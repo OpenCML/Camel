@@ -33,12 +33,12 @@
 //
 // Four regions, each with one source:
 //
-//   lexical             include/camel/parse/syntax/token_kinds.def -- the one keyword and
+//   lexical             parse/include/camel/parse/syntax/token_kinds.def -- the one keyword and
 //                       punctuation table the lexer, the parser and the page share; it stays beside
 //                       the rule it states, in §4 of the page
-//   precedence          src/parse/syntax/parser_expr.cpp -- the `///  name : production` comments
+//   precedence          parse/src/syntax/parser_expr.cpp -- the `///  name : production` comments
 //                       of the expression levels, loosest first, as the parser writes them; in §5
-//   diagnostics         diagnostics/registry.tsv -- every diagnostic, its name and message
+//   diagnostics         kernel/diagnostics/registry.tsv -- every diagnostic, its name and message
 //                       template; the severity is the heading of the block the row is in. Written
 //                       to docs/reference/camel-for-ai-diagnostics.md
 //   stdlib-signatures   docs/stdlib-reference.md -- the signatures of the standard library, which
@@ -77,11 +77,11 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const PAGE_REL = 'docs/reference/camel-for-ai.md'
 const DIAGNOSTICS_REL = 'docs/reference/camel-for-ai-diagnostics.md'
 const SIGNATURES_REL = 'docs/reference/camel-for-ai-stdlib-signatures.md'
-const REGISTRY_REL = 'diagnostics/registry.tsv'
+const REGISTRY_REL = 'kernel/diagnostics/registry.tsv'
 const STDLIB_PAGE_REL = 'docs/stdlib-reference.md'
 const LEXICAL_DOC_REL = 'docs/language/02_lexical.md'
-const PARSER_REL = 'src/parse/syntax/parser_expr.cpp'
-const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
+const PARSER_REL = 'parse/src/syntax/parser_expr.cpp'
+const TOKENS_REL = 'parse/include/camel/parse/syntax/token_kinds.def'
 
 // Which regions each document holds, and which one this run reads and writes. The page keeps the
 // two tables that belong to its own prose -- the keyword table beside §4's rule and the precedence
@@ -333,7 +333,7 @@ function generatePrecedence(root) {
     })
     out.push('```')
     out.push('')
-    out.push('The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the')
+    out.push('The production of each level, as `parse/src/syntax/parser_expr.cpp` writes it above the')
     out.push('function that parses it:')
     out.push('')
     out.push('```text')

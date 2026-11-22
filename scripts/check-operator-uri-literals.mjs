@@ -21,15 +21,15 @@
  * hand, so that the next person can judge whether the boundary should move. A file is a definition
  * or a registry, and its URI literals are not findings, when
  *
- *   1. it sits under `src/builtin/` -- the built-in operators' definitions, the executors that run
+ *   1. it sits under `lib/std/builtin/` -- the built-in operators' definitions, the executors that run
  *      them, and the module registries that fill the table with them;
- *   2. it is `src/core/operator_table.cpp` or `src/core/operator_names.cpp` -- the table itself and
+ *   2. it is `kernel/core/operator_table.cpp` or `kernel/core/operator_names.cpp` -- the table itself and
  *      the named-operator constants;
- *   3. it is `include/camel/core/operator_table.h` or `include/camel/core/operator_names.h` -- the
+ *   3. it is `kernel/include/camel/core/operator_table.h` or `kernel/include/camel/core/operator_names.h` -- the
  *      declarations those two fill, including the well-known URI list the table is built from;
  *   4. its base name contains `traits` or `registry`, wherever it sits -- a traits table and a
  *      registry are the two other shapes a definition takes in this tree
- *      (`src/core/operator_traits.cpp`, `modules/tensor/ops/registry.cpp`).
+ *      (`kernel/core/operator_traits.cpp`, `lib/tensor/ops/registry.cpp`).
  *
  * Everything else is a business file, and every built-in URI literal in it is reported once:
  * `path:line: ":op/..."`. A literal is a string whose first characters after the quote are `:`,
@@ -39,9 +39,9 @@
  *
  * **This rule is mechanical, and it is the author's to change.** It says that the URI is spelled
  * where the operator is declared, not that every file listed above deserves the exemption: a
- * backend's spelling table (`src/passes/trans/cpp/operator_rules.cpp`), the bytecode's opcode map
- * (`src/passes/sched/fastvm/compile.cpp`) and a module's lowering table
- * (`modules/onnx/lowering.cpp`) are the biggest populations in the list, and whether one of them
+ * backend's spelling table (`lib/std/cpp/operator_rules.cpp`), the bytecode's opcode map
+ * (`lib/std/fvm/compile.cpp`) and a module's lowering table
+ * (`lib/onnx/lowering.cpp`) are the biggest populations in the list, and whether one of them
  * *is* a registry is exactly the judgement this check asks a reader to make. If one is, add it to
  * the rule above with the reason beside it, and the list comes down by that much.
  *
@@ -72,17 +72,17 @@ const URI_LITERAL = /"(:[A-Za-z_][A-Za-z0-9_]*\/[^"\n]*)"/g
 
 /** The files the rule names outright, relative to the tree. */
 const HOME_FILES = new Set([
-    'src/core/operator_table.cpp',
-    'src/core/operator_names.cpp',
-    'include/camel/core/operator_table.h',
-    'include/camel/core/operator_names.h',
+    'kernel/core/operator_table.cpp',
+    'kernel/core/operator_names.cpp',
+    'kernel/include/camel/core/operator_table.h',
+    'kernel/include/camel/core/operator_names.h',
 ])
 
 /** A base name that says "traits table" or "registry" is a definition wherever it sits. */
 const HOME_NAME = /(?:traits|registry)/i
 
 /** The one directory whose whole tree is a definition: the built-in operators and their executors. */
-const HOME_TREE = 'src/builtin/'
+const HOME_TREE = 'lib/std/builtin/'
 
 /** Replaces comments with spaces and leaves string literals alone, so offsets and lines survive. */
 function stripComments(text) {

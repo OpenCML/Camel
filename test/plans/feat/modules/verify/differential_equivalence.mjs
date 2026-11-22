@@ -69,7 +69,7 @@ const casePath = input.case_path ?? payload.case_path ?? ''
 const repoRoot =
     input.repo_root ?? payload.repo_root ?? path.resolve(path.dirname(casePath), '..', '..', '..', '..')
 const testName = input.test_name ?? payload.test_name ?? 'rules.differential_equivalence'
-const library = path.join(repoRoot, 'stdlib', 'rules.cml')
+const library = path.join(repoRoot, 'lib', 'rules', 'rules.cml')
 
 if ((input.exit_code ?? payload.exit_code ?? 0) !== 0) {
     fail(`${testName}: the check case exited ${input.exit_code ?? payload.exit_code}`)

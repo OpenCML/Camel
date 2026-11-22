@@ -15,17 +15,32 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
+// The rulesets moved with the library -- `lib/rulesets/` now that the declarations live one per
+// module under `lib/`, `stdlib/rulesets/` before it -- so the root is the first ancestor holding
+// either spelling, and the case runs in both trees.
+function rulesetPath(dir) {
+    for (const parts of [
+        ['lib', 'rulesets', 'vmap.cml'],
+        ['stdlib', 'rulesets', 'vmap.cml'],
+    ]) {
+        const file = join(dir, ...parts)
+        try {
+            readFileSync(file, 'utf8')
+            return file
+        } catch {
+            // The next spelling, and then the parent directory.
+        }
+    }
+    return null
+}
+
 function repositoryRoot(start) {
     let dir = resolve(start)
     for (;;) {
-        try {
-            readFileSync(join(dir, 'stdlib', 'rulesets', 'vmap.cml'), 'utf8')
-            return dir
-        } catch {
-            const parent = dirname(dir)
-            if (parent === dir) throw new Error(`no stdlib/rulesets/vmap.cml above ${start}`)
-            dir = parent
-        }
+        if (rulesetPath(dir)) return dir
+        const parent = dirname(dir)
+        if (parent === dir) throw new Error(`no lib/rulesets/vmap.cml or stdlib/rulesets/vmap.cml above ${start}`)
+        dir = parent
     }
 }
 

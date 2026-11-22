@@ -29,7 +29,7 @@ func main(): int sync {
     println(is_same::<ShapeOf<float[]>, int[1]>())
     // ② a scalar is a tensor of rank zero: the empty shape. The arm that answers it is guarded
     //    (`case _ when is_numeric::<T>()`), so the empty shape is a number's shape; a leaf type
-    //    that is not a number is refused instead of answered. See `stdlib/types.cml#ShapeOf`.
+    //    that is not a number is refused instead of answered. See `lib/types/types.cml#ShapeOf`.
     println(is_same::<ShapeOf<int>, int[0]>())
     // ③ an open rank states the open list.
     println(is_same::<ShapeOf<float[...]>, int[]>()

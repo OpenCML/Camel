@@ -132,7 +132,7 @@
 
 - 名字：`std::cml`。头文件 `include/camel/passes/trans/cml/cml.h`，源文件 `src/passes/trans/cml/`（`cml.cpp`、`module_writer.cpp`、`expr_writer.cpp`、`type_writer.cpp`、`literal.cpp`、`operator_syntax.cpp`），与 `src/passes/trans/json/` 同构。
 - 类：`CmlDumpPass : public RuntimeGraphTranslatePass`（运行时图，翻译遍）。`apply(const Program *, std::ostream &)` 写源码，返回 `nullptr`（消费程序），与 `JsonGirDumpPass` 一致。
-- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`src/execute/pass.cpp#extractWritings`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
+- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`kernel/execute/pass.cpp#extractWritings`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
 - 参数（`PassDescriptor`，`include/camel/execute/pass/params.h#PassDescriptor`）：
   - `out`（String，默认 `""`）：写文件；空 = 写 `os`（stdout）。写文件时 `data_dir` 默认取 `out` 的父目录。
   - `data_dir`（String，默认 `""`）：大常量的 sidecar 目录；为空且需要 sidecar 时拒绝。
@@ -276,7 +276,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 ### 5.11 写法表（两张写法）
 
-**决定**：`std::cml` 是翻译遍，驱动在它之前抽取一种写法（`src/execute/pass.cpp#std::cml`），所以它打印的是抽取后的可执行图；写法表本身不可打印（源码没有“一个值两种写法”的语法）。若手工把带 `kGraphFlagHasWritings` 的图送进来，拒绝（`CmlHasWritings`）。
+**决定**：`std::cml` 是翻译遍，驱动在它之前抽取一种写法（`kernel/execute/pass.cpp#std::cml`），所以它打印的是抽取后的可执行图；写法表本身不可打印（源码没有“一个值两种写法”的语法）。若手工把带 `kGraphFlagHasWritings` 的图送进来，拒绝（`CmlHasWritings`）。
 **影响**：2.5 的“任何合法的图”按“可执行状态的图”理解；表是遍之间的内部表示，不是程序。需要作者确认（问题 7）。
 
 ### 5.12 没有 `main` / 库模块

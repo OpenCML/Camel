@@ -519,7 +519,7 @@ function checkTechnicalIndex() {
 //
 // A source citation names a file and a symbol, never a line:
 //
-//     `src/compile/gir/builder_control.cpp#Builder::buildArm`
+//     `compile/src/gir/builder_control.cpp#Builder::buildArm`
 //
 // A line number moves with every edit, so a citation that carries one is reported as a defect, not
 // verified: the check used to compare the cited line's text and that only moved the maintenance

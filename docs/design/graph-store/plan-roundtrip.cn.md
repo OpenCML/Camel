@@ -334,7 +334,7 @@ print family, and this operator's configuration is not a string, so its call has
 
 **作者裁的一页（`fsh-dev = d2face663`，2026-11-03 03:30）直接指向本刀的相邻判据，逐字留档：**
 
-> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml#shl`（原文写的是行号 627-632，这里按引用规则换成符号）写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
+> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`lib/math/math.cml#shl`（原文写的是行号 627-632，这里按引用规则换成符号）写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
 
 ⇒ **"无体"说的是实现在哪，"私有"说的是名字能不能写，两件事。** 这一条已按作者的修法落地，见本页**第二十九刀**：`OperatorTable::CallForm` 多了 `exported`（由 `Module::exportEntity` 填，`declarePrivateEntity` 不填），打印器据此决定写不写名字，这一族 **411 → 30**。
 
@@ -748,7 +748,7 @@ func pick(x: int): string { return 'wide' }
 | 有什么 | 在哪 |
 |---|---|
 | 打印机 | `src/passes/trans/cml/cml.cpp`（2433 行）、`include/camel/passes/trans/cml/cml.h`；`CmlDumpPass` 是 `RuntimeGraphTranslatePass`，`acceptsWritings()` 为假（`cml.h#CmlDumpPass`） |
-| 注册与声明 | 每个遍在自己的源文件里登记 `PassKernel`，驱动按名字从 `pass.cpp#passImplementations` 取；遍的声明（名字、说明、参数）在 `stdlib/std.cml#cml` |
+| 注册与声明 | 每个遍在自己的源文件里登记 `PassKernel`，驱动按名字从 `pass.cpp#passImplementations` 取；遍的声明（名字、说明、参数）在 `lib/std/std.cml#cml` |
 | 诊断码 | `CmlUnsupportedConstruct = 0x1A5`、`CmlBigConstant = 0x1A6`（`semantic.h#CmlUnsupportedConstruct`） |
 | 参数 | `maxLiteralBytes` 默认 64 KiB（`cml.h#CmlOptions`），写出为 `std::cml max_literal_bytes=...` |
 | 抽取写法 | 有写法状态时，驱动器挑一个写法再交给消费者（`pass.cpp#applyPassesDetailed`）；不知道状态的遍拒绝（同一函数里的 `RuntimeDiag::PassNeedsExtraction`） |
@@ -927,7 +927,7 @@ ROUNDTRIP checked=700 equivalent=649 not_equivalent=51 over_budget=0 unfaithful=
 
 `printed 589 → 707`（+118）、`equivalent 543 → 649`（+106）、`refused 1779 → 1664`、`not_equivalent 43 → 51`（+8，同样要逐条定性，不许当形状差异放过）、`families 58`。重扫里最大的一族换成了 `the operator '<name>'`（429 条：没有调用形状也没有符号的算子），`import { name } from module` 那族（171 条）还在。
 
-**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的行号引用（`627-632`），判据要求引用写成符号，改成 `stdlib/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
+**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的行号引用（`627-632`），判据要求引用写成符号，改成 `lib/math/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
 
 ## 8. 要裁定的问题（本计划不擅自决定）
 

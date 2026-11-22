@@ -31,8 +31,11 @@
 //                it is hand-written source; the guard reports it instead of skipping it.
 //
 // Membership is a path allow/deny list, not a guess: every rule below says why it is on its side.
-// A file no rule matches is not silently skipped; if its extension is not one of the data or
-// document formats in NOT_SOURCE, it is reported as undecided.
+// The two rules that name a directory read it from the tree being checked (`BLOCK_DIRECTORIES`,
+// `LIBRARY_DIRECTORIES`), so the list says which blocks of the layout are product source and not
+// where a block happened to stand before or after a move. A file no rule matches is not silently
+// skipped; if its extension is not one of the data or document formats in NOT_SOURCE, it is
+// reported as undecided.
 //
 // Exit status: 0 when every member file is canonical, 1 when one is not, 2 when the scope is empty
 // or a flag is wrong. A check of nothing is refused, never reported as a pass.
@@ -81,6 +84,36 @@ function canonicalLines(ext) {
 }
 
 // ---- membership ------------------------------------------------------------------------------
+
+// Which directories hold the product's C/C++ and where the standard library's declarations lie is
+// a layout, not a path (docs/design/architecture/layout-map.cn.md): the map gives the product five
+// blocks -- `kernel`, `parse`, `compile`, `lib/<module>`, `tools` -- and, before the move, the same
+// code stood under the four container directories `src/`, `include/`, `modules/` and `stdlib/`. The
+// two rules below therefore name no directory: they read the layout the tree being checked has, and
+// the tree's answer decides. A move of a block is then a line of the two lists here and not a
+// rewrite of a rule.
+const BLOCK_DIRECTORIES = ['kernel', 'parse', 'compile', 'lib', 'tools', 'bindings', 'src', 'include', 'modules']
+// `lib/<module>/<module>.cml` after the move, the flat `stdlib/` before it. A C/C++ module's native
+// half was `stdlib/<module>/native/` and is `lib/<module>/` now, so the same two roots cover it.
+const LIBRARY_DIRECTORIES = ['lib', 'stdlib']
+
+/** The directories of `names` the tree at rootDir has, as one alternation; null when it has none. */
+function rootsOf(rootDir, names) {
+    const present = names.filter((name) => fs.existsSync(path.join(rootDir, name)))
+    if (present.length === 0) return null
+    return new RegExp(`^(?:${present.join('|')})/`)
+}
+
+// A root a tree does not have matches nothing. It is not an error for the library one (a corpus need
+// not hold a library, and the `\.cml$` deny rule is then the whole truth about its Camel files).
+const NEVER = /^(?!)/
+// Set once from the tree being checked, before the first `classify`, and read by the two rules that
+// cannot name a directory: a rule is built when this module is loaded, the layout is known later.
+let blockRoot = NEVER
+let libraryRoot = NEVER
+// A rule's `path` is asked `test(rel)`, so a regex and this adapter are the same thing to `classify`.
+const AT_BLOCK_ROOT = { test: (rel) => blockRoot.test(rel) }
+const AT_LIBRARY_ROOT = { test: (rel) => libraryRoot.test(rel) }
 
 // Ordered: the first matching rule decides. The deny list comes first, because a denied directory
 // must win over an extension rule that covers everything (`.py` anywhere is a script, except a test
@@ -132,27 +165,15 @@ const RULES = [
         reason: 'a PowerShell helper of the internal tooling; like the shell helpers, it is not one of the script languages the policy names',
     },
 
-    // Allow: C/C++ that ships in the product.
+    // Allow: C/C++ that ships in the product. One rule, because the blocks are what the layout names
+    // and the four container directories of an unmoved tree are the same files: `AT_BLOCK_ROOT` is
+    // whichever of the two the tree being checked has, asked once per file.
     {
-        path: /^(?:src|include|tools)\//,
+        path: AT_BLOCK_ROOT,
         ext: CPP_EXT,
         member: true,
         kind: 'C/C++',
-        reason: 'the compiler and runtime, the public libcamel headers and the installable tools',
-    },
-    {
-        path: /^modules\//,
-        ext: CPP_EXT,
-        member: true,
-        kind: 'C/C++',
-        reason: 'the native implementation of a standard library module, which stdlib/<m>/native/ will hold',
-    },
-    {
-        path: /^stdlib\/[^/]+\/native\//,
-        ext: CPP_EXT,
-        member: true,
-        kind: 'C/C++',
-        reason: 'the native part of a standard library module, in the layout the stdlib reorganisation gives it',
+        reason: 'the kernel, the parser, the compiler, a standard library module, a tool or the host binding: the product itself',
     },
     {
         path: /^test\/tools\//,
@@ -161,17 +182,12 @@ const RULES = [
         kind: 'C/C++',
         reason: 'a C helper of the test tooling (the allocator shim), not a test case',
     },
-    {
-        path: /^bindings\//,
-        ext: CPP_EXT,
-        member: true,
-        kind: 'C/C++',
-        reason: 'a host binding of the runtime (the CPython extension module links libcamel and ships with it), which is product code and not a test',
-    },
 
-    // Allow: the standard library's declarations.
+    // Allow: the standard library's declarations, in whichever root the tree keeps its library in:
+    // `lib/<module>/` after the move, the flat `stdlib/` before it.
     {
-        path: /^stdlib\/.*\.cml$/,
+        path: AT_LIBRARY_ROOT,
+        ext: /\.cml$/,
         member: true,
         kind: 'Camel',
         reason: 'the standard library: the one place its operators and values are declared',
@@ -309,7 +325,7 @@ function splitText(text) {
     const bom = text.startsWith('\uFEFF') ? '\uFEFF' : ''
     const body = bom ? text.slice(1) : text
     // The dominant ending, not "contains a CRLF": one stray CRLF used to flip a whole file to CRLF
-    // on the way out (a single `\r` in `modules/transforms/vmap.cpp` rewrote all 857 of its lines),
+    // on the way out (a single `\r` in `lib/transforms/vmap.cpp` rewrote all 857 of its lines),
     // and `.gitattributes` says the tree is LF because the tests compare bytes. A file that is
     // mostly CRLF is still written as CRLF.
     const crlfCount = (body.match(/\r\n/g) || []).length
@@ -685,9 +701,13 @@ const USAGE = `usage: node scripts/headers.mjs --check|--fix [--root DIR] [--dry
   --dry-run   with --fix: list the rewrites, write nothing
   --help      this text
 
-A member file is a hand-written source file: C/C++ under src/, include/, tools/, modules/ and
-stdlib/*/native/; the standard library's .cml; and .js/.mjs/.cjs/.ts/.tsx/.css/.py/.cmake scripts everywhere except
-the denied trees (third_party/, docs/, examples/, showcase/, test/cases/, test/plans/).
+A member file is a hand-written source file: C/C++ in the product's blocks -- kernel/, parse/,
+compile/, lib/, tools/ and bindings/ in the layout docs/design/architecture/layout-map.cn.md gives
+(kernel, parse, compile, lib/<module>, tools, plus the host binding), or src/, include/, modules/ and
+tools/ in the tree before that move -- and the standard library's .cml in whichever root the tree
+keeps it (lib/, or the flat stdlib/), plus .js/.mjs/.cjs/.ts/.tsx/.css/.py/.cmake scripts everywhere
+except the denied trees (third_party/, docs/, examples/, showcase/, test/cases/, test/plans/). Which
+of those directories a tree has is read from the tree; a tree with none of them is refused.
 
 The guard is red for a missing header, a header line that is not the canonical text, a year in a
 header line, a header that is not followed by one blank line, an element of the old header that
@@ -728,6 +748,20 @@ function main(argv) {
         fail(2, `"${root}" is not a directory`)
     }
     const relPaths = root ? collectWalked(rootDir) : collectTracked(rootDir)
+
+    // The layout of the tree being checked, read once and before the first `classify`. A tree with
+    // none of the block directories is neither layout, and reading it as one with no member files
+    // would be a pass over nothing.
+    const blocks = rootsOf(rootDir, BLOCK_DIRECTORIES)
+    if (!blocks) {
+        fail(
+            2,
+            `${rootDir} has none of ${BLOCK_DIRECTORIES.join(', ')}: it is neither the layout the layout map ` +
+                'describes nor the one before it, so which files are product source is not a question it answers'
+        )
+    }
+    blockRoot = blocks
+    libraryRoot = rootsOf(rootDir, LIBRARY_DIRECTORIES) ?? NEVER
 
     const members = []
     const undecided = []

@@ -510,18 +510,34 @@ const COLLECT_STDLIB_OLD = [
   '    }',
 ].join('\n')
 const COLLECT_STDLIB_NEW = [
-  '    // layout-move: the declarations live one per lib/<name>/ now, so the install is assembled.',
+  '    // layout-move: the declarations live one per `lib/<name>/` now, so the install is',
+  '    // assembled instead of copied. A module directory is `lib/<name>/` and holds `<name>.cml`',
+  '    // (plus `lib/std/prelude.cml`, the one declaration with no module of its own name); the two',
+  '    // subtrees the module search path keeps are `signatures/`, merged from every module, and',
+  '    // `rulesets/`, which is the dotted prefix of `rulesets.jvp` and not a module directory.',
   '    const libRoot = path.join(BASEDIR, \'lib\')',
   '    if (fs.existsSync(libRoot)) {',
   '        for (const entry of fs.readdirSync(libRoot, { withFileTypes: true })) {',
   '            if (!entry.isDirectory()) continue',
   '            const dir = path.join(libRoot, entry.name)',
-  '            for (const f of fs.readdirSync(dir)) {',
-  '                const src = path.join(dir, f)',
-  '                if (fs.statSync(src).isFile() && f.endsWith(\'.cml\')) {',
-  '                    fs.copyFileSync(src, path.join(stdlibDir, f))',
-  '                } else if (fs.statSync(src).isDirectory() && (f === \'rulesets\' || f === \'signatures\')) {',
-  '                    fs.cpSync(src, path.join(stdlibDir, f), { recursive: true })',
+  '            // No `<name>.cml` of its own: a dotted prefix, not a module. Copied flat, as the',
+  '            // first assembly did, `lib/rulesets/jvp.cml` installed as `stdlib/jvp.cml` and',
+  '            // every `rulesets.*` import failed with "Module \'rulesets.jvp\' not found" -- 346',
+  '            // cells across the five plans. It installs as `stdlib/rulesets/jvp.cml`.',
+  '            if (!fs.existsSync(path.join(dir, `${entry.name}.cml`))) {',
+  '                if (fs.readdirSync(dir).some((f) => f.endsWith(\'.cml\'))) {',
+  '                    fs.cpSync(dir, path.join(stdlibDir, entry.name), { recursive: true })',
+  '                }',
+  '                continue',
+  '            }',
+  '            for (const sub of fs.readdirSync(dir, { withFileTypes: true })) {',
+  '                const src = path.join(dir, sub.name)',
+  '                if (sub.isFile() && sub.name.endsWith(\'.cml\')) {',
+  '                    fs.copyFileSync(src, path.join(stdlibDir, sub.name))',
+  '                } else if (sub.isDirectory() && sub.name === \'signatures\') {',
+  '                    fs.cpSync(src, path.join(stdlibDir, \'signatures\'), { recursive: true })',
+  '                } else if (sub.isDirectory() && fs.readdirSync(src).some((f) => f.endsWith(\'.cml\'))) {',
+  '                    fs.cpSync(src, path.join(stdlibDir, sub.name), { recursive: true })',
   '                }',
   '            }',
   '        }',
@@ -546,7 +562,16 @@ function buildBlocks (moves) {
     // directories for the include scan and the ownership table, and compiles nothing: putting the
     // 88 module sources into `libcamel` again would compile every module twice and give the
     // library include paths that only one module's build ever had.
-    if (b === 'lib_module') return []
+    //
+    // "A module" is the build's own definition and not a guess about the block: a module is a
+    // directory the module loop enters (`add_subdirectory(lib/<name>)`), and every one of them
+    // carries a `CMakeLists.txt` that makes its `.cmo`. A directory under `lib/` without one is
+    // core code the move carried out of `src/`, and it has to stay in `libcamel`: `lib/test/` is
+    // `src/passes/test/`, whose objects register the `test::` passes and whose declarations are in
+    // `stdlib/std.cml`. Left out of every block, the directory compiles nowhere, the binary has no
+    // `test::` channel, and the plans fail with `Unrecognized pass 'test::…'` -- forty-eight cells
+    // of it. The check reads the moved tree, which is the tree `cmakeText` runs on (the moves are
+    // applied before the generated file is written).
     // A directory brings its whole tree; a single file brings the directory it lands in, so the
     // block that received `kernel/execute/pass.cpp` globs `kernel/execute/*.cpp` -- a split whose
     // halves are files, not directories, still compiles. Only a source file brings a tree: a moved
@@ -555,6 +580,9 @@ function buildBlocks (moves) {
       .filter((m) => blockOfTarget(m.to) === b)
       .filter((m) => m.row.from.endsWith('/') || /\.(cpp|cc|cxx|c)$/i.test(m.to))
       .map((m) => (m.row.from.endsWith('/') ? m.to : path.posix.dirname(m.to)))
+    if (b === 'lib_module') {
+      return [...new Set(own)].filter((t) => !fs.existsSync(path.join(ROOT, t, 'CMakeLists.txt'))).sort()
+    }
     if (b === 'unplaced') own.push('src')
     if (b === 'third_party') own.push('third_party')
     return [...new Set(own)].sort()
@@ -572,6 +600,14 @@ function buildBlocks (moves) {
 function cmakeText (blocksInfo) {
   const { blocks, roots, treesFor } = blocksInfo
   const L = []
+  // The two-line header every hand-written file of this tree carries (scripts/headers.mjs;
+  // docs/design/public-repo/README.cn.md 4.5). This block file is generated, but it is generated by
+  // a script of this repository and into it, so the header is written here: without it the guard
+  // reported `cmake/layout-blocks.cmake: missing the two-line header`, and a hand edit of the
+  // generated copy would be overwritten by the next run.
+  L.push('# Copyright (c) the OpenCML Organization')
+  L.push('# SPDX-License-Identifier: MIT')
+  L.push('')
   L.push('# GENERATED by scripts/layout-move.mjs from docs/design/architecture/layout-map.cn.md.')
   L.push('# Do not edit: edit the table and regenerate. A hand edit here is a second source of truth')
   L.push('# for the layout, and the first one is the one under review.')
@@ -747,17 +783,41 @@ function walk (dir, root, out, skip) {
 function prefixRules (moves) {
   const out = []
   for (const m of moves) {
-    if (!m.row.from.endsWith('/')) continue
+    if (!m.row.from.endsWith('/')) {
+      // A moved file is a spelling of its own, and a build file names it one by one rather than
+      // through its directory: `cmake/camel_module.cmake` appends
+      // `${CMAKE_SOURCE_DIR}/modules/camel_module_abi.cpp` to every module's sources, and no
+      // directory rule carries that. Without this pair the configure step asks for a file the
+      // move took away.
+      out.push({ from: m.from, to: m.to })
+      continue
+    }
+    // A bare name (`diagnostics`) is the same word as a deeper directory's last segment
+    // (`core/error/diagnostics`), so the match itself has to say which one it is: `applyRewrites`
+    // rewrites it only where a path starts at it. What this list carries is the pair, not the
+    // reach.
     out.push({ from: m.from, to: m.to })
     // When the target does not end with the old suffix, no include root can absorb the move:
     // `src/compile/...` was spelled `compile/...` against the `src` root, and the target is
     // `compile/src`, so the spelling itself has to become `compile/src/...`. This is the one class
     // of `#include` the move genuinely rewrites.
+    //
+    // `suffix: true` marks the pair, and the mark is the whole difference between a spelling and a
+    // word. A suffix pair is not a path anybody writes in a build file: a build file names the tree
+    // from a root (`${PROJECT_SOURCE_DIR}/src/parse/ast`) and that is the directory pair above. What
+    // writes `compile/...` is an `#include` string resolved against an include root, which is the
+    // include pass's work. Treated as free text, the same pair reads `compile` -- a word that is
+    // just as often an English verb or a JavaScript variable name -- as a path: the declaration of
+    // the `--compile` flag in scripts/stdlib-reference.mjs became a declaration of a variable named
+    // `compile/src`, "the declarations compile to have no callable Camel name" became
+    // "…compile/src to have…" in a comment, and `src/parse/ast/builder.cpp` became
+    // `parse/src/src/ast/builder.cpp` because the rewritten head matched the shorter `parse` pair
+    // again. A suffix pair therefore never reaches a build file.
     for (const R of OLD_ROOTS) {
       const prefix = `${R}/`
       if (!m.from.startsWith(prefix)) continue
       const oldSuffix = m.from.slice(prefix.length)
-      if (!m.to.endsWith(`/${oldSuffix}`) && oldSuffix !== m.to) out.push({ from: oldSuffix, to: m.to })
+      if (!m.to.endsWith(`/${oldSuffix}`) && oldSuffix !== m.to) out.push({ from: oldSuffix, to: m.to, suffix: true })
     }
   }
   return out.sort((a, b) => b.from.length - a.from.length)
@@ -993,8 +1053,42 @@ function applyRewrites (tree, moves, scan) {
     includeFiles++
     edits.push({ file: rel, occurrences: pairs.size })
   }
-  // The build files: the same prefix rule over every occurrence of a moved directory.
-  const rules = prefixRules(moves)
+  // The build files: the same prefix rule over every occurrence of a moved directory -- minus the
+  // `suffix` pairs. Those are a spelling against an include root, which only an `#include` line
+  // writes; in a build file the same characters are a word (`compile`, `parse/ast`), and rewriting
+  // a word as a path is what put `compile/src` inside a JavaScript identifier and a sentence. The
+  // include pass above is where the suffix pairs are used, and it is the only place that can tell a
+  // path from prose: it matches the `#include` line and nothing else.
+  const rules = prefixRules(moves).filter((r) => !r.suffix)
+  // Whether the token at `offset` is a path spelled from the tree root. `.` and `..` are how a
+  // spelling is written, a root anchor names the root, and a slash that opens the spelling
+  // (`"/src/parse"`, i.e. from `/`) is the path's first component; any other segment to the left is
+  // a real directory name (`core/error`), which makes the token that directory's child instead.
+  const PATH_STOP = /[\s()"'`,;]/
+  const ROOT_ANCHORS = new Set([
+    '${CMAKE_SOURCE_DIR}',
+    '${PROJECT_SOURCE_DIR}',
+    '${CMAKE_CURRENT_SOURCE_DIR}',
+    '${CMAKE_CURRENT_LIST_DIR}',
+    '${CMAKE_BINARY_DIR}',
+    '${PROJECT_BINARY_DIR}',
+  ])
+  const rootedHere = (text, offset) => {
+    let at = offset
+    for (;;) {
+      if (at === 0 || PATH_STOP.test(text[at - 1])) return true
+      if (text[at - 1] !== '/') return false
+      let s = at - 1
+      while (s > 0 && !PATH_STOP.test(text[s - 1])) s--
+      const segment = text.slice(s, at - 1)
+      if (segment === '') return true
+      if (segment === '.' || segment === '..') {
+        at = s
+        continue
+      }
+      return ROOT_ANCHORS.has(segment)
+    }
+  }
   for (const rel of rewriteTargetsFrom(tree)) {
     const file = path.join(tree, rel)
     if (!fs.existsSync(file)) continue
@@ -1004,11 +1098,16 @@ function applyRewrites (tree, moves, scan) {
     for (const r of rules) {
       // A build file names a directory either with a trailing segment (`modules/ckpt/src`) or as a
       // whole token (`add_subdirectory(modules/ckpt)`), so the boundary after it is a slash or the
-      // end of the token. The boundary before it stops at a word character, a dot or a hyphen, and
-      // allows a slash: `${CMAKE_SOURCE_DIR}/modules/ckpt` is an absolute path to the same
-      // directory. Requiring the trailing slash is what left all 29 `add_subdirectory` calls
+      // end of the token. Requiring the trailing slash is what left all 29 `add_subdirectory` calls
       // pointing at a directory that no longer existed.
-      const re = new RegExp(`(?<![\\w.-])${escapeRe(r.from)}(?=[/\\s)"'\`]|$)`, 'g')
+      //
+      // The boundary before it is a path *component* boundary, which is why the match is checked
+      // instead of being written as a character class: `(?<![\w.-])` let `core/error/diagnostics`
+      // through, because the character before `diagnostics` is a slash and a slash is how a path
+      // continues, not how it starts. The move then read the kernel's own `core/error/diagnostics/`
+      // as the top-level `diagnostics/` the table moves, and put the moved path in front of a name
+      // that was already right -- eleven places, and the registry check could not read base.h.
+      const re = new RegExp(`${escapeRe(r.from)}(?=[/\\s)"'\`]|$)`, 'g')
       const snapshot = text
       // A path that already resolves from the file it appears in is that file's own path, not a
       // path into the moved tree: `tools/debugger/CMakeLists.txt` names its sources `src/core/...`,
@@ -1028,6 +1127,19 @@ function applyRewrites (tree, moves, scan) {
         return fs.existsSync(path.join(tree, local))
       }
       text = text.replace(re, (match, offset) => {
+        // The token names the moved directory only where the path starts at it; a match in the
+        // middle of a longer path is a different directory that happens to end in the same word.
+        if (!rootedHere(snapshot, offset)) return match
+        // A one-word pair (`diagnostics`) is a word before it is a path, and the script does not
+        // guess: `const diagnostics = ...`, "the diagnostics and the signatures" and a document
+        // region named `'diagnostics'` are the same eight characters as the directory. What is
+        // unambiguous is the spelling that continues into a path (`diagnostics/registry.tsv`, which
+        // is the registry the code tables are checked against), and that is the one this pass takes.
+        // A whole-token use of a one-word directory would need a patch that names it, the way
+        // `COMMON_ROOTS` below is; the only one in the tree is `migrate-pack-dots.mjs`'s list of
+        // source roots, and that script is a one-shot migration the architecture audit proposes
+        // deleting, so it is reported rather than special-cased.
+        if (!r.from.includes('/') && snapshot[offset + match.length] !== '/') return match
         if (keepLocal(offset)) return match
         count++
         return r.to

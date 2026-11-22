@@ -276,7 +276,7 @@ timeout_ms = 60000
 # handed `numel` a value the port had promised as something else, and neither the index nor the
 # transform had an opinion about the pair. `scripts/law-cotangent-ports.mjs` reads the laws of
 # `stdlib/rulesets` as text -- no build, no compiler -- and states, for each port, which requirement
-# the body's uses put on it and where that requirement is written down (`stdlib/tensor.cml#numel`
+# the body's uses put on it and where that requirement is written down (`lib/tensor/tensor.cml#numel`
 # for an array, the module's own `spread_over` for an element). The three readings below are the
 # three the change was accepted on: the tree's own laws, and the two directions of one disagreement.
 #

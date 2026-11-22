@@ -1,0 +1,464 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The properties of types that an applicability condition asks about. These are ordinary Camel
+ * functions: each one matches the type it is given with `match type` and returns a constant, so
+ * `func f::<T>(x: T) when is_float::<T>()` is applicable exactly where `T` is a float. There is
+ * no run-time inspection of a type: a predicate is settled when the call is compiled.
+ *
+ * One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
+ * The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
+ * `is_function`, and the shapes `is_array`, `is_nullable`, `is_fallible`, `is_map`, `is_set`) carry the
+ * `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+ * `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
+ * alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
+ *
+ * Types are also computed from types, in the one language (design principles 5.6, 21): a type
+ * function is declared with `type`, takes its arguments in the angle brackets of a type position
+ * and has a type expression for its body, a `match type` among them. Those that take a type apart
+ * or put one back together are written that way: `ElementOf<T>` (the element of an array or a set),
+ * `WithElement<A, E>` (A with the element `E`) and `RowsOf<T>` (the array whose first-dimension
+ * elements are `T`) are `match type` cases over the array's dimensions, which a case binds as a
+ * dims pack (`case E[...Dims]`). `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and
+ * `ValueOf<T>` (the key and value types of a map, and the keys of a set) are declared below without
+ * a body: the compiler provides them, because what they answer is a field of the type that a
+ * `match type` case cannot name. A type function is evaluated when the instance that binds `T` is
+ * made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
+ *
+ * `match type` compares a type's identity as well as its shape (design principles 5.5): the
+ * cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
+ * `c64`, `c128`, `string`, `bool`), and `case func` is the shape of every function type.
+ * `bf16` and `f16` are floating-point types (design principles 7.3), so they belong to
+ * `is_float` and inherit `is_numeric` and `is_ordered` from it.
+ */
+
+/// The `U` of `U?` or `U!`; any other type is refused.
+/// @example is_same::<PayloadOf<float?>, float>()    // true
+/// @example is_same::<PayloadOf<int!>, int>()    // true
+export type PayloadOf<T>
+
+/// The keys of a map or a set type: the key type of a map, the element type of a set (a set's
+/// elements are its keys); any other type is refused.
+/// @example is_same::<KeyOf<Map<string, int>>, string>()    // true
+/// @example is_same::<KeyOf<Set<i32>>, i32>()    // true
+export type KeyOf<T>
+
+/// The value type of a map type; any other type is refused.
+/// @example is_same::<ValueOf<Map<string, int[]>>, int[]>()    // true
+export type ValueOf<T>
+
+/// The shape a type states, as the list of its extents: `int[2]` for `float[2, 3]` and `int[1]`
+/// for `float[]` (the rank is stated), `int[]` for `float[...]` (it is open), and `int[0]` for a
+/// type that states no dimension at all -- a scalar, which is a tensor of rank zero and has the
+/// empty shape.
+///
+/// The rank is what the case's dims pack reaches: `case E[...Dims]` takes an array whose rank is
+/// stated apart and binds its dimensions to `Dims`, and a dims pack written where an extent stands
+/// is how many dimensions it stands for (design principles 5.4, the count `indices` walks in the
+/// value layer). So `shape` answers a value whose length is known, and a value of `T[...]` answers
+/// the open list.
+///
+/// The last arm is guarded: it answers the empty shape for a number (a scalar is a tensor of rank
+/// zero) and for nothing else, so `ShapeOf<string>` is a type function applied to a type it is not
+/// defined for and is reported as one, instead of quietly answering `int[0]`. The property the arm
+/// asks about is a Camel predicate (`is_numeric`), so it is written here and not in the compiler,
+/// and its answer is remembered by the predicate and the type it was asked about.
+/// @example is_same::<ShapeOf<float[2, 3]>, int[2]>()    // true
+/// @example is_same::<ShapeOf<float[...]>, int[]>()    // true
+/// @example is_same::<ShapeOf<int>, int[0]>()    // true
+export type ShapeOf<T> = match type T {
+    case E[...Dims] => int[Dims]
+    case E[...] => int[]
+    case _ when is_numeric::<T>() => int[0]
+}
+
+/// The element type of an array or a set type; any other type is refused.
+///
+/// The three ways a container says what its elements are: an array whose rank is stated gives its
+/// element and its dimensions (`case E[...Dims]`), an array of open rank gives its element (`case
+/// E[...]`), and a set's elements are its keys. A type that is none of these selects no case.
+/// @example is_same::<ElementOf<int[]>, int>()    // true
+/// @example is_same::<ElementOf<Set<i32>>, i32>()    // true
+export type ElementOf<T> = match type T {
+    case E[...Dims] => E
+    case E[...] => E
+    case set => KeyOf<T>
+}
+
+/// The array type A with the element type E in place of its own, extents and rank kept; a type that
+/// is not an array is refused.
+/// @example is_same::<WithElement<int[2, 3], float>, float[2, 3]>()    // true
+export type WithElement<A, E> = match type A {
+    case X[...Dims] => E[...Dims]
+    case X[...] => E[...]
+}
+
+/// The array type whose first-dimension elements are `T`: one dimension more than `T` has, of
+/// unknown length, the dimensions `T` states kept. The inverse of the element `x[i]` and `for x in
+/// xs` take (design principles 5.4), so a value of this type indexed at `i` gives a `T`. A type
+/// with no dimension is one element of the batch: `RowsOf<f32>` is `f32[?]`, the array of floats
+/// `vmap` applies a one-parameter function to.
+/// @example is_same::<RowsOf<f32[3]>, f32[?, 3]>()    // true
+/// @example is_same::<RowsOf<f32>, f32[]>()    // true
+export type RowsOf<T> = match type T {
+    case E[...Dims] => E[?, ...Dims]
+    case E[...] => E[?, ...]
+    case _ => T[?]
+}
+
+/// The ordinary parameters of a function type, as a type pack: `..ParamsOf<F>` writes them where a
+/// list of types is (the elements of a tuple); the `constas` parameters are not among them.
+/// @example is_same::<(...ParamsOf<(a: int, b: string) => bool>), (int, string)>()    // true
+export type ParamsOf<F>
+
+/// The `with` parameters of a function type, as a type pack, written with `..` as `ParamsOf<F>` is.
+/// @example is_same::<(...WithOf<<w: float> (a: int) => bool>), (float)>()    // true
+export type WithOf<F>
+
+/// The first member of a type pack: `FirstOf<WithOf<F>>` is the type of `F`'s first `with`
+/// parameter, and `FirstOf<ParamsOf<F>>` the type of its first ordinary parameter. A pack is a list
+/// of types, and taking its head is the `match type` every program can write -- a type pack takes
+/// apart the same way a value pack does (design principles 5.6): the case binds the member it writes
+/// and the rest of the pack in a name of its own, and the empty pack selects no case, because it has
+/// no member to give the first name.
+///
+/// This is not a primitive: it is the language, written here because a function type computed from
+/// `F` needs it and a program that writes the pattern itself gets the same answer.
+/// @example is_same::<FirstOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
+/// @example is_same::<FirstOf<ParamsOf<(a: int, b: string) => bool>>, int>()    // true
+export type FirstOf<P> = match type P { case (W, ...Rest) => W }
+
+/// The first member of a pack, as a primitive: the same answer `FirstOf<P>` gives, and a different
+/// place to read it. A `match type` written into the result of a generic function leaves the two
+/// names it binds as type variables of that call, and no argument binds them -- so a library
+/// function whose answer moves a pack's first member onto another list could not be called at all
+/// (`lib/vjp/vjp.cml#grad`). A primitive is evaluated with the pack in hand, which is what
+/// `grad`'s signature needs.
+/// @example is_same::<HeadOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
+export type HeadOf<P>
+
+/// The rest of a pack, as a primitive: every member but the first, as a pack of its own, so
+/// `...RestOf<P>` writes them where a list of types is. The empty pack when `P` has one member.
+/// @example is_same::<(...RestOf<WithOf<<w: float, k: int> (a: int) => bool>>), (int,)>()    // true
+/// @example is_same::<(...RestOf<WithOf<<w: float> (a: int) => bool>>), ()>()    // true
+export type RestOf<P>
+
+/// The result type of a function type.
+/// @example is_same::<ResultOf<(a: int) => string>, string>()    // true
+export type ResultOf<F>
+
+/// The tangent space of `T` (design principles 9.9): the type a tangent of a value of `T` has. A
+/// float and a tensor of floats are their own tangent space; a tuple and a struct take the tangent
+/// space of each member in that member's own place; every other type -- an integer, a `bool`, a
+/// `string`, a function -- takes the empty tuple, the value that carries no data and that a rule
+/// ignores (JAX's `float0`).
+/// @example is_same::<Tangent<float>, float>()    // true
+/// @example is_same::<Tangent<f32[2, 3]>, f32[2, 3]>()    // true
+/// @example is_same::<Tangent<(int, float)>, ((), float)>()    // true
+/// @example is_same::<Tangent<string>, ()>()    // true
+export type Tangent<T>
+
+/// The shape of a reverse transform's second half (design 4.4): `vjp(f)(x)` is the pair
+/// `(value, pullback)`, and the pullback takes the cotangent of the result and answers the cotangents
+/// of `f`'s parameters, one tuple member per parameter. A function of one parameter's pullback
+/// answers a one-long tuple -- `(27.0)` -- because the rule is one rule for every arity.
+///
+/// It does **not** take `f`'s `with` list . A `with` value the
+/// backward half reads is a residual like every other value it reads -- the rule is one rule, and it
+/// is "whatever the second half reads is a residual and goes into `lin`'s closure", `with` values
+/// included. `lin` is therefore a function of the tangents alone, and its transpose is this: one
+/// parameter, the cotangent of the result, and one answer member per parameter of `f`. The `with`
+/// values are written once, at the call that supplies them to `vjp`, and are captured there.
+/// @example is_same::<Pullback<(x: float) => float>, (ct: float) => (float,)>()    // true
+/// @example is_same::<Pullback<<w: float> (x: float) => float>, (ct: float) => (float,)>()    // true
+export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
+
+/// The derivative of a function, as a type of its own: the parameters the function takes, and the
+/// cotangent of the one that is differentiated. `grad` differentiates the first `with` parameter
+/// (design principles 9.9), so the result is that parameter's tangent space -- for
+/// `<w: float> (x: float) => float` it is `<float> (float) => float`, one number; for a weight that
+/// is a tensor it is a tensor of the weight's shape.
+///
+/// The shape is computed from `F` and is not written once per arity: the parameters are `F`'s
+/// (`ParamsOf<F>`, `WithOf<F>`), and the result names one member of the pack of `with` parameters
+/// (`FirstOf<WithOf<F>>`), so one declaration covers every function whose first `with` parameter
+/// has a tangent space. A function with no `with` parameter has no gradient -- there is no
+/// parameter to differentiate -- and the empty pack is refused where the type is used, which is the
+/// refusal `grad` itself gives that function.
+///
+/// This is the type the derivative has, and the type a caller who writes `Gradient<F>` asks for:
+/// one type, not a second one that looks like it. The weight stays a `with` argument of the
+/// derivative, so a call writes it in the angle brackets exactly where the differentiated function
+/// reads it.
+/// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => f32[2]>()    // true
+/// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => float>()    // false
+export type Gradient<F> =
+    <...WithOf<F>> (...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>
+
+/// The same derivative, and the name the library's `grad` answers in: the weight stays a `with`
+/// argument and the parameters are the differentiated function's, so a call writes the weight where
+/// the differentiated function reads it -- `grad(loss)<layer, y>(X)` for a loss declared
+/// `with <layer: Linear, y: f32[?, ?]> func loss(X)`.
+///
+/// It is one shape with `Gradient<F>` above, written out of the same three pieces, and the two
+/// aliases denote one type: this one exists because it is the name `grad`'s own declaration spells
+/// (`lib/vjp/vjp.cml#grad`). Two names for one type is a spelling a reader has to learn, and merging
+/// them is not done here, where the subject is the call form.
+///
+/// **The weight is inside the angle brackets.** Written as
+/// `<...Rest> (w: W, ...ParamsOf<F>) => Tangent<W>`, the weight would be the first *ordinary*
+/// parameter, which is the list `first_with_as_param` moves it to and the list a reverse transform
+/// differentiates, and that would put an implementation's shape on the language's surface. `grad`
+/// differentiates a function's first `with` parameter (design principles 9.9) and a `with` value is
+/// written in the angle brackets of a call, so the derivative is called the way the differentiated
+/// function is called (`with_grad(loss)<m>(x, y)`). Two readings turn on it: a caller who writes
+/// `grad(loss)<y>(layer, X)` is reading `first_with_as_param`'s answer and not `grad`'s meaning,
+/// and an inner `grad` of a library gradient would meet a function with no `with` parameter at
+/// all, so a nest of this `grad` would be refused at `first_with_as_param`. With this form a nest
+/// builds, and what refuses it is the layer after this one -- `jvp` over a function value computed
+/// at run time (`lib/vjp/vjp.cml#grad`) -- so the form is not the thing that stops it.
+///
+/// **The whole `with` list is carried, in its own order.** A function with a second `with` value --
+/// the data `y` beside the weight in `examples/case-study/train.cml`, the port the derivative is
+/// *not* taken of -- is called with its own list, in its own order, in the angle brackets, and the
+/// parameters are `F`'s ordinary parameters with nothing prepended to them.
+///
+/// The cost is one wrapper and no new mechanism: `grad`'s body still composes
+/// `split(jvp(first_with_as_param(f)))` -- the move and the cut stay internal -- and hands the
+/// weight back in the `with` position when it answers. `split` and `transpose` are untouched.
+///
+/// A function with no `with` parameter has no gradient -- there is no parameter to differentiate --
+/// and `WithOf<F>` is then an empty pack, which is the empty parameter list of this function type:
+/// `grad` itself refuses that function, saying so, before any of this applies.
+/// @example is_same::<GradientOf<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => f32[2]>()    // true
+/// @example is_same::<GradientOf<<w: f32[2], y: f32[1]> (x: float) => float>, <w: f32[2], y: f32[1]> (x: float) => f32[2]>()    // true
+export type GradientOf<F> =
+    <...WithOf<F>> (...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>
+
+/// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
+/// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`
+/// parameters as `f` does: a transform differentiates the
+/// ordinary parameters only, and a `with` value is handed on unchanged, as a constant, its tangent
+/// the zero of its type. So this is `Jvp<F>`'s shape -- the same `with` list, then the parameters.
+/// @example is_same::<Vjp<(x: float) => float>, <...WithOf<(x: float) => float>> (x: float) => (float, Pullback<(x: float) => float>)>()    // true
+export type Vjp<F> = <...WithOf<F>> (...ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
+
+/// The forward transform's type: the parameters of `f` and their tangents, then the value and its
+/// tangent (`jvp(f)(2.0, 1.0)` is `f(2.0)` and `df` in the direction 1).
+///
+/// **This declaration is the contract**: the build
+/// makes the declared type, and no declaration is approximate. The order written above is "all the
+/// parameters, then all their tangents"; the build today pairs each parameter with its tangent as it
+/// goes (`modules/transforms/jvp.cpp#jvpSignature`), and gives a parameter with no tangent space one
+/// place only. That difference is a **missing capability of the type-bundle splice** -- the exact shape
+/// needs an interleaving operation `(...A, ...B)` cannot express -- so the declaration is to be made
+/// exact when the splice can write it, and the gap is a defect of the declaration layer, not a
+/// licence to call the declaration approximate.
+/// @example is_same::<Jvp<(x: float) => float>, (x: float, d: float) => (float, float)>()    // true
+export type Jvp<F> =
+    <...WithOf<F>> (...ParamsOf<F>, ...Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
+
+/// The transpose of a linear function: the cotangent of the result, and one cotangent per parameter
+/// of `f`.
+///
+/// **This declaration is the contract**: the build makes the declared type, and the build that makes
+/// it is `modules/transforms/transpose/signature.cpp#transposeSignature`. There is no value parameter and no
+/// `with` list here, because a value the transposed body needs beside the cotangent is not one its
+/// caller passes: it is a residual the function that is transposed was closed over -- `x` in
+/// `transpose((dx: float) => 2.0 * x * dx)`, and the residue a cut captured in `lin`'s closure --
+/// and the transposed body reads it as a closure port. A `with` value the backward half reads is a
+/// residual like every other one the second half reads, so `transpose(lin)` is `(ct) => (...)`
+/// whether `lin` came from a `with` function or from a plain one.
+///
+/// A parameter **without** a tangent space (`int`, `bool`, a string) is the one place the shape above
+/// is not the one the build makes: `Tangent<int>` is `()`, so it needs no cotangent, and the call site
+/// still has to supply its value -- the transposed member takes it as one ordinary argument **before**
+/// the cotangent (`transpose(pick)` reads the index and answers the array's cotangent). Written here
+/// as `(...ValueParamsOf<F>, ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)` if the splice could
+/// state it. For a differentiable function every parameter has a tangent space, so the shape above is
+/// the exact one.
+/// @example is_same::<Transpose<(x: float) => float>, (ct: float) => (float,)>()    // true
+export type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
+
+/// True when `T` and `U` are the same type. Identity, not shape: two named types with the same
+/// fields are different, `i32` and `int` are different.
+/// @example is_same::<int, int>()    // true
+/// @example is_same::<i32, int>()    // false
+export func is_same::<T, U>(): bool {
+    return match type T {
+        case U => true
+        case _ => false
+    }
+}
+
+/// True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
+/// @example is_integer::<int>()    // true
+/// @example is_integer::<float>()    // false
+export func is_integer::<T>(): bool {
+    return match type T {
+        case int | i32 => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit, `bf16` and
+/// `f16` are the two reduced-precision floating types).
+/// @example is_float::<float>()    // true
+/// @example is_float::<bf16>()    // true
+/// @example is_float::<int>()    // false
+export func is_float::<T>(): bool {
+    return match type T {
+        case float | f32 | bf16 | f16 => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a complex number (`c64` is 64-bit, `c128` is 128-bit).
+/// @example is_complex::<c64>()    // true
+/// @example is_complex::<float>()    // false
+export func is_complex::<T>(): bool {
+    return match type T {
+        case c64 | c128 => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a number: an integer, a float or a complex number.
+///
+/// The three families are asked, not listed again: a type spelled in one of them is numeric
+/// without appearing here, so adding an integer width changes `is_integer` alone. The complex
+/// branch is `is_complex`, which is why `c64` is numeric.
+/// @example is_numeric::<int>()    // true
+/// @example is_numeric::<string>()    // false
+/// @example is_numeric::<c64>()    // true
+export func is_numeric::<T>(): bool {
+    return is_real::<T>() || is_complex::<T>()
+}
+
+/// True when `T` is a real number: an integer or a float. A complex number is not.
+/// @example is_real::<float>()    // true
+/// @example is_real::<c64>()    // false
+export func is_real::<T>(): bool {
+    return is_integer::<T>() || is_float::<T>()
+}
+
+/// True when `T` has a total order: the number types, `string` and `bool`.
+/// @example is_ordered::<string>()    // true
+/// @example is_ordered::<bool>()    // true
+export func is_ordered::<T>(): bool {
+    return is_real::<T>() || is_string::<T>() || is_bool::<T>()
+}
+
+/// True when `T` is a function type, whatever its parameters and result.
+/// @example is_function::<(x: int) => int>()    // true
+export func is_function::<T>(): bool {
+    return match type T {
+        case func => true
+        case _ => false
+    }
+}
+
+/// True when `T` is an array type, of any rank.
+/// @example is_array::<int[]>()    // true
+/// @example is_array::<f32[...]>()    // true
+/// @example is_array::<int>()    // false
+export func is_array::<T>(): bool {
+    return match type T {
+        case array => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `U?` for some `U`.
+/// @example is_nullable::<int?>()    // true
+/// @example is_nullable::<int!>()    // false
+/// @example is_nullable::<int>()    // false
+export func is_nullable::<T>(): bool {
+    return match type T {
+        case nullable => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `U!` for some `U`.
+/// @example is_fallible::<int!>()    // true
+/// @example is_fallible::<int?>()    // false
+/// @example is_fallible::<int>()    // false
+export func is_fallible::<T>(): bool {
+    return match type T {
+        case fallible => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a map, `Map<K, V>`.
+/// @example is_map::<Map<string, int>>()    // true
+/// @example is_map::<Set<int>>()    // false
+export func is_map::<T>(): bool {
+    return match type T {
+        case map => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a set, `Set<E>`.
+/// @example is_set::<Set<int>>()    // true
+/// @example is_set::<Map<string, int>>()    // false
+export func is_set::<T>(): bool {
+    return match type T {
+        case set => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `string`.
+/// @example is_string::<string>()    // true
+/// @example is_string::<int>()    // false
+export func is_string::<T>(): bool {
+    return match type T {
+        case string => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `bool`.
+/// @example is_bool::<bool>()    // true
+/// @example is_bool::<int>()    // false
+export func is_bool::<T>(): bool {
+    return match type T {
+        case bool => true
+        case _ => false
+    }
+}
+
+/// True when `T` is pure data: a number, `bool`, or a struct or tuple whose fields are all pure
+/// data.
+///
+/// Pure data is what a value can be stored as itself: the bytes contain the value and every read of
+/// them is the value again, because no field of the type is a reference. It is the element type an
+/// array is allocated and copied for, the element type `to_bytes` writes and `from_bytes` reads, and
+/// the element type the interchange with other frameworks names. A `string` holds a reference to
+/// its characters, an array holds a reference to its block, and a function, an enum and a tagged
+/// form hold something a copy of the bytes would not carry, so none of them is pure data.
+///
+/// The families are asked here as everywhere else: a number is pure data because `is_numeric` says
+/// so, and a struct or tuple is asked field by field.
+/// @example is_plain::<float>()    // true
+/// @example is_plain::<bool>()    // true
+/// @example is_plain::<{ x: int, y: f32 }>()    // true
+/// @example is_plain::<string>()    // false
+/// @example is_plain::<int[]>()    // false
+export func is_plain::<T>(): bool {
+    return match type T {
+        case struct | tuple => every_field_plain::<T>()
+        case _ => is_numeric::<T>() || is_bool::<T>()
+    }
+}
+
+// Every field of a struct or tuple is pure data. The walk over the fields is static, like every
+// other walk over a known shape: the answer is a constant of the instantiation and no field is read
+// when the program runs, so a type whose fields are pure data is settled when the call is compiled.
+func every_field_plain::<T>(): bool {
+    return static loop every = true for n, F in fields T do every && is_plain::<F>()
+}

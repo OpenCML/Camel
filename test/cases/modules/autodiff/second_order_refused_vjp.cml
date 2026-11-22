@@ -3,7 +3,7 @@
 //   f(x) = x*x*x,  f'(x) = 3x^2,  f''(2) = 12
 //
 // The writing is the natural one -- differentiate the result of `vjp` -- and it is refused inside
-// the library, at `stdlib/vjp.cml#vjp`'s `split(jvp(f))<...ws>(...xs)`:
+// the library, at `lib/vjp/vjp.cml#vjp`'s `split(jvp(f))<...ws>(...xs)`:
 //
 //   cannot differentiate through this call of a function value: which function it calls is not
 //   evident where it is called: the function is the result of a call of '<name>', and what that
@@ -16,7 +16,7 @@
 //   a tagged transform's call   "the function is the result of a call of '<name>', and what that
 //   returned it                 returns is not a function that is named or built in it"
 //
-// `stdlib/vjp.cml#vjp` carries `#macro` (author's ruling of 2026-11-15, `4ae2c0179`: the library's
+// `lib/vjp/vjp.cml#vjp` carries `#macro` (author's ruling of 2026-11-15, `4ae2c0179`: the library's
 // transforms are evaluated at the `std::macro` stage), so the call site is handed the call's answer
 // as a graph and reads the second line. Measured both ways on one build: the same case with that
 // tag removed answers the first line, and putting it back answers the second -- nothing else about
@@ -33,8 +33,8 @@
 // it runs. Reading the pullback out of the pair and calling that stops at the second half of the same
 // wall: "the function is read from a tuple, a struct or an array".
 //
-// The transform's rules are the library's, not the engine's: `stdlib/vjp.cml#grad` is `vjp` read at
-// the seed 1, and `stdlib/types.cml#Transpose` is the contract `transpose` builds. What *is*
+// The transform's rules are the library's, not the engine's: `lib/vjp/vjp.cml#grad` is `vjp` read at
+// the seed 1, and `lib/types/types.cml#Transpose` is the contract `transpose` builds. What *is*
 // available today is the second derivative through `grad`, whose inner transform is an OPER of the
 // autodiff module over a static function and is built while the rewrite runs:
 // `second_order_nest.cml` (12 from the nest), `second_order.cml` (12 from the named form).

@@ -1,4 +1,4 @@
-// A function that prints, put through the *library's* `grad` (`stdlib/vjp.cml#grad`), which is
+// A function that prints, put through the *library's* `grad` (`lib/vjp/vjp.cml#grad`), which is
 // `split(jvp(first_with_as_param(f)))` -- so the cut has to take a body whose last statement is a
 // print.
 //

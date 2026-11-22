@@ -80,8 +80,8 @@
 // Two shapes that the tensor module writes are resolved rather than reported:
 //
 //   - A module that exports the groups of its operator registry
-//     (`for (g: OpRegistry::instance().operatorGroups("<module>"))`, `modules/tensor` and
-//     `modules/nn`, where the registry is reached through `camel::tensor::ops::`). The names are
+//     (`for (g: OpRegistry::instance().operatorGroups("<module>"))`, `lib/tensor` and
+//     `lib/nn`, where the registry is reached through `camel::tensor::ops::`). The names are
 //     the OpDef table, so the check reads the C++ skip list (`kDeclaredOperators`) and requires
 //     it to be exactly the declaration names, both ways; the loop then exports exactly the
 //     computed signatures, which `--verify-ops` proves is the rest of the registered operators.
@@ -120,9 +120,44 @@ import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
-const SIGNATURE_DIR = path.join(STDLIB_DIR, 'signatures')
-const MODULES_DIR = path.join(REPO_ROOT, 'modules')
+// The library's declarations were one flat `stdlib/` before the layout move and are one file per
+// module after it: `lib/<name>/<name>.cml` beside the module's own sources, its computed
+// signatures in `lib/<name>/signatures/<name>.cml`, and the two declarations that belong to no
+// module in `lib/std/std.cml` and `lib/rulesets/`. There is no single directory to name either
+// way, so the three spellings are resolved here and nowhere else, and this file measures whichever
+// tree it is run in.
+const MOVED_LIBRARY = path.join(REPO_ROOT, 'lib')
+const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
+const FLAT = fs.existsSync(path.join(FLAT_LIBRARY, 'std.cml'))
+const firstOf = (files) => files.find((file) => fs.existsSync(file)) ?? files[0]
+/// A module's declaration file: `<name>.cml` in the flat library, `lib/<name>/<name>.cml` in the
+/// moved one (`lib/std/<name>.cml` for the core's own).
+const declarationFile = (name) =>
+    FLAT
+        ? path.join(FLAT_LIBRARY, `${name}.cml`)
+        : firstOf([
+            path.join(MOVED_LIBRARY, name, `${name}.cml`),
+            path.join(MOVED_LIBRARY, 'std', `${name}.cml`),
+            path.join(MOVED_LIBRARY, `${name}.cml`),
+        ])
+/// The file a module's `computed:` names: `signatures/<name>.cml` from the library root.
+const computedFile = (name, file = path.join('signatures', `${name}.cml`)) =>
+    FLAT
+        ? path.join(FLAT_LIBRARY, file)
+        : firstOf([
+            path.join(MOVED_LIBRARY, name, file),
+            path.join(MOVED_LIBRARY, file),
+            path.join(FLAT_LIBRARY, file),
+        ])
+/// The declaration file a `source:` entry names, which is the module's `<name>.cml` unless the
+/// table says otherwise.
+const sourceFile = (name, source) =>
+    source ? (FLAT ? path.join(FLAT_LIBRARY, String(source)) : firstOf([
+        path.join(MOVED_LIBRARY, name, String(source)),
+        path.join(MOVED_LIBRARY, 'std', String(source)),
+        path.join(MOVED_LIBRARY, String(source)),
+    ])) : declarationFile(name)
+const MODULES_DIR = FLAT ? path.join(REPO_ROOT, 'modules') : MOVED_LIBRARY
 const REFERENCE = path.join(REPO_ROOT, 'scripts', 'stdlib-reference.mjs')
 
 const relative = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
@@ -150,7 +185,7 @@ const UNDERIVABLE_OPERATORS = new Set([
 // checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
 //
 // Empty since `onnx` was declared (both of its names, `supported_operators` and `export_model`,
-// in stdlib/onnx.cml): every module that registers operators is now in the probe and in
+// in lib/onnx/onnx.cml): every module that registers operators is now in the probe and in
 // MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
 const UNCHECKED_MODULES = []
 
@@ -432,7 +467,7 @@ function coverageProblems(reference) {
     const operatorNames = new Set(operators.map((module) => module.name))
     const excluded = new Map(UNCHECKED_MODULES.map((entry) => [entry.name, entry]))
     const inReference = (name) => reference.find((module) => module.name === name && module.kind === 'cpp')
-    const where = (module) => `modules/${path.basename(module.dir)}`
+    const where = (module) => `lib/${path.basename(module.dir)}`
 
     for (const module of operators) {
         const entry = inReference(module.name)
@@ -477,7 +512,7 @@ function coverageProblems(reference) {
             if (!fs.existsSync(dir)) {
                 problems.push(
                     `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
-                        `modules/${module.name} does not exist`,
+                        `lib/${module.name} does not exist`,
                 )
             } else {
                 const registers = fs
@@ -489,13 +524,11 @@ function coverageProblems(reference) {
                 if (!registers) {
                     problems.push(
                         `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
-                            `no source of modules/${module.name} registers a pass (registerModulePass)`,
+                            `no source of lib/${module.name} registers a pass (registerModulePass)`,
                     )
                 }
             }
-            const declared = module.source
-                ? path.join(STDLIB_DIR, String(module.source))
-                : path.join(STDLIB_DIR, `${module.name}.cml`)
+            const declared = sourceFile(module.name, module.source)
             if (!fs.existsSync(declared)) {
                 problems.push(
                     `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
@@ -542,8 +575,8 @@ function coverageProblems(reference) {
             )
         }
         for (const file of [
-            path.join(STDLIB_DIR, `${entry.name}.cml`),
-            path.join(SIGNATURE_DIR, `${entry.name}.cml`),
+            declarationFile(entry.name),
+            computedFile(entry.name),
         ]) {
             if (fs.existsSync(file)) {
                 problems.push(
@@ -578,15 +611,31 @@ function coverageProblems(reference) {
 
 function declarationModules() {
     const modules = []
-    for (const file of fs.readdirSync(STDLIB_DIR).sort()) {
-        if (!file.endsWith('.cml')) continue
-        const name = file.slice(0, -'.cml'.length)
-        const dir = cppModuleDir(name)
+    // The declaration files, by module name: the flat library's `*.cml`, or every `lib/<name>/`
+    // that holds `<name>.cml`. A directory without one is not a module (`lib/rulesets/`, whose
+    // files are the dotted prefix of `rulesets.jvp`, and `lib/std/`, whose declaration is
+    // `std.cml` and belongs to the module whose C++ side is named `std`).
+    const files = FLAT
+        ? fs
+            .readdirSync(FLAT_LIBRARY)
+            .filter((file) => file.endsWith('.cml'))
+            .map((file) => ({ name: file.slice(0, -'.cml'.length), file: path.join(FLAT_LIBRARY, file) }))
+        : fs
+            .readdirSync(MOVED_LIBRARY, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => ({ name: entry.name, file: path.join(MOVED_LIBRARY, entry.name, `${entry.name}.cml`) }))
+            .filter((module) => fs.existsSync(module.file))
+            .concat(
+                fs.existsSync(path.join(MOVED_LIBRARY, 'std', 'std.cml'))
+                    ? [{ name: 'std', file: path.join(MOVED_LIBRARY, 'std', 'std.cml') }]
+                    : []
+            )
+    for (const module of files.sort((a, b) => a.name.localeCompare(b.name))) {
+        const dir = cppModuleDir(module.name)
         if (!dir) continue
-        const source = path.join(STDLIB_DIR, file)
         // The file is the module and its name is the file's name: a `.cml` beside the `.cmo`
         // of the same name is that module's declaration module, and it is read by its name.
-        modules.push({ name, cppDir: dir, source })
+        modules.push({ name: module.name, cppDir: dir, source: module.file })
     }
     return modules
 }
@@ -659,7 +708,7 @@ function computedPlaces(module, entry) {
     const file = new Map()
     let filePath = null
     if (entry && entry.computed) {
-        filePath = path.join(STDLIB_DIR, entry.computed)
+        filePath = computedFile(module.name, entry.computed)
         if (fs.existsSync(filePath)) {
             for (const declaration of readDeclarations(filePath, module.name, false).declarations) {
                 if (!file.has(declaration.name)) {
@@ -681,7 +730,7 @@ function computedPlaces(module, entry) {
 // a `for (... get*Groups()) exportEntity(group->name(), group)` loop iterates. Comments are
 // stripped first, so a name in a comment is not a resolver or an export.
 //
-// Two more shapes are read, both written by `modules/tensor`:
+// Two more shapes are read, both written by `lib/tensor`:
 // - a loop over the module's operator registry
 //   (`for (g: OpRegistry::instance().operatorGroups("<module>"))`), whose groups are the OpDef
 //   table rather than `OperatorGroup::create` calls; the names it exports are the module's
@@ -895,7 +944,7 @@ function staticChecks() {
         }
 
         // (2) a signature file survives only when the reference generator names it as computed.
-        const signatureFile = path.join(SIGNATURE_DIR, `${module.name}.cml`)
+        const signatureFile = computedFile(module.name)
         const namesSignatureFile = entry && entry.computed === `signatures/${module.name}.cml`
         if (fs.existsSync(signatureFile) && !namesSignatureFile) {
             problems.push(

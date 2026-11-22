@@ -68,11 +68,15 @@ HERE = Path(__file__).resolve().parent
 
 
 def repository_root(start):
-    """The first ancestor holding `stdlib/std.cml`: neither cwd nor `HERE` is the root."""
+    """The first ancestor holding the standard library: neither cwd nor `HERE` is the root.
+
+    The library is `stdlib/std.cml` before the layout move and `lib/std/std.cml` after it, and this
+    case runs against both trees, so either marker answers.
+    """
     for directory in [start, *start.parents]:
-        if (directory / "stdlib" / "std.cml").is_file():
+        if (directory / "stdlib" / "std.cml").is_file() or (directory / "lib" / "std" / "std.cml").is_file():
             return directory
-    raise SystemExit(f"no stdlib/std.cml above {start}")
+    raise SystemExit(f"no stdlib/std.cml or lib/std/std.cml above {start}")
 
 
 ROOT = repository_root(HERE)

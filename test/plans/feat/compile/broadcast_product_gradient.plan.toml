@@ -7,7 +7,7 @@
 # cotangent is `ct * h` reduced to `w`'s shape, and `w`'s shape is `float[2, 2, 3]` while `h` is
 # `float[3]`. A law that reads `w` for that shape cannot have it -- a transposition is handed the
 # cotangent and never the value it differentiates -- so the law passes the extents the forward half
-# computed into `sum_to`, which takes the target as an `int[]` (`stdlib/tensor.cml#sum_to`, the port
+# computed into `sum_to`, which takes the target as an `int[]` (`lib/tensor/tensor.cml#sum_to`, the port
 # handed over by `modules/transforms/rule_expand.cpp`). The two cases are one number read on both
 # sides: the engine's own pullback and the library's law.
 [[tests]]

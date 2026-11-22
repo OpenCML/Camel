@@ -64,7 +64,7 @@ import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const REGISTRY_REL = 'diagnostics/registry.tsv'
+const REGISTRY_REL = 'kernel/diagnostics/registry.tsv'
 const GENERATOR_REL = 'scripts/diagnostics-catalog.mjs'
 const DEFAULT_BASE = 'origin/develop'
 

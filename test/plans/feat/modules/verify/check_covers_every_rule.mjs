@@ -43,7 +43,7 @@ const repoRoot =
     input.repo_root ??
     payload.repo_root ??
     path.resolve(path.dirname(casePath), '..', '..', '..', '..')
-const library = path.join(repoRoot, 'stdlib', 'rules.cml')
+const library = path.join(repoRoot, 'lib', 'rules', 'rules.cml')
 
 if (result !== '0') {
     fail(`${input.test_name ?? payload.test_name}: the check case exited ${result}`)

@@ -46,7 +46,7 @@
 
 | 3.3 的规则 | 今天 | 判据文件 | 锁住它的测试 |
 |---|---|---|---|
-| 资源由库用 `resource` 声明（`export resource fs`），可分组 `resource io = [stdout, fs]`，共用命名空间、可导入、标准资源默认可见 | **部分**（语言层已有声明与导入）。`resource`／`export resource` 是语言声明（`resource NAME`、`resource NAME = [...]`、`resource NAME unordered`），模块内 `uses <名>` 解析到它，别的模块 `import { X } from m` 之后同样可用（`stdlib/process.cml` 的 `process`、`stdlib/tiles.cml` 的 `driver`、`stdlib/test_support.cml` 的 `rendezvous_point`）；C++ 侧的 `ResourceSpec` 字符串按 `<模块>:<名字>` 与它对齐（`process:process`、`tiles:driver`）。**缺**：`stdout`/`fs`/`rng` 等最基本的资源仍由 `externalAmbient` 写死、没有语言声明；分组形式（`resource io = [...]`）的语义没有用例 | `src/parse/ast/builder.cpp#ResourceDecl`（`export resource` 是它自己的声明）；`resource_semantics.h#resource`；`gir/builder_modules.cpp#resourceIdentity`（裸名归声明它的模块） | `modules/resources` 的 `resource_names` 钉的是 C++ 名字表与声明对齐后的名字 |
+| 资源由库用 `resource` 声明（`export resource fs`），可分组 `resource io = [stdout, fs]`，共用命名空间、可导入、标准资源默认可见 | **部分**（语言层已有声明与导入）。`resource`／`export resource` 是语言声明（`resource NAME`、`resource NAME = [...]`、`resource NAME unordered`），模块内 `uses <名>` 解析到它，别的模块 `import { X } from m` 之后同样可用（`stdlib/process.cml` 的 `process`、`stdlib/tiles.cml` 的 `driver`、`stdlib/test_support.cml` 的 `rendezvous_point`）；C++ 侧的 `ResourceSpec` 字符串按 `<模块>:<名字>` 与它对齐（`process:process`、`tiles:driver`）。**缺**：`stdout`/`fs`/`rng` 等最基本的资源仍由 `externalAmbient` 写死、没有语言声明；分组形式（`resource io = [...]`）的语义没有用例 | `parse/src/ast/builder.cpp#ResourceDecl`（`export resource` 是它自己的声明）；`resource_semantics.h#resource`；`gir/builder_modules.cpp#resourceIdentity`（裸名归声明它的模块） | `modules/resources` 的 `resource_names` 钉的是 C++ 名字表与声明对齐后的名字 |
 | 每个 `var` 自动是资源；`var` 形参是资源参数；闭包捕获 `var`，函数类型就带着它 | **部分**。`var` 单元、`var` 形参、捕获在运行期足迹里都正确；函数**类型**里没有资源。捕获只体现在足迹的 `Capture` 绑定，不进类型 | `include/camel/core/resource_semantics.h#Capture`（Port→Norm/With、捕获→Capture、Fresh 丢弃）；`src/compile/gir/builder_expr.cpp#orderAfterLastWriter` | `modules/resources` 的 `core`（`bump`、`countdown`、`__g_5__` 捕获）；`linear/captured_writes` |
 | 资源是函数类型的一部分；原生算子在签名里写 `uses`；没写的按"全局"资源，与一切效应保持顺序 | **部分/缺**。`FunctionType` 只有修饰符、参数、返回类型（`func.h#FunctionType`），没有资源；原生算子的语义在 C++ `ResourceSpec`，没写的按 `conservativeResources`（Unknown 类、碰每个操作数、external） | `func.cpp#FunctionType`（intern key 无资源）；`resources.cpp#Resolver::node`（在 `f54822a5`，`FUNC` 分支从被调用者足迹重建资源，不读类型）；`resource_semantics.h#ResourceSpec` | `modules/resources` 的 `declared_resources`；`stdlib_registry.purity_declared` |
 | Camel 函数的资源由编译器推出（所调用者之和，递归求不动点），悬停与文档以限定名显示；显式 `uses` 是承诺，超出是编译错误；导出函数推出资源变化给警告 | **部分**。运行期 `footprintOf` 就是那个不动点（含递归、捕获、局部 Fresh 丢弃），但只在需要时算，不存进类型、不在编译期检查、无悬停、无变化警告 | `resources.cpp#footprintOf`（`FootprintWalk`，`recursed_`/`grew_` 的循环在 `resources.cpp#footprintOf`） | `modules/resources` 的 `countdown`（不动点）；承诺与警告**没有测试** |
@@ -58,6 +58,8 @@
 | 无序资源 `resource net unordered`：其上的效应不保持书写顺序；要顺序就写 `sync` 块或用句柄 | **缺**。`ResourceSpec` 没有无序标志，语言层没有这个词 | parser；`resource_semantics.h#ResourceSpec` | 无 |
 | 句柄类型：`#resource` 类型，每个值一个独立资源；签名写 `uses 形参名`；同一句柄按书写顺序，不同句柄互不约束；调用处推出是哪个值 | **缺**。没有 `#resource` 标签（`tags.cpp` 的标准标签表里没有它），函数类型没有资源，`ResourceClass::Foreign` 只是"模块包的对象" | `tags.cpp#declareStandardTags` 是标准标签的写法；`struct.h#StructDecl` 是名词性类型的落点 | `tags.plan` 的 `independent.*` 是"声明→图属性"的现成范式；句柄无用例 |
 | 并发不需要 `async`/`await`；独立计算与不同资源可同时进行；运行时在一个效应等待时执行其他就绪节点 | **部分**。`std::prl` 就是 `std::taskflow`，任务图只由 norm/with/ctrl 边决定；不在同一条链上的两个节点可以并发。`wait` 旧写法仍在 | `src/execute/pass.cpp#std::prl`；`src/passes/sched/taskflow/` | `para` 各计划；没有"两个句柄并发"的用例 |
+
+| 并发不需要 `async`/`await`；独立计算与不同资源可同时进行；运行时在一个副作用等待时执行其他就绪节点 | **部分**。`std::prl` 就是 `std::taskflow`，任务图只由 norm/with/ctrl 边决定；不在同一条链上的两个节点可以并发。`wait` 旧写法仍在 | `kernel/execute/pass.cpp#std::prl`；`src/passes/sched/taskflow/` | `para` 各计划；没有"两个句柄并发"的用例 |
 | 取消只对 `cancellable` 资源/算子 | **缺** | — | — |
 
 ### 1.2 一个便宜处：类型声明已经是名词性的
@@ -245,7 +247,7 @@ export type Stream<T> = {
 - `sync` 块：语句串成一条控制链，块的值经 `GATE` 交出去；纯计算也在链上。
 - `sync` 之外：读排在最后写者之后（`orderAfterLastWriter`，`builder_expr.cpp#orderAfterLastWriter`）；写只在自己被 `wait` 时排在之前使用者之后（`builder_expr.cpp#orderAfterLastWriter`）；环境资源与外部效应之间没有边，不同变量的效应之间也没有保证。
 - `core.effects` 与 `core.resources` 是按需计算的**事实**（`core_facts.cpp#registerCoreKinds`、`core_facts.cpp#core_facts`），不是存的边或属性；`std::agir` 把非纯 OPER 标成 `role=effect`（`node_roles.cpp#node_roles`）。
-- `std::prl` 的任务图只由 norm/with/ctrl 边生成（`src/execute/pass.cpp#std::prl` 起；`src/passes/sched/taskflow/`）。**没有 ctrl 路径的两个节点就是可并发的任务。**
+- `std::prl` 的任务图只由 norm/with/ctrl 边生成（`kernel/execute/pass.cpp#std::prl` 起；`src/passes/sched/taskflow/`）。**没有 ctrl 路径的两个节点就是可并发的任务。**
 
 所以"3.3 的执行顺序是图的属性"这句话今天只对 `sync` 成立；本计划要让它对**每个资源**成立。
 

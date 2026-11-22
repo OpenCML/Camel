@@ -309,7 +309,7 @@ timeout_ms = 60000
 # literal, so the two legs are compared for equality and not against a tolerance, and the whole curve
 # is pinned -- a future change to either leg moves a pinned value instead of only the difference.
 #
-# What this row does not claim: the loop composes `vjp`, not the name `grad`. `stdlib/vjp.cml#grad`
+# What this row does not claim: the loop composes `vjp`, not the name `grad`. `lib/vjp/vjp.cml#grad`
 # is declared for `(x: float) => float`, and its general form -- the first `with` parameter, design
 # principles 9.9 -- is the item still blocked on a lifted body calling a function value; `vjp` is the
 # function `grad` is a reading of. The weights sit on ordinary parameters because that is the only

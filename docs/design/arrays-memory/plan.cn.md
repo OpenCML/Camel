@@ -91,7 +91,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 
 `modules/tensor/type.h/.cpp` 的 `TensorType : OtherType` 带可选 dtype 与可选形状，自己的驻留表、`kUnknownDim = -1`、`equals/unify/widened`、形状检查、`cloneWithParams/cloneWithArguments`（解析 `Tensor<f32, const [n, m]>`）。模块以此作为：
 
-- 导出的类型 `Tensor`（已随 P4 的删除步走掉：`modules/tensor/module.cpp#exportEntity` 只导出算子实体，类型名不再导出；写 `Tensor` 现在是未知名字，过渡诊断 `TensorElementTypeRequired` 一起删除，见 5.1a）；
+- 导出的类型 `Tensor`（已随 P4 的删除步走掉：`lib/tensor/module.cpp#exportEntity` 只导出算子实体，类型名不再导出；写 `Tensor` 现在是未知名字，过渡诊断 `TensorElementTypeRequired` 一起删除，见 5.1a）；
 - 所有算子推断的返回类型（`modules/tensor/ops/*`、`support.cpp` 的 `tensorOf`）；
 - 值类型细化器（常量数组 → dtype+形状）与 `.npy` 入口加载器的类型键；
 - `modules/nn`、`modules/onnx`、`modules/tiles`、`modules/ckpt`、`modules/autodiff` 识别"这是不是张量"的依据（`asTensorType`，25 个文件、51 处）。
@@ -276,7 +276,7 @@ Tensor<f32>               // f32[...]
 - `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '...' ident? ']'`。
 - `src/parse/syntax/parser_type.cpp` 的 `parseArrayType`（158–206）改为循环解析 `ArrayDim`；`parseSpecType`（208+）的 `typeOrData` 增加"以 `[` 开头的形状参数"分支（解析成 `ArrayData`，里面的项是 extent 表达式），`const` 分支保留但只对普通类型参数有效。
 - AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp#ArrayTypeLoad`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `...name`。
-- CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder_type.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[...s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
+- CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`compile/src/gct/builder_type.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[...s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
 - 格式化器：`tools/format/fmt.cpp#Formatter` 的 `visitArrayType` 逐组打印 `[?]/[...s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
 
 ### 4.3 绑定规则
@@ -438,7 +438,7 @@ P4 的终点：
 
 ### 5.5 入口参数与 `.npy`
 
-`EntryArgumentLoader` 今天按 `TypeCode` 精确查表（`src/execute/entry_args.cpp#EntryArgumentLoader/350`），且先试聚合类型。数组与张量共用 `TypeCode::Array` 之后：
+`EntryArgumentLoader` 今天按 `TypeCode` 精确查表（`kernel/execute/entry_args.cpp#EntryArgumentLoader/350`），且先试聚合类型。数组与张量共用 `TypeCode::Array` 之后：
 
 - 张量模块在 `TypeCode::Array` 上注册 `.npy` 加载器，回调先判"这是不是数值数组、秩是否已知"；不是就返回"不接"（批复 Q4 明确要求加载器能拒接）——`Type[string]` 的入口参数仍按原来的"不能从命令行给出"报错。
 - 返回值的静态类型是**声明的数组类型**（例如 `f32[2, 3]`），不是裸 `Tensor`；`.npy` 的真实 dtype/形状必须与声明相符，否则报入口参数错误。`from_bytes` 的声明保持 `Tensor`（任意数值数组）。

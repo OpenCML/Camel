@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The contextual keywords of Camel: words the parser reads as a keyword in one position and as an
-// ordinary name everywhere else. A `CAMEL_KEYWORD` of include/camel/parse/syntax/token_kinds.def is
+// ordinary name everywhere else. A `CAMEL_KEYWORD` of parse/include/camel/parse/syntax/token_kinds.def is
 // reserved in every position; these words are not tokens at all, so their one table is kept here and
 // everything that has to agree with it is generated from it or checked against it:
 //
@@ -16,7 +16,7 @@
 //     that its "contextual-keywords" rule names exactly these words, once each.
 //
 // Every entry says where it is a keyword (`zh`, `en`) and carries the verbatim line of
-// `src/parse/syntax/parser*.cpp` that reads it as one. `--check` requires each of those lines to be
+// `parse/src/syntax/parser*.cpp` that reads it as one. `--check` requires each of those lines to be
 // in the parser still, so a reading that disappears takes the word off the page instead of leaving a
 // sentence behind that nothing implements (design principles 6.4).
 //
