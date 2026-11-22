@@ -81,6 +81,21 @@ bool nodeMayFault(
     // copy, a construction, an access -- are asked by their shape, not by their kind: that is the
     // one seam for them (`camel/execute/shaped_operators.h`, refactor stage 2.3), and what each of
     // them can fail is a property of the operator, not of the record it is stored in today.
+    //
+    // Design principles 3.9 makes "may fault" one item of the operator record, stated by `panic`,
+    // and this shape answer stands in for that item only while the record says nothing about these
+    // four: of them only `copy` is an operator (`:op/copy`), and it states no `panic`, so asking
+    // its record today would read "nobody said" -- the conservative `true` -- instead of the
+    // `false` this answer gives. A conversion, a construction and an access are not operators at
+    // all yet: each takes a compile-time parameter a record keyed by URI cannot carry
+    // (`lib/std/builtin/modules/globals.cpp`, refactor plan 2.3).
+    //
+    // So this is where the two readings would part: once the record states `panic` for the four,
+    // each arm below becomes that item's reading --
+    // `camel::ops::Registry::instance().find(oper)->mayFault()`, which is
+    // `!panic.stated() || panic.value` in `camel/ops/operator_record.h` -- and this switch goes.
+    // `oper` is the operator the node names once the front end builds these four as ordinary OPER
+    // nodes; today these kinds carry `kNoOper` and have no record to ask.
     switch (camel::execute::shapeOfKind(kind)) {
     case camel::execute::OperShape::Conversion:
         return castMayFault(castTarget, castSource);
@@ -91,6 +106,7 @@ bool nodeMayFault(
     case camel::execute::OperShape::None:
         break;
     }
+
     switch (kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
@@ -123,8 +139,7 @@ bool may_be_rearranged(
     // kind -- and, for an operator, one a pass may run again. `mayBeRecomputed` is the one question
     // the fault table does not answer: a pure operator a rule writes, and one a macro expands, does
     // not fault, yet a pass may neither drop it nor copy it.
-    if (kind == GCNodeKind::Oper &&
-        !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
+    if (kind == GCNodeKind::Oper && !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
         return false;
     }
     // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing refuses an
@@ -640,12 +655,12 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     // which lands the exit on the arm's value.
     //
     // Here, beside the cross-reference check and not in the commit's own checks, because it is a
-    // property of the graph published and not of what a commit added: every commit runs this seal in
-    // every build, whether or not it added an access, and no draft is exempt from it.
-    // "In the function body" is "runs whenever the function runs", which is not the same as "region
-    // 0": a block and an inlined body are regions the function enters unconditionally, and the front
-    // end leaves the exit in one whenever the last thing a body says is inside one (an inlined call
-    // at the tail, a tagged block). What never runs for a value nothing asks for is an arm, a loop's
+    // property of the graph published and not of what a commit added: every commit runs this seal
+    // in every build, whether or not it added an access, and no draft is exempt from it. "In the
+    // function body" is "runs whenever the function runs", which is not the same as "region 0": a
+    // block and an inlined body are regions the function enters unconditionally, and the front end
+    // leaves the exit in one whenever the last thing a body says is inside one (an inlined call at
+    // the tail, a tagged block). What never runs for a value nothing asks for is an arm, a loop's
     // condition and a loop's body -- those run only when their owner says so -- and that is what
     // this refuses, at any depth.
     const auto validateRunsWithTheBody = [&](gc_node_ref_t ref, std::string_view what) {
@@ -653,7 +668,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             return; // no such node, or a number `validateRef` above has already thrown about
         }
         for (uint32_t region = graph->nodeRegion(ref); region != 0;
-             region            = graph->region(region)->parent) {
+             region          = graph->region(region)->parent) {
             const GCRegionKind kind = graph->region(region)->kind;
             if (kind != GCRegionKind::Arm && kind != GCRegionKind::LoopCond &&
                 kind != GCRegionKind::LoopBody) {
@@ -661,8 +676,10 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             }
             throw std::runtime_error(
                 std::format(
-                    "Runtime graph '{}' has its {} at node {}, which is in region {} instead of the "
-                    "function body: that region runs only when its owner says so, so a value nothing "
+                    "Runtime graph '{}' has its {} at node {}, which is in region {} instead of "
+                    "the "
+                    "function body: that region runs only when its owner says so, so a value "
+                    "nothing "
                     "asks for never runs there, and the read never happens.",
                     graph->name(),
                     what,
@@ -808,13 +825,13 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // A GATE is "let a value through once the sync chain has", and it waits through a
             // **sync predecessor** (docs/design/effects/edges.cn.md 5.3 -- it has no control input
             // there at all: it is a pure value-forwarding node with one data port and one sync
-            // predecessor). A path that has not moved onto the sync edge may still carry the wait as a
-            // control input, and the ones that have carry the sync edge instead.
-            // The wait a GATE carries is either a block's chain or an edge of its own, and this
-            // refuses a gate with neither. It is a structural reading, and it is written where it
-            // is read: `EffectLivenessFacts` does not carry it (camel/runtime/effect_liveness.h
-            // says why -- four call sites filled that field in three spellings, and none of them
-            // was the liveness answer).
+            // predecessor). A path that has not moved onto the sync edge may still carry the wait
+            // as a control input, and the ones that have carry the sync edge instead. The wait a
+            // GATE carries is either a block's chain or an edge of its own, and this refuses a gate
+            // with neither. It is a structural reading, and it is written where it is read:
+            // `EffectLivenessFacts` does not carry it (camel/runtime/effect_liveness.h says why --
+            // four call sites filled that field in three spellings, and none of them was the
+            // liveness answer).
             const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
             const bool isSyncStatement = !graph->syncPredsOf(ref).empty();
             // A gate may also wait through **what it reads**: the inputs after the value are nodes
@@ -1075,10 +1092,10 @@ DraftPayloadPlan planDraftPayload(
         // The finished node answers for itself here: the payload the graph will hold is the one the
         // draft holds, so the question the seal check asks of the frozen graph (nodeTakesNoOrder,
         // graph_edges.cpp) is asked of this node before it is written, and the answer decides both
-        // the edge count and the edges emitted. It cannot be asked where the edge is written: a node
-        // still being built has no payload, so nodeIsFreelySchedulable answers for a half-made node
-        // and every writer believes the edge is wanted.
-        const bool dropsOrder = takesNoOrder(draft, draftId);
+        // the edge count and the edges emitted. It cannot be asked where the edge is written: a
+        // node still being built has no payload, so nodeIsFreelySchedulable answers for a half-made
+        // node and every writer believes the edge is wanted.
+        const bool dropsOrder  = takesNoOrder(draft, draftId);
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
             if (dropsOrder) {
@@ -1186,11 +1203,11 @@ void emitDraftPayload(
                 // per node of it. A reference outside the plan -- `kInvalidNodeRef` is 0xffffffff
                 // -- is a graph built with a hole in it, and read as an index it walks 16 GB past
                 // the table. An `ASSERT` would be `((void)0)` under `NDEBUG`: the build that
-                // ships would have no check here at all, so a hole the passes made would arrive as a SIGSEGV
-                // with an empty stdout and no sentence (a transposed half
-                // whose answer tuple was handed an empty cotangent). A throw and not an abort: a
-                // pass that builds a graph the encoder cannot write is the pass's answer to give,
-                // and the driver reports it as one (`reportPassFailure`), by name.
+                // ships would have no check here at all, so a hole the passes made would arrive as
+                // a SIGSEGV with an empty stdout and no sentence (a transposed half whose answer
+                // tuple was handed an empty cotangent). A throw and not an abort: a pass that
+                // builds a graph the encoder cannot write is the pass's answer to give, and the
+                // driver reports it as one (`reportPassFailure`), by name.
                 throw std::runtime_error(
                     std::format(
                         "The {} input list of node {} names draft node {}, which is not one of the "
@@ -1224,14 +1241,13 @@ void emitDraftPayload(
     };
 
     // A GATE forwards its **first** norm input: FastVM reads the producer, NodeVM reads the gate's
-    // slot, so the slot must be the input's. The inputs after the first are the reads the gate takes
-    // and are not what it hands on (design principles 3.1), and the walk to the forwarding value is
-    // the one walk (`camel/runtime/draft.h#ungated`).
-    // Rewrites that rebind a
-    // gate's input (inlining binds parameter gates to the caller's arguments) leave a stale slot, so
-    // it is derived here. The owner of this rule is the encoder -- the payload plan in this file --
-    // not the draft's writers: it is the place that decides what the frozen graph holds, which is
-    // where the order-edge filter sits too.
+    // slot, so the slot must be the input's. The inputs after the first are the reads the gate
+    // takes and are not what it hands on (design principles 3.1), and the walk to the forwarding
+    // value is the one walk (`camel/runtime/draft.h#ungated`). Rewrites that rebind a gate's input
+    // (inlining binds parameter gates to the caller's arguments) leave a stale slot, so it is
+    // derived here. The owner of this rule is the encoder -- the payload plan in this file -- not
+    // the draft's writers: it is the place that decides what the frozen graph holds, which is where
+    // the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
         const gc_node_ref_t value = ungated(draft, id);
         const DraftNodeHeader *h  = value == kInvalidNodeRef ? nullptr : draft.header(value);

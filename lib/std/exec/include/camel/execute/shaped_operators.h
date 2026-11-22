@@ -13,9 +13,9 @@
  * representation, and every back end then writes the same four branches. So the four branches are
  * written once, here, by the operator's implementation:
  *
- *   - `shapeOfKind` / `shapeOfNode` is the **one** place in the execution side that reads the four
- *     node kinds. It is the adapter plan 2.3 keeps while the front end still builds the four
- *     nodes; when it stops, this answers from the operator record and nothing below changes.
+ *   - `shapeOfKind` / `shapeOfNode` is the **one** place in the execution side that asks *which*
+ *     of the four a node is. It is the adapter plan 2.3 keeps while the front end still builds the
+ *     four nodes; when it stops, this answers from the operator record and nothing below changes.
  *   - `runShapedOperator` is the fast path a frame-running back end takes for one of the four:
  *     the node VM, the macro evaluator and the parallel scheduler's linear path all call it
  *     instead of writing their own arm. What it does with the value -- compute it, write the
@@ -40,15 +40,30 @@ namespace camel::execute {
 
 /// What one of the four operators does, which is all a back end has to know to run it.
 enum class OperShape : uint8_t {
-    None = 0,    // not one of the four: the node kind says what it is to the back end
-    Conversion,  // CAST: its one ordinary input converted to the node's type
-    Clone,       // COPY: a value of its own made from its input
+    None = 0,     // not one of the four: the node kind says what it is to the back end
+    Conversion,   // CAST: its one ordinary input converted to the node's type
+    Clone,        // COPY: a value of its own made from its input
     Construction, // FILL: an aggregate made from a template and its fields
-    Access,      // ACCS: a member or an element read out of its input
+    Access,       // ACCS: a member or an element read out of its input
 };
 
 /// The shape a node kind stands for, or None. This is the adapter described at the top of this
-/// file: the only reading of the four kinds left in the execution side.
+/// file: the one place that asks *which* of the four a node is. It is not the last place that
+/// names them, and the readings that stay are not this question:
+///
+///   - **the payload.** A construction's `GCFillBody` (its fill kind, its slots, a closure's form)
+///     and an access's `GCAccsBody` (its key and index) are data the operator record does not
+///     hold: of the four only `copy` is an operator (`:op/copy`); a conversion, a construction and
+///     an access take a compile-time parameter -- a target type, a member position, a fill's kind
+///     and field names -- that a record keyed by URI cannot carry yet
+///     (`lib/std/builtin/modules/globals.cpp`, refactor plan 2.3). So this answers a shape and
+///     hands no payload out, and those reads stay where they are.
+///   - **building the node.** The front end still *makes* these four nodes
+///     (`kernel/runtime/draft_construct.cpp`): a site that writes one is doing that step, not
+///     asking a question the record could answer.
+///
+/// Both are about what the node holds and how it is made, so they move when the front end stops
+/// building the four nodes -- not because this function exists.
 inline OperShape shapeOfKind(camel::runtime::GCNodeKind kind) {
     switch (kind) {
     case camel::runtime::GCNodeKind::Cast:
@@ -65,7 +80,8 @@ inline OperShape shapeOfKind(camel::runtime::GCNodeKind kind) {
 }
 
 /// The shape of the operator `ref` stands for, read from the record the plan walks.
-inline OperShape shapeOfNode(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+inline OperShape
+shapeOfNode(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     const camel::runtime::GCNode *node = graph.node(ref);
     return node == nullptr ? OperShape::None : shapeOfKind(node->kind);
 }
