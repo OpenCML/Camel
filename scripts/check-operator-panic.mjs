@@ -260,7 +260,8 @@ function splitArguments(text) {
 // ---- the functions of one file --------------------------------------------
 
 /**
- * One file's function definitions: a name, the parameters it names, and the offsets of its body.
+ * One file's function definitions: a name, the parameters it names, where its own text begins (the
+ * end of its parameter list, so that an initializer list is part of it) and the offsets of its body.
  *
  * A definition is found by its shape -- an identifier, a parameter list, then the brace that opens
  * the body -- and not by its return type: a helper is written `[[noreturn]] void refuse(...)`,
@@ -269,6 +270,30 @@ function splitArguments(text) {
  * (`if`, `while`, `for`, `switch`, `catch`) are the ones excluded by name.
  */
 const NOT_A_DEFINITION = new Set(['if', 'while', 'for', 'switch', 'catch', 'return', 'sizeof', 'do', 'else', 'case'])
+
+/**
+ * The `{` that opens a definition's body, found after its parameter list: the brace written
+ * there, or -- for a constructor or a member written with an initializer list -- the first brace
+ * outside that list's own parentheses. An initializer list is part of what the definition is: it
+ * is where `GraphExecutor` hands `kernels()` to its base, and reading only the body would leave
+ * the module's map unreachable from the module it belongs to. `-1` when the shape is not a
+ * definition at all: a declaration ends at `;` and a call is followed by neither.
+ */
+function bodyOpen(text, paramsEnd) {
+  const rest = text.slice(paramsEnd + 1, paramsEnd + 400)
+  const direct = /^\s*(?:noexcept\s*)?(?:const\s*)?(?:override\s*)?\{/.exec(rest)
+  if (direct) return paramsEnd + direct[0].length
+  if (!/^\s*(?:noexcept\s*)?(?:const\s*)?(?:override\s*)?:/.test(rest)) return -1
+  let depth = 0
+  for (let i = paramsEnd + 1; i < text.length; i++) {
+    const c = text[i]
+    if (c === '(') depth++
+    else if (c === ')') depth--
+    else if (depth <= 0 && (c === ';' || c === '}')) return -1
+    else if (c === '{' && depth <= 0) return i
+  }
+  return -1
+}
 
 function indexFunctions(text) {
   const funcs = new Map()
@@ -280,14 +305,16 @@ function indexFunctions(text) {
     const openParen = m.index + m[0].length - 1
     const paramsEnd = closeParen(text, openParen)
     if (paramsEnd < 0) continue
-    const sep = /^\s*(?:noexcept\s*)?(?:const\s*)?(?:override\s*)?\{/.exec(text.slice(paramsEnd + 1, paramsEnd + 40))
-    if (!sep) continue
-    const open = paramsEnd + sep[0].length
+    const open = bodyOpen(text, paramsEnd)
+    if (open < 0) continue
     const close = closeBrace(text, open)
     if (close < 0) continue
     const params = splitArguments(text.slice(openParen + 1, paramsEnd)).map(paramName)
     if (!funcs.has(name)) funcs.set(name, [])
-    funcs.get(name).push({ name, params, open, close })
+    // `from` is where the definition's own text begins: the parameter list ends there, and an
+    // initializer list -- between that `)` and the body's `{` -- is part of the definition even
+    // though it is not part of the body the raises are read from.
+    funcs.get(name).push({ name, params, from: paramsEnd, open, close })
   }
   return funcs
 }
@@ -438,8 +465,14 @@ const MAP_HEAD =
   /(?:^|\n)[ \t]*[^\n{]*?(?:unordered_map\s*<\s*std::string\s*,\s*operator_t\s*>|(?:operatorKernels|Kernels|OpsMap)\s*\(\s*\))[^\n{]*\{/g
 const PAIR = /\{\s*"([A-Za-z_][\w./]*)"\s*,\s*(__\w+__|[A-Za-z_]\w*)\s*(?:,|\})/g
 
+/**
+ * The registrations, and the map each one is written in. The map is a region of one file: its key
+ * is what a module is later attributed to (see `readMapModules`), and the pair carries that key so
+ * that a registration and its module never drift apart.
+ */
 function readRegistrations(files, raws) {
   const pairs = []
+  const regions = []
   for (const file of files) {
     const text = blank(readTracked(file))
     const raw = raws.get(file) ?? ''
@@ -449,17 +482,19 @@ function readRegistrations(files, raws) {
       const open = m.index + m[0].length - 1
       const close = closeBrace(text, open)
       if (close < 0) continue
+      const region = `${file}|${open}`
+      regions.push({ key: region, file, open, close })
       // The pair's URI is a string literal, which `blank` erases: the entries are read off the raw
       // text at the same offsets (the two texts have one length).
       const body = raw.slice(open, close + 1)
       PAIR.lastIndex = 0
       let p
       while ((p = PAIR.exec(body))) {
-        pairs.push({ uri: p[1], kernel: p[2], file, line: lineAt(text, open + p.index) })
+        pairs.push({ uri: p[1], kernel: p[2], file, region, line: lineAt(text, open + p.index) })
       }
     }
   }
-  return pairs
+  return { pairs, regions }
 }
 
 function lineAt(text, offset) {
@@ -469,14 +504,38 @@ function lineAt(text, offset) {
 }
 
 /**
- * The `panic` a declaration states, by URI. The Camel entrance writes the keyword in the declaration
- * under `#op('<uri>')`; the C++ entrance passes it as the second argument, which has no default.
+ * A URI split at its first `:`: the module it answers on, and the name it has inside that module.
+ *
+ * Both entrances write a URI, and the two sides of this check are written differently: a
+ * declaration writes the whole URI (`array:min_i`, `:op/div_i` -- the empty prefix is the core),
+ * while an implementation map is keyed by the module-internal name alone (`min_i`). The module is
+ * the dimension that tells two operators apart: `re:find` and `str:find` are two operators with
+ * one name, and so are `array:min_i` and `math:min_i`, and only the first of each pair can fail.
+ * Comparing the two sides is therefore done on `module:name` -- never on the bare name, which
+ * would fold those pairs into one and let a declaration of one answer for the other.
+ */
+function uriParts(uri) {
+  const at = uri.indexOf(':')
+  return at < 0 ? { module: '', name: uri } : { module: uri.slice(0, at), name: uri.slice(at + 1) }
+}
+
+/** The key both sides are compared on: `module:name`, the empty prefix being the core. */
+function uriKey(uri) {
+  const { module, name } = uriParts(uri)
+  return `${module}:${name}`
+}
+
+/**
+ * The `panic` a declaration states, by `module:name`. The Camel entrance writes the keyword in the
+ * declaration under `#op('<uri>')`; the C++ entrance passes it as the second argument, which has no
+ * default.
  */
 function readDeclarations(cmlFiles, sourceFiles) {
   const stated = new Map()
   const record = (uri, value, file, line) => {
-    if (!stated.has(uri)) stated.set(uri, [])
-    stated.get(uri).push({ uri, value, file, line })
+    const key = uriKey(uri)
+    if (!stated.has(key)) stated.set(key, [])
+    stated.get(key).push({ uri, key, value, file, line })
   }
   for (const file of cmlFiles) {
     const lines = readTracked(file).split('\n')
@@ -501,6 +560,85 @@ function readDeclarations(cmlFiles, sourceFiles) {
     while ((m = re.exec(text))) record(m[1], m[2] === 'true', file, lineAt(text, m.index))
   }
   return stated
+}
+
+/**
+ * The module each implementation map answers on, read from the C++ that states it.
+ *
+ * An implementation map is keyed by the module-internal name (`min_i`, `find`, `op/div_i`), so the
+ * module is what a key means. The module is not the directory a file sits in -- `lib/random/`
+ * answers the protocol `rand` -- and it is not inferred from the declaration side, which would be
+ * the check reading its own answer. It is stated twice in C++, and this joins the two:
+ *
+ *   1. `registerExecutorFactory("<module>", ...)` names the protocol and writes the executor that
+ *      answers it (`lib/re/module.cpp`, `lib/std/builtin/modules/globals.cpp`);
+ *   2. that expression names the map, directly or through the function or the class it builds
+ *      from: `getArrayOpsMap()` outright, `createReExecutor` -> `getReOpsMap()`, `GraphExecutor`'s
+ *      initializer list -> `kernels()`, `BasicBuiltinExecutor::create` -> `getOpsImplMap()` ->
+ *      `makeOpsImplMap()`.
+ *
+ * So the walk starts at a factory's expression and follows the names it writes into the
+ * definitions of this repository, stopping at the region a map is written in. A name with more
+ * than one definition is followed only to the one written in the same file (`kernels` is four
+ * modules' word for four different maps); a name with several definitions and none in the same
+ * file is not followed at all (`create` is every module's), because guessing which one is meant is
+ * the defect this whole check exists to avoid.
+ *
+ * A map answered by two modules, or by none, is a reading the run cannot take, and the caller
+ * refuses (exit 2) rather than filing those operators under a module that may not be theirs.
+ */
+function readMapModules(regions, loadedRegions, files, texts, raws) {
+  const claimed = new Map() // map region key -> Set of modules
+  const FACTORY = /registerExecutorFactory\s*\(/g
+  const definitionsIn = (file, definition) =>
+    texts.get(file).slice(definition.from, definition.close + 1)
+  for (const file of files) {
+    const text = texts.get(file)
+    const raw = raws.get(file)
+    FACTORY.lastIndex = 0
+    let m
+    while ((m = FACTORY.exec(text))) {
+      const open = m.index + m[0].length - 1
+      const close = closeParen(text, open)
+      if (close < 0) continue
+      // The protocol is a string literal, which `blank` erases: it is read off the raw text.
+      const named = /^\s*"([^"]*)"/.exec(raw.slice(open + 1, close + 1))
+      if (!named) continue
+      const module = named[1]
+      let frontier = text.slice(open + 1, close).match(/[A-Za-z_]\w*/g) ?? []
+      const followed = new Set()
+      for (let depth = 0; depth <= 4 && frontier.length; depth++) {
+        const next = []
+        for (const name of frontier) {
+          if (followed.has(name)) continue
+          followed.add(name)
+          const candidates = definitionsByName.get(name) ?? []
+          const here = candidates.filter(candidate => candidate.file === file)
+          const definition = here.length === 1 ? here[0] : here.length ? null : candidates.length === 1 ? candidates[0] : null
+          if (!definition) continue
+          let loadedHere = false
+          for (const region of regions) {
+            if (
+              region.file === definition.file &&
+              region.open >= definition.definition.from &&
+              region.close <= definition.definition.close
+            ) {
+              if (loadedRegions.has(region.key)) loadedHere = true
+              if (!claimed.has(region.key)) claimed.set(region.key, new Set())
+              claimed.get(region.key).add(module)
+            }
+          }
+          // A map with registrations in it is the end of the road: what it writes are kernel
+          // names, and no map is reachable through them. A shape that only looks like one (a
+          // function returning a map, say) is walked through, because the map it builds is past it.
+          if (loadedHere) continue
+          next.push(...(definitionsIn(definition.file, definition.definition).match(/[A-Za-z_]\w*/g) ?? []))
+        }
+        frontier = next
+      }
+    }
+  }
+  return claimed
 }
 
 // ---- the run ---------------------------------------------------------------
@@ -569,24 +707,42 @@ function commonPrefix(a, b) {
   return n
 }
 
-const registrations = readRegistrations(sourceFiles, raws)
+const { pairs: registrations, regions: mapRegions } = readRegistrations(sourceFiles, raws)
 if (!registrations.length) {
   console.error(`[${NAME}] no operator registration found under ${scanRoot}: nothing to check`)
   process.exit(2)
 }
 
+const mapModules = readMapModules(mapRegions, new Set(registrations.map(r => r.region)), sourceFiles, texts, raws)
+
+/** The one module a map answers on, or null when the C++ does not say exactly one. */
+const moduleOfMap = region => {
+  const modules = mapModules.get(region)
+  return modules && modules.size === 1 ? [...modules][0] : null
+}
+
+const unattributed = new Set()
 const unresolved = new Set()
-const operators = new Map() // uri -> { kernels: Set, sites: [], files: Set, first: {file,line} }
+const operators = new Map() // `module:name` -> { uri, kernels: Set, sites: [], files: Set, first }
 for (const registration of registrations) {
-  if (!operators.has(registration.uri)) {
-    operators.set(registration.uri, { uri: registration.uri, kernels: new Set(), sites: [], files: new Set(), first: registration })
+  const module = moduleOfMap(registration.region)
+  if (module === null) {
+    const named = [...(mapModules.get(registration.region) ?? [])].sort().join(', ') || 'none'
+    unattributed.add(
+      `${registration.file}:${registration.line}: the map is answered by ${named === 'none' ? 'no module' : `${named} -- more than one`}`,
+    )
+    continue
   }
-  const operator = operators.get(registration.uri)
+  const key = `${module}:${registration.uri}`
+  if (!operators.has(key)) {
+    operators.set(key, { uri: key, kernels: new Set(), sites: [], files: new Set(), first: registration })
+  }
+  const operator = operators.get(key)
   operator.kernels.add(registration.kernel)
   operator.files.add(registration.file)
   const resolved = resolveKernel(registration.kernel, registration.file)
   if (!resolved) {
-    unresolved.add(`${registration.file}:${registration.line}: ${registration.uri} -> ${registration.kernel}`)
+    unresolved.add(`${registration.file}:${registration.line}: ${key} -> ${registration.kernel}`)
     continue
   }
   const funcs = functions.get(resolved.file)
@@ -675,6 +831,9 @@ for (const operator of [...operators.values()].sort((a, b) => a.uri.localeCompar
 
 const line = message => console.log(message)
 line(`[${NAME}] ${sourceFiles.length} source files read from \`git ls-files\` under ${scanRoot}; ${operators.size} operators registered in ${new Set(registrations.map(r => r.file)).size} implementation maps`)
+const protocols = [...new Set(operators.keys())].map(key => uriParts(key).module)
+const colours = [...new Set(protocols)].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
+line(`[${NAME}] the maps answer on ${colours.length} protocols (a map's key is a name inside one of them, so \`find\` in \`re\` and \`find\` in \`str\` are two operators): ${colours.map(module => (module === '' ? '\'\' (the core)' : module)).join(', ')}`)
 const totals = [...kindTotals.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')
 const siteCount = [...kindTotals.values()].reduce((a, b) => a + b, 0)
 line(`[${NAME}] ${siteCount} raises reachable from an operator's implementation: ${totals || '(none)'}`)
@@ -707,6 +866,12 @@ for (const operator of unkept) {
 }
 if (internalOnly.length) {
   line(`[${NAME}] ${internalOnly.length} more operators raise only a compiler defect (${[...INTERNAL_RAISES].join(', ')}), which is not a fault of the program and is not counted`)
+}
+
+if (unattributed.size) {
+  for (const missing of [...unattributed].sort()) line(`  ${missing}`)
+  console.error(`[${NAME}] ${unattributed.size} registrations are in a map no single module answers on: an operator filed under a module that may not be its own is refused, never guessed`)
+  process.exit(2)
 }
 
 if (unresolved.size) {
