@@ -1159,12 +1159,16 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         return signature;
     }
     signature.spelling = clause->spelling();
-    // A clause that writes the capability and nothing else (`f! spelling`) declares the spelling
-    // without promising anything about the rest: the same reading as a declaration that writes no
-    // clause at all, which promises nothing (Generic), with the capability added. Otherwise the
-    // word could only be written beside a full account of the body's resources, and a pass that
-    // reads the spelling and does anything else could not declare it (design principles 9.5).
-    if (clause->spelling() && !clause->pure() && clause->uses().empty()) {
+    // A clause that writes a capability and nothing else (`f! spelling`, `f(): T panic`) declares
+    // that capability without promising anything about the rest: the same reading as a declaration
+    // that writes no clause at all, which promises nothing (Generic). Otherwise the word could only
+    // be written beside a full account of the body's resources -- and a pass that reads the
+    // spelling and does anything else could not declare it (design principles 9.5), while `panic`
+    // would claim the empty resource set (`pure`) merely by being written. A fault statement is not
+    // a promise about effects: an operator that faults may still write stdout (design principles
+    // 3.9), and the resources a declaration publishes stay the operator's own (design effects plan
+    // 2.2).
+    if ((clause->spelling() || clause->panic()) && !clause->pure() && clause->uses().empty()) {
         return signature;
     }
     signature.mode = sem::ResourceSignature::Mode::Concrete;

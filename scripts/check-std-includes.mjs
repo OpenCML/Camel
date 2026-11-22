@@ -39,12 +39,16 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // The blocks the layout map files the sources under (`docs/design/architecture/layout-map.cn.md`,
 // tables A and B): the four source roots and `tools/`. The flat `src/`, `include/`, `modules/` and
-// `stdlib/` of the tree before the move are gone, and naming them here is a scan of nothing -- the
-// run exits 2 with `no such file or directory` instead of checking the tree, which is what it did
-// on the first gate after the move. A root that is not there is left out rather than spelled.
-const SCAN_DIRS = ['kernel', 'parse', 'compile', 'lib', 'tools'].filter((dir) =>
-    fs.existsSync(path.join(ROOT, dir))
-)
+// `stdlib/` of the tree before the move are gone, and naming them here would be a scan of nothing.
+//
+// A root that is not there is **not** left out. This list used to filter itself with `existsSync`,
+// which reads "the root is gone" as "there is nothing wrong under the root": with `tools/` moved
+// away on 2026-11-22 the run printed `std includes: 1188 files, every standard header used is
+// reached through its includes` and exited 0 -- 95 files dropped out of the scan and out of the
+// sentence, and the line claimed the tree had been checked. So the five are spelled here, and
+// `main` refuses (exit 2) when one of them is not in the tree, naming the root and the directory it
+// expected. A check that quietly scans a smaller tree reports on a tree it did not read.
+const SCAN_DIRS = ['kernel', 'parse', 'compile', 'lib', 'tools']
 // Where `#include "a/b.h"` is looked up after the directory of the including file: every block
 // carries its own `include/` (`kernel/include`, `parse/include`, `compile/include`, and one per
 // module directory under `lib/`), and a tool names a header of another tool from the tree root.
@@ -427,23 +431,44 @@ function addIncludes(file, headers) {
     fs.writeFileSync(file, lines.join(eol))
 }
 
+// The code is *set*, never `process.exit`ed: this check's reading is a few thousand bytes of
+// findings and then the two lines that say what they amount to, and the gate reads stdout through a
+// pipe. `process.exit` leaves with the queue still full (test/tools/check-plan-fields.mjs carries the
+// full note for the same reason), so the last line would be the one that never arrives.
 function main() {
     const args = process.argv.slice(2)
     const fix = args.includes('--fix')
     const direct = args.includes('--direct')
     const targets = args.filter((a) => !a.startsWith('--'))
-    const files = []
-    for (const target of targets.length > 0 ? targets : SCAN_DIRS) {
+    const roots = targets.length > 0 ? targets : SCAN_DIRS
+    // Every root is resolved before anything is walked, and every missing one is named: a run that
+    // cannot read a root never reports on the roots it could.
+    const missing = []
+    for (const target of roots) {
         const entry = path.resolve(ROOT, target)
-        if (!fs.existsSync(entry)) {
-            console.error(`no such file or directory: ${target}`)
-            process.exit(2)
-        }
-        walk(entry, files)
+        if (!fs.existsSync(entry)) missing.push({ target, entry })
     }
+    if (missing.length > 0) {
+        for (const { target, entry } of missing) {
+            console.error(`no such file or directory: ${target} (expected at ${entry})`)
+        }
+        console.error(
+            `std includes: ${missing.length} of the ${roots.length} root(s) this check scans ` +
+                `${missing.length === 1 ? 'is' : 'are'} not in the tree: nothing was checked`,
+        )
+        return 2
+    }
+    const files = []
+    for (const target of roots) {
+        walk(path.resolve(ROOT, target), files)
+    }
+    // How much of the tree this run read, printed on every verdict. It is the number a reader
+    // compares across runs: a root that drops out of the list moves it, and a sentence that claims
+    // the whole tree was checked no longer stands beside a count that says otherwise.
+    console.log(`std includes: read ${files.length} source file(s) under ${roots.join(', ')}`)
     if (files.length === 0) {
         console.error('std includes: no .h/.cpp under the given targets: nothing was checked')
-        process.exit(2)
+        return 2
     }
     let findings = 0
     let filesWithFindings = 0
@@ -469,7 +494,7 @@ function main() {
     }
     if (filesWithUses === 0) {
         console.error(`std includes: none of the ${files.length} file(s) names a standard-library name: nothing was checked`)
-        process.exit(2)
+        return 2
     }
     const mode = direct ? 'named by the file itself' : 'reached through its includes'
     if (findings > 0) {
@@ -477,9 +502,10 @@ function main() {
             `std includes: ${findings} missing header(s) in ${filesWithFindings} of ${files.length} files (${mode})` +
                 (fix ? '; added' : '; run with --fix to add them'),
         )
-        process.exit(fix ? 0 : 1)
+        return fix ? 0 : 1
     }
     console.log(`std includes: ${files.length} files, every standard header used is ${mode}`)
+    return 0
 }
 
-main()
+process.exitCode = main()
