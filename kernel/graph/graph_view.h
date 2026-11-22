@@ -12,10 +12,18 @@
  * deletes the adapters and this class together with them.
  *
  * What it is not: a second model of a graph, a place to decide or cache anything, or a way to make
- * a graph say something it does not store. Everything derivable -- liveness, may-fault, a node's
- * position in a chain, a branch's join, an aggregate's arity -- is a fact derived from this face
- * and cached by the fact layer (section 4), never a member here. The adapter computes such an
- * answer at the call, or hands back the cache it already keeps; it does not learn a new one.
+ * a graph say something it does not store. Everything derivable -- liveness, may-fault, whether a
+ * node is a macro, whether it is a constant, a node's position in a chain, a branch's join, an
+ * aggregate's arity, which slot a value sits in -- is a fact derived from this face and cached by
+ * the fact layer (section 4), never a member here. The adapter computes such an answer at the call,
+ * or hands back the cache it already keeps; it does not learn a new one.
+ *
+ * Four readings left this face in the interface review of 2026-11-22, and each says where it went
+ * so that a reader does not look for it here: a macro is read from the record of the callee or of
+ * the operator (2.2 keeps macros in the records only), a constant is the node's kind and its
+ * inputs, which slot a value sits in belongs to the execution plan (section 13), and the static
+ * area is not handed out at all -- a reader asks the DATA node for its value, and the adapter reads
+ * the area it keeps.
  *
  * The vocabulary is nine kinds, three kinds of edge and "which region a node is in" (section 1).
  * Four readings differ from today's graph, and every reader still using the old reading is what the
@@ -36,6 +44,10 @@
  *    value is its single data input and what it waits for is a sync edge, so nothing counts "the
  *    first input is the value" any more.
  *
+ * A fifth one was added by the interface review of 2026-11-22: a callee is the graph it names, by
+ * name (an entry of the environment table) or by value, where the stored graph names it by a
+ * `GraphId` (`CalleeRef`).
+ *
  * Node numbers: a NodeRef is stable on one version line (section 2), and the adapters answer
  * today's numbers unchanged, so a reader moved onto this face prints the ids it printed before.
  * Gaps are expected, because the hidden kinds leave holes: nothing may index an array by a NodeRef,
@@ -47,10 +59,11 @@
 #include "camel/core/loop_kind.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/slot.h"
+#include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
-#include "camel/runtime/graph_id.h"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -64,6 +77,21 @@ class TupleType;
 } // namespace camel::core::type
 
 namespace camel::graph {
+
+/**
+ * The graph, as a value (design principles 2.3: in the process a graph's identity is the value
+ * itself, not a number; graph data model 4.4). The frozen graph this stage's programs hold and the
+ * graph an editing session is building are its two representations, each version of a graph is one
+ * such value, and everything that names a graph -- a callee referred to by value, the anchor of a
+ * fact (`kernel/facts`) -- names one of these.
+ *
+ * Declared here, by the lane that owns the graph, and only declared: this stage has two
+ * representations and answers both through the two adapters, so nothing here may name either of
+ * them (`GCGraph`, `GraphDraft`). When `Graph` gets members it moves to a header of its own; this
+ * is where its name and meaning live until then. A reader that wants to read one asks its owner
+ * for a `GraphView` -- the face below is how a graph is read, and the identity is the value.
+ */
+class Graph;
 
 /// A node of the graph, as the face numbers it. The same integer `gc_node_ref_t` is today; spelled
 /// here so that a reader of the view does not include a representation's header to name a node.
@@ -125,13 +153,22 @@ enum class EdgeKind : std::uint8_t {
 
 /// The role of a data port (section 1: a port carries a role; there is one data edge kind).
 /// Replaces `PortRole` unchanged, and the three runs `inBegin`/`withBegin`/`ctrlBegin` cut a node's
-/// input table into: `with` is a role here, and the third run is not a port at all.
-/// Who migrates: `normInputsOf`/`withInputsOf`/`ctrlInputsOf` and every `portRoleOf`.
+/// input table into: `with` is a role here, and the third run is not a port at all. `Capture` is
+/// the third role a port has (interface review 2026-11-22): the values a graph's body captured are
+/// the graph's own ports, and not a list beside them.
+/// Who migrates: `normInputsOf`/`withInputsOf`/`ctrlInputsOf`, every `portRoleOf`, and
+/// `closureNodes`.
 enum class PortGroup : std::uint8_t {
     /// The ordinary argument of the callee's signature.
     Normal = 0,
     /// The context (`with`) argument.
     Context = 1,
+    /// A value the body captured from where its function value was made, in the order it captured
+    /// it. Nothing at a call site names a capture -- it is bound from the closure tuple -- and it
+    /// is a port of the graph all the same: a reader that walks a graph's ports asks one query
+    /// three times instead of two plus a list of its own. The tuple those ports are read out of is
+    /// their types, which `captureType()` used to answer and which is not a query any more.
+    Capture = 2,
 };
 
 /// What a region is, as far as a reader of the view cares. Replaces `GCRegionKind`: the three kinds
@@ -189,12 +226,53 @@ struct LoopForm {
 };
 
 /**
+ * The callee a FUNC node names (core abstractions section 2; data model 2.3). A graph refers to
+ * another graph only by a call, and there are exactly two ways to write that reference:
+ *
+ *  - by name, for a top-level function and its generic instances: the entry of the environment
+ *    table of the function value the call is made from (2.3: a function value is its graph, its
+ *    captured values, and an environment table that binds each name it refers to);
+ *  - by value, for everything else -- a lambda, a graph a pass built, a graph the run made.
+ *
+ * Neither is a number. `GraphId` is the label a debugger and a dump name a graph by (data model
+ * 4.4: a graph's identity in the process is the value itself), so it does not say how a call refers
+ * to its callee and is not what this face answers. Replaces `calleeIdOf` and the `GCFuncRef`
+ * payload a reader decodes to reach it. Both adapters still translate the id they store into this
+ * reference, so every callee they answer today is by value; a name is answered once a function
+ * value's environment table exists to answer from.
+ */
+struct CalleeRef {
+    /// How the reference names its callee.
+    enum class Kind : std::uint8_t {
+        /// This node calls nothing: it is not a FUNC node, or it names no callee yet.
+        None = 0,
+        /// `name`: an entry of the function value's environment table.
+        Name = 1,
+        /// `graph`: the graph itself.
+        Value = 2,
+    };
+
+    Kind kind = Kind::None;
+    /// `Kind::Name`: the entry's name, interned (`camel/core/symbol.h`); `kEmptySym` otherwise.
+    camel::core::SymId name = camel::core::kEmptySym;
+    /// `Kind::Value`: the callee itself; nullptr otherwise. A reader that wants to read it asks its
+    /// owner for a `GraphView` -- the value is the identity, the view is only how it is read.
+    const Graph *graph = nullptr;
+};
+
+/**
  * The graph a reader holds, whatever it is made of. Replaces, together, `GCGraph` and `GraphDraft`
  * as *read* by anything but an adapter, and `compile/gir/graph_read.h`'s `GraphRead` with both of
  * its subclasses -- that face was the first half of this one and stops at the facts the lift asks.
  *
+ * A view is a way of reading a graph, not the graph's identity: the graph is a value (`Graph`
+ * above), an adapter is made on demand, and the same graph read through another adapter is still
+ * the same graph. So whatever has to name a graph past the call -- a callee referred to by value,
+ * the anchor of a fact (`kernel/facts`) -- names the value, and the anchor survives the view.
+ *
  * Every method answers what the graph stores. None of them decides anything: a reader that finds
- * `mayFault` or `isLive` here is looking in the wrong layer (section 4).
+ * `mayFault` here, or a node's macro-ness or constant-ness, is looking in the wrong layer (section
+ * 4, and the paragraph above that says where each of the three went).
  *
  * The parameters are a virtual interface on purpose. The first readers moved onto it -- the lift,
  * the encoder's self-check, `LoopView`, `decidingRegionOf`, `ControlRegions`, `NodeRoleRegistry` --
@@ -210,16 +288,17 @@ class GraphView {
     // -- the graph's own facts ---------------------------------------------------------------
     /// The graph's type: its parameters and what it answers. Replaces `GCGraph::funcType`.
     virtual camel::core::type::FunctionType *funcType() const = 0;
-    /// The graph's own ports, by group: the parameters of its body. Replaces `normPorts` and
-    /// `withPorts`; the values the body captured past them are `captures()`, because nothing at a
-    /// call site names those and they are bound from the closure tuple.
+    /// The graph's own ports, by group: the parameters of its body, and at `Capture` the values it
+    /// captured, in the order it captured them. Replaces `normPorts`, `withPorts` and
+    /// `closureNodes`: a capture is not a port at a call site, but it is a port of the graph, and
+    /// answering it as one group of the same query is what keeps a reader from learning a second
+    /// list. The tuple the captures are read out of is the types of these ports, so `captureType()`
+    /// is not a query either (interface review 2026-11-22).
     virtual std::vector<NodeRef> ports(PortGroup group) const = 0;
-    /// The values the body captured, in the order it captured them. Replaces `closureNodes`.
-    virtual std::vector<NodeRef> captures() const = 0;
-    /// The tuple those captures are read out of at a call, nullptr when the graph captures nothing.
-    virtual const camel::core::type::TupleType *captureType() const = 0;
-    /// The constants the graph was given. Replaces `staticSlots`/`staticSlotsOf`.
-    virtual std::span<const ::slot_t> staticArea() const = 0;
+    // The graph's static area is not a query of this face (interface review 2026-11-22): a span of
+    // raw slots hands a reader the representation of values and makes it index one, which is the
+    // execution plan's business and not the graph's content. A constant is asked of the DATA node
+    // that stands for it (`constantOf`), and the adapter reads the static area it keeps.
     /// The node the graph's value comes from, `kNoNode` when it has none. Replaces
     /// `exitNodeRef`/`exitRefOf`; a frozen graph stores it, a draft names the node it holds, and
     /// which of the two is a field is the adapter's business and not a reader's.
@@ -238,12 +317,23 @@ class GraphView {
     /// The type of the node's value, nullptr when it has none. Types are interned, so both adapters
     /// answer the same pointer for the same type.
     virtual const camel::core::type::Type *typeOf(NodeRef ref) const = 0;
-    /// The slot the node's value lives in; negative for a constant of the static area.
-    virtual std::int32_t dataIndexOf(NodeRef ref) const = 0;
-    /// The two node flags that exist. Replaces `GCNode::hasFlag` and `NodeFace::flags`, which hand
-    /// a reader a bit mask it has to know the meaning of.
-    virtual bool isMacro(NodeRef ref) const    = 0;
-    virtual bool isConstant(NodeRef ref) const = 0;
+    /// The value of a DATA node that is a constant, `std::nullopt` for every other node. Replaces
+    /// `staticArea()`: a reader asks the node it already has for its value, and where that value is
+    /// kept -- one word of the static area -- stays the representation's, read by the adapter. The
+    /// word is a value of the representation the graph and the back ends share (`slot_t`), so a
+    /// reader decodes it through the node's `typeOf`.
+    virtual std::optional<::slot_t> constantOf(NodeRef ref) const = 0;
+    // Three more readings are not here (interface review 2026-11-22), and a reader that wants one
+    // asks where it is derived rather than this face:
+    //
+    //   isMacro      the record of the callee, or of the operator the node names (2.2 keeps macros
+    //                in the records only, so a copy of the answer on a node would be a second
+    //                truth).
+    //   isConstant   the node's kind and its inputs: a DATA node whose value the graph was given,
+    //                which is what `constantOf` answers.
+    //   dataIndexOf  which slot the value sits in is the execution plan's (section 13), not the
+    //                graph's content. The back ends keep reading the frozen payload; stage 3 moves
+    //                the slot into the execution plan.
     /// Where the node was written, 0 when unknown. Compile and debug metadata, not content.
     virtual std::uint64_t originOf(NodeRef ref) const = 0;
 
@@ -294,9 +384,11 @@ class GraphView {
     virtual std::vector<RegionId> regionsOwnedBy(NodeRef ref) const = 0;
 
     // -- the payloads that are typed, not bytes ----------------------------------------------
-    /// The graph a FUNC node calls, `kInvalidGraphId` for another kind or one that names no callee.
-    /// Replaces `calleeIdOf` and the `GCFuncRef` payload a reader decodes to reach it.
-    virtual camel::runtime::GraphId calleeOf(NodeRef ref) const = 0;
+    /// The callee of a FUNC node, by name or by value; `Kind::None` for another kind, and for a
+    /// function that names no callee yet. Replaces `calleeIdOf` and the `GCFuncRef` payload a
+    /// reader decodes to reach it -- and `GraphId`, which labels a graph for a debugger and does
+    /// not say how a call refers to one. See `CalleeRef`.
+    virtual CalleeRef calleeOf(NodeRef ref) const = 0;
     /// The operator an OPER node names, `kNoOper` for another kind. Replaces `operUriOf` and the
     /// `GCOperBody` payload; the URI, the traits and the implementation are read from
     /// `camel/core/operator_table.h`, where they are stored once per operator.
@@ -341,6 +433,12 @@ class GraphView {
     };
 
     NodeRange nodes() const { return NodeRange(this); }
+
+    // Additions, and not part of this rework (interface review 2026-11-22, item 6): the successors
+    // of an order edge and of a sync edge -- the scheduler needs them, where `predecessors` answers
+    // the one direction the readers of this stage ask for -- and an entry that reads a node's tags,
+    // which are content of the graph and which a pass has to read. Both arrive as additions;
+    // nothing here reserves a name for them.
 };
 
 } // namespace camel::graph
