@@ -3064,6 +3064,7 @@ cd77d2e1477deacc ok test/cases/modules/autodiff/second_order_refused_vjp.cml
 f2760c0b0e338c68 ok test/cases/modules/autodiff/slice_grad.cml
 e5e7e093fd6f1ee3 ok test/cases/modules/autodiff/slice_grad_negative_step.cml
 7a9581b8ebb34ed8 ok test/cases/modules/autodiff/slice_open_end.cml
+983772a5d30f31bb ok test/cases/modules/autodiff/struct_member_read_grad.cml
 0965607e93a9c7bf ok test/cases/modules/autodiff/tensor_grad_check.cml
 3adbe79dfe82b581 ok test/cases/modules/autodiff/transform_rules.cml
 554f094bc9bd1045 ok test/cases/modules/autodiff/transpose_needs_parameter_shape.cml

@@ -3,9 +3,9 @@
 
 /*
  * Reverse-mode rules of the builtin float arithmetic (float64 `_d` and
- * float32 `_f` variants) and conversions between the float types. Integer,
- * boolean and string operators need none: their values have no tangent, so
- * no gradient ever reaches them.
+ * float32 `_f` variants), conversions between the float types, and the
+ * member read of an aggregate. Integer, boolean and string operators need
+ * none: their values have no tangent, so no gradient ever reaches them.
  */
 
 #include "derivative.h"
@@ -14,14 +14,20 @@
 
 #include "camel/core/derivative.h"
 #include "camel/core/forward.h"
+#include "camel/core/mm.h"
 #include "camel/core/type/base.h"
 #include "camel/core/rtdata/half.h"
+#include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/utils/type.h"
 
 #include <array>
 #include <format>
 #include <stdexcept>
+#include <vector>
 
 using namespace camel::core;
 using namespace camel::core::rtdata;
@@ -454,6 +460,178 @@ void scatterSliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+// ---- the member read of an aggregate ----
+//
+// `access::<T, U>(at, x)` and `access_key::<T, U>(key, x)` read one member of an aggregate, and a
+// differentiated value passes through that read: the reverse of taking one member out is putting
+// the gradient back where the member stood, with the zero tangent in every other place. So the
+// read's gradient is the aggregate's tangent with `dy` at the member's position and nothing else
+// anywhere -- it is neither dropped nor handed to the aggregate whole.
+//
+// The place (`at`, an int) or the name (`key`, a string) is the call's first operand and a
+// compile-time constant, so which member is written is decided here, once; which spelling the call
+// used does not decide it, because that is `__access_value__`'s reading too: the operand's type
+// says whether the member is read by place or by name (prelude.cml has the two URIs).
+
+/// The member the constant operand `where` names, as an element index of `aggregate`.
+std::optional<size_t> memberIndexOf(VjpBuilder &b, Type *aggregate, vjp_node_t where) {
+    if (!isAggregate(aggregate)) {
+        return std::nullopt;
+    }
+    const std::optional<slot_t> constant = b.staticValueOf(where);
+    if (!constant) {
+        return std::nullopt;
+    }
+    Type *const whereType = b.nodeType(where);
+    if (whereType != nullptr && whereType->code() == TypeCode::String) {
+        const auto *key = fromSlot<const String *>(*constant);
+        if (key == nullptr) {
+            return std::nullopt;
+        }
+        return tt::as_ptr<type::StructType>(aggregate)->findField(key->view());
+    }
+    const int64_t at = fromSlot<int64_t>(*constant);
+    if (at < 0 || static_cast<uint64_t>(at) >= aggregateSize(aggregate)) {
+        return std::nullopt;
+    }
+    return static_cast<size_t>(at);
+}
+
+/// The element of `aggregate` whose place in the aggregate's tangent is `position`.
+std::optional<size_t> primalElementOf(Type *aggregate, size_t position) {
+    for (size_t i = 0; i < aggregateSize(aggregate); ++i) {
+        const std::optional<size_t> at = machineryTangentElementIndex(aggregate, i);
+        if (at && *at == position) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+/// A value of `aggregate`'s tangent type built from `fields`, one per member in the tangent's
+/// order: the construction a program writes as an aggregate literal (`fill::<T, ...F>`), which is
+/// the operator a member read's reverse needs. Its template is one constant of the type it makes
+/// and every member is written from the fields, so the constant holds only the shape.
+vjp_node_t tangentAggregateOf(
+    VjpBuilder &b, Type *aggregate, const std::vector<vjp_node_t> &fields) {
+    Type *const tangent = machineryTangentTypeOf(aggregate);
+    if (tangent == nullptr) {
+        throw std::runtime_error(std::format(
+            "Derivative of a member read has no tangent type for '{}'.", aggregate->toString()));
+    }
+    const size_t size = aggregateSize(tangent);
+    Object *empty     = tangent->code() == TypeCode::Struct
+                            ? static_cast<Object *>(::Struct::create(size, mm::autoSpace()))
+                            : static_cast<Object *>(::Tuple::create(size, mm::autoSpace()));
+    std::vector<vjp_node_t> inputs;
+    inputs.reserve(size + 1);
+    inputs.push_back(b.addStatic(toSlot<Object *>(empty), tangent));
+    inputs.insert(inputs.end(), fields.begin(), fields.end());
+    return b.addOper(tangent, ":op/fill", inputs);
+}
+
+vjp_node_t zeroTangentOf(VjpBuilder &b, Type *primal, vjp_node_t primalNode);
+
+/// The zero tangent of the aggregate `primal`: every member's own zero in its place, taken member
+/// by member the way `machineryTangentTypeOf` keeps them.
+vjp_node_t zeroTangentAggregateOf(VjpBuilder &b, Type *primal, vjp_node_t primalNode) {
+    Type *const tangent = machineryTangentTypeOf(primal);
+    if (tangent == nullptr) {
+        throw std::runtime_error(std::format(
+            "Derivative of a member read has no tangent type for '{}'.", primal->toString()));
+    }
+    std::vector<vjp_node_t> fields;
+    const size_t size = aggregateSize(tangent);
+    fields.reserve(size);
+    for (size_t position = 0; position < size; ++position) {
+        const std::optional<size_t> member = primalElementOf(primal, position);
+        if (!member) {
+            throw std::runtime_error(std::format(
+                "Derivative of a member read found a tangent member of '{}' with no primal "
+                "member.",
+                primal->toString()));
+        }
+        fields.push_back(zeroTangentOf(
+            b,
+            aggregateElement(primal, *member),
+            b.addAccess(primalNode, *member)));
+    }
+    return tangentAggregateOf(b, primal, fields);
+}
+
+/// The zero tangent of the value `primalNode`: a scalar's registered zero, an array's zeros of its
+/// shape, an aggregate's every member's zero in its place.
+vjp_node_t zeroTangentOf(VjpBuilder &b, Type *primal, vjp_node_t primalNode) {
+    if (isAggregate(primal)) {
+        return zeroTangentAggregateOf(b, primal, primalNode);
+    }
+    Type *const tangent = machineryTangentTypeOf(primal);
+    if (const std::optional<slot_t> zero = zeroTangentConstantOf(primal)) {
+        return b.addStatic(*zero, tangent != nullptr ? tangent : primal);
+    }
+    const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primal);
+    if (space != nullptr && !space->zerosLikeUri.empty()) {
+        const std::array<vjp_node_t, 1> like{primalNode};
+        return b.addOper(tangent != nullptr ? tangent : primal, space->zerosLikeUri, like);
+    }
+    throw std::runtime_error(std::format(
+        "Derivative of a member read cannot build the zero tangent of the member's type '{}'.",
+        primal->toString()));
+}
+
+// A member read: the gradient of the member goes back to that member's position in the aggregate's
+// gradient, and the members that were not read get the zero tangent.
+void memberReadVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 2);
+    const std::optional<vjp_node_t> dy = b.gradientOf(call.output);
+    if (!dy) {
+        // Nothing reached the read: a member with no tangent of its own (an integer field), or a
+        // value no differentiated parameter flows into. A discrete member's derivative is zero by
+        // definition (design principles 9.9), so there is no gradient to carry.
+        return;
+    }
+    Type *const aggregate              = b.nodeType(call.inputs[1]);
+    const std::optional<size_t> member = memberIndexOf(b, aggregate, call.inputs[0]);
+    if (!member) {
+        throw std::runtime_error(std::format(
+            "Derivative of '{}' cannot read the member it names: the place or the name is not a "
+            "constant of the program, or it names no member of '{}'. A read whose member is "
+            "decided while the program runs has no derivative.",
+            call.uri,
+            aggregate->toString()));
+    }
+    const std::optional<size_t> position = machineryTangentElementIndex(aggregate, *member);
+    if (!position) {
+        // The member has no gradient channel of its own, so no gradient can have reached the read.
+        return;
+    }
+    Type *const tangent = machineryTangentTypeOf(aggregate);
+    if (tangent == nullptr) {
+        return;
+    }
+    std::vector<vjp_node_t> fields;
+    const size_t size = aggregateSize(tangent);
+    fields.reserve(size);
+    for (size_t at = 0; at < size; ++at) {
+        if (at == *position) {
+            fields.push_back(*dy);
+            continue;
+        }
+        const std::optional<size_t> other = primalElementOf(aggregate, at);
+        if (!other) {
+            throw std::runtime_error(std::format(
+                "Derivative of '{}' found a tangent member of '{}' with no primal member.",
+                call.uri,
+                aggregate->toString()));
+        }
+        fields.push_back(zeroTangentOf(
+            b,
+            aggregateElement(aggregate, *other),
+            b.addAccess(call.inputs[1], *other)));
+    }
+    b.accumulateGradient(call.inputs[1], tangentAggregateOf(b, aggregate, fields));
+}
+
 // A conversion between float widths: the gradient converts back.
 template <typename To> void convertVjp(VjpBuilder &b, const VjpCall &call, std::string_view back) {
     requireInputs(call, 1);
@@ -549,6 +727,12 @@ void registerBuiltinDerivatives() {
     registry.setRule(":tangent/scatter_add_arr", scatterAddArrayVjp);
     registry.setRule(":tangent/scatter_slice_arr", scatterSliceArrayVjp);
     registry.setRule(":tangent/scatter_take_arr", scatterTakeArrayVjp);
+    // A member read: the gradient of the member goes back to that member's place in the
+    // aggregate's gradient, and the other members get the zero tangent (see the block above).
+    // `:op/access` and `:op/access_key` are one read spelled two ways, and the rule reads which
+    // member by the constant operand the call was written with, not by which URI it holds.
+    registry.setRule(":op/access", memberReadVjp);
+    registry.setRule(":op/access_key", memberReadVjp);
 
     registry.setTangentSpace(TypeCode::Float64, floatTangentSpace<F64>());
     registry.setTangentSpace(TypeCode::Float32, floatTangentSpace<F32>());
