@@ -22,7 +22,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
-#include "camel/parse/ast/rule_head.h"
+
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
@@ -189,7 +189,7 @@ gc_node_ref_t buildRuleTangent(
         const auto match = camel::core::forwardRuleOf(std::string(uri));
         if (!match.has_value()) {
             why = "the operator has no forward rule bound at all";
-        } else if (match->status == camel::parse::ast::RuleLookup::NoSuchFamily) {
+        } else if (match->status == camel::core::RuleLookup::NoSuchFamily) {
             why = "no ruleset module is loaded (import rulesets.jvp)";
         } else {
             why = "the ruleset holds no rule for this operator and operand count";
@@ -212,7 +212,7 @@ gc_node_ref_t buildRuleTangent(
         why = choice.why;
         return rt::kInvalidNodeRef;
     }
-    ruleName = choice.rule;
+    ruleName = choice.rule.name;
     return expandRuleRightSide(
         group,
         transaction,

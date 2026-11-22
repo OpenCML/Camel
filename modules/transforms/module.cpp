@@ -35,6 +35,7 @@
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/forward.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/draft.h"
@@ -45,7 +46,6 @@
 
 #include <array>
 #include "camel/runtime/graph_txn.h"
-#include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/program.h"
 
 #include <algorithm>
@@ -65,10 +65,10 @@ void printRuleUris(
     camel::core::context::Context &context, const camel::runtime::Program *program,
     std::ostream &os) {
     std::vector<std::string> printed;
-    for (const camel::parse::ast::RuleEntry &head : camel::parse::ast::rulesOf("rulesets.jvp")) {
+    for (const camel::core::RuleObject &head : camel::core::forwardRules()) {
         auto &table = camel::compile::gir::genericRuleTable(context);
         for (size_t i = 0; i < table.size(); ++i) {
-            if (table[i]->name != head.rule) {
+            if (table[i]->name != head.name) {
                 continue;
             }
             const uint64_t ruleId = static_cast<uint64_t>(i) + 1;
@@ -159,7 +159,7 @@ void printRuleUris(
             const Shape lhsShape = shapeOf(instance.lhs);
             const Shape rhsShape = shapeOf(instance.rhs);
             const size_t ports   = rhsShape.ports;
-            os << "REINTERP uri " << uri << " -> rule " << head.rule
+            os << "REINTERP uri " << uri << " -> rule " << head.name
                << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << " ports=" << ports
                << " nodes=" << instance.rhs->nodeCount() << " lhsPorts=" << lhsShape.ports
                << " lhsKinds=" << lhsShape.kinds << " rhsKinds=" << rhsShape.kinds

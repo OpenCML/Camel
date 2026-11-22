@@ -21,11 +21,22 @@
  * registration time. That is what makes this an index consumer rather than a second copy of the
  * rules: remove a rule from the ruleset and the next question has no answer, which is exactly what a
  * transform must see.
+ *
+ * **What a caller is handed is a rule object, not a name to look up again.** A `RuleObject`
+ * (`camel/core/rule_index.h`) carries the five facts a transform reads about a rule -- its name,
+ * the operator its left side is written with, that operator's operand count, the function its right
+ * side calls, and the names its left side binds -- and the compiler filed all five when it read the
+ * declaration. So a caller here never touches the syntax tree, and never asks a second question of
+ * the index: `RuleMatch::rule` is the answer.
+ *
+ * The family names themselves live in this header's implementation and only there: a transform does
+ * not name the family it reads -- `vmapRuleOf` is the batching family's answer by construction --
+ * because "which module a rule is written in" is the question this file answers.
  */
 
 #pragma once
 
-#include "camel/parse/ast/rule_head.h"
+#include "camel/core/rule_index.h"
 
 #include <cstdint>
 #include <optional>
@@ -68,10 +79,10 @@ std::vector<std::string> ruleKeyExceptionLines();
 /// operands, and three is a fact the family's index holds (`arityOfHead`), not one the name spells.
 std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &uri);
 
-/// What `uri`'s forward rule is called right now, read from `rulesets.jvp`'s index at this moment.
+/// What `uri`'s forward rule is right now, read from `rulesets.jvp`'s index at this moment.
 /// `nullopt` when the operator has no key at all (which is not the same as a family that lacks the
 /// rule: the two are `NoRuleForPrimitive` and `NoSuchFamily` in the answer).
-std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri);
+std::optional<RuleMatch> forwardRuleOf(const std::string &uri);
 
 /// Every forward rule `uri` could answer by, in the order the family filed them: empty when the
 /// operator has no key or the family holds none.
@@ -81,23 +92,34 @@ std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri
 /// apart. The index does not encode the type; this answers the candidates and the caller lets the
 /// engine decide -- it instantiates a rule at the operand's own type, and a rule whose condition
 /// does not hold there gives a named refusal instead of an answer.
-std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri);
+std::vector<RuleMatch> forwardRulesOf(const std::string &uri);
+
+/// Every rule the forward family files, in filing order: what a reading of the transform's sources
+/// prints, one line per rule. A caller that walks the family asks here rather than naming
+/// `rulesets.jvp` itself.
+std::vector<RuleObject> forwardRules();
 
 /// `forwardRuleOf`, for the family a linear function's pullback is written in.
-std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
+std::optional<RuleMatch> transposeRuleOf(const std::string &uri);
 
 /// Every rule `uri` could answer by in the transpose family, in filing order: what a caller that can
 /// see the operands' types asks, so that two laws of one key are told apart by the values they meet
 /// rather than by the order they were filed in. Empty when the operator has no key or the family
 /// holds none there -- `transposeRuleOf` still tells those two apart (`NoSuchFamily`,
 /// `NoRuleForPrimitive`).
-std::vector<camel::parse::ast::RuleMatch> transposeRulesOf(const std::string &uri);
+std::vector<RuleMatch> transposeRulesOf(const std::string &uri);
 
 /// `forwardRuleOf`, for the family a batching transform asks (`rulesets.vmap`).
-std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri);
+std::optional<RuleMatch> vmapRuleOf(const std::string &uri);
 
 /// Every rule `uri` could answer by in the batching family, in filing order: `transposeRulesOf`'s
 /// question asked of `rulesets.vmap`.
-std::vector<camel::parse::ast::RuleMatch> vmapRulesOf(const std::string &uri);
+std::vector<RuleMatch> vmapRulesOf(const std::string &uri);
+
+/// `vmapRuleOf`, for a *head* rather than an operator: a call's callee is a name the graph holds,
+/// not an operator with a URI, and the batching family files a rule for such a name like any other
+/// head (`func f(x)`, then `rule vmap_f(bx: RowsOf<T>)`). The answer is the same kind of object a
+/// URI is answered with, and the family is still this file's to name.
+RuleMatch vmapRuleByHead(const std::string &head, uint32_t arity);
 
 } // namespace camel::core

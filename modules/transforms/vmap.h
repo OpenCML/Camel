@@ -15,16 +15,17 @@
  * tangent is the rule's), so both arrows are called. In a `vmap` graph they do not exist: `Lift<T>`
  * replaced the whole chain with batches, so an unbatched operand is a value the graph has none of,
  * and handing a batch to the outer arrow is a type error. So the transform reads the *name* the
- * rule's right side calls (`rhsCalleeOf`, include/camel/parse/ast/rule_head.h) and calls that
- * function with the batches as its arguments. The rule mechanism is unchanged; what differs is
- * which half of a rule a transform can ask for.
+ * rule's right side calls -- `RuleObject::rhsCallee`, filed with the rule by the compiler
+ * (`camel/core/rule_index.h`) -- and calls that function with the batches as its arguments. The rule
+ * mechanism is unchanged; what differs is which half of a rule a transform can ask for.
  *
- * A family other than the one an operator's key was first recorded for is read through that *key*:
  * The key a batching rule is filed under -- the spelling the rule's left side writes, and how many
  * operands that spelling takes -- is read off the operator itself (`camel/core/forward.h#ruleKeyOf`):
  * this transform keeps no table of its own, and the two operators whose key cannot be derived are
- * named, with their reasons, in `ruleKeyExceptions()`.
- * reads it and `lookupRule("rulesets.vmap", head, arity)` asks this family.
+ * named, with their reasons, in `ruleKeyExceptions()`. Which *module* those rules are written in is
+ * not this transform's to name either: `vmapRuleOf` / `vmapRulesOf` answer out of the batching
+ * family by construction, and a call -- which has a head but no operator URI -- is asked by its head
+ * (`vmapRuleByHead`). Every answer is a rule object, not a name to look up again.
  *
  * What is built today is the elementwise tier, `matmul`, the reductions along an axis, and calls: a
  * body of ports, constants, primitives that have a rule, and calls, which are *asked about* -- by the

@@ -7,6 +7,8 @@
 
 #include "builder_internal.h"
 
+#include "camel/core/rule_index.h"
+
 namespace {
 
 /// A rule's parameters as one string: the type written for each, in order, with the whitespace
@@ -137,7 +139,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // operand's own type enters -- the declaration is not refused for writing the same
         // `is_float::<T>()` twice.
         std::string parameterTypes = parameterTypesOf(context->get<cst::ParentParams>());
-        collectRuleHead(
+        camel::core::collectRuleHead(
             diags_->moduleName(),
             std::move(head),
             name,
