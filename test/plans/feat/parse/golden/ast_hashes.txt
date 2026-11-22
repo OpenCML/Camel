@@ -499,7 +499,7 @@ e24aa6d5e3d34cf4 ok src/stdlib/re.cml
 ef441b2c8bfac877 ok src/stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok src/stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok src/stdlib/rulesets/probe_missing.cml
-328d330e56d4d1e1 ok src/stdlib/rulesets/transpose.cml
+176913fc2945da70 ok src/stdlib/rulesets/transpose.cml
 261482309fb1f2d3 ok src/stdlib/rulesets/vmap.cml
 c32080d3581938e7 ok src/stdlib/sim.cml
 879b3dadd508cc8f ok src/stdlib/state.cml
@@ -4398,7 +4398,7 @@ f2359cb27baac27f ok test/cases/trans/spelling/undeclared.cml
 2673b5760b0bb445 ok test/cases/transforms/compositions/grad_vmap_f.cml
 7a8cc0d29d80d381 ok test/cases/transforms/compositions/hessian_of_a_quadratic.cml
 44ed6930e195e931 ok test/cases/transforms/compositions/jvp_vjp_f.cml
-0e657bd557a97ce1 ok test/cases/transforms/compositions/nested_grad_min.cml
+9bfc718ed893ebd4 ok test/cases/transforms/compositions/nested_grad_min.cml
 de2e3227933a6e2e ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
 1e6325d17962b018 ok test/cases/transforms/compositions/pullback_of_a_sum_of_squares.cml
 5e4605e2b3c579f8 ok test/cases/transforms/compositions/pullback_read_at_a_cotangent.cml
