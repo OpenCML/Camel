@@ -178,6 +178,36 @@ jobs:
           ASAN_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer-19
           UBSAN_OPTIONS: print_stacktrace=1
           CAMEL_TEST_BUILD: debug
+          # A plan's `timeout_ms` states the program's own cost, and the 4x Debug scale below it
+          # states what unoptimised C++ adds. Neither covers what the sanitizers add, and this
+          # lane's readings are therefore costs of the instrumentation. Measured on
+          # `stream.interval_loop_not_materialised` (2,000,000 rounds under an 8 MB heap cap, the
+          # tightest case of the three plans):
+          #
+          #   * plain Debug, same sources, gate host 2026-11-22: `cpu_ms: 4540` at c9c055ae3 and
+          #     `cpu_ms: 4790` at 86c8bb26f -- 4.41x and 4.18x of the 20000 ms line (the plan's
+          #     20000 ms timeout, x4 on a Debug build, over TIMEOUT_MARGIN's 4), so the plan's
+          #     number is a real bound of the Debug build and the two commits do not differ (5.5%);
+          #   * this job: `cpu_ms: 18200` in 44961637664 (margin 1.10x, 10% of room left) and
+          #     `cpu_ms: 36360` in 44965707048 (margin 0.55x, `[FAIL]`; exit 0 and `2000000` on
+          #     stdout, so the program finished and only the bound was crossed). 3.8x and 7.6x of
+          #     the plain Debug figure, and not a garbage-collection cost: the same program on the
+          #     same Debug binary reads 4.64 s of user time at its 8 MB heap cap and 4.69 s at 512
+          #     MB, so the rounds are the interpreter's own work -- which `-fsanitize=address`
+          #     checks at every load and store and `-fsanitize=undefined` at every arithmetic
+          #     operation. Neither sanitizer reported anything in either run, so the cost is the
+          #     instrumentation and not a finding in the program;
+          #   * and it is not one case: the two next-tightest were
+          #     `stream.for_loop_prl` (9740 ms against its 10000 ms line) and `stream.for_loop_jit`
+          #     (9640 ms), 1.03x and 1.04x.
+          #
+          # So under this lane the absolute reading has no discriminating power, and 8 is the
+          # smallest multiplier that puts the worst reading back under the plan's own 4x margin
+          # (20000 x 8 = 160 s against 36.36 s), which is 4.4x; the next-tightest two land at 8.2x.
+          # This states the premise of the lane rather than moving a plan's number: every plan's
+          # `timeout_ms` still means "this is slow" in the lanes whose cost it was measured on,
+          # and a program that never finishes is still killed at the scaled liveness bound.
+          CAMEL_TEST_TIMEOUT_SCALE: "8"
         run: |
           node scripts/test.js smoke
           node scripts/test.js test/plans/feat/compile/stream.plan.toml
