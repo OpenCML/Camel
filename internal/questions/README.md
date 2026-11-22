@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：68 页
+## 现在在等作者：69 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -75,6 +75,7 @@
 | [`2026-11-22-one-rule-value-or-two`](2026-11-22-one-rule-value-or-two.md) | `RuleObject` 与重写模块的规则值，合成一个还是两个 |
 | [`2026-11-22-residual-mlp-margin-was-already-thin`](2026-11-22-residual-mlp-margin-was-already-thin.md) | `residual_mlp_large_bytecode` 的时间余量在 0.2 之前就没有，现在要不要抬 |
 | [`2026-11-22-where-the-rule-instantiation-happens`](2026-11-22-where-the-rule-instantiation-happens.md) | 0.4 只把「编译一次」放在值上，实例仍按程序的类型组合预先展开——这算 0.4 还是匹配那一项 |
+| [`2026-11-23-the-dots-type-column-for-a-structural-operator`](2026-11-23-the-dots-type-column-for-a-structural-operator.cn.md) | DOT 的 `type=` 对一个写成算子的成员读/构造写哪种名字：`OPER` 加 URI，还是 `ACCS`/`FILL` 加原来的标签 |
 | [`decorators-and-macro`](decorators-and-macro.cn.md) | 装饰器的声明要不要带 `#macro`？ |
 | [`graph-is-a-base-or-a-rename`](graph-is-a-base-or-a-rename.cn.md) | `Graph` 是 `GCGraph` 改名，还是两者共有的基类？ |
 
