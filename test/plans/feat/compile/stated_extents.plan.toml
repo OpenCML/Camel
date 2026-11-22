@@ -176,14 +176,14 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["max<1> tie: value=5.0", "same=true"]
-expect_stderr_contains = ["max_axis_stated_t"]
+expect_stderr_contains = ["sum_axis_stated_t", "where_t"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "stated_min_axis_gradient_negative_axis"
-desc = "The gradient of `sum(min<-1, false>(x))` with a tie in one row: the lanes are `[1.0, 4.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. The axis written `-1` is the second reading in the case -- it reaches `min_axis_stated` unresolved and the stated extents decide where the lane's cotangent goes -- and the tie is the first: a law that kept only the first tied position would answer `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and one that spread the cotangent over the lane would answer `[[1.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. Both legs `same=true`."
+desc = "The gradient of `sum(min<-1, false>(x))` with a tie in one row: the lanes are `[1.0, 4.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. The axis written `-1` is the second reading in the case -- it reaches `sum_axis_stated` unresolved and the stated extents decide where the lane's cotangent goes -- and the tie is the first: a law that kept only the first tied position would answer `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and one that spread the cotangent over the lane would answer `[[1.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. Both legs `same=true`."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_min_axis_gradient_negative_axis.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -191,7 +191,7 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["min<-1>: value=5.0", "same=true"]
-expect_stderr_contains = ["min_axis_stated_t"]
+expect_stderr_contains = ["sum_axis_stated_t", "where_t"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -393,5 +393,25 @@ expect_exit = 0
 expect_output_contains = ["step engine  loss=180.0 dL/db=[24.0, 24.0] dL/dw=[[78.0, 78.0], [102.0, 102.0], [126.0, 126.0]]", "step library dL/dw[0][0]=78.0", "step library dL/dw[1][0]=102.0", "step library dL/dw[2][0]=126.0", "step library dL/db[0]=24.0"]
 expect_stderr_contains = ["jvp_sum_axis"]
 expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The forward half of a lane extremum, which the two cases above do not read: they take the gradient
+# (`vjp`), and the mask rides through that leg's stated operator, so a wrong forward value is
+# invisible to them. Here the tangent is read one element at a time -- a seed that is one at
+# `x[i][j]` answers that element's column of the per-element gradient -- on a lane whose extremum is
+# unique and on one where it is held twice. The tie is the discriminating reading: it is worth
+# `[2.0, 1.0]` from a seed of ones and `[1.0, 1.0]` from a law that selects the extremum of the
+# tangents instead of the tangent of the extremum.
+[[tests]]
+name = "max_min_axis_lane_tangent"
+desc = "The tangent of `max<1, false>` and `min<1, false>` on `[[1.0, 2.0], [3.0, 4.0]]` and on `[[2.0, 2.0], [1.0, 3.0]]`, seeded one element at a time: the per-element gradient is `[[0.0, 1.0], [0.0, 1.0]]` for the max and `[[1.0, 0.0], [1.0, 0.0]]` for the min, because both maxima sit in column 1 and both minima in column 0. On the tied lane row 0 holds its extremum twice, and a seed of ones reads `[2.0, 1.0]` for both operators -- the two tied tangents add, as the adjoint of `max_axis_stated_t`'s whole-cotangent-to-every-tied-position requires. `[1.0, 1.0]` is the value of a law that reduces the tangents with the extremum instead of selecting them, and it is a number, which is why the digits are pinned rather than a shape or a magnitude."
+kind = "behavior"
+case = "../../../cases/compile/transforms/max_min_axis_lane_tangent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["max<1> no-tie forward=[2.0, 4.0]", "max<1> no-tie d/dx[0][0]=[0.0, 0.0]", "max<1> no-tie d/dx[0][1]=[1.0, 0.0]", "max<1> no-tie d/dx[1][0]=[0.0, 0.0]", "max<1> no-tie d/dx[1][1]=[0.0, 1.0]", "max<1> tie forward=[2.0, 3.0]", "max<1> tie d/dx=ones [2.0, 1.0]", "max<1> tie d/dx[0][0]=[1.0, 0.0]", "max<1> tie d/dx[1][0]=[0.0, 0.0]", "min<1> no-tie forward=[1.0, 3.0]", "min<1> no-tie d/dx[0][0]=[1.0, 0.0]", "min<1> no-tie d/dx[0][1]=[0.0, 0.0]", "min<1> no-tie d/dx[1][0]=[0.0, 1.0]", "min<1> no-tie d/dx[1][1]=[0.0, 0.0]", "min<1> tie forward=[2.0, 1.0]", "min<1> tie d/dx=ones [2.0, 1.0]", "min<1> tie d/dx[0][0]=[1.0, 0.0]", "min<1> tie d/dx[1][0]=[0.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

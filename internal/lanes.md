@@ -19,6 +19,7 @@
 | lane/stats-macro | 已合入 | `std::stats` 每张可达图一个名字一个布尔 | 已合(`0699bc111`) | — | 2026-11-22 23:35 |
 | lane/stage2-frontend | 已合入 | 四个算子声明+内核+注册;前端不翻 | 已合(`801e22a43`) | — | 2026-11-22 23:20 |
 | lane/stage2-opsfacts | 已合入 | 图上 `#macro` 五处写 → 零处写 | 已合(`215574512`、`257f84c7e`) | — | 2026-11-22 23:10 |
+| lane/axis-tangent-wrong | `jvp_max_axis`/`jvp_min_axis` 前向把 `dxs` 交给 `max_axis_stated`/`min_axis_stated`,而按 `tensor.cml` 那个算子的值就是 `max<axis, keepdims>(t)`(mask 只给反向读),所以交出的是切线的极大/极小而不是极值的切线;改为 `sum_axis_stated(where(mask, dxs, 0.0), …)`,两条 stated 规则同病同改,`tensor.cml` 未动 | 首笔 `4b06d3981`;新例 `max_min_axis_lane_tangent` 在并列与不并列上逐元素读切线,按手算的那组对上(修前 18 项期望里 12 项不符,并列读 `[1.0, 1.0]` 而选择值 `[2.0, 1.0]`);`-Changed`(基 `9680035a4`)`[SUMMARY] total: 4880, pass: 4859, fail: 2, skip: 7`、12 known;两红都不在本车道:`frontend.ast_snapshot` 只差 `src/stdlib/prelude.cml` 一行旧账(记录行与文件内容都不在本笔 diff 内,是并入时留下的),`plan_validation` 是主机 checkout 缺 `build/lib/tiles/Release/tiles-plan-check`;反向本就正确(两条既有梯度用例数字不变、`same=true`),只是走的法律由 `max_axis_stated_t` 变成 `sum_axis_stated_t`+`where_t` | 未合 | 等点名 | 2026-11-23 03:20 |
 
 ## 没开车道的一件
 
