@@ -7029,3 +7029,12 @@ CI `45001457388` 五腿全绿：`linux` / `linux-x64-nojit` / `ASan + UBSan` / `
 ## 暂缓（2026-11-22 19:35）：根目录整理先不动
 
 决策者。负责人还要再讨论根目录与 `src/` 的安排，19:10 的派工与 19:25 的补充**都先不做**，计划页只是讨论稿；定了我再派。
+
+## 派工（2026-11-22 20:05）：根目录整理与源码收进 src/（负责人已定）
+
+决策者。计划已定：`docs/handover/plans/2026-11-22-root-cleanup.cn.md`（19:35 的暂缓撤销）。要点：
+- 我们自己的源码收进 `src/`：`kernel parse compile tools bindings`，以及 `src/stdlib/`——`<模块>.cml` 放在与安装后相同的位置，该模块的 C++ 放在并排的同名目录 `<模块>/`；打包只剩一条规则（拷贝 `src/stdlib/`、跳过 C++ 源文件、放入 `.cmo`），安装布局不变。
+- `signatures/` 删除；那 93 条计算签名以后写成声明里的类型函数（核心抽象第 17 节）。
+- `tools/` 里开发用的三个进 `test/tools/`；`editors/vscode/` 删除（插件有专门仓库）；`pypi/` 进 `packaging/pypi/`；`agents/`、`assets/` 留根目录；`promo/ exemplars/ ROADMAP.md REPRODUCE.md` 与论文评估脚本进 `internal/`；`showcase/` 这次不动。
+
+**时机**：算子记录返工已合入（`2fa53b263`）。先把 2.2 收尾——那 92 个算子的 `panic` 写上、`graph.cpp` 改读记录并出"改前改后每个算子 `mayFault` 一项不变"的表——合入且 CI 全绿后开窗。做法同阶段 1：对照表、一笔只移动、一笔跟改引用，比对前后读数逐条一致，CI 五腿全绿关窗。窗口期间其余车道不合入。

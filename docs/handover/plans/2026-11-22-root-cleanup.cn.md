@@ -1,4 +1,6 @@
-# 根目录整理（讨论稿，暂缓，未派工）
+# 根目录整理与源码收进 src/
+
+> 已定（负责人 2026-11-22）。算子记录返工合入之后、阶段 3 开工之前开一次搬家窗口执行。
 
 依据：公开仓库的组织（`docs/design/public-repo/README.cn.md`，已定 2026-10-22）第 2 节与第 6 节 I1、I2——当时定了却一直没做；源码布局以核心抽象第 9 节为准（`kernel/ parse/ compile/ lib/ tools/`，取代该稿第 2、3 节里的 `src/ include/ stdlib/`）。负责人 2026-11-22："根目录确实太混杂了……需要进一步精简"；"倾向于 src 包裹我们自己的源码，因为有针对这个的代码行数统计"。
 
@@ -32,7 +34,7 @@ internal/                                                         内部协作�
 | `lib/<模块>/signatures/<模块>.cml`（计算出来的签名的记录） | 删除 | 负责人 2026-11-22：不留这种单独的记录文件。这些签名以后写成模块声明里的类型函数（核心抽象第 17 节，93 条是那一步的验收清单）；在那之前不另记。同批改 `scripts/stdlib-reference.mjs`（这些算子只列名字与说明）、`scripts/stdlib-declarations.mjs --check`（去掉 `computed` 字段那条规则）、`docs/stdlib-conventions.cn.md` 第 27 行那条规则 |
 | `hello.cml` | `examples/hello.cml` | |
 | `logo.png` | 删除 | 与 `assets/logo.png` 逐字节相同；引用改指 `assets/` |
-| `assets/` | 留在根目录 | README、打包、宣传都用，不只是文档（待负责人确认） |
+| `assets/` | 留在根目录 | README、打包、宣传都用，不只是文档 |
 | `export_matrix.csv`、`export_matrix.md` | 不入库 | 生成物：生成它的脚本输出到 `out/`，引用它的文档改为"运行某命令生成" |
 | `changes.log` | `CHANGELOG.md` | 按 Keep a Changelog；`agents/branching.md` 与发布脚本跟着改 |
 | `ROADMAP.md` | `internal/ROADMAP.md` | 内容是"当前这一轮开发的目标与大纲"，属内部协作 |
