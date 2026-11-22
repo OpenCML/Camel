@@ -13,6 +13,8 @@ set(CAMEL_LAYOUT_BLOCKS
     third_party
     kernel_utils
     kernel_core
+    kernel_ops
+    kernel_facts
     kernel_runtime
     parse
     compile
@@ -41,6 +43,18 @@ set(CAMEL_LAYOUT_BLOCK_kernel_core_ROOTS
     ${PROJECT_SOURCE_DIR}/kernel/execute
     ${PROJECT_SOURCE_DIR}/kernel/include
     ${PROJECT_SOURCE_DIR}/kernel/profile
+)
+set(CAMEL_LAYOUT_BLOCK_kernel_ops_ROOTS
+    ${PROJECT_SOURCE_DIR}/.
+    ${PROJECT_SOURCE_DIR}/kernel
+    ${PROJECT_SOURCE_DIR}/kernel/ops
+    ${PROJECT_SOURCE_DIR}/kernel/ops/include
+)
+set(CAMEL_LAYOUT_BLOCK_kernel_facts_ROOTS
+    ${PROJECT_SOURCE_DIR}/.
+    ${PROJECT_SOURCE_DIR}/kernel
+    ${PROJECT_SOURCE_DIR}/kernel/facts
+    ${PROJECT_SOURCE_DIR}/kernel/facts/include
 )
 set(CAMEL_LAYOUT_BLOCK_kernel_runtime_ROOTS
     ${PROJECT_SOURCE_DIR}/.
@@ -171,7 +185,11 @@ set(CAMEL_LAYOUT_CATCHALL_ROOTS
     ${PROJECT_SOURCE_DIR}/kernel/core
     ${PROJECT_SOURCE_DIR}/kernel/diagnostics
     ${PROJECT_SOURCE_DIR}/kernel/execute
+    ${PROJECT_SOURCE_DIR}/kernel/facts
+    ${PROJECT_SOURCE_DIR}/kernel/facts/include
     ${PROJECT_SOURCE_DIR}/kernel/include
+    ${PROJECT_SOURCE_DIR}/kernel/ops
+    ${PROJECT_SOURCE_DIR}/kernel/ops/include
     ${PROJECT_SOURCE_DIR}/kernel/profile
     ${PROJECT_SOURCE_DIR}/kernel/runtime
     ${PROJECT_SOURCE_DIR}/kernel/utils
@@ -305,6 +323,18 @@ function(camel_layout_add_blocks)
                 "${PROJECT_SOURCE_DIR}/kernel/include/camel/runtime/*.cpp"
                 "${PROJECT_SOURCE_DIR}/kernel/include/camel/utils/*.cpp"
                 "${PROJECT_SOURCE_DIR}/kernel/profile/*.cpp"
+            )
+            list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
+        endif()
+        if(_block STREQUAL "kernel_ops")
+            file(GLOB_RECURSE _sources
+                "${PROJECT_SOURCE_DIR}/kernel/ops/*.cpp"
+            )
+            list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
+        endif()
+        if(_block STREQUAL "kernel_facts")
+            file(GLOB_RECURSE _sources
+                "${PROJECT_SOURCE_DIR}/kernel/facts/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
