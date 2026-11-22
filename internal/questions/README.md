@@ -5,11 +5,12 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：1 页
+## 现在在等作者：2 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
+| [`2026-11-23-two-cases-read-one-record-file-in-opposite-directions`](2026-11-23-two-cases-read-one-record-file-in-opposite-directions.cn.md) | 两个用例按相反方向读同一份记录文件 |
 
 ## 生成器不会删的行：240 行（页已不在 `questions/` 里）
 
