@@ -25,8 +25,8 @@
 // a tolerance. That is the criterion this case exists for: "the library trains S2" is worth nothing
 // unless its curve is the curve the engine produces -- a gradient that is a constant multiple of the
 // right one still makes a loss go down. `docs/design-principles.cn.md` 7.6 asks for bit-identical
-// readings on one device and one configuration, and `docs/handover/batches-2026-10-31-72h.cn.md`
-// asks S2 to train "with the library's `grad`".
+// readings on one device and one configuration, and the criterion for this case is that the loop
+// trains with the library's `grad`.
 //
 // The rounds are folded into two arrays and printed once, because an effect written inside a `loop`
 // body does not reach the output (measured here: only the line after the loop printed).

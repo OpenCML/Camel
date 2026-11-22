@@ -12,8 +12,7 @@
  *
  * Both updates read `copied` from `camel inspect --copies`, and `by-count` would be wrong for
  * both: `Array::writableInPlace` answers from the element's own block count, and a container's
- * slot never increments it. See
- * docs/handover/plans/2026-11-20-container-held-elements-as-one-clause.cn.md.
+ * slot never increments it.
  *
  * Expected output: [1, 2] [9, 2] / [[0], [1]] [1, 2]
  */

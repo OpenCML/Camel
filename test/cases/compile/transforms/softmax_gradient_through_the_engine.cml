@@ -1,8 +1,7 @@
 // `softmax`'s gradient through the engine, written out element for element: the number the library's
 // own rules will have to reproduce, and the case that is allowed to be one-sided today.
 //
-// The deletion audit (`docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`,
-// D1) has `softmax` on its difference set. The engine answers it (`softmaxVjp`,
+// The deletion audit has `softmax` on its difference set. The engine answers it (`softmaxVjp`,
 // `modules/tensor/ops/reduction_ops.cpp`, registered by `setVjp(defs, "softmax", ...)`); the library
 // does not, and the neighbouring case records *where* it stops -- not at a missing `softmax_t`, but
 // one step earlier, in `split` (`skip=backward construct=a node whose input was not copied`). So this

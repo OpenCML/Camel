@@ -8,9 +8,8 @@
  *
  * `vmap` is the transform (jax_vmap.cml, jax_vmap_tensor.cml): the same numbers as a value rather
  * than as a call form. What no case has is the rest of `vmap`: a second batched argument, a chosen
- * or named axis, and a batch over the leaves of a tree.
- * docs/handover/reviews/questions-2026-10-30-jax.md records that gap; this case is the part that
- * must stay green whatever the transform becomes.
+ * or named axis, and a batch over the leaves of a tree. That gap is not this case's subject: this
+ * case is the part that must stay green whatever the transform becomes.
  */
 
 type Point = { w: float }

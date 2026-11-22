@@ -5,8 +5,7 @@
 // no law for it, and that `transpose` is for linear functions while a gradient is taken with `vjp`.
 // What the sentence must NOT say -- and what this entry's `expect_output_not_contains` pins -- is that
 // `abs` is not linear: that claim would need the forward family's index, and a program that imports
-// only `rulesets.transpose` does not carry it (the ruling is the 2026-11-04 page under
-// docs/handover/questions/ whose name begins `2026-11-04-must-a-transpose-refusal-claim`). A wrong
+// only `rulesets.transpose` does not carry it. A wrong
 // explanation is worse than none, because a reader acts on it; "the family holds no rule for this
 // operator" is the fact the index answers, and it is also the one a reader can act on.
 //

@@ -15,9 +15,8 @@
 // makes the rank-zero array where a value's type goes from `T` to `T[...]`
 // (`camel/core/type/composite/array.h#isRankZeroEdge`, `Array::createRankZero` through
 // `ArrayType::castSlotFrom`), so `numel(ct)` answers 1 -- one lane, the whole product of the stated
-// extents -- and the one law of this key reads both shapes of answer. Author, 2026-11-04 04:20
-// (`docs/handover/reviews/questions-2026-10-29.md`, "秩 0：只有一个转换点"): the ports say `T[...]`
-// and the conversion is the compiler's, once.
+// extents -- and the one law of this key reads both shapes of answer: the ports say `T[...]` and the
+// conversion is the compiler's, once.
 //
 // This case wrote `keepdims = true` for a while to keep the answer a rank-one array, which dodged
 // the conversion rather than testing it. The ruling turned it back: the flag is `false`, the answer

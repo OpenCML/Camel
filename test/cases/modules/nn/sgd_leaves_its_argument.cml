@@ -2,19 +2,15 @@
  * `sgd(params, g, rate)` is a library operator: it answers a new tree and leaves its argument as
  * it was (design principles 11.3). `nn:sgd` declares that it *may* reuse an operand
  * (`OperatorTable::declareReusesOperand`), and at this call site the argument's binding is a second
- * name for it, so the count is two and the kernel must not write into it. That is not a rule we are
- * still waiting for: the author's answer is that the argument binding is a holder, handed on at the
- * caller's last use and added otherwise, so reuse in place happens only at count one (`9699824aa`;
- * docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md). Here the caller reads
- * `p.weight` after the call, so the count never falls to one and the write is wrong -- which is what
- * this case pins.
+ * name for it, so the count is two and the kernel must not write into it. The argument binding is a
+ * holder, handed on at the caller's last use and added otherwise, so reuse in place happens only at
+ * count one. Here the caller reads `p.weight` after the call, so the count never falls to one and
+ * the write is wrong -- which is what this case pins.
  *
  * The leaf here is a compact array with no view and no block (`zeros` of two f32), which is the one
  * shape for which `Array::writableInPlace()` already answers true. So this is the smallest program
  * that tells a kernel which asks that question from one that allocates a new leaf: with the write
  * into the parameter, `p.weight` prints the updated value, and the program has lost its argument.
- *
- * docs/handover/reports/2026-11-17-s3b-the-training-steps-update-cannot-read-in-place.cn.md
  */
 
 import { grad } from autodiff

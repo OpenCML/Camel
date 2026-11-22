@@ -5,9 +5,8 @@
  * the value `3`. Nothing is reported: the write is a root of the region it is written in, and is
  * not an effect nobody runs.
  *
- * The author's ruling of 2026-11-15 overrides the reading this case was written for (2026-11-05,
- * `080778522`, `docs/handover/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`):
- * a write in a running region runs, and a loop body that runs is a running region.
+ * The rule this case pins is the general one: a write in a running region runs, and a loop body that
+ * runs is a running region, so a statement written there needs no `sync` to run.
  */
 
 func main(): int sync {

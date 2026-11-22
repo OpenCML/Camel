@@ -7,7 +7,7 @@
  *
  * The call below is the shape JAX writes for that transform, refused here because the name belongs
  * to persistence: a program that wants to save a tree calls `ckpt`, and one that wants recomputation
- * has nothing to call yet (docs/handover/reviews/questions-2026-10-30-jax.md, J8).
+ * has nothing to call yet.
  */
 
 func square(x: float): float {
