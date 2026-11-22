@@ -28,8 +28,8 @@
  *
  * What resolves, and what does not:
  *
- *  - a path taken from the repository root (`stdlib/array.cml`), or from the citing file
- *    (`../stdlib/array.cml`), or a suffix of one (`stdlib/array.cml` for a file under `funcs/`);
+ *  - a path taken from the repository root (`lib/array/array.cml`), or from the citing file
+ *    (`../lib/array/array.cml`), or a suffix of one (`lib/array/array.cml` for a file under `funcs/`);
  *    the suffix form must name exactly one file, because a suffix two files answer is no evidence;
  *  - a token whose first segment is not a directory of this tree is a sentence's shorthand, not a
  *    claim about this tree: it is read when exactly one file ends that way and ignored otherwise;

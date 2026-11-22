@@ -6,7 +6,7 @@
 # Three kinds of target compile C++ here -- the objects of the core library, the tools that link it
 # (and the CPython extension, which is built by the same helper), and the modules that become .cmo --
 # and each of the three files that create them spelled the flags out again: CMakeLists.txt for
-# `libcamel_objects`, tools/libcamel_tool.cmake for every tool, modules/camel_module.cmake for every
+# `libcamel_objects`, tools/libcamel_tool.cmake for every tool, cmake/camel_module.cmake for every
 # module. A flag written in one of them stayed in one of them, and a new flag had to be written
 # three times or it silently reached two thirds of the tree.
 #
@@ -33,7 +33,7 @@
 #   diagnostics that only `-Wpedantic` enables, so they travel with it.
 #
 #   -Wno-gnu-label-as-value is the core library's alone: the computed-goto interpreter,
-#   src/passes/sched/fastvm/gotovm.cpp, is the one translation unit in the tree with `goto *`.
+#   lib/std/fvm/gotovm.cpp, is the one translation unit in the tree with `goto *`.
 #
 #   -Wno-nan-infinity-disabled is the core library's alone as well, and it is the one flag here
 #   that nothing currently needs: it arrived with a `-ffast-math` this tree no longer passes

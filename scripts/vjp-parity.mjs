@@ -10,27 +10,27 @@
 //
 //   the engine's table   a C++ rule per operator URI, registered with
 //                        `camel::core::DerivativeRegistry::instance().setRule(uri, fn)` --
-//                        `src/builtin/operators/derivative.cpp` (the core's arithmetic,
+//                        `lib/std/builtin/operators/derivative.cpp` (the core's arithmetic,
 //                        conversions, array writes and the tangent operators),
-//                        `modules/tensor/ops/*.cpp` (`setVjp(defs, "<name>", &fn)`, which
-//                        `modules/tensor/ops/registry.cpp` turns into `tensor:<name>`) and
-//                        `modules/math/module.cpp`, `modules/autodiff/operators.cpp`.
-//                        `modules/autodiff/pullback.cpp` asks it by URI (`findRule`) and refuses
+//                        `lib/tensor/ops/*.cpp` (`setVjp(defs, "<name>", &fn)`, which
+//                        `lib/tensor/ops/registry.cpp` turns into `tensor:<name>`) and
+//                        `lib/math/module.cpp`, `lib/autodiff/operators.cpp`.
+//                        `lib/autodiff/pullback.cpp` asks it by URI (`findRule`) and refuses
 //                        the node when the answer is nothing.
 //
-//   the library's table  one `export rule <name>` per law in `stdlib/rulesets/transpose.cml`
-//                        (the reverse side) and `stdlib/rulesets/jvp.cml` (the forward side).
+//   the library's table  one `export rule <name>` per law in `lib/rulesets/transpose.cml`
+//                        (the reverse side) and `lib/rulesets/jvp.cml` (the forward side).
 //                        The compiler asks it by *key*, not by URI:
-//                        `src/core/forward.cpp#ruleKeyOf` reads the key off the operator --
+//                        `kernel/core/forward.cpp#ruleKeyOf` reads the key off the operator --
 //                        `:op/add_d` is `+` at two operands, `tensor:pick_at` is the call
 //                        `pick_at` at two, a conversion is its destination's spelling at one --
-//                        and `src/core/rule_index.cpp#lookupRules` answers the laws filed
+//                        and `kernel/core/rule_index.cpp#lookupRules` answers the laws filed
 //                        under it. (Until 0.4 it answered from the syntax tree; the answer is
 //                        the same one, read from `RuleObject` instead of from `RuleHead`.)
 //
 // Nothing compared the two, and the shape of the failure that produced is a half-account: a law
 // the library answers and the engine refuses. `tensor:pick_at` was one -- the library filed
-// `stdlib/rulesets/transpose.cml#pick_at_t` and `stdlib/rulesets/jvp.cml#jvp_idx_arr`, the
+// `lib/rulesets/transpose.cml#pick_at_t` and `lib/rulesets/jvp.cml#jvp_idx_arr`, the
 // engine's table had no row, so `vjp` answered `[0.0, 1.0, 0.0]` for a program `grad` refused.
 // Each one is found by a person meeting it. This is the comparison instead.
 //
@@ -53,7 +53,7 @@
 // machinery). So the property is: **every difference is written down, with who owns it and why**
 // -- `scripts/vjp-parity-exemptions.tsv`, one row per key, three fields, no wildcard. A
 // difference that is not in that file is the debt this check exists to catch, and it is caught in
-// both directions: a new law in `stdlib/rulesets/*.cml` with no `setVjp` behind it is a
+// both directions: a new law in `lib/rulesets/*.cml` with no `setVjp` behind it is a
 // library-only row, and a new `setRule` with no law beside it is an engine-only row.
 //
 //   node scripts/vjp-parity.mjs                  check: the tree's differences are the list
@@ -132,7 +132,7 @@ const RULE_KEY_EXCEPTIONS = [
     { uri: 'tensor:sum_axis', head: 'sum', arity: 1 },
 ]
 
-// `typeCodeToString` (`src/core/type/base.cpp`) for the codes a conversion can target: the key of
+// `typeCodeToString` (`kernel/core/type/base.cpp`) for the codes a conversion can target: the key of
 // a conversion is its destination's spelling at one operand.
 const TYPE_CODE_SPELLING = new Map([
     ['Int32', 'i32'],
@@ -220,7 +220,7 @@ function lineOf(text, offset) {
 // ---- the library's table ---------------------------------------------------------------------
 //
 // One row per rule declaration in every ruleset the directory holds: the rule's symbol (`pick_at_t`,
-// `jvp_pick_at`), the key it files (read from the head of its left side, `src/parse/ast/
+// `jvp_pick_at`), the key it files (read from the head of its left side, `parse/src/ast/
 // rule_head.cpp#leftHeadOf`), and the left side itself, so a reader can see what was read.
 //
 // The rulesets are read by directory, not from a list of names. The list this replaced named two
@@ -231,11 +231,11 @@ function lineOf(text, offset) {
 // line of this script opens is a law nothing compares, and no error says so: each table stays
 // complete in itself, which is the shape of every defect this comparison exists for.
 //
-// So the read set is the top of `stdlib/rulesets/`, and `unreadRulesets` below is the relation that
+// So the read set is the top of `lib/rulesets/`, and `unreadRulesets` below is the relation that
 // keeps it the whole directory rather than its top level: a ruleset that moves into a subdirectory
 // stops being read the day it moves, and a green check would not say so.
 
-const RULESET_DIRECTORY = 'stdlib/rulesets'
+const RULESET_DIRECTORY = 'lib/rulesets'
 
 function rulesetFiles() {
     let names
@@ -258,7 +258,7 @@ function rulesetFiles() {
 
 const RULESETS = rulesetFiles()
 
-/// The `.cml` files under `stdlib/rulesets` that declare a rule and are not in the read set.
+/// The `.cml` files under `lib/rulesets` that declare a rule and are not in the read set.
 ///
 /// The read set is the top of the directory, so a ruleset one level down is read by nothing while
 /// the check stays green -- the same defect, moved. A file is recognised by what it says (`rule`,
@@ -472,14 +472,14 @@ function* cppFiles(dir) {
 /// in the tensor module's catalog. Read, not assumed, and refused when the catalog names more
 /// than one, because then one of the two would be attributed to the wrong namespace.
 function tensorProtocol() {
-    const text = withoutComments(read('modules/tensor/ops/catalog.cpp'))
+    const text = withoutComments(read('lib/tensor/ops/catalog.cpp'))
     const protocols = new Set()
     for (const match of text.matchAll(/OpRegistry::instance\(\)\.add\(\s*"([^"]+)"/g)) {
         protocols.add(match[1])
     }
     if (protocols.size !== 1) {
         fail(
-            `modules/tensor/ops/catalog.cpp registers ${protocols.size} protocol(s) ` +
+            `lib/tensor/ops/catalog.cpp registers ${protocols.size} protocol(s) ` +
                 `(${[...protocols].join(', ')}): a setVjp cannot be attributed by this reader`
         )
     }
@@ -573,10 +573,10 @@ function readEngine() {
                 const literal = argument.match(/^"([^"]+)"$/)
                 return literal ? [literal[1]] : []
             }
-            // A call, never the method's own definition (`src/core/derivative.cpp` declares
+            // A call, never the method's own definition (`kernel/core/derivative.cpp` declares
             // `setRule(std::string_view, VjpRule)`, and a definition registers nothing). The one
             // registration whose URI is not a value this reader can name is the transport:
-            // `modules/tensor/ops/registry.cpp` copies `OpDef::vjp` into the registry under
+            // `lib/tensor/ops/registry.cpp` copies `OpDef::vjp` into the registry under
             // `<protocol>:<def.name>`, and a `setVjp` is what put a function there. It is counted
             // rather than resolved, and the count is asserted below, because a transport that
             // stopped existing would make every `setVjp` row disappear without a refusal here.
@@ -642,10 +642,10 @@ function readEngine() {
 }
 
 /// Whether an operator URI is a conversion, and to which type: the registrations with their two
-/// types are in `src/builtin/executors/builtin.cpp#kConversions`, which is where the compiler
+/// types are in `lib/std/builtin/executors/builtin.cpp#kConversions`, which is where the compiler
 /// reads them too. A `:op/*` name that is not there is not a conversion, whatever its letters.
 function conversionTargets() {
-    const text = withoutComments(read('src/builtin/executors/builtin.cpp'))
+    const text = withoutComments(read('lib/std/builtin/executors/builtin.cpp'))
     const targets = new Map()
     for (const match of text.matchAll(
         /\{\s*"(op\/[a-z0-9_]+)"\s*,[^,]*,\s*TypeCode::([A-Za-z0-9_]+)\s*,\s*TypeCode::([A-Za-z0-9_]+)\s*\}/g
@@ -653,12 +653,12 @@ function conversionTargets() {
         targets.set(`:${match[1]}`, match[3])
     }
     if (targets.size === 0) {
-        fail('src/builtin/executors/builtin.cpp names no conversion: the reader stopped matching')
+        fail('lib/std/builtin/executors/builtin.cpp names no conversion: the reader stopped matching')
     }
     return targets
 }
 
-/// The key an operator URI reduces to, as `src/core/forward.cpp#ruleKeyOf` states it. A `:op/`
+/// The key an operator URI reduces to, as `kernel/core/forward.cpp#ruleKeyOf` states it. A `:op/`
 /// name that is neither a written operation nor a conversion, and a module operator whose name
 /// the rulesets file no rule under, reduce to a key with no operand count: the compiler's answer
 /// for them is "no key at all", which is a fact about the library's table (it files nothing the
@@ -771,7 +771,7 @@ const library = readLibrary()
 // which is why the closure is stated here, before a user meets it.
 //
 // The unit is the same key the comparison above uses -- `head@arity`, the key the compiler derives
-// from the operator (`src/core/forward.cpp#ruleKeyOf`) -- and not the parameter-type list: a family
+// from the operator (`kernel/core/forward.cpp#ruleKeyOf`) -- and not the parameter-type list: a family
 // may file several laws under one key (`jvp.cml` files four for `float(x)`), and what the walk asks
 // is whether the key has a law at all. The reported operator is the key and, beside it, the backward
 // law that has no twin, so the repair names the file and the symbol to write.
@@ -779,8 +779,8 @@ const library = readLibrary()
 // `library.rules` carries both files with the relative path each was read from, so a `--root` copy
 // is read the same way and a law appended to the copy is reported like one in the tree.
 if (CLOSURE) {
-    const BACKWARD = 'stdlib/rulesets/transpose.cml'
-    const FORWARD = 'stdlib/rulesets/jvp.cml'
+    const BACKWARD = 'lib/rulesets/transpose.cml'
+    const FORWARD = 'lib/rulesets/jvp.cml'
     const backward = library.rules.filter((rule) => rule.file === BACKWARD)
     const forward = library.rules.filter((rule) => rule.file === FORWARD)
     const forwardKeys = new Set(forward.map((rule) => rule.key))

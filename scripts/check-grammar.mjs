@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The grammar of Camel is written once, as the production above each function of the parser
-// (src/parse/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
+// (parse/src/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
 // in step with it:
 //
 //   node scripts/check-grammar.mjs --write    regenerate the grammar blocks of the language
@@ -12,10 +12,10 @@
 //                                             section 2.4.1, both languages)
 //   node scripts/check-grammar.mjs --check    exit 1 unless
 //       - those blocks are what --write would produce,
-//       - every file at the top of src/parse/syntax was read, and a file under that directory
+//       - every file at the top of parse/src/syntax was read, and a file under that directory
 //         which writes a production and is not read is a failure, named by path,
 //       - every name used on a right-hand side is a production (or a token class),
-//       - every quoted literal is a token of include/camel/parse/syntax/token_kinds.def, or a
+//       - every quoted literal is a token of parse/include/camel/parse/syntax/token_kinds.def, or a
 //         contextual keyword of scripts/context-keywords.mjs,
 //       - every production has a `parse` function or is listed as folded into another one,
 //       - every node kind of node_kinds.def names a production in its comment,
@@ -34,7 +34,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // into a subdirectory, is read by nothing -- its productions are compared with nothing while every
 // check below stays green, which is the defect this script exists for (the shape that
 // `scripts/vjp-parity.mjs`'s ruleset directory and `test/tools/reading_refusal/check.py`'s walk of
-// `modules/transforms` were fixed for). So every file at the top of the directory is read, with no
+// `lib/transforms` were fixed for). So every file at the top of the directory is read, with no
 // name and no extension filter: a filter is the same silent decision, one level down.
 const PARSER_DIRECTORY = path.join(ROOT, 'src', 'parse', 'syntax')
 // The order the productions are written in is the reading order of the reference (08), not an
@@ -46,7 +46,7 @@ let parserEntries
 try {
     parserEntries = fs.readdirSync(PARSER_DIRECTORY, { withFileTypes: true })
 } catch {
-    console.error('error: src/parse/syntax is not in the tree; the grammar is read from it')
+    console.error('error: parse/src/syntax is not in the tree; the grammar is read from it')
     process.exit(1)
 }
 const PARSER_FILES = parserEntries
@@ -62,7 +62,7 @@ const PARSER_FILES = parserEntries
     .map((name) => path.join(PARSER_DIRECTORY, name))
 // An empty read set makes every check below true of nothing.
 if (PARSER_FILES.length === 0) {
-    console.error('error: src/parse/syntax holds no file; the grammar is read from it and there is nothing to compare')
+    console.error('error: parse/src/syntax holds no file; the grammar is read from it and there is nothing to compare')
     process.exit(1)
 }
 const TOKENS = path.join(ROOT, 'include', 'camel', 'parse', 'syntax', 'token_kinds.def')
@@ -180,7 +180,7 @@ function readProductions() {
     return productions
 }
 
-/// The files under `src/parse/syntax` that write a production and are not in the read set.
+/// The files under `parse/src/syntax` that write a production and are not in the read set.
 ///
 /// The read set is the top of the directory, so a parser source that moves into a subdirectory
 /// stops being read while every check stays green -- the same defect, one level down, and the one
@@ -246,7 +246,7 @@ for (const p of productions) {
 for (const unread of unreadSources()) {
     errors.push(
         `${unread} writes a \`/// name : \` production and is not read, so its productions are ` +
-            'compared with nothing: the grammar is read from the top of src/parse/syntax'
+            'compared with nothing: the grammar is read from the top of parse/src/syntax'
     )
 }
 
@@ -329,7 +329,7 @@ function flat(text) {
     return text.replace(/\s+/g, ' ').trim()
 }
 const BUILDER = path.join(ROOT, 'src', 'parse', 'ast', 'builder.cpp')
-if (!fs.existsSync(BUILDER)) errors.push('src/parse/ast/builder.cpp does not exist')
+if (!fs.existsSync(BUILDER)) errors.push('parse/src/ast/builder.cpp does not exist')
 const evidenceFlat = flat(parserText + '\n' + (fs.existsSync(BUILDER) ? readText(BUILDER) : ''))
 for (const entry of CONTEXT_KEYWORDS) {
     for (const line of entry.evidence) {

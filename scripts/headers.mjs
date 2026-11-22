@@ -309,7 +309,7 @@ function splitText(text) {
     const bom = text.startsWith('\uFEFF') ? '\uFEFF' : ''
     const body = bom ? text.slice(1) : text
     // The dominant ending, not "contains a CRLF": one stray CRLF used to flip a whole file to CRLF
-    // on the way out (a single `\r` in `modules/transforms/vmap.cpp` rewrote all 857 of its lines),
+    // on the way out (a single `\r` in `lib/transforms/vmap.cpp` rewrote all 857 of its lines),
     // and `.gitattributes` says the tree is LF because the tests compare bytes. A file that is
     // mostly CRLF is still written as CRLF.
     const crlfCount = (body.match(/\r\n/g) || []).length

@@ -5,7 +5,7 @@
 /**
  * The gate's build-side facts, measured on a machine that has the Release build tree:
  *
- *   node scripts/gate-time-check.mjs [--config Release] [--header include/camel/core/operator.h]
+ *   node scripts/gate-time-check.mjs [--config Release] [--header kernel/include/camel/core/operator.h]
  *
  * It runs on the build host (the gate host keeps out/latest), not on a workstation that cannot
  * build. Three checks, each of which can go red:
@@ -56,7 +56,7 @@ function usage(message) {
     process.exit(2)
 }
 
-const options = { config: 'Release', header: 'include/camel/core/operator.h', stampRebuild: false, repeat: 1 }
+const options = { config: 'Release', header: 'kernel/include/camel/core/operator.h', stampRebuild: false, repeat: 1 }
 const argv = process.argv.slice(2)
 for (let i = 0; i < argv.length; i++) {
     const next = () => {

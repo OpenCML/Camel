@@ -393,7 +393,7 @@ const MODULES = [
         title: '`rulesets.jvp`: how a forward transform lifts a value',
         kind: 'camel',
         // A ruleset is a module of the library, found under its dotted name: a dotted module name
-        // is a subdirectory of the library, so `rulesets.jvp` is `stdlib/rulesets/jvp.cml`. Its
+        // is a subdirectory of the library, so `rulesets.jvp` is `lib/rulesets/jvp.cml`. Its
         // declarations are Camel, and `--verify-docs` compiles their examples like any other
         // module's.
         source: 'rulesets/jvp.cml',
@@ -403,7 +403,7 @@ const MODULES = [
         title: '`rulesets.vmap`: how a batched transform lifts a value',
         kind: 'camel',
         // `Lift<T> = RowsOf<T>`: a batched value is the value with one dimension in front, so the
-        // elementwise tier's rule for a primitive is the primitive itself (`stdlib/rulesets/vmap.cml`).
+        // elementwise tier's rule for a primitive is the primitive itself (`lib/rulesets/vmap.cml`).
         source: 'rulesets/vmap.cml',
     },
     {
@@ -506,7 +506,7 @@ function signatureFiles() {
 /// The declaration files of the library, the way `scripts/collect-out.js` assembles the install:
 /// every `lib/<name>/<name>.cml`, the ones in `lib/std/`, the dotted `lib/rulesets/` and the
 /// signature files beside their modules -- or, in a tree that has not been moved, the same set in
-/// `stdlib/`, `stdlib/rulesets/` and `stdlib/signatures/`. The audit's "no module of the table
+/// `stdlib/`, `lib/rulesets/` and `stdlib/signatures/`. The audit's "no module of the table
 /// reads this file" half is only worth reading if it walks the library the install is built from.
 function libraryFiles() {
     const out = new Set()
@@ -833,7 +833,7 @@ function readDeclarations(file, module, options = {}) {
         // above the declaration - above the tag, or between the tag and the declaration - is its
         // description. The line therefore does not end the pending comment, which is what the AST
         // builder does too (it reads the comment above the declaration's first token, and the tag
-        // is that token: src/parse/ast/builder.cpp, docOf). A `#op('module:function')` names the
+        // is that token: parse/src/ast/builder.cpp, docOf). A `#op('module:function')` names the
         // operator a C++ declaration implements when it does not follow the convention (design
         // principles 6.4, step 1). This used to end the comment for a module written
         // in Camel, which lost the description of every such declaration from the page.
@@ -1310,7 +1310,7 @@ function typeWithoutDefault(type) {
 
 // The positions a declaration writes, in the order the operator registers them: the ordinary
 // parameters, then the `<>` ones (`OpDef::params`, written `withAfterNorm`; the protocol
-// `modules/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
+// `lib/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
 // axis form (design principles 7.3) is exactly this: `sum` declares one ordinary parameter and two
 // `with` ones, `sum<axis, keepdims>(t)`, and the operator registers three ports -- so the two lists
 // are one list when the counts add up. When they do not (a declaration may write a `with` parameter
@@ -2106,7 +2106,7 @@ function namesOfDeclaration(entry) {
 // every test returned `float32` rows, and nothing read the two statements against each other.
 //
 // The comparison is on the type, not on the spelling. The authority for which spellings name one
-// type is the compiler's own table (`initInnerTypes`, src/compile/gct/builder.cpp): `int` and
+// type is the compiler's own table (`initInnerTypes`, compile/src/gct/builder.cpp): `int` and
 // `i64` are Int64, `float` and `f64` are Float64, and `f32`, `i32`, `bf16`, `f16`, `c64`, `c128`,
 // `bool`, `string`, `Bytes`, `void` and `never` are their own. Two types are the same only when
 // their codes are, so `f32[...]` and `float[...]` stay two types here (design principles 5.1: no
@@ -2117,10 +2117,10 @@ function namesOfDeclaration(entry) {
 
 // A result written as one of these names is read; every other name makes the entry unreadable.
 // The middle column is the type the compiler holds for that spelling. The spellings are the
-// program's own names (src/compile/gct/builder.cpp, `initInnerTypes`), the explicit names of the
+// program's own names (compile/src/gct/builder.cpp, `initInnerTypes`), the explicit names of the
 // same types (`i64` for Int64, which the declaration files write as `int64`; `float64` for
 // Float64), and the names the tensor module writes an element type with (`dtypeName`,
-// modules/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
+// lib/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
 // those are what a kernel's own `resultDoc` says, so a claim of `float32[...]` and a declaration of
 // `f32[...]` are the same type here.
 const RESULT_SCALARS = new Map([
@@ -2273,7 +2273,7 @@ function canonicalResult(text) {
     }
     // `float` alone is the word the tensor module writes where an operator gives back a tensor of
     // its argument's element type: `softmax`, `layer_norm`, `linear` and `softmax_grad` return
-    // `dtypeOf<T>()` of the input (modules/tensor/kernels/reduce.cpp) and their `resultDoc` says
+    // `dtypeOf<T>()` of the input (lib/tensor/kernels/reduce.cpp) and their `resultDoc` says
     // `float[...]`, while an operator that returns f64 says `float64[...]` (`from_bytes_f64`,
     // `to_bytes_f64`). So a bare `float` in a claim is the element family, not one element type.
     return { text: `${known}${dimensions}`, opaque: false, family: base === 'float' }
@@ -2615,7 +2615,7 @@ function matchTypeVerdict(declaredText, operatorText) {
     }
 }
 
-// What a registered parameter says it takes (`modules/tensor/ops/op_def.cpp`, `kindText`). These
+// What a registered parameter says it takes (`lib/tensor/ops/op_def.cpp`, `kindText`). These
 // are not types but sets of them, and `float[...]` in one is the operator's spelling for "a tensor",
 // not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
 // it takes. A signature a resolver builds instead writes real types; those are compared as types.
@@ -2954,7 +2954,7 @@ const EXAMPLE_STOPS = {
     },
     // `an internal error` is gone (2026-11-03). The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
-    // live dereference node, and then, while the split ABI moved, `stdlib/vjp.cml`'s example and the
+    // live dereference node, and then, while the split ABI moved, `lib/vjp/vjp.cml`'s example and the
     // two fragments beside it, which still destructured the pair `split(f)` no longer answers. The
     // step that lane recorded as pending has landed: every one of those examples compiles, so a run
     // that finds nothing in this class is the run this table asks for, and the class is removed

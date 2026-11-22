@@ -63,7 +63,7 @@ function main() {
         const srcRoot = path.join(archiveRoot, name)
         const ver = name.slice(-3) // e.g. 311
         const dstRoot = path.join(outRoot, `python${ver}`)
-        logStep(`Syncing SDK ${name} -> modules/python/sdks/python${ver}`)
+        logStep(`Syncing SDK ${name} -> lib/python/sdks/python${ver}`)
 
         fs.mkdirSync(dstRoot, { recursive: true })
         copyDirIfExists(path.join(srcRoot, 'include'), path.join(dstRoot, 'include'))

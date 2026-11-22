@@ -385,7 +385,7 @@ function pinnedFootprint(config, cmakeOptionFlags, gitVersion) {
  */
 export function runCmakeBuild(config, cmakeOptionFlags) {
     process.chdir(BASEDIR)
-    // The diagnostic numbers are assigned in diagnostics/registry.tsv and the headers and message
+    // The diagnostic numbers are assigned in kernel/diagnostics/registry.tsv and the headers and message
     // tables are generated from it. Generate before CMake configures, so a new declaration
     // is numbered and the tree CMake reads already carries the emitted files; CMake then runs
     // --check again as a dependency of libcamel_objects, so a direct cmake build is guarded too.
@@ -465,7 +465,7 @@ function removeStaleModuleArtifacts(config, moduleFiles) {
  *  删除本次 configure 不构建的模块产物。
  *
  * `.cmo` 不再复制进 `stdlib/`：源码树不是安装。模块查找本来就会看可执行文件旁与
- * `CAMEL_HOME` 下（`include/camel/utils/install_layout.h`），安装由 `collect-out` 按清单写进
+ * `CAMEL_HOME` 下（`kernel/include/camel/utils/install_layout.h`），安装由 `collect-out` 按清单写进
  * `out/<tag>/stdlib`；在源码树里再放一份没有消费者，只会把构建产物留在源码树。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  */
@@ -558,7 +558,7 @@ export const BUILD_INFO_SCHEMA = 3
 export const FINGERPRINT_VERSION = 1
 
 /** Stamped file by tag (`latest`, `debug`, or a release mirror tag). */
-export const BUILD_INFO_ROOTS = ['src', 'include', 'modules', 'tools', 'stdlib', 'third_party', 'cmake']
+export const BUILD_INFO_ROOTS = ['src', 'include', 'modules', 'tools', 'stdlib', 'third_party', 'cmake', 'kernel', 'parse', 'compile', 'lib']
 
 /** Single files at the repository root that the build reads. */
 export const BUILD_INFO_ROOT_FILES = ['CMakeLists.txt', 'conanfile.txt']

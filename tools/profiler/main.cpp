@@ -10,8 +10,8 @@
 #include <string>
 
 #ifndef NDEBUG
-#include "service/profiler/advanced/advanced_tracer.h"
-#include "service/profiler/core/trace.h"
+#include "tools/profiler/advanced/advanced_tracer.h"
+#include "tools/profiler/core/trace.h"
 #endif
 #include "camel/init.h"
 

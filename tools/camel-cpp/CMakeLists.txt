@@ -3,4 +3,4 @@
 add_executable(camel-cpp main.cpp)
 
 set_target_properties(camel-cpp PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
-target_include_directories(camel-cpp PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(camel-cpp PRIVATE ${CAMEL_LAYOUT_TRANSITIONAL_ROOTS})

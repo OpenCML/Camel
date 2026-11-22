@@ -3,7 +3,7 @@
 
 // Every rule of the standard rule library, decided by an SMT solver instead of sampled.
 //
-// `stdlib/rules.cml` is read as the single truth: the rule declarations, the licence each one asks
+// `lib/rules/rules.cml` is read as the single truth: the rule declarations, the licence each one asks
 // for (`#requires(...)`), the condition each one is guarded by (`when`), and the two sides of each
 // one. For every rule this script states one proposition -- "the two sides denote the same value for
 // every input the rule admits" -- and asks Z3 whether its negation is unsatisfiable:

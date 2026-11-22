@@ -107,7 +107,7 @@ set(CAMEL_MODULES "" CACHE STRING
 message(STATUS "CAMEL_PACKAGE_MINIMAL=${CAMEL_PACKAGE_MINIMAL} (CAMEL_MODULES=\"${CAMEL_MODULES}\")")
 
 # ========== Tensor module ==========
-# Consumed by modules/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
+# Consumed by lib/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
 option(
     CAMEL_TENSOR_BLAS
     "Use a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels. On by default; when no CBLAS is found the builtin GEMM is the library path"

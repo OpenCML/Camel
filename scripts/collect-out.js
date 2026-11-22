@@ -362,12 +362,12 @@ function collect(config, tag) {
         )
     }
 
-    // Python runtime DLLs: modules/python/sdks/python3xx/ (sync-python-sdks); else venv / conda / python on PATH.
+    // Python runtime DLLs: lib/python/sdks/python3xx/ (sync-python-sdks); else venv / conda / python on PATH.
     if (process.platform === 'win32') {
         const dlls = collectPythonRuntimeDlls(BASEDIR)
         if (dlls.length === 0) {
             logWarn(
-                'No Python runtime DLL found. Run sync-python-sdks into modules/python/sdks/, or activate a venv with python3xx.dll discoverable.'
+                'No Python runtime DLL found. Run sync-python-sdks into lib/python/sdks/, or activate a venv with python3xx.dll discoverable.'
             )
         }
         for (const dllPath of dlls) {
@@ -399,6 +399,38 @@ function collect(config, tag) {
         fs.cpSync(includeSrc, includeDir, { recursive: true })
     }
 
+    // layout-move: the declarations live one per `lib/<name>/` now, so the install is
+    // assembled instead of copied. A module directory is `lib/<name>/` and holds `<name>.cml`
+    // (plus `lib/std/prelude.cml`, the one declaration with no module of its own name); the two
+    // subtrees the module search path keeps are `signatures/`, merged from every module, and
+    // `rulesets/`, which is the dotted prefix of `rulesets.jvp` and not a module directory.
+    const libRoot = path.join(BASEDIR, 'lib')
+    if (fs.existsSync(libRoot)) {
+        for (const entry of fs.readdirSync(libRoot, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue
+            const dir = path.join(libRoot, entry.name)
+            // No `<name>.cml` of its own: a dotted prefix, not a module. Copied flat, as the
+            // first assembly did, `lib/rulesets/jvp.cml` installed as `stdlib/jvp.cml` and
+            // every `rulesets.*` import failed with "Module 'rulesets.jvp' not found" -- 346
+            // cells across the five plans. It installs as `stdlib/rulesets/jvp.cml`.
+            if (!fs.existsSync(path.join(dir, `${entry.name}.cml`))) {
+                if (fs.readdirSync(dir).some((f) => f.endsWith('.cml'))) {
+                    fs.cpSync(dir, path.join(stdlibDir, entry.name), { recursive: true })
+                }
+                continue
+            }
+            for (const sub of fs.readdirSync(dir, { withFileTypes: true })) {
+                const src = path.join(dir, sub.name)
+                if (sub.isFile() && sub.name.endsWith('.cml')) {
+                    fs.copyFileSync(src, path.join(stdlibDir, sub.name))
+                } else if (sub.isDirectory() && sub.name === 'signatures') {
+                    fs.cpSync(src, path.join(stdlibDir, 'signatures'), { recursive: true })
+                } else if (sub.isDirectory() && fs.readdirSync(src).some((f) => f.endsWith('.cml'))) {
+                    fs.cpSync(src, path.join(stdlibDir, sub.name), { recursive: true })
+                }
+            }
+        }
+    }
     if (fs.existsSync(stdlibSrc)) {
         fs.cpSync(stdlibSrc, stdlibDir, { recursive: true })
     }
@@ -428,11 +460,11 @@ function collect(config, tag) {
     // Copy Python bridge libraries to out/<tag>/libs for runtime routing. The name carries the
     // platform: `py_bridge310.dll` on Windows, `libpy_bridge310.so` / `.dylib` elsewhere -- and the
     // loader asks for exactly that name inside `libs/` (`bridgeFileNameForTag` in
-    // src/core/module/dynamic.cpp), so a Linux host that built its bridge still failed to find it
+    // kernel/core/module/dynamic.cpp), so a Linux host that built its bridge still failed to find it
     // while only the Windows spelling was collected here.
     //
     // The bridge's build directory follows its module: `build/lib/python` now that the module lives
-    // in `lib/python`, `build/modules/python` while it lived in `modules/python`. Both are tried so
+    // in `lib/python`, `build/modules/python` while it lived in `lib/python`. Both are tried so
     // one script collects either tree -- `fs.existsSync` turning a wrong guess into "no bridge" is
     // exactly how a build that produced one installs without it.
     const bridgeDir = [

@@ -1,0 +1,241 @@
+# python 模块：.cmo 外源动态库示例，import python 加载
+include(${PROJECT_SOURCE_DIR}/cmake/camel_module.cmake)
+
+# Root CMakeLists uses this to decide whether to add_subdirectory(lib/pyplot) (also needs pybind11).
+set(CAMEL_PYTHON_DEV_AVAILABLE FALSE PARENT_SCOPE)
+
+set(CAMEL_PYTHON_SDKS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/sdks")
+
+# Resolve include/ + libs/ (or Include/ + Libs/, or include/pythonX.Y/) for bridge targets.
+# When pypi-rollup uses the interpreter install (venv → sys.base_prefix), build.js sets
+# CAMEL_PYPI_PY_INCLUDE_DIR / CAMEL_PYPI_PY_LIBS_DIR explicitly.
+macro(camel_python_dev_dirs _root _out_inc _out_lib)
+  if(DEFINED ENV{CAMEL_PYPI_PY_INCLUDE_DIR} AND NOT "$ENV{CAMEL_PYPI_PY_INCLUDE_DIR}" STREQUAL "")
+    set(${_out_inc} "$ENV{CAMEL_PYPI_PY_INCLUDE_DIR}")
+    set(${_out_lib} "$ENV{CAMEL_PYPI_PY_LIBS_DIR}")
+  else()
+    if(EXISTS "${_root}/include/Python.h")
+      set(${_out_inc} "${_root}/include")
+    elseif(EXISTS "${_root}/Include/Python.h")
+      set(${_out_inc} "${_root}/Include")
+    else()
+      file(GLOB _camel_py_h_glob "${_root}/include/python*/Python.h")
+      list(LENGTH _camel_py_h_glob _camel_py_h_n)
+      if(_camel_py_h_n GREATER 0)
+        list(GET _camel_py_h_glob 0 _camel_one_h)
+        get_filename_component(${_out_inc} "${_camel_one_h}" DIRECTORY)
+      else()
+        set(${_out_inc} "")
+      endif()
+    endif()
+    if(EXISTS "${_root}/libs")
+      set(${_out_lib} "${_root}/libs")
+    elseif(EXISTS "${_root}/Libs")
+      set(${_out_lib} "${_root}/Libs")
+    else()
+      set(${_out_lib} "")
+    endif()
+  endif()
+endmacro()
+
+# Set **only** by pypi-rollup (via build.js rollupMm). Unset for normal `npm run build` → all py_bridge* targets.
+set(_rollup_mm "")
+if(DEFINED ENV{CAMEL_PYPI_SINGLE_SDK_MM} AND NOT "$ENV{CAMEL_PYPI_SINGLE_SDK_MM}" STREQUAL "")
+  set(_rollup_mm "$ENV{CAMEL_PYPI_SINGLE_SDK_MM}")
+endif()
+
+set(_has_python_sdk FALSE)
+if(NOT _rollup_mm STREQUAL "")
+  if(EXISTS "${CAMEL_PYTHON_SDKS_ROOT}/python${_rollup_mm}/include/Python.h" AND EXISTS "${CAMEL_PYTHON_SDKS_ROOT}/python${_rollup_mm}/libs")
+    set(_has_python_sdk TRUE)
+  elseif(NOT "$ENV{CAMEL_PYPI_SDK_ROOT}" STREQUAL "")
+    camel_python_dev_dirs("$ENV{CAMEL_PYPI_SDK_ROOT}" _rollup_pfx_inc _rollup_pfx_lib)
+    if(EXISTS "${_rollup_pfx_inc}/Python.h" AND EXISTS "${_rollup_pfx_lib}")
+      set(_has_python_sdk TRUE)
+    endif()
+  endif()
+elseif(EXISTS "${CAMEL_PYTHON_SDKS_ROOT}")
+  file(GLOB _sdk_dirs_probe LIST_DIRECTORIES true "${CAMEL_PYTHON_SDKS_ROOT}/python3*")
+  foreach(_sdk IN LISTS _sdk_dirs_probe)
+    if(EXISTS "${_sdk}/include/Python.h" AND EXISTS "${_sdk}/libs")
+      set(_has_python_sdk TRUE)
+      break()
+    endif()
+  endforeach()
+endif()
+
+# True when venv/conda is present (Windows Scripts/ or Unix bin/).
+set(_has_active_env FALSE)
+if(DEFINED ENV{VIRTUAL_ENV})
+  if(WIN32 AND EXISTS "$ENV{VIRTUAL_ENV}/Scripts/python.exe")
+    set(_has_active_env TRUE)
+  elseif(EXISTS "$ENV{VIRTUAL_ENV}/bin/python3")
+    set(_has_active_env TRUE)
+  elseif(EXISTS "$ENV{VIRTUAL_ENV}/bin/python")
+    set(_has_active_env TRUE)
+  endif()
+endif()
+if(NOT _has_active_env AND DEFINED ENV{CONDA_PREFIX})
+  if(WIN32 AND EXISTS "$ENV{CONDA_PREFIX}/python.exe")
+    set(_has_active_env TRUE)
+  elseif(EXISTS "$ENV{CONDA_PREFIX}/bin/python3")
+    set(_has_active_env TRUE)
+  elseif(EXISTS "$ENV{CONDA_PREFIX}/bin/python")
+    set(_has_active_env TRUE)
+  endif()
+endif()
+
+# GitHub actions/setup-python and other installs: Interpreter + Development on PATH, no VIRTUAL_ENV.
+set(_has_path_python FALSE)
+if(NOT _has_python_sdk AND NOT _has_active_env)
+  find_package(Python3 3.10 COMPONENTS Interpreter Development QUIET)
+  if(Python3_FOUND AND Python3_INCLUDE_DIRS)
+    set(_has_path_python TRUE)
+  endif()
+endif()
+
+if(NOT _has_python_sdk AND NOT _has_active_env AND NOT _has_path_python)
+  if(NOT _rollup_mm STREQUAL "")
+    message(FATAL_ERROR "CAMEL_PYPI_SINGLE_SDK_MM=${_rollup_mm}: need lib/python/sdks/python${_rollup_mm}/ or a full interpreter tree (CAMEL_PYPI_SDK_ROOT / headers+libs from venv base_prefix).")
+  endif()
+  message(WARNING "Skip python.cmo build: no SDK under lib/python/sdks, no venv/conda, and no Python3 Development on PATH.")
+  return()
+endif()
+
+set(CAMEL_PYTHON_DEV_AVAILABLE TRUE PARENT_SCOPE)
+add_camel_module(NAME python SOURCES executor.cpp module.cpp operators.cpp type.cpp USE_PYTHON)
+
+# Multi-target bridge build: one bridge DLL per sdk folder (python3xx), or one from interpreter prefix (PyPI).
+set(_sdk_dirs "")
+if(NOT "$ENV{CAMEL_PYPI_SDK_ROOT}" STREQUAL "" AND NOT _rollup_mm STREQUAL "")
+  set(_sdk_dirs "$ENV{CAMEL_PYPI_SDK_ROOT}")
+elseif(EXISTS "${CAMEL_PYTHON_SDKS_ROOT}")
+  file(GLOB _sdk_dirs LIST_DIRECTORIES true "${CAMEL_PYTHON_SDKS_ROOT}/python3*")
+  list(SORT _sdk_dirs COMPARE NATURAL ORDER ASCENDING)
+endif()
+
+list(LENGTH _sdk_dirs _camel_bridge_sdk_len)
+if(NOT _rollup_mm STREQUAL "" AND _camel_bridge_sdk_len EQUAL 0)
+  message(FATAL_ERROR "PyPI rollup: nowhere to build py_bridge for mm=${_rollup_mm} (need lib/python/sdks/python${_rollup_mm}/ or CAMEL_PYPI_SDK_ROOT from the interpreter).")
+endif()
+
+# One more place a bridge can come from, and the one that is missing on a Linux host: the
+# interpreter this build has already resolved. `lib/python/sdks/` is gitignored and per tree, so
+# a tree nobody filled has no `python3*` folder -- and then the module's `.cmo` is built (the check
+# above passes and the module is added below) while no `py_bridge*` target exists, so `import
+# python` fails at run time with "python bridge for active environment not found ...
+# libs/libpy_bridge310.so". `camel_python_dev_dirs` cannot read an interpreter prefix as one root
+# either: a venv has the headers under `include/python3.X` and no libpython at all, and a system
+# install keeps the library in `lib/` or `lib/x86_64-linux-gnu/`, not in the `libs/` that macro
+# looks for. So the two directories are handed over as they are, instead of as a root.
+#
+# Two roads, and they do not overlap: a PyPI rollup fills `_sdk_dirs` from
+# `CAMEL_PYPI_SDK_ROOT`/`CAMEL_PYPI_SINGLE_SDK_MM` above, and a tree with a filled cache takes the
+# `file(GLOB)` branch, so neither reaches this one. Only "no cache, not a rollup" lands here, which
+# is the everyday Linux build and the CI setup-python build (there, `pythonXY.lib` sits beside
+# `Python.h` in the interpreter prefix and the WIN32 branch below links it).
+set(_interp_bridge_inc "")
+set(_interp_bridge_lib "")
+set(_interp_bridge_mm "")
+if(_camel_bridge_sdk_len EQUAL 0 AND _rollup_mm STREQUAL "")
+  find_package(Python3 3.10 COMPONENTS Interpreter Development QUIET)
+  if(Python3_FOUND AND Python3_INCLUDE_DIRS AND Python3_LIBRARIES)
+    list(GET Python3_INCLUDE_DIRS 0 _interp_bridge_inc)
+    # `Python3_LIBRARIES` is a list that may name more than libpython; the one whose name starts
+    # with `python3` is the library this bridge embeds.
+    foreach(_cand IN LISTS Python3_LIBRARIES)
+      if(_cand MATCHES "python3")
+        get_filename_component(_interp_bridge_lib "${_cand}" DIRECTORY)
+        break()
+      endif()
+    endforeach()
+  endif()
+  if(NOT "${_interp_bridge_lib}" STREQUAL "" AND EXISTS "${_interp_bridge_inc}/Python.h")
+    set(_interp_bridge_mm "${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
+    # One entry, so the loop below makes exactly one bridge. Nothing is created, copied or written:
+    # the two directories are the ones CMake already resolved.
+    set(_sdk_dirs "${_interp_bridge_inc}")
+    list(LENGTH _sdk_dirs _camel_bridge_sdk_len)
+    message(STATUS "python bridge: no lib/python/sdks, building py_bridge${_interp_bridge_mm} from the interpreter (inc=${_interp_bridge_inc} lib=${_interp_bridge_lib})")
+  endif()
+endif()
+
+foreach(_sdk IN LISTS _sdk_dirs)
+  if(NOT "$ENV{CAMEL_PYPI_SDK_ROOT}" STREQUAL "" AND NOT _rollup_mm STREQUAL "")
+    set(_py_mm "${_rollup_mm}")
+    set(_sdk_name "interpreter_tree")
+  elseif(NOT "${_interp_bridge_mm}" STREQUAL "")
+    set(_py_mm "${_interp_bridge_mm}")
+    set(_sdk_name "interpreter_tree")
+  else()
+    get_filename_component(_sdk_name "${_sdk}" NAME)
+    string(REGEX REPLACE "^python" "" _py_mm "${_sdk_name}")
+  endif()
+
+  if(NOT _rollup_mm STREQUAL "" AND NOT _py_mm STREQUAL _rollup_mm)
+    continue()
+  endif()
+
+  if(NOT "${_interp_bridge_inc}" STREQUAL "")
+    set(_sdk_inc "${_interp_bridge_inc}")
+    set(_sdk_lib "${_interp_bridge_lib}")
+  else()
+    camel_python_dev_dirs("${_sdk}" _sdk_inc _sdk_lib)
+  endif()
+  if(NOT EXISTS "${_sdk_inc}/Python.h" OR NOT EXISTS "${_sdk_lib}")
+    message(STATUS "Skip bridge ${_sdk_name}: missing Python.h or lib dir (inc=${_sdk_inc} lib=${_sdk_lib})")
+    continue()
+  endif()
+
+  set(_bridge_target "py_bridge${_py_mm}")
+  add_library(${_bridge_target} SHARED bridge_runtime.cpp)
+  target_compile_features(${_bridge_target} PRIVATE cxx_std_23)
+  target_include_directories(${_bridge_target} PRIVATE "${_sdk_inc}")
+  target_link_directories(${_bridge_target} PRIVATE "${_sdk_lib}")
+
+  if(WIN32)
+    string(REGEX REPLACE "^3" "" _py_minor_str "${_py_mm}")
+    set(_bridge_lib_a "${_sdk_lib}/python${_py_mm}.lib")
+    set(_bridge_lib_b "${_sdk_lib}/python3${_py_minor_str}.lib")
+
+    if(EXISTS "${_bridge_lib_a}")
+      target_link_libraries(${_bridge_target} PRIVATE "${_bridge_lib_a}")
+    elseif(EXISTS "${_bridge_lib_b}")
+      target_link_libraries(${_bridge_target} PRIVATE "${_bridge_lib_b}")
+    elseif(EXISTS "${_sdk_lib}/python3.lib")
+      target_link_libraries(${_bridge_target} PRIVATE "${_sdk_lib}/python3.lib")
+    else()
+      message(STATUS "Skip bridge ${_sdk_name}: missing python import library under ${_sdk_lib}")
+      continue()
+    endif()
+  else()
+    if(DEFINED ENV{CAMEL_PYPI_PY_VERSION_DOT} AND NOT "$ENV{CAMEL_PYPI_PY_VERSION_DOT}" STREQUAL "")
+      set(_py_dot "$ENV{CAMEL_PYPI_PY_VERSION_DOT}")
+    else()
+      string(SUBSTRING "${_py_mm}" 0 1 _mj)
+      string(SUBSTRING "${_py_mm}" 1 -1 _mn)
+      set(_py_dot "${_mj}.${_mn}")
+    endif()
+    find_library(_camel_pybridgelib
+      NAMES "python${_py_dot}" "python${_py_dot}m"
+      PATHS "${_sdk_lib}"
+      NO_DEFAULT_PATH
+    )
+    if(NOT _camel_pybridgelib)
+      message(STATUS "Skip bridge ${_sdk_name}: no libpython in ${_sdk_lib} for ${_py_dot}")
+      continue()
+    endif()
+    target_link_libraries(${_bridge_target} PRIVATE "${_camel_pybridgelib}")
+  endif()
+
+  if(WIN32)
+    target_compile_definitions(${_bridge_target} PRIVATE NOMINMAX)
+    # Official Windows SDK trees ship release import libs (pythonXY.lib) only; pyconfig.h
+    # uses #pragma comment(lib, "pythonXY_d.lib") when _DEBUG is set, which then fails
+    # to link under Debug. Drop _DEBUG for this TU so the pragma matches the .lib we link.
+    target_compile_options(${_bridge_target} PRIVATE
+      $<$<CONFIG:Debug>:$<IF:$<BOOL:${MSVC}>,/U_DEBUG,-U_DEBUG>>)
+    set_target_properties(${_bridge_target} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+  endif()
+  set_target_properties(${_bridge_target} PROPERTIES OUTPUT_NAME "${_bridge_target}")
+endforeach()

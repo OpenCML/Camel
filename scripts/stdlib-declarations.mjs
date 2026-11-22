@@ -80,8 +80,8 @@
 // Two shapes that the tensor module writes are resolved rather than reported:
 //
 //   - A module that exports the groups of its operator registry
-//     (`for (g: OpRegistry::instance().operatorGroups("<module>"))`, `modules/tensor` and
-//     `modules/nn`, where the registry is reached through `camel::tensor::ops::`). The names are
+//     (`for (g: OpRegistry::instance().operatorGroups("<module>"))`, `lib/tensor` and
+//     `lib/nn`, where the registry is reached through `camel::tensor::ops::`). The names are
 //     the OpDef table, so the check reads the C++ skip list (`kDeclaredOperators`) and requires
 //     it to be exactly the declaration names, both ways; the loop then exports exactly the
 //     computed signatures, which `--verify-ops` proves is the rest of the registered operators.
@@ -150,7 +150,7 @@ const UNDERIVABLE_OPERATORS = new Set([
 // checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
 //
 // Empty since `onnx` was declared (both of its names, `supported_operators` and `export_model`,
-// in stdlib/onnx.cml): every module that registers operators is now in the probe and in
+// in lib/onnx/onnx.cml): every module that registers operators is now in the probe and in
 // MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
 const UNCHECKED_MODULES = []
 
@@ -432,7 +432,7 @@ function coverageProblems(reference) {
     const operatorNames = new Set(operators.map((module) => module.name))
     const excluded = new Map(UNCHECKED_MODULES.map((entry) => [entry.name, entry]))
     const inReference = (name) => reference.find((module) => module.name === name && module.kind === 'cpp')
-    const where = (module) => `modules/${path.basename(module.dir)}`
+    const where = (module) => `lib/${path.basename(module.dir)}`
 
     for (const module of operators) {
         const entry = inReference(module.name)
@@ -477,7 +477,7 @@ function coverageProblems(reference) {
             if (!fs.existsSync(dir)) {
                 problems.push(
                     `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
-                        `modules/${module.name} does not exist`,
+                        `lib/${module.name} does not exist`,
                 )
             } else {
                 const registers = fs
@@ -489,7 +489,7 @@ function coverageProblems(reference) {
                 if (!registers) {
                     problems.push(
                         `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
-                            `no source of modules/${module.name} registers a pass (registerModulePass)`,
+                            `no source of lib/${module.name} registers a pass (registerModulePass)`,
                     )
                 }
             }
@@ -681,7 +681,7 @@ function computedPlaces(module, entry) {
 // a `for (... get*Groups()) exportEntity(group->name(), group)` loop iterates. Comments are
 // stripped first, so a name in a comment is not a resolver or an export.
 //
-// Two more shapes are read, both written by `modules/tensor`:
+// Two more shapes are read, both written by `lib/tensor`:
 // - a loop over the module's operator registry
 //   (`for (g: OpRegistry::instance().operatorGroups("<module>"))`), whose groups are the OpDef
 //   table rather than `OperatorGroup::create` calls; the names it exports are the module's

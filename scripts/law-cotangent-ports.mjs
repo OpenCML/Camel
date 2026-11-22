@@ -13,7 +13,7 @@
 //     sum_axis_stated(t, at)  => (ct: T[...]) => lane_spread(ct, ...)         // a lane per number
 //     mean_axis_stated(t, at) => (ct: T[...]) => mean_axis_cotangent(ct, at)  // the lane's numbers
 //
-// `spread_over` takes one number (`stdlib/rulesets/transpose.cml#spread_over`: `ct: T`, feeding
+// `spread_over` takes one number (`lib/rulesets/transpose.cml#spread_over`: `ct: T`, feeding
 // `full(at, ct)` whose `value` is a `number`); `numel` reads an array (`stdlib/tensor.cml#numel`:
 // `t: T[...]`). Write the port one way and the body the other and the law still parses, still
 // instantiates, still builds a graph -- and the slot the body reads is not the value the port
@@ -40,7 +40,7 @@
 //     compiler, at the one place a value's type goes from `T` to `T[...]`.
 //   * a port that agrees with its body and disagrees with the value the transform hands over. That is
 //     the half `mean_axis_stated_t` was on, and a law's source has no witness for it: `ruleCotangent`
-//     (`modules/transforms/transpose.cpp`) decides the types at build time. It is recorded as a
+//     (`lib/transforms/transpose.cpp`) decides the types at build time. It is recorded as a
 //     question beside this change
 //     (`docs/handover/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`).
 //
@@ -49,7 +49,7 @@
 //
 //   * an exact argument position of a call whose declaration is in the tree -- `numel(ct)` reads an
 //     array because `stdlib/tensor.cml#numel` says `t: T[...]`, `spread_over(ct, at)` takes an element
-//     because `stdlib/rulesets/transpose.cml#spread_over` says `ct: T`;
+//     because `lib/rulesets/transpose.cml#spread_over` says `ct: T`;
 //   * an index or an arrow -- `ct[i]`, `ct->reduce<...>` read an array, whatever the callee says;
 //   * a companion of the same shape -- `ct * exp(x)` and `ct - sum<0, true>(ct)` are one array wide
 //     because `exp` and the three-operand `sum` answer arrays.
@@ -97,17 +97,17 @@ const root = path.resolve(import.meta.dirname, '..')
 // The declarations a requirement is read from. The laws import from these modules, so a requirement
 // this check states is the one the compiler will apply -- not a second table that could drift.
 const DECLARATION_FILES = [
-    'stdlib/tensor.cml',
-    'stdlib/signatures/tensor.cml',
-    'stdlib/array.cml',
-    'stdlib/autodiff.cml',
-    'stdlib/signatures/autodiff.cml'
+    'lib/tensor/tensor.cml',
+    'lib/tensor/signatures/tensor.cml',
+    'lib/array/array.cml',
+    'lib/autodiff/autodiff.cml',
+    'lib/autodiff/signatures/autodiff.cml'
 ]
 
-const LAW_DIRECTORY = 'stdlib/rulesets'
+const LAW_DIRECTORY = 'lib/rulesets'
 
-// One family per module: `stdlib/rulesets/jvp.cml` is the forward family, whose ports are the
-// tangents of the operands, and `stdlib/rulesets/transpose.cml` is the reverse one, whose ports are
+// One family per module: `lib/rulesets/jvp.cml` is the forward family, whose ports are the
+// tangents of the operands, and `lib/rulesets/transpose.cml` is the reverse one, whose ports are
 // the cotangents of the answer. A module serves one family (design principles 9.9).
 const FAMILY_OF_FILE = new Map([
     ['jvp.cml', 'forward'],
@@ -315,7 +315,7 @@ function declarationBindsElement(declaration, variable) {
 
 /// A law's own port type. A bare type variable here is the element type: the transform instantiates
 /// a law at its element type first
-/// (`modules/transforms/transpose/walkmachinery.cpp#ruleCotangentOf`: "`T` is the
+/// (`lib/transforms/transpose/walkmachinery.cpp#ruleCotangentOf`: "`T` is the
 /// law's *element* type"), so `(ct: T)` promises one number and `(ct: T[...])` promises an array.
 function kindOfPortType(text) {
     const kind = kindOfType(text)
