@@ -282,9 +282,21 @@ bool declaresIndependentElements(const camel::runtime::GCGraph &graph);
 void markIndependentElements(camel::runtime::GraphDraft &draft, attr::AttrSetId declaration);
 
 /// Whether the declaration facts carry the standard tag `macro` (design principles 8): the
-/// function may be evaluated ahead of time by `std::macro`. The compiler records the answer on
-/// the function's graph (kGraphFlagMacro), which is what the runtime reads.
+/// function may be evaluated ahead of time by `std::macro`.
 bool declaresMacro(attr::AttrSetId declaration);
+
+/// Whether the graph's exit node carries the `macro` fact of the declaration it was built from.
+/// `macro` takes the same shape `independent` does: the fact lives on the declaration *and* on the
+/// graph's exit node (markMacro), so it survives into the runtime graph and is read without the
+/// module that declared the function. False for a graph whose exit node is not set.
+bool declaresMacro(const camel::runtime::GraphDraft &draft);
+bool declaresMacro(const camel::runtime::GCGraph &graph);
+
+/// Puts the `macro` fact of a function's declaration on the graph's exit node, the node that
+/// stands for what the function gives. `declaration` is the set tagFactsOfList built for the
+/// declaration; without the `macro` key this does nothing. The compiler calls it once per named
+/// function after its body is built, beside markIndependentElements.
+void markMacro(camel::runtime::GraphDraft &draft, attr::AttrSetId declaration);
 
 /// The facts attached to the declaration `name` of `module` (`on func`, `on type`).
 attr::AttrSetId ofDeclaration(const module::Module &module, const Reference &name);

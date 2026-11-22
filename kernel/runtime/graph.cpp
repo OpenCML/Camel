@@ -23,6 +23,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
@@ -3102,7 +3103,13 @@ size_t GCGraph::frameSize() const {
     return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType()->size();
 }
 
-bool GCGraph::isMacro() const { return (flags_ & kGraphFlagMacro) != 0; }
+bool GCGraph::isMacro() const {
+    // The `#macro` fact of the function's declaration, read off the exit node it was recorded on
+    // (tag::markMacro) -- the same shape `independent` takes, and the declaration's fact rather
+    // than a copy of it. There is no macro flag: the fact has one statement, on the declaration,
+    // and every graph that can be evaluated ahead of time answers from it.
+    return camel::core::tag::declaresMacro(*this);
+}
 
 bool GCGraph::isRoot() const { return !isValid(outerGraphId_); }
 

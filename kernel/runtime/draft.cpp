@@ -16,6 +16,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/log.h"
 
@@ -32,6 +33,12 @@
 namespace camel::runtime {
 
 namespace mm = camel::core::mm;
+
+bool GraphDraft::isMacroGraph() const {
+    // The declaration's `#macro` fact, recorded on the exit node by tag::markMacro. No flag: the
+    // fact has one statement, on the declaration (see GCGraph::isMacro).
+    return camel::core::tag::declaresMacro(*this);
+}
 
 uint64_t nextDraftEpoch() {
     // A number, not an address: the allocator hands a destroyed draft's memory to the next one, so

@@ -94,18 +94,11 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     graph_ptr_t decoratedGraph = enterScope(
         FunctionType::create(param_vec_t{}, param_vec_t{}, nullptr),
         "__decorated__" + funcName + "_" + std::to_string(syntheticRefIndex_++));
-    // A decorator runs at macro time: the graph applying them is a macro that yields the decorated
-    // function once its inputs are static (design principles 8). This is the one macro write that
-    // has **no content witness**: the factory's exit is a call of the decorator, and a decorator is
-    // an ordinary function, so nothing in the graph says `macro`. What this line records is the
-    // stage fact, not a copy of a declaration. It folds into the third cause (a graph whose exit is
-    // a call of a macro callee) as soon as a decorator's own declaration carries `#macro` — the
-    // language author's ruling to make, not this file's.
-    // The other four writers are to be derived the same way: `#macro` recorded on the exit node
-    // (tag::markMacro), then read from the operator record or from the callee's graph; this one
-    // stays until the ruling lands, because it is a stage fact and not a copy of anything.
-    decoratedGraph->edit().setFlags(static_cast<uint8_t>(
-        decoratedGraph->view().flags() | camel::runtime::kGraphFlagMacro));
+    // `@d f` is `let f = d(f0)` and `d` is an ordinary function (design principles 6.1): the
+    // shorthand writes the same semantics and carries no rule of its own. So the factory graph is
+    // not macro here — the call of the decorator inside it is evaluated ahead of time exactly when
+    // the decorator's own declaration says `#macro` (principles 8), which is what `#macro` means.
+    // Writing the flag here was a rule the principles never stated; it is gone.
     registerGraphOrigin(
         context_,
         decoratedGraph,
