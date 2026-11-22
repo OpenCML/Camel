@@ -6,7 +6,7 @@
 //
 // The question the ledger answers is narrow: **which of the old autodiff cases can run on the `vjp`
 // library today, and which of them have stopped?** The page that holds the answer
-// (docs/handover/m4-autodiff-migration-table.cn.md) is written by hand, and every time it was
+// (internal/archive/m4-autodiff-migration-table.cn.md) is written by hand, and every time it was
 // recounted by hand the count came out wrong -- once by one (a probe rewrote a whole import line and
 // took the helper names with it), once with a blind spot (measuring every case by exit 0, when some
 // of them guard an exit 1 on purpose). So the counting is here, and the page reads the number.

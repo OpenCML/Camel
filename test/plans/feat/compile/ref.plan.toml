@@ -684,7 +684,7 @@ verify_script = '''
 # the run is taken **without `--gc-stress`**: under stress the collector settles the account after
 # the program stops and a back end that ran no row at all reads the same numbers, which is how a
 # missing count survived the `live <= 3` assertion
-# (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md). The two entries
+# (internal/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md). The two entries
 # are what std::fvm's and std::jit's bytecode SCHD instruction was short by, and what the plan's own
 # give-back skipped as the node's take-over.
 

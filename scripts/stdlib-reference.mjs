@@ -2707,7 +2707,7 @@ const TYPE_VARIABLE = /^[A-Z]$/
 //
 // ## Why members and not counts
 //
-// Author's ruling of 2026-11-03 13:30 (`docs/handover/reviews/questions-2026-10-29.md`): a count that
+// Author's ruling of 2026-11-03 13:30 (`internal/reviews/questions-2026-10-29.md`): a count that
 // can move while the behaviour stays the same protects nothing. The per-class counts this table used
 // to hold were exactly that: an overload that started writing a different spelling moved the class
 // while nothing about the library changed, and the failure said "records 6, and the run found 7" -- a

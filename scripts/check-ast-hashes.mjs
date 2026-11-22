@@ -36,7 +36,7 @@
  * --- the scope, counted rather than assumed ---------------------------------
  * The scope is the `.cml` files the tree holds -- the git index, plus the untracked files that are
  * not ignored, because a lane runs this *before* it commits and a case it has written is exactly
- * the one that lands unrecorded -- with `docs/handover` aside (`test/tools/parsecheck/corpus.py`,
+ * the one that lands unrecorded -- with `internal` aside (`test/tools/parsecheck/corpus.py`,
  * `HANDOVER`: the author's drafts, not the repository's surface) and the same skipped directories
  * `corpus.py` walks past. The record's `probes/*` lines are the probes
  * `test/tools/parsecheck/probes.py` generates, so they are generated here too and hashed with the
@@ -170,7 +170,7 @@ const PROBES = 'test/tools/parsecheck/probes.py'
 const PROBE_PREFIX = 'probes/'
 
 /** `corpus.HANDOVER`: the language author's drafts, not the repository's language surface. */
-const HANDOVER = 'docs/handover/'
+const HANDOVER = 'internal/'
 
 /**
  * `corpus.SKIP_DIRS` and `corpus.walk`'s `out_lr` prefix rule, kept with the same names: this scope

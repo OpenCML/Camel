@@ -117,7 +117,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 # schedulers and the JIT), or the limit is allowed to follow the call structure, which is the same
 # question as the mutual recursion of depth_value.cml (inline / saturate / std::opt move its
 # boundary from 50 levels to 100). Both are with the author; see
-# docs/handover/reviews/questions-2026-10-29.md, the matrix section of 2026-11-02.
+# internal/reviews/questions-2026-10-29.md, the matrix section of 2026-11-02.
 
 # --- the twelve cells a pass moves, pinned, and the row without passes beside them ------------
 #

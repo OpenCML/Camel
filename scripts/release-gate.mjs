@@ -124,16 +124,16 @@ const STATIC_CHECKS = [
     // reads as a question nobody is working on. The author's rule of 2026-11-03 is why this is a
     // gate check and not a habit: the answer is decided by reviews/, never by what is left behind.
     { name: 'pending questions: no page already answered in reviews', args: ['scripts/check-doc-links.mjs', '--questions-index'] },
-    // The same rule's other half: a new question is one page under docs/handover/questions/, and
+    // The same rule's other half: a new question is one page under internal/questions/, and
     // every page states a default and starts on it that round. That half used to live in the skill
     // and in whoever remembered it; a page that arrives without a default now stops the gate
     // instead. The check names the page and which half is missing.
     { name: 'questions: every pending page names a default and gives it', args: ['scripts/check-doc-links.mjs', '--questions-defaults'] },
-    // The other half of the same reading rule: outside docs/handover/ a source is cited by symbol
+    // The other half of the same reading rule: outside internal/ a source is cited by symbol
     // (`file#Symbol`) and never by line, because a line moves with every edit. Inside handover the
     // line numbers are that day's reading, and the index says so once for all 203 pages instead of
     // 183 pages each saying it.
-    { name: 'citations: no source cited by line outside docs/handover', args: ['scripts/check-doc-links.mjs', '--source-line-citations'] },
+    { name: 'citations: no source cited by line outside internal', args: ['scripts/check-doc-links.mjs', '--source-line-citations'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     // The conformance matrix: every program in test/conformance/cases.json is compared with the
@@ -143,7 +143,7 @@ const STATIC_CHECKS = [
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
     // The wheel tags a release may upload: `cp310-abi3-<platform>` with the interop extension and
     // `py3-none-<platform>` without it (the 2026-10-25 ruling, carried out 2026-11-02;
-    // docs/handover/README.cn.md item 7, review index C28). It reads what `npm run pypi:rollup`
+    // internal/archive/handover-README.cn.md item 7, review index C28). It reads what `npm run pypi:rollup`
     // left in dist/pypi/ and prints a SKIPPED banner -- naming that command -- when the gate was
     // not run after a wheel build: this gate does not build wheels, and a fabricated pass here
     // would be worse than the missing check. The rule itself is scripts/check_wheel_tags.py, the

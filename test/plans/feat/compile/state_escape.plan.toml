@@ -52,7 +52,7 @@
 # The module top level is a scope under the same rules, and that half is still NOT in this lane: a
 # module `var` works as it did, and its own rule (design principles 3.5, "a module's top level holds
 # declarations only: a top-level `var` has no use") is a lane of its own. It is filed as
-# docs/handover/reviews/2026-11-14-who-migrates-the-module-level-var.cn.md.
+# internal/reviews/2026-11-14-who-migrates-the-module-level-var.cn.md.
 #
 # What is NOT covered here either, by design: `Ref<T>` (the sanctioned way to hand long-lived shared
 # state out). That belongs to another lane of the same ruling.

@@ -119,7 +119,7 @@
  * nobody can check, which is the defect this script exists to remove.
  *
  * The tree's full corpus is printed too, with the same walk `test/tools/parsecheck/corpus.py
- * --scope repository` uses (its `SKIP_DIRS`, its exclusion of `docs/handover`), and the Markdown
+ * --scope repository` uses (its `SKIP_DIRS`, its exclusion of `internal`), and the Markdown
  * ```cml blocks it extracts are counted beside it. `outside_scope` is the number of a full-corpus
  * `.cml` this run did not compile, with its first few paths: so a file read here can never be
  * mistaken for the whole repository's reading.
@@ -173,7 +173,7 @@ const SKIP_DIRS = new Set([
     'results',
 ])
 /** The author's handover directory: draft material, not the repository's language surface. */
-const HANDOVER = ['docs', 'handover']
+const HANDOVER = ['internal']
 
 /** The one field of the document this script reads its shape from; anything else is refused. */
 const FORMAT = 'camel.gir'

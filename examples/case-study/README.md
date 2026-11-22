@@ -427,7 +427,7 @@ Three readings, and only the first is what the paper says today:
    edge named, or a change that lets a call which cannot fault leave the block's chain.
    -> It is a red of rework item 4 (a pure call placed on a `sync` block's chain, principle 3.4:
    `train` is recursive, and 3.4 counts a recursive call as possibly faulting) --
-   `docs/handover/reviews/questions-2026-10-29.md`, the rework section of 2026-11-15 night, item 4 --
+   `internal/reviews/questions-2026-10-29.md`, the rework section of 2026-11-15 night, item 4 --
    and not a defect of this example.
 
 ## The `var`-to-SSA acceptance (red, and red for one reason)

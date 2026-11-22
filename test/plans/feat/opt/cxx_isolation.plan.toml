@@ -7,7 +7,7 @@ tags = ["feat", "opt", "cxx", "differential", "fold", "cse"]
 # Neither is deleted yet (docs/roadmap.cn.md, P, written by the author on 2026-11-18): the C++
 # ones stay, isolated under `cxx::`, and are compared against the Camel ones -- "输出图是否规范相等
 # （不等处逐例归因）" -- before anything decides which one runs by default. The report of the
-# experiment is docs/handover/reports/2026-11-18-two-implementations-of-one-pass.md.
+# experiment is internal/reports/2026-11-18-two-implementations-of-one-pass.md.
 #
 # The comparison is a run, not a reading. `std::jgir canonical=true` writes the document the
 # equivalence checker reads (src/passes/trans/json/gir_canonical.cpp): the graph and node names,
@@ -155,7 +155,7 @@ const flags = graphs.map((g) => g.flags).sort().join(",")
 if (flags !== "0,2,2,2,2") {
     fail("the graph set prints flags [" + flags + "], not [0,2,2,2,2]: exactly one graph is left "
         + "with no commit having looked at its gates, because this sweep writes only the graphs it "
-        + "rewrites (docs/handover/reports/2026-11-18-two-implementations-of-one-pass.md)")
+        + "rewrites (internal/reports/2026-11-18-two-implementations-of-one-pass.md)")
 }
 """
 
@@ -196,7 +196,7 @@ const flags = graphs.map((g) => g.flags).sort().join(",")
 if (flags !== "2,2,2,2,2") {
     fail("the graph set prints flags [" + flags + "], not [2,2,2,2,2]: this sweep opens one "
         + "transaction over the program and commits it once, so a commit has looked at the gates of "
-        + "every graph, including the one it merged nothing in (docs/handover/reports/"
+        + "every graph, including the one it merged nothing in (internal/reports/"
         + "2026-11-18-two-implementations-of-one-pass.md)")
 }
 """
@@ -209,7 +209,7 @@ if (flags !== "2,2,2,2,2") {
 # comparison.
 [[tests]]
 name = "cxx_isolation.default_pipeline.by_default_name"
-desc = "The default pipeline, run by the name a program writes -- `std::opt`, the word a program that asks for optimization by name uses -- prints a canonical document of the whole graph set in which no operation over constants is left. This is the reference `by_registered_name` is compared against; it asserts a canonical, non-empty document of five graphs because an empty run against an empty run compares equal, which is the trap the experiment's report names (docs/handover/reports/2026-11-18-two-implementations-of-one-pass.md, section 4)."
+desc = "The default pipeline, run by the name a program writes -- `std::opt`, the word a program that asks for optimization by name uses -- prints a canonical document of the whole graph set in which no operation over constants is left. This is the reference `by_registered_name` is compared against; it asserts a canonical, non-empty document of five graphs because an empty run against an empty run compares equal, which is the trap the experiment's report names (internal/reports/2026-11-18-two-implementations-of-one-pass.md, section 4)."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
 args = ["${case}", "std::opt", "std::jgir canonical=true"]

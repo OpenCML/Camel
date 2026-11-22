@@ -121,7 +121,7 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
 ## 6. Wheel 与 pip 的对应关系
 
 一次原生构建出一个平台的**两只** wheel，名字直接说清 pip 该怎么挑（2026-10-25 的决定，2026-11-02 落地；
-`docs/handover/README.cn.md` 第 7 条、评审索引 C28）：
+`internal/archive/handover-README.cn.md` 第 7 条、评审索引 C28）：
 
 | 文件名 | 内容 | pip 在哪些解释器上选它 |
 |--------|------|------------------------|

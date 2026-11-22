@@ -1,0 +1,702 @@
+# 排队的工作项（非优先级一，但已由裁定落到纸面）
+
+## 1. `(d1)` 的删除要改走**编辑接口**，不能在 SSA 这一路另写一份
+
+决策者 2026-11-15 答复（`internal/reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md`）里 `(d1)` 的验收原文：
+
+> 只删确认没有读者的节点，**删除走编辑接口**（同日"谁接替被遍取走的持位节点"的裁定），**不在 SSA 这一路另写一份删除**。
+
+已落的 `8d2fa8b8f` 里有一个 `dropCarriedVariableUnits`——**那是一份在 SSA 路上新写的删除**，正是不许的那一种。
+
+**它当时不知道这条裁定**（裁定在它之后到达），所以不是违规，是**待改**。
+
+改法有两条路，选哪条要按「位置交接收进编辑接口」那件事的进度定：
+- 若编辑接口已有 `eraseNode`/`replaceNode` 的承接能力 ⇒ `dropCarriedVariableUnits` 改成调用它们；
+- 若还没有 ⇒ 先把那个能力补进编辑接口，再改这里。**不要为了这一处单独造第三个删除入口**。
+
+判据不变：删完四后端输出逐字不变，三个度量按下面第 2 条。
+
+## 2. **「必须先删」不等于「删了就绿」——必要性不是充分性**
+
+我在问页里写的是车道给的结论：「三项在 `(d)` 删掉无读者的 `:var/new` 与 `:op/assn_l` **之前不可能变绿**」。
+
+**那是一个必要条件。我把它当成了充分条件来写**，于是决策者的验收口径写成「三个度量转绿后报 3/4」。
+
+**实测是 1/3**（`8d2fa8b8f`）：只有 `var.an_arm_assignment_is_the_branch_result` 转绿；另两项的红另有原因——
+
+> `a_loop_assignment_is_the_loops_state` 与 `loop_write_outside_read_is_the_let_writing`：**循环体里那次读还在读 cell**（`total = total + 1`），所以它**不满足「无读者」判据，删不动**——它要的是循环搬运。
+
+所以正确口径是：
+- `(d1)` 后：**1/4**；
+- `(c)` 循环搬运后：**3/4**；
+- `(d2)` 按值捕获后：**4/4**。
+
+**这条错在措辞上，代价在排期上**：若照「3/4」去验收 `(d1)`，那一笔会被判成不合格，而它其实做对了。
+
+## 判据（给后来的人）
+写这种顺序结论时，**把「不可能早于」和「一定晚不了」分开写**：
+- 「X 在 Y 之前不可能变绿」= 必要条件；
+- 「做了 Y，X 就会绿」= 充分条件，**必须有实测才能说**。
+
+## 3. 一处提交标题说的机制，diff 里没有（2026-11-15 记）
+
+`origin/fsh-dev` 的 `f257714fe` 标题写着：
+
+> Merge develop: a read after a branch takes the JOIN's value, **an unread unit is dropped through the edit interface**
+
+而 `6f686ac40..f257714fe` 的改动文件里，**与编辑接口相关的 0 个**：
+
+```
+src/compile/gir/builder.{h,cpp}
+src/compile/gir/builder_control.cpp
+src/compile/gir/builder_expr.cpp        ← 191 行，删除实现在这里
+test/cases/compile/var/arm_var.cml
+test/plans/feat/compile/var.plan.toml
+test/plans/feat/parse/golden/ast_hashes.txt
+test/tools/writing-freedom.mjs
+```
+
+**实际做的正是本文第 1 节记的那件事**：`dropCarriedVariableUnits` 在 SSA 路上新写的一份删除。
+
+### 为什么记它
+**一个合并标题是别人读这笔改动时最先读到的东西。** 标题说「走编辑接口」，而代码没走——**两种可能，处理方式不同**：
+- 若这是一句**期望/待办**（「应当走编辑接口」）⇒ 标题误导了事实；
+- 若这是作者的**判断**（认为现有实现已经算走编辑接口）⇒ 那我第 1 节的判断错了，需要作者指认编辑接口是哪一个。
+
+**在澄清之前，任何一方都不许按标题去改代码**——否则会为了对齐一句话而造出真正的第二个删除入口。
+
+**判据**：这件事以「代码里删除从哪条路走」为准，不以标题为准。第 1 节的待改项保持原样。
+
+## 4. 返工：`f883c88ee` 的第 4、5 条要撤（决策者 2026-11-16 凌晨裁定）
+
+裁定原文在 `internal/reviews/questions-2026-10-29.md` 末尾「返工」一节。要点：
+
+- **第 4 条（补回 `IgnoredSideEffect`）要撤**：让循环状态「声明自己写了」会让它报「缺 `sync`」。按原则 3.1 与 11-15 的答复，**`IgnoredSideEffect` 对 `var` 的两支要删，不是要保住**。改的是 `var_read_before_write` 的期望（去掉 `IgnoredSideEffect`）。
+- **第 5 条（补回 `COPY → LOOP` 顺序边）要撤**：新语义下 `var` 不是资源，**变量的写之间没有顺序边**，先后只靠数据依赖。`order_edges_regions.gir` 里那一条从金标去掉；同一用例里**对外部资源**的顺序边保留。
+- 第 2、3、1、6 条（循环只露出头部声明的状态；无 store 的单元也能删；按函数锚点定位；「认领」与「交出值」分开验）**没有问题，保留**。
+
+### 这件事的形状（比返工本身重要）
+我把第 4、5 条写进合并正文，并称它们为「今晚第三次同族」「折叠只搬它承认的那一类边」——**把重建旧机制读成了深刻的一课**。
+
+真正的病不是纪律松，是**判据缺**：「不许改期望」这条规矩单独存在时，**遇到「新语义下旧用例变红」，它只能把我推向「去把旧机制补回来」**。
+
+判据已写进 `agents/test.md` 末条：**先问那条用例测的是不是已撤回的规则。**
+
+## 5. 生成文档里的示例已经不再示范那条诊断（2026-11-16 记）
+
+`diagnostics/examples.tsv` 仍把 `SemanticDiag::IgnoredSideEffect` 的示例钉在 `warnings_visible.cml`，**而那个例子现在已不再触发这条警告**（臂里直写 `var` 按 3.1 不是效应）。
+
+`docs.links.diag_catalog` 的 `doc_is_generated` **是绿的**——因为它比的是**页面正文与源码是否一致**，不是**示例是否还示范了这条诊断**。
+
+同源的还有一处：该诊断的 help 文字仍是旧读法（「A write outside one is ordered after the reads written before it…」）。
+
+### 要做的
+1. 给 `IgnoredSideEffect` 换一个**真的会触发它**的示例（`reportIgnoredCapturedWrites` 那一支仍活着：被调函数捕获写、调用处没交回）；
+2. 改 help 文字，去掉「顺序」那半句（新语义下 `var` 的写之间没有顺序边）。
+
+### 判据
+**「示例能过检查」与「示例示范了这条诊断」是两件事。** 检查只证明前者。**改完之后要有一个读数能证明后者**——例如把该示例的诊断码与它出现在目录里的用途对上，或让检查在「示例不产生该诊断」时报红。
+
+**在做到这一步之前，`IgnoredSideEffect` 的目录页会一直是绿的，而它是错的。**
+
+## 6. 诊断示例是按名字相似度自动钉的（2026-11-16 记，第 5 节的成因）
+
+`node scripts/diagnostics-catalog.mjs --write` 在**还没有用例钉住**某条诊断时，**按名字相似**挑一个用例当示例。实测：新诊断 `ClosureAssignsCapturedName` 被自动钉到 `err_closure_assigns_let.cml`，**而那个用例触发的是 `ImmutablePassedToVarParam`**——它不是新诊断的证据。
+
+`--verify-doc` 当时是绿的，因为它只比**页面与 TSV 是否一致**，不问**示例是否产生那条诊断**。
+
+### 所以第 5 节不是「一个旧示例烂了」，而是「生成器会系统性地产出这种示例」
+每加一条诊断，就自动多一个「页面绿、示例不示范」的坑。这不是偶发，是默认行为。
+
+### 要做的
+1. `--write` 选示例时**先验证示例确实产生该诊断码**；验证不通过就**不钉**、留空并在页面上写明「待补示例」——**宁可缺一格，不要错一格**；
+2. 或让 `--verify-doc` 增加一条：**示例用例的输出里必须出现该行钉住的诊断码**。
+
+### 判据
+**「页面与 TSV 一致」不是「示例示范了这条诊断」。** 前者可以用生成器保证，后者必须真的跑一次示例。
+
+**在做到这一步之前，每加一条诊断都会自动多一个绿着的错页。**
+
+## 7. 两处纪律事实（2026-11-16 记）
+
+### 7.1 `node scripts/format.js` 会重排既有注释，产出几百行噪声
+实测：`defunc` 那笔改 `defunctionalize.cpp` 与 `draft_inline.cpp`，格式化会把这两个文件里**既有注释整体重排 542 行**。
+
+车道的处理：**还原格式化结果，只手抄回自己的块**，终态 diff 保持 `+360/−18`。
+
+**为什么这条要记**：下一个人跑格式化时会看到同一片噪声，**而他会以为那是这次改动的一部分**。看到几百行注释位移时，先问「这是格式化还是改动」。
+
+### 7.2 我的派工文本用了行号引用，违反本仓库的规矩
+我在派工里写 `defunctionalize.cpp:346`、`:470`；`defunc` 按 `agents/commit.md`「引代码用符号不用行号」改成了 `path#symbol`，并把设计原则的 `160/167/154` 换成条目名。
+
+**它用仓库规则压了我的指令，并且说明了理由。** 这是对的。
+
+**同样的事今晚发生在我别的派工里**（`docs/design/effects/plan.cn.md:51` 的引证也是行号形态的红账）。**派工文本自己要先合规**——否则车道要么照抄一个坏例子，要么每次都要替我改正。
+
+## 8. `(d1)` 的编辑接口缺口已补，但它新增的保证没有被任何用例钉住（2026-11-16 记）
+
+`lane-editiface`（`0bdb37e38`）给 `GraphDraft` 加了 `eraseUnreadNodes(span)`：**判据与删除在同一个动词里**，删除仍只经 `eraseNode`（位置交接仍是 `closeChainOver`），所以**不是第三个删除入口**。`dropCarriedVariableUnits` 里「能不能删」的 3 处判据归零，只剩成员资格与走法。
+
+### 它给了两个方向相反、但都正确的读数
+- **把调用换回旧的逐节点删除 ⇒ 完全没区别**（3428/3408/0，var 仍 14/14，golden 逐字节）；
+- **把 `eraseUnreadNodes` 改成一律 `return false` ⇒ var 12/14**，红的正是 `an_arm_assignment_is_the_branch_result` 与 `closure_read_is_the_let_writing`。
+
+**两个读数指向不同的事**：前者说「判据一次都没行使」，后者说「调用确实在活路上」。**只做第一个会得出「改造无效」，只做第二个会得出「判据有效」。**
+
+### 债
+`eraseUnreadNodes` 唯一新增的语义是「判据失败则**整集一个节点都不动**」。而现有程序里**没有一个单元的节点还带着读者** ⇒ 它一次都没触发。
+
+**所以 (d1) 在字面上满足（删除走接口），而那条保证是防御性的、未被验证。**
+
+要回答的问题：**「一个单元的节点仍带着集合外读者」这个形状，在语言里构造得出来吗？**
+构造得出来 ⇒ 补一个用例钉住「整集不动」；构造不出来 ⇒ 在文档里写清它在什么条件下才会触发，**不要让它显得像被验证过**。
+
+### 两处已知未做（都不是遗漏，是范围）
+1. `closeChainOver` 交不出去时**仍然静默**——裁定第 2 条要它失败，那是跨 pass 的契约变更（`placeLostStatements` 还在 fold 里），另开车道；
+2. `collapseNonEscapingVariableReads` 删「没人用的 read」仍直接 `eraseNode`——**同一类判据的第二个、也是最自然的调用者**。
+
+### 补记（2026-11-20）：调用点这一侧钉不住，且原因已量清
+
+上面第 2 条已由 `a01c41447` 改成走 `GraphDraft::eraseUnreadNodes`（判据未放宽：仍是 normal / `with` / control / sync 四类使用者全空）。**但这一侧的保证不能由任何端到端用例覆盖**，三条原因都已量过：
+
+1. **拒绝侧不可达**：调用点自己的「无读者」判据（四类使用者全空）**严格窄于**接口的读者判据（normal 与 `with`），所以「还有读者的 read」根本不会被提交给接口；
+2. **唯一可达的拒绝条件是 `namesNode`**（入口、出口、返回值、端口、捕获、区域结果、控制区域端口），而语料里没有任何 `:var/get` 是命名节点——把接口改成「拒绝即中止」后跑 `feat/compile` 2652 例与 `feat/compile/var` 41 例，**零触发**；
+3. **删除本身对外不可观测**：两份宿主二进制（删 / 完全不删）在 7 个程序（语料里会走到这处的 4 个，加为这次测量写的 3 个）、以及上述 2693 例上，`std::gir` 的 `:var/get` 计数与 `std::stats` 的 `GRAPH_STATS` nodes / edges / bytes **逐字相同**。原因是没人读、图也不点名的节点不在「从出口可达」的集合里，而 `std::gir`、`std::stats` 与执行都以那个集合为准；这处删除维护的是 draft 内部一致（源码注释：否则写者的 order edge 会指向图不留的节点）。
+
+所以这一侧的保证由**接口级用例**覆盖：`test/plans/feat/runtime/draft_erase_unread.plan.toml`（`test::draft_erase_unread` 在 pass 里自建 draft 图，直接向 `eraseUnreadNodes` 要「拒绝即整组一个节点都不动」，并在同一次运行里跑接受侧作对照）。**它的反验是把接口改成一律接受 ⇒ 该例变红**，不是「完全不删 ⇒ 该例变红」——后者对拒绝侧在逻辑上不可能：**拒绝与「根本没问」的可观测状态相同**。
+
+## 9. 我写错了一个前提：`ClosureCaptureEscapes` 不是「另一条有效规则」（2026-11-16 裁定）
+
+我在问答页里写下「两条规则都对，是优先级问题」，并据此建议「改载体、不让 D1 让位」。**决策者推翻了这个前提**：
+
+> **这不是优先级问题：`ClosureCaptureEscapes` 已经不是有效规则。** 它是 2026-11-14 规则二「可变单元活不过那次求值、离开的闭包不能按引用捕获 `var`」的检查；11-15 定案「闭包捕获的是值」，**规则二整条撤回**（原则 3.5「闭包捕获的是值」一条写着「取代 2026-08-14 的规则二」）。**闭包捕获的是值，带着值离开作用域没有任何问题。**
+
+**所以从来不是两条规则相撞，而是一条规则与一个已撤掉的检查相撞。** 我的「优先级」框架本身就是错的——正确的话是：**那条检查该删。**
+
+### 裁定给的四件（属第 3 步，不单独派）
+1. **删** `SemanticDiag::ClosureCaptureEscapes`、`builder_state.cpp` 里携出的判定（`carryOutOf`/`carriedOffAt` 一族）与它在 `docs/diagnostics.md` 的条目；
+2. `state_escape/` 的 5 条：程序里写了捕获的名字，**按新规则报 D1，期望改成 D1**（不是改载体）；
+3. **另加 5 条对照**：同样的离开方式（返回、放进字段、放进数组、交给会存它的函数、放进另一个闭包），**闭包只读**捕获的 `var`——它们合法、能编译能运行，读到的是闭包创建时的值；
+4. 算第 3 步的工作量。
+
+### 教训（写下来是为了下次更早问）
+**我看到「两条规则」时，应该先问「后一条还活着吗」，而不是问「该谁先报」。** 一个已被取代的检查与一条新规则相撞，看起来完全像优先级问题——**因为它仍然在报错，所以看起来仍然有效。**
+
+---
+
+## 工具事实：`-Plan` 与 `-Changed` 同时给时，`-Plan` 被忽略
+
+```
+camel-remote.ps1 -Changed -ChangedBase <sha> -Plan @('a','b')      # 选中的是 --changed 自己的集合，a、b 不进
+camel-remote.ps1 -Plan @('a','b')                                  # 要点名计划，就不要带 -Changed
+```
+
+**这条已经让两个人各误读一次读数**：一次把 `--changed` 自己选出的 6806 条当成「`--changed` 加上我点名的七个
+计划」，一次把 `--changed` 选出的 148 条当成「四个族的最小闸门」。两次都不报错，只是**静默少跑**——
+这正是「一条检查从不运行，和没有这条检查，读数上一模一样」的同一类错。
+
+**判据**：报告的 `[SUMMARY] total` 与自己预期的数量级不符时，先看跑起来的 `[PLAN]` 名单，不要先解释读数。
+
+## 新发现、未定责：`debugger.dap_*`
+
+`slow` 层轮转抽到 `feat/tools/debugger`：`debugger.dap_session`、`debugger.dap_stepping` 两条红，
+**与今晚的语义改动无关**（它们起于 DAP 会话与单步）。**先记不修，下一轮轮转再看**，不插进正在合的这一批。
+## 10. `lane-byref` 报的两条缺陷（不归它修，记账）
+
+### A：捕获一个 `Ref` 句柄并写它，被效应推断判成 `uses capture 0`
+`std::opt` / `std::macro` / `std::defunctionalize` 下被拒：
+```
+error[RuntimeDiag::PassEffectContainment]: Pass 'std::defunctionalize report=false' returned a program
+whose call site reaches past the type it declares: node 2 of graph 'f' (a call of 'inc', which is 'a')
+declares uses capture 0; the graph it runs touches write state::Ref
+```
+最小复现（默认流水线跑出 `21`，带上优化就拒）：
+```camel
+import state
+func f(): int sync {
+    let x = state::ref(1)
+    func inc(): int sync { state::set(x, state::get(x) + 1); return 1 }
+    let a = inc()
+    return state::get(x) * 10 + a
+}
+```
+**这是实现缺陷，不是语言规则**：写穿捕获的句柄被记成 `uses capture 0`，而它实际触碰 `write state::Ref`。修法在 `decideCaptureByValue` 之后的效应推断。
+**用例的绕法（句柄当实参传）是正当的**——用例不该为实现的缺陷买单，`captured_write_order.cml` 的注释已记下这个形状。
+
+### B：非 `sync` 体里 `set` 单独成句，写被丢掉
+```camel
+func p(): int {                  // 非 sync 函数体
+    let c = state::ref(0)
+    state::set(c, 1)             // warning: EffectNotExecuted
+    return state::get(c)         // 印 0
+}
+```
+同文件里 `println(...)` 在非 sync 体里**照常执行**；`let v = state::set(c, 7)` 其值被用到时也照常执行（`v + get(c)` = 14）。只有「`set` 单独成句 + 后面有读者」这一形状丢了写。
+
+**按原则 3.3 的字面它该被执行**（「对 `Ref` 的写由之后的读者用到（3.1）」）——设计原则与代码冲突时原则优先，**所以这是缺陷，不是待裁定**。它直接决定了 `lambda_capture_write` 为什么必须改成 `sync`：原用例「后置的读把写拉活」那个机制**对 `Ref` 不成立**。
+
+### 教训
+**同一条 `Ref` 语义，在 `var` 上成立的「后置的读把写拉活」在 `Ref` 上不成立**——迁移时最容易漏的正是这种「只换了载体、没换机制」的地方。`byref` 认出了它并只报不改，是对的。
+
+## 11. 作者把两条 `Ref` 缺陷升到第一档（2026-11-16）
+
+`origin/fsh-dev` 的合并提交 `704ff582a` 标题原话：
+
+> **`Merge develop: by-reference capture cases migrated, the var unit deleted through the edit interface; put the two Ref defects into priority one`**
+
+**所以第 10 节记的 A 与 B 不是「顺带记一笔的债」，它们是第一档的一部分。** 已派 `lane-refdiag`（只诊断不改源码），要求它给出：同一根因还是两个缺陷、修法的 `file#Symbol`、**预测炸开范围（标注预判）**、可证伪判据、以及**风险**——尤其「修完之后会不会有写从『不执行』变成『执行』」。
+
+**作者把指令写在合并提交的标题里，没有改 `docs/roadmap.cn.md`。** 这一点要记住：**他的裁定以提交到达 `origin/fsh-dev`，载体可以是标题、可以是 `internal/reviews/` 下的页——不一定是任务书文件。** 巡检时必须读 `origin/fsh-dev` 的最新一笔标题，不能只看 roadmap 有没有变。
+
+## 12. `lane-refwrite` 撞出的两条（都超出它那条放宽的范围）
+
+### C1：`if` 语句的值没人要时，**整支不运行**——连外部写（`println`）也被丢
+```camel
+func p(): int {                  // 非 sync 函数体
+    if true then { println("inside") }
+    return 0
+}
+```
+**基线就什么都不印**，并报 `EffectNotExecuted`。`state::set` 在同一位置也一样。
+
+**按 3.1「区域因为它的 owner 运行而运行」，这是缺陷**：`if` 语句的 owner 是函数体，函数体运行了，它就该运行，臂里的外部写就该发生。**实现里「一条值的没人要的分支语句」被整支跳过。**
+
+- `ref.plan.toml` 的 `dead_loop` 把**循环**那一半钉成「不运行」——那是另一件事，**别混进来**；
+- **分支这一半没有用例**，所以它从来没被问过；
+- 对**外部写**与**句柄写**是**同一个洞**。
+
+### C2：「循环体里读写外层 `Ref`」在基线上就是坏的
+```
+loop 体里一个被 println 拉活的 state::get(outer_ref)   → 印两轮 box 0 后
+                                                        RuntimeDiag::InvalidArgument @ state.get
+```
+**与写无关，只读就崩。** 怀疑正是「捕获端口被当成形参」那一族（`lane-portbind` 在修 `src/runtime/resources.cpp`）。
+
+`lane-refwrite` 的放宽让**写**那条路也能走到这个洞：`state::set(outer_ref, …)` 在循环体里从「被丢掉、印 0」变成「第 0 轮就崩」；连 `sync { state::set(c,5) }` 写进循环体也崩。
+
+**所以 `lane-refwrite` 的放宽不合主干，等 `lane-portbind` 落地后重跑 `R3`。** 作者认的代价是「多执行一次不可观察的写」，**不是「崩」**——这一条界线要守住。
+
+### 一条方法上的记认
+`lane-refwrite` 在「修完反而更坏」的地方**停下来报**，而不是提交一个「六条里四条达成」的交付。**这是对的**：`R3` 从「印 0」变「崩」是可观察的退步，而验收表是作者的——**没人有权把一条验收改成「不适用」来让一笔提交变完整。**
+
+## 13. 作者答了 `Ref` 写那页：**同意默认**，并改了原则（2026-11-16）
+
+`origin/fsh-dev`（`3df4ac383` 带来 `reviews/q-2026-11-16-may-a-ref-write-that-nobody-reads-be-dropped.cn.md`）原话：
+
+> **同意默认：对句柄（`Ref` 与其他 `#resource` 类型）的写由所在区域用到，与外部写同一条规则。** 句柄的读者可能在调用方、在之后被调用的闭包里、在另一个同类型的名字后面，本图判不全；条件式保活会把 `R6`/`R7`/`R8` 判成可删。**代价是一次真没人读的句柄写会执行一次，不可观察，接受。** 调试器「从不执行的行不是停点」那条用例**按新规则改期望**（句柄写的那一行现在会执行）。
+>
+> **原则已改**（3.1「对外部资源与句柄的写由所在区域用到」、3.3 把「内部资源」一条改成「句柄」、3.3「要执行的效应之间按书写顺序」同步），**取代 11-15 写的「对 `Ref` 的写由之后的读者用到」**。
+
+### 一个必须记住的结构性事实
+**原则文本的修改在 `origin/fsh-dev` 上，不在 `origin/develop` 上。** 作者的流程是把 develop 合进 fsh-dev，所以 `docs/design-principles.cn.md` 在我们这条线上**永远是旧的**。
+
+**所以任何车道读原则时，凡涉及最近裁定的段落，都要去 `origin/fsh-dev` 读那一笔**：
+```
+git show 07c9b4358:internal/reviews/…      # 更早的答复
+git -C <repo> log -1 --format=%s origin/fsh-dev  # 最新一笔标题里可能就有裁定
+```
+**这不是绕过原则，而是原则的最新文本存在另一条线上。**
+
+### 同轮并入第一档的两件
+1. **非 `sync` 函数体里值没人要的 `if` 语句整支不运行，连臂里的 `println` 也不执行**——违反 3.1。已派 `lane-ifarm`（见第 12 节 C1）。
+2. **循环体里读外层 `Ref` 在基线上就崩**——作者确认顺序：**先修捕获口（`lane-portbind`），再放宽（`lane-refwrite`）**。
+
+## 14. 三条流程事实（都来自今晚某条车道的实测或事故）
+
+### 14.1 `git stash` 是**仓库级共享**的，不是工作树级的
+`lane-refwrite` 收尾时 `git stash push -- src include` 报 `No local changes to save`，紧接着无条件的 `git stash pop` **弹出了 `lane-portbind` 的 stash**（五条车道共用一个仓库）。它用 `git stash store -m ...` 原样放回并清理了落进来的文件，三条栈一条不少、顺序一致。
+
+**规矩**：
+- **量基线不要用 `stash`**——用 `git checkout <sha> -- src include` 或建一个只读 `worktree`，两者都不碰共享栈；
+- 万一必须 `stash`：`push -m "<车道名> <用途>"`，`pop` 前**先 `git stash list` 确认 `stash@{0}` 的 message 是自己**，否则按 index 弹；
+- **`pop` 永不无条件跟在 `push` 后面**——`push` 失败时 `pop` 就是地雷。
+
+### 14.2 「不是我弄红的」要靠**测量**，不靠声明
+今晚两条车道各自给出了可复算的证明方式，两种都值得学：
+- **`Compare-Object` 名字集合**（`lane-refwrite`）：两棵树的红名单逐一比对，报「无差异」，而不是报「我没碰那些文件」；
+- **回到裁定落地的父提交两侧量**（`lane-optred`）：在 `81fa0bac9^` 上跑同一批，报「那边也红、消息相同」或「那边绿、这边红」。
+
+### 14.3 作者点名的调试器用例：**动作对、理由不对**
+作者说「调试器『从不执行的行不是停点』那条按新规则改期望（**句柄写的那一行现在会执行**）」。`lane-refwrite` 实测：
+- 那一行是 `println(a)`，**不是句柄写**；`test/cases/tools/debugger/` 整个目录**没有一处 `state::`**；
+- `dap_stepping` **18/170**、`dap_session` **1/101**，**基线逐字相同** ⇒ 修前就有；
+- 主因像是 2026-11-15 那次「区域根」裁定让 `println(a)` 真的执行了 ⇒ **用例的前提（「这一行从不执行」）已经过期**。
+
+**所以该改的是期望，但让它过期的不是句柄放宽，是 11-15 的区域根裁定。** 照原话去改会**改错理由**。**顺序**：等「值没人要的分支语句是否运行」定了（`lane-ifarm`）再一起重排，因为那之后「哪些行会执行」还要变一次。
+
+## 15. 闸门名单定死成 12 个目标（2026-11-16）
+
+今晚同一个洞出现了**五次**，每次的形状都一样：**某族计划没被选中 ⇒ 它的红既不算新红、也不算已修，根本不在任何判断里。**
+
+```
+① slow 层从不在 --changed 里跑
+② feat/mm 两行「等 byref 合完再量」，延期后没人回头
+③ feat/opt 不在名单里（32 条红从未计入）
+④ 我的「基线 49」建立在这上面
+⑤ feat/modules、feat/tools、feat/effects 不在基线里（10 条红无法定责）
+```
+
+**从这一笔起，闸门名单写死成这 12 个目标，不再临时挑**：
+
+```
+smoke  feat/compile  feat/linear  feat/opt  feat/parse  feat/mm
+feat/modules  feat/tools  feat/consistency  feat/trans  feat/effects  docs_links
+```
+
+另加两条固定动作：
+- **每批轮转 2–3 个 `slow` 计划，并写明哪几个跑了、哪几个没跑**；
+- **`新红 vs 基线` 必须写成三张表**：基线内仍红（逐条）／基线内已转绿（逐条）／**不在基线里（逐条，并注明「基线从没量过这一族」或已做 A/B 定责）**。**给不出就写「未对账」，不许写「0」。**
+
+**理由**：一个子集跑出来的 `fail` 数，和一张覆盖全部计划的基线表，**不是同一种东西**。今晚已经有人（包括我）两次差点拿子集数去减基线数。
+
+## 16. 基线 174 → 54，且 12 目标里「新红 = 0」（2026-11-16，`0f32ded47`）
+
+### 兑现账（谁付的）
+```
+compile 27   closurerule（删一条已撤回的规则 + 22 条 + 4 条同因 + 5 条 state_escape）
+linear  98   byref（按引用捕获改按值；33 条收成 1 条）
+opt     32   optred（24 D1 + 8 D2，全部换载体，断言一字未改）
+opt      4   within_call（1948bf82b，换载体让内联读数回来）
+opt      2   screens
+mm       2   poison:linear.captured_writes / poison:linear.var_reference
+modules  1   nn 的 lr
+```
+
+### 仍红（54，全部已被 A/B 或双侧证明为老账）
+```
+consistency 36（new_values 28 + partial_application.var_parameter_effect 4）
+trans 6（cml 3 + cpp 2 + print_determinism 1）
+mm 2（capacity.perm_query_types + poison:compile.nullable_assign）
+compile 3（transitional.*，乙类，第 4 步删）
+docs 1（plan.cn.md:51，`resources.cpp#FunctionType`）
+opt 6（camel_passes.cse ×6，已用 `0b336ce51` 双侧证明是老账）
+```
+
+### 两条**不稳定**用例（新类别，必须单独记）
+```
+cli.plan_arg_domain_refused
+load_class.shared_place
+```
+- 在 `320895383` 上**绿**；
+- 在 `portbind` 那一轮闸门里**红**；
+- 现在**又绿**。
+
+**判定：不稳定，不是新红。** 而这个判定有三层后果：
+1. **它会让「新红 = 0」这句话偶尔变假**——下次看到它红，不要先去归因给最近的改动；
+2. **不稳定的红一旦进了基线，基线就不可复算了**（同一棵树两次跑出不同数）；
+3. **它本身是一个缺陷**：要么用例对时序/并行/环境有依赖，要么被测行为真的不确定。**待派人查，目前只知道「不属于任何一笔改动」。**
+
+**注意报告里的措辞**：不能写成「这两条红是 portbind 造成的」，也不能写成「这两条是绿的」——**只能写成「它在两次测量里给了不同答案」**。
+
+### 慢层轮转第 3 批（记下来，因为「跑了哪几个」和「没跑哪几个」一样重要）
+```
+跑了：mm/gc_pacing、mm/gc_soak、modules/random      50/50/0
+未跑：var_reference、tools/lsp、autodiff、frontend、trans/cml_sweep、tools/debugger
+      （前两批已跑过）
+```
+
+## 17. 一条保留的空合并（2026-11-16，`42bbc4ba1`）
+
+```
+42bbc4ba1  parents: 2de547387, 64f281e31
+tree(42bbc4ba1) = cf18ed5b…   tree(64f281e31) = cf18ed5b…   ← 逐字节相同
+2de547387 是 64f281e31 的祖先                              ← 合并了自己的祖先
+```
+
+**它是空合并：没有带进任何内容，而且三笔提交（车道原始提交、真正的合并、这条空合并）共用一个标题。**
+
+**保留，不重写。** 理由：`origin` 上已经推送，内容零差异；而 `develop` 永不被重写——
+**用一个可读的瑕疵换一次不可回退的重写，是错的交换。**
+
+**成因**：先「把车道分支合进 `develop`」，车道又自己合了一次 `develop`，再把它的合并提交合回来 ⇒ 第二层多余。
+
+**正确顺序（写死，从这一条起）**：
+```
+① 在车道分支里 git merge origin/develop  → 解冲突、跑通
+② 在 develop 上 git merge --no-ff <车道分支> 一次
+③ 推一次
+```
+
+**这一条被记录下来的用意**：**被记录的瑕疵不会复现，被悄悄抹掉的会。**
+
+## 18. 「不稳定用例」是我判错了：判定稳定，越线的是成本（2026-11-16）
+
+`cli.plan_arg_domain_refused` 与 `load_class.shared_place` 两条我记成「在两次测量里给了不同答案」。**查清了，它们没有给不同答案。**
+
+### 真相
+```
+主机上留着五条真实红记录（三个 gate，jobs=8，8699–8734 用例，400–426 s）：
+  每条用例自己的判定都是 PASS、exit 0、内部检查全 ok
+  红的注记全是运行器 test/tools/run-tests.mjs#timeoutMarginVerdict 的 4 倍余量：
+  CPU 30.04 / 30.20 / 30.37 / 30.75 / 31.25 s  对线 timeout 120 s / 4 = 30.000 s
+  越线 0.1%–4.2%
+```
+- **单独跑**：`cli` 2.3–3.3 s CPU、`load_class` 9.3–9.9 s；在满负荷 gate 里同一份工作被 charge 到 30.0–31.3 s。
+- **135 次运行**（`-Jobs 1/8/16`、单跑、成对跑）**0 红**，无抖动。
+- **成本来源**：这两条用例内部分别起 **9 次 / 6 次嵌套 runner**（`#TEST_SCRATCH_RUN`）。
+- **放大器**（另一件事）：`test/results` 里「有失败的 run 目录」永久保留，主检出已积 **1984 个 run 目录 / 2.9 M 个文件**，每次嵌套 runner 启动都要扫它。
+
+### 判定：**A（环境/负载依赖）**，不是 B（共享状态），不是 C（行为不确定）
+决定性证据是「判定从未改变 + 只越 0.1%–4.2% + 单独跑 3–13 倍余量」。`-Jobs` 宽度复现不了；只有「多条车道同时压满主机」时出现。
+
+### 我错在哪
+我把「红的出现与消失」当成「行为不确定」，于是**给它起名叫不稳定，并去查 B/C**。而真正的读法是：**它的判定恒定，变的是主机的负载**。
+> **「同一用例两次不同答案」有两种可能：判定变了（行为），还是判定没变、只是被判红的门槛变了（成本）。先看五条红记录里用例自己的判定，再看越线幅度——两者都是「没变」。**
+
+### 连带后果
+1. **这两条不是基线里的红**，也不该进基线——它们是**负载敏感**，要写进「读数可信性」那一栏；
+2. **`lsp.navigation` 是真的稳定红**：`-Jobs 1` 连红 3/3（`expected 1 warning, actual 0` + `TypeError`，248–258 ms）。**它不在那 54 族里 ⇒ 基线 54 → 55。**
+3. **一次 gate 会在仓库根留下 14 个未跟踪产物**（`*.onnx`、含空格的 `子 目录/`、`数据 文件 🐫.txt`），来源如 `test/cases/modules/onnx/*.cml` 的 `export_model<out: 'affine.onnx'>`。后果有三：`[provenance]` 变 `dirty: N files`；camel-remote 的 untracked tar 会把它带到主机；`-Changed` 的文件集被污染。**这是缺陷，待修。**
+
+### 修法（方向已定，未做）
+**把 9 次 / 6 次嵌套调用各并成一次**（治因）；**不提高 `timeout_ms`**（那是挪线）。已派 `lane-runnertax`。
+
+## 19. 我删掉了一棵正在被使用的工作树（2026-11-16，08:04）
+
+**事实**：清理时我删了 `D:\Projects\Camel-wt\ifarm` 并 `branch -d lane-ifarm-parsepoint`。那一刻 `lane-ifarm` 正在用那棵树做 `feat/parse` 两点测量。它三笔都已提交，**一笔没丢**，它用 `git worktree add` 原地恢复后做完了测量。
+
+**判据错在哪**：我把 `dirty=0 且 ahead=0` 当成「空闲树」。
+> **`dirty=0 且 ahead=0` 只证明「没有未提交的工作」，不证明「没人在用」。**
+> 恰恰因为那条车道把工作全部提交干净了，它才被我的清理扫到。
+
+**闸门（不是判断；判断会被跳过）**：`worktree remove` 之前必须
+```
+① list_agents 确认没有正在跑的 agent 在那棵树上工作；
+② 树名必须属于「我派出去、且已收到收工报告」的车道；
+③ *-base-*、*point*、*tmp* 这类测量用树一律不碰 —— 那是车道自己的临时树。
+```
+
+## 20. 「两栏相等」可能是「两栏都被同一批未跟踪文件污染」
+
+`lane-ifarm` 查出自己那次「基线 47 红」是假的：`git stash`（**不带 `-u`**）留下了未跟踪的 `.cml` 用例，于是「基线」那一栏也红了，**而 `git diff` 两栏相等反而把错误掩盖住**。
+
+> **`git diff` 看不见未跟踪文件，所以它给出的是假相等。**
+> 「基线栏与改后栏相同」只有在**两栏用的是同一份文件集**时才是证据。
+
+真基线 **46 红**（改后仍 46，逐条同名）。
+
+## 21. 三个「基线」数字不是同一种东西，**不许相减**
+
+```
+46(五套)     feat/compile + feat/linear + feat/opt + feat/parse + smoke
+55(12目标)   固定闸门名单（§16 的 54，加 lsp.navigation 一条稳定红）
+174(1115)    2026-11-15 那张最全的一次
+```
+今晚已因混用快照出过三次错（`2553/2507/30` 取自 `28d47f148`、`feat/opt` 4 vs 39、`feat/compile` 30 vs 3）。**每个数字必须带它的选中集**，写成 `46(五套)` / `55(12目标)` / `174(1115全量)`。**不带选中集的数字禁止出现在对账里。**
+
+## 22. 一条诊断的判据与它的文本恰好反相关（`UnusedAssignedValue`）
+
+文本：`The value this assignment stores is never read.`
+产生处：`src/compile/gir/builder_diagnostics.cpp#Builder::reportDroppedEffects`。
+
+**实测判据**：从函数 output/exit/return 加区域根出发、只沿 NORM/WITH/CTRL/SYNC **输入**反向可达的节点收进 `needed`，凡活着的 `:op/assn_l` 节点不在其中就报 —— 即「**store 节点没有后继消费者**」，**不是**「存的值没人读」。
+
+**实测：判据与文本反相关**（同一形状，只差体是不是 `sync`）：
+| 形状 | 非 `sync` 体 | `sync` 体 | 文本为真？ |
+|---|---|---|---|
+| `t = 1`（无读者） | 报 ✅ | **不报** ❌ | 真 |
+| `t = t+1; println(t)` | **报**，stdout `1` ❌ | 不报 | **假** |
+| `t = t+1; return t` | **报**，stdout `1` ❌ | — | **假**（唯一读者就是返回值） |
+
+**机理**：`sync` 体里 `:op/assn_l` → `println` 有 CTRL+SYNC 边，所以没人读值也不报；非 `sync` 体里 `:op/assn_l` **整个消失**、`:op/add_l` 直接 NORM 喂给 `:io/println`，于是**值被读了照样报**。
+
+**后果**：`camel -Werror` 下**任何写在非 `sync` 函数体里、值之后被读的语句级 `var` 重赋值（计数器的通常写法）直接被拒**。
+
+**并且期望已经把这条误报锁住了**：`test/plans/feat/linear/var_read_before_write.plan.toml` 基线 6/6 全绿，它钉的三条正是「值被读了」的写，而 `desc` 称其为 `the three writes whose value nobody reads`。**一条错诊断 + 一条照着它写的期望 = 两处都要改。**
+
+**分界（不许揉在一起）**：
+```
+UnusedAssignedValue   →  只说「值没人读」
+被丢掉的写（写不执行） →  归 EffectNotExecuted 那一族
+```
+已派 `lane-varwarn` 改判据。**这条归作者的第一优先级（`var` 化成 SSA），因为 `assn_l` 的存废正是那一步要动的东西。**
+
+## 23. 多笔交付不许 squash（2026-11-16，`ifarm` 的代价）
+
+`lane-ifarm` 把三笔拆得很清楚（①播种 → ③声明不计值 → ②标记还原），**每笔各自绿、正文互相指认**，并写明「② 绝不能排在 ③ 前面」。合并时被**压成一笔** `d5bb220e7`。
+
+内容我一逐条验过，**完整**（③ 的 `declarationAt`、② 的 `UnusedStatementScope` 都在 origin 的源码里，正文也列了原三 sha、顺序与依赖）。**但代价是真的**：
+> **丢掉了「单独回退 ②」的能力**，而 ②③ 是一对有硬依赖的提交 —— **bisect 到这三笔之间就再也分不开了。**
+
+**规矩**：**多笔交付按原笔数 `merge --no-ff` 合入，不做 squash。** 车道已经把三笔拆开、各自跑绿、写了互相指认的正文——**squash 把那份工作抹平**。
+只有两种情况可以 squash：① 派工时写明允许；② 车道自己建议并写了理由。
+**已 squash 的，正文必须列全原笔 sha、顺序与依赖**（`d5bb220e7` 做到了，所以留下）。
+
+## 24. 新增 `.cml` 必须登记 AST 快照 —— 一条今晚踩了两次的坑
+
+`test/plans/feat/parse/frontend.plan.toml#frontend.ast_snapshot` **记录全仓库每一个 `.cml`**，未登记的文件**直接判红**（工具的提示：`N files read as recorded, M not in the snapshot yet, of T in the corpus`）。
+
+**两次**：
+```
+lane-ifarm      加 5 条 .cml 未登记 ⇒ feat/parse 红，且它自己误判成「别人弄红的」
+lane-looplayout + lane-loopref  加 2 条未登记 ⇒ 同一处红
+```
+**修法**：`python3 test/tools/parsecheck/check.py snapshot --update`（在 Linux 侧跑，保证 hash 与测试侧一致）。
+
+**规矩（已加进派工模板）**：**任何派工只要新增 `.cml`，任务书里必须写这一条**，并且**登记要与被测改动分开归属**——登记是测量设施的变化，不是车道的主张。
+> **这一条之所以值得单独立规矩：它不产生新红，它把别人的红搬到你这笔上，然后让「是不是我弄红的」这个问题变得无法回答。**
+
+## 25. 基线：`61(12目标)` 在 `9997c789a`
+
+```
+[SUMMARY] 8851 / 8756 / 61 / skip 10 / known 24 / killed 0     red_more = 0
+61(12目标) 组成：**这一串是陈旧的、加不起来的数字，已作废**（原写「opt 族 39、consistency.new_values 31、
+                  masking 4、transitional 3、modules 3、trans 6、docs 1、mm 2、lsp 1、load_class 1、cli 1、
+                  runner 1」，求和 92 ≠ 61）。
+                  **`opt` 族从来没有 39 条**——那是更早的树上的族名被逐轮照抄的结果。真实分区见下（`56` 那次实测）。
+已转绿：本轮 0（loopref 的判据都在本来绿的那两族里）   新红：0
+```
+**`declared` 这一栏：6598 / 386 文件**（`git grep -c '^\[\[tests\]\]'`），gate `total` 8851——**`declared < started` 正常**（一条 entry 可跑多个后端）。
+
+## 26. 「绿在没看」的又一处：通过的用例读不到余量
+
+`test/tools/run-tests.mjs` 的 `meta.json` 对**没有 `cpu_budget_ms`** 的用例记 `cpu_ms: null` ⇒ **通过的用例在 gate 记录里读不到「还剩多少余量」**。
+> **跑过了、没红、但没人能回答「离红线还有多远」—— 这是「绿在没看」的第三种形态**（前两种：空集通过、检查从不运行）。
+
+连带一条登记：`test/cases/tools/cli/stdout_matches.mjs` 与刚修的两条**同一形状、11 次嵌套启动**（实测；账页原写 15，是转述别的车道的话、我没数），只因 `timeout_ms = 180000`（线 45 s）才没红（本轮 1.43–1.52 s）。**它现在绿，绿的原因是线更高，不是成本更低。**
+
+## 27. 一条失败断言可以把其余检查一起吞掉
+
+`lane-lsp` 修 `lsp.navigation` 时发现的机理：
+```
+expected 1 / actual 0                          ← 先记下一条失败
+pushed.diagnostics[0].severity 在空数组上取下标 ⇒ TypeError
+⇒ 输出 "2 of 11 checks failed" 就结束，剩下 9 条一条没跑
+```
+> **它伪装成「2 条失败」，实际是「1 条失败 + 9 条没跑」。**
+
+**这条红挂了一整晚没人看穿，一半原因在这个伪装上。** 修法是把取用改成 `?.`，让以后不符时报 FAIL 而不是抛异常。
+
+**这是「绿在没看」的第四种形态：红把其他检查吞了。**
+前三种：① 空集通过 ② 检查从不运行 ③ 通过时读不到余量（§26）。
+
+**推广**：**任何「先断言、后取下标」的测量脚本都有这个形状**。它的危害在下游——**你若在某一步崩了，「后面几条都不报」会被误读成「判据对了」。**
+
+## 28. 基线：`54` 没有变过，`lsp.navigation` 不是红
+
+§18 里我写「`lsp.navigation` 是真的稳定红 ⇒ 基线 54 → 55」。**撤回。**
+
+`lane-lsp` 判明它是**期望过时**：那条 `IgnoredSideEffect` 的「赋值/`var` 实参不在 `sync` 块」分支已被 `8b541bdba`（合并 `27b0c53a0`）删掉，`docs/cli.md` 同步改了，设计原则 3.1 写明「给 `var` 赋值不是效应」。**三重证据同时成立**（规则被撤回、代码分支被删、文档同步改了），不是「现在打不出来」。
+
+**所以`54(12目标)` 不变**；`lsp` 那条合进来之后，`61(12目标)` 会走到 **57(12目标)**。
+
+> **教训：把一条红记成「稳定红」之前，先问「它期望的规则还在吗」。** 我按「三次跑同一个答案」就把它归入基线——**稳定是稳定性，正确性是另一件事**，而我只量了前者。
+
+## 29. 「推前自己先看一遍区间」这条规矩，第一次用就抓到一处
+
+合并位照这条做，结果正好撞上：车道那个合并提交原本仍叫 `Merge remote-tracking branch 'origin/develop' into lane-runnertax`。它在**车道分支里先改成「合进来的是什么」**（`b3ef76bff`），再用新 tip 重做 develop 上的合并。
+
+**规矩第一次执行就抓到一个，说明它不是理论问题。** 这条规矩该由**最清楚那次合并内容的人**执行——合并位在合的时候才知道自己合了什么，而我在场外只能事后打区间。
+
+## 30. 两笔改同一个列表，但回答不同的问题 —— 都留
+
+`refwrite` 与 `ifarm` 的冲突同时落在**注释**和**注释下面的代码**里（`src/runtime/graph.cpp`、`src/compile/gir/builder_diagnostics.cpp`）：
+```
+refwrite    把注释从 3.1 一条放宽到 3.1 与 3.3：写一个盒子是区域内有人欠的写，读者可能在本图之外
+ifarm       往同一个列表加另一种种子：join 不出值的分支也是区域种子
+            并把 regionRoots 从 const 改成可变以收集它
+```
+**处理：两边都留** —— 宽的 3.1+3.3 文本、分支那一段、可变 vector + `statementBranchRoots`。
+
+**判据（这是这一条值得记的地方）**：
+> **两个种子回答的是不同的问题，只是落在同一个列表里。** 所以「取一边」不是简化的取舍，而是**丢掉一个问题**。
+
+而证据是**测量出来的，不是推理出来的**：
+```
+六条计划 313 / 313 / 0
+refwrite.shapes / refwrite.dead_arm     四后台全 PASS（反向判据：没人走的臂仍报）
+branch_exit#used_arm_exit               读 8，四后台 —— ifarm 的判据在合并树上仍成立
+loops.outer_ref（loopref 的 R3 形状）    四后台全 PASS
+```
+> **「单独取任何一边就会红的计划，只在合并树上才绿」 —— 这就是不许在冲突里挑一边的理由。**
+
+## 31. 「未复测」是一个合法的答案
+
+`refwrite` 的两条新 `.cml` 没登记快照 ⇒ 新红 1(`12目标`)，当场修掉（`8866b029f`，单独一笔，正文写明「这是测量设施，不是这一批的主张」）。
+
+但**合并位没有重跑 12 目标去追那个「新红 = 0」**，理由：`ast_snapshot` 的差异清单是 `2 added, 0 removed`，只补两条、不改任何既有行，而重跑要十分钟。它把这一格记成 **「未复测」**。
+
+> **这比跑一趟再报 0 更好**——**跑一趟也只证明那一次是 0，而「未复测」说的是它真正知道的**。今晚已经有过「把两个数相减当对账」的教训（§21），而这一条是它的正面写法：**能报就报数，不能报就说「未对账」，不要用别的数代替。**
+
+## 32. 快照那条红不是粗心，是「车道只跑自己的计划，而快照读全仓库」
+
+今晚**四批、四次**，每一条新增 `.cml` 的车道都在 `frontend.ast_snapshot` 上留了一条红：
+```
+lane-ifarm                     5 条
+lane-looplayout + lane-loopref 2 条
+lane-refwrite                  2 条
+lane-lsp                       1 条（warned.cml）
+```
+**成因不是粗心**：**车道只跑自己的计划，而 `frontend.ast_snapshot` 读全仓库的 `.cml` 语料。** 一条新夹具在自己的计划里是绿的，在快照里是红的，而车道跑不到快照。
+
+所以规矩要放在两处：
+```
+① 派工模板：新增 .cml ⇒ 跑 python3 test/tools/parsecheck/check.py snapshot --update，登记单独一笔
+② 合并位：合并后立刻查这一条，不等闸门报
+```
+> **「绿在别处」的第五种形态：一条用例在自己的计划里绿，在另一个读全仓库的计划里红。**
+> 它的毒性在于**归因**：红了之后第一个问题是「是不是我弄红的」，而这个问题在这里有一个非人格的答案——**是新文件没登记，不是谁写错了代码**。
+
+## 33. 基线：`57(12目标)`，但要写成「登记后应为 57、未复测」
+
+```
+8861 / 8769 / fail 58 / skip 10 / known 24 / killed 0
+58 = 57(lsp 绿之后) + 1(frontend.ast_snapshot，已登记 56966b07b)
+已转绿 1(12目标)：feat.tools.lsp.navigation       新红 0(12目标)
+```
+**`57` 这个数记作「登记后应为 57、未复测」**，不拿「应该」当读数（与 §31 同一条纪律）。
+
+**已被实测确认的**：`lsp.navigation` 绿了，且不在那 58 里。它此前不在 54 族、没人认领——**正是「新红 = 0」为假的那一条**。而它不是红，是**期望过时**（§28）。
+
+## 34. 余量终于可读了：五个字段，一条判定没动
+
+`test/tools/run-tests.mjs#costRecord` 现在对**每条**用例记：
+```
+cpu_ms            实测 CPU（该用例自己进程树的读数；只有宿主给不出才是 null）
+cpu_limit_ms      判定用的线：有 cpu_budget_ms 就是它，否则 timeout_ms / 4
+cpu_margin_x      线 ÷ 读数（1.0 就是线，37.975 就是还有 37.975 倍）
+cpu_margin_basis  线属于哪条规则
+```
+**判定一字未动**：同一批 63 条两栏逐条比对，`[PASS]/[FAIL]` 名字与状态 **63/63 完全相同**。
+
+**硬证据（最有力的一条）**：`lsp.navigation` 的 `meta.json` 从 `cpu_ms: null`（什么都没有）变成 `cpu_ms: 60, cpu_limit_ms: 15000, cpu_margin_x: 250` —— **同一次失败，从「无法回答」变成「60 ms 对 15 s 线」。**
+
+**对账（与 `lane-runnertax` 手工量对得上）**：
+```
+cli.plan_arg_domain_refused   cpu 790 ms  线 30 s  ⇒ 37.975×    手量 0.75–0.80 s
+load_class.shared_place       cpu 8800 ms 线 30 s  ⇒ 3.409×     手量 6.05–9.22 s
+```
+
+**这次改动真正的理由不是「加了个字段」，而是**：
+> **`payload` 里同一个名字 `cpu_ms` 以前指两件事**——对无预算的用例恒 `null`，而它自己的 `meta.json` 里记着实测值。**一个名字两种读数是缺陷。**
+
+## 35. 二手数字进了账页，就会被下一个人当读数用
+
+§26 我写「`stdout_matches.mjs` 15 次嵌套启动」。**实测是 11 次**（8 个 `runPlans` 调用点，其中 3 个在循环里 3/2/2；`strace -f -e trace=execve` 数 spawn 也是 11）。**那个 15 是别的车道转述给我的，我没数就写进了账页。**
+
+> **转述的数字一律标「未实测」，直到有人数过。** 账页是别人查读数的地方，**一个没量过的数字混在量过的数字里，比不写更坏**。
+
+## 36. 一条与任何改动无关的既有红：`check-doc-links --citations`
+
+```
+1 条 unverified citation：resources.cpp#FunctionType
+引用方：docs/design/effects/plan.cn.md
+与基线 commit 字节相同 ⇒ 既有红，不是任何一条车道引入的
+每次 -Check 都会报，因此每次都要有人重新判定一次「是不是我」
+```
+**登记为独立一项。** 它正是「一条红没有主人」的形状——而只要它没有主人，每次对账都要花时间重新排除它。
+### 基线分区必须按当次日志重新分组，不许搬上一轮的族名
+
+`56(12目标)` 的分区（实测，逐条按 `[PLAN]` 归属，求和 **56**）：
+```
+feat.consistency.new_values    31      feat.opt.camel_passes           6
+feat.effects.masking_transition 4      feat.compile.var_closure        3
+feat.modules.resources          3      feat.trans.cml                  3
+feat.trans.cpp                  2      feat.consistency.runner         1
+feat.mm.capacity                1      feat.mm.gc_poison_sweep         1
+feat.trans.print_determinism    1
+```
+**`opt` 族只有 `camel_passes` 6 条**；`new_values` 31 条属于 `feat.consistency`，**不在 `feat.opt` 下**。
+
+> **族名不重算，就是分区表在撒谎。** 我在这页上照抄「opt 族 39」照抄了好几轮，它求和从不等于总数——**而没人去加它，因为它是「已知的」**。
+> **规矩：三张表的分区一律由当次日志按 `[PLAN]` 重新分组得出；加不起来就不许进报告。**

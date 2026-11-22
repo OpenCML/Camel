@@ -21,7 +21,7 @@ the gate where nothing is measured, so this file is run on the ECOOP side:
     python -m pip install torch
     python test/cases/opt/writings/fx_greedy_fusion.py
 
-and its source is quoted in `docs/handover/reports/2026-11-18-eco-measurements.cn.md`.
+and its source is quoted in `internal/reports/2026-11-18-eco-measurements.cn.md`.
 
 The transform is the same one, step for step, as `greedy_fuse.cml.in`:
 

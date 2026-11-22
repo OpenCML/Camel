@@ -29,7 +29,7 @@
 - 差就是"只有一边有这一行"：`the engine's table: no row reduces to pow_d@2` / `the library's table: no rule files conv2d`。
 
 **单位是键，不是数。** 两侧的"读数"是"谁把这个键归档"对"谁注册了这个键"，不是两个浮点数。程序级的数值对照是另一张表
-（[2026-11-04 的 11 项逐条重算](../../handover/reports/2026-11-04-where-the-library-and-the-engine-still-differ.cn.md)），
+（[2026-11-04 的 11 项逐条重算](../../../internal/reports/2026-11-04-where-the-library-and-the-engine-still-differ.cn.md)），
 本页不与它混用：那张表回答"两条腿跑同一个程序各答什么数"，这张回答"两份表差哪些键"，混在一起会让"读数变了"分不清是数变了还是键变了。
 
 五条命令，全在树根跑，不建树、不跑计划，只读源码：

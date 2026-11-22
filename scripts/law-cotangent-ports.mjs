@@ -25,7 +25,7 @@
 // wherever a value enters a position of the other one (`ArrayType::castSlotFrom` ->
 // `Array::createRankZero`, inserted by `Builder::coerceTo`; the exporter writes it as
 // `rt::Array<T>::element`; `numel` of the box answers 1 and `shape` answers `[]`). Author, 2026-11-04
-// 04:20 (`docs/handover/reviews/questions-2026-10-29.md`, "秩 0：只有一个转换点"): the ports say
+// 04:20 (`internal/reviews/questions-2026-10-29.md`, "秩 0：只有一个转换点"): the ports say
 // `T[...]` and the conversion is the compiler's, once, so **no allowance is made here for a port that
 // promises one thing and a body that reads another** -- not in either direction, and not for the
 // rank-zero pair. A law that hands `ct` to a body read at the element writes `ct: T`; the one that
@@ -42,7 +42,7 @@
 //     the half `mean_axis_stated_t` was on, and a law's source has no witness for it: `ruleCotangent`
 //     (`src/stdlib/transforms/transpose/`) decides the types at build time. It is recorded as a
 //     question beside this change
-//     (`docs/handover/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`).
+//     (`internal/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`).
 //
 // So this reads the laws as text and asks one question of each port: what does the body require of
 // it? Three kinds of witness, and each names where its requirement comes from:

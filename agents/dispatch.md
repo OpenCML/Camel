@@ -6,9 +6,9 @@
 
 ## 0. 派工之前（顺序不能换）
 
-- [ ] **先读 `docs/handover/questions/` 的索引。** 44 页，一页一问。查有没有人已经做过这件事、或已经判过它不该做。
+- [ ] **先读 `internal/questions/` 的索引。** 44 页，一页一问。查有没有人已经做过这件事、或已经判过它不该做。
   > 出处：2026-11-20，我把「改 JOIN 尾位置印法」批给一条车道，而 `2026-11-19-the-join-does-not-record-which-var-it-carries.cn.md` 里记着这条路**已被实测否掉并整笔回退**。那张页就在索引里。差点让一条车道重跑一条已知印错值的改法。
-- [ ] **在 `docs/handover/reviews/` 里搜同一件事的关键词**，确认作者没有相反裁定。
+- [ ] **在 `internal/reviews/` 里搜同一件事的关键词**，确认作者没有相反裁定。
   > 出处：2026-11-20，我建议把 `break_rate` 的期望改成 `exit 0`，作者裁定是「保留拒绝，案例搬到库 `grad`」。**被推翻的理由不废掉结论。**
 - [ ] **确认基线 sha 与那一项计划的当前 `total/pass/fail`**，写进派工提示。读数必须带「哪个总体、哪个时刻、哪个来源、哪个前提」。
   > 出处：整晚。「一个表没有它的 build sha，三小时后就没意义。」
@@ -39,7 +39,7 @@
 ```
 **★ 不许 `git stash`** —— 工作树之间共享一个 stash 栈，2026-11-15 出过事故。要暂存就 `git commit` 到一个临时分支。
 **★ 生成物不许手解** —— 冲突一律用生成器重录：
-   `docs/handover/questions/README.md` ⇒ `node scripts/check-doc-links.mjs --questions-index --write`
+   `internal/questions/README.md` ⇒ `node scripts/check-doc-links.mjs --questions-index --write`
    `docs/stdlib-reference.md`       ⇒ `node scripts/stdlib-reference.mjs --write`（跑两遍、要求 `git diff` 空、再 `--verify-doc` 必须 exit 0）
    `ast_hashes.txt`                 ⇒ `camel-remote.ps1 -UpdateAstHashes -AstOnly`
    `messages/*.h`                   ⇒ `node scripts/diagnostics-catalog.mjs --write`
@@ -77,7 +77,13 @@
 ## 6. 派工者自己的三条
 
 - **不空等。** 车道大部分时间是**不需要主机**的：读代码、判判据、写 `.cml`、二分提交、写页 —— 都无主机。要跑时才报「等位」。
-- **不向用户提问。** 有疑问写成一页一问（`docs/handover/questions/`），写死默认建议，并按默认当轮开工。
+- **不向用户提问。** 有疑问写成一页一问（`internal/questions/`），写死默认建议，并按默认当轮开工。
 - **合并迟到比实现迟到代价大。** 成熟的提交不许因为「想先确认」而压着；判定不确定时改成**事后判 + 可回退**（合完跑，只有合后才红就 `git revert --no-commit` 撤回来）。
   > 出处：2026-11-20，我要求合并位「先证实某条红是既有红再合」，主干因此停了 28 分钟。
 - **同一台构建主机上的远程跑一律串行，不许并行。** 闸门自带的宿主清扫按「最近 10 分钟有没有文件变过」判定，两条并行跑的读数会互相打脸：一条算出「worktree 已消失，删掉检出」，另一条三十秒后算出「十分钟内变过，保留」。2026-11-22 有过一次：A、B 并行，A 的读数删掉了 ~/camel-work/twored（718 MB），B 的读数却是「keeping」。删除由竞态决定，不是判定。**串行跑，或者各自用不同主机的检出目录。**
+
+## 7. 协作文件在哪（2026-11-23 起）
+
+- 决策者的派工、催办、返工只写在 `internal/inbox.md`；接手一条就删掉那一条，以同一编号转进 `internal/backlog.md`。
+- 手上全部的活（包括自己发现的红基线、闸门欠账、`known_fail`、搁置的分支）只记在 `internal/backlog.md`；当前车道只记在 `internal/lanes.md`，开、合、卡、收当场改自己那一行。
+- 流转与格式见 `internal/README.md`。本清单 §0 说的"先读索引、先搜裁定"照旧，只是位置改成了 `internal/questions/` 与 `internal/reviews/`。

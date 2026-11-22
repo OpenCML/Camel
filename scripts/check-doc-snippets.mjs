@@ -58,7 +58,7 @@
 // On a `docs/design/` or `docs/technical/` page a fence without an entry point is an excerpt,
 // not a program: those pages quote fragments, proposed syntax and measurements. Only their
 // fences that contain `func main` are compiled. The rule is in EXCERPTS below, with the reason.
-// The record directories (docs/handover, docs/reviews) are not pages and are not scanned; three
+// The record directories (internal, docs/reviews) are not pages and are not scanned; three
 // generated or dated references are allowlisted because their `camel` fences are signatures,
 // diagnostics or excerpts of an earlier state, not programs.
 //
@@ -94,7 +94,7 @@ function usage(message) {
 const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), ROOT, usage)
 
 // Directories that are records, not pages: they quote the old spelling to say what happened.
-const RECORDS = ['docs/handover/', 'docs/reviews/']
+const RECORDS = ['internal/', 'docs/reviews/']
 
 // A generated reference is not a teaching page: its `camel` fences are signatures (one per
 // overload) and the triggering examples of diagnostics, deliberately wrong.

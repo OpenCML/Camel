@@ -91,7 +91,7 @@ between tasks** — the matmul and relu kernels of `tensor` are where the thread
 graph has nothing independent to schedule. That is also why the two back ends print identical
 numbers: the scheduler has no freedom to reorder anything. For a plan that *does* cut chains (a
 branch arm cut into eleven chains with thirteen edges between them), see
-`docs/handover/reports/prl-two-reds-and-segments.md`.
+`internal/reports/prl-two-reds-and-segments.md`.
 
 ## What is not here, and why
 

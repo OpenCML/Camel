@@ -113,7 +113,7 @@ reading that the extra two files per tool buy anything for the documented path.
 
 `libs/` before this change held `libcamel.so` (20,130,880 B) and the Python bridge; with the runtime
 it holds 44.0 MB (43,005,424 B for those two files alone). The ruling's "24 MB" is this number, and
-a wheel gains the same bytes before compression (the `docs/handover/pitfalls.cn.md` row estimates
+a wheel gains the same bytes before compression (the `internal/archive/pitfalls.cn.md` row estimates
 +8 MB in the wheel) -- the release note for a version that first ships it has to say so.
 
 ## 5. Where the two halves live

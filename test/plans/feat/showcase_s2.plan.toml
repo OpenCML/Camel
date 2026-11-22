@@ -4,12 +4,12 @@ tier = "fast"
 tags = ["feat", "showcase", "s2", "vjp", "autodiff", "gradient"]
 
 # S2 is one end-to-end training example written with the library's own derivative
-# (`docs/handover/batches-2026-10-31-72h.cn.md`). Its first step is where the library's gradient can
+# (`internal/archive/batches-2026-10-31-72h.cn.md`). Its first step is where the library's gradient can
 # be held against the engine's, and this plan pins that step on the ONE model the library can lift
 # today. That model is SCALAR -- `pred = x * w + b`, `loss = 0.5 * (pred - t)^2`, two gradient
 # elements -- and it is not S2's tensor model: `vjp` cannot reverse a `sum` over an array, a
 # `softmax<1>`, `mean` at an axis, or a captured array operand yet
-# (`docs/handover/reports/2026-11-03-library-vjp-walls.cn.md`). The scalar numbers prove the pipe is
+# (`internal/reports/2026-11-03-library-vjp-walls.cn.md`). The scalar numbers prove the pipe is
 # closed end to end; they are not a reading of the tensor path.
 #
 # The two Camel legs differ only in where the weight sits, which is what design principles 9.9 says
@@ -223,7 +223,7 @@ timeout_ms = 60000
 # what the language can answer today: `sum_to`'s target is written from `extent_of::<float[2]>()`. Green,
 # and kept for what it is worth -- it pins the rank-one arithmetic against the engine at 0.0 and shows a
 # stated shape being answered from the type. It is not the design's terminal road: see the two entries
-# above and `docs/handover/reports/2026-11-04-the-two-vector-laws-ask-for-a-shape-the-declaration-does-not-write.cn.md`.
+# above and `internal/reports/2026-11-04-the-two-vector-laws-ask-for-a-shape-the-declaration-does-not-write.cn.md`.
 [[tests]]
 name = "matmul_t.vector_lhs_law_stated_extent"
 desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead (author, 2026-11-04 12:40)"

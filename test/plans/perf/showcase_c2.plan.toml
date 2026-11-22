@@ -115,7 +115,7 @@ timeout_ms = 180000
 # through `std::profile json=...`, its per-operator rows bucketed into the forward pass, the backward
 # pass and the optimizer (`showcase/c2-mlp-mnist/phases.py`).
 #
-# The bound is the one the reading itself carries (docs/handover/reports/s2-with-grad-time-split.md):
+# The bound is the one the reading itself carries (internal/reports/s2-with-grad-time-split.md):
 # the three blocks add up to the time the loop reports, within 5 %.  It held at 100.4 % when it was
 # written (0.996 s of blocks against 0.992 s of loop, 1000 steps, batch 100, one thread), and the
 # operators outside the loop -- loading the data, the checkpoint, the setup -- are in neither the

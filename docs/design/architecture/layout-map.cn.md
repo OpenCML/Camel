@@ -2,7 +2,7 @@
 
 依据：`docs/design/architecture/abstractions.cn.md` 第 9 节（仓库布局，已定）、
 `docs/design/architecture/refactor-plan.cn.md` 第 1、2 节（阶段与车道）、
-`docs/handover/plans/2026-11-22-refactor-stage0.cn.md` 0.5。
+`internal/plans/2026-11-22-refactor-stage0.cn.md` 0.5。
 
 这张表是**搬家脚本唯一的输入**（`scripts/layout-move.mjs`）。脚本读它，产出 `git mv` 序列、`#include`
 改写与每块的构建目标；脚本不执行，演练在临时树里跑（见 `scripts/layout-move.mjs --help`）。
@@ -244,5 +244,5 @@ node scripts/layout-move.mjs --apply --root D:\Temp\layout-drill
 ```
 
 `--apply` 只会动 `--root` 指向的树，且拒绝在仓库主干上跑。演练结果与违例清单见
-`docs/handover/plans/2026-11-22-refactor-stage0-layout-violations.cn.md`；车道对目录的独占见
+`internal/plans/2026-11-22-refactor-stage0-layout-violations.cn.md`；车道对目录的独占见
 `layout-ownership.cn.md`。

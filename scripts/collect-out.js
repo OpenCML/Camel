@@ -204,7 +204,7 @@ function collectPythonRuntimeDlls(BASEDIR) {
 // older distribution ships: there the binary refuses to start ("version `GLIBCXX_3.4.36' not
 // found") and every caller had to export LD_LIBRARY_PATH first. A command typed by hand over ssh,
 // or any caller that did not inherit that export, got a binary that could not start at all -- and
-// the failure looks like a broken test rather than a missing library (docs/handover/pitfalls.cn.md,
+// the failure looks like a broken test rather than a missing library (internal/archive/pitfalls.cn.md,
 // the GLIBCXX row).
 //
 // Writing the toolchain's directory into the executables' rpath would answer that with an absolute

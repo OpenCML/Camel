@@ -10,7 +10,7 @@ Changes:
 - **tensor 的仿射融合组开始被调度**：`tensor::fuse` 早把 `x @ w + b` 标成 `linear`、`relu(x @ w + b)` 标成 `linear_relu`，但一直没有注册组内核，后端问注册表拿不到，只能把两三个算子逐个跑。
 - **`autodiff::mul_tangent` 有了转置**：`matmul_t` 的梯度路径给出 `dL/dx`、`dL/dt`、`dL/dw` 三组数（`value=10.34375`）；`transpose` 把只带切线的函数的 lift 读作线性，`jvp`/`vjp` 在两层组合上不再停在端口计数上。
 - **三处诊断**：没有 `else` 的 `if` 分支里未使用的 `T!` 重新告警；被分支携带的写入，分支自己的语句照常执行；微分后的函数体保留它等待的语句。
-- **一条性能是退的**：`std::opt` 这条路比上一版慢约 30%（两次优化 `6.48 s` 对 `5.00 s` 预算，四个后端一致，不是抖动）。这一版带着它发，读数与追查记在 `docs/handover/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`。
+- **一条性能是退的**：`std::opt` 这条路比上一版慢约 30%（两次优化 `6.48 s` 对 `5.00 s` 预算，四个后端一致，不是抖动）。这一版带着它发，读数与追查记在 `internal/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`。
 
 本版带发的问题（四条，下一版修）：
 
@@ -75,7 +75,7 @@ Changes:
 - 可达性与 dump：`keep` 是可达的，支撑这个结论的计数被钉在测试里；一个没有具名结果的图现在是 dump 能显示的状态，不再当作内部错误。
 - 事务与账本：jvp 的成员图从事务里取，测试 pass 也经由它自己的事务读草稿，账本因此只认一个所有者。
 - 图存储第六步；`facts`、`effects2`、`s1`、`m5`、`reinterp2`、`m4-assembly` 等一批 lane 的清理与读数。
-- 记录：新增 72 小时批状态表（`docs/handover/batches-2026-10-31-72h.cn.md`）；链检查的计数跟着基线走，不再跟着某次测试走；一次读数请求确认 pass 边界的检查一次也没有触发。
+- 记录：新增 72 小时批状态表（`internal/archive/batches-2026-10-31-72h.cn.md`）；链检查的计数跟着基线走，不再跟着某次测试走；一次读数请求确认 pass 边界的检查一次也没有触发。
 
 [0.2.39]
 Changes:
@@ -121,7 +121,7 @@ Changes:
 - 新增 `erf` 与 `erfc`；`..` 的优先级在语言文档里修正，语法块按生成器重出。
 - core 的 `idx_take` 只留一条求导规则；`ConstructNotSupported` 这个诊断码退役，循环与规则的上下文按今天的语言描述。
 - 修复：checkpoint 用例里失败的保存不再丢掉它的错误；device-tree 用例把 float 写进 f32 结果的对齐到元素类型；两个受声明影响的生成文件按其脚本重生成，`05_effect_order` 的 exemplar 用脚本重录而不是手改。
-- 这一批有十七个转交页往返（控制边的模型、纯值是否自带 wait、悬空的链尾、入口内联尺寸、内联自递归、tile 链成员、spliced body 等），作者答完或撤回的页已从树里删掉，`docs/handover/questions/` 目前是空的。
+- 这一批有十七个转交页往返（控制边的模型、纯值是否自带 wait、悬空的链尾、入口内联尺寸、内联自递归、tile 链成员、spliced body 等），作者答完或撤回的页已从树里删掉，`internal/questions/` 目前是空的。
 
 [0.2.35]
 Changes:

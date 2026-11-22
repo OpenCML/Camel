@@ -49,9 +49,9 @@
  * exactly one file of the tree as the answer.
  *
  * The record directories are not read by default (`RECORD_DIRS`, the same rule the citation check
- * keeps): `docs/handover` and `docs/reviews` are the history of decisions, a page there quotes a
+ * keeps): `internal` and `docs/reviews` are the history of decisions, a page there quotes a
  * path as it stood when the decision was taken, and rewriting it would be rewriting the record.
- * `--path docs/handover` reads them anyway, which is how a sweep checks its own deletions. A plan's
+ * `--path internal` reads them anyway, which is how a sweep checks its own deletions. A plan's
  * `fixture/` trees are not read at all (`isFixtureTree`): they are a synthetic checkout another
  * check builds and runs against, and one of their pages cites the file that must not be there.
  *
@@ -88,7 +88,7 @@ const SKIP_DIRS = new Set([
 ])
 
 /** The records: history, not the tree as it stands. Read only when named by `--path`. */
-const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
+const RECORD_DIRS = new Set(['internal', 'docs/reviews'])
 
 /**
  * A synthetic checkout another check builds and runs against: the `fixture/` trees of the plans.
@@ -304,7 +304,7 @@ for (let index = 0; index < argv.length; index += 1) {
 const named = targets.length > 0
 const rootTop = new Set(fs.readdirSync(ROOT).map((name) => name))
 const readDirectories = named ? targets.map((target) => path.relative(ROOT, target).split(path.sep).join('/')) : []
-const readingRecords = readDirectories.some((rel) => rel === 'docs/handover' || rel.startsWith('docs/handover/') || rel.startsWith('docs/reviews'))
+const readingRecords = readDirectories.some((rel) => rel === 'internal' || rel.startsWith('internal/') || rel.startsWith('docs/reviews'))
 const { files, ignores } = named
     ? { files: targets.flatMap((target) => targetFiles(target, !readingRecords).files), ignores: allIgnores() }
     : { files: walk(ROOT, true).files, ignores: allIgnores() }
