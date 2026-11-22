@@ -29,7 +29,7 @@ internal/                                                         内部协作�
 | `editors/vscode/` | 删除 | 插件有专门的仓库（负责人 2026-11-22："删了吧"）。同批改掉依赖它的：`test/plans/feat/tools/grammar.plan.toml` 删除；`scripts/context-keywords.mjs`、`scripts/install.js`、`scripts/source-package.mjs`、`test/tools/tree-guard.mjs` 去掉对它的引用；`docs/editor-support.*` 改为指向插件仓库，`docs/debugging.*` 里的插件安装步骤同样改指 |
 | `lib/<模块>/` 里的 `.cml` | `src/stdlib/` 里与安装后相同的位置（`<模块>.cml`、`rulesets/*.cml` 等） | 负责人 2026-11-22：`stdlib` 是随 Camel 发布附带的标准库目录，Camel 运行与测试时看到的就该是它 |
 | `lib/<模块>/` 里的 C++ | `src/stdlib/<模块>/`，与 `<模块>.cml` 并排 | 一个模块的声明与实现挨在一起；这也是第三方 Camel 库的写法（一个 `.cml` 加同名的原生实现目录）。打包规则只有一条：拷贝 `src/stdlib/`，跳过 C++ 源文件，放入编好的 `.cmo`；`scripts/collect-out.js` 的按模块挑选、铺平与特例全部删掉。安装布局不变，`packaging/pypi/` 与模块加载不用改 |
-| `lib/<模块>/signatures/<模块>.cml`（计算出来的签名的记录） | `src/stdlib/<模块>/signatures.cml`，不安装 | 只给参考文档生成用，跟着该模块的 C++ 实现（那些签名正由 C++ 算出）；以后类型函数有了 Camel 入口（核心抽象第 17 节），这些签名改写成模块 `.cml` 里的类型函数，这个文件随之消失 |
+| `lib/<模块>/signatures/<模块>.cml`（计算出来的签名的记录） | 删除 | 负责人 2026-11-22：不留这种单独的记录文件。这些签名以后写成模块声明里的类型函数（核心抽象第 17 节，93 条是那一步的验收清单）；在那之前不另记。同批改 `scripts/stdlib-reference.mjs`（这些算子只列名字与说明）、`scripts/stdlib-declarations.mjs --check`（去掉 `computed` 字段那条规则）、`docs/stdlib-conventions.cn.md` 第 27 行那条规则 |
 | `hello.cml` | `examples/hello.cml` | |
 | `logo.png` | 删除 | 与 `assets/logo.png` 逐字节相同；引用改指 `assets/` |
 | `assets/` | 留在根目录 | README、打包、宣传都用，不只是文档（待负责人确认） |
