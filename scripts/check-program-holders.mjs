@@ -53,7 +53,7 @@
  *
  * The type is decided by identity, not by the name: the runtime's Program is `camel::Program` /
  * `camel::runtime::Program` (and the file-local `rt` alias), while `camel::tiles` has a Program of
- * its own (lib/tiles/include/tiles/program.h) that is not the runtime's and that this check
+ * its own (src/stdlib/tiles/include/tiles/program.h) that is not the runtime's and that this check
  * does not report. An unqualified `Program` takes the identity of the namespace it is declared in,
  * so a bare `Program *` inside `camel::tiles` is the tiles one. A qualifier this file does not know
  * is reported, not skipped: a holder the check cannot place is a holder to look at.
@@ -66,7 +66,10 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default. */
-const SCANNED = ['include', 'src', 'modules', 'tools']
+// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
+// tree of either layout is scanned instead of crashing on the way in.
+const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
 
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 
@@ -386,7 +389,7 @@ for (let index = 0; index < argv.length; index += 1) {
 }
 
 const targets = paths.length > 0 ? paths : SCANNED.map((name) => path.join(ROOT, name))
-const scanned = targets.flatMap((target) => sourceFilesUnder(target))
+const scanned = targets.filter((target) => fs.existsSync(target)).flatMap((target) => sourceFilesUnder(target))
 if (scanned.length === 0) {
     console.error(
         `check-program-holders: ${targets.join(', ')} holds no C++ source, so this check matched ` +

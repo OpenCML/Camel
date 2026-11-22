@@ -48,7 +48,7 @@ import { LOG_DIR, SCRATCH_DIR, runnerOutputPath } from '../test/tools/runner-out
 
 const THIS_FILE = fileURLToPath(import.meta.url)
 const TIERS = ['build', 'out', 'tmp', 'source']
-// A declaration is lib/<module>/<module>.cml after the layout move (stdlib/<module>.cml in the flat library before it): a .cml of the library is source, never output, whichever layout the checkout has.
+// A declaration is src/stdlib/<module>/<module>.cml after the layout move (stdlib/<module>.cml in the flat library before it): a .cml of the library is source, never output, whichever layout the checkout has.
 const STDLIB_SOURCE = /^(?:stdlib\/[^/]+|lib\/.+)\.cml$/
 const TRACKED_FIXTURE = 'test/cases/modules/pass_not_found/unloadable.cmo'
 const GIT_MAX_BUFFER = 64 * 1024 * 1024

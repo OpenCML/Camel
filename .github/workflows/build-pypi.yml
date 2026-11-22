@@ -103,7 +103,7 @@ jobs:
       # The wheel build links `python.cmo` against CPython (modules/python embeds the
       # interpreter through pybind11::embed), and CMake's `Development.Embed` component cannot be
       # satisfied without a *shared* libpython. The image's own /opt/python trees are standalone
-      # builds -- Py_ENABLE_SHARED=0, and no libpython at all under their `lib/` -- so
+      # builds -- Py_ENABLE_SHARED=0, and no libpython at all under their `src/stdlib/` -- so
       # the interpreter this job builds for comes from the distribution: python3.11-devel
       # (AlmaLinux 8 AppStream) provides /usr/bin/python3.11 and /usr/lib64/libpython3.11.so.
       # There is no python3.10 package at all here ("dnf list --available 'python3.10*'" ->

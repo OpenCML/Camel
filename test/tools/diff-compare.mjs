@@ -95,7 +95,7 @@ import { parseTomlFile } from './toml-lite.mjs'
 const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 /// The repository root: the first ancestor of this tool that holds the standard library, so a tool
 /// copied into a worktree or a scratch directory still reads the tree it belongs to. The library is
-/// `stdlib/std.cml` before the layout move and `lib/std/std.cml` after it, and this tool runs
+/// `stdlib/std.cml` before the layout move and `src/stdlib/std.cml` after it, and this tool runs
 /// against both trees -- one moved, one not -- so either marker answers.
 const ROOT_MARKERS = [
     ['stdlib', 'std.cml'],
@@ -115,7 +115,7 @@ const REPO_ROOT = (() => {
     for (;;) {
         if (holdsLibrary(dir)) return dir
         const parent = path.dirname(dir)
-        if (parent === dir) throw new Error(`no stdlib/std.cml or lib/std/std.cml above ${HERE}`)
+        if (parent === dir) throw new Error(`no stdlib/std.cml or src/stdlib/std.cml above ${HERE}`)
         dir = parent
     }
 })()

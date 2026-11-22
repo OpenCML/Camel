@@ -334,7 +334,7 @@ export function getGitVersion() {
 
 /**
  * `BUILD_FOOTPRINT` names the build in `camel --version`. It used to be the wall clock of every
- * configure, and because tools/camel-cli and tools/debugger compile it into a generated header,
+ * configure, and because src/tools/camel-cli and src/tools/debugger compile it into a generated header,
  * every reconfigure recompiled config.cpp (17 s) and repl.cpp (15 s) even when not one byte of the
  * tree had moved: a gate re-run on an unchanged tree paid 43 s of rebuild for a new timestamp.
  *
@@ -385,7 +385,7 @@ function pinnedFootprint(config, cmakeOptionFlags, gitVersion) {
  */
 export function runCmakeBuild(config, cmakeOptionFlags) {
     process.chdir(BASEDIR)
-    // The diagnostic numbers are assigned in kernel/diagnostics/registry.tsv and the headers and message
+    // The diagnostic numbers are assigned in src/kernel/diagnostics/registry.tsv and the headers and message
     // tables are generated from it. Generate before CMake configures, so a new declaration
     // is numbered and the tree CMake reads already carries the emitted files; CMake then runs
     // --check again as a dependency of libcamel_objects, so a direct cmake build is guarded too.
@@ -430,12 +430,15 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
  */
 function removeStaleModuleArtifacts(config, moduleFiles) {
     const built = new Set(moduleFiles.map((file) => path.resolve(file)))
-    // A module's output directory follows the module: `build/lib/<name>/<config>` now that it lives
-    // in `lib/<name>`, `build/modules/<name>/<config>` while it lived in `modules/<name>`. Both are
-    // scanned, because a sweep that only knows the old one leaves a renamed module's `.cmo` in the
-    // build tree and the next install copies it back onto the search path -- the exact leak this
-    // sweep exists to close.
+    // A module's output directory follows the module's source directory, and it has moved twice:
+    // `build/src/stdlib/<name>/<config>` since the 2026-11-22 move (the module is `src/stdlib/<name>/`
+    // and CMake puts a target's binary directory under the one its source directory has),
+    // `build/lib/<name>/<config>` after the layout move, `build/modules/<name>/<config>` before it.
+    // Every spelling is scanned, because a sweep that only knows one of them leaves a renamed
+    // module's `.cmo` in the build tree and the next install copies it back onto the search path --
+    // the exact leak this sweep exists to close.
     const baseDirs = [
+        path.join(BASEDIR, 'build', 'src', 'stdlib'),
         path.join(BASEDIR, 'build', 'libs'),
         path.join(BASEDIR, 'build', 'modules'),
         path.join(BASEDIR, 'build', 'lib'),
@@ -465,12 +468,18 @@ function removeStaleModuleArtifacts(config, moduleFiles) {
  *  删除本次 configure 不构建的模块产物。
  *
  * `.cmo` 不再复制进 `stdlib/`：源码树不是安装。模块查找本来就会看可执行文件旁与
- * `CAMEL_HOME` 下（`kernel/include/camel/utils/install_layout.h`），安装由 `collect-out` 按清单写进
+ * `CAMEL_HOME` 下（`src/kernel/include/camel/utils/install_layout.h`），安装由 `collect-out` 按清单写进
  * `out/<tag>/stdlib`；在源码树里再放一份没有消费者，只会把构建产物留在源码树。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  */
 export function copyBuildArtifacts(config) {
-    const exeSrcDir = path.join(BASEDIR, 'build', 'tools', 'camel-cli', config)
+    // `build/src/tools/camel-cli` since the 2026-11-22 move (`build/tools/camel-cli` before it): the
+    // CLI's source directory is `src/tools/camel-cli` and CMake keeps its binary directory under the
+    // same relative path.
+    const exeSrcDir = [
+        path.join(BASEDIR, 'build', 'src', 'tools', 'camel-cli', config),
+        path.join(BASEDIR, 'build', 'tools', 'camel-cli', config),
+    ].find((dir) => fs.existsSync(dir)) ?? path.join(BASEDIR, 'build', 'src', 'tools', 'camel-cli', config)
     const stdlibDir = path.join(BASEDIR, 'stdlib')
 
     const libSrc = findBuiltLibcamel(config)

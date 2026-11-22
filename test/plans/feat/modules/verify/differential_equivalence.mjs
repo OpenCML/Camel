@@ -69,7 +69,13 @@ const casePath = input.case_path ?? payload.case_path ?? ''
 const repoRoot =
     input.repo_root ?? payload.repo_root ?? path.resolve(path.dirname(casePath), '..', '..', '..', '..')
 const testName = input.test_name ?? payload.test_name ?? 'rules.differential_equivalence'
-const library = path.join(repoRoot, 'lib', 'rules', 'rules.cml')
+// The library files its rule list at the root of `src/stdlib/` since the 2026-11-22 move
+// (`lib/rules/rules.cml` after the layout move, `stdlib/rules/rules.cml` before it).
+const library = [
+    path.join(repoRoot, 'src', 'stdlib', 'rules.cml'),
+    path.join(repoRoot, 'lib', 'rules', 'rules.cml'),
+    path.join(repoRoot, 'stdlib', 'rules', 'rules.cml'),
+].find((file) => fs.existsSync(file))
 
 if ((input.exit_code ?? payload.exit_code ?? 0) !== 0) {
     fail(`${testName}: the check case exited ${input.exit_code ?? payload.exit_code}`)

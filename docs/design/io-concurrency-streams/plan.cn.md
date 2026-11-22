@@ -84,7 +84,7 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 `
 | `foreach` | `lib/std/prelude.cml#foreach` | 数组的按序副作用 |
 | `fold` | `lib/std/std.cml#fold`、`lib/opt/opt.cml#fold` | **两个遍**，与折叠无关 |
 | `zip` | `lib/std/prelude.cml#zip`（`:struct/zip`） | 数组的元组化；要求各参数都是数组 |
-| `take` | `lib/array/array.cml#take`（数组）；`lib/tensor/signatures/tensor.cml#take`（张量按下标取行） | **没有流版** |
+| `take` | `lib/array/array.cml#take`（数组）；`src/stdlib/tensor/signatures/tensor.cml#take`（张量按下标取行） | **没有流版** |
 | `sum`/`max` | `lib/array/array.cml#sum`、`lib/array/array.cml#max` | 数组归约 |
 | `range` | `lib/std/prelude.cml#range` | `range(start, end): int[]`——今天「区间」的等价写法 |
 | `scan`/`batch`/`unfold`/`tee`/`window` | **无**（实测 0 处声明） | 全部是新东西 |
@@ -601,7 +601,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 算子 id | `kernel/include/camel/core/operator_table.h#MacroCmp` | 117（`= 19`，`:macro/cmp`） |
 | `TypeCode` 无流 | `kernel/include/camel/core/type/base.h#TypeCode` | 56–100 |
 | 开秩数组 `T[...]` | `kernel/include/camel/core/type/composite/array.h#ArrayType::openRank` | 83–87、111–118 |
-| 维度包落图 | `compile/src/gct/builder_type.cpp#DimPack` | 5095–5120、5775–5805 |
+| 维度包落图 | `src/compile/src/gct/builder_type.cpp#DimPack` | 5095–5120、5775–5805 |
 | `map` / `filter` 的类型解析 | `lib/std/prelude.cml#map` | 2266–2348 |
 | 高阶算子的语义形状 | `lib/std/builtin/executors/builtin_semantics.cpp#ElementCalls` | 190、222 |
 | 数组版签名 | `lib/std/prelude.cml#map` | 385（`zip`）、411–429（`map`/`filter`/`reduce`）、324（`range`） |

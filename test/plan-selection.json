@@ -40,17 +40,17 @@
         },
         {
             "comment": "The standard library is inside the module tree now (`lib/std/` holds the core's files and the passes, `lib/<module>/` a module), and a plan directory mirrors a module, not the library: this narrower match comes first, so a `lib/std/` change is read by the file rules only, the way a `src/passes/` change was before the layout move.",
-            "paths": ["lib/std/"],
+            "paths": ["src/stdlib/std/"],
             "plans": "feat/"
         },
         {
             "comment": "A module: lib/tensor selects feat/modules/tensor, lib/nn selects feat/modules/nn.plan.toml. A module with no plan of its own (python) falls through to the file rules. `modules/<module>/` before the layout move, which put a module's C++ under `modules/`; the directory is `lib/<module>/` now.",
-            "paths": ["lib/"],
+            "paths": ["src/stdlib/"],
             "plans": "feat/modules/"
         },
         {
             "comment": "A tool: tools/lsp selects feat/tools/lsp.plan.toml; tools/format falls through to the file rules (feat/format).",
-            "paths": ["tools/"],
+            "paths": ["src/tools/"],
             "plans": "feat/tools/"
         }
     ],
@@ -239,92 +239,92 @@
         },
         {
             "comment": "The public headers mirror the blocks: a header a pass or the runtime includes is as wide as the source file that includes it. These rules mirror the source rules below, so a header change selects the same plans as the implementation it declares. They come first because the layout map (`docs/design/architecture/layout-map.cn.md`, table B) put each block's headers inside the block's own directory (`kernel/include/`, `parse/include/`, `compile/include/`, `lib/<module>/include/`): a rule is matched by prefix, so a header rule placed after its block's source rule would never fire.",
-            "paths": ["parse/include/camel/parse/"],
+            "paths": ["src/parse/include/camel/parse/"],
             "plans": ["smoke", "feat/parse", "feat/compile"]
         },
         {
             "comment": "The compiler and graph headers. `compile/include/camel/compile/gir/draft_graph_builder.h` is the only door from a handle to the builder that owns it, so the witness of that identity runs with it.",
-            "paths": ["compile/include/camel/compile/"],
+            "paths": ["src/compile/include/camel/compile/"],
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/runtime/draft_node_owner.plan.toml"]
         },
         {
             "comment": "The pass API headers: the translation, optimization and scheduler passes. The move distributed them over the block that owns each pass, so the rule names each block's `camel/passes/` directory.",
-            "paths": ["lib/std/cml/include/camel/passes/", "lib/std/cxx/opt/include/camel/passes/", "lib/std/gir/include/camel/passes/", "lib/std/gir/dot/include/camel/passes/", "lib/std/gir/json/include/camel/passes/", "lib/std/macro/include/camel/passes/", "lib/test/include/camel/passes/"],
+            "paths": ["src/stdlib/std/cml/include/camel/passes/", "src/stdlib/std/cxx/opt/include/camel/passes/", "src/stdlib/std/gir/include/camel/passes/", "src/stdlib/std/gir/dot/include/camel/passes/", "src/stdlib/std/gir/json/include/camel/passes/", "src/stdlib/std/macro/include/camel/passes/", "src/stdlib/test/include/camel/passes/"],
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear", "feat/runtime/draft_erase_unread.plan.toml"]
         },
         {
             "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too. The ledger's `files`/`references` count is partly a header count (`kernel/include/camel/runtime/draft.h`, `draft_session.h`, ...), so this rule names the ledger plan for the same reason the core one does. `kernel/include/camel/runtime/node_ref.h` is where a handle's identity is written down -- the address and the epoch -- so the witness of it runs here too.",
-            "paths": ["kernel/include/camel/core/", "kernel/include/camel/runtime/"],
+            "paths": ["src/kernel/include/camel/core/", "src/kernel/include/camel/runtime/"],
             "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",
-            "paths": ["lib/std/exec/include/camel/execute/"],
+            "paths": ["src/stdlib/std/exec/include/camel/execute/"],
             "plans": ["smoke", "feat/linear", "feat/para"]
         },
         {
             "comment": "Any other public header (init, utils, services, the standalone bridge): the compiler, the translator and the runtime, which is the smallest set every consumer of the blocks' include roots shares.",
-            "paths": ["kernel/include/", "compile/include/camel/service/", "lib/std/cpp/include/"],
+            "paths": ["src/kernel/include/", "src/compile/include/camel/service/", "src/stdlib/std/cpp/include/"],
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear"]
         },
         {
             "comment": "FastVM and the other schedulers. The scheduler is also where a collection can be asked for, which makes this the file class that decides when an object dies: `feat/opt/defun.plan.toml` reads programs whose values are function values and closures, `feat/compile/ref.plan.toml` reads the box counts a run takes and releases, and `feat/mm/graph_space.plan.toml` is the graph-space gradient case that runs a real collection. On 2026-11-15 a collection added after the entry graph returned in `nodevm.cpp` was selected by feat/linear, feat/para, feat/trans and smoke, none of which runs a program that keeps a function value alive; it passed all of them and broke eight `defun` program runs (`killed by a signal: 8`) plus one assertion, all red on a pushed HEAD until the change was reverted. The judgement this rule records is not the three plans but the class: any file that can change what may be treated as a root takes every plan that depends on when an object dies with it.",
-            "paths": ["lib/std/fvm/", "lib/std/nvm/", "lib/std/prl/"],
+            "paths": ["src/stdlib/std/fvm/", "src/stdlib/std/nvm/", "src/stdlib/std/prl/"],
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans", "feat/opt/defun.plan.toml", "feat/compile/ref.plan.toml", "feat/mm/graph_space.plan.toml"]
         },
         {
             "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule). The rule library's own SMT check is selected here too: it reads stdlib/rules.cml, so a rule that stops holding under its licence is reported by the change that edited it.",
-            "paths": ["lib/std/cxx/opt/", "lib/rules/rules.cml", "lib/rewrite/", "scripts/rule-proofs.mjs"],
+            "paths": ["src/stdlib/std/cxx/opt/", "src/stdlib/rules.cml", "src/stdlib/rewrite/", "scripts/rule-proofs.mjs"],
             "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile", "feat/modules/rules_proofs.plan.toml"]
         },
         {
             "comment": "The profiler pass: its own plan runs without a CUDA device (the host fallback), so it is safe from an ordinary change.",
-            "paths": ["lib/std/profile/"],
+            "paths": ["src/stdlib/std/profile/"],
             "plans": ["smoke", "gpu/profile.plan.toml"]
         },
         {
             "comment": "The other translation passes: the graph printers, the C++ emitter, the JSON dump.",
-            "paths": ["lib/std/cml/", "lib/std/cpp/", "lib/std/stats/", "lib/std/gir/", "lib/std/tns/", "lib/std/gc/", "lib/std/nop/", "lib/std/selftest/", "lib/std/rulesets/"],
+            "paths": ["src/stdlib/std/cml/", "src/stdlib/std/cpp/", "src/stdlib/std/stats/", "src/stdlib/std/gir/", "src/stdlib/std/tns/", "src/stdlib/std/gc/", "src/stdlib/std/nop/", "src/stdlib/std/selftest/", "src/stdlib/std/rulesets/"],
             "plans": ["smoke", "feat/trans", "feat/compile/gir.plan.toml", "feat/consistency/print_formats.plan.toml"]
         },
         {
             "comment": "The test-only passes (test::facts, test::regions, test::rules, ...): the plans that name them in their arguments.",
-            "paths": ["lib/test/"],
+            "paths": ["src/stdlib/test/"],
             "plans": ["smoke", "feat/compile", "feat/linear", "feat/mm", "feat/modules", "feat/opt", "feat/runtime/draft_erase_unread.plan.toml"]
         },
         {
             "comment": "Any other pass, including the shared pass machinery.",
-            "paths": ["lib/std/macro/"],
+            "paths": ["src/stdlib/std/macro/"],
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
         },
         {
             "comment": "GCT/GIR construction, encoding and the graph printer. `src/compile/gir/builder_support.h` is where a node handle is turned back into the draft it names and where that identity is checked, so the witness of the identity (`feat/runtime/draft_node_owner.plan.toml`) runs with it.",
-            "paths": ["compile/src/", "compile/semantic/"],
+            "paths": ["src/compile/src/", "src/compile/semantic/"],
             "plans": ["smoke", "feat/compile", "feat/consistency", "feat/trans", "feat/runtime/draft_node_owner.plan.toml"]
         },
         {
             "comment": "The front end: lexer, parser, AST and diagnostics.",
-            "paths": ["parse/src/"],
+            "paths": ["src/parse/src/"],
             "plans": ["smoke", "feat/parse", "feat/compile", "feat/consistency"]
         },
         {
             "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too. The direct-connection ledger of graph-store step 2 b is checked here as well: its three numbers count the references to `GraphDraft`, and `src/runtime/` is where both the storage and the transaction live, so this is the directory a commit can add a direct connection from. The plan is fast and cheap (one `git grep` pass), so it rides along rather than waiting for its own gate. The witness of a node handle's identity rides along for the same reason: the epoch a handle names its draft by is minted in `src/runtime/draft.cpp`.",
-            "paths": ["kernel/core/", "kernel/runtime/"],
+            "paths": ["src/kernel/core/", "src/kernel/runtime/"],
             "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml", "feat/runtime/draft_erase_unread.plan.toml"]
         },
         {
             "comment": "Execution, entry arguments and the standalone bridge.",
-            "paths": ["lib/std/exec/"],
+            "paths": ["src/stdlib/std/exec/"],
             "plans": ["smoke", "feat/linear", "feat/para"]
         },
         {
             "comment": "The rest of src/: the built-in operators and their semantic tables (src/builtin) are the core every module plan runs on, so feat/modules is included; the services, profiler helpers and utilities are reached through the compiler and the runtime. The specific rules above stay narrower.",
-            "paths": ["kernel/", "lib/std/builtin/"],
+            "paths": ["src/kernel/", "src/stdlib/std/builtin/"],
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear", "feat/modules"]
         },
         {
             "comment": "Tiles, the module: the CPU plan, the three GPU plans (all slow, so they are named as plan files and run in full even under --tier fast), the profile and reading plans, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before.",
-            "paths": ["lib/tiles/"],
+            "paths": ["src/stdlib/tiles/"],
             "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "gpu/reading.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
@@ -334,18 +334,18 @@
         },
         {
             "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph. `onnx_with_forms` pins the three call forms of `export_model`'s `with` list (only `out`; `out` with `target`; `out` with `dynamic_axes`), one case under `test/cases/modules/onnx/with_forms/` each.",
-            "paths": ["lib/onnx/", "test/cases/modules/onnx/"],
+            "paths": ["src/stdlib/onnx/", "test/cases/modules/onnx/"],
             "layer": true,
             "plans": ["feat/modules/onnx.plan.toml", "feat/modules/onnx_with_forms.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
         },
         {
             "comment": "Neural-network operators: the nn plan and the plans that train with them.",
-            "paths": ["lib/nn/"],
+            "paths": ["src/stdlib/nn/"],
             "plans": ["feat/modules/nn.plan.toml", "feat/modules/checkpoints.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
             "comment": "Automatic differentiation. `layer` is true because five slow cases compare gradients against PyTorch: --tier fast runs the fast autodiff cases and filters those.",
-            "paths": ["lib/autodiff/", "test/cases/modules/autodiff/"],
+            "paths": ["src/stdlib/autodiff/", "test/cases/modules/autodiff/"],
             "layer": true,
             "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml", { "plan": "feat/compile/rules_angle_args.plan.toml", "ownCases": true }]
         },
@@ -358,83 +358,83 @@
         },
         {
             "comment": "Tensor operators and shapes: the tensor plans, the index/operator semantics plans, the thread budget (the pool and the library GEMM share one number), the numeric licence that the library path is allowed under, and autodiff (layered, for the same PyTorch reason), because a shape or operator change shows up in gradients.",
-            "paths": ["lib/tensor/"],
+            "paths": ["src/stdlib/tensor/"],
             "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/threads.plan.toml", "feat/modules/index_semantics.plan.toml", "feat/modules/operator_semantics.plan.toml", "feat/compile/numeric_permissions.plan.toml", { "plan": "feat/modules/autodiff.plan.toml", "layer": true }]
         },
         {
             "comment": "Keyed random: the random plan, whose slow std::cpp comparison follows --tier (`layer`) so a change to a case does not run it in full, the reference plan that runs the Philox cases, and the registry that lists them.",
-            "paths": ["lib/random/", "test/cases/modules/random/"],
+            "paths": ["src/stdlib/random/", "test/cases/modules/random/"],
             "layer": true,
             "plans": ["feat/modules/random.plan.toml", "feat/modules/random_reference.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "Graph values and passes, and the rewrite rules built on them.",
-            "paths": ["lib/graph/"],
+            "paths": ["src/stdlib/graph/"],
             "plans": ["feat/modules/graph.plan.toml", "feat/modules/graph_facts.plan.toml", "feat/modules/rules.plan.toml"]
         },
         {
             "comment": "Checkpoint trees.",
-            "paths": ["lib/ckpt/"],
+            "paths": ["src/stdlib/ckpt/"],
             "plans": ["feat/modules/ckpt.plan.toml", "feat/modules/checkpoints.plan.toml"]
         },
         {
             "comment": "I/O: the module's plan and the std facade that wraps it.",
-            "paths": ["lib/io/"],
+            "paths": ["src/stdlib/io/"],
             "plans": ["feat/modules/io.plan.toml", "feat/modules/std.plan.toml"]
         },
         {
             "comment": "JSON values: the accessor/typed/value plans and the std facade.",
-            "paths": ["lib/json/"],
+            "paths": ["src/stdlib/json/"],
             "plans": ["feat/modules/json_typed.plan.toml", "feat/modules/json_value.plan.toml", "feat/modules/json_accessor_error.plan.toml", "feat/modules/std.plan.toml"]
         },
         {
             "comment": "Bytes and the std facade over them.",
-            "paths": ["lib/bytes/"],
+            "paths": ["src/stdlib/bytes/"],
             "plans": ["feat/modules/bytes.plan.toml", "feat/modules/std.plan.toml"]
         },
         {
             "comment": "Parallel operators: the para plans and the registry that lists their signatures.",
-            "paths": ["lib/para/"],
+            "paths": ["src/stdlib/para/"],
             "plans": ["feat/para", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "The Python bridge: the std plan whose python cases run it and the two consistency plans that drive it.",
-            "paths": ["lib/python/"],
+            "paths": ["src/stdlib/python/"],
             "plans": ["feat/modules/std.plan.toml", "feat/consistency/attempt.plan.toml", "feat/consistency/cleanup.plan.toml"]
         },
         {
             "comment": "Numeric operators: the std facade and the operator-semantics plan.",
-            "paths": ["lib/math/"],
+            "paths": ["src/stdlib/math/"],
             "plans": ["feat/modules/std.plan.toml", "feat/modules/operator_semantics.plan.toml"]
         },
         {
             "comment": "The declaration modules with no plan of their own: their cases live under test/cases/modules/std, which feat/modules/std.plan.toml runs, and their signatures are checked by the registry plan.",
-            "paths": ["lib/env/", "lib/fs/", "lib/hash/", "lib/process/", "lib/pyplot/", "lib/re/", "lib/sim/", "lib/str/", "lib/this/", "lib/time/"],
+            "paths": ["src/stdlib/env/", "src/stdlib/fs/", "src/stdlib/hash/", "src/stdlib/process/", "src/stdlib/pyplot/", "src/stdlib/re/", "src/stdlib/sim/", "src/stdlib/str/", "src/stdlib/this/", "src/stdlib/time/"],
             "plans": ["feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "The computed halves of the declarations (stdlib/signatures/<module>.cml before the layout move, one directory per module now): they are not compiled; stdlib-reference.mjs --verify-ops compares them with the operators the module registers, and --verify-doc regenerates docs/stdlib-reference.md from them. That is exactly feat/modules/stdlib_registry, so this rule is narrower than the declaration-body rule below and comes first (`lib/<module>/signatures/` is inside a module directory the catch-all below would otherwise take).",
-            "paths": ["lib/autodiff/signatures/", "lib/ckpt/signatures/", "lib/nn/signatures/", "lib/tensor/signatures/", "lib/tiles/signatures/", "lib/transforms/signatures/"],
+            "paths": ["src/stdlib/autodiff/signatures/", "src/stdlib/ckpt/signatures/", "src/stdlib/nn/signatures/", "src/stdlib/tensor/signatures/", "src/stdlib/tiles/signatures/", "src/stdlib/transforms/signatures/"],
             "plans": ["feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "The declaration bodies that no module rule above names (a declaration is `lib/<module>/<module>.cml` now, beside the module's C++; `stdlib/<module>.cml` in the flat library before the move): a declaration is compiled (feat/compile) and loaded at startup (smoke), it is imported by every module plan that uses its operators (feat/modules, a directory so --tier fast keeps the ProGen/GC/PyTorch entries out), and --verify-ops/--verify-doc check it against the registry. lib/rules/rules.cml and lib/rewrite/ are matched by the optimizer rule above, which is narrower. The list is every declaration that has no module rule of its own: it is a list and not a prefix because the move put each declaration inside its module's directory, and a module added later without a rule of its own is a tracked file no rule names -- which the runner self-test reports by name.",
-            "paths": ["lib/array/array.cml", "lib/opt/opt.cml", "lib/optim/optim.cml", "lib/perf/perf.cml", "lib/rulesets/", "lib/state/state.cml", "lib/statistics/statistics.cml", "lib/std/prelude.cml", "lib/std/std.cml", "lib/stream/stream.cml", "lib/tensor_definitions/tensor_definitions.cml", "lib/test_support/test_support.cml", "lib/transforms/transforms.cml", "lib/tree/tree.cml", "lib/types/types.cml", "lib/vjp/vjp.cml"],
+            "paths": ["src/stdlib/array.cml", "src/stdlib/opt.cml", "src/stdlib/optim.cml", "src/stdlib/perf.cml", "src/stdlib/rulesets/", "src/stdlib/state.cml", "src/stdlib/statistics.cml", "src/stdlib/prelude.cml", "src/stdlib/std.cml", "src/stdlib/stream.cml", "src/stdlib/tensor_definitions.cml", "src/stdlib/test_support.cml", "src/stdlib/transforms.cml", "src/stdlib/tree.cml", "src/stdlib/types.cml", "src/stdlib/vjp.cml"],
             "plans": ["smoke", "feat/modules", "feat/compile", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "The std facade over the modules: the module plan that exercises it, the compile checks of its imports, and the registry that lists its operators.",
-            "paths": ["lib/std/"],
+            "paths": ["src/stdlib/std/"],
             "plans": ["feat/compile", "feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "Any other module (a module's C++ that no rule above names). `lib/` is the module tree after the layout move, `modules/` before it. A directory target, so --tier fast filters the slow cases; a module that grows a specific rule above stops using this one.",
-            "paths": ["lib/"],
+            "paths": ["src/stdlib/"],
             "plans": ["feat/modules"]
         },
         {
             "comment": "The language server, debugger, formatter and command-line tools.",
-            "paths": ["tools/"],
+            "paths": ["src/tools/"],
             "plans": ["feat/tools", "feat/format"]
         },
         {
@@ -484,7 +484,7 @@
         },
         {
             "comment": "The diagnostics registry and the example pins: compile.diag_catalog runs --check, the failure-path proof, --verify-doc and --coverage; the registry is the one declaration file, the pins are the one record of which case each page example shows, and the generated tables live beside the code they number. `docs.diagnostics_catalog` of feat/docs_links runs the same script, so a change to the tool or to either table selects both plans; the failure-path proof is the one path that stays with feat/compile, because docs_links does not run it.",
-            "paths": ["scripts/diagnostics-catalog.mjs", "kernel/diagnostics/registry.tsv", "kernel/diagnostics/examples.tsv"],
+            "paths": ["scripts/diagnostics-catalog.mjs", "src/kernel/diagnostics/registry.tsv", "src/kernel/diagnostics/examples.tsv"],
             "plans": ["feat/compile/diag_catalog.plan.toml", "feat/docs_links.plan.toml"]
         },
         {
@@ -554,7 +554,7 @@
         },
         {
             "comment": "The CPython binding of the runtime: the extension module links libcamel and is read by the Python binding plan, which drives it from an interpreter (the test skips where the extension was not built).",
-            "paths": ["bindings/"],
+            "paths": ["src/bindings/"],
             "plans": ["feat/bindings"]
         },
         {

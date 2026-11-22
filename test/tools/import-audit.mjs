@@ -127,11 +127,13 @@ function bracedBody(text, from) {
 }
 
 // Every `.cmo` module has a directory of its own named after the module; `array` and `tree`
-// are Camel only and have no `module.cpp`. The directory is `lib/<module>/` after the layout move
+// are Camel only and have no `module.cpp`. The directory is `src/stdlib/<module>/` after the layout move
 // (a module's C++ and its declaration in one directory) and `modules/<module>/` before it, so both
 // are asked and the one the tree has decides.
 function moduleSource(module) {
     const candidates = [
+        path.join(REPO_ROOT, 'src', 'stdlib', module, 'module.cpp'),
+        path.join(REPO_ROOT, 'src', 'stdlib', module, 'src', 'module.cpp'),
         path.join(REPO_ROOT, 'lib', module, 'module.cpp'),
         path.join(REPO_ROOT, 'lib', module, 'src', 'module.cpp'),
         path.join(REPO_ROOT, 'modules', module, 'module.cpp'),
@@ -488,9 +490,10 @@ function declarationCost(reps) {
             }
             samples.sort((a, b) => a - b)
             const median = samples[Math.floor(samples.length / 2)]
-            // The declaration is beside the module's own sources after the layout move, in the flat library
-            // before it; `lib/std/` holds the ones that belong to the core.
+            // The declaration sits at the root of `src/stdlib/` since the 2026-11-22 move, beside the
+            // module's own sources after the layout move, and in the flat library before it.
             const declaration = [
+                path.join(REPO_ROOT, 'src', 'stdlib', `${module}.cml`),
                 path.join(REPO_ROOT, 'lib', module, `${module}.cml`),
                 path.join(REPO_ROOT, 'lib', 'std', `${module}.cml`),
                 path.join(REPO_ROOT, 'stdlib', `${module}.cml`),

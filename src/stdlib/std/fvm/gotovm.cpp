@@ -1,0 +1,1036 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#include "camel/utils/int_div.h"
+#include "fastvm.h"
+
+#include "camel/core/effect_trace.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/global_config.h"
+#include "camel/execute/executor.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/loop_frame.h"
+#include "camel/execute/operator_call.h"
+#include "runtime_support.h"
+#include <array>
+#include <iostream>
+
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+#if ENABLE_FASTVM_JIT
+using namespace camel::jit;
+#endif
+
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+/* Clang Win64: wrapper in trampoline.cpp. Use a fixed-size per-thread stack so nested direct JIT
+ * calls do not overwrite the caller's saved pc/bc, while keeping the hot path allocation-free. */
+static constexpr size_t kJitSaveStackLimit = 8192;
+static thread_local std::array<size_t, kJitSaveStackLimit> s_jit_pc_stack;
+static thread_local std::array<const Bytecode *, kJitSaveStackLimit> s_jit_bc_stack;
+static thread_local size_t s_jit_save_depth = 0;
+#define JIT_SAVE_PC_BC()                                                                           \
+    do {                                                                                           \
+        GUARD(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");           \
+        s_jit_pc_stack[s_jit_save_depth] = pc;                                                     \
+        s_jit_bc_stack[s_jit_save_depth] = bc;                                                     \
+        ++s_jit_save_depth;                                                                        \
+    } while (0)
+#define JIT_RESTORE_PC_BC()                                                                        \
+    do {                                                                                           \
+        GUARD(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                           \
+        --s_jit_save_depth;                                                                        \
+        pc = s_jit_pc_stack[s_jit_save_depth];                                                     \
+        bc = s_jit_bc_stack[s_jit_save_depth];                                                     \
+    } while (0)
+#else
+#define JIT_SAVE_PC_BC() ((void)0)
+#define JIT_RESTORE_PC_BC() ((void)0)
+#endif
+
+/**
+ * Computed Goto implementation of FastVM.
+ *
+ * This version of FastVM uses the "Computed Goto" technique for bytecode dispatch.
+ *
+ * Basic idea:
+ * Instead of using a large switch-case statement to handle different opcodes,
+ * this approach maintains a jump table that maps each opcode directly to the
+ * corresponding instruction handler (label address). The VM fetches the next
+ * opcode, looks up the handler's address in the jump table, and jumps to it
+ * directly via an indirect goto instruction.
+ *
+ * Why it's faster:
+ * - Avoids the repeated branch comparisons in a switch-based dispatcher.
+ * - Reduces branch misprediction penalties, since the CPU can learn common
+ *   jump patterns in bytecode sequences more easily.
+ * - Eliminates unnecessary instruction dispatch overhead and improves I-cache
+ *   locality in the main interpreter loop.
+ *
+ * In high-frequency dispatch scenarios (such as bytecode interpreters or
+ * state machines), this approach can typically yield a **10%–20% performance
+ * improvement** compared to a traditional switch-based implementation,
+ * depending on workload and CPU architecture.
+ */
+
+#include "opperf.h"
+
+#ifndef NDEBUG
+#include "src/tools/profiler/advanced/advanced_tracer.h"
+#include "src/tools/profiler/core/trace.h"
+#endif
+#include <stdexcept>
+#include <unordered_set>
+
+// This file is compiled a second time by inspectvm.cpp, which defines the two hooks below
+// before it includes this file: that is the loop a program runs on while an execution observer
+// (a debugger) is installed. Here they are what the loop of a normal run always had: no hook.
+#ifndef CAMEL_FVM_INSPECTED_LOOP
+#define SYNC_RUNTIME_ORIGIN()                                                                      \
+    do {                                                                                           \
+        if (InternalGlobalConfig::IsInspectionMode() && context_) {                                \
+            if (auto _sourceContext = context_->sourceContext()) {                                 \
+                _sourceContext->setCurrentRuntimeOrigin(_sourceContext->debugMap().pcOrigin(pc));  \
+            }                                                                                      \
+        }                                                                                          \
+    } while (0)
+#define OBSERVE_RUNTIME_FAULT(fault) ((void)0)
+#endif
+
+#define NEXT()                                                                                     \
+    do {                                                                                           \
+        pc += bc->opsize;                                                                          \
+        /* FVM has no per-bytecode GC safepoint; calls poll (fastVmCallBoundarySafepoint).         \
+                                                                                                 \ \
+         * * coarse schedulers service pending GC work; putting a mutex-backed poll here dominates \
+         *                                                                                         \
+         * recursive-call benchmarks. */                                                           \
+        SYNC_RUNTIME_ORIGIN();                                                                     \
+        bc = &base[pc];                                                                            \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
+    } while (0)
+
+#define JUMP()                                                                                     \
+    do {                                                                                           \
+        /* Keep branch/call transitions on the same no-per-bytecode-safepoint policy as NEXT(). */ \
+        SYNC_RUNTIME_ORIGIN();                                                                     \
+        bc = &base[pc];                                                                            \
+        goto *dispatchTable[static_cast<size_t>(bc->opcode)];                                      \
+    } while (0)
+
+#define DEF_BIN_OP_LABEL(LABEL, TYPE, OP)                                                          \
+    label_##LABEL : {                                                                              \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
+        TYPE res = lhs OP rhs;                                                                     \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
+        NEXT();                                                                                    \
+    }
+
+// Comparisons produce a bool slot, whatever the operand type.
+#define DEF_CMP_OP_LABEL(LABEL, TYPE, OP)                                                          \
+    label_##LABEL : {                                                                              \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
+        Bool res = lhs OP rhs;                                                                     \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
+        NEXT();                                                                                    \
+    }
+
+#define DEF_BIN_DIV_LABEL(LABEL, TYPE, ZERO_CHECK)                                                 \
+    label_##LABEL : {                                                                              \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
+        if (rhs == ZERO_CHECK) {                                                                   \
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
+        }                                                                                          \
+        TYPE res = camel::utils::quotient(lhs, rhs);                                               \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
+        NEXT();                                                                                    \
+    }
+
+// The remainder of the language: x % -1 is 0 (camel/utils/int_div.h), the quotient's rule.
+#define DEF_BIN_MOD_LABEL(LABEL, TYPE, ZERO_CHECK)                                                 \
+    label_##LABEL : {                                                                              \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
+        if (rhs == ZERO_CHECK) {                                                                   \
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
+        }                                                                                          \
+        TYPE res = camel::utils::remainder(lhs, rhs);                                              \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
+        NEXT();                                                                                    \
+    }
+
+using namespace std;
+
+namespace {
+
+// Computed-goto handlers mostly operate on positive dynamic slots. Those slots are raw frame
+// storage and do not require type lookup, static-area routing, or slot-0 handling. Keep the rare
+// static/control cases on Frame::get/set so the interpreter preserves the generic semantics.
+template <typename T> inline T fastFrameGet(Frame *frame, data_idx_t index) {
+    return LIKELY(index > 0) ? fromSlot<T>(frame->slotBase()[static_cast<size_t>(index)])
+                             : frame->get<T>(index);
+}
+
+inline slot_t fastFrameGetSlot(Frame *frame, data_idx_t index) {
+    return LIKELY(index > 0) ? frame->slotBase()[static_cast<size_t>(index)]
+                             : frame->get<slot_t>(index);
+}
+
+template <typename T> inline void fastFrameSet(Frame *frame, data_idx_t index, T value) {
+    if (LIKELY(index > 0)) {
+        frame->slotBase()[static_cast<size_t>(index)] = toSlot(value);
+        return;
+    }
+    frame->set(index, value);
+}
+
+inline void fastFrameSetSlot(Frame *frame, data_idx_t index, slot_t value) {
+    if (LIKELY(index > 0)) {
+        frame->slotBase()[static_cast<size_t>(index)] = value;
+        return;
+    }
+    frame->set(index, value);
+}
+
+static void writeComputedGotoFillSlots(
+    Frame *frame, const Bytecode *bc, Object *target, Type *targetType,
+    const camel::runtime::GCFillBody *fillBody) {
+    const data_arr_t wargs = bc->wargs();
+    std::vector<slot_t> fillValues;
+    fillValues.reserve(bc->withCnt());
+    for (size_t j = 0; j < bc->withCnt(); ++j) {
+        fillValues.push_back(frame->get<slot_t>(wargs[j]));
+    }
+    camel::execute::writeRuntimeFillSlots(target, targetType, fillBody, fillValues);
+}
+
+} // namespace
+
+FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
+    Frame *currFrame             = rootFrame;
+    Frame *rootActiveFrame       = rootFrame;
+    const Bytecode *base         = bytecodes_.data();
+    const Bytecode *bc           = nullptr;
+    const size_t stackDepthBase  = stackDepth_;
+    const size_t nestedCallsBase = nestedCalls_;
+#if ENABLE_FASTVM_JIT
+    const bool useJit = jitEnabled();
+#endif
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+    const size_t jitSaveBase = s_jit_save_depth;
+#endif
+
+    try {
+        static void *dispatchTable[256] = {
+            &&label_RETN, // 0
+            &&label_CAST, // 1
+            &&label_COPY, // 2
+            &&label_ACCS, // 3
+            &&label_JUMP, // 4
+            &&label_BRCH, // 5
+            &&label_JOIN, // 6
+            &&label_FILL, // 7
+            &&label_CALL, // 8
+            &&label_FUNC, // 9
+            &&label_TAIL, // 10
+            &&label_OPER, // 11
+            &&label_SCHD, // 12
+            &&label_LBEG, // 13
+            &&label_LTST, // 14
+            &&label_LEND, // 15
+
+            // Inline operators
+            &&label_IADD,
+            &&label_LADD,
+            &&label_FADD,
+            &&label_DADD,
+            &&label_ISUB,
+            &&label_LSUB,
+            &&label_FSUB,
+            &&label_DSUB,
+            &&label_IMUL,
+            &&label_LMUL,
+            &&label_FMUL,
+            &&label_DMUL,
+            &&label_IDIV,
+            &&label_LDIV,
+            &&label_FDIV,
+            &&label_DDIV,
+            &&label_IMOD,
+            &&label_LMOD,
+            &&label_ILT,
+            &&label_LLT,
+            &&label_FLT,
+            &&label_DLT,
+            &&label_IGT,
+            &&label_LGT,
+            &&label_FGT,
+            &&label_DGT,
+            &&label_IEQ,
+            &&label_LEQ,
+            &&label_FEQ,
+            &&label_DEQ,
+            &&label_INE,
+            &&label_LNE,
+            &&label_FNE,
+            &&label_DNE,
+            &&label_ILE,
+            &&label_LLE,
+            &&label_FLE,
+            &&label_DLE,
+            &&label_IGE,
+            &&label_LGE,
+            &&label_FGE,
+            &&label_DGE,
+        };
+
+        // Coverage statistics (opCounts_, fastvm_stats.cpp; a switch for the whole process):
+        // when they are on, every entry of the dispatch table is redirected, once, to
+        // label_COUNT, which counts the bytecode and continues at its handler through the
+        // saved table. When they are off nothing here runs and the dispatch is untouched.
+        static void *handlerTable[256];
+        if (opCounts_ != nullptr && handlerTable[0] == nullptr) [[unlikely]] {
+            for (size_t i = 0; i < 256; ++i) {
+                handlerTable[i]  = dispatchTable[i];
+                dispatchTable[i] = &&label_COUNT;
+            }
+        }
+
+        // Initial dispatch
+        JUMP();
+
+    label_COUNT:
+        ++opCounts_[pc];
+        goto *handlerTable[static_cast<size_t>(bc->opcode)];
+
+    label_RETN: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        slot_t result = bc->fastop[0] == 0 ? NullSlot : fastFrameGetSlot(currFrame, bc->fastop[0]);
+        if (currFrame == rootActiveFrame) {
+            return CallResult{result, currFrame};
+        }
+
+        framePool_.release(currFrame);
+
+        auto [lastPC, lastFrame] = pop();
+        pc                       = lastPC;
+        bc                       = &bytecodes_[pc];
+        currFrame                = lastFrame;
+
+        Bytecode &lbc = bytecodes_[pc];
+        const slot_t callerValue =
+            camel::passes::sched::fastvm::funcValueForCall(&lbc, currFrame, result);
+        fastFrameSetSlot(currFrame, lbc.result, callerValue);
+        // The rows the plan has at the position of the call this returns into: `pc` is still the
+        // FUNC instruction the callee was entered from, and `lbc.result` is the slot the plan keys
+        // that node by. The interpreter enters a direct call by moving the program counter into the
+        // callee, so this -- the caller's own continuation, once the callee's value exists -- is
+        // the place the call's node has run (camel/execute/operator_call.h, `runNode`). A value a
+        // call made is born with its count here, before the next instruction can read it.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, lbc.result), [&] {
+            return callerValue;
+        });
+
+        NEXT();
+    }
+
+    label_CAST: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        Type *targetType  = bc->extra()->pType;
+        data_idx_t srcIdx = bc->fastop[0];
+        Type *srcType     = currFrame->typeAt<Type>(srcIdx);
+        slot_t value      = currFrame->get<slot_t>(srcIdx);
+        slot_t result     = targetType->castSlotFrom(value, srcType);
+        if (bc->result != 0) {
+            currFrame->set(bc->result, result);
+        }
+
+        NEXT();
+    }
+
+    label_COPY: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        TypeCode srcCode = currFrame->codeAt(bc->fastop[0]);
+        if (isGCTraced(srcCode)) {
+            Object *srcData  = currFrame->get<Object *>(bc->fastop[0]);
+            Type *srcTypePtr = currFrame->typeAt<Type>(bc->fastop[0]);
+            currFrame->set(bc->result, srcData->clone(mm::autoSpace(), srcTypePtr, false));
+        } else {
+            slot_t srcData = currFrame->get<slot_t>(bc->fastop[0]);
+            currFrame->set(bc->result, srcData);
+        }
+
+        NEXT();
+    }
+
+    label_ACCS: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
+        if (srcType == TypeCode::Tuple) {
+            Tuple *t = currFrame->get<Tuple *>(bc->fastop[0]);
+            GUARD(
+                static_cast<size_t>(bc->fastop[1]) < t->size(),
+                "Tuple access index out of range in FastVM.");
+            currFrame->set(bc->result, t->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
+        } else if (srcType == TypeCode::Struct) {
+            Struct *s = currFrame->get<Struct *>(bc->fastop[0]);
+            GUARD(
+                static_cast<size_t>(bc->fastop[1]) < s->size(),
+                "Struct access index out of range in FastVM.");
+            currFrame->set(bc->result, s->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
+        } else {
+            throw std::runtime_error(
+                "ACCS opcode unsupported source type in FastVM.: the dispatch reached a case no "
+                "handler covers");
+        }
+
+        NEXT();
+    }
+
+    label_JUMP: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        pc = getJumpTargetPc(bc);
+
+        JUMP();
+    }
+
+    label_LBEG: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        camel::execute::loopBegin(*currFrame, *bc->loopPayload());
+
+        NEXT();
+    }
+
+    label_LTST: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        if (camel::execute::loopTest(*currFrame, *bc->loopPayload())) {
+            pc = getJumpTargetPc(bc);
+            JUMP();
+        }
+
+        NEXT();
+    }
+
+    label_LEND: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        if (camel::execute::loopEnd(
+                *currFrame,
+                *bc->loopPayload(),
+                camel::execute::loopRoundSafepoint([&] { fastVmCallBoundarySafepoint(); }))) {
+            pc = getJumpTargetPc(bc);
+            JUMP();
+        }
+
+        NEXT();
+    }
+
+    label_BRCH: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        size_t jumpIdx;
+        if (bc->withCnt() == 0) {
+            jumpIdx = fastFrameGet<bool>(currFrame, bc->operands()[0]) ? 0 : 1;
+        } else {
+            jumpIdx = camel::passes::sched::fastvm::selectBranchArm(*bc, currFrame);
+        }
+
+        fastFrameSet(currFrame, bc->result, fromSlot<Int32>(jumpIdx));
+        pc += bc->opsize + jumpIdx;
+
+        JUMP();
+    }
+
+    label_JOIN: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        const data_arr_t nargs = bc->nargs();
+        const data_arr_t wargs = bc->wargs();
+        int32_t brIndex        = fastFrameGet<int32_t>(currFrame, nargs[0]);
+        GUARD(
+            brIndex >= 0 && static_cast<size_t>(brIndex) < bc->withCnt(),
+            "JOIN opcode choosen index out of range in FastVM.");
+        if (bc->result != 0) {
+            // JOIN always owns exactly one trailing extra word containing the result type. Avoid
+            // BytecodeHeader::extra() here because its generic opcode switch is on the recursive
+            // if/else join path.
+            auto *joinType = (reinterpret_cast<const BytecodeExtra *>(bc + bc->opsize) - 1)->pType;
+            if (joinType == Type::Void()) {
+                fastFrameSetSlot(currFrame, bc->result, NullSlot);
+                NEXT();
+            }
+            slot_t result = fastFrameGetSlot(currFrame, wargs[static_cast<size_t>(brIndex)]);
+            fastFrameSetSlot(currFrame, bc->result, result);
+            // The rows the plan has at this JOIN's position (camel/execute/operator_call.h,
+            // `runNode`): the arm value this node hands on is a use of its own, and the plan laid
+            // that use's reference down at the node whose value it is handed to.
+            (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+                return result;
+            });
+        }
+        NEXT();
+    }
+
+    label_FILL: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        const data_arr_t nargs = bc->nargs();
+
+        Type *srcType  = bc->extra()->pType;
+        auto *fillBody = *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc->extra2());
+        GUARD(isGCTraced(srcType->code()), "FILL target type is not GC-traced in FastVM.");
+        Object *sourceObj = currFrame->get<Object *>(nargs[0]);
+        GUARD(sourceObj != nullptr, "FILL source object is null in FastVM.");
+        Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
+
+        GUARD(srcObj != nullptr, "FILL target data is null.");
+        writeComputedGotoFillSlots(currFrame, bc, srcObj, srcType, fillBody);
+
+        currFrame->set(bc->result, srcObj);
+        // The rows the plan has at this FILL's position, in the place the node ran
+        // (camel/execute/operator_call.h, `runNode`): a FILL makes a value and reads the values it
+        // packs, and its position is the one the plan laid its rows out at.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+            return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
+        });
+
+        NEXT();
+    }
+
+    label_CALL: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+        fastVmCallBoundarySafepoint();
+
+        const data_arr_t nargs = bc->nargs();
+        const data_arr_t wargs = bc->wargs();
+        auto function          = currFrame->get<Function *>(wargs[0]);
+        GUARD(function != nullptr, "GotoVM CALL resolved a null Function callee.");
+        auto *runtimeTarget = programs_.graphOf(function);
+        GUARD(
+            runtimeTarget != nullptr,
+            "FastVM indirect CALL requires a materialized runtime graph target.");
+
+        const uint32_t callCount = noteIndirectCall(runtimeTarget);
+        // The call nests on the native stack: it is counted, and checked before the frame
+        // is taken.
+        requireNestedCallRoom(currFrame);
+        Frame *funcFrame = framePool_.acquire(runtimeTarget);
+        populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
+
+        _timer.pause();
+        ++nestedCalls_;
+        const auto &result = jitEnabled() ? invokeCallOrJit(
+                                                graphEntryPc(runtimeTarget),
+                                                runtimeTarget,
+                                                funcFrame,
+                                                currentJitCtx_,
+                                                callCount)
+                                          : call(graphEntryPc(runtimeTarget), funcFrame);
+        --nestedCalls_;
+        _timer.resume();
+
+        currFrame->set(bc->result, result);
+        // The rows the plan has at this call's position (camel/execute/operator_call.h, `runNode`):
+        // the count a value a call made is born with is taken where the call ran, and the uses the
+        // call made of a value it was given come back here.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+            return result;
+        });
+
+        NEXT();
+    }
+
+    label_FUNC: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+        fastVmCallBoundarySafepoint();
+        const data_arr_t srcArgs  = bc->directCallSrcArgs();
+        const data_arr_t dstSlots = bc->directCallDstSlots();
+
+#if ENABLE_FASTVM_JIT
+        if (!useJit) {
+            // std::fvm is a pure interpreter mode even in builds that include JIT support. Keep it
+            // away from materializeCallTarget()/getFuncExtraFn() so the non-JIT benchmark does not
+            // pay for tiering metadata on every recursive call.
+            push(pc, currFrame);
+            auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
+            GUARD(
+                runtimeTarget != nullptr,
+                "FastVM direct FUNC target must have a materialized runtime graph.");
+            Frame *funcFrame = acquireFrameForCall(runtimeTarget);
+            // Recursive scalar functions are commonly unary after inlining/normalization. Keep that
+            // arity in the bytecode hot path and fall back to the generic copier only for wider
+            // calls.
+            if (LIKELY(srcArgs.size() == 1)) {
+                fastFrameSetSlot(funcFrame, dstSlots[0], fastFrameGetSlot(currFrame, srcArgs[0]));
+            } else {
+                populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+            }
+            pc        = getFuncExtraTargetPc(bc);
+            currFrame = funcFrame;
+            JUMP();
+        }
+        bc                            = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
+        const data_arr_t callSrcArgs  = bc->directCallSrcArgs();
+        const data_arr_t callDstSlots = bc->directCallDstSlots();
+        auto *runtimeTarget           = getFuncExtraRuntimeGraph(bc);
+        GUARD(
+            runtimeTarget != nullptr,
+            "FastVM direct FUNC target must have a materialized runtime graph.");
+        if (getFuncExtraFn(bc) != nullptr) {
+            JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
+            JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+            // The call counts against the recursion limit as an interpreted one does; the
+            // compiled callee continues the count from here (invokeOwnedJitFrame).
+            push(pc, currFrame);
+            Frame *funcFrame = [&]() {
+                Frame *frame = framePool_.acquire(runtimeTarget);
+                if (LIKELY(callSrcArgs.size() == 1)) {
+                    fastFrameSetSlot(
+                        frame,
+                        callDstSlots[0],
+                        fastFrameGetSlot(currFrame, callSrcArgs[0]));
+                } else {
+                    populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+                }
+                return frame;
+            }();
+            slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
+            (void)pop();
+            JIT_RESTORE_PC_BC();
+            if (bc->result != 0) {
+                fastFrameSetSlot(
+                    currFrame,
+                    bc->result,
+                    camel::passes::sched::fastvm::funcValueForCall(bc, currFrame, result));
+            }
+            NEXT();
+        }
+        push(pc, currFrame);
+        Frame *funcFrame = [&]() {
+            Frame *frame = framePool_.acquire(runtimeTarget);
+            if (LIKELY(callSrcArgs.size() == 1)) {
+                fastFrameSetSlot(
+                    frame,
+                    callDstSlots[0],
+                    fastFrameGetSlot(currFrame, callSrcArgs[0]));
+            } else {
+                populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
+            }
+            return frame;
+        }();
+        pc        = getFuncExtraTargetPc(bc);
+        currFrame = funcFrame;
+        JUMP();
+#else
+        push(pc, currFrame);
+        auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
+        GUARD(
+            runtimeTarget != nullptr,
+            "FastVM direct FUNC target must have a materialized runtime graph.");
+        Frame *funcFrame = acquireFrameForCall(runtimeTarget);
+        if (LIKELY(srcArgs.size() == 1)) {
+            fastFrameSetSlot(funcFrame, dstSlots[0], fastFrameGetSlot(currFrame, srcArgs[0]));
+        } else {
+            populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+        }
+        pc        = getFuncExtraTargetPc(bc);
+        currFrame = funcFrame;
+        JUMP();
+#endif
+    }
+
+    label_TAIL: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+        fastVmCallBoundarySafepoint();
+        const data_arr_t srcArgs  = bc->directCallSrcArgs();
+        const data_arr_t dstSlots = bc->directCallDstSlots();
+
+        // The entry graph's own activation is not a call of the program, and its call of `main` is
+        // the one call kEntryCalls excuses (camel/execute/limits.h): push() and
+        // requireNestedCallRoom() subtract both by name. A tail call reuses its caller's
+        // activation, so folding the entry's call of its callee into the entry's activation would
+        // leave one activation fewer on the stack and lift the limit by one -- which is what a
+        // graph whose entry call is a direct call (`FUNC main`) rather than a call through a
+        // function value did, after std::cxx::devirtualize. The count of open calls must not
+        // depend on how a call is spelled (camel/execute/limits.h), so the entry's callee gets an
+        // activation of its own, exactly as the value-call spelling gives it one. Every other tail
+        // call reuses its caller's activation as before.
+        if (stackDepth_ + nestedCalls_ == 0) {
+            const Bytecode *entryBc = bc;
+#if ENABLE_FASTVM_JIT
+            if (useJit) {
+                entryBc = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
+            }
+#endif
+            auto *entryTarget = getFuncExtraRuntimeGraph(entryBc);
+            GUARD(
+                entryTarget != nullptr,
+                "FastVM direct TAIL target of the entry graph must have a materialized runtime "
+                "graph.");
+            push(pc, currFrame);
+            Frame *funcFrame = framePool_.acquire(entryTarget);
+            populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+            pc        = getFuncExtraTargetPc(entryBc);
+            currFrame = funcFrame;
+            JUMP();
+        }
+
+#if ENABLE_FASTVM_JIT
+        if (!useJit) {
+            // Same split as FUNC: tail-call frame reuse is needed in std::fvm, but JIT materialized
+            // call-target state is not. The target pc was already linked into the bytecode.
+            auto *lastGraph         = currFrame->graph();
+            auto *targetGraph       = getFuncExtraRuntimeGraph(bc);
+            auto *runtimeTailTarget = targetGraph;
+            GUARD(
+                runtimeTailTarget != nullptr,
+                "FastVM direct TAIL target must have a materialized runtime graph.");
+            slot_t tailArg0 = NullSlot;
+            if (LIKELY(srcArgs.size() == 1)) {
+                tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+            } else {
+                captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+            }
+            framePool_.release(currFrame);
+            currFrame = acquireFrameForTail(runtimeTailTarget);
+            if (LIKELY(srcArgs.size() == 1)) {
+                fastFrameSetSlot(currFrame, dstSlots[0], tailArg0);
+            } else {
+                populateDirectCallFrameFromValues(currFrame, dstSlots, tailArgValuesScratch_);
+            }
+            if (targetGraph != lastGraph) {
+                framePool_._resetTop();
+            }
+            pc = getFuncExtraTargetPc(bc);
+            JUMP();
+        }
+
+        bc                      = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
+        auto *runtimeTailTarget = getFuncExtraRuntimeGraph(bc);
+        [[maybe_unused]] auto *tailTargetGraph = runtimeTailTarget;
+        GUARD(
+            runtimeTailTarget != nullptr,
+            std::format(
+                "FastVM direct TAIL target '{}' must have a materialized runtime graph.",
+                tailTargetGraph->name()));
+        if (getFuncExtraFn(bc) != nullptr) {
+            slot_t tailArg0 = NullSlot;
+            if (LIKELY(srcArgs.size() == 1)) {
+                tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+            } else {
+                captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+            }
+            framePool_.release(currFrame);
+            Frame *newFrame = [&]() {
+                Frame *frame = framePool_._acquire(runtimeTailTarget);
+                if (LIKELY(srcArgs.size() == 1)) {
+                    fastFrameSetSlot(frame, dstSlots[0], tailArg0);
+                } else {
+                    populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+                }
+                framePool_._resetTop();
+                return frame;
+            }();
+#ifdef CAMEL_FVM_INSPECTED_LOOP
+            // Under an execution observer the target stays on this loop, whose hooks compiled
+            // code does not have. (A debugger runs std::jit as std::fvm, so this is not
+            // reached from one; it keeps the loop correct for any other observer.)
+            if (currFrame == rootActiveFrame) {
+                rootActiveFrame = newFrame;
+            }
+            pc        = getFuncExtraTargetPc(bc);
+            currFrame = newFrame;
+            JUMP();
+#else
+            // The target is compiled: its code takes over. A tail call replaces the current
+            // activation, so the result of the code is the result of that activation.
+            JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+            if (currFrame == rootActiveFrame) {
+                // It was the activation call() was entered for: the caller of the interpreter
+                // runs the code (CallResult::tailFn), once this function is off the native
+                // stack. A loop of tail calls between compiled and interpreted graphs therefore
+                // does not grow that stack.
+                return CallResult{NullSlot, newFrame, reinterpret_cast<void *>(fn)};
+            }
+            currFrame                = newFrame;
+            slot_t result            = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
+            auto [lastPC, lastFrame] = pop();
+            pc                       = lastPC;
+            bc                       = &bytecodes_[pc];
+            currFrame                = lastFrame;
+            fastFrameSetSlot(currFrame, bc->result, result);
+            NEXT();
+#endif
+        }
+        size_t targetPc = getFuncExtraTargetPc(bc);
+        slot_t tailArg0 = NullSlot;
+        if (LIKELY(srcArgs.size() == 1)) {
+            tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+        } else {
+            captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+        }
+        framePool_.release(currFrame);
+        currFrame = [&]() {
+            Frame *frame = framePool_._acquire(runtimeTailTarget);
+            if (LIKELY(srcArgs.size() == 1)) {
+                fastFrameSetSlot(frame, dstSlots[0], tailArg0);
+            } else {
+                populateDirectCallFrameFromValues(frame, dstSlots, tailArgValuesScratch_);
+            }
+            framePool_._resetTop();
+            return frame;
+        }();
+        pc = targetPc;
+        JUMP();
+#else
+        auto *lastGraph         = currFrame->graph();
+        auto *targetGraph       = bc->extra()->runtimeGraph;
+        auto *runtimeTailTarget = getFuncExtraRuntimeGraph(bc);
+        GUARD(
+            runtimeTailTarget != nullptr,
+            "FastVM direct TAIL target must have a materialized runtime graph.");
+        slot_t tailArg0 = NullSlot;
+        if (LIKELY(srcArgs.size() == 1)) {
+            tailArg0 = fastFrameGetSlot(currFrame, srcArgs[0]);
+        } else {
+            captureCallArgValues(currFrame, srcArgs, tailArgValuesScratch_);
+        }
+        framePool_.release(currFrame);
+        currFrame = acquireFrameForTail(runtimeTailTarget);
+        if (LIKELY(srcArgs.size() == 1)) {
+            fastFrameSetSlot(currFrame, dstSlots[0], tailArg0);
+        } else {
+            populateDirectCallFrameFromValues(currFrame, dstSlots, tailArgValuesScratch_);
+        }
+        if (targetGraph != lastGraph) {
+            framePool_._resetTop();
+        }
+        pc = getFuncExtraTargetPc(bc);
+        JUMP();
+#endif
+    }
+
+    label_OPER: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        {
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "FastVM",
+                "Executing operator {}.",
+                context_->execMgr().getNameOfAnOperator(bc->extra()->func)));
+            slot_t result;
+            if (camel::core::effect_trace::enabled()) [[unlikely]] {
+                if (auto sc = context_->sourceContext()) {
+                    camel::core::effect_trace::setSite(sc->debugMap().pcOrigin(pc));
+                }
+            }
+            try {
+                result = invokeNativeOperator(*bc, *currFrame, pc);
+            } catch (const RuntimeFault &fault) {
+                OBSERVE_RUNTIME_FAULT(fault);
+                throw reportRuntimeFault(
+                    *context_,
+                    fault,
+                    makePcExecutionSite(context_->sourceContext(), currFrame, pc));
+            } catch (const camel::core::mm::MemoryExhausted &e) {
+                // The allocator names the space and the size; the instruction names the place
+                // the program asked for it.
+                throw e.during(
+                    std::string(),
+                    context_->sourceContext() ? context_->sourceContext()->debugMap().pcOrigin(pc)
+                                              : camel::source::kInvalidOriginId);
+            }
+            currFrame->set(bc->result, result);
+        }
+
+        NEXT();
+    }
+
+    label_SCHD: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        const data_arr_t nargs = bc->nargs();
+        const data_arr_t wargs = bc->wargs();
+        auto mark              = bc->extra()->mark;
+        try {
+            // A marked operator is an operator node like any other: it runs through the one hook
+            // (camel/execute/operator_call.h), so the count's rows at this instruction's position
+            // are run here as they are at OPER's -- the missing place that made std::fvm keep a
+            // counted box that std::nvm released.
+            camel::execute::callOperator(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+                evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+                return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
+            });
+        } catch (const camel::core::mm::MemoryExhausted &e) {
+            throw e.during(
+                std::string(),
+                context_->sourceContext() ? context_->sourceContext()->debugMap().pcOrigin(pc)
+                                          : camel::source::kInvalidOriginId);
+        }
+
+        NEXT();
+    }
+
+        DEF_BIN_OP_LABEL(IADD, Int32, +);
+        DEF_BIN_OP_LABEL(LADD, Int64, +);
+        DEF_BIN_OP_LABEL(FADD, Float32, +);
+        DEF_BIN_OP_LABEL(DADD, Float64, +);
+
+        DEF_BIN_OP_LABEL(ISUB, Int32, -);
+        DEF_BIN_OP_LABEL(LSUB, Int64, -);
+        DEF_BIN_OP_LABEL(FSUB, Float32, -);
+        DEF_BIN_OP_LABEL(DSUB, Float64, -);
+
+        DEF_BIN_OP_LABEL(IMUL, Int32, *);
+        DEF_BIN_OP_LABEL(LMUL, Int64, *);
+        DEF_BIN_OP_LABEL(FMUL, Float32, *);
+        DEF_BIN_OP_LABEL(DMUL, Float64, *);
+
+        DEF_BIN_DIV_LABEL(IDIV, Int32, 0);
+        DEF_BIN_DIV_LABEL(LDIV, Int64, 0);
+        DEF_BIN_DIV_LABEL(FDIV, Float32, 0.0f);
+        DEF_BIN_DIV_LABEL(DDIV, Float64, 0.0);
+
+        DEF_BIN_MOD_LABEL(IMOD, Int32, 0);
+        DEF_BIN_MOD_LABEL(LMOD, Int64, 0);
+
+        DEF_CMP_OP_LABEL(ILT, Int32, <);
+        DEF_CMP_OP_LABEL(LLT, Int64, <);
+        DEF_CMP_OP_LABEL(FLT, Float32, <);
+        DEF_CMP_OP_LABEL(DLT, Float64, <);
+
+        DEF_CMP_OP_LABEL(IGT, Int32, >);
+        DEF_CMP_OP_LABEL(LGT, Int64, >);
+        DEF_CMP_OP_LABEL(FGT, Float32, >);
+        DEF_CMP_OP_LABEL(DGT, Float64, >);
+
+        DEF_CMP_OP_LABEL(IEQ, Int32, ==);
+        DEF_CMP_OP_LABEL(LEQ, Int64, ==);
+        DEF_CMP_OP_LABEL(FEQ, Float32, ==);
+        DEF_CMP_OP_LABEL(DEQ, Float64, ==);
+
+        DEF_CMP_OP_LABEL(INE, Int32, !=);
+        DEF_CMP_OP_LABEL(LNE, Int64, !=);
+        DEF_CMP_OP_LABEL(FNE, Float32, !=);
+        DEF_CMP_OP_LABEL(DNE, Float64, !=);
+
+        DEF_CMP_OP_LABEL(ILE, Int32, <=);
+        DEF_CMP_OP_LABEL(LLE, Int64, <=);
+        DEF_CMP_OP_LABEL(FLE, Float32, <=);
+        DEF_CMP_OP_LABEL(DLE, Float64, <=);
+
+        DEF_CMP_OP_LABEL(IGE, Int32, >=);
+        DEF_CMP_OP_LABEL(LGE, Int64, >=);
+        DEF_CMP_OP_LABEL(FGE, Float32, >=);
+        DEF_CMP_OP_LABEL(DGE, Float64, >=);
+    } catch (const RuntimeFault &fault) {
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
+        OBSERVE_RUNTIME_FAULT(fault);
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+        s_jit_save_depth = jitSaveBase;
+#endif
+        std::unordered_set<Frame *> released;
+        auto releaseFrame = [&](Frame *frame) {
+            if (!frame || released.count(frame) != 0) {
+                return;
+            }
+            if (!framePool_.isActive(frame)) {
+                return;
+            }
+            framePool_.release(frame);
+            released.insert(frame);
+        };
+
+        Frame *siteFrame = currFrame ? currFrame : rootActiveFrame;
+        // Frames go back in the order they were taken: the one that was executing, then the
+        // frames this activation still has pushed above its root, and the root last. A lowered
+        // loop's `next` frame is one of those pushed frames — no return has released it, and
+        // the frame of the faulting call sits above it — so releasing the root first rewound
+        // past it: silently in a Release build, as the pool's assertion in a Debug one
+        // (4.1).
+        releaseFrame(currFrame);
+        nestedCalls_ = nestedCallsBase;
+        while (stackDepth_ > stackDepthBase) {
+            releaseFrame(frameStack_[stackDepth_ - 1]);
+            --stackDepth_;
+        }
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
+        }
+
+        throw reportRuntimeFault(
+            *context_,
+            fault,
+            makePcExecutionSite(context_->sourceContext(), siteFrame, pc));
+    } catch (Diagnostic &) {
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
+        s_jit_save_depth = jitSaveBase;
+#endif
+        std::unordered_set<Frame *> released;
+        auto releaseFrame = [&](Frame *frame) {
+            if (!frame || released.count(frame) != 0) {
+                return;
+            }
+            if (!framePool_.isActive(frame)) {
+                return;
+            }
+            framePool_.release(frame);
+            released.insert(frame);
+        };
+
+        releaseFrame(currFrame);
+        nestedCalls_ = nestedCallsBase;
+        while (stackDepth_ > stackDepthBase) {
+            releaseFrame(frameStack_[stackDepth_ - 1]);
+            --stackDepth_;
+        }
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
+        }
+        throw;
+    }
+}

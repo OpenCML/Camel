@@ -72,14 +72,14 @@ if(DEFINED ENV{CAMEL_SKIP_PYTHON} AND "$ENV{CAMEL_SKIP_PYTHON}" MATCHES "^(1|ON|
 endif()
 message(STATUS "CAMEL_ENABLE_PYTHON=${CAMEL_ENABLE_PYTHON}")
 
-# ========== The Python host binding (bindings/python: `camel._camel`) ==========
+# ========== The Python host binding (src/bindings/python: `camel._camel`) ==========
 # Independent of CAMEL_ENABLE_PYTHON, which embeds Python in Camel (the other direction): this is
 # Camel inside Python. It builds only when Python's development files are present, but a caller may
 # also want it gone by name -- a tree that is read rather than installed, or a source package whose
 # readers have no CPython 3.10.
 option(
     CAMEL_ENABLE_PYTHON_BINDINGS
-    "Build the CPython extension camel._camel (bindings/python)"
+    "Build the CPython extension camel._camel (src/bindings/python)"
     ON
 )
 message(STATUS "CAMEL_ENABLE_PYTHON_BINDINGS=${CAMEL_ENABLE_PYTHON_BINDINGS}")
@@ -107,7 +107,7 @@ set(CAMEL_MODULES "" CACHE STRING
 message(STATUS "CAMEL_PACKAGE_MINIMAL=${CAMEL_PACKAGE_MINIMAL} (CAMEL_MODULES=\"${CAMEL_MODULES}\")")
 
 # ========== Tensor module ==========
-# Consumed by lib/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
+# Consumed by src/stdlib/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
 option(
     CAMEL_TENSOR_BLAS
     "Use a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels. On by default; when no CBLAS is found the builtin GEMM is the library path"
