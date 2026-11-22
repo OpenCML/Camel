@@ -150,7 +150,7 @@ export rule jvp_neg::<T>(x: T) when is_float::<T>() {
 // `stop_gradient` passes its argument through unchanged and cuts the gradient there (the engine's
 // kernel is the identity slot and its registered rule is `camel::core::noGradient`, whose missing
 // contribution the pullback materializes as the zero of the value's type,
-// `modules/autodiff/pullback.cpp#Backward::checkGradientType`). So the tangent of the result is not
+// `lib/autodiff/pullback.cpp#Backward::checkGradientType`). So the tangent of the result is not
 // "the tangent of the argument dropped somewhere": it is the zero of the result's own type, and that
 // zero **is** this law's answer. It is not a zero standing in for a value -- nothing here reads a
 // value at all.
@@ -175,7 +175,7 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 // The matrix product is the one operator a model meets at every step, and its key needs no
 // exception: the rule's left side is written `matmul(a, b)`, the name the operator itself has, so
 // `ruleKeyOf` derives the key (`tensor:matmul` -> `matmul` at two operands) from the family's index
-// (`include/camel/core/forward.h`). A rule with no binding and a binding with no rule are the two
+// (`kernel/include/camel/core/forward.h`). A rule with no binding and a binding with no rule are the two
 // halves that must land together, and here the rule is the binding.
 
 /// `d(a · b) = da · b + a · db`, both operands' tangents in one right side.
@@ -185,7 +185,7 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 /// to reduce each cotangent to its own operand's shape, and the operand whose cotangent is being
 /// answered is a tangent on that side -- `float[...]`, no extents in its type (design principles 5.4).
 /// Here `a` and `b` are values, so the two lists are values of the primal, and
-/// `stdlib/rulesets/transpose.cml#matmul_stated_t` reads them and nothing of the position it answers.
+/// `lib/rulesets/transpose.cml#matmul_stated_t` reads them and nothing of the position it answers.
 /// Both terms state the **primal** operands' shapes and not the tangents': a tangent has its value's
 /// shape, and a `shape(da)` node would be a value derived from a tangent, which the cut cannot place
 /// on either side of itself (`split does not build this function`).
@@ -201,7 +201,7 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 /// The right side is written **inline** and not as a call to a helper, and that is a condition of the
 /// law being transposable at all: the pullback walks the driven graph and turns each node around, and
 /// a `Call` is a node it can only turn around when the callee is a function it can transpose
-/// (`skip=call-no-transpose`, `modules/transforms/transpose.cpp`). A helper taking both operands and
+/// (`skip=call-no-transpose`, `lib/transforms/transpose/walk.cpp`). A helper taking both operands and
 /// both tangents -- `matmul_tangent(a, b, da, db)` would be exactly that -- has no transpose of its
 /// own: the walk answers
 /// `TRANSPOSE function=rulesets.jvp::matmul_tangent<float> skip=signature` and then
@@ -218,7 +218,7 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 /// **This is a workaround, and the road it works around is named here so that nobody reads the inline
 /// form as a matter of taste.** What should be transposable is a `Call`: a rule's right side is an
 /// ordinary expression, so whether a law may be written with a helper should not be something the
-/// rule's author has to know. It is not transposable today -- `modules/transforms/transpose.cpp`
+/// rule's author has to know. It is not transposable today -- `lib/transforms/transpose/walk.cpp`
 /// refuses a callee whose signature it cannot turn around (`skip=signature`) and then refuses the call
 /// itself (`skip=call-no-transpose`), while it does transpose the one-value `autodiff` helpers.
 /// Making a call transposable in general is the change that would let this rule -- and any other --
@@ -253,7 +253,7 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // `vmap_rule_reshape`/`vmap_reshape` is where that same arrangement was first landed, `ff09ab5a0`).
 //
 // What a law must not do is write a **constant** there. The fit compares the value a `<>` port
-// carries against the one the law wrote (`modules/transforms/rule_expand.cpp#lawConstantsFitNode`),
+// carries against the one the law wrote (`lib/transforms/rule_expand.cpp#lawConstantsFitNode`),
 // so a law written for one configuration answers only a node that carries that configuration.
 // For example, a `jvp_reshape` written for `[2, 2]` returns the tangent of
 // `reshape<[8, 2, 8]>(x)` reshaped to `[2, 2]`, stopping the program at
@@ -281,7 +281,7 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 //
 // Each key is the operator's own name (`tensor:sum` -> `sum`). A rule's parameters are the
 // operator's **ports, in port order**: the normal ones, then the `<>` ones (`OpDef::params` written
-// `withAfterNorm`, and `modules/transforms/vmap.cpp` states the same protocol where it builds a
+// `withAfterNorm`, and `lib/transforms/vmap.cpp` states the same protocol where it builds a
 // call). That is why `jvp_mean_axis` declares all three of the axis mean's parameters even though only
 // the first is an operand: `axis` and `keepdims` arrive as the node's context ports, and the walk
 // hands them over after the tensor. They carry no tangent of their own (`Tangent<int>` and
@@ -300,7 +300,7 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // tangents -- and the adjoint of that operation gives one cotangent back to every element the
 // operation consumed. That is `shape(xs)` of them, a value of the primal which the tangent does not
 // carry, so the **linear call states it**: one known actual argument beside the tangent, and the law
-// that answers it (`stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
+// that answers it (`lib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
 // that argument and nothing of the operand the cotangent comes back through. A transpose law may
 // read only known operands, and `T[...]` carries no extents in
 // its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
@@ -310,7 +310,7 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // transpose walk refuses an operator with a third *tensor* operand (`skip=arity
 // uri=tensor:mean_axis operands=3`): the
 // stated reductions take their axis, their flag and their extents as three parameters
-// (`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
+// (`lib/tensor/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
 // node with five operands, and the laws read them by name. The plain axis form does not need the
 // list either: with the axis and the flag in angle brackets it carries one normal operand and two
 // context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds. A list would need a function to build it, and nothing builds a
@@ -331,7 +331,7 @@ export rule jvp_sum::<T>(xs: T[...]) when is_float::<T>() {
 /// `d(mean<axis, keepdims>(xs)) = mean<axis, keepdims>(dxs)`: a mean is a sum divided by a
 /// count, and neither the count nor the division reads the value, so the tangent of a mean is the
 /// mean of the tangents. It is written as the operator so that the accumulator, the order and the one
-/// rounding are the definition's own (`stdlib/tensor_definitions.cml`).
+/// rounding are the definition's own (`lib/tensor_definitions/tensor_definitions.cml`).
 ///
 /// A lane mean forgets the lane, and its adjoint spreads each lane's cotangent back over the lane it
 /// was averaged from, so the tangent call states the axis, the flag and the extents as parameters of
@@ -457,7 +457,7 @@ func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 ///
 /// The tangent is `subtract_stated` with the two operands' shapes beside it, for the reason
 /// `jvp_add_tensor` states: the reverse side's operands are tangents, their types state no extents,
-/// and `stdlib/rulesets/transpose.cml#subtract_stated_t` reads the two lists the forward half
+/// and `lib/rulesets/transpose.cml#subtract_stated_t` reads the two lists the forward half
 /// computed where both operands were values. A plain `dx - dw` would hand the reverse leg nothing to
 /// reduce by.
 ///
@@ -490,7 +490,7 @@ func mul_tensor::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// adjoint: a product's reverse law has to reduce each cotangent to the shape of the operand it
 /// answers, and on the reverse side that operand is a **tangent** -- `float[...]`, which states no
 /// extents (design principles 5.4). Here both operands are values, so `shape(...)` of each is a value
-/// of the primal the cut carries, and `stdlib/rulesets/transpose.cml#mul_stated_t` reads the two lists
+/// of the primal the cut carries, and `lib/rulesets/transpose.cml#mul_stated_t` reads the two lists
 /// and nothing of the position it answers.
 ///
 /// Both terms state the **primal** operands' shapes, `shape(x)` and `shape(w)`, and not the tangent's:
@@ -550,7 +550,7 @@ export func softmax_jvp::<T>(x: T[...], dx: T[...], axis: int): T[...] when is_f
 /// the sum runs over the **product** `p * dx`, and `p` multiplies the tangent inside it.
 ///
 /// Do not write it as `dx - p * sum<axis, true>(dx)`: that is the **transpose**'s shape
-/// (`stdlib/rulesets/transpose.cml#log_softmax_t` answers `ct - p * sum(ct)`, because the reverse
+/// (`lib/rulesets/transpose.cml#log_softmax_t` answers `ct - p * sum(ct)`, because the reverse
 /// direction's sum runs over the cotangent alone). The two differ by a broadcast, and they agree only
 /// where `p` is uniform along the axis: `sum(p * dx) = p_i * sum(dx)` holds when every `p_j` is `1/n`,
 /// which is exactly the program whose `x` is constant -- so a case written on a constant lane cannot
@@ -655,7 +655,7 @@ export rule jvp_layer_norm::<T>(x: T[...], gamma: T[...], beta: T[...]) when is_
 }
 
 /// `d(relu(x)) = dx` where `x > 0`, and zero where it is not: the tangent is the mask multiplied by
-/// the tangent, and the mask is the one `relu_t` (`stdlib/rulesets/transpose.cml`) writes, so the
+/// the tangent, and the mask is the one `relu_t` (`lib/rulesets/transpose.cml`) writes, so the
 /// forward and the reverse reading of the boundary cannot drift apart. The input `0.0` is not
 /// positive, and both say the slope there is zero.
 ///
@@ -695,15 +695,15 @@ export rule jvp_exp::<T>(x: T[...]) when is_float::<T>() {
 /// `d(sigmoid(x)) = y * (1 - y) * dx` with `y = sigmoid(x)`: the slope is the output times its own
 /// complement, and a law with one operand can only name it by calling the operator again. So the
 /// right side is one recomputed x-only value multiplied by the tangent -- the shape `jvp_exp`
-/// (`stdlib/rulesets/jvp.cml`) measured the cut carrying, and no helper: a helper named here becomes
+/// (`lib/rulesets/jvp.cml`) measured the cut carrying, and no helper: a helper named here becomes
 /// a call in the linear half, and a call with no transpose of its own stops the backward walk
 /// (`skip=call-no-transpose`). Both products are `mul_stated` with `shape(x)` twice, for the reason
 /// `jvp_relu` above records, and the slope's own product comes first so the chain keeps the engine's
 /// order (`s * (1 - s)` then `* dx`).
 ///
-/// The engine's `sigmoidVjp` (`modules/tensor/ops/elementwise_ops.cpp`) scales its cotangent by
+/// The engine's `sigmoidVjp` (`lib/tensor/ops/elementwise_ops.cpp`) scales its cotangent by
 /// `y * (1 - y)` read off the output it already holds; this rule and `sigmoid_t`
-/// (`stdlib/rulesets/transpose.cml`) recompute that `y` from `x`, which is the same number, and both
+/// (`lib/rulesets/transpose.cml`) recompute that `y` from `x`, which is the same number, and both
 /// halves say so the same way.
 export rule jvp_sigmoid::<T>(x: T[...]) when is_float::<T>() {
     sigmoid(x) => (dx: T[...]) =>
@@ -715,7 +715,7 @@ export rule jvp_sigmoid::<T>(x: T[...]) when is_float::<T>() {
 }
 
 /// `d(tanh(x)) = (1 - y * y) * dx` with `y = tanh(x)`: the slope is one minus the output squared, the
-/// engine's own law (`tanhVjp`, `modules/tensor/ops/elementwise_ops.cpp`), written the same way here so
+/// engine's own law (`tanhVjp`, `lib/tensor/ops/elementwise_ops.cpp`), written the same way here so
 /// the two algorithms differ only in who builds the graph. Both products are `mul_stated` with
 /// `shape(x)` twice, for the reason `jvp_relu` above records: `y * y` is squared first and the
 /// tangent is the second product's right operand, which is the engine's order.
@@ -733,7 +733,7 @@ export rule jvp_tanh::<T>(x: T[...]) when is_float::<T>() {
 // `neg`, `abs`, `sqrt`, `log`, `rsqrt`, `maximum`, `minimum`, `divide`: one elementwise kernel each,
 // no state, no axis, no shape of their own beyond the broadcast the binary ones already share. They
 // are the first tranche of the deletion difference set -- the operators the engine can differentiate
-// (`setVjp` at `modules/tensor/ops/elementwise_ops.cpp`, its helper in `modules/tensor/ops/vjp.cpp`)
+// (`setVjp` at `lib/tensor/ops/elementwise_ops.cpp`, its helper in `lib/tensor/ops/vjp.cpp`)
 // and the library could not, because neither family had a rule for them.
 //
 // **Every right side below is a straight line and none of them branches.** A rule's right side is
@@ -760,7 +760,7 @@ export rule jvp_tanh::<T>(x: T[...]) when is_float::<T>() {
 // (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent` before `jvp_pow` was inlined).
 
 /// `-x` on an array: what `tensor:neg` is, and the name its rule is filed under. `x * w`'s array
-/// form needed the same stand-in (`mul_tensor`, `stdlib/rulesets/transpose.cml`) for the same
+/// form needed the same stand-in (`mul_tensor`, `lib/rulesets/transpose.cml`) for the same
 /// reason: a rule's left side is a call, and `tensor:neg` has no spelling a program writes.
 func neg::<T>(x: T[...]): T[...] when is_float::<T>() {
     return -x
@@ -923,7 +923,7 @@ export rule jvp_divide::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 // module's private function, and this one is not `export`ed.
 //
 // The core binds this key in its forward table (`:op/idx_arr` -> `rulesets.jvp`, `index_into` at two
-// operands, src/builtin/operators/derivative.cpp), and the binding and this rule have to land
+// operands, lib/std/builtin/operators/derivative.cpp), and the binding and this rule have to land
 // together: a binding with no rule answers "no rule", and a rule with no binding is a key no
 // transform asks for.
 
@@ -958,7 +958,7 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
 // and it is the operator the linear half of a read is written with: `jvp_idx_arr` above answers with
 // `pick_at(dxs, i, len(xs))`. That node never reached this rule, because a rule's right
 // side is not differentiated again -- so the read carried a reverse law
-// (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one, and a program that wrote the read
+// (`lib/rulesets/transpose.cml#pick_at_t`) and no forward one, and a program that wrote the read
 // itself was refused by name while the same program written as `xs[i]` ran:
 //
 //     REINTERP jvp function=read skip=rule uri=tensor:pick_at reason=the operator has no forward rule bound at all
@@ -971,7 +971,7 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
 // that is; here the call that carries the position carries the length beside it, and the tangent is
 // checked against the same length the primal was.
 //
-// The operands are the registration's, in its order (`modules/tensor/ops/layout_ops.cpp`, the OpDef
+// The operands are the registration's, in its order (`lib/tensor/ops/layout_ops.cpp`, the OpDef
 // named `pick_at`: a `Tensor` then two `int`s), and the closure takes **one** tangent and not
 // three: both integers are known values of the call, not differentiated ones -- `Tangent<int>` is
 // `()` -- so there is no second position to answer. The reverse law's closure looks different because it is
@@ -1001,7 +1001,7 @@ export rule jvp_pick_at::<T>(xs: T[], position: int, length: int) when is_float:
 /// **structurally known** -- a constant has no tangent -- and not a value a law computes and
 /// compares. What replaces it happens before anything runs: the rule's right side is expanded with
 /// the structurally-zero tangents named, and the product one of them multiplies is omitted rather
-/// than computed (`modules/transforms/rule_expand.cpp#expandRuleRightSide`). So `(-3.0) ^ 2.0`
+/// than computed (`lib/transforms/rule_expand.cpp#expandRuleRightSide`). So `(-3.0) ^ 2.0`
 /// still answers `-6.0` and `log(-3.0)` is never asked for its `NaN`, while a law with no branch
 /// is a law the backward walk can turn around: `^`'s pullback answers the same number as `pow`'s
 /// (`test/cases/compile/transforms/pow_gradient_through_the_library.cml` against
@@ -1020,7 +1020,7 @@ export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
 /// `d(x ^ w) = w * x^(w-1) * dx + x^w * log(x) * dw`, written out **here** rather than called.
 ///
 /// The operator is spelled `^`, and its key is derived from its name -- `pow` is one of the written
-/// operations `src/core/forward.cpp` lists -- so nothing here is filed under a call.
+/// operations `kernel/core/forward.cpp` lists -- so nothing here is filed under a call.
 ///
 /// The law is in the rule and not in `pow_tangent` above because of what the right side becomes: the
 /// linear half of a lifted program is what `transpose` turns around, and a **call** in it has no
@@ -1049,7 +1049,7 @@ export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
 //
 // `pow(x, w)` (`lib/math/math.cml#pow`) is the same arithmetic as `^` under another spelling, and it is
 // a different operator: `^` on two floats is `:op/pow_d`, a written token whose key the core derives
-// (`src/core/forward.cpp#kWrittenOperations`), while `pow` reaches the same kernel through a declared
+// (`kernel/core/forward.cpp#kWrittenOperations`), while `pow` reaches the same kernel through a declared
 // function and is `math:pow_d`, whose key is the name `pow_d` at two operands -- so the two families
 // need two rules, and until this one was written a lifted program that called `pow` was refused by
 // name (`skip=rule uri=math:pow_d reason=no forward rule bound at all`).
@@ -1207,7 +1207,7 @@ export rule jvp_bf16_from_string(x: string) {
 /// `d(erf(x)) = 2/sqrt(pi) * exp(-x*x) * dx`.
 ///
 /// **The chain's order is the law, not a style.** The engine's `erfGrad`
-/// (`modules/tensor/kernels/gradient.cpp#erfGradArm`) writes `pg * kScale * exp(-px*px)`, which is
+/// (`lib/tensor/kernels/gradient.cpp#erfGradArm`) writes `pg * kScale * exp(-px*px)`, which is
 /// `(dy * kScale) * exp(...)`, and the transpose of a product chain reverses it: `(dx * exp(...)) *
 /// kScale` transposes to `(ct * kScale) * exp(...)` and answers the same bits, while the shorter
 /// `dx * (kScale * exp(...))` transposes to `ct * (kScale * exp(...))` and rounds in a different
@@ -1266,7 +1266,7 @@ export rule jvp_gelu::<T>(x: T[...]) when is_float::<T>() {
 
 /// `d(transpose(x)) = transpose(dx)`: the last two axes swapped is its own inverse, so the linear
 /// half holds the operator again and its transpose law is the same one line
-/// (`stdlib/rulesets/transpose.cml#transpose_t`).
+/// (`lib/rulesets/transpose.cml#transpose_t`).
 export rule jvp_transpose::<T>(x: T[...]) when is_float::<T>() {
     transpose(x) => (dx: T[...]) => transpose(dx)
 }
@@ -1277,7 +1277,7 @@ export rule jvp_transpose::<T>(x: T[...]) when is_float::<T>() {
 /// `perm` is the operator's second port, and this law names it, so the call's own `<>` value reaches
 /// the right side as an ordinary value -- the protocol the expansion states over `jvp_sum` (a rule's
 /// parameters are the operator's ports in port order, the normal ones then the `<>` ones) and the one
-/// `vmap_rule_permute` already relies on (`stdlib/rulesets/vmap.cml`). It is written as a call to
+/// `vmap_rule_permute` already relies on (`lib/rulesets/vmap.cml`). It is written as a call to
 /// `permute_jvp` rather than as `permute<perm>(dx)`: the right side hands the value on where a call
 /// states an ordinary argument, which is the shape that needs no context argument of its own.
 /// @example permute_jvp([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 0])    // [[1.0, 3.0], [2.0, 4.0]]
@@ -1292,7 +1292,7 @@ export rule jvp_permute::<T>(x: T[...], perm: int[]) when is_float::<T>() {
 /// `d(where(c, a, b)) = (where(c, da, db))`: the condition is a choice and not a magnitude, so it
 /// carries no tangent and the tangent of the result is the tangent of the branch that was taken.
 /// The law answers one tangent per branch, which is why its right side takes two. The backward half
-/// is the same `where` taken apart (`stdlib/rulesets/transpose.cml#where_t`); a right side that
+/// is the same `where` taken apart (`lib/rulesets/transpose.cml#where_t`); a right side that
 /// wrote `where(c, dx, 0.0)` would put a three-operand `where` in the linear half for the reduction
 /// half of the operator to answer, and this is the shape `jvp_relu` records as refused.
 /// `db` is the one port in this family that its body leaves unconstrained.
@@ -1312,7 +1312,7 @@ export rule jvp_where::<T>(c: bool[...], a: T[...], b: T[...]) when is_float::<T
 /// The mask is a value of `xs` alone, so the cut carries it and the linear half is a `where` over
 /// the tangent and a `sum_stated` -- two operators that already had laws, which is why this one
 /// needs no new name. `>=` and not `>`: a tie selects every tied position on the engine's side too
-/// (`extremumAllVjp` compares with `strict_eq` against the broadcast output, `modules/tensor/ops/
+/// (`extremumAllVjp` compares with `strict_eq` against the broadcast output, `lib/tensor/ops/
 /// reduction_ops.cpp`), and a NaN extremum selects nothing on either side.
 export rule jvp_max::<T>(xs: T[...]) when is_float::<T>() {
     max(xs) => (dxs: T[...]) => sum_stated(where(xs >= max(xs), dxs, 0.0), shape(xs))
@@ -1331,11 +1331,11 @@ export rule jvp_min::<T>(xs: T[...]) when is_float::<T>() {
 /// The two terms are the product's, so their transposes are the product's two answers and the walk
 /// needs nothing new by name: `d/dx = ct @ wᵀ` and `d/dw = xᵀ @ ct`, which is the pair the engine's
 /// `linearVjp` reaches through `tensor:matmul_grad_lhs` / `_rhs`
-/// (`modules/tensor/ops/linalg_ops.cpp`).
+/// (`lib/tensor/ops/linalg_ops.cpp`).
 ///
 /// **Both terms are `matmul_stated`** (the same move `jvp_matmul` and
 /// `jvp_mul_tensor` make): the two lists are the operands' extents as **known operands**, so
-/// `stdlib/rulesets/transpose.cml#matmul_stated_t` reads them and never a `shape()` of the position it
+/// `lib/rulesets/transpose.cml#matmul_stated_t` reads them and never a `shape()` of the position it
 /// answers. Written with the bare `matmul`, the backward half met `#matmul_t`, whose right side names
 /// the operands only as arguments of `ct_of_a(ct, a, b)` -- a **call**, not a `shape()` -- so the shape
 /// that was in the type (`float[2, 2]`) was unreadable there and the step was refused by name
@@ -1367,7 +1367,7 @@ export rule jvp_linear::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 // The library is `transpose(split(reinterp<jvp>(f)))`: one half writes the operators the other half
 // then walks. So a step of the composition has two authors, and an operator one half files a law for
 // and the other does not is a step the composition can take in one direction only. `rulesets.jvp` is
-// the forward half, so every operator `stdlib/rulesets/transpose.cml` files a law for needs a law
+// the forward half, so every operator `lib/rulesets/transpose.cml` files a law for needs a law
 // here. The closure is checked (`scripts/vjp-parity.mjs --closure`, a case of
 // `feat/compile/transforms`), so an operator added to one half alone is a red and not a refusal a
 // user meets a month later.
@@ -1501,7 +1501,7 @@ export rule jvp_min_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keep
 
 /// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
 /// Declared here because a family cannot read another module's private function, the same stand-in
-/// `mul_tensor` and `divide` above are (`stdlib/rulesets/transpose.cml` declares its own copy for
+/// `mul_tensor` and `divide` above are (`lib/rulesets/transpose.cml` declares its own copy for
 /// the backward half).
 func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x + w
@@ -1510,7 +1510,7 @@ func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// `d(x + w) = dx + dw`. The tangent is `add_stated` with the two operands' shapes beside it, so the
 /// extents travel as **values** of the primal the cut carries: on the reverse side the sum's operands
 /// are tangents, `float[...]`, which state no extents, and
-/// `stdlib/rulesets/transpose.cml#add_stated_t` reads the two lists and nothing of the position it
+/// `lib/rulesets/transpose.cml#add_stated_t` reads the two lists and nothing of the position it
 /// answers. That is the only form a forward rule hands an array sum -- a tangent's shape is not in
 /// its type, so a rule that wrote the plain `+` would leave the reverse leg with nothing to reduce
 /// by.

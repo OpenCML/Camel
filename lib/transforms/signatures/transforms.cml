@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Computed signatures of the `transforms` module (C++ operators, modules/transforms).
+ * Computed signatures of the `transforms` module (C++ operators, lib/transforms).
  *
- * The pass `reinterp` is declared in stdlib/transforms.cml. The entry here takes a function and
+ * The pass `reinterp` is declared in lib/transforms/transforms.cml. The entry here takes a function and
  * gives a function whose parameter list and result type come from the argument, which a
  * declaration cannot write (the arbitrary-function-type gap): `jvp(f)` is
  * `(f: (float) => float) => (float, float) => (float, float)`, the type `JvpResolver` computes
- * from `jvpSignature(f)` in modules/transforms/jvp.cpp.
+ * from `jvpSignature(f)` in lib/transforms/jvp.cpp.
  *
  * `Jvp<F>` names the result type the resolver computes:
  *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent, so
@@ -30,9 +30,9 @@
  * the module registers, and docs/stdlib-reference.md is generated from them.
  */
 
-/// The tangent space of `T` (design principles 9.9); `stdlib/types.cml` declares it, and it is
+/// The tangent space of `T` (design principles 9.9); `lib/types/types.cml` declares it, and it is
 /// named again here because it is the whole vocabulary of what follows. A forward transform carries
-/// `Lift<T> = (T, Tangent<T>)` (`stdlib/rulesets/jvp.cml`), so the cut `split` makes between "the
+/// `Lift<T> = (T, Tangent<T>)` (`lib/rulesets/jvp.cml`), so the cut `split` makes between "the
 /// part computable now" and "the part computable later" is the cut between those two components --
 /// not a position among the parameters.
 /// @example is_same::<Tangent<float>, float>()    // true
@@ -46,7 +46,7 @@ export type Tangent<T>
 #macro
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
-/// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
+/// residue (design 4.2, 4.4). Implemented for the straight-line tier (`lib/transforms/split.cpp`):
 /// the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 /// graph too, so a body that needs a value it computed carries it instead of computing it again.
 ///
@@ -84,7 +84,7 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// the transposed graph takes a port that is not a cotangent, because the call site still fills it.
 ///
 /// **`lib/types/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
-/// that makes it is `modules/transforms/transpose/signature.cpp#transposeSignature`. So `transpose(f)` is
+/// that makes it is `lib/transforms/transpose/signature.cpp#transposeSignature`. So `transpose(f)` is
 /// called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
 ///
 /// The member is built once for a graph version and kept: the walk reads
@@ -101,11 +101,11 @@ export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 /// Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one
 /// dimension less than the batch: for `f: (f32) => f32` it is `(f32[]) => f32[]`, and for
 /// `f: (f32[3]) => f32` it is `(f32[?, 3]) => f32[]` -- `Lift<T> = RowsOf<T>`, the value with one
-/// dimension of unknown length in front of it (`stdlib/types.cml`). The arithmetic of every
+/// dimension of unknown length in front of it (`lib/types/types.cml`). The arithmetic of every
 /// elementwise primitive is that primitive (`bx + bw` is `x + w` element by element), which is why
 /// `vmap(f)(xs)` and the row-by-row `map` answer the same bits.
 ///
-/// The rules come from `stdlib/rulesets/vmap.cml`: the transform asks that family, by the operator's
+/// The rules come from `lib/rulesets/vmap.cml`: the transform asks that family, by the operator's
 /// key, for every primitive of `f`, and calls the function the rule names with the batches. An
 /// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
 /// branch or a loop in the body is refused the same way, because the elementwise tier batches
@@ -120,13 +120,13 @@ export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 /// the same function and no value changes -- what changes is what a step that cuts the graph in two
 /// has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
 /// be recomputed from the parameters are not residuals, and the backward half computes them again
-/// (`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
+/// (`lib/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
 /// name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
 /// takes the other word.
 /// @example let remembered = remat((x: int) => x + 1)
 ///
 /// The type is the argument's own: a function in, the same function out, which is the whole of what
-/// the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
+/// the name says. `lib/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
 /// the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
 /// declarations show, because the result of a call is the exit type its resolver gives.
 export func remat::<F>(f: F): F when is_function::<F>()
@@ -153,7 +153,7 @@ export type FirstWithAsParam<F> = match type WithOf<F> { case (W, ...Rest) => <.
 /// The body is not read, rewritten or re-derived -- the one thing that differs is which list a port
 /// is in -- and a `with` value the body reads is read through a port like any other value, so a
 /// reclassification of the port is the whole of the transform
-/// (`modules/transforms/first_with_as_param_operator.cpp`). The transform is what makes a weight
+/// (`lib/transforms/first_with_as_param_operator.cpp`). The transform is what makes a weight
 /// differentiable by the library's composition: a `with` parameter has no place to take a direction
 /// in from, and an ordinary one has.
 ///

@@ -10,16 +10,16 @@
  *
  * The first line is the design's assembly (design principles 9.9, design 4.4) with its middle step
  * written as the call that performs it: `jvp(f)` is the forward transform as an operator of the
- * `transforms` module (`stdlib/signatures/transforms.cml`), because a pass cannot answer a function
+ * `transforms` module (`lib/transforms/signatures/transforms.cml`), because a pass cannot answer a function
  * value and a call cannot name a rule set in its angle brackets.
  *
  * `grad` differentiates the first `with` parameter (design principles 9.9), and a reverse transform
  * differentiates the ordinary parameters, so the weight has to be moved onto that list before `vjp`
  * sees the function. The move is the signature reinterpretation `first_with_as_param`
- * (`stdlib/signatures/transforms.cml`): it reclassifies one port and copies the body unchanged, and
+ * (`lib/transforms/signatures/transforms.cml`): it reclassifies one port and copies the body unchanged, and
  * it puts the weight **first** among the parameters, so the first member of the pullback's answer is
  * its cotangent. That move is the composition's own and stays inside it: `grad` hands the weight
- * back to the `with` list before it answers, so `GradientOf<F>` (`stdlib/types.cml`) is the
+ * back to the `with` list before it answers, so `GradientOf<F>` (`lib/types/types.cml`) is the
  * differentiated function's own shape -- the whole `with` list, then `F`'s own parameters.
  *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
@@ -33,7 +33,7 @@
  * The `with` list is not one of those parameters: it is a residual like everything else the second
  * half reads. `split` captures the `with` value the backward half reads in `lin`'s closure, so
  * `lin` is a function of the tangents alone and `transpose(lin)` is the declared `Pullback<F>`
- * `(ct) => (...Tangent<ParamsOf<F>>)` -- `stdlib/types.cml`. The `with` values are written once, in
+ * `(ct) => (...Tangent<ParamsOf<F>>)` -- `lib/types/types.cml`. The `with` values are written once, in
  * the call that supplies them to `vjp`: `let (y, pb) = vjp(scale)<2.0>(3.0); pb(1.0)`.
  *
  * The surface is JAX's: `vjp(f)(x)` is the pair `(y, pullback)` and
@@ -79,14 +79,14 @@ import { first_with_as_param, jvp, split, transpose } from transforms
 /// one-long tuple).
 ///
 /// One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
-/// pullback's cotangents are too (stdlib/types.cml), and `<...ws> (...xs)` takes both lists the
+/// pullback's cotangents are too (lib/types/types.cml), and `<...ws> (...xs)` takes both lists the
 /// instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
 /// stands in. The packs are values in the
 /// body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
 /// `split(jvp(f))<...ws>(...xs)` hands the forward half the list it declares and the parameters it
 /// takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
 /// list, because the `with` value the backward half reads is a residual the cut captured in its
-/// closure (`Pullback<F>` in stdlib/types.cml is
+/// closure (`Pullback<F>` in lib/types/types.cml is
 /// `(ct) => (...Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
 /// lambda receives them, and `split(jvp(f))<...ws>(...xs)` is the only place they appear. The lambda
 /// writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
@@ -108,7 +108,7 @@ import { first_with_as_param, jvp, split, transpose } from transforms
 /// `transpose(lin)` is still written inside the lambda, because `lin` does not exist until the
 /// forward half has run -- but the *walk* is a function of the graph `lin` is of, and a call keeps
 /// asking about the same graph. So the module keeps the member it built for a graph version and a
-/// call names the stored one (`modules/transforms/transpose_operator.cpp#TransposeMember`, a fact of
+/// call names the stored one (`lib/transforms/transpose_operator.cpp#TransposeMember`, a fact of
 /// the source graph stamped by `closureRevision`), and a loop that steps a gradient many times pays
 /// for one transposition rather than one per step. What a call still does, and only it can, is make
 /// the function value closed over the residuals *that* call's `lin` carries: the residuals are
@@ -142,15 +142,15 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 /// It is a composition and not a second transform: `vjp` read at the seed 1, its first cotangent
 /// taken. The weight is moved onto the ordinary list *inside this body*, because that is the list
 /// `vjp` differentiates, by `first_with_as_param` -- the signature reinterpretation that reclassifies
-/// that one port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in
+/// that one port and copies the body (`lib/transforms/signatures/transforms.cml`), which is why nothing in
 /// the differentiated body reads a `with` value that would need a direction of its own. That move is
 /// the composition's business and not the caller's: the lambda below takes the whole `with` list
 /// back and hands the weight to the moved function in the parameter position the move put it in.
-/// `GradientOf<F>` (`stdlib/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
+/// `GradientOf<F>` (`lib/types/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
 /// `f`'s own parameters -- and the first member of the pullback's answer is the weight's cotangent.
 ///
 /// **The whole `with` list is carried, and in its own order.** The reading the body builds is a `vjp`
-/// read, declared `<...ws> (...xs)` (`Vjp<F>`, `stdlib/types.cml`), so it takes the `with` values its
+/// read, declared `<...ws> (...xs)` (`Vjp<F>`, `lib/types/types.cml`), so it takes the `with` values its
 /// function takes; the lambda that answers takes `f`'s list as `f` wrote it -- `grad(loss)<layer, y>(X)`
 /// for a loss declared `with <layer: Linear, y: f32[?, ?]>`, whose data `y` is a `with` value the
 /// derivative never differentiates and cannot do without. The lambda binds that list as a *named*
@@ -169,7 +169,7 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 /// 1, because a `vjp` read would put the cut back inside the lambda it answers: the whole point is
 /// that the derivative is a graph by the time `grad(f)` answers. The transposition is one call for
 /// the same reason and by the same rule as `vjp`'s: written where the graph is asked about, done
-/// once for that graph version (`modules/transforms/transpose_operator.cpp#TransposeMember`).
+/// once for that graph version (`lib/transforms/transpose_operator.cpp#TransposeMember`).
 ///
 /// **A nest of this `grad` is this composition twice, and it is read one wall further on.** `grad(f)`
 /// answers a function that still takes its weight as a `with` value, so `grad(grad(f))` finds a first

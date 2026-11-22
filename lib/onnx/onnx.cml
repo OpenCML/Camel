@@ -8,7 +8,7 @@
  * needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
  */
 
-// The declarations of the C++ module `modules/onnx` (design principles 6.4). This file is the one
+// The declarations of the C++ module `lib/onnx` (design principles 6.4). This file is the one
 // source of both operators' signatures; the C++ side keeps the kernels, the executor and the
 // purity.
 //

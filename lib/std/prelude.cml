@@ -53,13 +53,13 @@ export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int
 //
 // A tag is written on a function and holds a rule for it: `#jvp(rule)` is the rule forward mode
 // uses, `#transpose(rule)` the one the transpose uses, `#vjp(rule)` the custom derivative. The
-// rule has the signature of the transformation (`stdlib/signatures/autodiff.cml`), and the tags
+// rule has the signature of the transformation (`lib/autodiff/signatures/autodiff.cml`), and the tags
 // are declared here, beside the operators the library writes them on, because a tag is a fact
 // about any function and every program reads this file.
 
 /// The rule of the function it is written on for forward mode: along the tangents of the
 /// function's arguments it gives the tangent of its result. The rule has the signature of the
-/// forward derivative of the function (`stdlib/signatures/autodiff.cml`). The tag is written
+/// forward derivative of the function (`lib/autodiff/signatures/autodiff.cml`). The tag is written
 /// where `vjp` is and takes the same kind of argument.
 export tag jvp::<F>(rule: F) on func when is_function::<F>()
 
@@ -71,7 +71,7 @@ export tag transpose::<F>(rule: F) on func when is_function::<F>()
 
 /// The custom derivative of the function it is written on: calls of that function use `rule`
 /// instead of differentiating its body. The rule has the signature of the pullback of the
-/// function (`stdlib/signatures/autodiff.cml`).
+/// function (`lib/autodiff/signatures/autodiff.cml`).
 export tag vjp::<F>(rule: F) on func when is_function::<F>()
 
 // ---- operators ----
@@ -268,7 +268,7 @@ export func operator -(x: c128): c128
 
 // Indexing, `xs[i]`. The operator registers three words -- the array, the position, and the
 // dimension the position names -- and its registration says so
-// (`src/builtin/modules/globals.cpp`: `(arr: T[], index: int, axis: int) => T`); the declaration
+// (`lib/std/builtin/modules/globals.cpp`: `(arr: T[], index: int, axis: int) => T`); the declaration
 // writes two, because the third is the declaration's default and the mechanism fills it before the
 // operator's type rule sees the call, so a two-word `xs[i]` stays a two-word call. That is why
 // `[]` is declared with the parameters a call writes and not with the registration's whole list,
@@ -276,7 +276,7 @@ export func operator -(x: c128): c128
 // (`test/cases/compile/native/generic_module.cml`).
 //
 // `[]` is not a token: it is a pair of brackets, and the declaration writes both. The parser reads
-// `func operator [` `]` as an operator name already (src/parse/syntax/parser.cpp#parseOperatorName,
+// `func operator [` `]` as an operator name already (parse/src/syntax/parser.cpp#parseOperatorName,
 // whose own example is `func operator [](m: M, i: int): T`), because a bracket form is an operator
 // declaration like any other, not a form of its own.
 
@@ -937,7 +937,7 @@ export func len(x: Bytes): int
 /// The value is settled where the call is built and where the name is used as a value, and the
 /// graph holds the list itself: the operator records the instantiated type of the call but not the
 /// type argument it was written with, so the run has nothing left to read
-/// (`src/builtin/operators/struct.cpp#ExtentOfResolver`, the rule's
+/// (`lib/std/builtin/operators/struct.cpp#ExtentOfResolver`, the rule's
 /// `valueFromTypeArgs`). The refusal names the **position** that has no number in it
 /// (`SemanticDiag::ExtentOfNeedsStatedShape`).
 ///

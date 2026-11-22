@@ -17,7 +17,7 @@
  * no callable Camel name, so they are not declared here.
  */
 
-// The declarations of the callable operators of the C++ module `modules/rewrite` (design
+// The declarations of the callable operators of the C++ module `lib/rewrite` (design
 // principles 6.4); the C++ side keeps the kernels, the executor and the purity. `Rule` and `Proof`
 // are this module's own types, exported by the C++ side; `Node` and `Op` are the graph module's.
 // No signature is computed from an argument, so the module needs no `signatures/rewrite.cml`.
