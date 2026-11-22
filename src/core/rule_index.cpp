@@ -3,6 +3,8 @@
 
 #include "camel/core/rule_index.h"
 
+#include "camel/core/type/text.h"
+
 #include <map>
 #include <mutex>
 #include <string>
@@ -29,6 +31,31 @@ std::string keyOf(const std::string &head, uint32_t arity) {
     return head + "@" + std::to_string(arity);
 }
 
+/// Whether two rules answer for the same operands: their parameter types are one list, compared as
+/// types (`type::typeEquals` -- the relation the intern table, the graph's hashes and the e-graph
+/// use for "the same type"). Not the text the two declarations were written with: `(x: (T))` and
+/// `(x: T)` are one type and two texts, and two different types can be written alike once a name
+/// resolves (`rule a::<T>(x: T)` beside `rule b(x: T)` where the module also declares `type T`).
+///
+/// A rule whose left side was never compiled has no list (nullopt), and that is not "no
+/// parameters": no verdict is a refusal here, so the answer is "not known to be a duplicate".
+bool sameParameterTypes(const RuleObject &left, const RuleObject &right) {
+    if (!left.parameterTypes.has_value() || !right.parameterTypes.has_value()) {
+        return false;
+    }
+    const std::vector<const camel::core::type::Type *> &one = *left.parameterTypes;
+    const std::vector<const camel::core::type::Type *> &two = *right.parameterTypes;
+    if (one.size() != two.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < one.size(); ++i) {
+        if (!camel::core::type::typeEquals(one[i], two[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void collectRuleHead(
@@ -39,8 +66,6 @@ void collectRuleHead(
     std::string shape,
     std::string variables,
     std::string outerUses,
-    std::string condition,
-    std::string parameterTypes,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
@@ -52,8 +77,6 @@ void collectRuleHead(
     object.variables      = std::move(variables);
     object.shape          = std::move(shape);
     object.outerUses      = std::move(outerUses);
-    object.condition      = std::move(condition);
-    object.parameterTypes = std::move(parameterTypes);
     object.tokenStart     = tokenStart;
     object.tokenEnd       = tokenEnd;
     std::lock_guard<std::mutex> lock(registryMutex);
@@ -80,10 +103,10 @@ std::string indexRule(const std::string &family, const RuleObject &rule) {
             return {}; // one module built twice files its rules twice
         }
         // Two rules of one operator that cannot be told apart -- one spelling, one operand count,
-        // one parameter-type list -- are a duplicate: neither can be preferred, and a family that
-        // holds both would answer by filing order. The condition is *not* part of that test:
-        // a `when` clause is a question about the same operands, not a different shape, so two laws
-        // of one parameter-type list are one law written twice whatever their guards say. A rule
+        // one compiled parameter-type list -- are a duplicate: neither can be preferred, and a
+        // family that holds both would answer by filing order. The condition is *not* part of that
+        // test: a `when` clause is a question about the same operands, not a different shape, so two
+        // laws of one parameter-type list are one law written twice whatever their guards say. A rule
         // that wants to answer two questions of one operand writes two laws of two parameter types
         // (`jvp_float_from_float::<S>` beside `jvp_float_from_int(x: int)`,
         // `stdlib/rulesets/jvp.cml`) or one law that branches on the type.
@@ -94,9 +117,14 @@ std::string indexRule(const std::string &family, const RuleObject &rule) {
         // the element (design principles 5.4), and an `int` source is not a float one -- and this
         // text used to call them a duplicate because both wrote `is_float::<T>()`.
         //
+        // The comparison is of types, not of the text the two declarations were written with: a
+        // type has one identity however it is spelled, and two different types can be spelled
+        // alike (`rule a::<T>(x: T)` beside `rule b(x: T)` under a module that declares `type T`).
+        // The type system is the only truth about which of the two a rule matched.
+        //
         // The choice between rules that share a key is not made here: the operand types are not
         // known at this point, and the engine makes it where they are (`lookupRules`).
-        if (slot.parameterTypes == rule.parameterTypes) {
+        if (sameParameterTypes(slot, rule)) {
             return slot.name;
         }
     }

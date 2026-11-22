@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：66 页
+## 现在在等作者：67 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -72,6 +72,7 @@
 | [`2026-11-21-which-reader-may-fill-a-lifts-value-half`](2026-11-21-which-reader-may-fill-a-lifts-value-half.cn.md) | `Transpose<F>` 的那一格写不进签名：提升签名的 value half 由谁填 |
 | [`2026-11-21-who-lifts-the-members-of-a-closure-fill`](2026-11-21-who-lifts-the-members-of-a-closure-fill.cn.md) | 闭包构造 Fill 的成员，在配对提升里由谁提升 |
 | [`2026-11-21-who-pairs-the-captures-of-a-body-built-closure`](2026-11-21-who-pairs-the-captures-of-a-body-built-closure.cn.md) | 体内造出的闭包，谁负责把它的捕获配成对 |
+| [`2026-11-22-one-rule-value-or-two`](2026-11-22-one-rule-value-or-two.md) | `RuleObject` 与重写模块的规则值，合成一个还是两个 |
 | [`2026-11-22-paused-branches-and-the-drift-gate`](2026-11-22-paused-branches-and-the-drift-gate.md) | 暂停中的分支撞上「落后 100」这条闸门，闸门该不该对它们生效 |
 | [`2026-11-22-residual-mlp-margin-was-already-thin`](2026-11-22-residual-mlp-margin-was-already-thin.md) | `residual_mlp_large_bytecode` 的时间余量在 0.2 之前就没有，现在要不要抬 |
 | [`2026-11-22-where-the-rule-instantiation-happens`](2026-11-22-where-the-rule-instantiation-happens.md) | 0.4 只把「编译一次」放在值上，实例仍按程序的类型组合预先展开——这算 0.4 还是匹配那一项 |

@@ -29,7 +29,14 @@
  * (`float(x: float)` and `float(x: int)` are both `float` at one operand) and the *type* is what
  * tells their laws apart -- which is the engine's question, asked where the operand's type is known
  * (the engine instantiates a rule at the operand's own type and refuses by name when no instance is
- * made). The index answers names, and objects; a type is not its to encode.
+ * made).
+ *
+ * Two of the members are not read off the declaration at all: `parameterTypes` and `condition` are
+ * what the declaration *compiled to*, and they are filed when the module is built, from the
+ * signatures the compiler made of the rule's own sides. That is deliberate -- a rule's parameter
+ * types are types, and the text a declaration was written with is not a type: two spellings of one
+ * type would be two laws here, and two types that spell the same would be one. The compiled form is
+ * the only truth about them, so the text is not kept beside it.
  */
 
 #pragma once
@@ -38,6 +45,11 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace camel::core::type {
+class Type;
+class FunctionType;
+} // namespace camel::core::type
 
 namespace camel::core {
 
@@ -68,16 +80,24 @@ struct RuleObject {
     /// right side's callee has nothing to bind those names with, so a rule that reads one is
     /// refused where it is written.
     std::string outerUses;
-    /// The rule's applicability condition as written (`is_same::<T, int>()`), empty when it has
-    /// none: it is what tells a genuine duplicate -- two laws of one operator that could answer for
-    /// the same operand -- apart from two laws of one operator that cannot.
-    std::string condition;
-    /// The type written for each of the rule's parameters, in order, joined by `|` after the
-    /// whitespace is squeezed out (`T[..]|T`); empty for a rule that takes none. The other half of
-    /// a duplicate: two laws of one key whose parameter types are the same list can answer for the
-    /// same operands and cannot be told apart, while two whose lists differ are two laws of two
-    /// shapes (design principles 5.4).
-    std::string parameterTypes;
+    /// The rule's applicability condition as the compiler compiled it: the signature of the
+    /// condition's own function (`<rule>__when`, the extra declaration the rule's head became), or
+    /// null when the rule has none. A condition is a function of the rule's parameters -- that is
+    /// what `when is_float::<T>()` becomes -- so the compiled signature is the same object the
+    /// engine's rule value calls, and it is not a second account of it. The text the condition was
+    /// written with is not kept: two conditions that compile to one function are one condition, and
+    /// two spellings of it (`x > 0` and `x>0`) are not two.
+    const camel::core::type::FunctionType *condition = nullptr;
+    /// The type of each of the rule's parameters, in order, as the compiler compiled it: the
+    /// parameter types of the left side's signature (`<rule>__lhs`), which are the types the rule
+    /// matches with. Empty for a rule that takes none, and nullopt when the left side was never
+    /// compiled into a signature at all (a ruleset module's rule whose maker the program did not
+    /// settle) -- the two are different answers, and `indexRule` gives a verdict only on the first.
+    ///
+    /// This is the other half of a duplicate: two laws of one key whose parameter types are the
+    /// same list can answer for the same operands and cannot be told apart, while two whose lists
+    /// differ are two laws of two shapes (design principles 5.4).
+    std::optional<std::vector<const camel::core::type::Type *>> parameterTypes;
     /// The rule's tokens in its module's buffer, for a diagnostic about the rule itself.
     uint32_t tokenStart = 0;
     uint32_t tokenEnd   = 0;
@@ -102,8 +122,10 @@ struct RuleMatch {
 /// Records one rule of a ruleset while its declarations are read. The module is named by the
 /// caller: the index is keyed by module, never by an ambient "current module". `rule` (the rule's
 /// name), `head`, `arity`, `rhsCallee` and `variables` are the five facts a transform will read
-/// back; `shape`, `outerUses`, `condition` and `parameterTypes` are what the module build judges the
-/// declaration by.
+/// back; `shape` and `outerUses` are what the module build judges the declaration by. The other
+/// two -- `parameterTypes` and `condition` -- are not here: they are types, a declaration read as
+/// syntax has none, and they are filed from the compiled sides when the module is built
+/// (`camel/compile/gir/rule_templates.h#compiledRuleTypes`).
 void collectRuleHead(
     const std::string &module,
     std::string head,
@@ -112,8 +134,6 @@ void collectRuleHead(
     std::string shape,
     std::string variables,
     std::string outerUses,
-    std::string condition,
-    std::string parameterTypes,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd);
@@ -127,9 +147,12 @@ std::vector<RuleObject> takeRuleHeads(const std::string &module);
 /// the duplicate, and the two are never silently merged -- and an empty string means the rule was
 /// filed, or was already there under the same name (a module built twice files its rules twice).
 ///
-/// Two rules under one key are a duplicate when they answer for the same operands: the same
-/// parameter-type list. Two whose lists differ are two laws of two shapes, and the choice between
-/// them is made where the operand types are known (the engine's, not this index's).
+/// Two rules under one key are a duplicate when they answer for the same operands: their parameter
+/// types, as the compiler compiled them, are one list (`type::typeEquals`, the type system's own
+/// answer -- not the text the two declarations were written with). Two whose lists differ are two
+/// laws of two shapes, and the choice between them is made where the operand types are known (the
+/// engine's, not this index's). A rule whose left side was never compiled has no list to compare,
+/// and no verdict is a refusal: a duplicate is reported only where it can be seen to be one.
 std::string indexRule(const std::string &family, const RuleObject &rule);
 
 // --- the reader's side: a transform asks the index, and is handed the objects ------------------
@@ -142,7 +165,7 @@ RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_
 /// Every rule of `family` whose left side is `head` with `arity` operands, in the order they were
 /// filed. A key holds **one or more** rules, and which of them answers is decided by the engine,
 /// which instantiates a rule at the operand's own type and refuses by name when there is none. The
-/// index's job is the name; the type is not its to encode.
+/// index files the name and the compiled types; the choice among them is the engine's.
 std::vector<RuleObject>
 lookupRules(const std::string &family, const std::string &head, uint32_t arity);
 
