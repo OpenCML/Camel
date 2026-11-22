@@ -31,7 +31,7 @@
  * (the engine instantiates a rule at the operand's own type and refuses by name when no instance is
  * made).
  *
- * Two of the members are not read off the declaration at all: `parameterTypes` and `condition` are
+ * One member is not read off the declaration at all: `parameterTypes` is
  * what the declaration *compiled to*, and they are filed when the module is built, from the
  * signatures the compiler made of the rule's own sides. That is deliberate -- a rule's parameter
  * types are types, and the text a declaration was written with is not a type: two spellings of one
@@ -80,14 +80,12 @@ struct RuleObject {
     /// right side's callee has nothing to bind those names with, so a rule that reads one is
     /// refused where it is written.
     std::string outerUses;
-    /// The rule's applicability condition as the compiler compiled it: the signature of the
-    /// condition's own function (`<rule>__when`, the extra declaration the rule's head became), or
-    /// null when the rule has none. A condition is a function of the rule's parameters -- that is
-    /// what `when is_float::<T>()` becomes -- so the compiled signature is the same object the
-    /// engine's rule value calls, and it is not a second account of it. The text the condition was
-    /// written with is not kept: two conditions that compile to one function are one condition, and
-    /// two spellings of it (`x > 0` and `x>0`) are not two.
-    const camel::core::type::FunctionType *condition = nullptr;
+    /// There is no `condition` member here, though the compiler does compile one. A rule's
+    /// applicability condition belongs to the rule value the transform carries, and the match is
+    /// what reads it; this type had a field for it that nothing ever read, so the field is gone
+    /// and the signature stays where the transform step will pick it up
+    /// (`src/compile/gir/program.cpp`, `compiledRuleTypes`). Keeping a written-but-unread field
+    /// would be a claim that something asks, which nothing does.
     /// The type of each of the rule's parameters, in order, as the compiler compiled it: the
     /// parameter types of the left side's signature (`<rule>__lhs`), which are the types the rule
     /// matches with. Empty for a rule that takes none, and nullopt when the left side was never
@@ -123,20 +121,13 @@ struct RuleMatch {
 /// caller: the index is keyed by module, never by an ambient "current module". `rule` (the rule's
 /// name), `head`, `arity`, `rhsCallee` and `variables` are the five facts a transform will read
 /// back; `shape` and `outerUses` are what the module build judges the declaration by. The other
-/// two -- `parameterTypes` and `condition` -- are not here: they are types, a declaration read as
-/// syntax has none, and they are filed from the compiled sides when the module is built
+/// one -- `parameterTypes` -- is not here: it is a type, a declaration read as
+/// syntax has none, and it is filed from the compiled sides when the module is built
 /// (`camel/compile/gir/rule_templates.h#compiledRuleTypes`).
 void collectRuleHead(
-    const std::string &module,
-    std::string head,
-    std::string rule,
-    std::string rhsCallee,
-    std::string shape,
-    std::string variables,
-    std::string outerUses,
-    uint32_t arity,
-    uint32_t tokenStart,
-    uint32_t tokenEnd);
+    const std::string &module, std::string head, std::string rule, std::string rhsCallee,
+    std::string shape, std::string variables, std::string outerUses, uint32_t arity,
+    uint32_t tokenStart, uint32_t tokenEnd);
 
 /// The rules collected for `module`, removed by the read: one registry per ruleset module, taken
 /// once where the module is built.
