@@ -6,6 +6,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/render.h"
 #include "camel/core/source/manager.h"
+#include "graph/graph_view.h"
 
 #include <array>
 #include <format>
@@ -21,13 +22,15 @@ using camel::core::error::RuntimeDiag;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 
-uint64_t nodeOriginNear(const GCGraph *graph, gc_node_ref_t ref) {
-    if (const uint64_t origin = graph->nodeOrigin(ref); origin != camel::source::kInvalidOriginId) {
+uint64_t nodeOriginNear(const camel::graph::Graph *graph, gc_node_ref_t ref) {
+    const camel::graph::GraphView &view = graph->view();
+    if (const uint64_t origin = view.originOf(ref); origin != camel::source::kInvalidOriginId) {
         return origin;
     }
-    for (const auto inputs : {graph->withInputsOf(ref), graph->normInputsOf(ref)}) {
-        for (gc_node_ref_t input : inputs) {
-            if (const uint64_t origin = graph->nodeOrigin(input);
+    for (const auto inputs : {view.inputs(ref, camel::graph::PortGroup::Context),
+                              view.inputs(ref, camel::graph::PortGroup::Normal)}) {
+        for (const camel::graph::NodeRef input : inputs) {
+            if (const uint64_t origin = view.originOf(input);
                 origin != camel::source::kInvalidOriginId) {
                 return origin;
             }

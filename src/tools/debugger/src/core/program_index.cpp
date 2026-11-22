@@ -316,7 +316,7 @@ void ProgramIndex::collect(
     std::unordered_set<GCGraph *> seen{root};
     std::deque<GCGraph *> queue{root};
     while (!queue.empty()) {
-        GCGraph *g = queue.front();
+        auto *g = queue.front();
         queue.pop_front();
         graphs.push_back(g);
         if (g->hasNodePayload()) {
@@ -383,7 +383,7 @@ void ProgramIndex::running(GCGraph *root) {
     graphs_.clear(); // graphs of an earlier run may be gone
     collect(root, runningLines_, runningGraphs_, nullptr, &armOwners_);
     runningGraphIds_.clear();
-    for (GCGraph *g : runningGraphs_) {
+    for (auto *g : runningGraphs_) {
         runningGraphIds_.insert(camel::runtime::toText(g->id()));
     }
     armGraphIds_.clear();
@@ -408,7 +408,7 @@ void ProgramIndex::findLiveGraphs(GCGraph *root) {
     std::unordered_set<GCGraph *> seen{root};
     std::deque<GCGraph *> queue{root};
     while (!queue.empty()) {
-        GCGraph *g = queue.front();
+        auto *g = queue.front();
         queue.pop_front();
         liveGraphIds_.insert(camel::runtime::toText(g->id()));
         if (g->hasNodePayload()) {
@@ -419,7 +419,7 @@ void ProgramIndex::findLiveGraphs(GCGraph *root) {
             }
         }
         for (const auto &next : {program->dependencies(*g), program->staticGraphRefs(*g)}) {
-            for (GCGraph *graph : next) {
+            for (auto *graph : next) {
                 if (graph != nullptr && seen.insert(graph).second) {
                     queue.push_back(graph);
                 }
@@ -486,7 +486,7 @@ const std::string &ProgramIndex::moduleOfFile(int file) {
 
 void ProgramIndex::nameFunctions() {
     std::unordered_map<std::string, GCGraph *> byGraphId;
-    for (GCGraph *g : initialGraphs_) {
+    for (auto *g : initialGraphs_) {
         byGraphId.emplace(camel::runtime::toText(g->id()), g);
     }
     for (const auto &b : recorder_->built) {
@@ -561,7 +561,7 @@ FunctionResolution ProgramIndex::resolveFunction(const std::string &written) con
     // full names `m::<name>` of modules m; one module only, or it is ambiguous.
     std::vector<GCGraph *> exact;
     std::map<std::string, std::vector<GCGraph *>> byModule;
-    for (GCGraph *g : graphs) {
+    for (auto *g : graphs) {
         const std::string &full = g->name();
         if (isCompilerNamed(full)) {
             continue;
@@ -591,7 +591,7 @@ FunctionResolution ProgramIndex::resolveFunction(const std::string &written) con
             out.fullName = name; // one instance was asked for
         }
         bool called = false;
-        for (GCGraph *g : chosen) {
+        for (auto *g : chosen) {
             out.graphs.push_back(camel::runtime::toText(g->id()));
             called = called || liveGraphIds_.count(camel::runtime::toText(g->id())) != 0;
         }
@@ -888,7 +888,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                 node.label       = std::string(body->uri());
             } break;
             case GCNodeKind::Func: {
-                GCGraph *callee = programOfGraph->calleeOf(*g, node.ref);
+                auto *callee = programOfGraph->calleeOf(*g, node.ref);
                 node.label      = callee ? callee->name() : std::string("?");
                 if (callee != nullptr && callee->name().rfind("__g_", 0) == 0) {
                     // What is passed to a compiler-made graph names its ports (see above).
@@ -989,7 +989,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     info->display = info->name;
     if (info->name.rfind("__g_", 0) == 0) {
         std::string owner;
-        for (GCGraph *outer = programOfGraph->outerOf(*g); outer != nullptr;
+        for (auto *outer = programOfGraph->outerOf(*g); outer != nullptr;
              outer          = programOfGraph->outerOf(*outer)) {
             if (outer->name().rfind("__", 0) != 0) {
                 owner = outer->name();

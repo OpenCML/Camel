@@ -24,7 +24,7 @@ using namespace camel::jit;
 
 const camel::runtime::Program *
 JitAsmDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
 #if ENABLE_FASTVM_JIT
     auto linked = compileAndLink(
         context_,

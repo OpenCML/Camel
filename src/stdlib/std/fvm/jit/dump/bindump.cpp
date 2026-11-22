@@ -70,7 +70,7 @@ static void dumpMachineCodeByInstruction(
 
 const camel::runtime::Program *
 JitBinaryDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
 #if ENABLE_FASTVM_JIT
     auto linked = compileAndLink(
         context_,

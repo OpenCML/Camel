@@ -182,7 +182,7 @@ FunctionEmitter::FunctionEmitter(
 }
 
 void FunctionEmitter::collectParameters(Member &member) {
-    GCGraph *graph     = member.graph;
+    auto *graph        = member.graph;
     const Type *result = graph->funcType()->exitType();
     if (!program_.values.type(result)) {
         throw Refusal{
@@ -630,7 +630,7 @@ void FunctionEmitter::bind(
 
 bool FunctionEmitter::lowerNode(
     Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail) {
-    const GCGraph *g = frame.graph;
+    const auto *g = frame.graph;
     const auto *node = g->node(ref);
     // The four shaped operators lower from the shape their operator gives, not from a node kind
     // this emitter reads (plan 2.3, camel/execute/shaped_operators.h).
@@ -655,7 +655,7 @@ bool FunctionEmitter::lowerNode(
     case GCNodeKind::Data: {
         const Type *type = node->dataType();
         std::optional<std::string> text;
-        if (GCGraph *function = functionConstantOf(g, ref)) {
+        if (auto *function = functionConstantOf(g, ref)) {
             text = functionValue(function, {});
             // A named function used as a value is kept too: a call spells the function type of
             // the position, and a `void` one drops the result the function gives.
@@ -746,8 +746,8 @@ bool FunctionEmitter::lowerNode(
 void FunctionEmitter::lowerCall(
     Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
     bool &handled) {
-    const GCGraph *g = frame.graph;
-    GCGraph *callee  = program_.program->calleeOf(*g, ref);
+    const auto *g = frame.graph;
+    auto *callee     = program_.program->calleeOf(*g, ref);
     if (callee == nullptr) {
         refuse(g, ref, std::format("a call in {} has no callee", describeFunction(g)));
     }
@@ -950,7 +950,7 @@ class NodeCall final : public OperatorCall {
 } // namespace
 
 void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out) {
-    const GCGraph *g      = frame.graph;
+    const auto *g         = frame.graph;
     const auto *node      = g->node(ref);
     const std::string uri = operatorUri(g, ref);
     if (!program_.values.type(node->dataType())) {
@@ -1213,7 +1213,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
 
 void FunctionEmitter::lowerLoop(
     Frame &frame, gc_node_ref_t loop, const std::vector<gc_node_ref_t> &order, Block &out) {
-    GCGraph *g = frame.graph;
+    auto *g = frame.graph;
     if (g->loopCollectionCountOf(loop) != 0) {
         refuse(g, loop, std::format("{} has a loop that collects values", describeFunction(g)));
     }
@@ -1419,7 +1419,7 @@ void FunctionEmitter::lowerLoop(
 bool FunctionEmitter::lowerBranch(
     Frame &frame, gc_node_ref_t brch, const std::vector<gc_node_ref_t> &order, Block &out,
     bool joinIsTail, const Tail &tail) {
-    GCGraph *g                = frame.graph;
+    auto *g                   = frame.graph;
     const gc_node_ref_t join  = g->nodeBodyAs<GCBrchBody>(brch)->join;
     const auto *joinNode      = join != kInvalidNodeRef ? g->node(join) : nullptr;
     const size_t armCount     = g->armCountOf(brch);
@@ -1625,7 +1625,7 @@ std::optional<std::string> FunctionEmitter::functionValue(
 }
 
 void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
-    const GCGraph *g = frame.graph;
+    const auto *g = frame.graph;
     const auto *node = g->node(ref);
     const auto *body = g->nodeBodyAs<camel::runtime::GCFillBody>(ref);
     const auto norm  = g->normInputsOf(ref);
@@ -1639,7 +1639,7 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     if (body->fillKind == camel::runtime::GCFillKind::FunctionClosure) {
         // A closure: the function constant and the values it captures, slot i of the closure
         // being the i-th captured port of the function's graph.
-        GCGraph *function = functionConstantOf(g, templ);
+        auto *function = functionConstantOf(g, templ);
         std::vector<std::string> captures(
             function != nullptr ? function->closureNodes().size() : 0);
         for (size_t i = 0; i < with.size() && i < slots.size(); ++i) {
@@ -1766,7 +1766,7 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
 }
 
 void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
-    const GCGraph *g          = frame.graph;
+    const auto *g             = frame.graph;
     const gc_node_ref_t input = g->normInputsOf(ref).front();
     const Type *type          = g->node(input)->dataType();
     const auto *body          = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
@@ -1788,7 +1788,7 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
 void FunctionEmitter::lowerCopyValue(Frame &frame, gc_node_ref_t ref) {
     // A copy of a value is that value: values have no identity (design principles 10.5), and every
     // holder of a shared array sees it unchanged (array.h).
-    const GCGraph *g  = frame.graph;
+    const auto *g     = frame.graph;
     const auto *node  = g->node(ref);
     const auto inputs = g->normInputsOf(ref);
     if (!inputs.empty()) {
@@ -1800,7 +1800,7 @@ void FunctionEmitter::lowerCopyValue(Frame &frame, gc_node_ref_t ref) {
 void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A call of a function value (design principles 2.1): with input 0 is the value,
     // the other `with` inputs and the normal ones its arguments.
-    const GCGraph *g = frame.graph;
+    const auto *g = frame.graph;
     const auto with  = g->withInputsOf(ref);
     if (with.empty()) {
         refuse(g, ref, std::format("a call in {} has no function", describeFunction(g)));
@@ -1835,7 +1835,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
 void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A value entering `T?` or `T!` (design principles 3.8), `null` entering `T?`, a failed
     // value passed on with another payload (`->`), a conversion between numbers.
-    const GCGraph *g          = frame.graph;
+    const auto *g             = frame.graph;
     const gc_node_ref_t input = g->normInputsOf(ref).front();
     const Type *toType        = g->node(ref)->dataType();
     const Type *fromType      = g->node(input)->dataType();
@@ -2029,7 +2029,7 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
 
 bool FunctionEmitter::lowerVariable(
     Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
-    const GCGraph *g             = frame.graph;
+    const auto *g                = frame.graph;
     const camel::core::OperId id = operatorId(g, ref);
     if (id == camel::core::oper::VarNew) {
         const gc_node_ref_t init = g->normInputsOf(ref).front();
@@ -2181,7 +2181,7 @@ bool FunctionEmitter::lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block 
     if (frame.consumed.contains(ref)) {
         return true;
     }
-    const GCGraph *g = frame.graph;
+    const auto *g = frame.graph;
     const auto taken = g->normInputsOf(ref);
     const auto items = g->withInputsOf(ref);
     if (taken.size() != 1 || items.size() != 1 ||
@@ -2224,7 +2224,7 @@ bool FunctionEmitter::lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Bloc
     if (frame.consumed.contains(ref)) {
         return true;
     }
-    const GCGraph *g = frame.graph;
+    const auto *g = frame.graph;
     const auto args  = g->normInputsOf(ref);
     if (args.size() != 3 || g->node(args.front())->kind != GCNodeKind::Oper ||
         operatorUri(g, args.front()) != ":var/take") {
@@ -2288,7 +2288,7 @@ bool FunctionEmitter::lowerFail(
     if (uri != ":op/fail") {
         return false;
     }
-    const GCGraph *g = frame.graph;
+    const auto *g = frame.graph;
     // `fail<'Kind'>(message)`: the kind is a constant of the graph -- the tag the program wrote,
     // which is what the fault's report is named after (design principles 3.9) -- and the message
     // is the call's argument. Both are wanted, and neither is a value of the program's own words.
@@ -2342,7 +2342,7 @@ bool FunctionEmitter::lowerHigherOrder(
     // The generated program's own runtime (hof.h) has one entry per shape of call; which one an
     // operator uses is its declaration's (OperatorSemantics::elementCalls).
     using camel::core::sem::ElementShape;
-    const GCGraph *g  = frame.graph;
+    const auto *g     = frame.graph;
     const auto *calls = camel::core::OperatorTable::instance().elementCalls(operatorId(g, ref));
     if (calls == nullptr) {
         return false;
