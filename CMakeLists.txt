@@ -38,14 +38,32 @@ elseif(UNIX)
     add_definitions(-DPLATFORM_LINUX)
 endif()
 
+# `src/` is the umbrella the blocks were moved under on 2026-11-22: `src/kernel`, `src/parse`,
+# `src/compile`, `src/bindings`, `src/tools` and the standard library `src/stdlib`. None of them is
+# collected here, and that is the point of the exclude below:
+#
+#   * `cmake/layout-blocks.cmake` globs every block's sources itself (`camel_layout_add_blocks`) and
+#     its objects are what libcamel is linked from;
+#   * a module directory under `src/stdlib/<module>/` is its own `.cmo` target (`CMakeLists.txt`,
+#     `CAMEL_ALL_MODULES`), not a part of libcamel;
+#   * `src/tools/` and `src/bindings/` are separate executables and the CPython extension, each of
+#     which links libcamel.
+#
+# A recursive glob over `src/` therefore compiles the same translation units a second time and the
+# link fails on duplicate symbols -- which is exactly what happened the day the move landed. So the
+# glob keeps only what no block claims: `third_party/`, and a source sitting directly in `src/`
+# (the `unplaced` block of `layout-blocks.cmake` applies the same rule, without recursing).
+# A block added under `src/` later has to be added to this list as well as to the layout.
 file(GLOB_RECURSE _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
     "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
+list(FILTER _ALL_SRC EXCLUDE REGEX
+    "^${PROJECT_SOURCE_DIR}/src/(kernel|parse|compile|bindings|tools|stdlib)/")
 # A checkout older than the handwritten front end can still carry `parse/src/antlr/` on disk: that
 # path was ignored for the ANTLR-generated sources until 2026-11-02, when the ignore rules went. This
-# filter is not a dependency on it and nothing in this tree needs it -- the glob above takes every
-# `src/**/*.cpp`, and this keeps a stale output directory out of a build that finds one.
+# filter is not a dependency on it and nothing in this tree needs it -- the globs above take every
+# block, and this keeps a stale output directory out of a build that finds one.
 list(FILTER _ALL_SRC EXCLUDE REGEX "/parse/src/antlr/")
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
@@ -243,9 +261,9 @@ if(NOT CAMEL_ENABLE_PYTHON OR CAMEL_PACKAGE_MINIMAL)
     message(STATUS "Skipping lib/python and modules/pyplot.${_camel_skip_python_why}")
 endif()
 if(NOT _camel_skip_python_modules)
-    add_subdirectory(lib/python)
+    add_subdirectory(src/stdlib/python)
     if(CAMEL_PYTHON_DEV_AVAILABLE)
-        add_subdirectory(lib/pyplot)
+        add_subdirectory(src/stdlib/pyplot)
     else()
         message(STATUS "Skipping modules/pyplot: no Python development environment (same condition as python.cmo).")
     endif()
@@ -296,7 +314,7 @@ if(NOT "${CAMEL_MODULES}" STREQUAL "")
 endif()
 
 foreach(_module IN LISTS _camel_modules)
-    add_subdirectory(lib/${_module})
+    add_subdirectory(src/stdlib/${_module})
 endforeach()
 
 # The link relations the modules declared, checked against the selected set. Each entry is
@@ -319,7 +337,7 @@ endforeach()
 # in Camel, the other direction), so it is added whether or not CAMEL_ENABLE_PYTHON is on; the
 # directory itself returns early when Python's development files are absent.
 if(CAMEL_ENABLE_PYTHON_BINDINGS AND NOT CAMEL_PACKAGE_MINIMAL)
-    add_subdirectory(bindings/python)
+    add_subdirectory(src/bindings/python)
 else()
     message(STATUS "Skipping bindings/python (CAMEL_ENABLE_PYTHON_BINDINGS=OFF or CAMEL_PACKAGE_MINIMAL=ON).")
 endif()
@@ -347,7 +365,8 @@ file(GENERATE
     CONTENT "${_camel_cmo_manifest}")
 
 # CLI and tools: link the libcamel shell (camel-cli lives under tools).
-add_subdirectory(tools)
+add_subdirectory(src/tools)
+add_subdirectory(test/tools/parsecheck)
 camel_layout_append_catchall()
 
 # ---------------------------------------------------------------------------------------------
