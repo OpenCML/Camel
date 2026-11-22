@@ -151,6 +151,29 @@ std::string operatorUri(const GCGraph *graph, gc_node_ref_t ref) {
     return std::string(graph->nodeBodyAs<GCOperBody>(ref)->uri());
 }
 
+// Which of the four the operator node names: `:op/fill` is a construction, `:op/cast` a
+// conversion, `:op/copy` a copy, and a member read is written two ways because the two reads ask
+// the value different questions -- `:op/access` and `:op/access_key` are both a member read. Any
+// other URI is None: an operator is one of the four by what it says it is, not by being an
+// operator, which is the question `node_operator.h` of `std::transforms` asks of the same five
+// names. The kind form of a node answers this through `shapeOfKind`.
+camel::execute::OperShape shapeOfOperatorUri(const std::string &uri) {
+    using camel::execute::OperShape;
+    if (uri == ":op/cast") {
+        return OperShape::Conversion;
+    }
+    if (uri == ":op/copy") {
+        return OperShape::Clone;
+    }
+    if (uri == ":op/fill") {
+        return OperShape::Construction;
+    }
+    if (uri == ":op/access" || uri == ":op/access_key") {
+        return OperShape::Access;
+    }
+    return OperShape::None;
+}
+
 camel::core::OperId operatorId(const GCGraph *graph, gc_node_ref_t ref) {
     return graph->nodeBodyAs<GCOperBody>(ref)->oper;
 }
@@ -632,9 +655,15 @@ bool FunctionEmitter::lowerNode(
     Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail) {
     const GCGraph *g = frame.graph;
     const auto *node = g->node(ref);
-    // The four shaped operators lower from the shape their operator gives, not from a node kind
-    // this emitter reads (plan 2.3, camel/execute/shaped_operators.h).
-    switch (camel::execute::shapeOfKind(node->kind)) {
+    // The four shaped operators lower from the operation their node names, not from a node kind
+    // this emitter reads (plan 2.3, camel/execute/shaped_operators.h): a graph may carry the kinds
+    // still, and the `:op/cast`, `:op/copy`, `:op/fill` and `:op/access[_key]` calls the front end
+    // now builds say the same thing by their URI. Each lowering reads the parameters from the
+    // writing it has.
+    const auto shape = node->kind == GCNodeKind::Oper
+                           ? shapeOfOperatorUri(operatorUri(g, ref))
+                           : camel::execute::shapeOfKind(node->kind);
+    switch (shape) {
     case camel::execute::OperShape::Conversion:
         lowerCast(frame, ref, out);
         return false;
@@ -1627,25 +1656,47 @@ std::optional<std::string> FunctionEmitter::functionValue(
 void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     const GCGraph *g = frame.graph;
     const auto *node = g->node(ref);
-    const auto *body = g->nodeBodyAs<camel::runtime::GCFillBody>(ref);
     const auto norm  = g->normInputsOf(ref);
     const auto with  = g->withInputsOf(ref);
     if (norm.empty()) {
         refuse(g, ref, std::format("a construction in {} has no template", describeFunction(g)));
     }
     const gc_node_ref_t templ = norm.front();
-    const auto slots          = body->slots();
+    const Type *type          = node->dataType();
+    // The values a construction writes, and the place each one fills. A node of the FILL kind
+    // states both in its own body -- a slot table, because a construction the front end wrote may
+    // give its values in an order that is not the target type's. The operator form
+    // (`fill::<T, ...F>(template, ...fields)` of the prelude) has no such table: the template is
+    // the first ordinary operand and the values follow it in the target type's layout order, so the
+    // place of a value is its own position (plan 2.3, the construction's own declaration).
+    const auto *body      = g->nodeBodyAs<camel::runtime::GCFillBody>(ref);
+    const bool asOperator = node->kind == GCNodeKind::Oper;
+    std::vector<size_t> slots;
+    std::vector<gc_node_ref_t> values;
+    if (asOperator) {
+        for (size_t i = 1; i < norm.size(); ++i) {
+            slots.push_back(i - 1);
+            values.push_back(norm[i]);
+        }
+    } else {
+        slots.assign(body->slots().begin(), body->slots().end());
+        values.assign(with.begin(), with.end());
+    }
 
-    if (body->fillKind == camel::runtime::GCFillKind::FunctionClosure) {
+    const bool closure =
+        asOperator
+            ? type != nullptr && type->code() == camel::core::type::TypeCode::Function
+            : body->fillKind == camel::runtime::GCFillKind::FunctionClosure;
+    if (closure) {
         // A closure: the function constant and the values it captures, slot i of the closure
         // being the i-th captured port of the function's graph.
         GCGraph *function = functionConstantOf(g, templ);
         std::vector<std::string> captures(
             function != nullptr ? function->closureNodes().size() : 0);
-        for (size_t i = 0; i < with.size() && i < slots.size(); ++i) {
+        for (size_t i = 0; i < values.size() && i < slots.size(); ++i) {
             const auto at = static_cast<size_t>(slots[i]);
             if (at < captures.size()) {
-                captures[at] = valueOf(frame, with[i]).text;
+                captures[at] = valueOf(frame, values[i]).text;
             }
         }
         auto value = function != nullptr ? functionValue(function, captures) : std::nullopt;
@@ -1668,7 +1719,6 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
 
     // A tuple, struct or array: the template's constant elements, with the computed ones in
     // their places.
-    const Type *type          = node->dataType();
     const std::string cppName = cppType(g, ref, type);
     const slot_t constant     = g->staticArea()->get<slot_t>(-g->node(templ)->dataIndex);
     std::vector<std::string> items;
@@ -1700,10 +1750,10 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
             items.push_back("");
         }
     }
-    for (size_t i = 0; i < with.size() && i < slots.size(); ++i) {
+    for (size_t i = 0; i < values.size() && i < slots.size(); ++i) {
         const auto at = static_cast<size_t>(slots[i]);
         if (at < items.size()) {
-            items[at] = valueOf(frame, with[i]).text;
+            items[at] = valueOf(frame, values[i]).text;
         }
     }
     for (size_t i = 0; i < items.size(); ++i) {
@@ -1766,8 +1816,120 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
 }
 
 void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
-    const GCGraph *g          = frame.graph;
-    const gc_node_ref_t input = g->normInputsOf(ref).front();
+    const GCGraph *g  = frame.graph;
+    const auto *node  = g->node(ref);
+    const auto norm   = g->normInputsOf(ref);
+    // A member read is written two ways (plan 2.3): a node of the ACCS kind carries the place or
+    // the name in its own body, and the operator form (`access::<T, U>(at, x)` by place,
+    // `access_key::<T, U>(key, x)` by name, of the prelude) carries it as the call's first
+    // ordinary operand -- a constant the program wrote, which is the order the declaration writes.
+    // A record is a C++ aggregate and a tuple a C++ tuple, so neither has a field table at run
+    // time: the writer reads the constant here, on the ground the struct form of `:op/idx_str`
+    // stands on. A name the struct does not have is the interpreter's own report, FieldNotFound,
+    // at this position (`__access_value__`, lib/std/builtin/operators/struct.cpp), not a refusal.
+    if (node->kind == GCNodeKind::Oper) {
+        const std::string uri = operatorUri(g, ref);
+        if (norm.size() != 2) {
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "'{}' in {} reads no value: a member read takes its place or its name and the "
+                    "value it reads",
+                    uri,
+                    describeFunction(g)));
+        }
+        const gc_node_ref_t input = norm[1];
+        const Type *type          = g->node(input)->dataType();
+        size_t index              = 0;
+        if (uri == ":op/access_key") {
+            if (type == nullptr || type->code() != camel::core::type::TypeCode::Struct) {
+                refuse(
+                    g,
+                    ref,
+                    std::format(
+                        "{} reads a member by name of a value of type '{}', and only a struct has "
+                        "fields to read by name",
+                        describeFunction(g),
+                        typeName(type)));
+            }
+            const auto key = stringConstantOf(g, norm[0]);
+            if (!key) {
+                refuse(
+                    g,
+                    ref,
+                    std::format(
+                        "{} reads a field of {} by a name the program computes, and a record is a "
+                        "C++ aggregate with no field table to look that name up in",
+                        describeFunction(g),
+                        typeName(type)));
+            }
+            const auto *record = static_cast<const camel::core::type::StructType *>(type);
+            const auto found   = record->findField(*key);
+            if (!found) {
+                cppType(g, input, type);
+                frame.values[ref] = CppValue{
+                    std::format(
+                        "rt::fail({}, {})",
+                        program_.sites.siteFor(
+                            g,
+                            ref,
+                            RuntimeDiag::FieldNotFound,
+                            std::vector<std::string>{SiteTable::valueMark(0)}),
+                        cppStringLiteral(*key)),
+                    false};
+                return;
+            }
+            index = *found;
+        } else {
+            if (type == nullptr || type->code() != camel::core::type::TypeCode::Tuple) {
+                refuse(
+                    g,
+                    ref,
+                    std::format(
+                        "{} reads an element by place of a value of type '{}', and only a tuple has "
+                        "elements to read by place",
+                        describeFunction(g),
+                        typeName(type)));
+            }
+            const auto *position = g->node(norm[0]);
+            if (position == nullptr || position->kind != GCNodeKind::Data ||
+                position->dataType() == nullptr ||
+                position->dataType()->code() != camel::core::type::TypeCode::Int64) {
+                refuse(
+                    g,
+                    ref,
+                    std::format(
+                        "{} reads an element of {} by a place the program computes, and a tuple's "
+                        "elements are the writer's own member names",
+                        describeFunction(g),
+                        typeName(type)));
+            }
+            const int64_t at = camel::core::rtdata::fromSlot<int64_t>(
+                g->staticArea()->get<slot_t>(-position->dataIndex));
+            const auto *tuple = static_cast<const camel::core::type::TupleType *>(type);
+            if (at < 0 || static_cast<size_t>(at) >= tuple->size()) {
+                refuse(
+                    g,
+                    ref,
+                    std::format(
+                        "{} reads element {} of a value of type '{}', which has no such element",
+                        describeFunction(g),
+                        at,
+                        typeName(type)));
+            }
+            index = static_cast<size_t>(at);
+        }
+        cppType(g, input, type);
+        frame.values[ref] = CppValue{
+            std::format(
+                "{}.{}",
+                valueOf(frame, input).text,
+                program_.values.fieldName(type, index)),
+            false};
+        return;
+    }
+    const gc_node_ref_t input = norm.front();
     const Type *type          = g->node(input)->dataType();
     const auto *body          = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
     cppType(g, input, type);
