@@ -3523,7 +3523,7 @@ c64e8db2a11ef9f7 ok test/cases/modules/std/env/basic.cml
 4944fee0a7929c2a ok test/cases/modules/std/env/unset_and_empty.cml
 e0edf06f845234a0 ok test/cases/modules/std/env/unicode/env_paths.cml
 d2da28ad0fff5952 ok test/cases/modules/std/env/unicode/helper.cml
-0c4009af2f37cac4 ok test/cases/modules/std/env/unicode/missing_file.cml
+b9ef4880274670ca ok test/cases/modules/std/env/unicode/missing_file.cml
 df2598e6c8a18c70 ok test/cases/modules/std/env/unicode/package_user.cml
 b08427cf5e5517f0 ok test/cases/modules/std/fs/basic.cml
 cbdf73b96e8d1488 ok test/cases/modules/std/fs/remove.cml

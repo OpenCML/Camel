@@ -1,12 +1,24 @@
 /**
  * The negative side of the process boundary of item 3: a diagnostic about a file whose name
  * lies outside the process code page must still carry the name in UTF-8, not as '?'.
+ *
+ * A missing file is an error value of `fs` (`NotFound`, stdlib/fs.cml) and not a fault, so a
+ * diagnostic only exists when the error reaches the exit of `main`: opened with `!!` the error is
+ * replaced and the run succeeds, which tests nothing. Handing it out of `main` is the shape that
+ * reports -- the message carries the path, the exit code is 1 (see
+ * test/cases/consistency/entry/error_thrown.cml).
  */
 
 import { read_text } from fs
 import { get_cwd } from env
 
-func main(): int sync {
-    println((((get_cwd() !! '') + '/不存在 文件 🐪.txt')->read_text !! ''))
-    return 0
+func main(): int! sync {
+    let path = (get_cwd() !! '') + '/不存在 文件 🐪.txt'
+    match path->read_text {
+        case error e => sync { return e }
+        case text => sync {
+            println(text)
+            return 0
+        }
+    }
 }

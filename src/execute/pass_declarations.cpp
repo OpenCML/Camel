@@ -6,6 +6,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/source/manager.h"
+#include "camel/utils/path.h"
 
 #include <algorithm>
 #include <cctype>
@@ -19,21 +20,27 @@ namespace camel::execute::detail {
 
 namespace {
 
-std::vector<std::string> declarationCandidatesFor(
+/// The files a declaration of `module` could be in, as the file system writes them. A module root
+/// is Camel text (UTF-8, design principles 11.1), so it meets the file system through
+/// `camel::utils::pathFromUtf8` and not through `std::filesystem::path`'s narrow constructor: that
+/// one decodes the bytes in the process code page, and a root outside it then names a file that
+/// does not exist -- the search "found" nothing while every candidate the message printed looked
+/// right.
+std::vector<std::filesystem::path> declarationCandidatesFor(
     const std::string &module, const camel::core::context::context_ptr_t &ctx) {
-    std::vector<std::string> candidates;
+    std::vector<std::filesystem::path> candidates;
     if (module.empty() || module.find("::") != std::string::npos || !ctx) {
         return candidates;
     }
-    const std::filesystem::path file = std::filesystem::path(module + ".cml");
+    const std::filesystem::path file = camel::utils::pathFromUtf8(module + ".cml");
     for (const auto &root : ctx->searchPaths()) {
         if (root.empty()) {
             continue;
         }
-        const std::filesystem::path base = std::filesystem::path(root);
+        const std::filesystem::path base = camel::utils::pathFromUtf8(root);
         for (const auto &candidate :
              {base / file, base / module / file, base / "stdlib" / file}) {
-            candidates.push_back(candidate.string());
+            candidates.push_back(candidate);
         }
     }
     return candidates;
@@ -44,7 +51,7 @@ std::string declarationPathFor(
     for (const auto &candidate : declarationCandidatesFor(module, ctx)) {
         std::error_code ec;
         if (std::filesystem::is_regular_file(candidate, ec)) {
-            return candidate;
+            return camel::utils::pathToUtf8(candidate);
         }
     }
     return {};
@@ -130,7 +137,11 @@ std::string moduleDeclarationPath(
 
 std::vector<std::string> moduleDeclarationCandidates(
     const std::string &module, const camel::core::context::context_ptr_t &ctx) {
-    return declarationCandidatesFor(module, ctx);
+    std::vector<std::string> candidates;
+    for (const auto &candidate : declarationCandidatesFor(module, ctx)) {
+        candidates.push_back(camel::utils::pathToUtf8(candidate));
+    }
+    return candidates;
 }
 
 const std::vector<PassDeclaration> &passDeclarations(

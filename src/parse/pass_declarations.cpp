@@ -20,6 +20,7 @@
 #include "camel/core/source/manager.h"
 #include "camel/parse/ast.h"
 #include "camel/parse/parse.h"
+#include "camel/utils/path.h"
 
 #include <format>
 #include <fstream>
@@ -167,7 +168,10 @@ DeclarationProblem problemOf(
 
 DeclarationFile readDeclarations(const std::string &module, const std::string &path) {
     DeclarationFile read;
-    std::ifstream in(path, std::ios::binary);
+    // The path is Camel text (UTF-8), so it reaches the file system through `pathFromUtf8`:
+    // `std::ifstream`'s narrow constructor decodes the bytes in the process code page and would
+    // open a file whose name is not the one the search found.
+    std::ifstream in(camel::utils::pathFromUtf8(path), std::ios::binary);
     if (!in) {
         read.problem = DeclarationProblem{
             std::format(
