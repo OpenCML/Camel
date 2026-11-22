@@ -71,3 +71,10 @@ slot_t __tangent_scatter_take_arr__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_init_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_last_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+// The two shaped operators of plan 2.3, step 2, whose compile-time parameter is the node's own:
+// `fill::<T, ...F>` is the FILL node kind (its kind is the target type's, its field order is
+// the call's) and `access::<T, U>` is the ACCS node kind (the position or the name is its
+// first operand). Their kernels are in operators/struct.cpp.
+slot_t __fill_value__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __access_value__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
