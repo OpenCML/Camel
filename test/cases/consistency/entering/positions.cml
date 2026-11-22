@@ -41,7 +41,7 @@ func grade(k: int): string? {
 func lift(x: int): int?! { return x }
 
 func total(xs: (int?)[]): int {
-    return xs->map<(x: int?): int => x ?? 0>->reduce<(a: int, b: int): int => a + b, 0>
+    return xs->map<func (x: int?) => int { x ?? 0 }>->reduce<func (a: int, b: int) => int { a + b }, 0>
 }
 
 func main(): int sync {
@@ -51,7 +51,7 @@ func main(): int sync {
     println(which(5), which(opt), which(null))
     println(first_or(5, 0), first_or(opt, 0), first_or('a', 'z'))
     // a function value
-    let f = (x: int?, y: string!): string => string(x ?? -1) + (y !! '?')
+    let f = func (x: int?, y: string!) => string { string(x ?? -1) + (y !! '?') }
     println(f(1, 'a'), f(null, 'b'))
     // annotated let
     let a: int? = 5

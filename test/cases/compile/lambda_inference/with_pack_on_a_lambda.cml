@@ -22,7 +22,7 @@ func apply(g: <w: float> (x: float) => float): float {
 // The lambda writes the pack and the position gives it `w`; the body forwards the pack to `g`'s own,
 // so what `g` is called with is `ws` and not a name the caller of `through` chose.
 func through(g: <w: float> (x: float) => float): <w: float> (x: float) => float {
-    return <...ws> (x) => g<...ws>(x)
+    return func <...ws> (x) { g<...ws>(x) }
 }
 
 with <w: float>
@@ -31,9 +31,9 @@ func scaled(x: float): float {
 }
 
 func main(): int sync {
-    let named = apply((x) => x * w)
+    let named = apply(func (x) { x * w })
     let packed = through(scaled)<2.0>(3.0)
-    let (square, pullback) = vjp((x: float) => x * x)(3.0)
+    let (square, pullback) = vjp(func (x: float) { x * x })(3.0)
     let slope = pullback(1.0).0
     println(`named={:.17f} packed={:.17f}`->format<named, packed>)
     println(`square value={:.17f} slope={:.17f}`->format<square, slope>)

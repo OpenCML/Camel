@@ -47,7 +47,7 @@ func r5(a6: int, a7: float, a8: float): float {
     return if (a6 <= 1) then a8 else {
         let n9 = r5(a6 - 1, 0.25, a8);
         let n10 = r5(a6 - 2, r1(9, -4.75), a8);
-        return [3, a6, 10]->reduce<(p11: float, p12: int): float => if false then n10 else n9, a8>;
+        return [3, a6, 10]->reduce<func (p11: float, p12: int) => float { if false then n10 else n9 }, a8>;
     };
 }
 
@@ -59,18 +59,18 @@ func e16(var c17: int[]): float sync {
     c17 = (if true then {
         let n18 = r5(2, 1.5, 2.0);
         return [3, 1, 12, 4];
-    } else [4, 4, 3])->reduce<(q36: int[], p19: int): int[] => concat(q36, [f13([10, p19], (p20: bool, p21: float): float => r1(6, p21))]), c17>;
+    } else [4, 4, 3])->reduce<func (q36: int[], p19: int) => int[] { concat(q36, [f13([10, p19], func (p20: bool, p21: float) => float { r1(6, p21) })]) }, c17>;
     func g22(a23: int, a24: bool): int sync {
         println('L1 {}'->format<a24>);
         let n51 = concat(c17, [c17[1] + (if (len(c17) > 1) then c17[1] else 4)]);
-        return (if a24 then ['cd', 'yz'] else ['b'])->reduce<(p25: int, p26: string): int => [-0.5, 3.0]->reduce<(p27: int, p28: float): int => if a24 then 100 else p25, 31>, a23>;
+        return (if a24 then ['cd', 'yz'] else ['b'])->reduce<func (p25: int, p26: string) => int { [-0.5, 3.0]->reduce<func (p27: int, p28: float) => int { if a24 then 100 else p25 }, 31> }, a23>;
     };
     return (0.0 * 0.25) / 2.0;
 }
 
 func w29(a30: int, var c31: int): int sync {
     return if (a30 <= 0) then sync {
-        c31 = f13([a30, 7, 2], (p32: bool, p33: float): float => p33) % 1000;
+        c31 = f13([a30, 7, 2], func (p32: bool, p33: float) => float { p33 }) % 1000;
         return match a30 {
             case 0 => -7
             case _ => a30
@@ -90,18 +90,18 @@ func w29(a30: int, var c31: int): int sync {
 func main(): int sync {
     let n35 = int(get_env('PROGEN_I0') ?? '');
     let n36 = int(get_env('PROGEN_I1') ?? '');
-    let n38 = (if (if false then true else false) then concat([n36, 5, n36, n35], [n35]) else concat([n35, n36, -7, n36], [n35, n36]))->map<(p37: int): int => -2>;
+    let n38 = (if (if false then true else false) then concat([n36, 5, n36, n35], [n35]) else concat([n35, n36, -7, n36], [n35, n36]))->map<func (p37: int) => int { -2 }>;
     var v41 = (match n36 {
         case -1 => 4
         case _ => 0
-    }, f13(n38, (p39: bool, p40: float): float => p40 - 4.75));
+    }, f13(n38, func (p39: bool, p40: float) => float { p40 - 4.75 }));
     if (!false) || (false || true) then sync {
         println('L3 {} {}'->format<v41, v41>);
         v41 = (len(n38), v41.1);
         null;
     } else sync {
         println('L4 {} {}'->format<n36, v41>);
-        let h44 = (p42: int): int => sync {
+        let h44 = func (p42: int) => int sync {
             let n43 = { n: 100, tag: 'b' + 'm', w: 10.0 };
             return match n35 {
                 case 1 => -1
@@ -119,7 +119,7 @@ func main(): int sync {
                 case 1 => string(10)
                 case _ => {
                     let n45 = true;
-                    return ([false, true, n45]->map<(p46: bool): string => 'r:{},{:.1f}{},'->format<'pq', 0.5, n35>>)->join<''>;
+                    return ([false, true, n45]->map<func (p46: bool) => string { 'r:{},{:.1f}{},'->format<'pq', 0.5, n35> }>)->join<''>;
                 }
             };
             return n36 % 10;
@@ -129,7 +129,7 @@ func main(): int sync {
         let n49 = if true then [{ x: n35, y: 0 }, { x: n35, y: n48 }] else [{ x: n48, y: 1 }, { x: n35, y: -7 }];
         let n50 = if true then (0.5, n38) else (1.0, [-2]);
         return if true then ('ab', n35) else ('cd', n35);
-    } else (if true then 'a' else 'b', f13([n48, 5], (p51: bool, p52: float): float => p52));
+    } else (if true then 'a' else 'b', f13([n48, 5], func (p51: bool, p52: float) => float { p52 }));
     println('L6 {} {}'->format<n38, n35>);
     println('L7 {}'->format<n48>);
     println('L8 {}'->format<n53>);

@@ -17,14 +17,14 @@ func f1(a2: string, a3: (a0: int) => int): string {
 
 func r10(a11: int, a12: string): string {
     return if false then 'm' else {
-        return f1(if false then a12 else '', (p14: int): int => {
+        return f1(if false then a12 else '', func (p14: int) => int {
             return 0;
         });
     };
 }
 
 func main(): int sync {
-    let n41 = (p39: string, p40: float): int => 0;
+    let n41 = func (p39: string, p40: float) => int { 0 };
     println('');
     let n57 = if false then sync {
         let n56 = n41(r10(5, 'yz'), 2.0);

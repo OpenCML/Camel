@@ -27,7 +27,7 @@ func apply(f: (x: int) => void, v: int) {
 func main(): int sync {
     let r = state::ref(1)
     let before = state::get(r)
-    apply((x: int) => { let _ = state::set(r, x + before) }, 4)
+    apply(func (x: int) { let _ = state::set(r, x + before) }, 4)
     println(before, state::get(r))
     return 0
 }

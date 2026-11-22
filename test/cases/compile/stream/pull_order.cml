@@ -15,7 +15,7 @@ func lines(n: int): int.. {
 }
 
 func step(n: int): () => (int, int..)? {
-    return () => sync {
+    return func () sync {
         println("read", n)
         if n > 0 then (n, step(n - 1)) else null
     }

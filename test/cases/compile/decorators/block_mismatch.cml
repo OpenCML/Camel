@@ -4,7 +4,7 @@
  */
 
 func twice(f: (x: int) => int): (x: int) => int {
-    return (x: int) => f(f(x))
+    return func (x: int) { f(f(x)) }
 }
 
 func d(x: float): float {

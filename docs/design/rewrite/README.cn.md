@@ -109,7 +109,7 @@ import { rewrite, saturate, extract, seq, fixpoint, try, within } from graph
 
 let simplify = fixpoint<rewrite<[mul_one, sub_self, fold_mul]>, 20>   // 反复直到不变，至多 20 轮
 let optimize = seq<simplify, saturate<algebra_rules, budget>, extract<gpu_cost>>
-let only_hot = within<(n) => has_tag(n, hot), optimize>               // 只作用于带 #hot 的节点
+let only_hot = within<func (n) { has_tag(n, hot) }, optimize>               // 只作用于带 #hot 的节点
 ```
 
 | 组合子 | 含义 |
@@ -180,7 +180,7 @@ fact range: Interval {
 逐级降低之后要求图满足某种条件，例如"不再有高层算子"：
 
 ```camel
-let lowered = seq<lower_to_tiles, legal<(n) => is_tiles_op(n)>>(f)
+let lowered = seq<lower_to_tiles, legal<func (n) { is_tiles_op(n) }>>(f)
 ```
 
 `legal<pred>` 是标准库函数：检查每个节点满足条件，否则返回列出违规节点（带源码位置）的错误值。不增加语法。

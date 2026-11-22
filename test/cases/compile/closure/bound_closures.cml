@@ -6,10 +6,10 @@
 func main(): int sync {
     let k = 3
     let scale = 2.5
-    let plain = (x: int): int => { return x * 3 }
-    let captured = (x: int): int => { return x * k }
-    let captured_float = (x: float): float => { return x * scale }
-    let bound = <b: int> (x: int): int => { return x * k + b }
+    let plain = func (x: int) => int { return x * 3 }
+    let captured = func (x: int) => int { return x * k }
+    let captured_float = func (x: float) => float { return x * scale }
+    let bound = func <b: int> (x: int) => int { return x * k + b }
     let a = plain(2)
     let c = captured(2)
     let f = captured_float(2.0)

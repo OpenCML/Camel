@@ -12,7 +12,7 @@ import { plain, mark } from test_attrs
 
 /// A decorator of the program: the function, its result doubled.
 func doubled(f: () => int): () => int {
-    return () => f() * 2
+    return func () { f() * 2 }
 }
 
 func value_of(x: int): int {

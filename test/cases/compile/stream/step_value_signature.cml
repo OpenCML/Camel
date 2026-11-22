@@ -6,7 +6,7 @@
  */
 
 func main(): int sync {
-    let s: int.. = (x: int) => x
+    let s: int.. = func (x: int) { x }
     println(0)
     return 0
 }

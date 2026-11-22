@@ -460,6 +460,12 @@ void ParserImpl::parseStmt() {
     case TK::KwYield:
         return parseRetStmt();
     case TK::KwFunc:
+        // `func` followed by a parameter list is a lambda -- a value, not a declaration
+        // (design principles 4.4). Everything else after `func` is a declaration's head.
+        if (peek(1) == TK::LParen || peek(1) == TK::Lt || peek(1) == TK::LAngle) {
+            return parseExpr();
+        }
+        return parseFuncDecl();
     case TK::KwWith:
     case TK::KwExport:
         return parseFuncDecl();

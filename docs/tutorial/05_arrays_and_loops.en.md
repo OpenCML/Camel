@@ -28,9 +28,9 @@ a location (chapter 7).
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x) => x * x>
-    let evens = squares->filter<(x) => x % 2 == 0>
-    let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
+    let squares = xs->map<func (x) { x * x }>
+    let evens = squares->filter<func (x) { x % 2 == 0 }>
+    let total = evens->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 
     println(xs)
     println(squares)
@@ -42,7 +42,7 @@ func main(): int sync {
     println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<func (s) sync { println('item', s) }>
     return 0
 }
 ```
@@ -139,12 +139,12 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = (0..8)->map<(i) => next_key()->randint<0, 100>>
+    let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = (0..8)->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
+    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0:0]>
     println(ordered)
     return 0
 }
@@ -174,12 +174,12 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = (0..8)->map<(i) => next_key()->randint<0, 100>>
+    let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = (0..8)->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
+    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0:0]>
     println(ordered)
     return 0
 }
@@ -211,14 +211,14 @@ import { any, flat_map, sort_by, take } from array
 // The words of one line: lower case, punctuation removed, empty pieces dropped.
 func words_of(line: string): string[] {
     let plain = line->to_lower->replace<',', ' '>->replace<'.', ' '>
-    return plain->split<' '>->filter<(w) => len(w) > 0>
+    return plain->split<' '>->filter<func (w) { len(w) > 0 }>
 }
 
 // `counts` with one more for `w`, adding `w` when it is new.
 func bump(counts: (string, int)[], w: string): (string, int)[] {
-    let seen = counts->any<(e: (string, int)): bool => e.0 == w>
+    let seen = counts->any<func (e: (string, int)) => bool { e.0 == w }>
     let rows = if seen then counts else concat(counts, [(w, 0)])
-    return rows->map<(e: (string, int)): (string, int) => if e.0 == w then (e.0, e.1 + 1) else e>
+    return rows->map<func (e: (string, int)) => (string, int) { if e.0 == w then (e.0, e.1 + 1) else e }>
 }
 
 func show(e: (string, int)): string {
@@ -233,8 +233,8 @@ func main(): int sync {
 
     // Cut the text into lines, and the lines into words.
     let lines = text->split<'\n'>
-        ->map<(l) => trim(l)>
-        ->filter<(l) => len(l) > 0>
+        ->map<func (l) { trim(l) }>
+        ->filter<func (l) { len(l) > 0 }>
     let words = lines->flat_map<words_of>
     println('lines:', len(lines), 'words:', len(words))
 
@@ -245,8 +245,8 @@ func main(): int sync {
     // sort_by is stable: ordering by word first and by count second leaves the words of one count
     // in alphabetical order. The negated count puts the largest first.
     let ranked = counts
-        ->sort_by<(e: (string, int)): string => e.0>
-        ->sort_by<(e: (string, int)): int => 0 - e.1>
+        ->sort_by<func (e: (string, int)) => string { e.0 }>
+        ->sort_by<func (e: (string, int)) => int { 0 - e.1 }>
     println('top 5:')
     println(ranked->take<5>->map<show>->join<'\n'>)
     return 0

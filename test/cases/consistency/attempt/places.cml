@@ -12,7 +12,7 @@ func top(d: int): int { return mid(d) * 2 }
 func arm(d: int): int { return if d > 5 then d else 30 / d }
 
 func divider(d: int): (x: int) => int {
-    return (x: int): int => x / d
+    return func (x: int) => int { x / d }
 }
 
 func inv(x: int): int { return 60 / (x - 3) }
@@ -39,14 +39,14 @@ func main(): int sync {
     let by0 = divider(0)
     println(kind(attempt(by2)(10)))
     println(kind(attempt(by0)(10)))
-    println(kind(attempt((x: int): int => x / (x - x))(5)))
+    println(kind(attempt(func (x: int) => int { x / (x - x) })(5)))
 
-    println(attempt(() => (4..8)->map<inv>)() !! [-1])
-    println(attempt(() => (0..8)->map<inv>)() !! [-1])
-    println(attempt(() => (3..8)->filter<keep>)() !! [-2])
-    println(attempt(() => (0..8)->filter<keep>)() !! [-2])
-    println(attempt(() => (4..8)->reduce<step, 0>)() !! -3)
-    println(attempt(() => (0..8)->reduce<step, 0>)() !! -3)
+    println(attempt(func () { (4..8)->map<inv> })() !! [-1])
+    println(attempt(func () { (0..8)->map<inv> })() !! [-1])
+    println(attempt(func () { (3..8)->filter<keep> })() !! [-2])
+    println(attempt(func () { (0..8)->filter<keep> })() !! [-2])
+    println(attempt(func () { (4..8)->reduce<step, 0> })() !! -3)
+    println(attempt(func () { (0..8)->reduce<step, 0> })() !! -3)
 
     println(kind(attempt(spin)(0, 400, 0)))
     println(kind(attempt(spin)(0, 1000, 0)))

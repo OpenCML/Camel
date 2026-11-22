@@ -104,7 +104,7 @@ func main(): int sync {
     // The written conversion and the tensor cast give the same element as the literal: the
     // rounding is one, and it is the store rounding of the element type, not the f32 one.
     let tenth: f32[] = [0.1]
-    let widenedTenth = tenth->map<(x: f32) => bf16(x)>
+    let widenedTenth = tenth->map<func (x: f32) { bf16(x) }>
     println(to_array(to_bytes(bf16(tenth))))
     println(to_array(to_bytes(f16(tenth))))
     println(widenedTenth[0], bitsOfBf16(widenedTenth[0])[0], bitsOfBf16(widenedTenth[0])[1], string(widenedTenth[0]))

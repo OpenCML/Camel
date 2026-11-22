@@ -44,18 +44,18 @@ import { to_array } from bytes
 /// The fold written with an f32 accumulator: every addition rounds. This is "round after every
 /// step", which is what a floating-point reduction must not do (7.3).
 func foldStep(xs: f32[]): f32 {
-    return xs->reduce<(acc: f32, item: f32): f32 => acc + item, f32(0.0)>
+    return xs->reduce<func (acc: f32, item: f32) => f32 { acc + item }, f32(0.0)>
 }
 
 /// The same elements in an f64 accumulator, from +0 in order: the exact sum, before the one
 /// rounding into the element type.
 func foldF64(xs: f32[]): float {
-    return xs->reduce<(acc: float, item: f32): float => acc + float(item), 0.0 as float>
+    return xs->reduce<func (acc: float, item: f32) => float { acc + float(item) }, 0.0 as float>
 }
 
 /// The elements widened to f64: the reference of `sum` over the f64 image of the vector.
 func widened(xs: f32[]): f64[] {
-    return xs->map<(x: f32) => float(x)>
+    return xs->map<func (x: f32) { float(x) }>
 }
 
 /// The four bytes of one f32 value, through a one-element f32 tensor.
@@ -95,7 +95,7 @@ func main(): int sync {
     let bodyMax: (xs: f32[...]) => f32 = max
 
     // 2^24 then 1025 ones: the exact sum is 16778241 and the one f32 rounding is 16778240.
-    let a = (0..1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
+    let a = (0..1026)->map<func (i: int) { if i == 0 then f32(16777216.0) else f32(1.0) }>
     let sumA = sum(a)
     let refA = foldF64(a)
     let onceA = sumA == f32(refA) && f32(refA) == f32(16778240.0) && sumA != foldStep(a)

@@ -5,6 +5,6 @@ func filter(xs: int[]): string { return 'my filter' }
 func main(): int sync {
     let xs = [1, 2, 3, 4]
     println([x * x for x in xs if x % 2 == 0], [x + 1 for x in xs])
-    println(xs->map<(x: int) => x>, xs->filter<(x: int) => true>)
+    println(xs->map<func (x: int) { x }>, xs->filter<func (x: int) { true }>)
     return 0
 }

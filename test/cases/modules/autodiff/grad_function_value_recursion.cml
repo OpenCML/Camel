@@ -9,7 +9,7 @@ func iterate(f: (v: float) => float, n: int, x: float): float {
 with <x: float>
 func loss(): float {
     let s = x * 0.5
-    return iterate((v: float): float => v * s + 1.0, 3, x)
+    return iterate(func (v: float) => float { v * s + 1.0 }, 3, x)
 }
 
 func main(): int sync {

@@ -4,7 +4,7 @@ func main(): int sync {
         v65 = 'k9';
         return (false, '');
     };
-    let h96 = (p91: int): int => sync {
+    let h96 = func (p91: int) => int sync {
         let n92 = [v65, 'ab']->join<','>;
         return 0;
     };

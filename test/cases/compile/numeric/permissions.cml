@@ -17,7 +17,7 @@ func fused(a: float, b: float, c: float, d: float): float {
 
 #[reassociate]
 func nested(k: float): float {
-    let f = (v: float) => v * k + 0.5
+    let f = func (v: float) { v * k + 0.5 }
     let z = if k > 0.0 then k * 2.0 else k / 2.0
     #[contract]
     {

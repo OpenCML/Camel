@@ -29,7 +29,7 @@ func isArmMul(n: Node): bool spelling {
 }
 
 func pickNodes::<F>(p: F): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == 'pick'>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == 'pick' }>
     return nodes(found[0])
 }
 

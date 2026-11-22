@@ -266,9 +266,9 @@ Camel 里没有“提前返回”。让分支成为函数体的最后一个表�
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x) => x * x>
-    let evens = squares->filter<(x) => x % 2 == 0>
-    let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
+    let squares = xs->map<func (x) { x * x }>
+    let evens = squares->filter<func (x) { x % 2 == 0 }>
+    let total = evens->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 
     println(xs)
     println(squares)
@@ -280,7 +280,7 @@ func main(): int sync {
     println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<func (s) sync { println('item', s) }>
     return 0
 }
 ```
@@ -311,12 +311,12 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = (0..8)->map<(i) => next_key()->randint<0, 100>>
+    let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = (0..8)->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
+    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0:0]>
     println(ordered)
     return 0
 }
@@ -526,7 +526,7 @@ func apply_twice(f: (x: int) => int, x: int): int {
 }
 
 func adder(n: int): (x: int) => int {
-    return (x: int): int => x + n
+    return func (x: int) => int { x + n }
 }
 
 func main(): int sync {
@@ -537,10 +537,10 @@ func main(): int sync {
     println(add5(10))
 
     let ops = [inc, dbl]                     // functions in an array
-    println(ops->map<(f: (x: int) => int): int => f(10)>)
+    println(ops->map<func (f: (x: int) => int) => int { f(10) }>)
 
     let total = state::ref(0)                // shared state: a handle a closure may capture
-    [1, 2, 3]->foreach<(x) => sync { state::set(total, state::get(total) + x) }>
+    [1, 2, 3]->foreach<func (x) sync { state::set(total, state::get(total) + x) }>
     println(state::get(total))
     return 0
 }
@@ -581,7 +581,7 @@ func main(): int sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(swap((1, 2)), swap(('x', 'y')))
-    println(my_map([1, 2, 3], (x: int): string => string(x) + '!'))
+    println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
     return 0
 }
 ```
@@ -816,9 +816,9 @@ import { mean } from array
 
 func main(): int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
-    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w) => trim(w)>
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<func (w) { trim(w) }>
     println(words)
-    println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
+    println(words->unique->sort_by<func (w: string) => int { len(w) }>->take<2>)
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
@@ -828,7 +828,7 @@ func main(): int sync {
 
     // Arrays and numbers.
     let xs = [3, -1, 4, -1, 5]
-    println(sum(xs), reverse(xs), xs->map<(x) => abs(x)>)
+    println(sum(xs), reverse(xs), xs->map<func (x) { abs(x) }>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println('{:.4f}'->format<pi>)
     return 0

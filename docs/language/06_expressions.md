@@ -24,7 +24,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 - 数组字面量的元素类型必须相同。元素是**有期望类型的位置**（[3.3.1](03_data_model.md#331-数组)）：有上下文时每个元素取那个类型，`let xs: float[] = [1, 2.0]` 的元素都是 `float`；没有上下文时，同一个数组里的数字字面量取最宽的一种（整数 < 小数），所以 `[1, 2.0]` 是 `float[]`（与 Go 的无类型常量相同）。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
 - 结构体字面量的键是标识符。字段同样是有期望类型的位置：`let p: P = { a: 1, b: 2.0 }`（`P = { a: float, b: float }`）里 `1` 是 `float`。字段的值写成名字时是变量，不转换，类型不符就是 `SemanticDiag::DeclaredTypeMismatch`。
-- **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
+- **列表推导** `[e for x in xs if c]` 就是 `xs->filter<func (x) { c }>->map<func (x) { e }>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
 - **展开不在语言里**：写在字面量里的 `...xs` 是普通语法错误（`...` 只出现在相对模块名 `import ...模块` 里）。要合并数组写 `concat(xs, ys)`。
 
 ### 6.2.1 格式化字符串
@@ -109,9 +109,9 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let total = (1..6)
-        ->map<(x) => x * x>
-        ->filter<(x) => x % 2 == 1>
-        ->reduce<(acc: int, x: int): int => acc + x, 0>
+        ->map<func (x) { x * x }>
+        ->filter<func (x) { x % 2 == 1 }>
+        ->reduce<func (acc: int, x: int) => int { acc + x }, 0>
     println(`total = ${total}`)
     return 0
 }
@@ -598,29 +598,29 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 
 ## 6.9 lambda 与函数类型
 
-lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略；体是一个表达式或一个块：
+lambda 就是一个没有名字的函数声明：`func (形参) { 体 }`，返回类型写 `=> 类型`，可以省略。花括号永远是函数体，最后一条语句就是它的值：
 
 <!-- camel-snippet: fragment: a list of lambda forms; total comes from the surrounding example -->
 
 ```cml
-(x: int) => x + 1
-(x: int): int => { let y = x * 2; return y + 1 }
-(x) => x + 1                                    // 形参类型从所在位置推出（见下）
-(s: string) => sync { println(s) }              // 同步块作函数体
-(x: int) => sync { total = total + x }          // 写入被捕获的变量：函数体写成同步块
+func (x: int) { x + 1 }
+func (x: int) => int { let y = x * 2; y + 1 }
+func (x) { x + 1 }                                    // 形参类型从所在位置推出（见下）
+func (s: string) sync { println(s) }            // 同步块作函数体
+func (x: int) sync { total = total + x }        // 写入被捕获的变量：函数体写成同步块
 ```
 
 函数类型写作 `(x: T) => R`，形参要写名字：`(x: int) => int`、`(acc: int, x: int) => int`。
 
 **形参类型从哪里来。** lambda 不写类型的形参，其类型从 lambda 所在位置的函数类型推出，省略的返回类型同样如此。这样的位置有三种：
 
-- 实参：调用一个形参是函数类型的函数，`with` 实参同理。内建函数也一样，它们的签名写在标准库的 `lib/std/prelude.cml` 里：`xs->filter<(x) => x > 0>`、`xs->foreach<(x) => println(x)>` 的 `x` 是 `xs` 的元素类型。`->` 之后直接写的 lambda 取左边那个值的类型（`x->(v) => v + 1`）。
+- 实参：调用一个形参是函数类型的函数，`with` 实参同理。内建函数也一样，它们的签名写在标准库的 `lib/std/prelude.cml` 里：`xs->filter<func (x) { x > 0 }>`、`xs->foreach<func (x) { println(x) }>` 的 `x` 是 `xs` 的元素类型。`->` 之后直接写的 lambda 取左边那个值的类型（`x->func (v) { v + 1 }`）。
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
   ```cml
   func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
-  apply_twice((x) => x + 1, 3)         // x: int
+  apply_twice(func (x) { x + 1 }, 3)   // x: int
   ```
 
 - 带标注的绑定：`let` 或 `var` 的类型是函数类型；往这样的变量再赋一个新值同理。
@@ -628,16 +628,16 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
   <!-- camel-snippet: fragment: bindings shown inside the block they would be written in -->
 
   ```cml
-  let g: (x: int) => int = (x) => x + 1    // x: int
-  var h: (x: int) => int = (x) => x - 1
-  h = (x) => x + 100                       // x: int
+  let g: (x: int) => int = func (x) { x + 1 }    // x: int
+  var h: (x: int) => int = func (x) { x - 1 }
+  h = func (x) { x + 100 }                       // x: int
   ```
 
 - 返回值：函数的结果类型是函数类型。
 
   ```cml
   func adder(n: int): (x: int) => int {
-      return (x) => x + n              // x: int，返回类型也是 int
+      return func (x) { x + n }              // x: int，返回类型也是 int
   }
   ```
 
@@ -645,16 +645,16 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
 
   ```cml
   func main(): int sync {
-      let a = 5 -> (y) => y + 1                  // y: int
+      let a = 5 -> func (y) { y + 1 }                  // y: int
       println(a)
       return 0
   }
   ```
 
-期望的类型确定不了的形参是一个错误（`SemanticDiag::LambdaParameterWithoutType`，指到那个形参）：lambda 不在这样的位置上（`let g = (x) => x + 1`、`((x) => x)(1)`），期望的类型不是函数类型，形参个数对不上，期望的类型在 lambda 写的某个形参之前就结束了（它有的形参比位置上要少），或者期望的类型还带着这个位置绑定不了的类型变量。没有期望类型时它不会变成一个 `any`（5.10）：写出类型即可。
+期望的类型确定不了的形参是一个错误（`SemanticDiag::LambdaParameterWithoutType`，指到那个形参）：lambda 不在这样的位置上（`let g = func (x) { x + 1 }`、`(func (x) { x })(1)`），期望的类型不是函数类型，形参个数对不上，期望的类型在 lambda 写的某个形参之前就结束了（它有的形参比位置上要少），或者期望的类型还带着这个位置绑定不了的类型变量。没有期望类型时它不会变成一个 `any`（5.10）：写出类型即可。
 
-- 推断不改变重载决议。lambda 在实参位置上推出类型这件事，与调用选中哪个重载无关：带类型的 lambda 仍按它自己的类型选重载（`pick((x: int) => x + 1, 1)` 与只有这一个重载时选中的相同）；不带类型的 lambda 面对一组重载时没有唯一的期望类型，于是报上面那个错误，而不是替调用挑一个重载。
-- 泛型高阶函数（`tree_reduce`、`map` 这类形参类型里带类型变量的）目前推不出来：实参位置的期望类型要等泛型实例化，而 lambda 总在实例化之前降低，所以那里的形参类型要写出来（`tree_reduce<(acc: int, x: int) => acc + x>(...)`）。这一项目前仍是待决问题。
+- 推断不改变重载决议。lambda 在实参位置上推出类型这件事，与调用选中哪个重载无关：带类型的 lambda 仍按它自己的类型选重载（`pick(func (x: int) { x + 1 }, 1)` 与只有这一个重载时选中的相同）；不带类型的 lambda 面对一组重载时没有唯一的期望类型，于是报上面那个错误，而不是替调用挑一个重载。
+- 泛型高阶函数（`tree_reduce`、`map` 这类形参类型里带类型变量的）目前推不出来：实参位置的期望类型要等泛型实例化，而 lambda 总在实例化之前降低，所以那里的形参类型要写出来（`tree_reduce<func (acc: int, x: int) { acc + x }>(...)`）。这一项目前仍是待决问题。
 
 **函数是值。** 函数的名字可以用在任何能写值的位置：作实参、`with` 实参、`let g = f`、`return f`、数组或元组的元素、分支臂的值。
 
@@ -667,14 +667,14 @@ func apply_twice(f: (x: int) => int, x: int): int {
 }
 
 func adder(n: int): (x: int) => int {
-    return (x: int): int => x + n          // 捕获 n
+    return func (x: int) => int { x + n }          // 捕获 n
 }
 
 func main(): int sync {
     let g = inc
     let add5 = adder(5)
     println(g(1), apply_twice(dbl, 3), add5(10))
-    println([inc, dbl]->map<(f: (x: int) => int): int => f(10)>)
+    println([inc, dbl]->map<func (f: (x: int) => int) => int { f(10) }>)
     return 0
 }
 ```
@@ -702,10 +702,10 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let xs = 1..6
-    println(xs->map<(x) => x * x>)
-    println(xs->filter<(x) => x % 2 == 0>)
-    println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)
-    xs->filter<(x) => x > 3>->foreach<(x) => sync { println('item', x) }>
+    println(xs->map<func (x) { x * x }>)
+    println(xs->filter<func (x) { x % 2 == 0 }>)
+    println(xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>)
+    xs->filter<func (x) { x > 3 }>->foreach<func (x) sync { println('item', x) }>
     return 0
 }
 ```
@@ -722,7 +722,7 @@ item 5
 
 ### 6.10.1 故障隔离 `attempt`
 
-错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值；除零、下标越界、递归过深等是故障，带位置终止程序，`!!` 接不住它。`attempt` 是**函数变换**：`attempt(f)` 得到一个函数，参数与 `f` 相同，结果类型是 `f` 的结果加上 `!`；调用它是 `attempt(f)(a, b)`。这次调用里（包括它直接或间接调用的一切）发生的故障，在边界处变成一个错误值，再用 `!!`、`->` 或 `match ... case error e` 处理。任意表达式用闭包包起来：`attempt(() => expr)()`。这个函数值可以像别的函数值一样传递、放进尖括号：`rows->map<attempt(parse_row)>`。
+错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值；除零、下标越界、递归过深等是故障，带位置终止程序，`!!` 接不住它。`attempt` 是**函数变换**：`attempt(f)` 得到一个函数，参数与 `f` 相同，结果类型是 `f` 的结果加上 `!`；调用它是 `attempt(f)(a, b)`。这次调用里（包括它直接或间接调用的一切）发生的故障，在边界处变成一个错误值，再用 `!!`、`->` 或 `match ... case error e` 处理。任意表达式用闭包包起来：`attempt(func () { expr })()`。这个函数值可以像别的函数值一样传递、放进尖括号：`rows->map<attempt(parse_row)>`。
 
 ```cml
 func risky(d: int): int { return 100 / d }
@@ -730,7 +730,7 @@ func risky(d: int): int { return 100 / d }
 func main(): int sync {
     println(attempt(risky)(4) !! -1)
     println(attempt(risky)(0) !! -1)
-    println(attempt(() => [1, 0, 4]->map<risky>)() !! [-1])
+    println(attempt(func () { [1, 0, 4]->map<risky> })() !! [-1])
     let r = attempt(risky)(0)
     println(match r {
         case error e => e.kind + ' at ' + e.location

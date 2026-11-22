@@ -16,8 +16,8 @@ func main(): int sync {
 
     let start = now()
     let prices = (0..workers)
-        ->map<(i: int): float => asian_call_price(paths_per_worker, steps, base_seed + i * 7919)>
-    let total = prices->reduce<(acc: float, cur: float): float => acc + cur, 0.0>
+        ->map<func (i: int) => float { asian_call_price(paths_per_worker, steps, base_seed + i * 7919) }>
+    let total = prices->reduce<func (acc: float, cur: float) => float { acc + cur }, 0.0>
     let duration = now() - start
     let price = total / float(workers)
 

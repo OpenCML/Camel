@@ -396,7 +396,6 @@ class ParserImpl {
     bool pairStartsAt(uint32_t n) const {
         return peek(n) == TK::Identifier && peek(n + 1) == TK::Colon;
     }
-    bool lambdaAhead() const;
     /// A shape comprehension is ahead: a name path, `{`, and the `static for` that fills it.
     bool shapeCompAhead() const;
 

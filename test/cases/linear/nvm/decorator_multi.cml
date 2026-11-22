@@ -4,14 +4,14 @@
 
 with <k: int>
 func add_n(f: (x: int) => int): (x: int) => int {
-    return (x: int): int => {
+    return func (x: int) => int {
         return f(x) + k
     }
 }
 
 with <m: int>
 func mul_n(f: (x: int) => int): (x: int) => int {
-    return (x: int): int => {
+    return func (x: int) => int {
         return f(x) * m
     }
 }

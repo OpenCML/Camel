@@ -7,8 +7,8 @@ import state
 
 func counter(start: int): () => int sync {
     let n = state::ref(start)
-    return (): int => sync {
-        return state::update(n, (x: int) => x + 1)
+    return func () => int sync {
+        return state::update(n, func (x: int) { x + 1 })
     }
 }
 

@@ -14,7 +14,7 @@ func main(): int sync {
         return 1
     } else {
         let runs = 20
-        let (average, margin_error) = perfms<runs>((): void => {
+        let (average, margin_error) = perfms<runs>(func () => void {
             fib(20)
         })
 

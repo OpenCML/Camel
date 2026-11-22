@@ -37,7 +37,7 @@ func main(): int sync {
         case _ => 'other'
     }
     println(m)
-    let f = (x: int): int => x-1
-    println(f(1), f(-1), [1, 2, 3]->map<(x: int): int => x-1>)
+    let f = func (x: int) => int { x-1 }
+    println(f(1), f(-1), [1, 2, 3]->map<func (x: int) => int { x-1 }>)
     return 0
 }

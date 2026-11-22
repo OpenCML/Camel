@@ -420,7 +420,7 @@ blockExpr  : stmtBlock | dataExpr ;
 any Formatter::visitBlockExpr(syn::Node context) { return visit(context); }
 
 /*
-funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
+funcData   : 'func' angledParams? parentParams ('=>' typeExpr)? blockExpr ;
 */
 any Formatter::visitFuncData(cst::FuncData context) {
     string result;
@@ -428,6 +428,8 @@ any Formatter::visitFuncData(cst::FuncData context) {
     const auto &angledParams = context->get<cst::AngledParams>();
     const auto &parentParams = context->get<cst::ParentParams>();
     const auto &blockExpr    = context->lastChild().node();
+
+    result += "func ";
 
     if (modifiers) {
         result += any_cast<string>(visitModifiers(modifiers)) + " ";
@@ -440,10 +442,10 @@ any Formatter::visitFuncData(cst::FuncData context) {
 
     const auto &typeExpr = context->type();
     if (typeExpr) {
-        result += ": " + any_cast<string>(visitType(typeExpr));
+        result += " => " + any_cast<string>(visitType(typeExpr));
     }
 
-    result += " => ";
+    result += " ";
 
     return result + any_cast<string>(visitBlockExpr(blockExpr));
 }

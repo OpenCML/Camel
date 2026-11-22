@@ -6,7 +6,7 @@ func operator <(a: P, b: P): bool {
 
 func main(): int sync {
     let n37 = '';
-    let h41 = (p39: int): int => sync {
+    let h41 = func (p39: int) => int sync {
         println('');
         return 0;
     };

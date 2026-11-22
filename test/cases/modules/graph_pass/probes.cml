@@ -35,7 +35,7 @@ func isString(n: Node): bool spelling {
 }
 
 func mainNodes::<F>(p: F): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == 'main'>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == 'main' }>
     return nodes(found[0])
 }
 
@@ -43,7 +43,7 @@ func mainNodes::<F>(p: F): Node[] spelling {
 export func fold_zero_adds::<F>(p: F): F! spelling sync {
     let t = open(p)
     let hits = mainNodes(p)->filter<isAddZero>
-    hits->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
+    hits->foreach<func (n: Node) { replace(t, n, inputs(n)[0]) }>
     return commit(t)
 }
 

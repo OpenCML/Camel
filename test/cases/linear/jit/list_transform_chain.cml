@@ -4,7 +4,7 @@
 
 func main(): int sync {
     let xs = 0..8
-    let ys = xs->map<(x: int): int => {
+    let ys = xs->map<func (x: int) => int {
         return x * x
     }>
     let zs = concat([100], ys[2:6])

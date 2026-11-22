@@ -19,15 +19,15 @@ func three(a: float, b: float, c: float): float {
 }
 
 rule one_rule(a: float) {
-    one(a) => (ba: float) => one(ba)
+    one(a) => func (ba: float) { one(ba) }
 }
 
 rule two_rule(a: float, b: float) {
-    two(a, b) => (ba: float, bb: float) => two(ba, bb)
+    two(a, b) => func (ba: float, bb: float) { two(ba, bb) }
 }
 
 rule three_rule(a: float, b: float, c: float) {
-    three(a, b, c) => (ba: float, bb: float, bc: float) => three(ba, bb, bc)
+    three(a, b, c) => func (ba: float, bb: float, bc: float) { three(ba, bb, bc) }
 }
 
 func main(): int sync {

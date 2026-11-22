@@ -10,7 +10,7 @@
  */
 func main(): int sync {
     let x = 2
-    let read = () => x
+    let read = func () { x }
     println(read())
     return 0
 }

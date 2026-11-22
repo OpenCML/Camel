@@ -54,9 +54,9 @@ func main(): int sync {
     let dl = grad(loss)
     let dn_grad = grad(negative_loss)
     let dk_grad = grad(keep_loss)
-    let df = (v: f32[...]): f32[...] => dl<v>()
-    let dn = (v: f32[...]): f32[...] => dn_grad<v>()
-    let dk = (v: f32[...]): f32[...] => dk_grad<v>()
+    let df = func (v: f32[...]) => f32[...] { dl<v>() }
+    let dn = func (v: f32[...]) => f32[...] { dn_grad<v>() }
+    let dk = func (v: f32[...]) => f32[...] { dk_grad<v>() }
     save_npy(df(a), folder + '/expand_cpu.npy')
     save_npy(download(run_preferred_resident<df>(a)), folder + '/expand_gpu.npy')
     save_npy(dn(a), folder + '/negative_cpu.npy')
@@ -65,12 +65,12 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<dk>(a)), folder + '/keep_gpu.npy')
     let e = zeros::<f32>([0, 4, 2])
     let de_grad = grad(empty_loss)
-    let de = (v: f32[...]): f32[...] => de_grad<v>()
+    let de = func (v: f32[...]) => f32[...] { de_grad<v>() }
     save_npy(de(e), folder + '/empty_cpu.npy')
     save_npy(download(run_preferred_resident<de>(e)), folder + '/empty_gpu.npy')
     let w = zeros::<f32>([2, 3, 4, 5])
     let dw_grad = grad(wide_loss)
-    let dw = (v: f32[...]): f32[...] => dw_grad<v>()
+    let dw = func (v: f32[...]) => f32[...] { dw_grad<v>() }
     save_npy(dw(w), folder + '/wide_cpu.npy')
     save_npy(download(run_preferred_resident<dw>(w)), folder + '/wide_gpu.npy')
     println('FIXED_INSPECT')

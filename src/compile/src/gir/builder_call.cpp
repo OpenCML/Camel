@@ -1990,18 +1990,17 @@ node_handle_t Builder::visitLinkNode(
                                     auto rejection = diags_->of(SemanticDiag::ArgumentsRejected)
                                                          .atOrigin(arguments[i].expr->origin());
                                     // The first ':' outside every bracket ends the expression,
-                                    // so the ':' of a lambda's return type can be read as the
-                                    // start of the specification. The fix is parentheses around
-                                    // the lambda (item 1; the parse-side twin is in
-                                    // ast/builder.cpp, for the case where that cut leaves the
-                                    // expression incomplete).
+                                    // so a ':' in a lambda written there is read as the start of
+                                    // the specification. The fix is parentheses around the lambda
+                                    // (item 1; the parse-side twin is in ast/builder_data.cpp,
+                                    // for the case where that cut leaves the expression
+                                    // incomplete).
                                     if (placeholders[i].find("=>") != std::string::npos) {
                                         rejection.note(
                                             "a lambda with a return type needs its own "
                                             "parentheses at the top level of an interpolation: "
-                                            "the ':' of the return type is read as the start of "
-                                            "the format specification. Write it as "
-                                            "${((x: int): int => x)}");
+                                            "the ':' of the format specification is read first. "
+                                            "Write it as ${(func (x: int) => int { x })}");
                                     }
                                     rejection.commit(
                                         reportGroup,

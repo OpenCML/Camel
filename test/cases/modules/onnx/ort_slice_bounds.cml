@@ -21,12 +21,12 @@ func main(): string! sync {
     let x = reshape<[3]>([1.0, 1.0, 1.0] as f32[])
     println(head(x))
     if (get_env('MODE') ?? '') == 'branch' then {
-        return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => branch(x), x) {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { branch(x) }, x) {
             case error e => { return e }
             case v => 'exported'
         }
     } else {
-        return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => head(x), x) {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { head(x) }, x) {
             case error e => { return e }
             case v => 'exported'
         }

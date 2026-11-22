@@ -15,9 +15,9 @@ func render(snake: Point[]): void sync {
     print('\x1B[2J\x1B[H')  // Clear screen
     let rows = 0..HEIGHT
 
-    rows->foreach<(y: int) => sync {
+    rows->foreach<func (y: int) sync {
         let cols = 0..WIDTH
-        cols->map<(x: int): string => {
+        cols->map<func (x: int) => string {
             let p = {x: x, y: y}
             return if snake->contains<p> then "O" else "."
         }>->join<"">->println

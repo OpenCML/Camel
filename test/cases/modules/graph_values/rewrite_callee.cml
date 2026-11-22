@@ -66,7 +66,7 @@ func named(label: string, g: Graph): bool spelling {
 
 /// The graph of the function `label` that `p` reaches.
 func graphNamed::<F>(p: F, label: string): Graph spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => named(label, g)>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { named(label, g) }>
     return found[0]
 }
 

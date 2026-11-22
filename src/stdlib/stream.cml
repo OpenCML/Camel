@@ -29,29 +29,29 @@ import state
 /// `null` when there is nothing more. The states are threaded, not repeated.
 /// @example loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x    // 6
 export func unfold::<S, T>(state: S, step: (state: S) => (T, S)?): T.. {
-    return () => match step(state) {
+    return func () { match step(state) {
         case null => null
         case next => (next.0, unfold(next.1, step))
-    }
+    } }
 }
 
 /// The stream with no element.
 /// @example loop n = 0 for x in empty::<int>() do n + 1    // 0
 export func empty::<T>(): T.. {
-    return unfold(0, (n: int): (T, int)? => null)
+    return unfold(0, func (n: int) => (T, int)? { null })
 }
 
 /// The elements of xs, in order.
 /// @example loop acc = 0 for x in from_array([1, 2, 3]) do acc + x    // 6
 export func from_array::<T>(xs: T[]): T.. {
-    return unfold(0, (i: int): (T, int)? => if i < len(xs) then (xs[i], i + 1) else null)
+    return unfold(0, func (i: int) => (T, int)? { if i < len(xs) then (xs[i], i + 1) else null })
 }
 
 /// x, f(x), f(f(x)), ... without end.
 /// @example 1->iterate<(x: int) => x * 2>->take<4>->collect    // [1, 2, 4, 8]
 with <f: (x: T) => T>
 export func iterate::<T>(x: T): T.. {
-    return unfold(x, (s: T): (T, T)? => (s, f(s)))
+    return unfold(x, func (s: T) => (T, T)? { (s, f(s)) })
 }
 
 // ---- transforming ----
@@ -61,20 +61,20 @@ export func iterate::<T>(x: T): T.. {
 // would hold it in its closure, and a closure cannot capture a stream (design principles 5.4) --
 // but a tuple can hold one, so the state is the stream together with a position that is not read.
 func advance::<T, U>(s: T.., step: (rest: T..) => (U, T..)?): U.. {
-    return unfold((s, 0), (st: (T.., int)): (U, (T.., int))? => match step(st.0) {
+    return unfold((s, 0), func (st: (T.., int)) => (U, (T.., int))? { match step(st.0) {
         case null => null
         case next => (next.0, (next.1, 0))
-    })
+    } })
 }
 
 /// f of every element.
 /// @example from_array([1, 2, 3])->map<(x: int) => x * 2>->collect    // [2, 4, 6]
 with <f: (x: T) => U>
 export func map::<T, U>(s: T..): U.. {
-    return advance(s, (rest: T..): (U, T..)? => match rest() {
+    return advance(s, func (rest: T..) => (U, T..)? { match rest() {
         case null => null
         case next => (f(next.0), next.1)
-    })
+    } })
 }
 
 // The first pair of the stream whose element satisfies pred, with the rest after it.
@@ -89,7 +89,7 @@ func next_where::<T>(s: T.., pred: (x: T) => bool): (T, T..)? {
 /// @example from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect    // [2, 4]
 with <pred: (x: T) => bool>
 export func filter::<T>(s: T..): T.. {
-    return advance(s, (rest: T..): (T, T..)? => next_where(rest, pred))
+    return advance(s, func (rest: T..) => (T, T..)? { next_where(rest, pred) })
 }
 
 /// The first n elements; fewer when the stream ends first, none when n is not positive. The
@@ -97,10 +97,10 @@ export func filter::<T>(s: T..): T.. {
 /// @example 1->iterate<(x: int) => x + 1>->take<3>->collect    // [1, 2, 3]
 with <n: int>
 export func take::<T>(s: T..): T.. {
-    return unfold((s, n), (st: (T.., int)): (T, (T.., int))? => if st.1 <= 0 then null else match st.0() {
+    return unfold((s, n), func (st: (T.., int)) => (T, (T.., int))? { if st.1 <= 0 then null else match st.0() {
         case null => null
         case next => (next.0, (next.1, st.1 - 1))
-    })
+    } })
 }
 
 /// The running results of folding the elements with f from init: one per element, the first
@@ -108,13 +108,13 @@ export func take::<T>(s: T..): T.. {
 /// @example from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect    // [1, 3, 6]
 with <f: (acc: A, x: T) => A, init: A>
 export func scan::<T, A>(s: T..): A.. {
-    return unfold((s, init), (st: (T.., A)): (A, (T.., A))? => match st.0() {
+    return unfold((s, init), func (st: (T.., A)) => (A, (T.., A))? { match st.0() {
         case null => null
         case next => {
             let total = f(st.1, next.0)
             (total, (next.1, total))
         }
-    })
+    } })
 }
 
 // The array with no element of type T: an empty literal states no element type, so it is bound to one.
@@ -136,7 +136,7 @@ func pull_chunk::<T>(s: T.., k: int, got: T[]): (T[], T..) {
 /// @example from_array([1, 2, 3])->chunks<2>->collect    // [[1, 2], [3]]
 with <k: int>
 export func chunks::<T>(s: T..): T[].. {
-    return advance(s, (rest: T..): (T[], T..)? => {
+    return advance(s, func (rest: T..) => (T[], T..)? {
         let got = pull_chunk(rest, k, no_elements::<T>())
         if len(got.0) == 0 then null else got
     })
@@ -145,13 +145,13 @@ export func chunks::<T>(s: T..): T[].. {
 /// The elements of two streams in pairs, until the shorter ends.
 /// @example zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect    // [(1, 'a'), (2, 'b')]
 export func zip::<T, U>(a: T.., b: U..): (T, U).. {
-    return unfold((a, b), (st: (T.., U..)): ((T, U), (T.., U..))? => match st.0() {
+    return unfold((a, b), func (st: (T.., U..)) => ((T, U), (T.., U..))? { match st.0() {
         case null => null
         case x => match st.1() {
             case null => null
             case y => ((x.0, y.0), (x.1, y.1))
         }
-    })
+    } })
 }
 
 // ---- consuming ----

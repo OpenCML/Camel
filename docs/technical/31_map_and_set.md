@@ -427,11 +427,11 @@ PRL). They are compositions of what exists, visible to passes:
 
 ```camel
 func map_values::<K, V, U>(m: Map<K, V>, f: (v: V) => U): Map<K, U> {
-    return items(m)->map<(kv: (K, V)): (K, U) => (kv.0, f(kv.1))> as Map<K, U>
+    return items(m)->map<func (kv: (K, V)) => (K, U) { (kv.0, f(kv.1)) }> as Map<K, U>
 }
 
 func filter_keys::<K, V>(m: Map<K, V>, f: (k: K) => bool): Map<K, V> {
-    return items(m)->filter<(kv: (K, V)): bool => f(kv.0)> as Map<K, V>
+    return items(m)->filter<func (kv: (K, V)) => bool { f(kv.0) }> as Map<K, V>
 }
 ```
 

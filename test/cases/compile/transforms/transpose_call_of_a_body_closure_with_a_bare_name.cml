@@ -32,7 +32,7 @@ func twice(y: float): float {
 }
 
 func f(x: float): float {
-    let h = (a: (y: float) => float, b: float) => a(b) * x
+    let h = func (a: (y: float) => float, b: float) { a(b) * x }
     return h(twice, 2.0)
 }
 

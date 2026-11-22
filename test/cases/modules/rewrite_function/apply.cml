@@ -9,7 +9,7 @@ func target(x: int): int {
 }
 
 func unit_cost(o: Op, inputs: float[]): float {
-    return 1.0 + inputs->reduce<(acc: float, c: float) => acc + c, 0.0>
+    return 1.0 + inputs->reduce<func (acc: float, c: float) { acc + c }, 0.0>
 }
 
 func main(): int sync {

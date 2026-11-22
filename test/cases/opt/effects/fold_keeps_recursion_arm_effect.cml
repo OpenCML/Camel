@@ -12,7 +12,7 @@ func visit(items: int[], i: int, cb: (x: int) => int): int {
 }
 
 func main(): int sync {
-    let total = visit([1, 2], 0, (x: int): int => sync {
+    let total = visit([1, 2], 0, func (x: int) => int sync {
         println('visit {}'->format<x>)
         println('twice {}'->format<x>)
         return x * 10

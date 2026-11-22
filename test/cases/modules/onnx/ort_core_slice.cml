@@ -128,87 +128,87 @@ func main(): string! sync {
     let out = get_env('ONNX_OUT') ?? ''
     let mode = get_env('MODE') ?? ''
     if mode == 'open' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => openEnd(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { openEnd(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'start' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => runtimeStart(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { runtimeStart(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'rank2' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => rank2(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { rank2(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'known' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => known(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { known(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'step' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => stepped(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { stepped(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negBoth' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negBoth(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negBoth(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posBoth' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posBoth(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posBoth(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negEnd' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negEnd(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negEnd(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posEnd' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posEnd(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posEnd(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negAll' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negAll(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negAll(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posAll' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posAll(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posAll(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negRank2' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negRank2(x), eight) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negRank2(x) }, eight) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posRank2' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posRank2(x), eight) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posRank2(x) }, eight) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'sweep' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => sweep(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { sweep(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negOne' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negOne(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negOne(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posOne' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posOne(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posOne(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else {
-        return match export_model<out: out>((x: f32[...]): f32[...] => both(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { both(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }

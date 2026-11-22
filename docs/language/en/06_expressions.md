@@ -24,7 +24,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 - The elements of an array literal must have the same type. An element is **a position with an expected type** ([3.3.1](03_data_model.md#331-arrays)): with a context every element takes that type, so the elements of `let xs: float[] = [1, 2.0]` are `float`; with none, the number literals of one array take the widest kind (integer < decimal), so `[1, 2.0]` is a `float[]` (as Go's untyped constants do). The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
 - The keys of a struct literal are identifiers. A field is such a position too: in `let p: P = { a: 1, b: 2.0 }` (`P = { a: float, b: float }`) the `1` is a `float`. A field written as a name is a variable, not converted: a type it does not fit is `SemanticDiag::DeclaredTypeMismatch`.
-- **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
+- **A list comprehension** `[e for x in xs if c]` is `xs->filter<func (x) { c }>->map<func (x) { e }>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
 - **A spread is not in the language**: `...xs` written in a literal is an ordinary syntax error (`...` is written only in a relative module name, `import ...module`). To join arrays write `concat(xs, ys)`.
 
 ### 6.2.1 Formatted strings
@@ -109,9 +109,9 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let total = (1..6)
-        ->map<(x) => x * x>
-        ->filter<(x) => x % 2 == 1>
-        ->reduce<(acc: int, x: int): int => acc + x, 0>
+        ->map<func (x) { x * x }>
+        ->filter<func (x) { x % 2 == 1 }>
+        ->reduce<func (acc: int, x: int) => int { acc + x }, 0>
     println(`total = ${total}`)
     return 0
 }
@@ -598,29 +598,29 @@ On the graph a loop is one `LOOP` node in the graph it is written in; the condit
 
 ## 6.9 Lambdas and function types
 
-A lambda is written `(parameters): return-type => body`; the return type can be omitted, and the body is an expression or a block:
+A lambda is a function declaration without a name: `func (parameters) { body }`, with the return type written `=> type` and omissible. The braces always hold the body, and the last statement is its value:
 
 <!-- camel-snippet: fragment: a list of lambda forms; total comes from the surrounding example -->
 
 ```cml
-(x: int) => x + 1
-(x: int): int => { let y = x * 2; return y + 1 }
-(x) => x + 1                                    // the parameter type comes from where it stands (below)
-(s: string) => sync { println(s) }              // a sync block as the function body
-(x: int) => sync { total = total + x }          // writes a captured variable: the body is a sync block
+func (x: int) { x + 1 }
+func (x: int) => int { let y = x * 2; y + 1 }
+func (x) { x + 1 }                                    // the parameter type comes from where it stands (below)
+func (s: string) sync { println(s) }            // a sync block as the function body
+func (x: int) sync { total = total + x }        // writes a captured variable: the body is a sync block
 ```
 
 A function type is written `(x: T) => R`, and the parameters must be named: `(x: int) => int`, `(acc: int, x: int) => int`.
 
 **Where a parameter type comes from.** A lambda parameter whose type is not written takes it, and an omitted return type too, from the function type of the position the lambda stands in. There are three such positions:
 
-- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way. The built-in functions are the same: their signatures are written in the standard library's `lib/std/prelude.cml`, so the `x` of `xs->filter<(x) => x > 0>` and of `xs->foreach<(x) => println(x)>` is the element type of `xs`. A lambda written right after `->` takes the type of the value on its left (`x->(v) => v + 1`).
+- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way. The built-in functions are the same: their signatures are written in the standard library's `lib/std/prelude.cml`, so the `x` of `xs->filter<func (x) { x > 0 }>` and of `xs->foreach<func (x) { println(x) }>` is the element type of `xs`. A lambda written right after `->` takes the type of the value on its left (`x->func (v) { v + 1 }`).
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
   ```cml
   func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
-  apply_twice((x) => x + 1, 3)         // x: int
+  apply_twice(func (x) { x + 1 }, 3)   // x: int
   ```
 
 - A declared binding: a `let` or `var` whose type is a function type, and an assignment of a new value to that variable.
@@ -628,16 +628,16 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
   <!-- camel-snippet: fragment: bindings shown inside the block they would be written in -->
 
   ```cml
-  let g: (x: int) => int = (x) => x + 1    // x: int
-  var h: (x: int) => int = (x) => x - 1
-  h = (x) => x + 100                       // x: int
+  let g: (x: int) => int = func (x) { x + 1 }    // x: int
+  var h: (x: int) => int = func (x) { x - 1 }
+  h = func (x) { x + 100 }                       // x: int
   ```
 
 - A returned result: the result type of the function is a function type.
 
   ```cml
   func adder(n: int): (x: int) => int {
-      return (x) => x + n              // x: int, and the result is int
+      return func (x) { x + n }              // x: int, and the result is int
   }
   ```
 
@@ -645,13 +645,13 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 
   ```cml
   func main(): int sync {
-      let a = 5 -> (y) => y + 1                  // y: int
+      let a = 5 -> func (y) { y + 1 }                  // y: int
       println(a)
       return 0
   }
   ```
 
-A parameter that the expected type does not determine is an error (`SemanticDiag::LambdaParameterWithoutType`, located at that parameter): the lambda does not stand in such a position (`let g = (x) => x + 1`, `((x) => x)(1)`), the expected type is not a function type, the number of parameters differs, the expected type ends before a parameter the lambda writes (it has fewer parameters than the position), or the expected type still holds a type variable that this position does not bind. With no expected type it does not become an `any` (5.10): write the type.
+A parameter that the expected type does not determine is an error (`SemanticDiag::LambdaParameterWithoutType`, located at that parameter): the lambda does not stand in such a position (`let g = func (x) { x + 1 }`, `(func (x) { x })(1)`), the expected type is not a function type, the number of parameters differs, the expected type ends before a parameter the lambda writes (it has fewer parameters than the position), or the expected type still holds a type variable that this position does not bind. With no expected type it does not become an `any` (5.10): write the type.
 
 **Functions are values.** The name of a function can be used wherever a value can be written: as an argument, as a `with` argument, in `let g = f`, in `return f`, as an element of an array or tuple, as the value of a branch arm.
 
@@ -664,14 +664,14 @@ func apply_twice(f: (x: int) => int, x: int): int {
 }
 
 func adder(n: int): (x: int) => int {
-    return (x: int): int => x + n          // captures n
+    return func (x: int) => int { x + n }          // captures n
 }
 
 func main(): int sync {
     let g = inc
     let add5 = adder(5)
     println(g(1), apply_twice(dbl, 3), add5(10))
-    println([inc, dbl]->map<(f: (x: int) => int): int => f(10)>)
+    println([inc, dbl]->map<func (f: (x: int) => int) => int { f(10) }>)
     return 0
 }
 ```
@@ -687,7 +687,7 @@ func main(): int sync {
 - When such a name is handed to a built-in higher-order operator (`xs->map<abs>`, `xs->reduce<max, 0>`, `xs->filter<is_even>`), the operator cannot say which function it expects, so the compiler asks it about each: when exactly one is accepted, that one is meant; when none or several are, the name has no value (`SemanticDiag::FunctionNameAsValue`, which lists the candidates).
 - A binding with a function type, `let f: (x: int) => int = inc`, checks its value against the type written; a lambda's parameter types can come from that type too (above).
 - The inference does not change overload resolution: a typed lambda still picks the overload its own type picks, and an untyped one facing a group of overloads has no single expected type, so it is the error above rather than a choice of overload.
-- A generic higher-order function (`tree_reduce`, `map`: a parameter type that mentions a type variable) does not infer yet: the expected type of the argument waits for the generic instantiation, and the lambda is always lowered before it. Write the parameter types there (`tree_reduce<(acc: int, x: int) => acc + x>(...)`); this is still undecided.
+- A generic higher-order function (`tree_reduce`, `map`: a parameter type that mentions a type variable) does not infer yet: the expected type of the argument waits for the generic instantiation, and the lambda is always lowered before it. Write the parameter types there (`tree_reduce<func (acc: int, x: int) { acc + x }>(...)`); this is still undecided.
 
 ## 6.10 Higher-order operators
 
@@ -701,10 +701,10 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let xs = 1..6
-    println(xs->map<(x) => x * x>)
-    println(xs->filter<(x) => x % 2 == 0>)
-    println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)
-    xs->filter<(x) => x > 3>->foreach<(x) => sync { println('item', x) }>
+    println(xs->map<func (x) { x * x }>)
+    println(xs->filter<func (x) { x % 2 == 0 }>)
+    println(xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>)
+    xs->filter<func (x) { x > 3 }>->foreach<func (x) sync { println('item', x) }>
     return 0
 }
 ```
@@ -721,7 +721,7 @@ If the element function of `foreach` is to produce side effects, its body must b
 
 ### 6.10.1 Fault isolation `attempt`
 
-Errors and faults are two different things: only an operation declared to return `T!` produces an error value; division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch one. `attempt` is a **function transform**: `attempt(f)` gives a function whose parameters are those of `f` and whose result type is the result of `f` plus `!`, and calling it is `attempt(f)(a, b)`. There is no `try`/`catch`: the boundary must be one function call and not a stretch of written text — the computation on the graph is evaluated on demand, moved by passes and run in parallel, and only the boundary of a subgraph is stable. A fault in that call (including everything it calls, directly or indirectly) becomes an error value at the boundary, to be handled with `!!`, by carrying it on with `->`, or with `match ... case error e`. Wrap any expression in a closure: `attempt(() => expr)()`. The value is a function value like any other: it can be passed on and written in angle brackets, `rows->map<attempt(parse_row)>`.
+Errors and faults are two different things: only an operation declared to return `T!` produces an error value; division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch one. `attempt` is a **function transform**: `attempt(f)` gives a function whose parameters are those of `f` and whose result type is the result of `f` plus `!`, and calling it is `attempt(f)(a, b)`. There is no `try`/`catch`: the boundary must be one function call and not a stretch of written text — the computation on the graph is evaluated on demand, moved by passes and run in parallel, and only the boundary of a subgraph is stable. A fault in that call (including everything it calls, directly or indirectly) becomes an error value at the boundary, to be handled with `!!`, by carrying it on with `->`, or with `match ... case error e`. Wrap any expression in a closure: `attempt(func () { expr })()`. The value is a function value like any other: it can be passed on and written in angle brackets, `rows->map<attempt(parse_row)>`.
 
 ```cml
 func risky(d: int): int { return 100 / d }
@@ -729,7 +729,7 @@ func risky(d: int): int { return 100 / d }
 func main(): int sync {
     println(attempt(risky)(4) !! -1)
     println(attempt(risky)(0) !! -1)
-    println(attempt(() => [1, 0, 4]->map<risky>)() !! [-1])
+    println(attempt(func () { [1, 0, 4]->map<risky> })() !! [-1])
     let r = attempt(risky)(0)
     println(match r {
         case error e => e.kind + ' at ' + e.location

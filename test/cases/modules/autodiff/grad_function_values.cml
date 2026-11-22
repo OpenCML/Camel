@@ -12,11 +12,11 @@ import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 func make(s: float): (t: f32[...]) => f32[...] {
-    return (t: f32[...]): f32[...] => tanh(t * f32(s))
+    return func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
 }
 
 func make_affine(q: f32[...]): (t: f32[...]) => f32[...] {
-    return (t: f32[...]): f32[...] => t * q + q
+    return func (t: f32[...]) => f32[...] { t * q + q }
 }
 
 func apply(f: (t: f32[...]) => f32[...], p: f32[...]): f32[...] {
@@ -32,15 +32,15 @@ func square(t: f32[...]): f32[...] {
 }
 
 func twice(f: (t: f32[...]) => f32[...]): (t: f32[...]) => f32[...] {
-    return (t: f32[...]): f32[...] => f(f(t))
+    return func (t: f32[...]) => f32[...] { f(f(t)) }
 }
 
 // 1. a closure called, twice, inside a second closure that captured it
 with <p: f32[...]>
 func loss1(): float {
     let s = float(sum(p))
-    let g = (t: f32[...]): f32[...] => tanh(t * f32(s))
-    let h = (t: f32[...]): f32[...] => g(t) * 2.0 + g(t * 0.5)
+    let g = func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
+    let h = func (t: f32[...]) => f32[...] { g(t) * 2.0 + g(t * 0.5) }
     return float(sum(h(p)))
 }
 
@@ -48,9 +48,9 @@ func loss1(): float {
 with <p: f32[...]>
 func loss2(): float {
     let s = float(sum(p * p))
-    let g = (t: f32[...]): f32[...] => tanh(t * f32(s))
-    let h = (t: f32[...]): f32[...] => g(t) * f32(s)
-    let k = (t: f32[...]): f32[...] => h(t + 1.0) + t
+    let g = func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
+    let h = func (t: f32[...]) => f32[...] { g(t) * f32(s) }
+    let k = func (t: f32[...]) => f32[...] { h(t + 1.0) + t }
     return float(sum(k(p)))
 }
 
@@ -73,7 +73,7 @@ func loss4(): float {
 with <p: f32[...]>
 func loss5(): float {
     let s = float(sum(p))
-    return float(sum(apply((t: f32[...]): f32[...] => tanh(t * f32(s)), p)))
+    return float(sum(apply(func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }, p)))
 }
 
 // 6. a named function passed to a function that calls it
@@ -86,7 +86,7 @@ func loss6(): float {
 with <p: f32[...]>
 func loss7(): float {
     let s = float(sum(p))
-    return float(sum(apply_outer((t: f32[...]): f32[...] => tanh(t * f32(s)), p)))
+    return float(sum(apply_outer(func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }, p)))
 }
 
 // 8. the closure of a factory passed to a function that calls it
@@ -99,7 +99,7 @@ func loss8(): float {
 with <p: f32[...]>
 func loss9(): float {
     let s = float(sum(p))
-    let g = (t: f32[...]): f32[...] => tanh(t * f32(s))
+    let g = func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
     let h = twice(g)
     return float(sum(h(p)))
 }
@@ -108,7 +108,7 @@ func loss9(): float {
 with <p: f32[...]>
 func loss10(): float {
     let s = float(sum(p))
-    let mk = (a: float) => (t: f32[...]): f32[...] => tanh(t * f32(a)) * f32(s)
+    let mk = func (a: float) { func (t: f32[...]) => f32[...] { tanh(t * f32(a)) * f32(s) } }
     return float(sum(mk(s * 0.5)(p)))
 }
 

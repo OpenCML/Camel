@@ -6,6 +6,6 @@
 import { unordered_foreach } from para
 
 func main(): int sync {
-    unordered_foreach<(item: int) => item>([1, 2], 1)
+    unordered_foreach<func (item: int) { item }>([1, 2], 1)
     return 0
 }

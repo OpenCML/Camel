@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-327 diagnostics: 305 errors, 22 warnings. 15 carry a machine-applicable edit, 312 say why they carry none.
+327 diagnostics: 305 errors, 22 warnings. 14 carry a machine-applicable edit, 313 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -42,7 +42,7 @@ prints one entry.
 | `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error | no |
 | `0x02000010` | [SyntaxDiag::WhenAfterBody](#whenafterbody) | Error | yes |
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
-| `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
+| `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | no |
 | `0x02000014` | [SyntaxDiag::FuncTypeNeedsNames](#functypeneedsnames) | Error | no |
 | `0x02000015` | [SyntaxDiag::IntervalHasNoOpenForm](#intervalhasnoopenform) | Error | no |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
@@ -769,7 +769,7 @@ The items of a list (parameters, arguments, elements) are separated by ','.
 func apply(f: (x) => int, x: int): int { return f(x) }
 
 func main(): int sync {
-    return apply((x: int) => x + 1, 1)
+    return apply(func (x: int) { x + 1 }, 1)
 }
 ```
 
@@ -826,11 +826,17 @@ Expected {0} before {1}.
 One token is missing at the caret and the message names it; nothing else in the file has to change.
 ```
 
-**Example** (`test/cases/compile/fstring/lambda_spec.cml`, run as `camel test/cases/compile/fstring/lambda_spec.cml`)
+**Example** (`test/cases/modules/rules/fact_no_type.cml`, run as `camel test/cases/modules/rules/fact_no_type.cml`)
 
 ```camel
+import { max } from math
+
+fact depth(n) match n {
+    case const c: int => c
+    case _            => 0
+} join max
+
 func main(): int sync {
-    print(`A ${(x: int): int => x}`)
     return 0
 }
 ```
@@ -1095,18 +1101,18 @@ func main(): int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+None: context: the lambda starts with 'func' and has a body, so the repair is more than the name under the arrow
 
 **Message**
 
 ```text
-A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.
+A lambda is written 'func (x) { … }': a name standing before a '=>' that fits nothing is not one.
 ```
 
 **Help**
 
 ```text
-A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) { x => x }), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.
+A lambda is a function declaration without a name (design principles 4.4): 'func (x) { x * x }' or 'func (x: int) => int { x }'. 'x => e' is not a lambda in either spelling: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) { x => x }), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.
 ```
 
 **Example** (`test/cases/parse/rulings/lambda_without_parentheses.cml`, run as `camel test/cases/parse/rulings/lambda_without_parentheses.cml`)
@@ -1216,7 +1222,7 @@ A '>' after a space, at the end of a line, is the comparison operator, and the e
 
 ```camel
 func main(): int sync {
-    let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
+    let total = [1, 2]->reduce<func (acc: int, x: int) => int { acc + x }, 0>
     total->format<total>->println
     return 0
 }
@@ -1386,7 +1392,7 @@ func apply_all(ps: (int, int)[]): int[] {
 }
 
 func main(): int sync {
-    println(apply_all<((a, b, c)) => a + b + c>([(1, 2)]))
+    println(apply_all<func ((a, b, c)) { a + b + c }>([(1, 2)]))
     return 0
 }
 ```
@@ -3232,7 +3238,7 @@ import { abs } from math
 import { unordered_foreach } from para
 
 func main(): int sync {
-    unordered_foreach<(item: int) => abs(item)>([-1, 2])
+    unordered_foreach<func (item: int) { abs(item) }>([-1, 2])
     return 0
 }
 ```
@@ -4736,7 +4742,7 @@ A field cannot be taken from '{0}' by a compile-time key.
 ```camel
 import { tree_map } from tree
 func main(): int sync {
-    println(tree_map<(a: int, b: int): int => a + b>({ block: (1, 2) }, { block: 3 }))
+    println(tree_map<func (a: int, b: int) => int { a + b }>({ block: (1, 2) }, { block: 3 }))
     return 0
 }
 ```
@@ -4956,7 +4962,7 @@ A lambda takes the type of a parameter it does not write from the function type 
 
 ```camel
 func main(): int sync {
-    let g = (x) => x + 1
+    let g = func (x) { x + 1 }
     println(g(1))
     return 0
 }
@@ -6737,7 +6743,7 @@ The body of a folded call is read from the same constructs a 'when' condition re
 
 ```camel
 func first_of_list(): int {
-    let step = (n: int): int => n + 1
+    let step = func (n: int) => int { n + 1 }
     return step(1)
 }
 
@@ -7568,7 +7574,7 @@ func count(n: int): int.. {
 }
 
 func step(n: int): () => (int, int..)? {
-    return () => if n > 0 then (n, step(n - 1)) else null
+    return func () { if n > 0 then (n, step(n - 1)) else null }
 }
 
 func firstOf(p: (int, int..)?): int {
@@ -7878,7 +7884,7 @@ func count(n: int): int.. {
 }
 
 func step(n: int): () => (int, int..)? {
-    return () => if n > 0 then (n, step(n - 1)) else null
+    return func () { if n > 0 then (n, step(n - 1)) else null }
 }
 
 func firstOf(p: (int, int..)?): int {
@@ -7960,7 +7966,7 @@ func count(n: int): int.. {
 }
 
 func step(n: int): () => (int, int..)? {
-    return () => if n > 0 then (n, step(n - 1)) else null
+    return func () { if n > 0 then (n, step(n - 1)) else null }
 }
 
 func total(s: int..): int {
@@ -8348,7 +8354,7 @@ func count(n: int): int.. {
 }
 
 func step(n: int): () => (int, int..)? {
-    return () => if n > 0 then (n, step(n - 1)) else null
+    return func () { if n > 0 then (n, step(n - 1)) else null }
 }
 
 func firstOf(p: (int, int..)?): int {
@@ -8359,7 +8365,7 @@ func firstOf(p: (int, int..)?): int {
 }
 
 func read(): () => int {
-    return () => firstOf(source())
+    return func () { firstOf(source()) }
 }
 
 func main(): int sync {
@@ -8717,7 +8723,7 @@ A ruleset is a module of rules, and the transform finds a rule for a primitive b
 // A left side that names no one operator: the index files a rule under the head of its left side,
 // and `x` alone names nothing a primitive could look up. It is refused where it is written.
 rule id_rule(x: float) {
-    x => (dx: float) => dx
+    x => func (dx: float) { dx }
 }
 
 func main(): int sync {
@@ -8752,11 +8758,11 @@ A transform finds a rule for a primitive by the operator its left side is writte
 // Two rules of one module with the same head: a transform looks a rule up by the head of its left
 // side, so the second one has no way to be chosen. It is refused where it is written.
 rule first_rule(x: float, w: float) {
-    x + w => (dx: float, dw: float) => dx
+    x + w => func (dx: float, dw: float) { dx }
 }
 
 rule second_rule(x: float, w: float) {
-    x + w => (dx: float, dw: float) => dw
+    x + w => func (dx: float, dw: float) { dw }
 }
 
 func main(): int sync {
@@ -9183,7 +9189,7 @@ The closure holds the value `{0}` had when it was made, so this assignment canno
 ```camel
 func main(): int sync {
     var x = 1
-    let g = () => x
+    let g = func () { x }
     x = 2
     println(g())
     return 0
@@ -9219,7 +9225,7 @@ func bump(var p: int): void {
 
 func main(): int sync {
     var x = 1
-    let g = () => x
+    let g = func () { x }
     bump(x)
     println(g())
     return 0
@@ -9356,7 +9362,7 @@ func apply(f: (x: int) => void, v: int) {
 }
 
 func add(x: int): int {
-    apply((y: int) => { counter = y }, x)
+    apply(func (y: int) { counter = y }, x)
     return counter
 }
 
@@ -11733,9 +11739,9 @@ func apply_n(f: (x: int) => int, xs: int[]): int[] {
 
 func main(): int sync {
     let k = 10
-    let with_k = (x: int) => x + k
+    let with_k = func (x: int) { x + k }
     let ys = apply_n(with_k, [1, 2, 3])
-    let zs = apply_n((x: int) => x * 2, [1, 2, 3])
+    let zs = apply_n(func (x: int) { x * 2 }, [1, 2, 3])
     let pairs = zip([1, 2], [10, 20])
     'MAP ys={} zs={} pairs={}'->format<ys, zs, pairs>->println
     return 0

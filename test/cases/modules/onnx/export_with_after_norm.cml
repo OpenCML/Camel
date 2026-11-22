@@ -13,7 +13,7 @@ func rowSums(x: f32[...]): f32[...] {
 
 func main(): string! sync {
     let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => rowSums(x), x) {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { rowSums(x) }, x) {
         case error e => { return e }
         case v => 'exported'
     }

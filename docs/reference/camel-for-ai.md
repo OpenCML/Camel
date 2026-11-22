@@ -118,7 +118,7 @@ func inc(x: int): int {
 }
 
 func main(): int sync {
-    let total = (1..6)->map<inc>->reduce<(a: int, b: int): int => a + b, 0>
+    let total = (1..6)->map<inc>->reduce<func (a: int, b: int) => int { a + b }, 0>
     println(total)
     return 0
 }
@@ -143,7 +143,7 @@ func sum(xs: int[]): int {
 }
 
 func main(): int sync {
-    println(sum(1..5), [1, 2, 3]->reduce<(a: int, b: int): int => a + b, 0>)
+    println(sum(1..5), [1, 2, 3]->reduce<func (a: int, b: int) => int { a + b }, 0>)
     return 0
 }
 ```

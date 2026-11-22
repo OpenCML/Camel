@@ -81,13 +81,13 @@ func alphabet(): string {
 // character the corpus does not use.
 func class_of(code: int): int {
     let letters = codepoints(alphabet())
-    let found = range(0, len(letters), 1)->filter<(i: int): bool => letters[i] == code>
+    let found = range(0, len(letters), 1)->filter<func (i: int) => bool { letters[i] == code }>
     return if len(found) == 0 then 0 else found[0]
 }
 
 // The corpus as class indices, one integer per character.
 func tokens(corpus: string): int[] {
-    return codepoints(corpus)->map<(code: int): int => class_of(code)>
+    return codepoints(corpus)->map<func (code: int) => int { class_of(code) }>
 }
 
 // == model ==
@@ -143,7 +143,7 @@ type Transformer = {
 // not a parameter.  Row-major over the T x T grid: element `k` is row `k / T`, column `k % T`.
 func causal_mask(): float[...] {
     let n = 8
-    let flat = range(0, n * n, 1)->map<(k: int): float => if k % n <= k / n then 0.0 else -1000.0>
+    let flat = range(0, n * n, 1)->map<func (k: int) => float { if k % n <= k / n then 0.0 else -1000.0 }>
     return reshape<[8, 8]>(flat)
 }
 

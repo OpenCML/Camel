@@ -5,6 +5,6 @@
  */
 
 func main(): int sync {
-    println(((x) => x + 1)(41))
+    println((func (x) { x + 1 })(41))
     return 0
 }

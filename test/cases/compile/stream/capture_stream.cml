@@ -12,7 +12,7 @@ func count(n: int): int.. {
 }
 
 func step(n: int): () => (int, int..)? {
-    return () => if n > 0 then (n, step(n - 1)) else null
+    return func () { if n > 0 then (n, step(n - 1)) else null }
 }
 
 func firstOf(p: (int, int..)?): int {
@@ -23,7 +23,7 @@ func firstOf(p: (int, int..)?): int {
 }
 
 func read(): () => int {
-    return () => firstOf(source())
+    return func () { firstOf(source()) }
 }
 
 func main(): int sync {

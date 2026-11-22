@@ -10,11 +10,11 @@
  */
 
 rule first_rule(x: (float), w: float) {
-    x + w => (dx: float, dw: float) => dx
+    x + w => func (dx: float, dw: float) { dx }
 }
 
 rule second_rule(x: float, w: float) {
-    x + w => (dx: float, dw: float) => dw
+    x + w => func (dx: float, dw: float) { dw }
 }
 
 func main(): int sync {

@@ -156,7 +156,7 @@ func clamp(x: int): int {
 
 func main(): int sync {
     println(clamp<0, 10>(42))
-    println([-5, 3, 99]->map<(x) => x->clamp<0, 10>>)
+    println([-5, 3, 99]->map<func (x) { x->clamp<0, 10> }>)
     return 0
 }
 ```
@@ -285,7 +285,7 @@ func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
 func main(): int sync {
     println(first([1, 2, 3]), first(['a', 'b']))
     println(pick(false, 1.5, 2.5))
-    println(my_map([1, 2, 3], (x: int): string => string(x) + '!'))
+    println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
     return 0
 }
 ```
@@ -315,7 +315,7 @@ func my_fold::<T, U>(xs: T[]): U {
 }
 
 func main(): int sync {
-    println(['a', 'bb']->my_fold<(acc: int, s: string) => acc + len(s), 0>)
+    println(['a', 'bb']->my_fold<func (acc: int, s: string) { acc + len(s) }, 0>)
     return 0
 }
 ```
@@ -424,7 +424,7 @@ Before a function declaration one can write `@name` or `@name<with arguments>`. 
 ```cml
 with <n: int>
 func times(f: (x: int) => int): (x: int) => int {
-    return (x: int): int => f(x) * n
+    return func (x: int) => int { f(x) * n }
 }
 
 @times<3>
@@ -446,7 +446,7 @@ An annotation may also stand before a block. The block is then a function of no 
 
 ```cml
 func doubled(f: () => int): () => int {
-    return () => f() * 2
+    return func () { f() * 2 }
 }
 
 func next_doubled(x: int): int {

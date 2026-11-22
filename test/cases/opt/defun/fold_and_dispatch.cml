@@ -9,7 +9,7 @@ func apply(f: (x: int) => int, x: int): int {
 
 func main(): int sync {
     let a = 2
-    let add_a = (x: int) => x + a
+    let add_a = func (x: int) { x + a }
     let folded = add_a(10)
     let dispatched = apply(add_a, 10)
     'FOLD folded={} dispatched={}'->format<folded, dispatched>->println

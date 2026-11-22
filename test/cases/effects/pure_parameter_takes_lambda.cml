@@ -11,6 +11,6 @@ func usePure(f: (x: int) => int pure): int {
 }
 
 func main(): int sync {
-    println(usePure((x: int): int => x * 2))
+    println(usePure(func (x: int) => int { x * 2 }))
     return 0
 }

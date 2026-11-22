@@ -35,7 +35,7 @@ import { vjp } from vjp
 func main(): int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
-    let step = (w: float[2, 2]): float => {
+    let step = func (w: float[2, 2]) => float {
         let e = matmul(x, w) - t
         return 0.5 * sum(e * e)
     }

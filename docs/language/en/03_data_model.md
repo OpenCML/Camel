@@ -192,7 +192,7 @@ The remaining string functions are in the `str` module ([standard library refere
 import { split, trim, to_upper } from str
 
 func main(): int sync {
-    println('a, b ,c'->split<','>->map<(w) => trim(w)>)
+    println('a, b ,c'->split<','>->map<func (w) { trim(w) }>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
 }
@@ -365,7 +365,7 @@ To iterate, first take an array, then use a higher-order operator:
 
 ```cml
 func count_words(words: string[]): Map<string, int> {
-    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+    return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
 func main(): int sync {

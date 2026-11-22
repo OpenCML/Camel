@@ -12,7 +12,7 @@
 func total(x: int): int {
     var acc = 0
     acc = x * (x - 1) / 2
-    let read = (): int => acc
+    let read = func () => int { acc }
     read()
 }
 

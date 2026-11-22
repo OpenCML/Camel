@@ -5,8 +5,8 @@ func main(): int sync {
         v47 %= 7;
         null;
     };
-    let h62 = (p55: int): int => sync {
-        if (false, [v47, 0]->reduce<(p59: int, p60: int): int => 0, 0>).0 then false;
+    let h62 = func (p55: int) => int sync {
+        if (false, [v47, 0]->reduce<func (p59: int, p60: int) => int { 0 }, 0>).0 then false;
         return 0;
     };
     return 0;

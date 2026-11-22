@@ -16,7 +16,7 @@ func f1(a2: (a0: int) => string, a3: (a0: bool) => string, a4: (a0: int, a1: flo
 }
 
 func r18(a19: int, a20: int, a21: bool): int {
-    return if false then f1((p22: int): string => 'yz', (p23: bool): string => '', (p24: int, p25: float): int => a19) else {
+    return if false then f1(func (p22: int) => string { 'yz' }, func (p23: bool) => string { '' }, func (p24: int, p25: float) => int { a19 }) else {
         return 0;
     };
 }

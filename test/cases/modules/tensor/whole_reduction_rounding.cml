@@ -29,12 +29,12 @@ import { sum, mean, numel } from tensor
 /// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
 /// rounds — this is what "round after every step" means.
 func foldF32(xs: f32[]): f32 {
-    return xs->reduce<(acc: f32, item: f32): f32 => acc + item, f32(0.0)>
+    return xs->reduce<func (acc: f32, item: f32) => f32 { acc + item }, f32(0.0)>
 }
 
 func main(): int sync {
-    let a = (0..1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
-    let c = (0..3)->map<(i: int) => if i == 0 then f32(33554432.0) else f32(7.0)>
+    let a = (0..1026)->map<func (i: int) { if i == 0 then f32(16777216.0) else f32(1.0) }>
+    let c = (0..3)->map<func (i: int) { if i == 0 then f32(33554432.0) else f32(7.0) }>
 
     let ta = a
     let tc = c

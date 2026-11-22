@@ -27,10 +27,10 @@ func is_matmul(n: Node): bool {
 
 // What a fusion would fold into the matmul: the nodes that read its result, by operator.
 func report(sites: Node[]): void {
-    sites->foreach<(n: Node): void => println(
-        `fusion site ${id(n)}: ${op_text(n)} -> ${len(value_users(n))} reader(s)`)>
-    sites->foreach<(n: Node): void => value_users(n)->foreach<(m: Node): void => println(
-        `  reader ${id(m)}: ${op_text(m)}`)>>
+    sites->foreach<func (n: Node) => void { println(
+        `fusion site ${id(n)}: ${op_text(n)} -> ${len(value_users(n))} reader(s)`) }>
+    sites->foreach<func (n: Node) => void { value_users(n)->foreach<func (m: Node) => void { println(
+        `  reader ${id(m)}: ${op_text(m)}`) }> }>
 }
 
 func commit_unchanged::<F>(f: F): F! sync {

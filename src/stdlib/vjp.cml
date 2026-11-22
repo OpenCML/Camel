@@ -129,7 +129,7 @@ import { first_with_as_param, jvp, split, transpose } from transforms
 #macro
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     let forward = split(jvp(f))
-    return <...ws> (...xs) => {
+    return func <...ws> (...xs) {
         let (y, lin) = forward<...ws>(...xs)
         (y, transpose(lin))
     }
@@ -183,7 +183,7 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 #macro
 export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
     let forward = split(jvp(first_with_as_param(f)))
-    return <w, ...ws> (...xs) => {
+    return func <w, ...ws> (...xs) {
         let (value, lin) = forward<...ws>(w, ...xs)
         let _ = value
         let cotangents = transpose(lin)(1.0)
@@ -236,7 +236,7 @@ export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
 /// @example let step = has_aux(loss)
 export func has_aux(f: (w: float) => (float, float)): (w: float) => ((float, float), float) {
     let lifted = jvp(f)
-    return (w: float) => {
+    return func (w: float) {
         let (pair, tangent) = lifted(w, 1.0)
         (pair, tangent.0)
     }

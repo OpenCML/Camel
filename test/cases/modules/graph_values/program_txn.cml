@@ -52,12 +52,12 @@ func targetIn::<F>(p: F): Graph {
 func main(): int spelling sync {
     let p = main
     let t = open(p)
-    nodes(targetIn(p))->filter<isAddOne>->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
+    nodes(targetIn(p))->filter<isAddOne>->foreach<func (n: Node) { replace(t, n, inputs(n)[0]) }>
     let q = commit(t) !! p
     println(`committed: ${addOnes(targetIn(q))}`)
     println(`opened on: ${addOnes(targetIn(p))}`)
     println(`running: ${target(5)} ${addOnes(graph_of(target))}`)
-    let later = (x: int): int => target(x) + 1000
+    let later = func (x: int) => int { target(x) + 1000 }
     println(`made after: ${later(5)}`)
     println(`current: ${addOnes(targetIn(main))}`)
     return 0

@@ -8,7 +8,7 @@ func arithmetic(a: float, b: float): float { return (a + b) * 2.0 - a / b }
 func main(): int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(download(run_preferred_resident<loss_value>(x)) - loss<x>())
-    let vg = (v: f32[...]): (float, f32[...]) => with_grad(loss)<v>()
+    let vg = func (v: f32[...]) => (float, f32[...]) { with_grad(loss)<v>() }
     let cpu = vg(x)
     let gpu = run_preferred_resident<vg>(upload(x))
     println(download(gpu.0) - cpu.0)

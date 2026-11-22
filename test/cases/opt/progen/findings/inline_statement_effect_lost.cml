@@ -8,7 +8,7 @@
  */
 
 func f1(a2: bool, a3: float): bool {
-    return ((['']->reduce<(p4: int, p5: string): int => 0, -3>) > int(1.0));
+    return ((['']->reduce<func (p4: int, p5: string) => int { 0 }, -3>) > int(1.0));
 }
 
 func main(): int sync {

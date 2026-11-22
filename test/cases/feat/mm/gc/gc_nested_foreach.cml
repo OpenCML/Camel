@@ -18,26 +18,26 @@ func add(a: int, b: int): int {
 }
 
 func collect(n: int, k: int): Row[] sync {
-    return (0..n)->map<(i: int): Row => (0..n)->map<(j: int): int => add(i + j, k)>>
+    return (0..n)->map<func (i: int) => Row { (0..n)->map<func (j: int) => int { add(i + j, k) }> }>
 }
 
 func ends_of(n: int, i: int, k: int): int sync {
-    let row = (0..n)->map<(j: int): int => add(i + j, k)>
+    let row = (0..n)->map<func (j: int) => int { add(i + j, k) }>
     return row[0] + row[n - 1] + len(row)
 }
 
 func lasts(n: int, k: int): int[] sync {
-    return (0..n)->map<(i: int): int => sync { ends_of(n, i, k) }>
+    return (0..n)->map<func (i: int) => int sync { ends_of(n, i, k) }>
 }
 
 func probe(t: Row[], n: int): int {
     return (0..n)
-        ->map<(i: int): int => t[i][0] + t[i][i] + t[i][n - 1]>
-        ->reduce<(acc: int, x: int): int => acc + x, 0>
+        ->map<func (i: int) => int { t[i][0] + t[i][i] + t[i][n - 1] }>
+        ->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 }
 
 func total_of(xs: int[]): int {
-    return xs->reduce<(acc: int, x: int): int => acc + x, 0>
+    return xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 }
 
 func repeat(n: int, left: int, total: int): int sync {

@@ -31,13 +31,13 @@ func main(): int sync {
 
     'Sorting {} sampled arrays in parallel...'->format<replicas>->println
     let sort_start = now()
-    let medians = [b0, b1, b2, b3, b4, b5, b6, b7]->map<(arr: int[]): int => {
+    let medians = [b0, b1, b2, b3, b4, b5, b6, b7]->map<func (arr: int[]) => int {
         let sarr = sort(arr)
         return sarr[len(sarr) / 2]
     }>
     let sort_duration = now() - sort_start
 
-    let wide = medians->map<(m: int): float => float(m)>
+    let wide = medians->map<func (m: int) => float { float(m) }>
     'medians = {}'->format<medians>->println
     'mean = {:.2f}'->format<mean(wide)>->println
     'stdev = {:.2f}'->format<stdev(wide)>->println

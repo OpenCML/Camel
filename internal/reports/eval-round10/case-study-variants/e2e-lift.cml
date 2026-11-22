@@ -16,7 +16,7 @@ func run(n: int, base: int): int sync {
     let label = 'step'
     let twice = base * 2
     let thrice = base * 3
-    let f = (x: int): int => sync {
+    let f = func (x: int) => int sync {
         return closure_body(base, label, x)
     }
     let (_, total) = loop i = 0, total = twice + thrice while i < n do sync {

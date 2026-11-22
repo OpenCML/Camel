@@ -21,7 +21,7 @@ func square(): float {
 }
 
 func main(): int sync {
-    let (value, pullback) = vjp((g: <k: float> () => float, w: float): float => g<2.0>() * w)(square, 3.0)
+    let (value, pullback) = vjp(func (g: <k: float> () => float, w: float) => float { g<2.0>() * w })(square, 3.0)
     let cotangents = pullback(1.0)
     println('value={} cotangents={}'->format<value, cotangents>)
     return 0

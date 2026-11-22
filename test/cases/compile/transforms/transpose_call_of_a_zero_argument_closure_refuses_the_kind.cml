@@ -15,7 +15,7 @@ import rulesets.transpose
 import { transpose } from transforms
 
 func f(x: f32): f32 {
-    let g = () => x
+    let g = func () { x }
     return g()
 }
 

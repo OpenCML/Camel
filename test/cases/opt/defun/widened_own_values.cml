@@ -23,6 +23,6 @@ func void_g(x: int): void {
 
 func main(): int sync {
     apply(void_g, 1)
-    apply((x: int) => x * 10, 2)
+    apply(func (x: int) { x * 10 }, 2)
     return 0
 }

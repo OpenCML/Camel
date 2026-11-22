@@ -21,13 +21,13 @@ rule cancel_wide_addend::<T>(x: T) when is_integer::<T>() { x + 3000000000 - 300
 
 /// The nodes of one function of the program, by the name of its graph.
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
 /// The parameter of a function: the value the question is asked at.
 func portOf::<F>(p: F, function: string): Node spelling {
-    let ports = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Port>
+    let ports = nodesOf(p, function)->filter<func (n: Node) => bool { kind(n) == NodeKind::Port }>
     return ports[0]
 }
 

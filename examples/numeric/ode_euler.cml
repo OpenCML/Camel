@@ -29,7 +29,7 @@ func main(): int sync {
 
     // A smaller step gives a smaller error; one million steps do not grow the stack.
     let step_counts = [30, 300, 3000, 1000000]
-    let rows = step_counts->map<(n: int): string => report(coffee, start, minutes, n, truth)>
+    let rows = step_counts->map<func (n: int) => string { report(coffee, start, minutes, n, truth) }>
     println(rows->join<'\n'>)
     return 0
 }

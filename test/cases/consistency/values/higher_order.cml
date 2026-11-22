@@ -5,12 +5,12 @@
 
 func main(): int sync {
     let xs = 0..40
-    let squares = xs->map<(x: int): int => x * x>
-    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    let squares = xs->map<func (x: int) => int { x * x }>
+    let evens = squares->filter<func (x: int) => bool { x % 2 == 0 }>
     println(squares)
     println(evens)
-    println(xs->reduce<(acc: int, x: int): int => acc * 3 + x, 0>)
-    xs->filter<(x: int): bool => x % 13 == 0>->foreach<(x: int) => sync { println(x) }>
+    println(xs->reduce<func (acc: int, x: int) => int { acc * 3 + x }, 0>)
+    xs->filter<func (x: int) => bool { x % 13 == 0 }>->foreach<func (x: int) sync { println(x) }>
     println(len(evens))
     return 0
 }

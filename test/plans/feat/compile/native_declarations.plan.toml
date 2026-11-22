@@ -762,7 +762,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
 expect_diagnostic_line = 12
-expect_diagnostic_column = 38
+expect_diagnostic_column = 42
 
 [[tests]]
 name = "native.para_unordered_reduce_callback_arity"
@@ -771,7 +771,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_reduce_callback_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:12:103", "argument types: <(acc: int, item: int, extra: int) => int pure, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:12:111", "argument types: <(acc: int, item: int, extra: int) => int pure, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
 
 #  ---- The declaration of `this` ----
 

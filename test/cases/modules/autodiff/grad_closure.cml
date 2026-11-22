@@ -12,7 +12,7 @@ import { grad } from autodiff
 with <p: f32[...]>
 func loss1(): float {
     let s = float(sum(p))
-    let g = (t: f32[...]): f32[...] => tanh(t * f32(s))
+    let g = func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
     return float(sum(g(p)))
 }
 
@@ -20,9 +20,9 @@ func loss1(): float {
 with <p: f32[...]>
 func loss2(): float {
     let s = float(sum(p * p))
-    let wrap = (t: f32[...]): f32[...] => {
+    let wrap = func (t: f32[...]) => f32[...] {
         let u = t * f32(s)
-        let deep = (v: f32[...]): f32[...] => tanh(v * u) + v * f32(s)
+        let deep = func (v: f32[...]) => f32[...] { tanh(v * u) + v * f32(s) }
         deep(t + u)
     }
     return float(sum(wrap(p)))
@@ -32,7 +32,7 @@ func loss2(): float {
 with <p: f32[...]>
 func loss3(): float {
     let q = tanh(p) * 2.0
-    let g = (t: f32[...]): f32[...] => t * q + q
+    let g = func (t: f32[...]) => f32[...] { t * q + q }
     return float(sum(g(p * p)))
 }
 
@@ -40,14 +40,14 @@ func loss3(): float {
 with <p: f32[...]>
 func loss4(): float {
     let s = float(sum(p))
-    let g = (t: f32[...]): f32[...] => tanh(t * f32(s))
+    let g = func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
     return float(sum(g(p) * g(p * 0.5)))
 }
 
 // 5. a lambda that captures nothing
 with <p: f32[...]>
 func loss5(): float {
-    let g = (t: f32[...]): f32[...] => tanh(t) * t
+    let g = func (t: f32[...]) => f32[...] { tanh(t) * t }
     return float(sum(g(p)))
 }
 

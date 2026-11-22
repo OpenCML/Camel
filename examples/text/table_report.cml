@@ -28,14 +28,14 @@ func main(): int sync {
         { name: 'backpack', qty: 1, price: 34.99 }
     ]
 
-    let longest = max(items->map<(it: Item): int => len(it.name)>)
+    let longest = max(items->map<func (it: Item) => int { len(it.name) }>)
     let width = longest + 2
     let rule = '-'->repeat<width + 24>
-    let heads = ['item', 'qty', 'price', 'amount']->map<(h: string): string => to_upper(h)>
+    let heads = ['item', 'qty', 'price', 'amount']->map<func (h: string) => string { to_upper(h) }>
 
     println(format<pad(heads[0], width), heads[1], heads[2], heads[3]>('{}{:>5}{:>9}{:>10}'))
     println(rule)
-    println(items->map<(it: Item): string => line(it, width)>->join<'\n'>)
+    println(items->map<func (it: Item) => string { line(it, width) }>->join<'\n'>)
     println(rule)
     println(format<pad('total', width), sum(items->map<amount>)>('{}{:>24.2f}'))
     return 0

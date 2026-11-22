@@ -28,7 +28,7 @@ func main(): int sync {
     println('jax_vmap')
     println(batched([0.0, 1.0, 2.0]))
     println(batched([1.0, 2.0]))
-    let inline_batched = vmap((x: float) => x + x)
+    let inline_batched = vmap(func (x: float) { x + x })
     println(inline_batched([1.0, 2.0, 3.0]))
     return 0
 }

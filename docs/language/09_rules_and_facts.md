@@ -140,7 +140,7 @@ fact nonnegative(v: int): bool match v {
     case x - y   => false
     case x + y   => nonnegative(x) && nonnegative(y)
     case _       => true
-} join (lhs: bool, rhs: bool) => lhs | rhs
+} join func (lhs: bool, rhs: bool) { lhs | rhs }
 
 /// A count is its own absolute value.
 rule abs_of_count(x: int) when nonnegative(x) { abs(x) => x }
@@ -254,7 +254,7 @@ fact sign(v: int): int match v {
 fact mul_by_one(a: Node, b: Node): bool match (a, b) {
     case x * y => sign(y) == 1
     case _     => false
-} join (lhs: bool, rhs: bool) => lhs | rhs
+} join func (lhs: bool, rhs: bool) { lhs | rhs }
 
 rule mul_one_by_parts(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 
