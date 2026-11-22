@@ -410,13 +410,13 @@ void ParserImpl::parseFuncType() {
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
     }
-    if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {
+    if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "panic") || atWord(0, "spelling")) {
         parseResourceClause();
     }
     close(m, NK::FuncType);
 }
 
-/// resourceClause : 'spelling'? ('uses' usesEntry (',' usesEntry)* | 'pure')*
+/// resourceClause : 'spelling'? ('pure' | 'panic')* ('uses' usesEntry (',' usesEntry)* | 'pure')*
 ///
 /// What a function type says about the resources a call touches (design effects plan 3.1):
 /// `pure` says none; `uses` names parameters (the values a call touches) and resources
@@ -429,9 +429,19 @@ void ParserImpl::parseFuncType() {
 /// (`uses spelling` names one). `uses`, `pure` and `spelling` are contextual. A `pure` followed by
 /// a `uses` is read here and refused when the clause is compiled (PureAndUses), so the error names
 /// the two words rather than the token after them.
+///
+/// `panic` is the fourth word of this position (design principles 3.9, 负责人 2026-11-22): a call of
+/// the operator it is written on can fail, and a declaration that leaves it out promises that no
+/// call does. It takes no list, unlike `uses`, and it is written beside `pure`. It is consumed in
+/// the run of words before `uses` -- the run `Builder::visitResourceClause` reads as the clause's
+/// own words -- and not inside the loop below, because `uses panic` names a resource of that name
+/// and that spelling is an entry of the list.
 void ParserImpl::parseResourceClause() {
     const size_t m = mark();
     if (atWord(0, "spelling")) {
+        bump();
+    }
+    while (!panic_ && (atWord(0, "pure") || atWord(0, "panic"))) {
         bump();
     }
     while (!panic_ && (atWord(0, "pure") || atWord(0, "uses"))) {

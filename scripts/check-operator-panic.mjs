@@ -57,17 +57,33 @@
  * "raises nothing": a check of nothing is never a pass. The direction is stated here because it is
  * the one that would hide a fault, and the counters in the report are the size of it.
  *
+ * --- what the scan root is, and why it is `git ls-files` --------------------
+ * The scan reads **the repository**, not whatever a directory happens to hold. The two are not the
+ * same tree: a build directory holds a copy of the sources, and a bench run leaves one under
+ * `.cache/parser-bench-dual/` that is stale by however long ago it was made. A directory walk
+ * cannot tell a copy from the original, so it read that copy as the source and reported eight
+ * kernels of `modules/algo/operators.cpp` as missing from a file nobody had edited -- the file it
+ * was reading was not in the repository at all.
+ *
+ * So the file list comes from `git ls-files`, and from nowhere else: a path that is not in that
+ * list can never enter the run, and the check says so instead of skipping it. `.cache/`, `out/`,
+ * `build*`, `third_party/` and any `node_modules/` are build residue, never repository content;
+ * a tracked path under one of them is left out of the scan and **reported**, so that leaving it out
+ * is a reading and not a silence.
+ *
  * --- usage -----------------------------------------------------------------
  *   node scripts/check-operator-panic.mjs            report, exit 1 on any mismatch
  *   node scripts/check-operator-panic.mjs --list     report every operator's reading, not only reds
- *   node scripts/check-operator-panic.mjs --root DIR check a fixture tree instead of the repository
+ *   node scripts/check-operator-panic.mjs --root DIR check another git worktree instead of this one
  *
  * Exit status: 0 when every operator's implementation and declaration agree, 1 when they do not,
- * 2 when the scan found no operator or could not find a kernel's implementation.
+ * 2 when the scan found no operator, could not find a kernel's implementation, could not read what
+ * `git ls-files` lists, or was handed a path that `git ls-files` does not list.
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const NAME = 'operator-panic'
@@ -76,7 +92,14 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 /** The sources of the standard library and of every module: the check has no second scope. */
 const SOURCE = /\.(?:h|hpp|cpp|cc|cxx)$/
 const CAMEL = /\.cml$/
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'build', 'out', 'third_party'])
+
+/**
+ * A directory of build residue: a copy of the tree, or something no source lives in. The word
+ * `build*` names the build output directories (`build`, `build2`, `build-debug`, `build.cmake`,
+ * `cmake-build-debug`); a directory whose name merely starts with the same letters is not one, so
+ * `test/cases/tools/build_stamp/` -- a test case -- stays in scope.
+ */
+const BUILD_RESIDUE = /^(?:\.cache|out|third_party|node_modules|build\d*|build[-.].*|cmake-build.*)$/
 
 /** A raise of one of these is a defect of the compiler, not a fault of the program (3.9). */
 const INTERNAL_RAISES = new Set(['OperandTypeUnsupported', 'NullSlotUnwrapped'])
@@ -88,14 +111,66 @@ const scanRoot = rootAt >= 0 ? path.resolve(args[rootAt + 1] ?? '.') : ROOT
 
 // ---- reading the tree ------------------------------------------------------
 
-function walk(dir, out = []) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (SKIP_DIRS.has(entry.name)) continue
-    const p = path.join(dir, entry.name)
-    if (entry.isDirectory()) walk(p, out)
-    else out.push(p)
+/**
+ * The paths git tracks in `dir`, relative and with `/` separators. This is the run's only entrance:
+ * a file the repository does not hold is not a file this check may read, and the answer to "what
+ * are the sources" is `git ls-files` rather than a directory walk, which cannot tell the tree from
+ * a copy of it.
+ */
+function listTracked(dir) {
+  let listing
+  let toplevel
+  try {
+    toplevel = execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+  } catch (error) {
+    console.error(`[${NAME}] ${dir} is not in a git worktree: ${error.message}`)
+    console.error(`[${NAME}] the scan reads a repository, and refuses a directory it cannot name as one`)
+    process.exit(2)
   }
-  return out
+  if (path.resolve(toplevel).toLowerCase() !== path.resolve(dir).toLowerCase()) {
+    console.error(`[${NAME}] ${dir} is inside the worktree rooted at ${toplevel}, not its root`)
+    console.error(`[${NAME}] \`git ls-files\` under a subdirectory lists that subdirectory: the scan would read a fragment as the whole repository and is refused`)
+    process.exit(2)
+  }
+  try {
+    listing = execFileSync('git', ['-C', dir, 'ls-files', '-z'], {
+      encoding: 'utf8',
+      maxBuffer: 256 << 20,
+    })
+  } catch (error) {
+    console.error(`[${NAME}] cannot list what ${dir} holds with \`git ls-files\`: ${error.message}`)
+    console.error(`[${NAME}] a scan that cannot say what is in the repository is refused, never guessed`)
+    process.exit(2)
+  }
+  return listing.split('\0').filter(Boolean)
+}
+
+const trackedPaths = listTracked(scanRoot)
+const tracked = new Set(trackedPaths)
+
+/**
+ * The files this run reads. Every read goes through `readTracked`, which names a path it cannot
+ * account for and stops: a path outside the repository read as if it were the repository is the
+ * defect this check was written to catch, and skipping it quietly would turn "read the wrong tree"
+ * into "the check passed".
+ */
+const readPaths = new Set()
+
+function readTracked(file) {
+  const relative = path.relative(scanRoot, file).split(path.sep).join('/')
+  if (!tracked.has(relative)) {
+    console.error(`[${NAME}] ${file} is not a file of the repository: \`git ls-files\` does not list ${relative}`)
+    console.error(`[${NAME}] every path the scan reads is one the repository holds; this one is named, not skipped`)
+    process.exit(2)
+  }
+  readPaths.add(relative)
+  try {
+    return fs.readFileSync(file, 'utf8')
+  } catch (error) {
+    console.error(`[${NAME}] cannot read ${relative}, which \`git ls-files\` lists: ${error.message}`)
+    console.error(`[${NAME}] a check of an implementation it cannot read is refused, never passed`)
+    process.exit(2)
+  }
 }
 
 /**
@@ -366,7 +441,7 @@ const PAIR = /\{\s*"([A-Za-z_][\w./]*)"\s*,\s*(__\w+__|[A-Za-z_]\w*)\s*(?:,|\})/
 function readRegistrations(files, raws) {
   const pairs = []
   for (const file of files) {
-    const text = blank(fs.readFileSync(file, 'utf8'))
+    const text = blank(readTracked(file))
     const raw = raws.get(file) ?? ''
     MAP_HEAD.lastIndex = 0
     let m
@@ -404,7 +479,7 @@ function readDeclarations(cmlFiles, sourceFiles) {
     stated.get(uri).push({ uri, value, file, line })
   }
   for (const file of cmlFiles) {
-    const lines = fs.readFileSync(file, 'utf8').split('\n')
+    const lines = readTracked(file).split('\n')
     for (let i = 0; i < lines.length; i++) {
       const marker = /^\s*#op\(\s*'([^']+)'\s*\)/.exec(lines[i])
       if (!marker) continue
@@ -420,7 +495,7 @@ function readDeclarations(cmlFiles, sourceFiles) {
     }
   }
   for (const file of sourceFiles) {
-    const text = blank(fs.readFileSync(file, 'utf8'))
+    const text = blank(readTracked(file))
     const re = /CppRegistration\s*(?:&)?\s*\w*\s*\(\s*"([^"]+)"\s*,\s*(true|false)\s*\)/g
     let m
     while ((m = re.exec(text))) record(m[1], m[2] === 'true', file, lineAt(text, m.index))
@@ -430,7 +505,26 @@ function readDeclarations(cmlFiles, sourceFiles) {
 
 // ---- the run ---------------------------------------------------------------
 
-const all = walk(scanRoot)
+/**
+ * The run's subject: the repository's files, with the build residue cut out. `git ls-files` is the
+ * list; a path whose components include a build directory is left out **and counted**, because a
+ * tracked file that the scan skips is a reading somebody has to see.
+ */
+const residue = []
+const all = []
+for (const relative of trackedPaths) {
+  const parts = relative.split('/')
+  // Only the directories on the way to the file count: `build/x.cpp` is residue, `builder.cpp` is a
+  // source, and a test that reads the name of the file would confuse them.
+  const directories = parts.slice(0, -1)
+  const outside = directories.find(part => BUILD_RESIDUE.test(part))
+  if (outside) {
+    residue.push(`${relative} (${outside}/)`)
+    continue
+  }
+  all.push(path.join(scanRoot, ...parts))
+}
+
 const sourceFiles = all.filter(f => SOURCE.test(f))
 const cmlFiles = all.filter(f => CAMEL.test(f))
 
@@ -439,7 +533,7 @@ const raws = new Map()
 const functions = new Map()
 const definitionsByName = new Map()
 for (const file of sourceFiles) {
-  const raw = fs.readFileSync(file, 'utf8')
+  const raw = readTracked(file)
   raws.set(file, raw)
   const text = blank(raw)
   texts.set(file, text)
@@ -503,6 +597,33 @@ for (const registration of registrations) {
 
 const declarations = readDeclarations(cmlFiles, sourceFiles)
 
+// ---- the scan root's own check --------------------------------------------
+//
+// Every read above went through `readTracked`, which stops on a path `git ls-files` does not list.
+// What is checked here is the other direction: that the run read exactly the files it enumerated.
+// A file that was enumerated and never read, or a read that came from somewhere the enumeration
+// does not cover, is the same defect seen from the other side -- a check reading a tree it cannot
+// name -- and both are answered by naming the difference rather than by passing.
+
+const unaccounted = [...readPaths].filter(relative => !tracked.has(relative))
+if (unaccounted.length) {
+  for (const relative of unaccounted) {
+    console.error(`[${NAME}] ${relative} was read and \`git ls-files\` does not list it`)
+  }
+  console.error(`[${NAME}] ${unaccounted.length} files the scan cannot account for: a scan of the wrong tree is refused, never passed`)
+  process.exit(2)
+}
+const expectedReads = sourceFiles.length + cmlFiles.length
+if (readPaths.size !== expectedReads) {
+  const read = new Set(readPaths)
+  const missed = [...sourceFiles, ...cmlFiles]
+    .map(file => path.relative(scanRoot, file).split(path.sep).join('/'))
+    .filter(relative => !read.has(relative))
+  for (const relative of missed) console.error(`[${NAME}] ${relative} was enumerated and never read`)
+  console.error(`[${NAME}] ${readPaths.size} files read of ${expectedReads} enumerated: the run is not the scan it says it is, and is refused`)
+  process.exit(2)
+}
+
 const classify = kind => {
   if (kind === 'DivisionByZero') return 'division-by-zero'
   if (kind === 'IndexOutOfRange') return 'index-out-of-range'
@@ -553,7 +674,7 @@ for (const operator of [...operators.values()].sort((a, b) => a.uri.localeCompar
 }
 
 const line = message => console.log(message)
-line(`[${NAME}] ${sourceFiles.length} source files read; ${operators.size} operators registered in ${new Set(registrations.map(r => r.file)).size} implementation maps`)
+line(`[${NAME}] ${sourceFiles.length} source files read from \`git ls-files\` under ${scanRoot}; ${operators.size} operators registered in ${new Set(registrations.map(r => r.file)).size} implementation maps`)
 const totals = [...kindTotals.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')
 const siteCount = [...kindTotals.values()].reduce((a, b) => a + b, 0)
 line(`[${NAME}] ${siteCount} raises reachable from an operator's implementation: ${totals || '(none)'}`)
@@ -562,6 +683,11 @@ for (const kind of distinctSites.values()) distinctKinds.set(kind, (distinctKind
 const distinctLine = [...distinctKinds.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')
 line(`[${NAME}] ${distinctSites.size} distinct raise sites, the same site reached by several operators counted once: ${distinctLine || '(none)'}`)
 line(`[${NAME}] ${red.length} operators raise and state no \`panic\`; ${green.length} agree; ${unkept.length} state a fault their implementation does not raise`)
+line(`[${NAME}] ${readPaths.size} files read, every one of them listed by \`git ls-files\`; ${residue.length} tracked paths under ${BUILD_RESIDUE.source} were not scanned`)
+if (residue.length) {
+  for (const skipped of residue.slice(0, 10)) line(`  not scanned: ${skipped}`)
+  if (residue.length > 10) line(`  not scanned: and ${residue.length - 10} more`)
+}
 
 if (listAll) {
   for (const operator of [...red, ...green, ...unkept].sort((a, b) => a.uri.localeCompare(b.uri))) {

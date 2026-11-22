@@ -254,6 +254,15 @@ class ResourceClauseLoad : public Load {
     bool pure() const { return pure_; }
     void setPure(bool pure) { pure_ = pure; }
 
+    /// Whether the clause writes `panic`: a call of the operator this is declared on can fail
+    /// (design principles 3.9, 负责人 2026-11-22). It takes no list -- the kind of a fault is read
+    /// from what the call raises, not from the declaration -- and a declaration that leaves it out
+    /// promises that no call of it fails. It is carried here because it is written in this clause,
+    /// beside `pure`: the word belongs to the clause, and `panic` is not part of the function type
+    /// it follows.
+    bool panic() const { return panic_; }
+    void setPanic(bool panic) { panic_ = panic; }
+
     /// Whether the clause writes `spelling`: the body may read the spelling of the program -- a
     /// name, a source position, creation order and creation numbers, the text a node shows
     /// (design principles 9.5). It is written in the same clause as `pure`/`uses` and carried by
@@ -272,6 +281,7 @@ class ResourceClauseLoad : public Load {
   private:
     bool pure_ = false;
     bool spelling_ = false;
+    bool panic_ = false;
     std::vector<Uses> uses_;
 };
 
