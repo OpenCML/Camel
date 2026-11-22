@@ -32,4 +32,4 @@ func main() sync {
 9.3 ms 因此从 `import pyplot` 消失，改由第一次 `plot` 支付。初始化失败的种类与退出码不变
 （`RuntimeDiag::RuntimeError`、exit 1），但位置从导入处移到调用处，诊断文本写明 “at its first use”；
 `inspect --ops` 也不再需要解释器就能列出 `pyplot:plot`。测量、两种导入顺序与把这条规则钉住的测试见
-[`docs/technical/50_pyplot_cpython_init.md`](../../docs/technical/50_pyplot_cpython_init.md)。
+[`docs/technical/50_pyplot_cpython_init.md`](../../../docs/technical/50_pyplot_cpython_init.md)。

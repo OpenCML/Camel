@@ -288,7 +288,7 @@ export function findInterpreterDevelopmentLayout(pythonExe) {
     return { root, includeDir, libDir, dotted }
 }
 
-/** True if `pythonRootDir` is a `lib/python/sdks/python3xx` tree (CMake glob layout). */
+/** True if `pythonRootDir` is a `src/stdlib/sdks/python3xx` tree (CMake glob layout). */
 function isUnderCamelPythonSdks(pythonRootDir) {
     const sdksRoot = path.resolve(BASEDIR, 'modules', 'python', 'sdks')
     const resolved = path.resolve(pythonRootDir)
@@ -387,7 +387,7 @@ export function resolveRollupPythonExecutable(sdkRoot, rollupMm, preferExe) {
 
 /**
  * @param {object} [opts]
- * @param {string} [opts.rollupMm] - **PyPI rollup only**: "312" → lib/python/sdks/python312, one wheel per SDK.
+ * @param {string} [opts.rollupMm] - **PyPI rollup only**: "312" → src/stdlib/sdks/python312, one wheel per SDK.
  *   Omit for normal `npm run build` — then CMake builds every py_bridge* for all SDK folders (no narrowing).
  * @param {string} [opts.pythonRootDir] - passed to CMake FindPython / Python3_ROOT_DIR.
  * @param {string} [opts.pythonExecutable] - CMake Python_EXECUTABLE / Python3_EXECUTABLE.
@@ -418,7 +418,7 @@ export default function main(opts = {}) {
         if (!layout) {
             throw new Error(
                 'PyPI rollup: could not resolve Python include/libs from the interpreter (sys.base_prefix / sysconfig). ' +
-                    'Install a full CPython with headers, or use lib/python/sdks/python* from sync-python-sdks.'
+                    'Install a full CPython with headers, or use src/stdlib/sdks/python* from sync-python-sdks.'
             )
         }
         pushEnv('CAMEL_PYPI_SDK_ROOT', layout.root)

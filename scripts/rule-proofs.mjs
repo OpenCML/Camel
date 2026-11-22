@@ -3,7 +3,7 @@
 
 // Every rule of the standard rule library, decided by an SMT solver instead of sampled.
 //
-// `lib/rules/rules.cml` is read as the single truth: the rule declarations, the licence each one asks
+// `src/stdlib/rules.cml` is read as the single truth: the rule declarations, the licence each one asks
 // for (`#requires(...)`), the condition each one is guarded by (`when`), and the two sides of each
 // one. For every rule this script states one proposition -- "the two sides denote the same value for
 // every input the rule admits" -- and asks Z3 whether its negation is unsatisfiable:
@@ -67,10 +67,19 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// The library files its rule list under `lib/rules/` after the layout move (it was `stdlib/`), and
-// the licence names in the engine's operator semantics under `kernel/core/`.
-const LIBRARY = path.join(ROOT, 'lib', 'rules', 'rules.cml')
-const PERMISSIONS = path.join(ROOT, 'kernel', 'core', 'operator_semantics.cpp')
+// The library files its rule list at the root of `src/stdlib/` since the 2026-11-22 move
+// (`lib/rules/rules.cml` after the layout move, `stdlib/rules/rules.cml` before it), and the licence
+// names in the engine's operator semantics under `src/kernel/core/` (also `kernel/core/` after the
+// layout move). The spelling the tree has decides, so the file is found in the layout it is in.
+const LIBRARY = [
+    path.join(ROOT, 'src', 'stdlib', 'rules.cml'),
+    path.join(ROOT, 'lib', 'rules', 'rules.cml'),
+    path.join(ROOT, 'stdlib', 'rules', 'rules.cml'),
+].find((file) => fs.existsSync(file))
+const PERMISSIONS = [
+    path.join(ROOT, 'src', 'kernel', 'core', 'operator_semantics.cpp'),
+    path.join(ROOT, 'kernel', 'core', 'operator_semantics.cpp'),
+].find((file) => fs.existsSync(file))
 
 function fail(message) {
     console.error(`rule-proofs: ${message}`)

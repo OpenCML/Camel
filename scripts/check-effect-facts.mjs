@@ -22,11 +22,11 @@
  *
  *   1. the directory tree of the header that declares a named symbol, recursively, the files that
  *      declare or define it, and the implementation files named after that header --
- *      `isPure`/`hasExternalEffect` are declared in `kernel/include/camel/core/operator_table.h` and
- *      defined in `kernel/core/operator_table.cpp`, so `kernel/include/camel/core/` and that `.cpp` are home;
+ *      `isPure`/`hasExternalEffect` are declared in `src/kernel/include/camel/core/operator_table.h` and
+ *      defined in `src/kernel/core/operator_table.cpp`, so `src/kernel/include/camel/core/` and that `.cpp` are home;
  *   2. the same three things for `effectSummaryOf`, the function that hands out the fact layer's
- *      answer: it is declared in `kernel/include/camel/runtime/effects.h` and defined in
- *      `kernel/runtime/effects.cpp`, so `kernel/include/camel/runtime/` and that `.cpp` are home too.
+ *      answer: it is declared in `src/kernel/include/camel/runtime/effects.h` and defined in
+ *      `src/kernel/runtime/effects.cpp`, so `src/kernel/include/camel/runtime/` and that `.cpp` are home too.
  *
  * A named symbol used outside that home is a crossing, reported once per use (`path:line: symbol`).
  * A use whose **statement** also names the other atom is tagged as the combination the invariant
@@ -34,7 +34,7 @@
  * too, because it is the same question asked of the same two declarations in a second place.
  *
  * **This rule is mechanical, and it is the author's to change.** The judgement it encodes is that
- * the answer is one fact (`EffectSummary`, declared in `kernel/include/camel/runtime/effects.h`) and that
+ * the answer is one fact (`EffectSummary`, declared in `src/kernel/include/camel/runtime/effects.h`) and that
  * its two atoms (`OperatorTable::isPure`, `OperatorTable::hasExternalEffect`) are its inputs. If a
  * file outside these trees is where the answer belongs, move the answer there or add the file here,
  * deliberately, with the reason written beside it -- and if the second atom should be removed from
@@ -166,7 +166,7 @@ function homeOf(files, symbols) {
     }
     // Only a header contributes its directory tree: the rule is "the tree of the header that
     // declares it", and letting an implementation file pull in its own directory would make all of
-    // `kernel/runtime/` the fact layer.
+    // `src/kernel/runtime/` the fact layer.
     const dirs = [...new Set([...declaring].filter((file) => HEADER.test(file)).map((file) => path.dirname(file)))]
     const stems = new Set([...declaring].map((file) => path.basename(file).replace(SOURCE, '')))
     const impls = new Set(

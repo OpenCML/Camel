@@ -10,10 +10,10 @@
  * optional axis that defaults to the last one.
  *
  * `max(t)` / `min(t)` / `argmax(t)` / `argmin(t)` are the whole-tensor forms of the four reductions
- * that otherwise have only the axis form (design principles 7.3 names them under one name; 7.7 gives
- * them the readings below). They answer an element (max/min) or the position counted in row-major
- * order (argmax/argmin, an int64), and a tensor with no element is `InvalidArgument` -- an extremum
- * has no identity, unlike `sum`, whose identity is 0 (7.7).
+ * that otherwise have only the axis form (design principles 7.3 names them under one name; 7.7
+ * gives them the readings below). They answer an element (max/min) or the position counted in
+ * row-major order (argmax/argmin, an int64), and a tensor with no element is `InvalidArgument` --
+ * an extremum has no identity, unlike `sum`, whose identity is 0 (7.7).
  *
  * Where the accumulation happens, per form (reduction and rounding are one rule,
  * design principles 7.3):
@@ -117,8 +117,8 @@ template <k::ReduceOp Op> slot_t reduceAxisKernel(ArgsView &, ArgsView &norm, co
 /// leaves the rank open (`T[..]`). None of the three is guessed.
 ///
 /// This is the signature a program reads: the axis reductions are computed rather than declared
-/// (`lib/tensor/module.cpp#kDeclaredOperators`), because a declaration's result is a type and
-/// these extents are a function of two values.
+/// (`src/stdlib/tensor/module.cpp#kDeclaredOperators`), because a declaration's result is a type
+/// and these extents are a function of two values.
 InferFn reduceAxisInfer(k::ReduceOp op) {
     return [op](const InferContext &ctx) -> std::optional<Type *> {
         const TensorFacts in          = ctx.facts(0);
@@ -316,7 +316,7 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// The three parameters carry the values `reduceAxisInfer` reads as arguments -- `axis`, `keepdims`
 /// and the operand's `extents` -- and each is read by name now, not by its place in a list. That is
 /// why this name is **computed** rather than declared
-/// (`lib/tensor/module.cpp#kDeclaredOperators`): a declaration's result is a type, and these
+/// (`src/stdlib/tensor/module.cpp#kDeclaredOperators`): a declaration's result is a type, and these
 /// extents are a function of three values, so the only type a declaration could write is `T[..]`.
 ///
 /// When a call states all three, the extents are known and the answer is stated with them: `axis

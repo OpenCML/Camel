@@ -5,7 +5,7 @@
 // The source tree is not an install. A `.cmo` is the binary of a C++ module and
 // comes out of a build; a `.so` / `.dll` / `.pdb` / `.o` beside the sources is build output that
 // belongs in `build/` or `out/<tag>/`. The module loader finds modules beside the executable and
-// under `CAMEL_HOME` (`kernel/include/camel/utils/install_layout.h`), and `collect-out` puts the
+// under `CAMEL_HOME` (`src/kernel/include/camel/utils/install_layout.h`), and `collect-out` puts the
 // manifest's `.cmo` into `out/<tag>/stdlib`, so nothing has to be written next to `stdlib/*.cml`.
 //
 //   node scripts/check-source-artifacts.mjs              exit 1 and one line per artifact
@@ -20,8 +20,8 @@
 // What is checked: the directories the build reads (BUILD_INFO_ROOTS in scripts/common.js) for a
 // C++ module binary under `stdlib/` or `modules/`, and for a linker output (`.so`, `.dll`, `.pdb`,
 // `.o`, `.obj`, `.a`, `.lib`, `.dylib`, `.exe`, `.ilk`) anywhere under them. Two directories hold
-// vendored binaries rather than build output and are skipped: `lib/python/sdks/` and
-// `lib/python/dlls/` (both git-ignored). The one tracked `.cmo` is
+// vendored binaries rather than build output and are skipped: `src/stdlib/sdks/` and
+// `src/stdlib/dlls/` (both git-ignored). The one tracked `.cmo` is
 // `test/cases/modules/pass_not_found/unloadable.cmo`: a 72-byte text fixture, outside the
 // roots above, which this check never reads; `feat/modules/pass_not_found` pins that it stays
 // text, so it is not a compiled object an audit should count.

@@ -448,7 +448,7 @@ export rule subtract_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) {
 // A product's cotangent is written with two more products: `a · b` passes `ct · bᵀ` back to `a` and
 // `aᵀ · ct` back to `b`. Both are the operator itself, so the law needs no arithmetic of its own and
 // no operator the library does not already publish -- the transposition of the *known* operand is
-// `tensor:transpose` (the last two axes swapped, `lib/tensor/signatures/tensor.cml#transpose`), which
+// `tensor:transpose` (the last two axes swapped, `src/stdlib/tensor/signatures/tensor.cml#transpose`), which
 // reads a value the cut already carries, not the cotangent. Nothing here asks for a shape: the
 // extents are the operands' own, `transpose` carries them through, and `matmul` checks the pair where
 // the node is built -- the same place the forward rule's `matmul(da, b)` is checked

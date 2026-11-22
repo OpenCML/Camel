@@ -37,10 +37,10 @@ revision = options.source_revision or subprocess.check_output(['git', 'rev-parse
 if not re.fullmatch(r'[0-9a-f]{40}', revision):
     parser.error('--source-revision must be a full commit ID')
 fingerprint = hashlib.sha256()
-# The module's directory is `lib/tiles/` after the layout move and `modules/tiles/` before it; the
+# The module's directory is `src/stdlib/` after the layout move and `modules/tiles/` before it; the
 # fingerprint covers whichever one this checkout has, so it stays a fingerprint of the sources the
 # run measured.
-tiles_root = next(candidate for candidate in (root / 'lib/tiles', root / 'modules/tiles') if candidate.is_dir())
+tiles_root = next(candidate for candidate in (root / 'src/stdlib', root / 'modules/tiles') if candidate.is_dir())
 files = sorted(p for p in tiles_root.rglob('*')
                if p.is_file() and (p.suffix in {'.cpp', '.h'} or p.name == 'CMakeLists.txt'))
 for path in files + [case]:

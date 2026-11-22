@@ -59,9 +59,9 @@ struct WrittenConstant {
 /// `instance.lhs`, each with the value that graph's static area holds for it.
 ///
 /// `jvp_reshape`'s left side is `reshape<[2, 2]>(x)`, and the shape is written by the left side, so
-/// it is no parameter of the rule -- it is one `<>` value, an `int[]` holding `2, 2`. Empty for a law
-/// that names its configuration as a parameter instead (`(x, dims: int[])`), and for an operator that
-/// takes none.
+/// it is no parameter of the rule -- it is one `<>` value, an `int[]` holding `2, 2`. Empty for a
+/// law that names its configuration as a parameter instead (`(x, dims: int[])`), and for an
+/// operator that takes none.
 ///
 /// The left side's operator node is found the way `rule_templates.cpp` found it when it recorded
 /// `lhsOperatorUri`: the first `Oper` node of the published left side.
@@ -89,12 +89,13 @@ leftSideConstantsOf(const camel::compile::gir::GenericRuleInstance &instance) {
             //   `reshape<dims>(x)`    -- a `Port` node, i.e. the rule's own parameter: the law says
             //                            *nothing* about the configuration and takes the node's,
             //                            which the matcher already binds. Reading this as a written
-            //                            value is the mistake this branch exists to not make: it has
-            //                            no value to compare (`dataIndex` is not negative), and
-            //                            comparing against the placeholder refused `jvp_reshape` for
-            //                            every node in the tree (it refused with, verbatim
+            //                            value is the mistake this branch exists to not make: it
+            //                            has no value to compare (`dataIndex` is not negative), and
+            //                            comparing against the placeholder refused `jvp_reshape`
+            //                            for every node in the tree (it refused with, verbatim
             //                            "writes 1 `<>` value(s) of its own ((int[])), and this
-            //                            node's configuration is not that one ((float[...], int[]))").
+            //                            node's configuration is not that one ((float[...],
+            //                            int[]))").
             if (constant == nullptr || constant->kind != camel::runtime::GCNodeKind::Data ||
                 constant->dataIndex >= 0) {
                 continue;
@@ -118,18 +119,18 @@ leftSideConstantsOf(const camel::compile::gir::GenericRuleInstance &instance) {
 /// This is the half the fit was missing. A `<>` value is compared **by content** against the value
 /// the node holds at that port -- `valuesEqualByContent`, the same relation `==` uses on the two
 /// arrays -- because the type does not carry it: `reshape<[2, 2]>` and
-/// `reshape<[2, 1, 2]>` are assignable to one another, so a type comparison lets the law through and
-/// its right side then writes `[2, 2]` into the tangent of a rank-three reshape. A law written for
-/// one configuration therefore answers only the node that carries that configuration, which is the
-/// defect this closes: `reshape<[8, 2, 8]>` would match the law written for `[2, 2]` and the run
-/// would die with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
+/// `reshape<[2, 1, 2]>` are assignable to one another, so a type comparison lets the law through
+/// and its right side then writes `[2, 2]` into the tangent of a rank-three reshape. A law written
+/// for one configuration therefore answers only the node that carries that configuration, which is
+/// the defect this closes: `reshape<[8, 2, 8]>` would match the law written for `[2, 2]` and the
+/// run would die with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
 ///
-/// A law that writes **no** `<>` value is not asked about the node's configuration here: what such a
-/// law says about it is nothing, and `namesTheNode` already settles how many ports it must name.
+/// A law that writes **no** `<>` value is not asked about the node's configuration here: what such
+/// a law says about it is nothing, and `namesTheNode` already settles how many ports it must name.
 /// That leaves one hole open and it is written down rather than closed by guessing: `jvp_sum` names
-/// one port and writes none, so it would fit the three ports of `sum<0, false>(xs)`. Today the wider
-/// `jvp_sum_axis` wins on `fitting.size()` before the choice is made (`the `widest` step below`);
-/// closing it here would mean comparing against a law that states nothing.
+/// one port and writes none, so it would fit the three ports of `sum<0, false>(xs)`. Today the
+/// wider `jvp_sum_axis` wins on `fitting.size()` before the choice is made (`the `widest` step
+/// below`); closing it here would mean comparing against a law that states nothing.
 ///
 /// A caller that passes no `portValues` cannot answer the question, and a law that writes a `<>`
 /// value is then **refused** rather than guessed: answering with the law's own constant is exactly
@@ -156,7 +157,9 @@ bool lawConstantsFitNode(
             return false;
         }
         if (!camel::core::rtdata::valuesEqualByContent(
-                written[i].value, *nodePort, written[i].type)) {
+                written[i].value,
+                *nodePort,
+                written[i].type)) {
             return false;
         }
     }
@@ -225,8 +228,7 @@ std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
 } // namespace
 
 RuleChoice chooseRuleAmong(
-    camel::core::context::Context &context,
-    const std::vector<camel::core::RuleMatch> &candidates,
+    camel::core::context::Context &context, const std::vector<camel::core::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
     const RuleChoiceWords &words, const std::vector<bool> *answered,
@@ -242,9 +244,9 @@ RuleChoice chooseRuleAmong(
     // law to read them again.
     std::vector<Type *> shapePorts;
     std::string lastWhy;
-    // The most specific refusal there is: a candidate whose own left side writes a `<>` value. It is
-    // more specific than a shape mismatch, because the law's types may well fit -- what it cannot do
-    // is describe the node's configuration (see the check in the loop).
+    // The most specific refusal there is: a candidate whose own left side writes a `<>` value. It
+    // is more specific than a shape mismatch, because the law's types may well fit -- what it
+    // cannot do is describe the node's configuration (see the check in the loop).
     std::string constantWhy;
     // Every candidate that instantiates and whose ports take the operands. A key can hold more than
     // one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected first
@@ -284,15 +286,15 @@ RuleChoice chooseRuleAmong(
                           : instance.why;
             continue;
         }
-        // A law that writes a `<>` value of its own must find the node's configuration to be that value.
-        // The fit below compares **types and counts**, and `namesTheNode` lets a law name only some
-        // of the node's ports, so a law whose left side writes a constant would fit every node of
-        // that operator however the node spelled its configuration -- and its right side would then
-        // write the law's constant into the answer. For example
-        // `jvp_reshape`'s left side is `reshape<[2, 2]>(x)`, a `reshape<[8, 2, 8]>` node matched it,
-        // and the tangent came out as `[2, 2]` -- `TensorDimensionMismatch: [6] -> [2, 2]`. Design
-        // principles 9.9: the right derivative, or a refusal at compile time that names the
-        // operator; running and answering a wrong value is not allowed.
+        // A law that writes a `<>` value of its own must find the node's configuration to be that
+        // value. The fit below compares **types and counts**, and `namesTheNode` lets a law name
+        // only some of the node's ports, so a law whose left side writes a constant would fit every
+        // node of that operator however the node spelled its configuration -- and its right side
+        // would then write the law's constant into the answer. For example `jvp_reshape`'s left
+        // side is `reshape<[2, 2]>(x)`, a `reshape<[8, 2, 8]>` node matched it, and the tangent
+        // came out as `[2, 2]` -- `TensorDimensionMismatch: [6] -> [2, 2]`. Design principles 9.9:
+        // the right derivative, or a refusal at compile time that names the operator; running and
+        // answering a wrong value is not allowed.
         //
         // A law that names its configuration as a parameter (`(x: T[...], dims: int[])` reading
         // `reshape<dims>`) writes no `<>` value of its own and is not asked this question: what it
@@ -364,9 +366,9 @@ RuleChoice chooseRuleAmong(
             for (const WrittenConstant &one : written) {
                 writtenTypes.push_back(one.type);
             }
-            constantWhy = std::string("the ") + words.subject + " '" + candidate.rule.name + "' writes " +
-                          std::to_string(written.size()) + " `<>` value(s) of its own (" +
-                          typeTextOf(writtenTypes) +
+            constantWhy = std::string("the ") + words.subject + " '" + candidate.rule.name +
+                          "' writes " + std::to_string(written.size()) +
+                          " `<>` value(s) of its own (" + typeTextOf(writtenTypes) +
                           "), and this node's configuration is not that one (" +
                           typeTextOf(operandTypes) + ")";
             continue;
@@ -398,19 +400,21 @@ RuleChoice chooseRuleAmong(
     // A law that names more of the operator's ports is the narrower one, and that is settled before
     // the port types are compared: the axis reduction's law names the axis and the flag beside the
     // operand (`jvp_sum_axis::<T>(xs, axis, keepdims)`, for `sum<axis, keepdims>(xs)`), while the
-    // whole reduction's law names the operand alone (`jvp_sum::<T>(xs)`, for `sum(xs)`) and does not
-    // refuse the axis node's two extra ports, because `namesTheNode` takes a law that names fewer
-    // ports than the node has -- the rest may be written as constants in the law's own left side
-    // (`reshape`'s shape). Both laws are filed under `sum` at the one operand the parentheses carry,
-    // (a reduction over an axis has one name, the whole
-    // reduction's), so they are told apart here: the law that names every port is the node's.
+    // whole reduction's law names the operand alone (`jvp_sum::<T>(xs)`, for `sum(xs)`) and does
+    // not refuse the axis node's two extra ports, because `namesTheNode` takes a law that names
+    // fewer ports than the node has -- the rest may be written as constants in the law's own left
+    // side
+    // (`reshape`'s shape). Both laws are filed under `sum` at the one operand the parentheses
+    // carry, (a reduction over an axis has one name, the whole reduction's), so they are told apart
+    // here: the law that names every port is the node's.
     size_t widest = 0;
     for (const Fit &fit : fitting) {
         widest = std::max(widest, fit.ports.size());
     }
     fitting.erase(
         std::remove_if(
-            fitting.begin(), fitting.end(),
+            fitting.begin(),
+            fitting.end(),
             [widest](const Fit &fit) { return fit.ports.size() != widest; }),
         fitting.end());
     std::vector<const Fit *> kept;
@@ -480,7 +484,7 @@ bool findRuleRightSide(
     // The walk is camel::runtime::valueBehindGates (camel/runtime/graph.h): a gate's first input
     // is the value it carries, then its first context input, then nothing.
     const gc_node_ref_t exitRef = valueBehindGates(*rhs, rhs->exitNodeRef());
-    const rt::GCNode *exit = exitRef == rt::kInvalidNodeRef ? nullptr : rhs->node(exitRef);
+    const rt::GCNode *exit      = exitRef == rt::kInvalidNodeRef ? nullptr : rhs->node(exitRef);
     if (exit == nullptr) {
         why = "the rule's right side has no value to answer with";
         return false;
@@ -565,10 +569,10 @@ std::vector<bool> portsReadByBody(const rt::GCGraph &body, const std::vector<boo
 /// The operator a law names when it wants an operand's **shape** and not its value.
 ///
 /// `tensor:shape` is the library's own name for the extents of an array
-/// (`lib/tensor/tensor.cml#shape`), and it is the name a law has always had for this: `jvp_sum` states
-/// a sum's extents by writing `sum_stated(dxs, shape(xs))`. What changes here is where the numbers
-/// come from when the caller carries no value for `xs` -- a transposition has none for the operand
-/// it differentiates -- so the rule layer answers the call from the type instead
+/// (`src/stdlib/tensor.cml#shape`), and it is the name a law has always had for this: `jvp_sum`
+/// states a sum's extents by writing `sum_stated(dxs, shape(xs))`. What changes here is where the
+/// numbers come from when the caller carries no value for `xs` -- a transposition has none for the
+/// operand it differentiates -- so the rule layer answers the call from the type instead
 /// (`expandRuleRightSide`).
 constexpr std::string_view kShapeUri = "tensor:shape";
 
@@ -578,10 +582,9 @@ constexpr std::string_view kShapeUri = "tensor:shape";
 /// This is the whole of the pathway: a shape
 /// arrives at a law as a **known operand** -- a constant of the graph, built where the graph is
 /// built -- instead of being read off the value of an operand the caller does not have. It is not a
-/// zero standing in for a value (`transpose/walk.cpp#shapeCarrierOf` was one, and a law that multiplied
-/// by it answered zeros); it is the extents themselves, and the only thing that
-/// reads them is the shape (5.4: a shape is a fact about a type, and this is that fact written
-/// down).
+/// zero standing in for a value (`transpose/walk.cpp#shapeCarrierOf` was one, and a law that
+/// multiplied by it answered zeros); it is the extents themselves, and the only thing that reads
+/// them is the shape (5.4: a shape is a fact about a type, and this is that fact written down).
 gc_node_ref_t statedExtentsValue(
     camel::runtime::GraphDraft &draft, camel::core::type::Type *extentsType,
     const std::vector<int64_t> &extents) {
@@ -729,7 +732,7 @@ gc_node_ref_t expandRuleRightSide(
     std::vector<bool> keep;
     gc_node_ref_t answerRef = body->exitNodeRef();
     if (position != kWholeAnswer) {
-        answerRef = valueBehindGates(*body, answerRef);
+        answerRef              = valueBehindGates(*body, answerRef);
         const rt::GCNode *exit = answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
         if (exit == nullptr) {
             why = "the rule's right side has no value to answer with";
@@ -915,7 +918,8 @@ gc_node_ref_t expandRuleRightSide(
     //
     //   * the law's port for that capture states its extents (`float[2, 3]` does, `float[..]` and a
     //     number do not). The instance is made at the node's own operand types
-    //     (`expandRuleByName`, `transpose/walk.cpp#ruleCotangent`), so the port is the operand's type;
+    //     (`expandRuleByName`, `transpose/walk.cpp#ruleCotangent`), so the port is the operand's
+    //     type;
     //   * every place the answer reads that capture is a `tensor:shape` call. A body that read it
     //     anywhere else needs the value, and the value is the caller's to carry: substituting there
     //     would answer arithmetic with a shape, which is the silent zero this exists to remove.
@@ -1277,8 +1281,8 @@ gc_node_ref_t expandRuleRightSide(
     // carries the same value. A position asks for one component of that value, which the gate walk
     // above has already found.
     gc_node_ref_t out = position == kWholeAnswer ? body->exitNodeRef() : answerRef;
-    out = valueBehindGates(*body, out);
-    const auto at = copied.find(out);
+    out               = valueBehindGates(*body, out);
+    const auto at     = copied.find(out);
     if (at == copied.end()) {
         why = "the rule's right side has no exit the transform can read";
         return rt::kInvalidNodeRef;

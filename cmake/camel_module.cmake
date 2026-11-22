@@ -142,7 +142,7 @@ function(add_camel_module)
       endif()
 
       if(NOT _rollup_sdk_ok)
-        # pypi-rollup + venv: build.js sets CAMEL_PYPI_SDK_ROOT to sys.base_prefix (not under lib/python/sdks).
+        # pypi-rollup + venv: build.js sets CAMEL_PYPI_SDK_ROOT to sys.base_prefix (not under src/stdlib/sdks).
         set(_camel_pypi_interpreter_tree FALSE)
         if(DEFINED ENV{CAMEL_PYPI_SDK_ROOT} AND NOT "$ENV{CAMEL_PYPI_SDK_ROOT}" STREQUAL "")
           set(Python_ROOT_DIR "$ENV{CAMEL_PYPI_SDK_ROOT}")
@@ -214,7 +214,7 @@ function(add_camel_module)
           elseif(EXISTS "${_sdk_hit}/bin/python")
             set(Python_EXECUTABLE "${_sdk_hit}/bin/python")
           endif()
-          message(STATUS "Python SDK selected from lib/python/sdks: ${_sdk_hit}")
+          message(STATUS "Python SDK selected from src/stdlib/sdks: ${_sdk_hit}")
         elseif(NOT _active_python_exe STREQUAL "")
           get_filename_component(_py_bin_dir "${_active_python_exe}" DIRECTORY)
           get_filename_component(_py_bin_leaf "${_py_bin_dir}" NAME)

@@ -2,8 +2,8 @@
 
 The public API, supported operations and limitations are documented in
 [README.md](README.md). The language-level route is defined in
-[the Tiles design](../../docs/design/tiles-route/README.cn.md); numerical rules
-follow [the design principles](../../docs/design-principles.cn.md).
+[the Tiles design](../../../docs/design/tiles-route/README.cn.md); numerical rules
+follow [the design principles](../../../docs/design-principles.cn.md).
 
 ## Compilation and execution
 
@@ -94,7 +94,7 @@ logical-bound rejection.
 
 Keep ordinary test logs in local `tmp/` or CI artifacts. Include relevant commands,
 results and limitations in feature commit descriptions. Durable performance evidence
-and reproduction commands live in [measurements](../../docs/performance/tiles/README.md).
+and reproduction commands live in [measurements](../../../docs/performance/tiles/README.md).
 Do not run builds and tests concurrently against the same output directory.
 
 ## Remaining work

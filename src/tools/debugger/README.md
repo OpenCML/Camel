@@ -81,7 +81,7 @@ camel-db --serve 8765
 ```
 
 源码级调试的命令（断点、单步、栈、变量、`frames`）作用于前台任务，经父进程的 `debug` 命令转发给该任务的调试核心；
-一次完整的会话见 [docs/debugging.cn.md](../../docs/debugging.cn.md) 第 2 节。
+一次完整的会话见 [docs/debugging.cn.md](../../../docs/debugging.cn.md) 第 2 节。
 
 
 ## 后端接口与职责
@@ -95,8 +95,8 @@ camel-db --serve 8765
 - stdout/stderr、调试诊断和生命周期由 DAP 转发；停止、重启和退出清理 worker。
 
 HTTP 请求、响应和 target 约定见 [docs/API.md](docs/API.md)。源码级调试教程见
-[docs/debugging.cn.md](../../docs/debugging.cn.md)，DAP、帧、异常和编译流水线设计见
-[docs/technical/35_debugger.md](../../docs/technical/35_debugger.md)。
+[docs/debugging.cn.md](../../../docs/debugging.cn.md)，DAP、帧、异常和编译流水线设计见
+[docs/technical/35_debugger.md](../../../docs/technical/35_debugger.md)。
 
 ## 代码位置
 

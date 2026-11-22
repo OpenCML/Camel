@@ -43,7 +43,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-# The transforms moved with the module: `lib/transforms` now that the module lives in `lib/`,
+# The transforms moved with the module: `src/stdlib` now that the module lives in `src/stdlib/`,
 # `modules/transforms` while it lived beside `Camel/CMakeLists.txt`. Either answers, so this check
 # reads whichever tree it is run in.
 TRANSFORMS = next(

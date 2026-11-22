@@ -16,7 +16,7 @@ exit code: a run that ends in the violation, and a run that ends with any other 
 both failures here, and the stdout and stderr of each are kept.
 
 Every run is a `--timeit` process, which rebuilds the module, the graph and the Context for every
-iteration and destroys them again (tools/camel-cli/timeit.cpp); `--iterations` sets how many of
+iteration and destroys them again (src/tools/camel-cli/timeit.cpp); `--iterations` sets how many of
 those rebuild-and-destroy cycles one process makes. The failure is reported per run, and the
 number of iterations that were run is printed too, so a rate can be given for either.
 

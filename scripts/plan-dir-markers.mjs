@@ -52,7 +52,7 @@ if (pairs.length === 0) {
     process.exit(2)
 }
 
-// A pair is only a trap when the directory holds no plan of its own: `lib/tensor/` sits beside
+// A pair is only a trap when the directory holds no plan of its own: `src/stdlib/` sits beside
 // `tensor.plan.toml` and also holds plans, so both names reach something and there is nothing to
 // warn about. The trap is the directory that holds the fixtures and nothing else.
 const holdsPlans = (dir) => {

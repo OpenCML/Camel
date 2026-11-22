@@ -19,10 +19,10 @@
 pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\<树> -Plan <这条车道的计划> -Jobs 8
 
 # ② 2.1 视图一致性（图车道）
-ssh 88zjwei "cd ~/camel-work/<树> && node tools/diff-gate/gate.mjs --gate view"
+ssh 88zjwei "cd ~/camel-work/<树> && node test/tools/diff-gate/gate.mjs --gate view"
 
 # ③ 2.3 改前改后无差异（前端车道与四种节点的读者）
-ssh 88zjwei "cd ~/camel-work/<树> && node tools/diff-gate/gate.mjs --gate nodes"
+ssh 88zjwei "cd ~/camel-work/<树> && node test/tools/diff-gate/gate.mjs --gate nodes"
 ```
 
 `--gate 2.1` / `--gate 2.3` 是同样的两个门。基线、两边 install 的路径、并发位、两个语料切片全在
@@ -51,8 +51,8 @@ ssh 88zjwei "cd ~/camel-work/<树> && node tools/diff-gate/gate.mjs --gate nodes
 
 | 门 | 条目 | 语料切片 | 读的是 |
 |---|---|---|---|
-| `view` | 2.1 视图一致性 | `smoke/core`、`compile/core`、`compile/gir`、`compile/graph_read`、`compile/branch_exit`、`compile/fold_arms`（34 个 case） | 同一批程序在改前改后**答出同一份输出、画同一张图**。编码器对每张图问的那次「冻结图上与草稿上两个读面是否一致」在这个读数里面：两个读面不一致的图会被拒，那个 case 的退出码就与基线不同，于是计进 `output_differ`。 |
-| `nodes` | 2.3 改前改后无差异 | `compile/casts`、`compile/conversions`、`compile/array_alias`、`compile/broadcast_product_gradient`（27 个 case） | 会建出 Cast/Copy/Fill/Accs 的程序，改前改后输出一致、图一致。 |
+| `view` | 2.1 视图一致性 | `smoke/core`、`src/compile/core`、`src/compile/gir`、`src/compile/graph_read`、`src/compile/branch_exit`、`src/compile/fold_arms`（34 个 case） | 同一批程序在改前改后**答出同一份输出、画同一张图**。编码器对每张图问的那次「冻结图上与草稿上两个读面是否一致」在这个读数里面：两个读面不一致的图会被拒，那个 case 的退出码就与基线不同，于是计进 `output_differ`。 |
+| `nodes` | 2.3 改前改后无差异 | `src/compile/casts`、`src/compile/conversions`、`src/compile/array_alias`、`src/compile/broadcast_product_gradient`（27 个 case） | 会建出 Cast/Copy/Fill/Accs 的程序，改前改后输出一致、图一致。 |
 
 **不读的**：时间只报告不判决（`diff-compare` 的规则）；`not-pinned` 的文本不比较（用例自己声明那
 不是承诺）；性能计划不在切片里（那是另一条读数，`perf/**`）。

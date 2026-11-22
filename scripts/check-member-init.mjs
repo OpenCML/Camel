@@ -238,7 +238,7 @@ function runClangTidy(clangTidy, database, entries, jobs) {
                 proc.stderr.on('data', (data) => (out += data))
                 proc.on('close', () => {
                     // A translation unit that did not parse produces findings whose locations are
-                    // not the source: 134 of them came out of `bindings/python/module.cpp`, naming
+                    // not the source: 134 of them came out of `src/bindings/python/module.cpp`, naming
                     // members of classes the compiler never finished reading. A unit that reported
                     // an error contributes nothing and is named instead.
                     const local = []

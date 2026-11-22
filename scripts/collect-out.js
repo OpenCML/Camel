@@ -211,7 +211,7 @@ function collectPythonRuntimeDlls(BASEDIR) {
 // path inside one account's toolchain: a wheel carrying it names a directory the machine it is
 // installed on has never had, and the path stops resolving the day that toolchain moves. libs/ is
 // where the rpath the build already writes points -- `$ORIGIN/../libs` on every tool
-// (tools/libcamel_tool.cmake), `$ORIGIN` on libcamel itself (CMakeLists.txt) -- so the library is
+// (src/tools/libcamel_tool.cmake), `$ORIGIN` on libcamel itself (CMakeLists.txt) -- so the library is
 // copied there
 // instead: the binary loads the copy beside it wherever the install is unpacked, and `ldd` names a
 // file inside the install rather than the system's. What that costs is size (~24 MB in libs/,
@@ -303,12 +303,21 @@ function collect(config, tag) {
     ensureDir(libsDir)
     ensureDir(stdlibDir)
 
-    const toolsBuildDir = path.join(BASEDIR, 'build', 'tools')
+    // `build/src/tools` since the 2026-11-22 move: a target's build directory follows its source
+    // directory from the top-level `CMakeLists.txt`, and the tools are `src/tools/` now. Both
+    // spellings are tried, so a build tree made before the move is still collected.
+    const toolsBuildDir = [
+        path.join(BASEDIR, 'build', 'src', 'tools'),
+        path.join(BASEDIR, 'build', 'tools'),
+    ].find((dir) => fs.existsSync(dir))
     const includeSrc = path.join(BASEDIR, 'include')
     const stdlibSrc = path.join(BASEDIR, 'stdlib')
 
-    if (!fs.existsSync(toolsBuildDir)) {
-        logWarn(`Build dir not found: ${toolsBuildDir}, run npm run build|debug|profile first`)
+    if (toolsBuildDir === undefined) {
+        logWarn(
+            `Build dir not found: ${path.join(BASEDIR, 'build', 'src', 'tools')} (or build/tools), ` +
+                'run npm run build|debug|profile first'
+        )
         process.exit(1)
     }
 
@@ -362,12 +371,12 @@ function collect(config, tag) {
         )
     }
 
-    // Python runtime DLLs: lib/python/sdks/python3xx/ (sync-python-sdks); else venv / conda / python on PATH.
+    // Python runtime DLLs: src/stdlib/sdks/python3xx/ (sync-python-sdks); else venv / conda / python on PATH.
     if (process.platform === 'win32') {
         const dlls = collectPythonRuntimeDlls(BASEDIR)
         if (dlls.length === 0) {
             logWarn(
-                'No Python runtime DLL found. Run sync-python-sdks into lib/python/sdks/, or activate a venv with python3xx.dll discoverable.'
+                'No Python runtime DLL found. Run sync-python-sdks into src/stdlib/sdks/, or activate a venv with python3xx.dll discoverable.'
             )
         }
         for (const dllPath of dlls) {
@@ -379,8 +388,11 @@ function collect(config, tag) {
     // The Python binding: the CPython extension module, next to libs/ so the runpath
     // `$ORIGIN/../libs` the build wrote finds libcamel in both layouts. Absent whenever the
     // configure found no Python development files, which is not a warning: the rest of the
-    // install is complete without it.
+    // install is complete without it. Its build directory follows the module's source directory:
+    // `build/src/stdlib/python` since the 2026-11-22 move, `build/python` before it.
     const pythonBuildDir = [
+        path.join(BASEDIR, 'build', 'src', 'stdlib', 'python', config),
+        path.join(BASEDIR, 'build', 'src', 'stdlib', 'python'),
         path.join(BASEDIR, 'build', 'python', config),
         path.join(BASEDIR, 'build', 'python')
     ].find((dir) => fs.existsSync(dir))
@@ -399,37 +411,42 @@ function collect(config, tag) {
         fs.cpSync(includeSrc, includeDir, { recursive: true })
     }
 
-    // layout-move: the declarations live one per `lib/<name>/` now, so the install is
-    // assembled instead of copied. A module directory is `lib/<name>/` and holds `<name>.cml`
-    // (plus `lib/std/prelude.cml`, the one declaration with no module of its own name); the two
-    // subtrees the module search path keeps are `signatures/`, merged from every module, and
-    // `rulesets/`, which is the dotted prefix of `rulesets.jvp` and not a module directory.
-    const libRoot = path.join(BASEDIR, 'lib')
-    if (fs.existsSync(libRoot)) {
-        for (const entry of fs.readdirSync(libRoot, { withFileTypes: true })) {
-            if (!entry.isDirectory()) continue
-            const dir = path.join(libRoot, entry.name)
-            // No `<name>.cml` of its own: a dotted prefix, not a module. Copied flat, as the
-            // first assembly did, `lib/rulesets/jvp.cml` installed as `stdlib/jvp.cml` and
-            // every `rulesets.*` import failed with "Module 'rulesets.jvp' not found" -- 346
-            // cells across the five plans. It installs as `stdlib/rulesets/jvp.cml`.
-            if (!fs.existsSync(path.join(dir, `${entry.name}.cml`))) {
-                if (fs.readdirSync(dir).some((f) => f.endsWith('.cml'))) {
-                    fs.cpSync(dir, path.join(stdlibDir, entry.name), { recursive: true })
+    // The declarations live in one directory since the 2026-11-22 move: `src/stdlib/`, with
+    // `<name>.cml` for a module written in Camel, `src/stdlib/<name>/signatures/<name>.cml` for the
+    // computed half of a C++ module beside its C++, and `prelude.cml`/`std.cml` for the two that have
+    // no module of their own. The install keeps the shape the module search path reads, which is not
+    // the shape the sources have: a declaration installs flat (`stdlib/tensor.cml`), a module's
+    // computed half is merged into the one `stdlib/signatures/`, and `rulesets/` keeps its name --
+    // it is the dotted prefix of `rulesets.jvp`, not a module, and installing `jvp.cml` at the root
+    // made every `rulesets.jvp` import fail with "Module 'rulesets.jvp' not found".
+    //
+    // Only `.cml` of the library is installed. The C++ beside it is compiled into the `.cmo` below,
+    // and a directory with no `.cml` in it holds no declaration; copying the sources into the install
+    // is what the assembly this replaces did, and `stdlib/` is on the module search path.
+    const stdlibSource = path.join(BASEDIR, 'src', 'stdlib')
+    if (fs.existsSync(stdlibSource)) {
+        const walk = (dir, relative) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const abs = path.join(dir, entry.name)
+                const rel = relative === '' ? entry.name : `${relative}/${entry.name}`
+                if (entry.isDirectory()) {
+                    walk(abs, rel)
+                    continue
                 }
-                continue
-            }
-            for (const sub of fs.readdirSync(dir, { withFileTypes: true })) {
-                const src = path.join(dir, sub.name)
-                if (sub.isFile() && sub.name.endsWith('.cml')) {
-                    fs.copyFileSync(src, path.join(stdlibDir, sub.name))
-                } else if (sub.isDirectory() && sub.name === 'signatures') {
-                    fs.cpSync(src, path.join(stdlibDir, 'signatures'), { recursive: true })
-                } else if (sub.isDirectory() && fs.readdirSync(src).some((f) => f.endsWith('.cml'))) {
-                    fs.cpSync(src, path.join(stdlibDir, sub.name), { recursive: true })
-                }
+                if (!entry.isFile() || !entry.name.endsWith('.cml')) continue
+                // A declaration installs flat unless it lives in a subtree that keeps its name: the
+                // `signatures/` of a module (merged into one directory) and the dotted `rulesets/`.
+                const parts = rel.split('/')
+                const target = parts.includes('signatures')
+                    ? path.join(stdlibDir, 'signatures', entry.name)
+                    : parts.length === 1
+                      ? path.join(stdlibDir, entry.name)
+                      : path.join(stdlibDir, ...parts)
+                fs.mkdirSync(path.dirname(target), { recursive: true })
+                fs.copyFileSync(abs, target)
             }
         }
+        walk(stdlibSource, '')
     }
     if (fs.existsSync(stdlibSrc)) {
         fs.cpSync(stdlibSrc, stdlibDir, { recursive: true })
@@ -460,18 +477,20 @@ function collect(config, tag) {
     // Copy Python bridge libraries to out/<tag>/libs for runtime routing. The name carries the
     // platform: `py_bridge310.dll` on Windows, `libpy_bridge310.so` / `.dylib` elsewhere -- and the
     // loader asks for exactly that name inside `libs/` (`bridgeFileNameForTag` in
-    // kernel/core/module/dynamic.cpp), so a Linux host that built its bridge still failed to find it
+    // src/kernel/core/module/dynamic.cpp), so a Linux host that built its bridge still failed to find it
     // while only the Windows spelling was collected here.
     //
-    // The bridge's build directory follows its module: `build/lib/python` now that the module lives
-    // in `lib/python`, `build/modules/python` while it lived in `lib/python`. Both are tried so
-    // one script collects either tree -- `fs.existsSync` turning a wrong guess into "no bridge" is
-    // exactly how a build that produced one installs without it.
+    // The bridge's build directory follows its module: `build/src/stdlib/python` since the 2026-11-22
+    // move, `build/lib/python` while the module lived in `lib/python`, `build/modules/python` before
+    // the layout move. All three are tried so one script collects any of those trees -- `existsSync`
+    // turning a wrong guess into "no bridge" is exactly how a build that produced one installs
+    // without it.
     const bridgeDir = [
+        path.join(BASEDIR, 'build', 'src', 'stdlib', 'python', config),
         path.join(BASEDIR, 'build', 'lib', 'python', config),
         path.join(BASEDIR, 'build', 'modules', 'python', config),
     ].find((dir) => fs.existsSync(dir))
-    if (fs.existsSync(bridgeDir)) {
+    if (bridgeDir !== undefined) {
         const files = fs.readdirSync(bridgeDir)
         for (const f of files) {
             const lower = f.toLowerCase()

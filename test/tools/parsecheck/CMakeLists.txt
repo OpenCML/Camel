@@ -2,7 +2,7 @@
 # docs/technical/34_handwritten_parser.md): the AST snapshot, the formatter property, the fuzzer
 # and the benchmark.
 #
-# The tool moved here on 2026-11-22 (it lived in `tools/parsecheck/`), because its only readers are
+# The tool moved here on 2026-11-22 (it lived in `test/tools/parsecheck/`), because its only readers are
 # the test harness beside it (`check.py`, `corpus.py`, `probes.py`) and `feat/parse`; the two files
 # it borrows from the product's tools are named from the source root, since the sibling they used to
 # sit beside (`../libcamel_tool.cmake`, `../format/fmt.cpp`) is under `src/tools/` now.

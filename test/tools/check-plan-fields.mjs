@@ -90,7 +90,7 @@
  * file, so the rule selects nothing -- and nothing says so, because `--changed` widens a file no
  * rule matched to the whole fast layer and the run is green. `include/camel/parse/` sat in that
  * state from the layout move (2026-11-22) until this reading existed: its twin,
- * `parse/include/camel/parse/`, was already there under the new layout, so one rule of the file
+ * `src/parse/include/camel/parse/`, was already there under the new layout, so one rule of the file
  * matched no file at all and every file under `include/` -- a directory the tree no longer has --
  * was read as "no plan needed". A counting ratchet is the wrong shape for it: a rule that names
  * nothing is a defect to remove, not a debt to spend down, so a finding here fails the run whatever
@@ -487,7 +487,7 @@ function scanSelection(rootDir) {
     const lines = text.split('\n')
     // Where a reader starts: the first line naming the prefix, quoted as JSON quotes it. A shorter
     // prefix does not match inside a longer one (`include/camel/parse/` is not found inside
-    // `parse/include/camel/parse/`, because the quote in front of it belongs to `parse/`).
+    // `src/parse/include/camel/parse/`, because the quote in front of it belongs to `src/parse/`).
     const lineOf = (prefix) => {
         const needle = JSON.stringify(prefix)
         const at = lines.findIndex((line) => line.includes(needle))

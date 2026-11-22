@@ -19,10 +19,10 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 
 ## 解析与 AST
 
-- `enum` 是关键字（[`parser_type.cpp`](../../parse/src/syntax/parser_type.cpp) 的类型声明入口把它作为 `=` 之后的一种类型体）。`type` 声明仍是 `TypeType` 节点，`enum` 体由 `TypeType::Enum` + `EnumTypeLoad`（变体表）表示，变体形状是 `EnumVariantShape`。
+- `enum` 是关键字（[`parser_type.cpp`](../../src/parse/src/syntax/parser_type.cpp) 的类型声明入口把它作为 `=` 之后的一种类型体）。`type` 声明仍是 `TypeType` 节点，`enum` 体由 `TypeType::Enum` + `EnumTypeLoad`（变体表）表示，变体形状是 `EnumVariantShape`。
 - 模式是 CST 的 `EnumTuplePattern` / `EnumStructPattern`，AST 里是 `DataType::EnumPattern` + `EnumPatternLoad`；结构体模式的每个字段有名字与绑定名（`{ w }` 绑定同名，`{ w: width }` 改名）。
 - 限定名（`Shape::Circle`）在表达式里仍是 `IdentRef`；AST 区分不了它与模块成员，区分发生在建图时（名字解析之后）。
-- **字段位置只写名字或 `_`**：`case Shape::Circle(0.0)` 在解析时就是普通语法错误（`fieldPattern`，`SyntaxDiag::UnexpectedToken`；[`parser_expr.cpp`](../../parse/src/syntax/parser_expr.cpp)`parsePattern(bool fieldPosition)`），不解成嵌套模式再让后面的层拒绝。
+- **字段位置只写名字或 `_`**：`case Shape::Circle(0.0)` 在解析时就是普通语法错误（`fieldPattern`，`SyntaxDiag::UnexpectedToken`；[`parser_expr.cpp`](../../src/parse/src/syntax/parser_expr.cpp)`parsePattern(bool fieldPosition)`），不解成嵌套模式再让后面的层拒绝。
 
 ## 类型层
 

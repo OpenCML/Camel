@@ -179,7 +179,7 @@
 ### 1.9 模块、命名空间与缓存
 
 - 每个模块各建一张 `__root__`，程序只运行入口模块的那张；导出值、导出的函数使用本模块顶层值、互相导入都是带位置的诊断。
-- 导入在建 GCT 时处理，遇到 `import` 就把被导入模块**完整编译完**再回来。【读码 `compile/src/gct/builder.cpp#import`、`kernel/core/context/context.cpp#import`】
+- 导入在建 GCT 时处理，遇到 `import` 就把被导入模块**完整编译完**再回来。【读码 `src/compile/src/gct/builder.cpp#import`、`kernel/core/context/context.cpp#import`】
 - 模块之间交换的实体：节点（值）、图集（重载的函数）、算子组、带装饰器的图、泛型模板，装在一个 `variant` 里；前者是裸指针，后几种是 `shared_ptr`。【读码 `kernel/include/camel/core/module/module.h#variant`】
 - 没有任何缓存，每次运行从源码编译全部模块。`.cmo` 是 C++ 模块动态库的扩展名；查找一个模块时在每个目录里**先找 `名字.cmo`，再找 `名字.*`**。【读码 `context.cpp#Context`、`kernel/core/module/dynamic.cpp#module_ptr_t`】
 - 命名空间的现状在第 8 节。
@@ -1503,7 +1503,7 @@ export func simplify(p: Program): Program! {
 
 1. **声明索引**：不看任何函数体就能列出一个模块的顶层声明（种类、限定名、写出来的类型、是否导出）与它的 `import`。三步加载的第一步只读这个。
 2. **按声明取 GCT**：一个函数体、一个顶层值的初始化表达式可以单独请求，不必一次建完整个模块。
-3. **`import` 不触发被导入模块的编译**：今天在建 GCT 时编译被导入模块（`compile/src/gct/builder.cpp#import`），要挪到驱动里。
+3. **`import` 不触发被导入模块的编译**：今天在建 GCT 时编译被导入模块（`src/compile/src/gct/builder.cpp#import`），要挪到驱动里。
 4. **按声明取源码切片与模块内连续的位置编号**：缓存里的泛型模板与位置表靠它。
 
 **步骤。**
@@ -1605,7 +1605,7 @@ AST/GCT 重构 ──► 6 ──► 7 ──► 8 ──┐
 
 "做了一半"的实际情况是：**路径这一半做完了，作用域这一半没做。**
 
-内部形式【读码】：命名空间不是一种对象。AST 建造时维护一个路径栈，把块里声明的函数与类型的名字加上前缀（`parse/src/ast/builder.cpp#Builder、786-815`）；之后各层看到的就是一个带路径的名字 `Tools::inc`。建图器把函数登记在以完整名字为键的作用域里。模块的导出表是一棵按路径分层的名字树（`kernel/include/camel/common/ns.h`）；`import m` 登记"本地前缀 `m` → 模块 `m`"的绑定，`using namespace m::Tools` 把匹配前缀的导出名逐个登记为本地名（`kernel/core/module/module.cpp#importedNamespaceBindings_`）。名字解析的顺序在 `visitDRefNode`（`compile/src/gir/builder_expr.cpp#visitDRefNode`）：局部值与捕获 → 泛型模板 → 带装饰器的函数 → 本模块的函数 → 导入的实体 → 报错。
+内部形式【读码】：命名空间不是一种对象。AST 建造时维护一个路径栈，把块里声明的函数与类型的名字加上前缀（`src/parse/src/ast/builder.cpp#Builder、786-815`）；之后各层看到的就是一个带路径的名字 `Tools::inc`。建图器把函数登记在以完整名字为键的作用域里。模块的导出表是一棵按路径分层的名字树（`kernel/include/camel/common/ns.h`）；`import m` 登记"本地前缀 `m` → 模块 `m`"的绑定，`using namespace m::Tools` 把匹配前缀的导出名逐个登记为本地名（`kernel/core/module/module.cpp#importedNamespaceBindings_`）。名字解析的顺序在 `visitDRefNode`（`compile/src/gir/builder_expr.cpp#visitDRefNode`）：局部值与捕获 → 泛型模板 → 带装饰器的函数 → 本模块的函数 → 导入的实体 → 报错。
 
 逐项【实测】（`pNN` 指 `test/cases/compile/namespace_rules/pNN_*.cml`）：
 

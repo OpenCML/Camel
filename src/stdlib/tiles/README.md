@@ -3,7 +3,7 @@
 Experimental bundled C++ module for compiling pure Camel tensor function graphs
 to NVIDIA CUDA kernels. It builds with Camel and is imported with `from tiles`.
 This is the first executable foundation of the
-[indexed computation proposal](../../docs/design/indexed-computation/README.md),
+[indexed computation proposal](../../../docs/design/indexed-computation/README.md),
 not an implementation of its complete language, scheduling, or optimization model.
 
 ```cml

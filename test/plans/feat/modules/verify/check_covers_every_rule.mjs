@@ -43,7 +43,13 @@ const repoRoot =
     input.repo_root ??
     payload.repo_root ??
     path.resolve(path.dirname(casePath), '..', '..', '..', '..')
-const library = path.join(repoRoot, 'lib', 'rules', 'rules.cml')
+// The library files its rule list at the root of `src/stdlib/` since the 2026-11-22 move
+// (`lib/rules/rules.cml` after the layout move, `stdlib/rules/rules.cml` before it).
+const library = [
+    path.join(repoRoot, 'src', 'stdlib', 'rules.cml'),
+    path.join(repoRoot, 'lib', 'rules', 'rules.cml'),
+    path.join(repoRoot, 'stdlib', 'rules', 'rules.cml'),
+].find((file) => fs.existsSync(file))
 
 if (result !== '0') {
     fail(`${input.test_name ?? payload.test_name}: the check case exited ${result}`)
