@@ -5,81 +5,13 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：69 页
+## 现在在等作者：1 页
 
 | 页 | 问什么 |
 | --- | --- |
-| [`2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain`](2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain.cn.md) | A call to a pure function has no place on the chain, so two of the three rows read the same |
-| [`2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch`](2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch.cn.md) | The citation check demands a design page that by design lives only on the author's branch |
-| [`2026-11-19-a-rules-angle-argument-is-a-port`](2026-11-19-a-rules-angle-argument-is-a-port.cn.md) | A rule's `<>` argument is one of its operator's ports, and the value can be bound |
-| [`2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value`](2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value.cn.md) | `sync` 体里一个调用把元组当成了语句的值 |
-| [`2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal`](2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal.cn.md) | 一个未被触发的并列：`arrangeEqualKeyRun` 的 `stable_sort` 在片段相等时保留创建次序 |
-| [`2026-11-19-a-tuple-flows-into-an-operator-s-arguments`](2026-11-19-a-tuple-flows-into-an-operator-s-arguments.cn.md) | 元组当值流进了算子实参 |
-| [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
-| [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 |
-| [`2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject`](2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md) | 「调用写入、其后读到该版本」这个读法今天没有可打印的题材 |
-| [`2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made`](2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md) | 递给被调者的那个实参，得是一个「本图做出来的」值 |
-| [`2026-11-19-an-order-edge-across-an-inline-region-is-ignored-by-the-effect-check`](2026-11-19-an-order-edge-across-an-inline-region-is-ignored-by-the-effect-check.cn.md) | 跨 Inline 区的 order 边对效应序检查不生效：正向被拒，反向被接受但静默无效 |
-| [`2026-11-19-in-place-the-two-orders-cannot-both-hold`](2026-11-19-in-place-the-two-orders-cannot-both-hold.cn.md) | 就地更新：两条口谕不能同时成立 |
-| [`2026-11-19-order-cannot-reach-a-node-that-inline-just-made`](2026-11-19-order-cannot-reach-a-node-that-inline-just-made.cn.md) | `order` 写不到刚 `inline` 出来的节点上，而文档说它写得到 |
-| [`2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts`](2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts.cn.md) | 让入口图打包，并把呈现取第 0 份：方案定稿与两次失败的机制 |
-| [`2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other`](2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other.cn.md) | 去掉打包位与从声明算，互为前提 |
-| [`2026-11-19-route-b-s-113-failures-split-into-two-classes`](2026-11-19-route-b-s-113-failures-split-into-two-classes.cn.md) | 路 B 的 113 条红分成两类 |
-| [`2026-11-19-rule-overlap-is-judged-by-value-or-by-writing`](2026-11-19-rule-overlap-is-judged-by-value-or-by-writing.cn.md) | 问题：两条规则同时命中，算不算"结果不同"——按值还是按写法？ |
-| [`2026-11-19-s1-1-names-a-program-that-is-not-legal`](2026-11-19-s1-1-names-a-program-that-is-not-legal.cn.md) | S1-1 点名的那个程序并不合法：要收窄的是哪一边 |
-| [`2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type`](2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type.cn.md) | 调用构造的十个位置，与出口类型的三个来源 |
-| [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 |
 | [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
-| [`2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes`](2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes.cn.md) | ① 要的那份声明，正是 ② 要删的那个字段 |
-| [`2026-11-19-the-declared-type-slot-is-its-own-only-witness`](2026-11-19-the-declared-type-slot-is-its-own-only-witness.cn.md) | 声明函数类型那一位：判据不冗余，但它唯一能判的是它自己 |
-| [`2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple`](2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple.cn.md) | 入口没有 `var` 形参可打包，五条红是一次调用的元组 |
-| [`2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters`](2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters.cn.md) | 前端那条原地复用路径对 `var` 形参仍然可达 |
-| [`2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed`](2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed.cn.md) | 前端那条原地改写：它已经不可达，但还在 |
-| [`2026-11-19-the-gate-value-has-five-readings`](2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ |
-| [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ |
-| [`2026-11-19-the-packing-overwrites-what-the-declaration-said`](2026-11-19-the-packing-overwrites-what-the-declaration-said.cn.md) | 打包把声明说的那一个盖掉了 |
-| [`2026-11-19-the-packing-slot-came-back-under-another-name`](2026-11-19-the-packing-slot-came-back-under-another-name.cn.md) | 打包位换了名字回来：删它拆掉一半功能，留它把作者撤掉的位放回 develop |
-| [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five`](2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five.cn.md) | 13 条 `TILES_OUTLINED` 红：期望 10，而机制给出 12 或 5，且树里已经自相矛盾 |
-| [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve`](2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve.cn.md) | 那 13 条期望的 `TILES_OUTLINED 10`，模型被实测推翻了 |
-| [`2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch`](2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch.cn.md) | 三步裁定的目标代码只在 lane-ssa 上；而 develop 上没有打包 |
-| [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写没有序边（交给 effect order） |
-| [`2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted`](2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted.cn.md) | 对一次调用交出的值做投影：三次尝试各自否掉了什么 |
-| [`2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content`](2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content.cn.md) | 回滚要还原的是指针，还是内容？ |
-| [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 |
-| [`2026-11-20-a-law-that-states-its-angle-answers-only-that-angle`](2026-11-20-a-law-that-states-its-angle-answers-only-that-angle.cn.md) | 写死一个轴的律只答那一个轴：`jvp_softmax<1>` 与 `jvp_log_softmax<0>` 要不要像 `jvp_reshape` 那样把轴当参数？ |
-| [`2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge`](2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge.cn.md) | 一本「只许降」的账本，遇到一次合法合并带进来的新住户：账本该涨吗？ |
-| [`2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away`](2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away.cn.md) | A marker that asks for a `var` the compiler folded away before the printer saw it |
-| [`2026-11-20-parked-means-paused-or-deleted`](2026-11-20-parked-means-paused-or-deleted.cn.md) | `parked/` 指的是「暂停」还是「已删」？两种含义并存时，读者该按哪个行动？ |
-| [`2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread`](2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread.cn.md) | 条目（1）与三条打印判据：四条读数一字未动，挡住它们的是「没写子句」，不是读法 |
-| [`2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader`](2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader.cn.md) | The higher-order footprint has a place to be written and a reader; what is left is the two shapes it cannot place |
-| [`2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p`](2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p.cn.md) | 一次读错「哪棵树」的上报，以及它教会的两件事 |
-| [`2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint`](2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md) | The optimizer calls a spent growth budget a fixpoint, and the budget is reset on every call |
-| [`2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations`](2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations.cn.md) | A refused access no clause can name: the ruling stands, the corpus cannot take it yet |
-| [`2026-11-20-the-tangent-argument-record-is-not-written-by-the-transform`](2026-11-20-the-tangent-argument-record-is-not-written-by-the-transform.cn.md) | 「哪个实参是切向」这张位图，`jvp`/`vjp` 造的调用一张都没写 |
-| [`2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document`](2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document.cn.md) | 「两张导数图」这一项按 `std::jgir` 现在的读法比的不是导数图 —— 该改措辞，还是该换读法 |
-| [`2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program`](2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program.cn.md) | v1 的 `std::jgir` 是二进制的函数，不是程序的函数 |
-| [`2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut`](2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut.cn.md) | 一张提升图的第 2 段，在下一刀 `split` 里是切向还是值 |
-| [`2026-11-20-what-transpose-reads-a-lifted-kernel-call-by`](2026-11-20-what-transpose-reads-a-lifted-kernel-call-by.cn.md) | `transpose` 转置一个提升过的法则核调用时，实参按什么读 |
-| [`2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree`](2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree.cn.md) | 律的文档公式与右端表达式不一致时，以哪条为准则？ |
-| [`2026-11-20-when-a-ruling-read-a-success-line-as-the-failure`](2026-11-20-when-a-ruling-read-a-success-line-as-the-failure.cn.md) | 当一条裁定把成功行读成了失败原因？ |
-| [`2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure`](2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md) | `Jvp<F>` 是「(value, tangent) 那对」，还是「一个提升后的闭包」 |
-| [`2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops`](2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops.cn.md) | 割说「一个节点的操作数不在它这一半的出口可达集合里」—— 掉的是第二个 `with` 参数，还是切线端口那道墙的下游？ |
-| [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
-| [`2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time`](2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time.cn.md) | 构建期怎么知道一张图已经是提升的结果 |
-| [`2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments`](2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments.cn.md) | 「规则把切向写在哪个实参上」这件事，被调方的类型说不出 |
-| [`2026-11-21-where-does-the-capture-tangent-get-its-value`](2026-11-21-where-does-the-capture-tangent-get-its-value.cn.md) | 捕获的切向从哪里拿到它的值 |
-| [`2026-11-21-whether-transpose-can-say-its-signature-is-lifted`](2026-11-21-whether-transpose-can-say-its-signature-is-lifted.cn.md) | `Transpose<F>` 说不出「我的参数里有一半是提升出来的」 |
-| [`2026-11-21-which-reader-may-fill-a-lifts-value-half`](2026-11-21-which-reader-may-fill-a-lifts-value-half.cn.md) | `Transpose<F>` 的那一格写不进签名：提升签名的 value half 由谁填 |
-| [`2026-11-21-who-lifts-the-members-of-a-closure-fill`](2026-11-21-who-lifts-the-members-of-a-closure-fill.cn.md) | 闭包构造 Fill 的成员，在配对提升里由谁提升 |
-| [`2026-11-21-who-pairs-the-captures-of-a-body-built-closure`](2026-11-21-who-pairs-the-captures-of-a-body-built-closure.cn.md) | 体内造出的闭包，谁负责把它的捕获配成对 |
-| [`2026-11-22-one-rule-value-or-two`](2026-11-22-one-rule-value-or-two.md) | `RuleObject` 与重写模块的规则值，合成一个还是两个 |
-| [`2026-11-22-residual-mlp-margin-was-already-thin`](2026-11-22-residual-mlp-margin-was-already-thin.md) | `residual_mlp_large_bytecode` 的时间余量在 0.2 之前就没有，现在要不要抬 |
-| [`2026-11-22-where-the-rule-instantiation-happens`](2026-11-22-where-the-rule-instantiation-happens.md) | 0.4 只把「编译一次」放在值上，实例仍按程序的类型组合预先展开——这算 0.4 还是匹配那一项 |
-| [`2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with`](2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with.cn.md) | `fill` declares its fields as ordinary parameters and reads them from `with`, so neither side can call the other |
-| [`decorators-and-macro`](decorators-and-macro.cn.md) | 装饰器的声明要不要带 `#macro`？ |
-| [`graph-is-a-base-or-a-rename`](graph-is-a-base-or-a-rename.cn.md) | `Graph` 是 `GCGraph` 改名，还是两者共有的基类？ |
 
-## 生成器不会删的行：172 行（页已不在 `questions/` 里）
+## 生成器不会删的行：240 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -207,6 +139,7 @@
 | [`2026-11-17-is-a-fixed-compile-error-one-defect-or-two`](../reviews/2026-11-17-is-a-fixed-compile-error-one-defect-or-two.cn.md) | 四个格从「编译错」变成「算错」之后，E9 该把它算一个缺陷还是两个 | 在 `reviews/` |
 | `2026-11-17-who-owns-a-callee-argument-after-the-call-site` | 一个实参在调用之后还归谁：谁回答「这次是不是最后一次使用」？ | 页不在（`questions/` 与 `reviews/` 都没有） |
 | [`2026-11-17-who-owns-the-argument-after-a-call`](../reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md) | 调用之后，那个实参归谁？ | 在 `reviews/` |
+| [`2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain`](../reviews/2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain.cn.md) | A call to a pure function has no place on the chain, so two of the three rows read the same | 在 `reviews/` |
 | [`2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked`](../reviews/2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked.cn.md) | 一个装着 Ref 的格子，计划期算持有者、运行期不算句柄 | 在 `reviews/` |
 | [`2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot`](../reviews/2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot.cn.md) | 生成器状态槽要存一个 `Ref`，而 `Ref` 没有「未写」的形态 | 在 `reviews/` |
 | [`2026-11-18-a-value-made-per-round-needs-a-version-per-round`](../reviews/2026-11-18-a-value-made-per-round-needs-a-version-per-round.cn.md) | 一轮造一个值、循环之后还要读它，计划该怎么数它？ | 在 `reviews/` |
@@ -218,6 +151,7 @@
 | [`2026-11-18-retract-rc23-two-orders`](../reviews/2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） | 在 `reviews/` |
 | [`2026-11-18-specialization-carries-its-ports-one-place-over`](../reviews/2026-11-18-specialization-carries-its-ports-one-place-over.cn.md) | Specialization publishes its ports one place over from its own signature | 在 `reviews/` |
 | [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](../reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at`：语句上「占据位置」，纯节点上「只选区域」——答复已给（`e55cd6157`） | 在 `reviews/` |
+| [`2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch`](../reviews/2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch.cn.md) | The citation check demands a design page that by design lives only on the author's branch | 在 `reviews/` |
 | [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](../reviews/2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | 一条豁免该不该连「它记的那条原因」一起校验——原因不再成立时，它还是豁免吗？ | 在 `reviews/` |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](../reviews/2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 | 在 `reviews/` |
 | [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](../reviews/2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | 遍能不能在发布「体」的同一次 commit 里就把「型」补上，还是要一小块新 API？ | 在 `reviews/` |
@@ -225,28 +159,94 @@
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](../reviews/2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ | 在 `reviews/` |
 | [`2026-11-18-typeof-of-machine-made-types`](../reviews/2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ | 在 `reviews/` |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](../reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ | 在 `reviews/` |
+| [`2026-11-19-a-rules-angle-argument-is-a-port`](../reviews/2026-11-19-a-rules-angle-argument-is-a-port.cn.md) | A rule's `<>` argument is one of its operator's ports, and the value can be bound | 在 `reviews/` |
+| [`2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value`](../reviews/2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value.cn.md) | `sync` 体里一个调用把元组当成了语句的值 | 在 `reviews/` |
+| [`2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal`](../reviews/2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal.cn.md) | 一个未被触发的并列：`arrangeEqualKeyRun` 的 `stable_sort` 在片段相等时保留创建次序 | 在 `reviews/` |
+| [`2026-11-19-a-tuple-flows-into-an-operator-s-arguments`](../reviews/2026-11-19-a-tuple-flows-into-an-operator-s-arguments.cn.md) | 元组当值流进了算子实参 | 在 `reviews/` |
+| [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](../reviews/2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 | 在 `reviews/` |
+| [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](../reviews/2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 | 在 `reviews/` |
+| [`2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject`](../reviews/2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md) | 「调用写入、其后读到该版本」这个读法今天没有可打印的题材 | 在 `reviews/` |
+| [`2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made`](../reviews/2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md) | 递给被调者的那个实参，得是一个「本图做出来的」值 | 在 `reviews/` |
+| [`2026-11-19-an-order-edge-across-an-inline-region-is-ignored-by-the-effect-check`](../reviews/2026-11-19-an-order-edge-across-an-inline-region-is-ignored-by-the-effect-check.cn.md) | 跨 Inline 区的 order 边对效应序检查不生效：正向被拒，反向被接受但静默无效 | 在 `reviews/` |
 | [`2026-11-19-devirtualize-names-a-differentiated-call-the-type-says-nothing-about`](../reviews/2026-11-19-devirtualize-names-a-differentiated-call-the-type-says-nothing-about.cn.md) | `devirtualize` 之后那两条梯度调用没有序——因为 `encode.pb` 的类型里一个子句都没有 | 在 `reviews/` |
+| [`2026-11-19-in-place-the-two-orders-cannot-both-hold`](../reviews/2026-11-19-in-place-the-two-orders-cannot-both-hold.cn.md) | 就地更新：两条口谕不能同时成立 | 在 `reviews/` |
+| [`2026-11-19-order-cannot-reach-a-node-that-inline-just-made`](../reviews/2026-11-19-order-cannot-reach-a-node-that-inline-just-made.cn.md) | `order` 写不到刚 `inline` 出来的节点上，而文档说它写得到 | 在 `reviews/` |
+| [`2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts`](../reviews/2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts.cn.md) | 让入口图打包，并把呈现取第 0 份：方案定稿与两次失败的机制 | 在 `reviews/` |
+| [`2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other`](../reviews/2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other.cn.md) | 去掉打包位与从声明算，互为前提 | 在 `reviews/` |
+| [`2026-11-19-route-b-s-113-failures-split-into-two-classes`](../reviews/2026-11-19-route-b-s-113-failures-split-into-two-classes.cn.md) | 路 B 的 113 条红分成两类 | 在 `reviews/` |
+| [`2026-11-19-rule-overlap-is-judged-by-value-or-by-writing`](../reviews/2026-11-19-rule-overlap-is-judged-by-value-or-by-writing.cn.md) | 问题：两条规则同时命中，算不算"结果不同"——按值还是按写法？ | 在 `reviews/` |
+| [`2026-11-19-s1-1-names-a-program-that-is-not-legal`](../reviews/2026-11-19-s1-1-names-a-program-that-is-not-legal.cn.md) | S1-1 点名的那个程序并不合法：要收窄的是哪一边 | 在 `reviews/` |
+| [`2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type`](../reviews/2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type.cn.md) | 调用构造的十个位置，与出口类型的三个来源 | 在 `reviews/` |
+| [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](../reviews/2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 | 在 `reviews/` |
+| [`2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes`](../reviews/2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes.cn.md) | ① 要的那份声明，正是 ② 要删的那个字段 | 在 `reviews/` |
+| [`2026-11-19-the-declared-type-slot-is-its-own-only-witness`](../reviews/2026-11-19-the-declared-type-slot-is-its-own-only-witness.cn.md) | 声明函数类型那一位：判据不冗余，但它唯一能判的是它自己 | 在 `reviews/` |
 | [`2026-11-19-the-effect-of-a-call-through-a-function-value`](../reviews/2026-11-19-the-effect-of-a-call-through-a-function-value.cn.md) | 经函数值的调用，足迹取那个值的函数类型——而那个类型今天不写子句 | 在 `reviews/` |
+| [`2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple`](../reviews/2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple.cn.md) | 入口没有 `var` 形参可打包，五条红是一次调用的元组 | 在 `reviews/` |
 | [`2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised`](../reviews/2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised.cn.md) | 那 53 条在要求语言没承诺的东西 | 在 `reviews/` |
+| [`2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters`](../reviews/2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters.cn.md) | 前端那条原地复用路径对 `var` 形参仍然可达 | 在 `reviews/` |
+| [`2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed`](../reviews/2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed.cn.md) | 前端那条原地改写：它已经不可达，但还在 | 在 `reviews/` |
+| [`2026-11-19-the-gate-value-has-five-readings`](../reviews/2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ | 在 `reviews/` |
 | [`2026-11-19-the-join-does-not-record-which-var-it-carries`](../reviews/2026-11-19-the-join-does-not-record-which-var-it-carries.cn.md) | JOIN 不记「自己是哪个 `var` 的版本」，打印器无法重述携带的分支 | 在 `reviews/` |
+| [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](../reviews/2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ | 在 `reviews/` |
+| [`2026-11-19-the-packing-overwrites-what-the-declaration-said`](../reviews/2026-11-19-the-packing-overwrites-what-the-declaration-said.cn.md) | 打包把声明说的那一个盖掉了 | 在 `reviews/` |
+| [`2026-11-19-the-packing-slot-came-back-under-another-name`](../reviews/2026-11-19-the-packing-slot-came-back-under-another-name.cn.md) | 打包位换了名字回来：删它拆掉一半功能，留它把作者撤掉的位放回 develop | 在 `reviews/` |
+| [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve`](../reviews/2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve.cn.md) | 那 13 条期望的 `TILES_OUTLINED 10`，模型被实测推翻了 | 在 `reviews/` |
+| [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five`](../reviews/2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five.cn.md) | 13 条 `TILES_OUTLINED` 红：期望 10，而机制给出 12 或 5，且树里已经自相矛盾 | 在 `reviews/` |
+| [`2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch`](../reviews/2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch.cn.md) | 三步裁定的目标代码只在 lane-ssa 上；而 develop 上没有打包 | 在 `reviews/` |
+| [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](../reviews/2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写没有序边（交给 effect order） | 在 `reviews/` |
+| [`2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted`](../reviews/2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted.cn.md) | 对一次调用交出的值做投影：三次尝试各自否掉了什么 | 在 `reviews/` |
+| [`2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content`](../reviews/2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content.cn.md) | 回滚要还原的是指针，还是内容？ | 在 `reviews/` |
+| [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](../reviews/2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 | 在 `reviews/` |
+| [`2026-11-20-a-law-that-states-its-angle-answers-only-that-angle`](../reviews/2026-11-20-a-law-that-states-its-angle-answers-only-that-angle.cn.md) | 写死一个轴的律只答那一个轴：`jvp_softmax<1>` 与 `jvp_log_softmax<0>` 要不要像 `jvp_reshape` 那样把轴当参数？ | 在 `reviews/` |
+| [`2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge`](../reviews/2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge.cn.md) | 一本「只许降」的账本，遇到一次合法合并带进来的新住户：账本该涨吗？ | 在 `reviews/` |
+| [`2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away`](../reviews/2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away.cn.md) | A marker that asks for a `var` the compiler folded away before the printer saw it | 在 `reviews/` |
 | [`2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit`](../reviews/2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md) | 写明降维结果秩的函数，为什么把 `vjp` 挡在「反向半边的出口类型」上 | 在 `reviews/` |
 | [`2026-11-20-may-a-law-reduce-only-when-the-extents-are-readable`](../reviews/2026-11-20-may-a-law-reduce-only-when-the-extents-are-readable.cn.md) | 一条法则能不能只在 extents 读得出时才归约？ | 在 `reviews/` |
+| [`2026-11-20-parked-means-paused-or-deleted`](../reviews/2026-11-20-parked-means-paused-or-deleted.cn.md) | `parked/` 指的是「暂停」还是「已删」？两种含义并存时，读者该按哪个行动？ | 在 `reviews/` |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](../reviews/2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 | 在 `reviews/` |
+| [`2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread`](../reviews/2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread.cn.md) | 条目（1）与三条打印判据：四条读数一字未动，挡住它们的是「没写子句」，不是读法 | 在 `reviews/` |
+| [`2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader`](../reviews/2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader.cn.md) | The higher-order footprint has a place to be written and a reader; what is left is the two shapes it cannot place | 在 `reviews/` |
+| [`2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p`](../reviews/2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p.cn.md) | 一次读错「哪棵树」的上报，以及它教会的两件事 | 在 `reviews/` |
+| [`2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint`](../reviews/2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md) | The optimizer calls a spent growth budget a fixpoint, and the budget is reset on every call | 在 `reviews/` |
 | [`2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code`](../reviews/2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md) | 外层 `jvp` 要 `split` 交出静态可读的答案代码，那一步在 0.2.45 的范围里吗 | 在 `reviews/` |
+| [`2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations`](../reviews/2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations.cn.md) | A refused access no clause can name: the ruling stands, the corpus cannot take it yet | 在 `reviews/` |
+| [`2026-11-20-the-tangent-argument-record-is-not-written-by-the-transform`](../reviews/2026-11-20-the-tangent-argument-record-is-not-written-by-the-transform.cn.md) | 「哪个实参是切向」这张位图，`jvp`/`vjp` 造的调用一张都没写 | 在 `reviews/` |
+| [`2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document`](../reviews/2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document.cn.md) | 「两张导数图」这一项按 `std::jgir` 现在的读法比的不是导数图 —— 该改措辞，还是该换读法 | 在 `reviews/` |
+| [`2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program`](../reviews/2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program.cn.md) | v1 的 `std::jgir` 是二进制的函数，不是程序的函数 | 在 `reviews/` |
+| [`2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut`](../reviews/2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut.cn.md) | 一张提升图的第 2 段，在下一刀 `split` 里是切向还是值 | 在 `reviews/` |
+| [`2026-11-20-what-transpose-reads-a-lifted-kernel-call-by`](../reviews/2026-11-20-what-transpose-reads-a-lifted-kernel-call-by.cn.md) | `transpose` 转置一个提升过的法则核调用时，实参按什么读 | 在 `reviews/` |
+| [`2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree`](../reviews/2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree.cn.md) | 律的文档公式与右端表达式不一致时，以哪条为准则？ | 在 `reviews/` |
+| [`2026-11-20-when-a-ruling-read-a-success-line-as-the-failure`](../reviews/2026-11-20-when-a-ruling-read-a-success-line-as-the-failure.cn.md) | 当一条裁定把成功行读成了失败原因？ | 在 `reviews/` |
 | [`2026-11-20-where-is-the-rework-list-r3-through-r7`](../reviews/2026-11-20-where-is-the-rework-list-r3-through-r7.cn.md) | 返工表 R3 到 R7 在哪：在 `questions-2026-10-29.md` 的 `.md` 那一半里 | 在 `reviews/` |
 | [`2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function`](../reviews/2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function.cn.md) | `jvp` 与 `vjp` 对同一个 `f` 各造一张图 —— 两张图的边集合是不是不一致？ | 在 `reviews/` |
+| [`2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure`](../reviews/2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md) | `Jvp<F>` 是「(value, tangent) 那对」，还是「一个提升后的闭包」 | 在 `reviews/` |
 | [`2026-11-20-whether-splits-forward-half-takes-a-tangent-port`](../reviews/2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md) | `split` 割「结果含函数」的图时，前向半要不要收切向端口 | 在 `reviews/` |
+| [`2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops`](../reviews/2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops.cn.md) | 割说「一个节点的操作数不在它这一半的出口可达集合里」—— 掉的是第二个 `with` 参数，还是切线端口那道墙的下游？ | 在 `reviews/` |
 | [`2026-11-20-whether-the-value-half-takes-tangent-ports`](../reviews/2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md) | 值半要不要收一个切向端口 —— 割「提升过的函数」时的那条缝 | 在 `reviews/` |
+| [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](../reviews/2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 | 在 `reviews/` |
 | [`2026-11-20-why-the-split-point-is-type-computable`](../reviews/2026-11-20-why-the-split-point-is-type-computable.cn.md) | （A）不必要：割点对「结果含函数」也是**类型可算**的 | 在 `reviews/` |
 | [`2026-11-21-does-an-end-condition-that-mirrors-the-case-count-as-an-early-warning`](../reviews/2026-11-21-does-an-end-condition-that-mirrors-the-case-count-as-an-early-warning.cn.md) | 结束条件与用例自身的通过条件同构，这是不是问题？ | 在 `reviews/` |
+| [`2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time`](../reviews/2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time.cn.md) | 构建期怎么知道一张图已经是提升的结果 | 在 `reviews/` |
+| [`2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments`](../reviews/2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments.cn.md) | 「规则把切向写在哪个实参上」这件事，被调方的类型说不出 | 在 `reviews/` |
 | [`2026-11-21-what-do-the-three-rewrite-operators-reach`](../reviews/2026-11-21-what-do-the-three-rewrite-operators-reach.cn.md) | 三个改写算子各读写什么资源？ | 在 `reviews/` |
 | [`2026-11-21-what-extract-declares-and-where-a-capture-class-comes-from`](../reviews/2026-11-21-what-extract-declares-and-where-a-capture-class-comes-from.cn.md) | 改写家族的另外两条：`extract` 声明什么，闭包捕获的类从哪来？ | 在 `reviews/` |
+| [`2026-11-21-where-does-the-capture-tangent-get-its-value`](../reviews/2026-11-21-where-does-the-capture-tangent-get-its-value.cn.md) | 捕获的切向从哪里拿到它的值 | 在 `reviews/` |
 | [`2026-11-21-where-is-a-fill-built-closures-layout-recorded`](../reviews/2026-11-21-where-is-a-fill-built-closures-layout-recorded.cn.md) | 一个由 Fill 造出的函数值，闭包布局记在哪里 | 在 `reviews/` |
 | [`2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to`](../reviews/2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md) | 一句被钉住的拒句，墙自己挪走之后，用例该跟着挪吗 | 在 `reviews/` |
+| [`2026-11-21-whether-transpose-can-say-its-signature-is-lifted`](../reviews/2026-11-21-whether-transpose-can-say-its-signature-is-lifted.cn.md) | `Transpose<F>` 说不出「我的参数里有一半是提升出来的」 | 在 `reviews/` |
+| [`2026-11-21-which-reader-may-fill-a-lifts-value-half`](../reviews/2026-11-21-which-reader-may-fill-a-lifts-value-half.cn.md) | `Transpose<F>` 的那一格写不进签名：提升签名的 value half 由谁填 | 在 `reviews/` |
+| [`2026-11-21-who-lifts-the-members-of-a-closure-fill`](../reviews/2026-11-21-who-lifts-the-members-of-a-closure-fill.cn.md) | 闭包构造 Fill 的成员，在配对提升里由谁提升 | 在 `reviews/` |
+| [`2026-11-21-who-pairs-the-captures-of-a-body-built-closure`](../reviews/2026-11-21-who-pairs-the-captures-of-a-body-built-closure.cn.md) | 体内造出的闭包，谁负责把它的捕获配成对 | 在 `reviews/` |
 | [`2026-11-21-who-supplies-the-primal-to-a-transposed-lift`](../reviews/2026-11-21-who-supplies-the-primal-to-a-transposed-lift.cn.md) | 谁把原值交给「线性函数的提升」的转置 | 在 `reviews/` |
+| [`2026-11-22-one-rule-value-or-two`](../reviews/2026-11-22-one-rule-value-or-two.md) | `RuleObject` 与重写模块的规则值，合成一个还是两个 | 在 `reviews/` |
 | [`2026-11-22-paused-branches-and-the-drift-gate`](../reviews/2026-11-22-paused-branches-and-the-drift-gate.md) | 暂停中的分支撞上「落后 100」这条闸门，闸门该不该对它们生效 | 在 `reviews/` |
+| [`2026-11-22-residual-mlp-margin-was-already-thin`](../reviews/2026-11-22-residual-mlp-margin-was-already-thin.md) | `residual_mlp_large_bytecode` 的时间余量在 0.2 之前就没有，现在要不要抬 | 在 `reviews/` |
+| [`2026-11-22-where-the-rule-instantiation-happens`](../reviews/2026-11-22-where-the-rule-instantiation-happens.md) | 0.4 只把「编译一次」放在值上，实例仍按程序的类型组合预先展开——这算 0.4 还是匹配那一项 | 在 `reviews/` |
+| [`2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with`](../reviews/2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with.cn.md) | `fill` declares its fields as ordinary parameters and reads them from `with`, so neither side can call the other | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
+| [`decorators-and-macro`](../reviews/decorators-and-macro.cn.md) | 装饰器的声明要不要带 `#macro`？ | 在 `reviews/` |
+| [`graph-is-a-base-or-a-rename`](../reviews/graph-is-a-base-or-a-rename.cn.md) | `Graph` 是 `GCGraph` 改名，还是两者共有的基类？ | 在 `reviews/` |
 | [`q-2026-11-15-should-the-deletion-come-before-the-carrying`](../reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md) | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 在 `reviews/` |
 | [`q-2026-11-15-what-path-a-diagnostic-prints`](../reviews/q-2026-11-15-what-path-a-diagnostic-prints.cn.md) | 诊断的位置行打印哪个路径形式 | 在 `reviews/` |
 | [`q-2026-11-15-what-the-side-effect-warning-says-now`](../reviews/q-2026-11-15-what-the-side-effect-warning-says-now.cn.md) | 那条「副作用没有执行」的警告，现在该怎么说话 | 在 `reviews/` |
