@@ -23,8 +23,9 @@
  * and they are the representation's, not the view's:
  *
  *   DraftNodeHeader::kind                    kindOf            (same four-kind folding)
- *   DraftNodeHeader::dataType / dataIndex    typeOf / dataIndexOf
- *   DraftNodeHeader::runtimeFlags            isMacro / isConstant
+ *   DraftNodeHeader::dataType                typeOf
+ *   DraftNodeHeader::runtimeFlags            nothing: a macro is the record of the callee or of
+ *                                            the operator (2.2), a constant is `constantOf`
  *   DraftNodeHeader::origin                  originOf
  *   DraftNodeHeader::region                  regionOf
  *   DraftNodeView::normInputs/withInputs     inputs(ref, Normal) / inputs(ref, Context)
@@ -37,11 +38,15 @@
  *   GraphDraft::region / nodeRegion          region / regionOf
  *   regionPort(i) + GCRegion.portBegin/Count regionParameters
  *   armRegionOf / loopRegionOf               regionsOwnedBy
- *   payloadGraphs (by index) + `kept`        calleeOf
+ *   payloadGraphs (by index) + `kept`        calleeOf, as the graph that id names (by value)
  *   GCOperBody in the payload tail           operatorOf         (same refusal: see gc_graph_view.h)
  *   LOOP payload                             loopFormOf
  *   entryNode / exitNode                     exit
- *   closureNodes / closureType / staticSlots captures / captureType / staticArea
+ *   closureNodes                             ports(Capture)
+ *   closureType                              nothing: the captures' types are ports(Capture)
+ *   staticSlots                              constantOf, per DATA node (read from staticSlots)
+ *   DraftNodeHeader::dataIndex               nothing: which slot a value sits in is the execution
+ *                                            plan's (section 13)
  *
  * `kept`, when it is given, is the same id table the encoder builds (`liveDraftNodes`): `kept[i]`
  * is the draft's node the runtime graph's node `i` is built from. A draft read beside the graph it
@@ -55,6 +60,7 @@
 #include "camel/runtime/graph_txn.h"
 #include "graph/graph_view.h"
 
+#include <optional>
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -78,18 +84,13 @@ class DraftGraphAdapter final : public GraphView {
 
     camel::core::type::FunctionType *funcType() const override;
     std::vector<NodeRef> ports(PortGroup group) const override;
-    std::vector<NodeRef> captures() const override;
-    const camel::core::type::TupleType *captureType() const override;
-    std::span<const ::slot_t> staticArea() const override;
     NodeRef exit() const override;
 
     std::uint32_t nodeSlotCount() const override;
     bool contains(NodeRef ref) const override;
     NodeKind kindOf(NodeRef ref) const override;
     const camel::core::type::Type *typeOf(NodeRef ref) const override;
-    std::int32_t dataIndexOf(NodeRef ref) const override;
-    bool isMacro(NodeRef ref) const override;
-    bool isConstant(NodeRef ref) const override;
+    std::optional<::slot_t> constantOf(NodeRef ref) const override;
     std::uint64_t originOf(NodeRef ref) const override;
 
     std::span<const NodeRef> inputs(NodeRef ref, PortGroup group) const override;
@@ -104,7 +105,7 @@ class DraftGraphAdapter final : public GraphView {
     bool isAncestorOf(RegionId ancestor, RegionId region) const override;
     std::vector<RegionId> regionsOwnedBy(NodeRef ref) const override;
 
-    camel::runtime::GraphId calleeOf(NodeRef ref) const override;
+    CalleeRef calleeOf(NodeRef ref) const override;
     camel::core::OperId operatorOf(NodeRef ref) const override;
     LoopForm loopFormOf(NodeRef ref) const override;
 
