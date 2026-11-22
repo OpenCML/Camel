@@ -975,7 +975,15 @@ function selfTest() {
 
 const args = process.argv.slice(2)
 const targets = args.filter((argument) => !argument.startsWith('--'))
+// The code is *set*, not forced. `process.exit()` ends the process before the writes still queued
+// on the pipe have left it, and this check is the one that prints more than a pipe holds:
+// `--explain` is ~72 KB of table. On 2026-11-22 the macOS leg received 37 431 characters of it --
+// the rows stopped at `mul_stated_t`, the summary line never arrived, the exit code was 0 and
+// stderr was empty, so the failure read as "the law is not in the table" when the law was there and
+// the table was cut (`docs.the_stated_lane_means_port_is_its_own_open_rank`). `process.exitCode`
+// and a drained event loop is the same exit code with every byte delivered, on every host.
 if (args.includes('--self-test')) {
-    process.exit(selfTest())
+    process.exitCode = selfTest()
+} else {
+    process.exitCode = run(targets, { explain: args.includes('--explain') })
 }
-process.exit(run(targets, { explain: args.includes('--explain') }))
