@@ -21,13 +21,14 @@
 块名取核心抽象第 9 节的五处：`kernel`、`parse`、`compile`、`lib/<模块>`、`tools`。
 一个块的构建目标只把**下层**的头文件放进包含路径；`lib/<模块>` 之间只有声明过的依赖可以互相引用。
 
-**构建口径的块名比这张表的「块」列更细，其中两块在表里没有行（2026-11-22 补）。**
-`cmake/layout-blocks.cmake` 把 `kernel` 拆成五块，层序就是：`kernel_utils`、`kernel_core`、
-`kernel_ops`、`kernel_facts`、`kernel_runtime`。`kernel/ops/`（`camel/ops/operator_record.h`）与
-`kernel/facts/`（`camel/facts/facts.h`）是阶段 2.2 新建的纯头目录，**表 A、表 B 没有对应的搬家行**，
-于是搬家脚本的 `blockOfTarget` 仍把这两个目录算成 `kernel_core`，脚本也不会产出这两个块：
+**构建口径的块名比这张表的「块」列更细，其中三块在表里没有行（2026-11-22 补）。**
+`cmake/layout-blocks.cmake` 把 `kernel` 拆成六块，层序就是：`kernel_utils`、`kernel_core`、
+`kernel_ops`、`kernel_facts`、`kernel_graph`、`kernel_runtime`。`kernel/ops/`（`camel/ops/operator_record.h`）、
+`kernel/facts/`（`camel/facts/facts.h`）与 `kernel/graph/`（`graph_view.h`、`draft_view.h`、
+`gc_graph_view.h`）是阶段 2.2 新建的纯头目录，**表 A、表 B 没有对应的搬家行**，
+于是搬家脚本的 `blockOfTarget` 仍把这三个目录算成 `kernel_core`，脚本也不会产出这三个块：
 它们在生成物里是手加的，`scripts/layout-move.mjs` 的 `LAYERS`、`deriveRoots`、`treesFor` 三处还
-不认识它们。**重新生成这个文件前先把这两行补进表、再改脚本，否则重新生成会把手加的两块删掉。**
+不认识它们。**重新生成这个文件前先把这三行补进表、再改脚本，否则重新生成会把手加的三块删掉。**
 
 ## 表 A：顶层对照（50 行 = 工作树根的 50 个条目）
 
