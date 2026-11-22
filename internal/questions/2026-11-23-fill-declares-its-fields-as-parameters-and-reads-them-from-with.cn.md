@@ -49,3 +49,8 @@ It is not a reason to drop `Fill` from `GCNodeKind`, and not a reason to change 
 semantics. The `Cast` and `Accs` halves of the same move are already measured: `type="CAST"` and
 `type="ACCS"` are both absent from the printed graph, and `type="FILL"` remains only because these
 nineteen sites are still waiting here.
+## 决策者答（2026-11-23 01:35）
+
+**按路线 1：改内核，让 `__fill_value__` 从普通参数读字段。** 这不需要语言层面的新裁定，`with` 参数的判断依据已经定了：`with` 是配置函数的东西（相当于函子的 `this`，决定"这是哪一个函数"），每次调用要处理的数据是普通参数。`fill` 的模板与各字段值是这一次构造的输入，属于普通参数，声明是对的，内核读错了位置。
+
+顺带：页里说"其余构造结构体的算子已经从 `with` 取字段"——按同一条判据，那几个也读错了位置。请列出它们，以 `C-` 编号进 backlog，与 `fill` 同批改到普通参数（声明若也写成了 `with`，声明一并改；这是按既定判据纠错，不算改已合入的接口）。前端车道解除阻塞。
