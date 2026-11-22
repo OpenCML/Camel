@@ -80,6 +80,7 @@
 #include "camel/core/type/text.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
@@ -680,7 +681,9 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     for (const GCGraph *graph : program->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const GCNode &node = **it;
-            if (node.kind != GCNodeKind::Fill ||
+            // A construction is asked by its shape, not by the node kind that still spells it
+            // (`camel/execute/shaped_operators.h`): the fill body below is its payload, which stays.
+            if (camel::execute::shapeOfKind(node.kind) != camel::execute::OperShape::Construction ||
                 node.dataType() == nullptr ||
                 node.dataType()->code() != TypeCode::Function) {
                 continue;
@@ -719,7 +722,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 continue;
             }
             TypePlan &plan = planOf(plans, type);
-            if (node.kind == GCNodeKind::Fill) {
+            if (camel::execute::shapeOfKind(node.kind) == camel::execute::OperShape::Construction) {
                 const auto *fill = graph->nodeBodyAs<GCFillBody>(it.ref());
                 if (fill == nullptr || fill->fillKind != GCFillKind::FunctionClosure) {
                     refuseIfUnsaid(plan, "a value is not a plain reference to a function");
@@ -853,7 +856,8 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                         site.variant = function->graph()->id();
                         site.known   = true;
                     }
-                } else if (callee->kind == GCNodeKind::Fill) {
+                } else if (camel::execute::shapeOfKind(callee->kind) ==
+                           camel::execute::OperShape::Construction) {
                     const auto *fill = graph->nodeBodyAs<GCFillBody>(withs.front());
                     const auto norms = graph->normInputsOf(withs.front());
                     const GCNode *base =
@@ -1565,9 +1569,11 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 if (withs.empty()) {
                     continue;
                 }
-                const auto *fill = draft.header(withs.front())->kind == GCNodeKind::Fill
-                                       ? graph->nodeBodyAs<GCFillBody>(withs.front())
-                                       : nullptr;
+                const auto *fill =
+                    camel::execute::shapeOfKind(draft.header(withs.front())->kind) ==
+                            camel::execute::OperShape::Construction
+                        ? graph->nodeBodyAs<GCFillBody>(withs.front())
+                        : nullptr;
                 if (fill == nullptr || fill->fillKind != GCFillKind::FunctionClosure) {
                     continue;
                 }
