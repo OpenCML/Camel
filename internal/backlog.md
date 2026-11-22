@@ -24,3 +24,8 @@
 | D-1123-9 | 作者 inbox（已删） | 把车道、闸门、派工、合并的规矩并进 `agents/dispatch.md`（只追加），SKILL 只留指向它的一节 | 协调者 | done | 2026-11-23 01:20 | `1bf533760` |
 | D-1123-10 | 作者 inbox（已删） | `fsh-dev` 整枝合进 `develop`（协作体系搬迁 + 设计原则红线 1、4、6） | 合并位 | done | 2026-11-23 01:05 | `5a63a3b52` |
 | D-1123-16 | 作者 inbox | 规范编号在宽度超过 6 的并列上回落到 `stable_sort`，创建次序漏进编号（`src/kernel/runtime/canonical.cpp`），违反原则 9.5。**归图车道，随阶段 3c** | 待派 | open | 2026-11-23 02:30 | — |
+| D-1123-8 | 作者 inbox | 提交检查补两项：同一区域里两个冲突节点（访问同一资源、至少一个是写）之间必须有先后；未绑定的资源在签名效应里必须出现。红线 1、4、6 | `lane/commit-checks` | doing | 2026-11-23 04:45 | — |
+| D-1123-11/12/13 | 作者 inbox | 记号三批改动：lambda 改 `func (参数) { … }`（旧写法直接删）、`f <> g`、空格规则（`camel-fmt` 全库跑一遍）。**算子 URI 改 `模块:路径` 一项与在跑的栈冲突，栈合入后单独一笔** | `lane/notation` | doing | 2026-11-23 04:45 | — |
+| D-1123-19-3 | 作者 inbox | `panic` 收尾：余 168 个算子补可读陈述（`214/382` → 目标 `382/382`），逐项对照表要求一项不变 | `lane/panic-record` | doing | 2026-11-23 04:45 | — |
+| D-1123-19-4 | 作者 inbox | 阶段 3a：`src/stdlib/{transforms,autodiff,rewrite}` 与 `src/kernel/rewrite` 里直接读 `GCGraph`/`GraphDraft` 的改读 `GraphView`；**用只减不增的计数守着** | `lane/3a-transforms` | doing | 2026-11-23 04:45 | — |
+| D-1123-19-5 | 作者 inbox | 阶段 3a：`src/stdlib/std/{nvm,fvm,prl,cpp,exec}` 与 `src/tools`，同上计数 | `lane/3a-exec` | doing | 2026-11-23 04:45 | — |
