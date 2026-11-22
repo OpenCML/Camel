@@ -10,14 +10,10 @@
  *
  * What keeps these three writes apart today is the *plan*, not that count: every one of them is
  * `copied` (`camel inspect --copies` prints `set_index copied` three times for this program), so
- * the update runs the copying form and the array's own count is never asked. The day the plan
- * decides `in-place` (or `by-count`) for a write whose array is reachable through two struct names
- * -- the direct-SSA plan's S3b, docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md --
- * this case is what says whether that decision is true: two names are two holders, and the answer is
- * that reuse in place happens only at count one, with the argument binding handed on at the caller's
- * last use and added otherwise (`9699824aa`;
- * docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md`, with the reading in
- * docs/handover/reports/2026-11-17-s3b-the-training-steps-update-cannot-read-in-place.cn.md).
+ * the update runs the copying form and the array's own count is never asked. This case is what says
+ * whether deciding `in-place` (or `by-count`) for a write whose array is reachable through two
+ * struct names is true: two names are two holders, and reuse in place happens only at count one,
+ * with the argument binding handed on at the caller's last use and added otherwise.
  */
 
 type Bag = { label: string, xs: int[] }

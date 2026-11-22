@@ -14,6 +14,7 @@
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_roles.h"
+#include "graph/gc_graph_view.h"
 #include "camel/runtime/reachable.h"
 #include "camel/runtime/writings.h"
 #include "camel/utils/scope.h"
@@ -484,7 +485,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string roleAttr, roleFill, roleTooltip;
         if (config_.annotateRoles) {
             for (const auto &match :
-                 camel::runtime::NodeRoleRegistry::instance().classify(*graph, nodeRef)) {
+                 camel::runtime::NodeRoleRegistry::instance().classify(
+                     camel::graph::FrozenGraphAdapter(*graph), nodeRef)) {
                 roleAttr += (roleAttr.empty() ? "" : ";") + match.spec.name;
                 roleTooltip += std::format("\\nrole {}: {}", match.spec.name, escape(match.detail));
                 if (roleFill.empty()) {

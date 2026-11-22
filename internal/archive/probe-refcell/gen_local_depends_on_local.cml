@@ -1,9 +1,7 @@
-// Temporary instrument of the lane `mmtypeof`: a generator local whose declared value reads the
-// local before it. The state slot's payload is the `typeof` of that value, and inferring it needs
-// the earlier local's type -- which is itself a slot type. This case exists to read whether the
-// resolution happens in an order that has it, and it is deleted before the commit.
-//
-// It sits under docs/handover/, which the AST corpus walks past, so it moves no recorded reading.
+// A generator local whose declared value reads the local before it. The state slot's payload is the
+// `typeof` of that value, and inferring it needs the earlier local's type -- which is itself a slot
+// type. The probe reads whether the resolution happens in an order that has it; its control is
+// `gen_two_locals_no_dependency.cml`.
 
 func gen(): int.. sync {
     let a = 1

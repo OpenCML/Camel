@@ -270,11 +270,18 @@ bool TensorModule::load() {
     // back to the host, or a computed host number entering tensor math.
     camel::runtime::NodeRoleRegistry::instance().add(
         {"scalar-boundary", "scalar boundary (tensor <-> host number)", "#fff2cc"},
-        [](const camel::runtime::GCGraph &graph,
-           camel::runtime::gc_node_ref_t ref) -> std::optional<std::string> {
-            namespace rt           = camel::runtime;
-            const rt::GCNode *node = graph.node(ref);
-            if (node->kind != rt::GCNodeKind::Oper || !node->dataType()) {
+        [](const camel::graph::GraphView &graph,
+           camel::graph::NodeRef ref) -> std::optional<std::string> {
+            namespace rt = camel::runtime;
+            // An operator that names an operator: the four kinds the view folds into
+            // `NodeKind::Oper` keep their own payload in both representations today, so they answer
+            // `kNoOper`, and the role the old reading gave (a stored OPER) is this condition.
+            if (graph.kindOf(ref) != camel::graph::NodeKind::Oper ||
+                graph.operatorOf(ref) == camel::core::kNoOper) {
+                return std::nullopt;
+            }
+            const camel::core::type::Type *own = graph.typeOf(ref);
+            if (own == nullptr) {
                 return std::nullopt;
             }
             const auto isTensor = [](const camel::core::type::Type *t) {
@@ -283,22 +290,22 @@ bool TensorModule::load() {
             const auto isNumber = [](const camel::core::type::Type *t) {
                 return t && camel::tensor::isSupportedTensorScalar(t->code());
             };
-            const auto inputs = graph.normInputsOf(ref);
-            if (isNumber(node->dataType())) {
-                for (rt::gc_node_ref_t in : inputs) {
-                    if (isTensor(graph.node(in)->dataType())) {
-                        return "tensor -> host " + node->dataType()->toString();
+            const auto inputs = graph.inputs(ref, camel::graph::PortGroup::Normal);
+            if (isNumber(own)) {
+                for (camel::graph::NodeRef in : inputs) {
+                    if (isTensor(graph.typeOf(in))) {
+                        return "tensor -> host " + own->toString();
                     }
                 }
                 return std::nullopt;
             }
-            if (!isTensor(node->dataType())) {
+            if (!isTensor(own)) {
                 return std::nullopt;
             }
-            for (rt::gc_node_ref_t in : inputs) {
-                const rt::GCNode *input = graph.node(in);
-                if (input->kind != rt::GCNodeKind::Data && isNumber(input->dataType())) {
-                    return "host " + input->dataType()->toString() + " -> tensor";
+            for (camel::graph::NodeRef in : inputs) {
+                const camel::core::type::Type *inputType = graph.typeOf(in);
+                if (graph.kindOf(in) != camel::graph::NodeKind::Data && isNumber(inputType)) {
+                    return "host " + inputType->toString() + " -> tensor";
                 }
             }
             return std::nullopt;

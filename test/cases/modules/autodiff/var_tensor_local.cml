@@ -3,11 +3,10 @@
  * there: the gradient flows, and it is the true one.
  *
  * The declaration is a same-region local `var`, so it is built as the value it was given rather
- * than as a cell (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1), and a
- * value carries a gradient where a variable read is taken as a constant. This used to be
- * refused -- "a variable of a differentiable type that is declared inside the differentiated
- * function is read there" -- and the repair that diagnostic named was to bind the value with
- * `let`, which is what the compiler now builds for this local.
+ * than as a cell, and a value carries a gradient where a variable read is taken as a constant.
+ * This used to be refused -- "a variable of a differentiable type that is declared inside the
+ * differentiated function is read there" -- and the repair that diagnostic named was to bind the
+ * value with `let`, which is what the compiler now builds for this local.
  */
 import { reshape, sum } from tensor
 import { with_grad } from autodiff

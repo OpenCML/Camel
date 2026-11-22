@@ -9,12 +9,12 @@
 // What this case asserted before: the binary-tuple ABI handed the residuals back as a value of the
 // transform's own tuple type (`TupleType::residuals`), and `let (r0, r1) = residuals` was refused
 // with `SemanticDiag::ResidualsAreNotVisible`. That diagnostic and the guard that was its only
-// emitter are deleted now (`79c61958b`, 307 codes -> 306), because no transform produces a residual
-// tuple any more (`TupleType::residuals` is only its definition; see
-// `docs/handover/reports/2026-11-02-the-residual-chain-is-dead-and-four-spots-to-remove.cn.md`), so
-// the old assertion had no object left to speak about. The wish it was guarding is the same wish,
-// spelled against the new shape -- "give me the carried values, one by one" -- and that is what is
-// refused here.
+// emitter are gone, because no transform produces a residual tuple any more
+// (`TupleType::residuals` is only its definition), so the old assertion had no object left to
+// speak about. The wish it was guarding is the same wish, spelled against the new shape -- "give
+// me the carried values, one by one" -- and that is what is refused here, against a shape that
+// carries the residuals in the closure of the linear half, where no value names them.
+//
 import rulesets.jvp
 import { jvp, split } from transforms
 

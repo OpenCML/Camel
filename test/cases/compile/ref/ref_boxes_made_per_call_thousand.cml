@@ -8,8 +8,7 @@
  * that the boxes of the calls that are over were still counted.
  *
  * `live` = 0 is not reached and not asserted: the handle count does not follow the holders yet, so
- * the boxes of the last calls wait for a collection that this run does not have (see
- * `docs/handover/reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md`).
+ * the boxes of the last calls wait for a collection that this run does not have.
  */
 
 import state

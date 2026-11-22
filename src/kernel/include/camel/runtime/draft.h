@@ -426,8 +426,17 @@ std::shared_ptr<const UndoSnapshot> takeUndoSnapshot(const GraphDraft &draft);
 /// snapshot holds.
 std::optional<UndoClass> undoMismatch(const GraphDraft &draft, const UndoSnapshot &snapshot);
 
-class GraphDraft {
+// The draft representation of a graph. `camel::graph::Graph` is the graph as a value (the name a
+// callee and a fact anchor use, `kernel/graph/include/camel/graph/graph.h`); a draft has an identity
+// of its own (`id()`), it is the version the session is building, so it is the other of the two
+// representations that derive from it. The base adds no member and is not a way to read the draft --
+// that is `GraphView` and its adapter (`kernel/graph/draft_view.h`).
+class GraphDraft : public camel::graph::Graph {
   public:
+    /// The face this draft is read through (`camel/graph/graph.h`): the draft adapter, made on the
+    /// first call and kept here, so a reader holding a `const Graph *` can walk back to the view.
+    const camel::graph::GraphView &view() const override;
+
     /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
     /// callees of its FUNC nodes) in `program`. Graphs are named in a draft by GraphId.
     static std::unique_ptr<GraphDraft> decode(const Program &program, const GCGraph *graph);
@@ -466,7 +475,7 @@ class GraphDraft {
     /// and the exit of a graph is its own field (`exitNode`). So a body record of all defaults is
     /// complete, not missing, and a graph of one region has every node in it.
     GraphDraft() { regions_.push_back(GCRegion{}); }
-    ~GraphDraft() = default;
+    ~GraphDraft();
 
     GraphDraft(const GraphDraft &)            = delete;
     GraphDraft &operator=(const GraphDraft &) = delete;
@@ -1269,6 +1278,11 @@ class GraphDraft {
     GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
   private:
+    /// The view `view()` answers, made on the first call and freed with the draft (`~GraphDraft`,
+    /// defined beside the adapter it makes: graph/draft_view.cpp). Kept as an opaque pointer
+    /// because the adapter names this type, so this header cannot hold one.
+    mutable const void *viewCache_ = nullptr;
+
     static gc_node_ref_t
     translateNodeRef(gc_node_ref_t sourceRef, const std::vector<gc_node_ref_t> &sourceToDraft);
     static size_t payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t sourceRef);

@@ -7,8 +7,7 @@
  * *name*, into an enclosing declaration the program never wrote -- a value nobody assigned, which
  * is a wrong program and not a representation of one. The SSA information of a build is one fact
  * per declaration, not per name: a region declares a name at most once, so two regions that write
- * the same name are two declarations
- * (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, 1.1).
+ * the same name are two declarations.
  *
  * The arm prints nothing on purpose: a `println` written as a statement inside an arm is a defect
  * of its own on this tip (the branch-arm invariant; `var.loop_carry_write_in_an_arm` is two
