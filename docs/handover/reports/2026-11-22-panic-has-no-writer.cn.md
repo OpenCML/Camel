@@ -110,3 +110,11 @@ node scripts/check-operator-panic.mjs --list   # 每个算子的读数，不只�
 ## 七、一句话
 
 **一个「必填」，只有在有人真去填的时候才有约束力。** 今天两侧都空着，读取方又对空取值取了保守默认——于是「必填」这件事在库代码里一次也没有发生过。返工把 `panic` 收成 `Stated<bool>` 是对的，但它要的是一次真实写入：不是给 `copy` 填一个 `false` 就算完，而是把**每个实现里有故障路径的算子**都写出来，让「没写」重新等于「不会故障」。
+
+## 八、待办：两个入口的 `panic` 今天不一致（**留着，不要消**）
+
+作者 2026-11-22 20:30 的裁定之后，这一条从一个「红」变成一条**待办**。三件事要连着读：
+
+1. **声明侧有 50 行，登记侧 0 个。** `git grep -c 'panic' -- lib` 今天读出 50 行、7 个文件（`lib/std/prelude.cml` 30、`lib/array/array.cml` 8、`lib/rewrite/rewrite.cml` 5、`lib/ckpt/ckpt.cml` 2、`lib/re/re.cml` 2、`lib/rulesets/transpose.cml` 2、`lib/str/str.cml` 1）；C++ 侧一个也没有。原因不是没人写，而是**写了到不了**：`CppRegistration` 的第二个参数到 `Registry` 没有路（`ce8332713` 加了设置函数，`Registry` 的 `instance`/`intern`/`find`/`declare` 与 `Record` 的读取面仍只有声明与零定义之外的少数几条），所以登记表上这一项今天是一片空白。
+2. **`--verify-ops` 今天不比较这一项。** 这是作者 20:30 的裁定：`camel inspect --ops` 给出的登记签名字符串里本来就没有 `panic` 的位置，拿声明去比它只会让每一处都报不一致——那是检查读错了，不是声明写错了。`scripts/stdlib-reference.mjs` 因此在解析声明时就把 `panic` 从句子里读出来（`takePanicClause`），它不进结果类型文本、也不进异常列表，页面照样把它印在声明写的位置。**这一项今天由 `scripts/check-operator-panic.mjs` 单独管**：它比的是实现里的故障路径与声明，今天的读数是 exit 1、48 个算子红了（330 个一致，0 个声明了实现里没有的故障）。
+3. **登记侧能填之后，由登记表比两边。** 到那时 `CppRegistration` 到 `Registry` 的路打通，`inspect --ops` 的签名带上这一项，`--verify-ops` 与登记表比「两个入口的 `panic` 是否一致」；**在那之前，两边不一致是「对的红」**——它记的是「登记侧还说不出这句话」这件事，不是某一侧写错了。消掉它只有一条路：把路修通，然后让登记表真的比。把声明里的 `panic` 删掉来换绿，是把这个待办从账上抹掉，不是把它做完。

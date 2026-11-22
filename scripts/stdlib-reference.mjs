@@ -595,20 +595,39 @@ function braceDepth(text) {
     return depth
 }
 
+// The `panic` a declaration writes beside its result type, taken out of the type: the type, and
+// whether the clause was stated. `panic` says a call of the operator can fail (design principles
+// 3.9); it is a statement about the operator's faults, written where the `uses` and `when` clauses
+// are (`export func save_tree::<T>(tree: T): void! panic uses var fs when has_ckpt_form::<T>()`),
+// and it is not part of the type. Read as part of the type it poisoned both halves of the
+// comparison: `T panic when ...` left the conditions cut off one word late, so every declaration
+// that states it disagreed with a registered signature that has no place for the clause, and a
+// `T panic` with no clause behind it did not read as a type at all -- `fail`'s `never panic` and
+// seven more entered the exception list as `an exception with no label`. The clause is read out
+// here, where the declaration's result is parsed, and printed back by `signatureText`, so the page
+// still states it where the declaration wrote it.
+function takePanicClause(text) {
+    const at = topLevelIndex(text, 'panic')
+    if (at < 0) return { text, panic: false }
+    const rest = text.slice(at + 'panic'.length)
+    return { text: `${text.slice(0, at).trimEnd()} ${rest.trimStart()}`.trim(), panic: true }
+}
+
 // The result type a declaration states, read from the line the declaration is on. A `match type`
 // result is written over several lines -- its case list is the part that looks like a body -- so
 // the brace group is followed to its close and the whole text is the result. Any other result is
-// the text after the colon, with a body opening (when the declaration has a body) cut off.
+// the text after the colon, with a body opening (when the declaration has a body) cut off. The
+// `panic` clause is not part of the type and is returned beside it (see `takePanicClause`).
 function readResultType(after, lines, lineIndex) {
     const text = after.replace(/^\s*:\s*/, '').trim()
-    if (!/^match\s+type\b/.test(text)) return text.replace(/\s*(sync\s*)?\{\s*$/, '').trim()
+    if (!/^match\s+type\b/.test(text)) return takePanicClause(text.replace(/\s*(sync\s*)?\{\s*$/, '').trim())
     let joined = text
     let depth = braceDepth(joined)
     for (let j = lineIndex + 1; depth > 0 && j < lines.length; j++) {
         joined += ` ${lines[j].trim()}`
         depth = braceDepth(joined)
     }
-    return joined.trim()
+    return takePanicClause(joined.trim())
 }
 
 // The index of the bracket that closes the one at `open`, or -1 when the line ends first.
@@ -920,8 +939,8 @@ function readDeclarations(file, module, options = {}) {
             // not part of the type, so the result every comparison reads is the type alone and the
             // clause is printed back where the declaration wrote it (signatureText).
             const stated = readResultType(after, lines, i)
-            const spelling = /\bspelling\s*$/.test(stated)
-            const result = spelling ? stated.replace(/\s+spelling\s*$/, '').trim() : stated
+            const spelling = /\bspelling\s*$/.test(stated.text)
+            const result = spelling ? stated.text.replace(/\s+spelling\s*$/, '').trim() : stated.text
             const entry = {
                 module: module.name,
                 name,
@@ -931,6 +950,10 @@ function readDeclarations(file, module, options = {}) {
                 with: splitParams(withText),
                 norm: splitParams(args.inner),
                 result,
+                // The `panic` clause the declaration writes beside its result: state that a call
+                // can fail. It is not part of `result` -- no comparison reads it -- and the page
+                // prints it back where the declaration wrote it (`signatureText`).
+                panics: stated.panic,
                 spelling,
                 inferred: result === '' && module.kind === 'camel',
                 // A body-less `export func` in a library module written in Camel declares one of
@@ -1047,13 +1070,18 @@ function parseHeader(module) {
 // ---- the document -------------------------------------------------------------------------
 
 function signatureText(entry) {
-    // The clause a declaration writes after its result type (`... => string spelling`) states the
-    // capability the body takes, not part of the type: the page prints it where the declaration
-    // writes it, after the result, and every comparison reads `entry.result` without it.
+    // The clauses a declaration writes after its result type are not part of it, and the page prints
+    // them where the declaration writes them: `panic` first (it is written beside the type,
+    // `: T panic when ...`), then the conditions, then the capability the body takes
+    // (`... => string spelling`). Every comparison reads `entry.result`, which holds the type and
+    // the conditions alone.
+    const { text: type, conditions } = splitConditions(entry.result)
+    const panic = entry.panics ? ' panic' : ''
+    const stated = `${type}${panic}${conditions === '' ? '' : ` ${conditions}`}`
     const clause = entry.spelling ? ' spelling' : ''
-    if (entry.value) return `${entry.name}: ${entry.result}${clause}`
+    if (entry.value) return `${entry.name}: ${stated}${clause}`
     const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
-    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}${clause}`
+    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${stated || (entry.inferred ? '?' : 'void')}${clause}`
 }
 
 function renderDoc() {
@@ -2158,9 +2186,9 @@ const FLOAT_ELEMENTS = new Set(['float', 'f32', 'bf16', 'f16'])
 // How many names an exception list shows in one line before it counts the rest.
 const EXCEPTIONS_SHOWN = 12
 
-// The type a signature states, with the conditions a declaration may add after it removed: a
-// `when ...` or `uses ...` clause is about the operator, not about its result.
-function withoutConditions(text) {
+// The type a signature states, and the conditions written after it: a `when ...` or `uses ...`
+// clause is about the operator, not about its result.
+function splitConditions(text) {
     const source = (text || '').trim()
     let depth = 0
     for (let i = 0; i < source.length; i++) {
@@ -2172,10 +2200,15 @@ function withoutConditions(text) {
         if ('([{<'.includes(c)) depth++
         else if (')]}>'.includes(c)) depth--
         else if (depth === 0 && /\s/.test(c) && /^(?:when|uses)\b/.test(source.slice(i + 1))) {
-            return source.slice(0, i).trimEnd()
+            return { text: source.slice(0, i).trimEnd(), conditions: source.slice(i + 1).trim() }
         }
     }
-    return source
+    return { text: source, conditions: '' }
+}
+
+// The type a signature states, with the conditions a declaration may add after it removed.
+function withoutConditions(text) {
+    return splitConditions(text).text
 }
 
 // The commas of `text` that are not inside a group, or null when the text does not balance.
