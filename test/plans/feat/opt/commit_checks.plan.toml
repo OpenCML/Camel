@@ -67,7 +67,7 @@ args = ["${case}", "test::camel_commit_checks", "std::nvm"]
 expect_exit = 1
 timeout_ms = 20000
 expect_diagnostic_name = "RuntimeDiag::PassEffectContainment"
-expect_output_contains = ["fold_function_type: graph 'announced' now publishes", "CAMEL_CHECKS build asks=0", "CAMEL_CHECKS accepted, asked=0", "CAMEL_CHECKS released: the run continued past opt::cse with the checks off", "CAMEL_CHECKS asked=1 -> the same program, the same pass", "Pass 'opt::cse' returned a program whose call site reaches past the type it declares", "write stdout"]
+expect_output_contains = ["fold_function_type: the call site at node", "now declares '(x: int) => int pure'", "while the body it runs is 'announced'", "CAMEL_CHECKS build asks=0", "CAMEL_CHECKS accepted, asked=0", "CAMEL_CHECKS released: the run continued past opt::cse with the checks off", "CAMEL_CHECKS asked=1 -> the same program, the same pass", "Pass 'opt::cse' returned a program whose call site reaches past the type it declares", "write stdout"]
 
 # What the check declined to judge, so that "I looked and it is fine" and "I refused to look" do not
 # read the same in a log. Both numbers are pinned: a checker that stays green by declining more has

@@ -134,26 +134,65 @@ SameShapePair findSameShapePair(const Program &program) {
     return {};
 }
 
-/// The fold, in one commit: the noisy graph publishes the type of the quiet one and keeps its body,
-/// which is the program the containment check is about. Returns the program the commit made.
+/// The fold, in one commit, on the **call site** rather than on the graph's own signature: the value
+/// a call runs through is given the quiet function's type, and the printing body behind it stays
+/// where it is. The commit is not the reader that can refuse this: the graph it changed is `main`,
+/// whose own clause still covers the print it reaches through that call, so nothing the commit
+/// compares is out of bounds and it publishes. The call site is left declaring `pure` over a body
+/// that writes the console -- which is the shape the pass boundary reads, at the one place the
+/// commit's comparison does not look: the clause written at the call node against the footprint of
+/// the callee behind it (`effectContainmentViolation`). Returns the program the commit made.
 ///
-/// The session is opened over the whole program and only the noisy graph is edited: naming a graph
-/// as the session's root would make that graph the program's entry when the commit replaces it, and
-/// the fixture would be a program whose entry takes a parameter.
-///
-/// This commit adds no node, so it adds no access, so the commit is not asked the effect or the order
-/// questions ( `commitAddsAccess`): a type replacement is what a draft does
-/// without adding an access, and the program it publishes is the one the boundary check below reads.
+/// The session is opened over the whole program and only the caller is edited: naming a graph as the
+/// session's root would make that graph the program's entry when the commit replaces it, and the
+/// fixture would be a program whose entry takes a parameter.
 const Program *foldTypeOf(
     const camel::core::context::context_ptr_t &context, const Program *program,
     const SameShapePair &pair, std::ostream &out) {
-    RuntimeGraphDraftSession session(context, program);
-    auto &transaction = session.edit(const_cast<GCGraph *>(pair.noisy));
-    transaction.edit().setFuncType(pair.quiet->funcType());
-    out << "fold_function_type: graph '" << pair.noisy->name() << "' now publishes '"
-        << pair.quiet->funcType()->toString() << "', the type of graph '" << pair.quiet->name()
-        << "'; its body is unchanged\n";
-    return session.commit();
+    gc_node_ref_t chosenGraph = kInvalidNodeRef;
+    gc_node_ref_t chosenValue = kInvalidNodeRef;
+    const GCGraph *chosenAt   = nullptr;
+    for (const GCGraph *graph : program->graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (gc_cnt_t i = 0; i < graph->nodeCount(); ++i) {
+            const gc_node_ref_t ref = static_cast<gc_node_ref_t>(i);
+            const GCNode *node      = graph->node(ref);
+            if (node == nullptr || node->kind != GCNodeKind::Call) {
+                continue;
+            }
+            const auto with = graph->withInputsOf(ref);
+            if (with.empty() || graph->node(with[0]) == nullptr) {
+                continue;
+            }
+            // The call that runs the printing function: its value carries that graph's type. The
+            // first call found is the fallback, for a fixture whose value type is a copy.
+            if (chosenAt == nullptr) {
+                chosenAt    = graph;
+                chosenGraph = ref;
+                chosenValue = with[0];
+            }
+            if (graph->node(with[0])->dataType() == pair.noisy->funcType()) {
+                chosenAt    = graph;
+                chosenGraph = ref;
+                chosenValue = with[0];
+                break;
+            }
+        }
+    }
+    if (chosenAt != nullptr) {
+        RuntimeGraphDraftSession session(context, program);
+        auto &transaction = session.edit(const_cast<GCGraph *>(chosenAt));
+        transaction.edit().setNodeDataType(chosenValue, pair.quiet->funcType());
+        out << "fold_function_type: the call site at node " << chosenGraph << " of graph '"
+            << chosenAt->name() << "' now declares '" << pair.quiet->funcType()->toString()
+            << "', the type of graph '" << pair.quiet->name()
+            << "', while the body it runs is '" << pair.noisy->name() << "'\n";
+        return session.commit();
+    }
+    out << "fold_function_type: no call through a value to fold\n";
+    return program;
 }
 
 /// The console a case prints to. `println` in the prelude is `#op(':io/println')`

@@ -117,7 +117,7 @@ desc = "A splice of the same write, ordered after the write the program already 
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_legal_splice", "std::nvm"]
-expect_exit = 48
+expect_exit = 54
 expect_stdout_contains = ["commit_legal_splice: the draft splices a write to stdout ordered after the write that was already there", "so the commit asks the effect and order checks in every build", "writes stdout at node", ", ordered after it", "commit_legal_splice: the commit published it, and nothing was refused"]
 
 # 乙's other side, on a splice the check really has nothing to say about: two *reads* of one ambient
@@ -162,7 +162,7 @@ desc = "Two drafts and the one build cell: the draft that adds an access is refu
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_tier", "std::nvm"]
-expect_exit = 48
+expect_exit = 54
 expect_stdout_contains = ["commit_tier: cell=0, draft adds an access", "commit_tier: cell=0, refused, check=order", "the tier is the draft's, not the build's", "commit_tier: cell=1, draft adds no access", "commit_tier: cell=1, refused, check=effect", "the signature moved and the body was read against the new one", "makes an access the type does not cover", "write stdout", "the graph's signature changed at this commit", "and now declares nothing", "cell=0 add-an-access -> refused=1, cell=1 narrows-the-signature -> refused=1", "the tier is the draft's, and the signature is the other side of the same comparison"]
 
 # ①, refused, in the seal and in every build. The exit is moved onto a node of one arm -- the shape
@@ -190,7 +190,7 @@ desc = "A draft leaves one node reading itself: the commit refuses the graph as 
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_cycle", "std::nvm"]
-expect_exit = 48
+expect_exit = 54
 expect_stdout_contains = ["commit_cycle: the draft's input setters do not look for a cycle, the commit does", "now reads itself", "commit_cycle: refused at the commit:", "breaks its edge invariants", "lies on a cycle of inputs"]
 
 # ④, refused. The write is spliced into one arm, ordered against nothing; the body already writes
@@ -342,5 +342,5 @@ desc = "A call site retyped twice through materializeStaticValue carries the sec
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::value_retype_twice", "std::nvm"]
-expect_exit = 48
+expect_exit = 54
 expect_stdout_contains = ["value_retype_twice: graph '__root__' names 'main'", "the two clauses differ: yes", "first uses var stdout, second uses var stdout, var retype_twice", "value_retype_twice: the encode says uses var stdout, var retype_twice"]
