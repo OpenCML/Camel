@@ -72,7 +72,10 @@ const NAME = 'check-edge-kind-layer'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default, the same set the other source checks read. */
-const SCANNED = ['include', 'src', 'modules', 'tools']
+// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
+// tree of either layout is scanned instead of crashing on the way in.
+const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
 
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 
@@ -203,7 +206,9 @@ for (let index = 0; index < argv.length; index += 1) {
 
 // The home is always derived from the whole tree, never from the sample: a sample is a place to
 // read findings from, and moving the boundary with it would make `--path` measure another rule.
-const TREE = SCANNED.map((name) => path.join(ROOT, name)).flatMap((target) => sourceFilesUnder(target))
+const TREE = SCANNED.map((name) => path.join(ROOT, name))
+    .filter((target) => fs.existsSync(target))
+    .flatMap((target) => sourceFilesUnder(target))
 const declaring = declaringFiles(TREE)
 const homeFiles = new Set([...declaring.values()].flat())
 // Only a header contributes its directory tree: the rule is "the tree of the header that declares
@@ -236,7 +241,7 @@ const isHome = (file) =>
     homeDirs.some((dir) => file.startsWith(dir + path.sep))
 
 const targets = paths.length > 0 ? paths : SCANNED.map((name) => path.join(ROOT, name))
-const scanned = targets.flatMap((target) => sourceFilesUnder(target))
+const scanned = targets.filter((target) => fs.existsSync(target)).flatMap((target) => sourceFilesUnder(target))
 if (scanned.length === 0) {
     console.error(
         `${NAME}: ${targets.join(', ')} holds no C++ source, so this check matched nothing and ` +
