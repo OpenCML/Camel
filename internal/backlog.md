@@ -29,3 +29,4 @@
 | D-1123-19-3 | 作者 inbox | `panic` 收尾：余 168 个算子补可读陈述（`214/382` → 目标 `382/382`），逐项对照表要求一项不变 | `lane/panic-record` | doing | 2026-11-23 04:45 | — |
 | D-1123-19-4 | 作者 inbox | 阶段 3a：`src/stdlib/{transforms,autodiff,rewrite}` 与 `src/kernel/rewrite` 里直接读 `GCGraph`/`GraphDraft` 的改读 `GraphView`；**用只减不增的计数守着** | `lane/3a-transforms` | doing | 2026-11-23 04:45 | — |
 | D-1123-19-5 | 作者 inbox | 阶段 3a：`src/stdlib/std/{nvm,fvm,prl,cpp,exec}` 与 `src/tools`，同上计数 | `lane/3a-exec` | doing | 2026-11-23 04:45 | — |
+| C-1123-14 | `3a-transforms` 的实测 | **`lane/stage3-facts` 的 WIP 搁在 `ft1` 上，已陈旧**：24 个已改文件 + 3 个未跟踪，HEAD `04b72ee82`，**落后 develop 139**。判据之一：其中 `M docs/handover/lanes.cn.md` —— **那个路径在 `5a63a3b52` 就搬成 `internal/lanes.md` 了**，所以这份 WIP **早于协作体系搬迁**，不能原样合。`src/stdlib/transforms/jvp.cpp` 也在里面（`3a-transforms` 要改它）。**未动、未 stash、未 reset；要重开这条车道必须先在现行树上重做** | 待裁 | open | 2026-11-23 04:50 | — |
