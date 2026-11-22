@@ -679,12 +679,49 @@ function writeExamplePins(root, pins) {
 // The entry as its author wrote it, for the loose name search below: the runner's own bookkeeping
 // (`__planPath`, `__backend`, `__knownFail`, ...) names no diagnostic and is not part of what the
 // entry declares.
+//
+// Written once per test and kept. The search below asks about every test once per diagnostic, so
+// serializing the same object again for each of the tree's 307 diagnostics was most of what this
+// script cost: `node --cpu-prof` on the build host put 15.7 s of its 21.1 s in this function. A test
+// is not written to after `loadTests` returns, so the reading cannot go stale.
+const declaredText = new WeakMap()
 function declaredFields(test) {
-    return JSON.stringify(test, (key, value) => (key.startsWith('__') ? undefined : value))
+    let text = declaredText.get(test)
+    if (text === undefined) {
+        text = JSON.stringify(test, (key, value) => (key.startsWith('__') ? undefined : value))
+        declaredText.set(test, text)
+    }
+    return text
+}
+
+// The tests each word appears in, counted once for the whole run. The name of a diagnostic is one
+// word -- `readRegistry` refuses a name that is not `/^[A-Za-z_]\w*$/` -- so `\b<name>\b` against the
+// text above is exactly "that text holds this word", and that text was being scanned once per
+// diagnostic for the other half of the cost measured above. The same predicate, reading each test's
+// words once instead of 307 times.
+const declaredWords = new WeakMap()
+function testsNamingWords(tests) {
+    let index = declaredWords.get(tests)
+    if (index) return index
+    index = new Map()
+    for (const test of tests) {
+        const kept = new Set()
+        for (const word of declaredFields(test).match(/[A-Za-z0-9_]+/g) || []) {
+            if (kept.has(word)) continue
+            kept.add(word)
+            let named = index.get(word)
+            if (!named) index.set(word, (named = new Set()))
+            named.add(test)
+        }
+    }
+    declaredWords.set(tests, index)
+    return index
 }
 
 function exampleFor(entry, tests, root, pins) {
     const candidates = []
+    const code = hex8(entry.code)
+    const named = testsNamingWords(tests).get(entry.name)
     for (const test of tests) {
         // An example must be a program that passes: a test the runner marks `known_fail` on the
         // back end it runs fails on purpose, and showing it would show the reader a program that
@@ -694,10 +731,8 @@ function exampleFor(entry, tests, root, pins) {
         if (test.__knownFail) continue
         if (!test.case || (test.tool && test.tool !== 'camel')) continue
         const exact =
-            test.expect_diagnostic_name === entry.fullName ||
-            test.expect_diagnostic_code === hex8(entry.code)
-        const loose = !exact && new RegExp(`\\b${entry.name}\\b`).test(declaredFields(test))
-        if (!exact && !loose) continue
+            test.expect_diagnostic_name === entry.fullName || test.expect_diagnostic_code === code
+        if (!exact && !named?.has(test)) continue
         const casePath = path.resolve(path.dirname(test.planPath), test.case)
         if (!casePath.endsWith('.cml') || !fs.existsSync(casePath)) continue
         const source = stripLeadingComment(fs.readFileSync(casePath, 'utf8'))
