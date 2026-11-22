@@ -373,37 +373,59 @@ std::string aggregatePartName(const Type *type, size_t index) {
     return std::to_string(index);
 }
 
-/// The part of `type` an ACCS node reads, when it reads one: `s.x` of a struct, `t.0` of a
+/// The part of `type` a member read reads, when it reads one: `s.x` of a struct, `t.0` of a
 /// tuple, of exactly the part's type.
+///
+/// A member read is an operator now (`:op/access_key` by name, `:op/access` by place): the member
+/// is the call's *first* ordinary operand, a constant the builder wrote there, and the value it
+/// reads is the second. So the node is an OPER and the access node's payload -- which held the
+/// member when the read had a kind of its own -- is not where the member is any more. Both
+/// spellings answer the same question, and the value operand is the last one either way, which is
+/// what tells the caller the read is of the value it asked about.
 std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
-    if (!nodeIsKind(node, runtime::GCNodeKind::Accs) || type == nullptr) {
+    if (type == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return std::nullopt;
+    }
+    const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
+    if (op == nullptr) {
+        return std::nullopt;
+    }
+    const std::string_view uri = op->uri();
+    const bool byName          = uri == ":op/access_key";
+    if (!byName && uri != ":op/access") {
         return std::nullopt;
     }
     const auto norm = normInputsOf(node);
-    if (norm.size() != 1) {
+    if (norm.size() != 2) {
         return std::nullopt;
     }
-    const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
-    if (payload.size() < sizeof(runtime::GCAccsBody)) {
+    const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(norm.front()));
+    if (!member.has_value()) {
         return std::nullopt;
     }
-    const auto *body = reinterpret_cast<const runtime::GCAccsBody *>(payload.data());
-    size_t index     = 0;
+    size_t index = 0;
     if (type->code() == TypeCode::Struct) {
-        if (body->accsKind != runtime::GCAccsKind::StructKey) {
+        if (!byName) {
             return std::nullopt;
         }
-        const auto field = tt::as_ptr<const StructType>(type)->findField(body->key());
+        const auto *key = camel::core::rtdata::fromSlot<String *>(*member);
+        if (key == nullptr) {
+            return std::nullopt;
+        }
+        const auto field = tt::as_ptr<const StructType>(type)->findField(std::string(key->view()));
         if (!field.has_value()) {
             return std::nullopt;
         }
         index = *field;
     } else if (type->code() == TypeCode::Tuple) {
-        if (body->accsKind != runtime::GCAccsKind::TupleIndex ||
-            body->value >= tt::as_ptr<const TupleType>(type)->size()) {
+        if (byName) {
             return std::nullopt;
         }
-        index = body->value;
+        const int64_t at = camel::core::rtdata::fromSlot<int64_t>(*member);
+        if (at < 0 || static_cast<uint64_t>(at) >= tt::as_ptr<const TupleType>(type)->size()) {
+            return std::nullopt;
+        }
+        index = static_cast<size_t>(at);
     } else {
         return std::nullopt;
     }
@@ -3196,8 +3218,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         }
                         const auto index = accessedPartOf(user, part.type);
                         const auto norms = normInputsOf(user);
-                        if (!index.has_value() || norms.size() != 1 ||
-                            nodeDraftOf(user)->ref(norms.front()) != source) {
+                        // The value is the last ordinary operand of a member read: the only one
+                        // when the read had a node kind of its own, the second when it is the
+                        // operator (the member is the first).
+                        if (!index.has_value() || norms.empty() ||
+                            nodeDraftOf(user)->ref(norms.back()) != source) {
                             return true;
                         }
                         const uint32_t region = draft.nodeRegion(nodeIdOf(user));

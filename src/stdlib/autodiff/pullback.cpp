@@ -903,20 +903,56 @@ class ForwardRewrite {
         return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
     }
 
+    /// The component a projection of a value reads, in either form the tree has: the ACCS node,
+    /// and the member read that is an operator (`:op/access` by place, the URI prelude.cml
+    /// declares for the read the programme wrote). nullopt for anything else, including a read by
+    /// name -- which names a field of a struct and never a component of a tuple.
+    std::optional<uint32_t> projectedComponentOf(gc_node_ref_t user) const {
+        const auto payload = draft().payloadOf(user);
+        if (kindOf(transaction_, user) == GCNodeKind::Accs) {
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                return std::nullopt;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            if (accs->accsKind != rt::GCAccsKind::TupleIndex) {
+                return std::nullopt;
+            }
+            return accs->value;
+        }
+        if (kindOf(transaction_, user) != GCNodeKind::Oper ||
+            payload.size() < sizeof(rt::GCOperBody)) {
+            return std::nullopt;
+        }
+        if (reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri() != ":op/access") {
+            return std::nullopt;
+        }
+        const auto inputs = draft().normInputsOf(user);
+        if (inputs.size() != 2) {
+            return std::nullopt;
+        }
+        const auto *place = draft().node(inputs[0]);
+        if (place == nullptr || place->header.kind != GCNodeKind::Data ||
+            place->header.dataIndex >= 0) {
+            return std::nullopt;
+        }
+        const size_t slot = static_cast<size_t>(-place->header.dataIndex);
+        if (slot >= draft().staticSlots().size()) {
+            return std::nullopt;
+        }
+        const int64_t at = camel::core::rtdata::fromSlot<int64_t>(draft().staticSlots()[slot]);
+        if (at < 0) {
+            return std::nullopt;
+        }
+        return static_cast<uint32_t>(at);
+    }
+
     /// The projection of `node`'s value: the access node that takes component `index` of it, or
     /// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
     /// component (the builder caches the access node it makes for a call's value).
     gc_node_ref_t componentProjectionOf(gc_node_ref_t node, uint32_t index) const {
         for (gc_node_ref_t user : draft().normUsersOf(node)) {
-            if (kindOf(transaction_, user) != GCNodeKind::Accs) {
-                continue;
-            }
-            const auto payload = draft().payloadOf(user);
-            if (payload.size() < sizeof(rt::GCAccsBody)) {
-                continue;
-            }
-            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-            if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
+            const std::optional<uint32_t> component = projectedComponentOf(user);
+            if (component && *component == index) {
                 return user;
             }
         }
@@ -2445,26 +2481,33 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     draft().setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
     draft().setNodeDataType(loop, valueType);
     draft().setNodeDataIndex(loop, draft().allocateRuntimeSlot(valueType));
-    // The loop's users see the state alone; the tape is read through the node below. The
-    // builder already inserted that projection when it normalised the loop; reuse it rather
-    // than redirect it to itself (a cycle), and add one only for a loop that has none.
-    // The projection is the user whose type is the state's value; with one struct state the
-    // programme's own field reads (`q.a`) are ACCS users of the loop node too, and one of them
-    // is a float, not the state (the state is the struct, not its fields).
-    gc_node_ref_t state = kInvalidNodeRef;
-    for (gc_node_ref_t user : draft().normUsersOf(loop)) {
-        if (k == 1 && kindOf(transaction_, user) == GCNodeKind::Accs &&
-            typeOf(transaction_, user) == bodyPlan.stateValueType) {
-            state = user;
-            break;
+    // The loop's users see the state alone; the tapes are read through the node below. A loop that
+    // already handed back a tuple -- the states, then the collections it collected before this
+    // rewrite -- keeps the readers it has: component 0 is still the state, so a projection of it
+    // still names the state, and redirecting it again would make it project its own projection
+    // (`:op/access` of an array, which is no read at all). Only a loop that handed back the state
+    // itself has readers naming the value, and those take the projection added below.
+    const bool valueWasTheState = k == 1 && bodyPlan.existingCollectionTypes.empty();
+    const uint64_t origin       = draft().nodeOrigin(loop);
+    gc_node_ref_t state         = kInvalidNodeRef;
+    if (k > 1) {
+        // More than one state: the value was a tuple of them and stays one, so the readers it has
+        // already project it, and the fill that gathers the first k components is the state.
+        for (gc_node_ref_t user : draft().normUsersOf(loop)) {
+            if (kindOf(transaction_, user) == GCNodeKind::Fill &&
+                typeOf(transaction_, user) == bodyPlan.stateValueType) {
+                state = user;
+                break;
+            }
         }
-        if (k > 1 && kindOf(transaction_, user) == GCNodeKind::Fill &&
-            typeOf(transaction_, user) == bodyPlan.stateValueType) {
-            state = user;
-            break;
-        }
+    } else if (!valueWasTheState) {
+        // One state, and the value was already a tuple (the loop collected before this rewrite):
+        // component 0 is still the state, so the projection the programme's own reads use still
+        // names it. Reusing that read keeps them where they are; adding a second projection and
+        // redirecting onto it would put a read of a read in their place -- `:op/access` of an
+        // array, which `__access_value__` refuses because an array has no members.
+        state = componentProjectionOf(loop, 0u);
     }
-    const uint64_t origin = draft().nodeOrigin(loop);
     if (state == kInvalidNodeRef) {
         if (k == 1) {
             state = draft().addAccsNode(bodyPlan.stateTypes.front(), 0u);

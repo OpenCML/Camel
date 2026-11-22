@@ -134,7 +134,7 @@ const lines = input.normalized.stdout.split(String.fromCharCode(10))
 const loops = lines.filter((l) => l.includes('type="LOOP"'))
 assert(loops.length > 0, 'the dump has no LOOP node to read the state shape from: ' + input.normalized.stdout)
 assert(loops.every((l) => l.includes('value_type="{  }"')), 'a zero-leaf loop state is not the empty struct: ' + loops.join(' | '))
-assert(lines.some((l) => l.includes('type="CAST"') && l.includes('value_type="Nothing"')), 'the empty struct does not enter the named type: ' + input.normalized.stdout)
+assert(lines.some((l) => l.includes('label=":op/cast"') && l.includes('value_type="Nothing"')), 'the empty struct does not enter the named type: ' + input.normalized.stdout)
 }
 """
 timeout_ms = 20000
