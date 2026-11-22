@@ -12,7 +12,7 @@ Choices that belong to the language author are collected in section 7, marked in
 
 ## 1. What a diagnostic carries
 
-`Diagnostic` (`include/camel/core/error/diagnostics.h`):
+`Diagnostic` (`kernel/include/camel/core/error/diagnostics.h`):
 
 | Field | Meaning |
 |-------|---------|
@@ -83,7 +83,7 @@ A fix is not a JSON-only artifact. The `text` format prints it the way rustc pri
 a `help:` line carrying the fix's title, and under it the source line the fix leaves behind, `+`
 under the text it writes; a fix that only cuts text writes nothing to show, so the line as it
 stood is printed with `-` under what it cuts (the rich text renderer in
-`src/core/error/diagnostics/render.cpp`). A reader and
+`kernel/core/error/diagnostics/render.cpp`). A reader and
 an AI reading the text therefore see what to write and not only that there is something to write,
 and the `short` format - one line, which the test runner parses - is the only one left unchanged.
 The same `DiagFix` travels to the editor: `DiagnosticInfo` in the semantic model carries it, the
@@ -224,8 +224,8 @@ for the language author to decide (`DESIGN-QUESTION(diagnostics) Q3`).
 ## 6. Catalog
 
 `scripts/diagnostics-catalog.mjs` reads the enumerators
-(`include/camel/core/error/diagnostics/messages/*.h`) and the message tables
-(`src/core/error/diagnostics/messages/*.cpp`) as text.
+(`kernel/include/camel/core/error/diagnostics/messages/*.h`) and the message tables
+(`kernel/core/error/diagnostics/messages/*.cpp`) as text.
 
 - `--check`: every enumerator has a table entry whose name is the enumerator, a message and a
   suggestion field; no value is used twice within a type; severity bits are valid; warning

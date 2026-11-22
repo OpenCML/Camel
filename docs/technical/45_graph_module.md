@@ -1,16 +1,16 @@
 # 模块 `graph`：把函数当作值
 
-`graph` 是一个 C++ 写的模块（`modules/graph`），让 Camel 程序读取并改写一个函数的图：读取图、在事务里编辑、提交成改过的函数；用 Camel 写的遍是一个 `(f: F) => F!` 函数，按 `<模块>::<函数>` 写进流水线。设计依据见 `docs/design/graph-store/README.cn.md` 第 4、5 节和设计原则 9.1（遍是函数到函数的变换）；本文说明实现里每一块放在哪里、行为是什么、有哪些限制。逐个算子的签名与例子见 [`docs/stdlib-reference.md`](../stdlib-reference.md) 的 `graph` 一节（由 `stdlib/graph.cml` 生成）。
+`graph` 是一个 C++ 写的模块（`lib/graph/`），让 Camel 程序读取并改写一个函数的图：读取图、在事务里编辑、提交成改过的函数；用 Camel 写的遍是一个 `(f: F) => F!` 函数，按 `<模块>::<函数>` 写进流水线。设计依据见 `docs/design/graph-store/README.cn.md` 第 4、5 节和设计原则 9.1（遍是函数到函数的变换）；本文说明实现里每一块放在哪里、行为是什么、有哪些限制。逐个算子的签名与例子见 [`docs/stdlib-reference.md`](../stdlib-reference.md) 的 `graph` 一节（由 `lib/graph/graph.cml` 生成）。
 
 没有 `Program` 类型：`Program` 是运行时的快照，Camel 程序不会写出它的名字。被读取、被改写的单位是**函数**：一个函数值带着它自己的图和从它可达的所有图。
 
 ## 类型
 
-这些类型在 `stdlib/graph.cml` 里都写成没有右边的 `export type`，实现由 C++ 模块按（模块名，类型名）注册（`registerNativeType`，`include/camel/core/type/native.h`）；声明了而 C++ 没有提供，是 `SemanticDiag::NativeTypeNotProvided`。
+这些类型在 `lib/graph/graph.cml` 里都写成没有右边的 `export type`，实现由 C++ 模块按（模块名，类型名）注册（`registerNativeType`，`kernel/include/camel/core/type/native.h`）；声明了而 C++ 没有提供，是 `SemanticDiag::NativeTypeNotProvided`。
 
 | 类型 | 是什么 | 实现 |
 | --- | --- | --- |
-| `Graph`、`Node<T>`、`Op`、`TypeRef`、`Region`、`Tag` | 命名某个函数的图里的东西 | 一个被追踪的 `Handle` 对象（`modules/graph/handle.h`）：种类、所属的 `Program`、`GraphId`、序号、`Type*` |
+| `Graph`、`Node<T>`、`Op`、`TypeRef`、`Region`、`Tag` | 命名某个函数的图里的东西 | 一个被追踪的 `Handle` 对象（`lib/graph/handle.h`）：种类、所属的 `Program`、`GraphId`、序号、`Type*` |
 | `Txn<F>` | 在函数 `f: F` 上开的事务 | 句柄资源类型：外部资源对象持有一个草稿会话；`commit(t)` 给出同类型的 `F!`。因为是资源，改写它的算子写 `uses t` |
 | `Value` | 值；目前与 `Node` 同一个类型 | `Node` 的另一个名字 |
 | `NodeKind` | `Data, Port, Cast, Copy, Fill, Accs, Brch, Join, Call, Func, Oper, Sync, Gate, Loop` | Camel 的 `enum`（`nodekind.cpp`）；`nodeKindTag` 对 `GCNodeKind` 做穷尽的 `switch`，图模型新增一种节点时这里编译不过，直到它被放进枚举或明确排除（`Bind`、`Dref`、`Dead` 不是程序里看得见的节点） |
@@ -24,7 +24,7 @@
 
 读取算子都是纯的，直接读冻结的图（`GCGraph`）：`graph_of(f)`（函数自己的图）、`graphs_of(f)`（从它可达的全部图）、`name`、`nodes`（`NodeId` 序，跳过 `Dead`）、`inputs` / `with_inputs` / `sync_inputs` / `order_inputs`（普通输入、with 输入、同步边与顺序边的前驱）、`users` / `value_users`（经图缓存的使用者索引）、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_constant`、`constant::<T>(n)`、`type_of` / `type_name`、`callee`、`tags`、`origin`、`show`、`shape_text`。可能没有的结果是 `T?`，用 `match` 取出。`constant::<T>(n)` 的类型实参是答案的类型：值的类型只出现在结果里，调用处用显式类型实参固定它（设计原则 4.4），`n` 不是 `T` 类型的常量时得到 `null`。
 
-区域：`region_of(n)` 给出节点所在的最内层区域，每个节点都有一个；区域 0 是函数体，只有体、没有区域表的图（`regionCount() == 0`）也返回区域 0，不会返回 `null`。`region_kind(r)` 给出 `RegionKind`，体的种类是 `Root`；`region_parent(r)` 给出父区域（体没有父区域，返回 `null`）。区域列在 R2b 落地后由分支臂与内联共同写入；区域规则（2）（3）（节点只读自己区域或祖先区域的节点、JOIN 的 with 输入可读本 BRCH 的 Arm 区域的结果、加边的默认区域取最深的输入区域）由分支臂校验执行（`src/runtime/branch_arms.cpp` 的 `verifyBranchArmRegions`），`EdgeChecker` 只检查等价写入在同一区域。
+区域：`region_of(n)` 给出节点所在的最内层区域，每个节点都有一个；区域 0 是函数体，只有体、没有区域表的图（`regionCount() == 0`）也返回区域 0，不会返回 `null`。`region_kind(r)` 给出 `RegionKind`，体的种类是 `Root`；`region_parent(r)` 给出父区域（体没有父区域，返回 `null`）。区域列在 R2b 落地后由分支臂与内联共同写入；区域规则（2）（3）（节点只读自己区域或祖先区域的节点、JOIN 的 with 输入可读本 BRCH 的 Arm 区域的结果、加边的默认区域取最深的输入区域）由分支臂校验执行（`kernel/runtime/branch_arms.cpp` 的 `verifyBranchArmRegions`），`EdgeChecker` 只检查等价写入在同一区域。
 
 事实（`docs/technical/40_graph_facts.md`）经上下文的事实库读取：`effects(g)`（`external`、`writes_variables`、`may_fault`、`may_not_terminate`）、`shape(n)`、`permissions(n)`。第一次问时计算，之后只要它读过的图没有变就不重算。
 
@@ -49,7 +49,7 @@
 
 ## 用 Camel 写遍
 
-一个模块导出 `(f: F) => F!` 的函数（`F` 是只受 `is_function::<F>()` 限定的类型变量），就是一个遍，流水线里写 `camel prog.cml mymod::fn std::nvm`：流水线把程序的入口函数交给它，拿回的函数就是下一站要处理的程序。实现在 `src/execute/camel_pass.cpp`：
+一个模块导出 `(f: F) => F!` 的函数（`F` 是只受 `is_function::<F>()` 限定的类型变量），就是一个遍，流水线里写 `camel prog.cml mymod::fn std::nvm`：流水线把程序的入口函数交给它，拿回的函数就是下一站要处理的程序。实现在 `kernel/execute/camel_pass.cpp`：
 
 1. 遍的名字解析不到时，把模块当**程序**编译（`Module::compileAsProgram`，`DefinitionStore::libraryFunction`）：程序以这个函数为入口，模块级的 `let` 在遍运行前算好（设计原则 10.1）；
 2. 它只接受唯一、签名为 `(f: F, ...with 参数) => F!` 的泛型函数（`hasGenericPassSignature`）：流水线按被处理程序的入口函数的类型实例化 `F`；
@@ -58,17 +58,17 @@
 5. `NodeVMSchedPass::callGraph` 在 NodeVM 上以被处理程序的入口函数为实参、以遍参数为 with 实参运行它；返回的函数与输入不是同一个快照就 `installRuntimeProgram`（返回函数的 `program()` 是新的程序）；
 6. 返回错误值就是遍的失败（设计原则 9.1：遍是 `(f: F) => F!`）：遍驱动在这一条遍上停下流水线，按"没有被处理的错误值到达出口"报出（3.9：标准错误、退出码非零），不再为它另发诊断；模块编译不过、函数不是遍，是 `InvalidPassParameter`，消息只说哪条遍规格、哪个库编译不过；模块自己的第一条诊断作为**从属位置**附上（文件、行、列与原行），文本格式里就是该位置下的源码片段。诊断没有位置时（例如导入的库编译不过），原因才留在消息里。模块不存在或没有这个函数，遍保持未知。模块自己解析不过（还在编辑的文件）也走这里：`compileAsProgram` 把 `compile()` 抛出的诊断留在模块的诊断表里并返回失败，调用方把它作为遍规格的问题报告，异常不会穿出流水线。诊断表停在错误上限（`--timeit` 的上下文上限是第一条错误）时得到的是上限异常而不是 `Diagnostic`：`DefinitionStore::libraryFunction` 把它同样当作"这个库没编过"，否则它会在遍解析之前穿出去，用户看到的是裸的解析诊断而不是 `InvalidPassParameter`。
 
-一个遍声明和一个函数值上的算子长得不同：遍的形状是 `(f: F): F!` 且条件是 `when is_function::<F>()`，而且模块里没有同名的 C++ 算子；`graph_of::<F>(f: F): Graph when is_function::<F>()` 的结果不是 `F!`，是读函数值的算子，`rewrite` 一类的引擎有同名的 C++ 算子，`f->rewrite<rules>` 调用它，都不是流水线里的遍（`Builder::isPassDeclaration`、`src/execute/pass_declarations.cpp`）。同名既有算子又有遍的模块（`onnx` 的 `export_model`）以多于一条声明区分：带 `#op` 的是算子，遍形状的那条是遍。
+一个遍声明和一个函数值上的算子长得不同：遍的形状是 `(f: F): F!` 且条件是 `when is_function::<F>()`，而且模块里没有同名的 C++ 算子；`graph_of::<F>(f: F): Graph when is_function::<F>()` 的结果不是 `F!`，是读函数值的算子，`rewrite` 一类的引擎有同名的 C++ 算子，`f->rewrite<rules>` 调用它，都不是流水线里的遍（`Builder::isPassDeclaration`、`kernel/execute/pass_declarations.cpp`）。同名既有算子又有遍的模块（`onnx` 的 `export_model`）以多于一条声明区分：带 `#op` 的是算子，遍形状的那条是遍。
 
 ## 标准库里的 Camel 遍
 
-`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::fold`、`opt::cse`、`opt::dce` 分别与 C++ 的 `std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::fold`（遍名与遍参数的写法见 `docs/cli.md`）。`opt::fold` 把操作数全是常量的纯算子换成它的算子算出的值（`eval`），逐轮重复到没有可折的为止（`chain` 要把 `let b = a + 4` 的加法先折成常量，才能折 `let c = b * 2` 的乘法）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。三个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，折掉一个算子会让它上面的运算成为常量，所以一轮不够。
+`lib/opt/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::fold`、`opt::cse`、`opt::dce` 分别与 C++ 的 `std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::fold`（遍名与遍参数的写法见 `docs/cli.md`）。`opt::fold` 把操作数全是常量的纯算子换成它的算子算出的值（`eval`），逐轮重复到没有可折的为止（`chain` 要把 `let b = a + 4` 的加法先折成常量，才能折 `let c = b * 2` 的乘法）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。三个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，折掉一个算子会让它上面的运算成为常量，所以一轮不够。
 
 每轮一次事务。`cse` 与 `dce` 里同一轮每个待改的节点都被换成"输入完全相同且更早的那个节点"，而这样的两个节点不可能互为祖先——若 `b` 是 `a` 的传递使用者，`b` 的某个输入必在 `a` 的使用者闭包里，于是 `b` 的输入列不可能与 `a` 的相同——所以一轮一次 `commit` 就够，不需要 C++ 的 `reaches` 守卫（`replace` 自带的成环检查是第二道防线）。`fold` 没有这条保证，折出来的值是事务新造的节点而不是更早的节点，所以它只在真有可求值的节点时才 `open`，并且一轮里一个都没折成（必然出故障的常量表达式就是这种）时 `abort` 掉、原样返回：不然事务会造出一个与原来一模一样的图，递归就停不下来。
 
 `fold` 求值的范围比它能替换的范围大：函数返回的那个常量表达式是图的 return、output 与 exit 锚点，而 `replace` 拒绝替换锚点（下一节的第三条）。C++ 的折叠在这里给 return 节点留了口子——没有控制输入时 `isFoldable` 放行，`replaceFoldResult` 再把三个锚点搬到折出来的值上——事务没有搬锚点的操作，于是 `opt::fold` 只求值、只为在必然出故障时报出警告，然后原样留下。两者对"必然出故障"的表达式都是这样：都求值、都报同一条 `ConstantExpressionFaults`、都原样留下，程序有没有这个遍都一样（设计原则 3.9）。
 
-`opt::saturate` 是第四个：把规则库的 `algebra` 与 `distribution` 两路定律双向用在每个值的写法上，最多 `rounds` 轮，什么也不抽取（`f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>`，`rewrite` 模块的引擎）；C++ 的 `std::cxx::saturate` 就是调用它，规则只在 `stdlib/rules.cml` 里写一次。
+`opt::saturate` 是第四个：把规则库的 `algebra` 与 `distribution` 两路定律双向用在每个值的写法上，最多 `rounds` 轮，什么也不抽取（`f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>`，`rewrite` 模块的引擎）；C++ 的 `std::cxx::saturate` 就是调用它，规则只在 `lib/rules/rules.cml` 里写一次。
 
 ### `opt::cse` 与 `opt::fold` 对着 C++ 遍少了什么
 
@@ -101,7 +101,7 @@
 
 计划里说的"`opt::cse` 与 `std::cxx::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl(cse_native)` 接到 C++ 实现落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为问题并**已有定论**（设计原则 10.4）：声明模块可以有函数体、泛型函数可以带 `#impl`，这条从此不再是障碍，`#impl(cse_native)` 的实现尚未做。
 
-**一页结论**。行数按各自的语言量：`opt::cse` 的定义与它用到的比较（`stdlib/opt.cml` 的 `bitEqualType` 到 `cse`）126 行，对 C++ 的 `cseDraft`（`src/passes/opt/generic/generic.cpp`）130 行；`opt::dce`（同一文件的 `valueOnly` 到 `dce`）26 行，对 `dceDraft` 38 行。这是"同一件工作在同一抽象层上的长度"，不是等价的工作量：草稿、使用者索引与提交在 C++ 侧要自己维护，在 Camel 侧交给了 `graph` 模块。同构率：三个语料（`cse_subject`、`written_variable` 的 cse、`dce_subject` 的 dce）全部同构，四个后端上的结果逐字一致。速度不在本项作门槛，这里也没有计时——计时会把 NodeVM 跑一个 Camel 遍的固定成本与遍本身混在一起，而本项回答的是"写得出来吗"。
+**一页结论**。行数按各自的语言量：`opt::cse` 的定义与它用到的比较（`lib/opt/opt.cml` 的 `bitEqualType` 到 `cse`）126 行，对 C++ 的 `cseDraft`（`lib/std/cxx/opt/generic/generic.cpp`）130 行；`opt::dce`（同一文件的 `valueOnly` 到 `dce`）26 行，对 `dceDraft` 38 行。这是"同一件工作在同一抽象层上的长度"，不是等价的工作量：草稿、使用者索引与提交在 C++ 侧要自己维护，在 Camel 侧交给了 `graph` 模块。同构率：三个语料（`cse_subject`、`written_variable` 的 cse、`dce_subject` 的 dce）全部同构，四个后端上的结果逐字一致。速度不在本项作门槛，这里也没有计时——计时会把 NodeVM 跑一个 Camel 遍的固定成本与遍本身混在一起，而本项回答的是"写得出来吗"。
 
 ## 一次编译问的是哪些模块
 

@@ -44,12 +44,12 @@ Read-code basis:
 
 | Foundation | Current evidence | Design use |
 |---|---|---|
-| Operator identity and traits | `include/camel/core/operator_table.h` | Extend the query interfaces beyond purity and elementwise behavior |
-| Tensor operator definitions | `modules/tensor/ops/op_def.h` | Reuse inference, reference execution, and VJP registration |
-| Static tensor facts | `modules/tensor/type.h` | Extend shape reasoning without requiring physical layout in the logical type |
-| Graph differentiation | `modules/autodiff/pullback.h` | Differentiate semantic graphs and structured operations |
-| Pass registration | `include/camel/execute/pass/base.h` | Host compilation pipelines in modules |
-| Graph node skeleton | `include/camel/runtime/graph.h` | Preserve calls, captures, branches, and graph-local node references |
+| Operator identity and traits | `kernel/include/camel/core/operator_table.h` | Extend the query interfaces beyond purity and elementwise behavior |
+| Tensor operator definitions | `lib/tensor/ops/op_def.h` | Reuse inference, reference execution, and VJP registration |
+| Static tensor facts | `lib/tensor/type.h` | Extend shape reasoning without requiring physical layout in the logical type |
+| Graph differentiation | `lib/autodiff/pullback.h` | Differentiate semantic graphs and structured operations |
+| Pass registration | `kernel/include/camel/execute/pass/base.h` | Host compilation pipelines in modules |
+| Graph node skeleton | `kernel/include/camel/runtime/graph.h` | Preserve calls, captures, branches, and graph-local node references |
 | Graph-model proposal | `docs/design/graph-model/README.cn.md` | Use the intended immutable program and transactional rewrite direction |
 
 The following remain as specified in `docs/design-principles.cn.md`:

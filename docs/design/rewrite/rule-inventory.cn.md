@@ -1,11 +1,11 @@
-# 标准规则库清点（`stdlib/rules.cml`）
+# 标准规则库清点（`lib/rules/rules.cml`）
 
-状态：清点稿。本页是**快照**，不是第二份真相：`stdlib/rules.cml` 的声明是唯一的真相，本表的数字与分类可以用一条命令重新数出来（第 4 节）。规则的改动只改那个文件；本表随之一并更新。
+状态：清点稿。本页是**快照**，不是第二份真相：`lib/rules/rules.cml` 的声明是唯一的真相，本表的数字与分类可以用一条命令重新数出来（第 4 节）。规则的改动只改那个文件；本表随之一并更新。
 
 ## 1. 有多少条
 
-- **37 条 `rule` 声明，全部 `export`**。`std::opt` 的规则库就是这 37 条，没有别的来源：C++ 侧不再注册规则（`modules/rewrite/module.cpp` 只注册引擎与内核；`src/passes/opt/generic/algebra.cpp` 剩下的 `neutral_only` 是文档化的参考模式，不是库的一部分）。
-- 标准库里另有 10 条 `rule`，那是求导的规则集，不属于 `std::opt`：5 条前向规则在 `stdlib/rulesets/jvp.cml`（`jvp_add` … `jvp_neg`），5 条转置规则在 `stdlib/rulesets/transpose.cml`（`add_t` … `neg_t`）。规则属于哪一族由它声明在哪个模块决定；它是哪个原语的规则，由左边的运算符与元数决定。
+- **37 条 `rule` 声明，全部 `export`**。`std::opt` 的规则库就是这 37 条，没有别的来源：C++ 侧不再注册规则（`lib/rewrite/module.cpp` 只注册引擎与内核；`lib/std/cxx/opt/generic/algebra.cpp` 剩下的 `neutral_only` 是文档化的参考模式，不是库的一部分）。
+- 标准库里另有 10 条 `rule`，那是求导的规则集，不属于 `std::opt`：5 条前向规则在 `lib/rulesets/jvp.cml`（`jvp_add` … `jvp_neg`），5 条转置规则在 `lib/rulesets/transpose.cml`（`add_t` … `neg_t`）。规则属于哪一族由它声明在哪个模块决定；它是哪个原语的规则，由左边的运算符与元数决定。
 - 测试用例里的 `rule` 是各自用例的规则，不进库。
 
 ## 2. 按注册点分组
@@ -109,7 +109,7 @@
 | `no_signed_zeros` | 零没有符号：R 里只有一个零，因此只差一个零的符号的规则不会被这条证伪 | 同上 |
 | `refine_accuracy` | 误差界 `error(right) <= error(left) + bound`（以 ulp 计） | 不是等式，不生成查询 → `unknown` |
 
-库里没用到的许可也逐个有行，理由是具体的，不是"跳过"：`contract`（融合乘加改变的是舍入路径，命题属于 `reassociate`）、`approx_math`（换掉的是一个核的值，两侧是两个函数）、`change_precision`（相对误差界，不是两侧相等）、`no_nans`（求解器的浮点理论只有一个 NaN，逐位视图已经一致）、`flush_subnormals`（要次正规格作前提，没有规则用它）、`nondeterministic`（值随调度变，只能采样，两种结论不许混）、`unordered_reduce`（授予归约顺序，不是数值假设）、`finite_math`（那四个名字的合写，库里逐个写）。这张表和每个名字的理由由 `scripts/rule-proofs.mjs` 打印；许可名的清单从 `src/core/operator_semantics.cpp` 读出，所以核心加一个许可而这里没有行，会被报成 `unmapped`。
+库里没用到的许可也逐个有行，理由是具体的，不是"跳过"：`contract`（融合乘加改变的是舍入路径，命题属于 `reassociate`）、`approx_math`（换掉的是一个核的值，两侧是两个函数）、`change_precision`（相对误差界，不是两侧相等）、`no_nans`（求解器的浮点理论只有一个 NaN，逐位视图已经一致）、`flush_subnormals`（要次正规格作前提，没有规则用它）、`nondeterministic`（值随调度变，只能采样，两种结论不许混）、`unordered_reduce`（授予归约顺序，不是数值假设）、`finite_math`（那四个名字的合写，库里逐个写）。这张表和每个名字的理由由 `scripts/rule-proofs.mjs` 打印；许可名的清单从 `kernel/core/operator_semantics.cpp` 读出，所以核心加一个许可而这里没有行，会被报成 `unmapped`。
 
 ### 4.2 三态：31 proved / 0 refuted / 6 unknown
 
@@ -124,7 +124,7 @@
 
 `proved` 不声称的事，写在这里以免读多：带许可的浮点规则证明的是**实数相等**，设计原则 7.2 那条命题的另一半（特殊值上逐位相等）由差分执行与 `check` 量；求解器的浮点理论只有一个 NaN，所以 NaN 的载荷传播不在模型里；数组规则按元素判，形状不变是规则写法的结构事实，不是那次查询的一部分。
 
-跑它的入口在仓库里，共三处，谁改规则谁就同时改到这三处：计划项 `rules.proofs_every_law_holds_under_its_licence`（`test/plans/feat/modules/rules_proofs.plan.toml`，以 `--require-solver --timeout 10000` 跑）、`scripts/release-gate.mjs` 的静态项「rule library: every rule holds under its own numeric licence」、以及 `test/plan-selection.json` 里由 `stdlib/rules.cml` 与 `scripts/rule-proofs.mjs` 触发同一个计划项的规则；在仓库根直接跑是 `node scripts/rule-proofs.mjs`。它要一个 SMT 求解器（`$CAMEL_Z3`、`PATH` 上的 `z3`、或 `$HOME/.local/bin/z3`）；没有求解器时它打印 `SKIPPED` 横幅并说明装什么，退出码 0——**静默通过是不允许的**，计划项用的形式带 `--require-solver`，把"没有求解器"变成失败。**这条失败说的是这台机器没有 z3，不是某条规则不成立**：横幅第一行就是 `no SMT solver was found` 与搜索过的四个位置，照着装或指 `CAMEL_Z3` 即可，不要去查规则。本机的 `camel-remote.ps1 -Check rule-proofs` 只是便利通道（该脚本在仓库外，只存在于这台机器），**不承重**；但它同样带 `--require-solver`，所以没有求解器时 `-Check all` 会红，原因同上。每次运行都先跑四条已知答案的地面查询（逐位视图分得开两个零、整数加法回绕、浮点模型会舍入），并做一次证伪自检：把 `int_combine` 的右侧故意改成 `x * (c1 - c2)`，它必须给出 `refuted` 与反例模型，未改的规则必须给出 `proved`。判定能力退化成"什么都证明"时，这两道闸先失败。
+跑它的入口在仓库里，共三处，谁改规则谁就同时改到这三处：计划项 `rules.proofs_every_law_holds_under_its_licence`（`test/plans/feat/modules/rules_proofs.plan.toml`，以 `--require-solver --timeout 10000` 跑）、`scripts/release-gate.mjs` 的静态项「rule library: every rule holds under its own numeric licence」、以及 `test/plan-selection.json` 里由 `lib/rules/rules.cml` 与 `scripts/rule-proofs.mjs` 触发同一个计划项的规则；在仓库根直接跑是 `node scripts/rule-proofs.mjs`。它要一个 SMT 求解器（`$CAMEL_Z3`、`PATH` 上的 `z3`、或 `$HOME/.local/bin/z3`）；没有求解器时它打印 `SKIPPED` 横幅并说明装什么，退出码 0——**静默通过是不允许的**，计划项用的形式带 `--require-solver`，把"没有求解器"变成失败。**这条失败说的是这台机器没有 z3，不是某条规则不成立**：横幅第一行就是 `no SMT solver was found` 与搜索过的四个位置，照着装或指 `CAMEL_Z3` 即可，不要去查规则。本机的 `camel-remote.ps1 -Check rule-proofs` 只是便利通道（该脚本在仓库外，只存在于这台机器），**不承重**；但它同样带 `--require-solver`，所以没有求解器时 `-Check all` 会红，原因同上。每次运行都先跑四条已知答案的地面查询（逐位视图分得开两个零、整数加法回绕、浮点模型会舍入），并做一次证伪自检：把 `int_combine` 的右侧故意改成 `x * (c1 - c2)`，它必须给出 `refuted` 与反例模型，未改的规则必须给出 `proved`。判定能力退化成"什么都证明"时，这两道闸先失败。
 
 重新数：
 

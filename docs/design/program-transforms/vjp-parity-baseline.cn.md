@@ -4,7 +4,7 @@
 - 树：`D:\Projects\Camel-wt\ledger`，分支 `lane-ledger`，基线 `146bb01ba`（= 实时 `origin/develop`）。
 - 本轮改动面：**本页 + 台账本身**——`scripts/vjp-parity.mjs` 加了 `stale=<n>` 与 `--strict`，清单里 24 行陈旧豁免
   逐条核过删掉，`test/tools/check-vjp-parity.mjs` 的第一条读数改成断言 `stale=0`。`src/**`、`modules/**`、
-  `stdlib/**` 一行未动；`src/runtime/retype*`、`src/passes/opt/defun/**` 仍是冻结区。
+  `stdlib/**` 一行未动；`src/runtime/retype*`、`lib/std/cxx/opt/defun/**` 仍是冻结区。
 - 判据：**读数先于动作**——先有一个能重复跑、能对着看的数，再谈"先动哪一类"；否则"对齐了"只是印象。
 
 ## 1. 口径
@@ -24,8 +24,8 @@
 
 **两侧怎么读**（`--tables` 的原样排法）：
 
-- 库侧：`stdlib/rulesets/transpose.cml#pow_d_t  left side: pow_d(x, y)`——规则符号与它左边的写法。
-- 引擎侧：`tensor:conv2d: modules/nn/tensor_ops.cpp (setVjp, line 849)`——URI 与注册点，`setVjp` 或 `setRule` 分清。
+- 库侧：`lib/rulesets/transpose.cml#pow_d_t  left side: pow_d(x, y)`——规则符号与它左边的写法。
+- 引擎侧：`tensor:conv2d: lib/nn/tensor_ops.cpp (setVjp, line 849)`——URI 与注册点，`setVjp` 或 `setRule` 分清。
 - 差就是"只有一边有这一行"：`the engine's table: no row reduces to pow_d@2` / `the library's table: no rule files conv2d`。
 
 **单位是键，不是数。** 两侧的"读数"是"谁把这个键归档"对"谁注册了这个键"，不是两个浮点数。程序级的数值对照是另一张表
@@ -101,7 +101,7 @@ exempt, 0 new, stale=0
       the engine's table: no row reduces to pow_d@2
 ```
 
-同组另一行是 `log_d@1`（`stdlib/rulesets/transpose.cml#log_d_t`，引擎无 `log_d`）。
+同组另一行是 `log_d@1`（`lib/rulesets/transpose.cml#log_d_t`，引擎无 `log_d`）。
 
 **B（4 行）**——`sum_axis_stated@4`，库为了把 extents 当残差带过去，把和写成了带轴带 extents 的原语；引擎答同一个程序走 `sum`：
 
@@ -159,14 +159,14 @@ F 的 16 个核心键：`argmax` `argmax@1` `argmin` `argmin@1` `concat` `idx_ta
 1. **先把 F 里的 4 行归错类**：`argmax` `argmax@1` `argmin` `argmin@1` 答的是整数索引，`Tangent<int>` 是 `()`——它们与
    `numel` `dim` `shape` 是同一类（E），不是"库的前向半走不到"。只改清单的分类与理由，不动代码，F 就从 23 行变成 19 行。
    **先做这个，因为分类错了的话，后面每一笔都会照着错的名单排队。**
-2. **A 的 2 行**（`pow_d@2`、`log_d@1`）：库的两半都写了律，引擎一格 `setRule` 就能答（`modules/math/module.cpp` 的注册处，
+2. **A 的 2 行**（`pow_d@2`、`log_d@1`）：库的两半都写了律，引擎一格 `setRule` 就能答（`lib/math/module.cpp` 的注册处，
    不在冻结范围）。这是 58 行里唯一"一行代码 + 一条已有的律 → 一个程序从拒绝变成答案"的形状；剂量最小，读数动得最干净。
    这两行随之作废（变成陈旧项，要一并删）。
 3. **F 的 16 个核心键**，按"程序写得出来、两条腿都能加对照"排：`concat` `permute` `unsqueeze` `slice_sub` 先（改形状与拼接，
    库的前向侧今天明说"states a reshape"，先确认这句话在 `permute` 上还成立），再 `layer_norm` `pow`，最后 `math:` 那 5 个拼法
    （`erf_d` `erf_f` `erfc_d` `erfc_f` `sqrt_d`）。**最后这 5 个不是工作量问题，是先要回答一个结构问题**：`math:` 是规则集
    今天一条规则也没写过的命名空间，先要有"规则集能不能给一个模块的拼法写律"的决定。
-4. **7 个 `modules/nn` 键放最后**：规则集不 `import` 任何 `nn`，对齐它们要先定"规则集看不看得见 `nn`"。这与第 3 条最后那 5 个
+4. **7 个 `lib/nn/` 键放最后**：规则集不 `import` 任何 `nn`，对齐它们要先定"规则集看不看得见 `nn`"。这与第 3 条最后那 5 个
    是同一个问题的两个面，先答一次，两处一起动。
 5. **24 行陈旧项本轮已清完**（`abs` `log` `sqrt` `maximum` `minimum` `max` `min` `where` `neg` `divide` `sum_axis`
    `max_axis` `min_axis` `mean` `argmax_axis` `argmin_axis` `transpose` `gelu` `linear` `erf` `erfc` `rsqrt`
@@ -190,7 +190,7 @@ node test/tools/check-vjp-parity.mjs              # 3/3 PASS（第一条读数�
 `stale=0`，所以这一条以后咬得住。反证读数：临时加回一行 `sum`（两边都答的键），默认档 `stale=1` exit 0，
 `--strict` 档 exit 1 并报 `1 exemption row(s) hold no difference`；撤回后两档都是 `stale=0` exit 0。
 
-**没有随机性**：脚本只读 `src/`、`modules/`、`stdlib/rulesets/` 与清单，输出顺序是排序后的键，同一个树跑两次逐字相同
+**没有随机性**：脚本只读 `src/`、`modules/`、`lib/rulesets/` 与清单，输出顺序是排序后的键，同一个树跑两次逐字相同
 （本轮连跑两次，两行都逐字一致）。唯一会动数字的是树的源码，不是运行环境——这也是它可以每次合并都报的原因。
 
 一处已知的、不属于本路范围的现象：被导入模块里**规则右值是闭包**时，它的 `__rhs` 图签名退出类型不在 `TypeTable` 里

@@ -5,8 +5,8 @@
 `autodiff::expand`、§10 五问）仍以 [GPU 设计稿](README.cn.md) 与 [G1–G3 设计计划](plan.cn.md) 为准；本文不
 改那两个文件，冲突时以它们为准。
 
-范围：G1–G3 里落在 `modules/tiles`、`modules/autodiff`、Tiles 的 CUDA 路径与相应 `test/` 的部分。
-**不在本文**（另有归属，见 §6）：图的边与 `src/runtime/**`、`modules/tensor` 的算子与 `Tensor` 写法、
+范围：G1–G3 里落在 `lib/tiles/`、`lib/autodiff/`、Tiles 的 CUDA 路径与相应 `test/` 的部分。
+**不在本文**（另有归属，见 §6）：图的边与 `kernel/runtime/**`、`lib/tensor/` 的算子与 `Tensor` 写法、
 `stdlib/{optim,opt,rules}.cml` 与改写模块、`showcase/**`、`test/tools/**`。
 
 ---
@@ -15,10 +15,10 @@
 
 | 项 | 落点 | 证据 |
 |---|---|---|
-| 启动设备校验（S1） | `src/execute/devices.cpp`；`c9f3b41a9`「check the devices named by --devices before any graph runs」 | `test/plans/feat/modules/tiles.plan.toml` 的 `device_startup.*` 六条 |
+| 启动设备校验（S1） | `lib/std/exec/devices.cpp`；`c9f3b41a9`「check the devices named by --devices before any graph runs」 | `test/plans/feat/modules/tiles.plan.toml` 的 `device_startup.*` 六条 |
 | 删除 `@gpu`/`run`/`run_device` 与旧分派（Q5） | `da73546d3` | 全树只有历史文档还提到这三个名字，代码、用例、stdlib 里没有 |
-| 一个键、两个标签（S2） | `src/core/tags.cpp`：`tiles.placement`（Symbol），`#gpu`/`#cpu` 两个 `Decl`，`readBy = tiles::compile`；`6d2648158` | `camel inspect --tags`；`placement_query.cml` |
-| 放置解析与报告（S3） | `modules/tiles/src/placement.cpp`（`placementOf`/`bodyPlacementOf`）；`91e7f4ac9`；规则见 [placement.cn.md](placement.cn.md) | `TILES_PLACEMENT`；`placement_hash_{cpu,gpu}.cml` |
+| 一个键、两个标签（S2） | `kernel/core/tags.cpp`：`tiles.placement`（Symbol），`#gpu`/`#cpu` 两个 `Decl`，`readBy = tiles::compile`；`6d2648158` | `camel inspect --tags`；`placement_query.cml` |
+| 放置解析与报告（S3） | `lib/tiles/src/placement.cpp`（`placementOf`/`bodyPlacementOf`）；`91e7f4ac9`；规则见 [placement.cn.md](placement.cn.md) | `TILES_PLACEMENT`；`placement_hash_{cpu,gpu}.cml` |
 | 作用域拒绝（S4） | `region_outline.cpp` 的 `refuseGpuScopes`：`GpuScopeUnsupported` / `GpuScopeNoDeviceProgram`，一条不落到主机；`5b701e746` | `test/plans/gpu/tiles.plan.toml` 的 `nofallback.*` 七条 |
 | `#cpu` 逃逸 | `ecb12f82d`；`gpu_scope_cpu_escape.cml` | 同上 `nofallback.cpu_escape_is_visible_in_the_source` |
 | 形状泛型调用重试 | `1b97de680`（`run_preferred_resident` 先按类型模板、失败再按实参重试） | `nofallback.shape_generic_call_still_retries` |
@@ -50,11 +50,11 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 ### M0 设备上的标量操作数（常量一类）：`x * 2.0`
 - **改什么**：静态形状的 `#gpu` 作用域里，张量算子的 f64 标量操作数（今天只出现在字面量）不再以
   `scalar_tensor_operand` 拒绝，而是建构成标量输入（`shape={}`、`dtype=F64`、`scalarBits`，见
-  `modules/tiles/src/compiler.cpp` 里 `host()` 对 `runtimeInput && Float64` 的构造），由点式/归约核当广播标量用；
+  `lib/tiles/src/compiler.cpp` 里 `host()` 对 `runtimeInput && Float64` 的构造），由点式/归约核当广播标量用；
   运行期才知道的 f64 标量（`let a = 2.0; x * a`）先保持拒绝，
   并在诊断里说清是"运行期标量"而不是"形状"。
-- **文件**：`modules/tiles/src/graph_regions.cpp`（`eligibility` 的算子表），`modules/tiles/src/kernel_ir.cpp` /
-  `index_expr.cpp`（标量一侧的索引与广播），`modules/tiles/src/compiler.cpp`（f64 标量输入的构造）。
+- **文件**：`lib/tiles/src/graph_regions.cpp`（`eligibility` 的算子表），`lib/tiles/src/kernel_ir.cpp` /
+  `index_expr.cpp`（标量一侧的索引与广播），`lib/tiles/src/compiler.cpp`（f64 标量输入的构造）。
 - **证据**：新 `test/cases/gpu/nofallback/` 下的 `scalar_operand.cml`（计划中，尚未存在）：静态形状的 `#gpu` 函数里 `x * 2.0`、`y + 1.0`、
   `1.0 - y`；`tiles::compile` 退出 0，`--devices cpu` 下数值与去掉 `#gpu` 的同一程序逐位相同，且段表里该算子成段；
   设备可见时 `std::profile` 的 `operator_rows[].device` 是 `cuda`（主机恢复后补测）。守卫**先红**：今天的现象见 §1.1。
@@ -66,9 +66,9 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
   按它所在的区域自成一段（收缩只在同一控制区域内进行，`rt::ControlRegions::controlOf`），控制端点
   （`BRCH`/`JOIN`/`LOOP` 自身）继续留主机；段的调用节点必须插在**成员所在的控制区域**（`draft.setInsertRegion`），
   不能一律插到函数体（否则臂里的计算被提到分支之外，未选中臂也会执行）。
-- **文件**：`modules/tiles/src/graph_regions.cpp`（`RegionNode` 带控制区域；`eligibility` 不再把区域内部的
-  `control_edge` 当排除理由），`modules/tiles/include/tiles/internal/regions.h`，`modules/tiles/src/regions.cpp`
-  （收缩限同一控制区域），`modules/tiles/src/region_outline.cpp`（按成员区域插入调用与传输）。
+- **文件**：`lib/tiles/src/graph_regions.cpp`（`RegionNode` 带控制区域；`eligibility` 不再把区域内部的
+  `control_edge` 当排除理由），`lib/tiles/include/tiles/internal/regions.h`，`lib/tiles/src/regions.cpp`
+  （收缩限同一控制区域），`lib/tiles/src/region_outline.cpp`（按成员区域插入调用与传输）。
 - **证据**：新 `test/cases/gpu/nofallback/branch.cml` 与 `loop.cml` + `test/plans/gpu/tiles.plan.toml` 两条：
   （a）段表里 else 臂的算子是**自己的段**（今天 `regions:[]`/排除理由是 `control_edge`，先红）；（b）未选中臂
   不被计算——未选中臂里放一次除零，程序不得报 `DivisionByZero`；（c）结果与去掉 `#gpu` 的同一程序逐位相同；
@@ -81,8 +81,8 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
   建程序**，没有"同签名只编一次"的账。M2 把编译缓存的键补成**形状签名**（各实参的 dtype + extents 的
   规范形式）+ 已有结构键，并让 `?` 走有界队列；同一签名第二次命中，不再建程序。复核的第一条硬要求
   落在这里。
-- **文件**：`modules/tiles/src/codegen_cache.cpp`（键与命中计数），`modules/tiles/include/tiles/internal/codegen_cache.h`，
-  `modules/tiles/src/compiled_scope.cpp`（原 `compiled_region.cpp`） / `compiler.cpp`（按实参特化的入口），`modules/tiles/src/module.cpp`
+- **文件**：`lib/tiles/src/codegen_cache.cpp`（键与命中计数），`lib/tiles/include/tiles/internal/codegen_cache.h`，
+  `lib/tiles/src/compiled_scope.cpp`（原 `compiled_region.cpp`） / `compiler.cpp`（按实参特化的入口），`lib/tiles/src/module.cpp`
   （运行期重试的调用点）。
 - **证据**：新 `test/cases/gpu/nofallback/` 下的 `shape_signature.cml`（计划中，尚未存在）：同一函数用同一形状调两次、用另一个形状调一次；
   `std::profile json=` 的编译/程序计数断言"同签名 1 次、两签名 2 次"，并对三次结果各取校验和与主机路径对照。
@@ -94,21 +94,21 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
   `autodiff::expand`：对**作用域内**、函数操作数静态可知（命名函数或静态闭包常量）的调用点，在编译期调用
   `buildGradientGraph` 建出派生图，把调用点换成持有该图的函数常量；派生图继承 primal 的放置。复核第 1 条的
  两条硬要求：该遍**幂等**；**无 `#gpu` 的图上逐字节不变**（`std::jgir` 比，不是比结果）。
-- **文件**：新 `modules/autodiff/src/` 下的 `expand.cpp`（计划中，尚未存在）、`modules/autodiff/CMakeLists.txt`、
-  `modules/autodiff/module.cpp`（登记遍）、`modules/tiles/src/region_pass.cpp`（作用域图先展开）。
+- **文件**：新 `modules/autodiff/src/` 下的 `expand.cpp`（计划中，尚未存在）、`lib/autodiff/CMakeLists.txt`、
+  `lib/autodiff/module.cpp`（登记遍）、`lib/tiles/src/region_pass.cpp`（作用域图先展开）。
   放置事实由 `attr::key("tiles.placement")` + `rt::ControlRegions` 读，规则与 `placement.cpp` 的
   `placementOf` **同一份 4 步顺序**（见 §5 决定 1）。
 - **证据**：`test/cases/gpu/nofallback/grad_expand.cml`（有/无该遍数值逐位相同；作用域内派生图 dump 出
   `placement=gpu`），`grad_dynamic.cml`（negative：运行期才知道的函数 → `GpuScopeUnsupported`，点名 `grad`
   与调用点），以及"展开前后 `std::jgir` 逐字节相同"的 jgir 用例。
-- **依赖**：M1；`modules/tensor/ops/vjp.cpp` 的 `TensorType::Default()` 属他人（§6），本步只要求调用点替换，
+- **依赖**：M1；`lib/tensor/ops/vjp.cpp` 的 `TensorType::Default()` 属他人（§6），本步只要求调用点替换，
   不要求反向节点带类型。
 
 ### M4 设备上的数据块就是数组值
-- **改什么**：`mm::Block` 的 `device_`/`device()`（`include/camel/core/mm/block.h`）今天没有任何写入者；设备值
+- **改什么**：`mm::Block` 的 `device_`/`device()`（`kernel/include/camel/core/mm/block.h`）今天没有任何写入者；设备值
   走 Tiles 自己的存储。按设计稿 §3：设备块是同一个值的另一个块，`device_` 填 DLPack 的设备，引用计数、原地写
   （计数为 1）、DLPack 交换沿用；传输是普通的值写入节点；"同一个值两种放置"不产生第二个类型或第二个名字。
-- **文件**：`include/camel/core/mm/block.h`（写入者与访问器的边界），`modules/tiles/src/device.cpp`、
+- **文件**：`kernel/include/camel/core/mm/block.h`（写入者与访问器的边界），`lib/tiles/src/device.cpp`、
   `resident_storage.cpp`、`access.cpp`、`module.cpp`（设备块的 owner 记录：流、事件、大小、释放回调）。
 - **证据**：`device_block_identity.cml`（上传后原值仍可读、类型与名字不变、两个块各自的 `device()`）、
   `device_inplace.cml`（计数为 1 原地写；优化器每步 0 分配，用 `tiles::inspect` 的分配计数），
@@ -116,7 +116,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 - **依赖**：M1、M2（段是传输插入的单位）。**今天的状态**：`device_` 恒为 0，守卫先红。
 
 ### M5 驻留由图推出、传输由遍插成节点
-- **改什么**：新 `modules/tiles/src/residency.cpp`：每个块的 owner 由产生它的节点决定；调用的形参跟随实参的块；
+- **改什么**：新 `lib/tiles/src/residency.cpp`：每个块的 owner 由产生它的节点决定；调用的形参跟随实参的块；
   循环状态跨轮驻留；`#cpu` 块的入口一个 download、出口一个 upload（不是每算子一次）；传输沿用已有的合批。
   `region_outline.cpp` 按驻留结论在放置变化处插节点，`schedule.cpp` 按放置做存储计划。
 - **证据**：`resident_loop.cml`（状态跨轮驻留 + 每轮传输计数）、`resident_cpu_block.cml`（每轮恰好两次），
@@ -148,7 +148,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 
 ### M9 回传图带类型与形状
 - **改什么**：端口类型带 extent form（`constas n`），调用点绑定实际 extents 并把输出类型/形状写回节点；反向图
-  的节点用算子声明的类型推断，不用 `TensorType::Default()`（`modules/tensor/ops/vjp.cpp`，属他人，见 §6）。
+  的节点用算子声明的类型推断，不用 `TensorType::Default()`（`lib/tensor/ops/vjp.cpp`，属他人，见 §6）。
 - **证据**：一个 `#gpu` 作用域函数的返回值在图上带元素类型与形状（`std::jgir` 断言），反向节点同样；今天两边
   都是未知。
 - **依赖**：M3、M7；`vjp.cpp` 的一半需要 §6 的协调。
@@ -158,7 +158,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
   按 `plan.cn.md` §2.4 改成**一个作用域一条诊断、列出全部留不住的算子及其原因**（按错误码分组，避免改动既有
   用例对码的期望），并把出路写成 `#cpu`（复核 2026-10-22 第 3 条）；同时去掉 `NoDeviceProgram` 消息里重复的
   "operator"。
-- **文件**：`modules/tiles/src/region_outline.cpp`。
+- **文件**：`lib/tiles/src/region_outline.cpp`。
 - **证据**：新 `test/cases/gpu/nofallback/two_refusals.cml`（一个作用域里 `tanh(x)` 与 `x * 2.0`）+ plan 用例断言
   两条算子名与两条原因都在输出里；既有 `nofallback.*` 的期望不变。守卫先红：今天只出现 `tensor:tanh` 一条。
 - **依赖**：无（设备无关）。M0 落地后第二个算子的原因会变，届时同步该用例。
@@ -199,9 +199,9 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 
 ## 6. 归属与不重叠
 
-- 本计划**只改** `modules/tiles/**`、`modules/autodiff/**`、`test/cases/gpu/**`、`test/cases/modules/tiles/**`、
+- 本计划**只改** `lib/tiles/**`、`lib/autodiff/**`、`test/cases/gpu/**`、`test/cases/modules/tiles/**`、
   `test/plans/gpu/**`、`test/plans/feat/modules/tiles.plan.toml`，以及 `docs/design/gpu/` 下的新文件。
-- 别人的区域（读，不改）：图的边与 `src/runtime/**`；类型系统与 `Tensor` 写法；`modules/tensor` 的算子
+- 别人的区域（读，不改）：图的边与 `kernel/runtime/**`；类型系统与 `Tensor` 写法；`lib/tensor/` 的算子
   （`ops/vjp.cpp` 是 M9 的一半）；`stdlib/{optim,opt,rules}.cml` 与改写模块；`showcase/**`；`test/tools/**`。
 - 因此 **M4（`mm::Block::device_`）与 M9（vjp 的类型）** 落地前需要和这些区域的所有者对齐接口；M1–M3、M5–M8
   不需要。

@@ -24,7 +24,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 | `import pyplot` | 18.67 ms (17.33–21.58) | **9.33 ms** | 9.33 | 0 |
 | `import python` | 19.08 ms | 9.56 ms | 0 | 9.56 |
 
-那 9.3 ms 具体落在哪一步：`Context::loadModuleFrom`（`src/core/context/context.cpp#Context::loadModuleFrom`）为每个模块开一个
+那 9.3 ms 具体落在哪一步：`Context::loadModuleFrom`（`kernel/core/context/context.cpp#Context::loadModuleFrom`）为每个模块开一个
 `cmo_load` 阶段（detail = 模块名），兄弟声明 `.cml` 存在时调 `mod->load()`（同文件 758 行）；
 `PyplotModule::load()` 里的 `set_python_home_from_venv()` → `py::initialize_interpreter()` →
 `ensure_site_packages_in_path()` / `ensure_extra_python_paths_in_path()` 全部在 `load()` 里，所以整段记在
@@ -43,20 +43,20 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 
 ## 3. 改了什么
 
-- **共享初始化入口** `modules/python/embed.h`（`camel::pyembed::ensureInitialized()`）：env guard →
+- **共享初始化入口** `lib/python/embed.h`（`camel::pyembed::ensureInitialized()`）：env guard →
   `promote_libpython_to_global()` → `PYTHONHOME`（venv）→ `py::initialize_interpreter()` → Python 输出的
   行缓冲与退出 flush → site-packages → extra 路径（`CAMEL_PYTHONPATH`）→ `PyEval_SaveThread()`。它先看
   `Py_IsInitialized()`：已经初始化就什么都不做。于是"谁先创建"不再决定解释器的设置——§3.2 里
   `pyplot` 先创建、`_ssl` 因缺 promote 而 exit 1 的那个程序，现在是 exit 0。这是有意的结果：`pyplot`
   单独使用也获得了 promote、输出顺序与 venv site-packages。
 - **进程级一次**：模块是各自独立的 `.cmo`（RTLD_LOCAL），每个都有自己的静态变量，所以守卫放在 libcamel
-  里（`camel::utils::runOnce`，`include/camel/utils/once.h` + `src/utils/once.cpp`，基于
+  里（`camel::utils::runOnce`，`kernel/include/camel/utils/once.h` + `kernel/utils/once.cpp`，基于
   `std::call_once`），key 是 `camel.embedded-python`。动作抛异常时 `call_once` 不置标志，下一次使用可以
   重试。第一个使用者可能在工作线程上（并行调度）：它在 GIL 下完成创建，最后 `PyEval_SaveThread()` 交还。
 - **两个 `load()` 只剩注册**：executor factory 与 `OperatorTable::declare(...)`（纯度，3.3）。声明仍然
-  eager（Q13 不变：坏的声明仍在导入期报）。`stdlib/pyplot.cml`、`stdlib/python.cml`、
+  eager（Q13 不变：坏的声明仍在导入期报）。`lib/pyplot/pyplot.cml`、`lib/python/python.cml`、
   `docs/stdlib-reference.md` 与 `declarations=345` 都没有动。
-- **每个算子先 ensure**：`modules/python/operators.cpp` 的 12 个 kernel 与 `modules/pyplot/operators.cpp`
+- **每个算子先 ensure**：`lib/python/operators.cpp` 的 12 个 kernel 与 `lib/pyplot/operators.cpp`
   的 `plot`，在 `py::gil_scoped_acquire` 之前调用 `ensurePythonInterpreter(ctx)` /
   `ensurePyplotInterpreter()`。模块的 executor 没有 dispatch 钩子，所以这一步放在每个 kernel 的第一行；
   之后是一次 `std::call_once` 的原子读，可以忽略。
@@ -67,7 +67,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
   import`。
 - **仍留在导入期的一步**：激活的 venv 版本没有对应 bridge 时，`.cmo` 本身加载不了
   （`SemanticDiag::ModuleNotFound`，说明缺少哪个 `libpy_bridge<tag>`，
-  `src/core/module/dynamic.cpp#tryLoadPythonBridgeForActiveEnv` 的 `tryLoadPythonBridgeForActiveEnv`）。那一步决定加载哪个二进制，
+  `kernel/core/module/dynamic.cpp#tryLoadPythonBridgeForActiveEnv` 的 `tryLoadPythonBridgeForActiveEnv`）。那一步决定加载哪个二进制，
   不是 CPython 初始化，没有动。
 
 ## 4. 改动后的数字
@@ -126,7 +126,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 §5.3 的候选："选 3 + 2"——加"每个（阶段, 模块）每轮恰好出现一次"的结构断言、加绝对的 CPU 总量
 （12 ms），**30% 共享率这条线退休**（比例是在墙钟口径下绕开负载的替代品，CPU 时间不再需要它）。
 `declaration.cost` 的两个读数也换成 CPU：`--time-phases` 的每个阶段多写一个 `cpu_ns`
-（`src/utils/phase_timer.cpp`），因为同一批阶段在 load 21 读 21 us/条、在 load 106–112 读 75–104 us/条
+（`kernel/utils/phase_timer.cpp`），因为同一批阶段在 load 21 读 21 us/条、在 load 106–112 读 75–104 us/条
 ——墙钟会随邻居漂移，而 CPU 时间在 load 68–112 的每个窗口都是 27.5–28.5 us/条。上表的 22.0/22.3 us
 与 19.1%/24.2% 因此是旧口径的读数，不再是闸门。
 

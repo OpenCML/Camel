@@ -6,7 +6,7 @@
 
 规则与事实是 Camel 最推荐的改图方式：声明式，定义处就能检查（原则 9.11），应用后一定通过提交。但图原生语言必须让程序有足够的能力读图、改图，规则写不出的变换（按分析结果整段改写、跨函数的遍、插入一段新计算、重组循环）要有出路。
 
-今天的出路是 `stdlib/graph.cml` 的 `graph_of`/`nodes`/`open`/`replace`/`erase`/`eval`/`add_constant`/`commit`/`abort`：图、节点、事务都是普通值，图操作和普通代码混在一起编译成图，检查只在程序主动调用 `commit` 时发生。
+今天的出路是 `lib/graph/graph.cml` 的 `graph_of`/`nodes`/`open`/`replace`/`erase`/`eval`/`add_constant`/`commit`/`abort`：图、节点、事务都是普通值，图操作和普通代码混在一起编译成图，检查只在程序主动调用 `commit` 时发生。
 
 负责人的出发点（2026-11-17）：**对图的操作本身没有展开编译成图的必要，应当聚合成运行时的原子操作**。对 `replace`、`erase` 这样的节点求导、批处理、常量折叠都没有意义，把它们作为普通节点摆进图里，只带来"草稿句柄是图里的一个值"之类的边角情况，还会让一个遍去改另一个遍的图。所以图操作只能写在三处有明确边界的地方：
 
@@ -193,8 +193,8 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 
 ## 11. 迁移
 
-- `stdlib/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`order`、`exit_of` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例）。
-- 用 Camel 写的遍（`stdlib/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit d = f { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
+- `lib/graph/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`order`、`exit_of` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例）。
+- 用 Camel 写的遍（`lib/opt/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit d = f { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
 - `probe_handle`、`check_pass_boundary` 改成 `view` 块里的查询。
 - 测试：每条现有的 `Txn` 用例改写；另加反例，各报一条具名诊断：句柄作为块的值交出、存进块外的 `Ref`、被离开的闭包带走、图算子写在块外、`view` 的节点交给 `replace`。
 
@@ -260,8 +260,8 @@ replace(a, b)
 
 - **问题**：模式能不能做"部分匹配"——效应虽在图里，不妨碍求导等模式识别纯计算；改完之后原来的效应怎么安排。负责人："你总不能说，所有经过 grad 的函数必须没有 print，这很荒谬。"
 - **11-17 的核查**：
-  - 匹配器只沿值的输入匹配（`src/runtime/writings_match.cpp`）；效应节点不能做中间节点，但能被变量绑定成叶子，改写后原地保留；中间节点挂着顺序边或同步边时，边被转挂到替换后的新根上，新根是已有节点时跳过这次匹配。设计文档 `docs/design/rewrite/README.cn.md` 2.4 节说的是"中间节点有模式外读者或控制输入就不匹配"、"模式里的 `sync` 顺序也要对上"，与代码不一致，待统一。"两侧什么都不访问"只在匹配时查，定义处不查。
-  - 两套求导：原生 `autodiff.grad`（`modules/autodiff/pullback.cpp`）能对带打印、带 `var` 写的函数求导，有测试；用规则组合的 `grad`（`stdlib/vjp.cml`：`split(jvp(f))` 再 `transpose`）里，`jvp` 把外部访问原样照抄、导数为零（`modules/transforms/jvp.cpp#liftGraph` 里 `hasExternalEffect` 那一支），`split` 遇到挂着顺序、控制、同步边的节点就拒绝（`modules/transforms/split_internal.h#Half::makeCopy`，"留给以后"），`Ref` 读写在 `jvp` 里很可能找不到规则而被拒（推断，无测试），`vmap` 不处理效应。
+  - 匹配器只沿值的输入匹配（`kernel/runtime/writings_match.cpp`）；效应节点不能做中间节点，但能被变量绑定成叶子，改写后原地保留；中间节点挂着顺序边或同步边时，边被转挂到替换后的新根上，新根是已有节点时跳过这次匹配。设计文档 `docs/design/rewrite/README.cn.md` 2.4 节说的是"中间节点有模式外读者或控制输入就不匹配"、"模式里的 `sync` 顺序也要对上"，与代码不一致，待统一。"两侧什么都不访问"只在匹配时查，定义处不查。
+  - 两套求导：原生 `autodiff.grad`（`lib/autodiff/pullback.cpp`）能对带打印、带 `var` 写的函数求导，有测试；用规则组合的 `grad`（`lib/vjp/vjp.cml`：`split(jvp(f))` 再 `transpose`）里，`jvp` 把外部访问原样照抄、导数为零（`lib/transforms/jvp.cpp#liftGraph` 里 `hasExternalEffect` 那一支），`split` 遇到挂着顺序、控制、同步边的节点就拒绝（`lib/transforms/split_internal.h#Half::makeCopy`，"留给以后"），`Ref` 读写在 `jvp` 里很可能找不到规则而被拒（推断，无测试），`vmap` 不处理效应。
 - **倾向的分析**：按原则，图分为纯计算部分（纯且不会出故障的计算只有值的边，3.4）与效应骨架（访问资源的节点，由顺序边、同步链、区域出口的 GATE 连起），两者只在边界接触——效应产出值（叶子）或读纯计算的值（读者）。求导要认的模式落在纯计算部分，部分匹配在结构上成立。规则改写不动骨架；整函数变换一比一照抄骨架、只改纯计算部分（求导：效应读到原始值，效应产出的值导数为零，`vjp` 的效应全部在前向一半，反向只有线性纯计算）。例外是同步块里可能出故障的计算（在同步链上），匹配器的转挂处理的就是它。
 - **规则两侧能否出现效应**：讨论到的方向是把 11-14 的"两侧只用什么都不访问的算子"收窄为"规则不新造、不复制、不挪动访问；左侧绑定的访问是锚点，右侧只能引用它们"（双推出改写里"保留"那部分的做法）；更本质的说法是模式只描述值的输入，正确性依赖顺序边、同步边、区域归属的节点不能由模式新造或重排。曾讨论过"把顺序换成令牌"（每个资源一个状态值），结论是对我们没有额外好处：我们的图里读本来就用数据边接在它之前最近的那次写上（原则 3.3），"两次读之间有没有写"已经是局部可判断的；要让规则处理效应，需要的是扩展模式语言，不是改图。
 - **待定**：

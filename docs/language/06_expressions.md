@@ -614,7 +614,7 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
 
 **形参类型从哪里来。** lambda 不写类型的形参，其类型从 lambda 所在位置的函数类型推出，省略的返回类型同样如此。这样的位置有三种：
 
-- 实参：调用一个形参是函数类型的函数，`with` 实参同理。内建函数也一样，它们的签名写在标准库的 `stdlib/prelude.cml` 里：`xs->filter<(x) => x > 0>`、`xs->foreach<(x) => println(x)>` 的 `x` 是 `xs` 的元素类型。`->` 之后直接写的 lambda 取左边那个值的类型（`x->(v) => v + 1`）。
+- 实参：调用一个形参是函数类型的函数，`with` 实参同理。内建函数也一样，它们的签名写在标准库的 `lib/std/prelude.cml` 里：`xs->filter<(x) => x > 0>`、`xs->foreach<(x) => println(x)>` 的 `x` 是 `xs` 的元素类型。`->` 之后直接写的 lambda 取左边那个值的类型（`x->(v) => v + 1`）。
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 

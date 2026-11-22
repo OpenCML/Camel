@@ -614,7 +614,7 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 
 **Where a parameter type comes from.** A lambda parameter whose type is not written takes it, and an omitted return type too, from the function type of the position the lambda stands in. There are three such positions:
 
-- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way. The built-in functions are the same: their signatures are written in the standard library's `stdlib/prelude.cml`, so the `x` of `xs->filter<(x) => x > 0>` and of `xs->foreach<(x) => println(x)>` is the element type of `xs`. A lambda written right after `->` takes the type of the value on its left (`x->(v) => v + 1`).
+- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way. The built-in functions are the same: their signatures are written in the standard library's `lib/std/prelude.cml`, so the `x` of `xs->filter<(x) => x > 0>` and of `xs->foreach<(x) => println(x)>` is the element type of `xs`. A lambda written right after `->` takes the type of the value on its left (`x->(v) => v + 1`).
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 

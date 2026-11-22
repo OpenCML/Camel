@@ -39,7 +39,7 @@ closures/branches），没有按算子的拆分，也没有捕获表；`std::gir
 
 | 名字 | 判据 |
 |------|------|
-| `capture_ports_generator` | 口所在的图是生成器机器自己造的：图名以 `__gen_` 开头（机器自己的 `__gen_step__`，`src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody` 里的 `stepName`），**或**该图的体调用了一个 `__gen_*` 图 |
+| `capture_ports_generator` | 口所在的图是生成器机器自己造的：图名以 `__gen_` 开头（机器自己的 `__gen_step__`，`compile/src/gct/builder_func.cpp#Builder::visitGeneratorBody` 里的 `stepName`），**或**该图的体调用了一个 `__gen_*` 图 |
 | `capture_ports_closure` | 其余图里的口：程序写的闭包按引用捕获。**这才是「目标 0」要归零的那个数** |
 | `capture_ports_unknown` | 判不出来的：文档没打印图名，或一个 `__gen_*` 名字的口坐在两个标记都不认的图里（两个信号互相矛盾）。单独报，不塞进任何一类 |
 | `capture_ports` | 合计，口径不变，便于与历史数对账 |
@@ -128,7 +128,7 @@ closures/branches），没有按算子的拆分，也没有捕获表；`std::gir
 ### 3.2 又一段读数（2026-11-17，`19b14ba0f`，同一台主机，`--jobs 8`）
 
 `lane-s3b` 把两个 case 加进了 `test/cases/`（`consistency/new_values/two_names_for_a_struct.cml`、
-`modules/nn/sgd_leaves_its_argument.cml`），scope 从 3874 涨到 3876，分母换了，`list_sha` 也换了。
+`test/cases/modules/nn/sgd_leaves_its_argument.cml`），scope 从 3874 涨到 3876，分母换了，`list_sha` 也换了。
 **两份读数的语料不同，不许写成「216 → 219」**，各报各的：
 
 | scope | files | counted | refused | var_new | var_new_empty | capture_ports | value | total | cell_typed_nodes | list_sha |
@@ -221,7 +221,7 @@ census 的 `list_sha` 与 `files`），不是「所有 `var` 的新值节点」�
 另一处能对齐到具体声明的是 3874 → 3876：+2 个文件、`var_new` +3。这 3 个节点全在
 `consistency/new_values/two_names_for_a_struct.cml` 里——`b`、`inner`、`moved` 三个 `var` 都过路径写
 （`b.xs[0] = 9`、`inner.xs[0] = 7`、`moved.box.xs[1] = 8`），S1 收窄后这类名字保留格子；同批加的
-`modules/nn/sgd_leaves_its_argument.cml` 一个 `var` 也没有。这是按源码与记录的数推的，不是逐节点重测。
+`test/cases/modules/nn/sgd_leaves_its_argument.cml` 一个 `var` 也没有。这是按源码与记录的数推的，不是逐节点重测。
 
 把 293 到 216 的路一步步写出来，每一步都是记录过的读数：
 

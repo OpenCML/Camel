@@ -12,7 +12,7 @@
 
 现状：
 
-- `src/compile/gir/tree.cpp`（236 行）在建图时按字符串 `tree:tree_map` 等认出五个操作并自己展开。`tree` 模块是空壳，它们的 resolver 恒为空，因此这些名字不能当函数值用，`inspect --ops` 与悬停也拿不到签名。
+- `compile/src/gir/tree.cpp`（236 行）在建图时按字符串 `tree:tree_map` 等认出五个操作并自己展开。`tree` 模块是空壳，它们的 resolver 恒为空，因此这些名字不能当函数值用，`inspect --ops` 与悬停也拿不到签名。
 - "什么是内部节点、叶子顺序、路径怎么写"在 `tree.cpp`、`nn/checkpoint.cpp`、`tiles/device.cpp`、`tree_transfer.cpp`、`module.cpp` 各写一份，已经不一致：有的把 `T?` 内部的元组当树递归，有的拒绝空结构体，有的以 `$` 为根。
 - `nn.save_tree` 的内核在运行时读 `norm.type(1)` 遍历值的静态类型，违反"原生内核不在运行时读取调用的静态类型"（5.5）。
 - 之后每加一个按类型展开的操作（序列化、逐字段相等与打印、`Device<T>` 分配、`tree_flatten`……）都要改编译器。
@@ -361,7 +361,7 @@ Camel 的风险：4.3 定了"用户写的更具体的重载优先"。`tree_map` 
 
 ### 7.4 结构体的字段顺序是不是类型的一部分——需裁定，且是现存的隐患
 
-现状：`StructType::equals`（`src/core/type/composite/struct.cpp`）按字段名比较，**不看顺序**：`{ a: int, b: int }` 与 `{ b: int, a: int }` 是同一个类型。而 5.2 规定参数树的叶子顺序按字段声明顺序，`tree_paths`、检查点、`tree_reduce` 的结果都依赖这个顺序。
+现状：`StructType::equals`（`kernel/core/type/composite/struct.cpp`）按字段名比较，**不看顺序**：`{ a: int, b: int }` 与 `{ b: int, a: int }` 是同一个类型。而 5.2 规定参数树的叶子顺序按字段声明顺序，`tree_paths`、检查点、`tree_reduce` 的结果都依赖这个顺序。
 
 后果：实例按类型缓存时，这两种写法会共用一个实例，其中一个的叶子顺序就是错的；检查点在两种写法之间读写会错位。泛型越多，这种"类型相等但行为不同"的情况越多。
 

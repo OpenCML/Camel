@@ -81,7 +81,7 @@ on the RTX 4060 Ti and RTX 3090.
 
 ## Region rewriting boundary
 
-`outlineRegions` in `modules/tiles/src/region_outline.cpp` owns extraction,
+`outlineRegions` in `lib/tiles/src/region_outline.cpp` owns extraction,
 function materialization, multi-output tuple projection and inter-region edge
 rewiring. Its executor and stable operator URI are supplied by its caller; a null
 executor creates ordinary CPU calls. It has no CUDA initialization, test output

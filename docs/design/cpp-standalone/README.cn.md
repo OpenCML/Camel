@@ -59,7 +59,7 @@
 ### 1.1 “脱离运行时”指什么
 
 - **产物**：可执行文件不依赖 `libcamel`，也不在运行时读 Camel 安装里的任何文件（标准库的 `.cmo`、`CAMEL_HOME`）。
-- **构建**：需要一个 C++20 编译器和 `camel/standalone/` 这一组头文件。头文件只依赖 C++ 标准库，另外复用 `include/camel/utils/` 里两个本来就只依赖标准库的头文件（`number_text.h`：数与文字之间的规则；`int_div.h`：整数除法的回绕），这样浮点数转文字、整数除法在解释器与生成的程序里是同一份代码。这两个头文件因此必须保持只依赖标准库，文件头的注释里写明。
+- **构建**：需要一个 C++20 编译器和 `camel/standalone/` 这一组头文件。头文件只依赖 C++ 标准库，另外复用 `kernel/include/camel/utils/` 里两个本来就只依赖标准库的头文件（`number_text.h`：数与文字之间的规则；`int_div.h`：整数除法的回绕），这样浮点数转文字、整数除法在解释器与生成的程序里是同一份代码。这两个头文件因此必须保持只依赖标准库，文件头的注释里写明。
 - **例外**：程序用到没有独立译法的算子时链接 `libcamel`（第 9 节）。转译时给出一条警告，指出是哪个算子、在哪里，使用者知道为什么产物不是独立的。
 
 ### 1.2 语义上要守住的
@@ -84,14 +84,14 @@
 - 名单里的每一条都要写明它是“缺口”还是“例外”；写成“已知”两个字的，下一个人既不会修也不会放过。`bridged.txt` 里只剩 `re:test` 一条，带一句“exception, not a gap”——它的答案就是桥，谁去“修”它等于把桥拆了。
 - 故障句是语言的一部分；重写一句像样的，比写错一行代码更难查——因为它读起来是对的。`tensor:zeros`/`tensor:ones` 的规则第一版给负长度写的是一句自己的话（`Tensor shape cannot contain negative extents`），量出来 `std::fvm` 印的是内核的 `zeros: Shape cannot contain negative values`，于是程序在它唯一打印的那一行上与解释器不一致。现在 `fault_*` 用例的故障句全部对 `std::fvm` 逐字比较（`run.py --faults`，47 个用例，stdout 与 stderr 合起来比，退出码一起比），仍不一致的一个写在 `test/tools/cppexec/fault_words.txt` 里、标成例外（那是解释器自己的 Warn，不是故障句），名单两个方向都查。
 - 域外与 NaN 的行为，先写一行决定再写代码，而且这一行要与 `std::fvm` 逐字节一致：`sqrt(-1.0)`、`sqrt(-4.0)` 与 `sqrt(nan)` 都答 `nan`（`is_nan` 为真），**不是故障**；`math:sqrt_f`/`math:sqrt_d` 因此写成 `std::sqrt`，用例 `math_sqrt_domain.cml` 把这六行输出钉住。先量后写，量出来不一致就停下——把自己以为的行为写成规则，比不写更糟。
-- 两边的故障句对不上，先问“这一边有没有这条故障”；缺故障比措辞不同严重一级。`fault_gcd_overflow.cml` 量出来是 `exit fvm 1 / cpp 0`：不是句子不同，是 standalone 的 `gcd` 压根没有“最小整数”那条拒绝——因为 `math:abs_i`/`math:abs_l` 写成 `std::abs`，它在 `INT64_MIN` 上是未定义行为，量出来的值既不是它本身也不是它的相反数，而 `stdlib/math.cml` 的 `gcd` 正是靠 `abs(a) < 0` 找这个值。整数绝对值因此写成 `rt::intAbs`（二补数取反，最小值回到自己），`gcd` 的拒绝与句子的原文就都回来了。先补故障，再谈措辞。
+- 两边的故障句对不上，先问“这一边有没有这条故障”；缺故障比措辞不同严重一级。`fault_gcd_overflow.cml` 量出来是 `exit fvm 1 / cpp 0`：不是句子不同，是 standalone 的 `gcd` 压根没有“最小整数”那条拒绝——因为 `math:abs_i`/`math:abs_l` 写成 `std::abs`，它在 `INT64_MIN` 上是未定义行为，量出来的值既不是它本身也不是它的相反数，而 `lib/math/math.cml` 的 `gcd` 正是靠 `abs(a) < 0` 找这个值。整数绝对值因此写成 `rt::intAbs`（二补数取反，最小值回到自己），`gcd` 的拒绝与句子的原文就都回来了。先补故障，再谈措辞。
 - 已裁未落的条目是最贵的账：裁定有了、人也在，只差一次同笔改动。所以裁下来的表示要在同一笔里落到三处——产出它的规则、设计稿第 9 节、第 4 节的类型表；只落一处，下一个人读到的仍是两种表示，而“两种表示并存”的过渡没有一次是安全的。
 - 表示统一之后，剩下的拒绝每一条都要能回答“是语言没有，还是我们没有”。回答“语言没有”的，写清是哪条语言规定、并在另一个后端上量一遍是不是同一句话（`string`/`bool` 张量给的是同一句 `NoMatchingFunction`）；回答“我们没有”的，是缺口，进待做；两边都不是、只是签名与行为不一致的，成页问作者（`c64`/`c128`），不要自己选。把“语言没有”写成“目标不具备”，读起来像能力边界，实际是把一条语言规定记成了一笔技术债。
-- 拒绝理由里的主语就是这条边界的名字：语言、后端、还是我们。一句 `unsupported` 三种主语读起来一样，收尾却各不相同——语言的进“不支持”，后端的进“这个目标没有”，我们的进“待做”。所以张量拒绝元素类型时，句子里要有主语（`modules/tensor/dtype.h` 的 `noTensorElement`），复数的元素在这条规则之外等裁定，不许顺手归进任何一类。
+- 拒绝理由里的主语就是这条边界的名字：语言、后端、还是我们。一句 `unsupported` 三种主语读起来一样，收尾却各不相同——语言的进“不支持”，后端的进“这个目标没有”，我们的进“待做”。所以张量拒绝元素类型时，句子里要有主语（`lib/tensor/dtype.h` 的 `noTensorElement`），复数的元素在这条规则之外等裁定，不许顺手归进任何一类。
 - “语言没有”是最容易滥用的一个筐——用它之前先指出一条语言规定，指不出来就是“我们没做”。
 - 改一句话之前，先 grep 谁在断言这句话——`test/` 下面不只是用例，还有计划里的期望。改名那天我 grep 了 `test/plans/*/*.toml` 与 `test/cases/*/*.cml`，漏了 `test/plans/feat/modules/tiles.plan.toml`（两层深）、`test/cases/modules/tiles/plan_check.cpp`（不是 `.cml`）和一行用例注释，于是“0 命中”的结论是假的：计划里的 `expect_stdout_contains`、`assert(...)` 和 C++ 检查都是断言，rename 与它的期望必须在同一笔里改。
 - `grep` 的结论要带上口径：搜了哪几个目录、哪几种扩展名——口径不写，“0 命中”就是假结论。
-- 签名是目标、存储是现状——落后的时候补存储，不把签名改成现状。作者裁了复数张量：签名写 `is_numeric`（`is_real || is_complex`）是目标，存储层落后于它，所以补存储、不为这段空档另加“尚未支持”的诊断。第一步只让模块认得这两个 dtype：`isSupportedTensorScalar` 收下 `c64`/`c128`，`elementSize` 改读元素的 `DataLayout`（8 与 16 字节，没有一种 C++ 存储类型同时说得出这两个宽度），创建算子的解析门从核心的 `isNumericScalar`（`include/camel/core/type/base.h`，只含整数与浮点）换成本模块的元素表——于是 `zeros::<c64>([2])` 过了重载，答 `[0+0i, 0+0i]`；`ones::<c64>` 仍停在 `dispatchDType` 的 default，那是内核那一步。
+- 签名是目标、存储是现状——落后的时候补存储，不把签名改成现状。作者裁了复数张量：签名写 `is_numeric`（`is_real || is_complex`）是目标，存储层落后于它，所以补存储、不为这段空档另加“尚未支持”的诊断。第一步只让模块认得这两个 dtype：`isSupportedTensorScalar` 收下 `c64`/`c128`，`elementSize` 改读元素的 `DataLayout`（8 与 16 字节，没有一种 C++ 存储类型同时说得出这两个宽度），创建算子的解析门从核心的 `isNumericScalar`（`kernel/include/camel/core/type/base.h`，只含整数与浮点）换成本模块的元素表——于是 `zeros::<c64>([2])` 过了重载，答 `[0+0i, 0+0i]`；`ones::<c64>` 仍停在 `dispatchDType` 的 default，那是内核那一步。
 
 
 ---
@@ -175,7 +175,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, fib:
 
 ### 3.3 运行时头文件
 
-`include/camel/standalone/`，只用 C++20 标准库，全部 `inline`：
+`lib/std/cpp/include/camel/standalone/`，只用 C++20 标准库，全部 `inline`：
 
 | 文件 | 内容 |
 |---|---|
@@ -201,8 +201,8 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, fib:
 | Camel | C++ | 说明 |
 |---|---|---|
 | `int`、`i32` | `int64_t`、`int32_t` | 加减乘、取负、`+=` 等用 `rt::add` 一类的内联函数：经无符号运算回绕，编译出来与 `+` 相同；比较直接写 `<` 等 |
-| `float`、`f32` | `double`、`float` | 直接写 `+ - *`；`/` 除以零是故障（与运行时一致【读码 `src/builtin/operators/ops.cpp` 的 `__builtin__div__`】），所以写成 `rt::div(a, b, site)` |
-| `bf16`、`f16` | `rt::BF16`、`rt::F16` | 十六位存储；一次舍入就是存回时按就近取偶的那次（`include/camel/standalone/half.h`，与 `camel/core/rtdata/half.h` 同一条规则）。`+`、`-`、`*` 与一元 `-` 直接写（在 `float` 里算、存回时舍入一次），`/` 是 `rt::div`（零是故障，与 f32 同一个），`^` 是 `rt::pow`；比较按加宽后的值（两个零相等，NaN 与任何值都不等、也不成序；`==`、`!=` 直接写，序用 `<=>`）；文字是该类型自己的最短文本（`halfText`，7.7），`println`、`string(x)` 与空的 `{}` 用的是它，任何别的格式说明按加宽后的 f32 写；`bf16(x)`、`f16(x)` 与 `as` 是 `static_cast`（一次舍入），`bf16(s)`、`f16(s)` 是 `rt::halfFromText`，其报告与解释器逐字相同；常量写成 `fromBits`，NaN 的载荷也不丢 |
+| `float`、`f32` | `double`、`float` | 直接写 `+ - *`；`/` 除以零是故障（与运行时一致【读码 `lib/std/builtin/operators/ops.cpp` 的 `__builtin__div__`】），所以写成 `rt::div(a, b, site)` |
+| `bf16`、`f16` | `rt::BF16`、`rt::F16` | 十六位存储；一次舍入就是存回时按就近取偶的那次（`lib/std/cpp/include/camel/standalone/half.h`，与 `camel/core/rtdata/half.h` 同一条规则）。`+`、`-`、`*` 与一元 `-` 直接写（在 `float` 里算、存回时舍入一次），`/` 是 `rt::div`（零是故障，与 f32 同一个），`^` 是 `rt::pow`；比较按加宽后的值（两个零相等，NaN 与任何值都不等、也不成序；`==`、`!=` 直接写，序用 `<=>`）；文字是该类型自己的最短文本（`halfText`，7.7），`println`、`string(x)` 与空的 `{}` 用的是它，任何别的格式说明按加宽后的 f32 写；`bf16(x)`、`f16(x)` 与 `as` 是 `static_cast`（一次舍入），`bf16(s)`、`f16(s)` 是 `rt::halfFromText`，其报告与解释器逐字相同；常量写成 `fromBits`，NaN 的载荷也不丢 |
 | `bool` | `bool` | `&`、`\|` 两边都已求值，写 `&&`、`\|\|` 不改变语义；`&&`、`\|\|` 运算符在图上本来就是分支（4.2） |
 | `c64`、`c128` | `std::complex<float>`、`std::complex<double>` | 两个部分就是 `std::complex` 的两个 `float`/`double`：`+`、`-`、`*`、一元 `-`、`==`、`!=` 直接写，`/` 是 `rt::complexDiv`（复数的零是故障），整数指数的 `^` 是 `rt::pow`（反复平方，与运行时同一个算法）；`abs`、`re`、`im`、`conj`、`exp` 是 `rt::complexAbs`、`rt::complexReal`、`rt::complexImag`、`std::conj`、`std::exp`；文字是 `camel::utils::complexText`，格式说明按两个部分写（`camel/standalone/format.h`，与解释器同一条规则，NaN 的部分不写符号）；`main` 的这类参数从 `--arg` 读语言里的复数文字（`rt::EntryKind::C64` / `C128`），实数文本是实部、虚部为 0 的复数（`1.5` 是 `1.5+0i`） |\r\n| `string` | `rt::Str` | 一个指针大小的句柄，指向 `{计数, 长度, 容量, 字节}`；空串是空指针。字面量是静态存储的“永生”对象（计数从一个不会减到零的值开始），不分配 |
 | `T[]`、`T[...]`、`T[2, 2]` | `rt::Array<T>` | 句柄，指向 `{计数, 长度, 容量, 维数, 各维长度, T 元素}`；元素是 `T` 的 C++ 表示，`int[]` 是连续的 `int64_t`。维数是值的一部分（5.4）：字面量带着类型写明的各维长度，`shape` 读的就是它；`T[...]` 只固定元素类型，长度由值自己带着。张量就是这个类型——`tensor:ones` 的 `T[...]` 与 `[1.0, 2.0]` 是同一个 `rt::Array<T>`，打印、取维数、求元素数只有一个实现。计数为 1 时“返回新值”的算子在原处改（5.2） |
@@ -268,7 +268,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, fib:
 
 10.5：有身份的只有变量单元、经 `var` 参数就地修改的对象、外部库包装的对象；其余的值没有可观察的身份，后端可以随意复制或共享。同一条规则定下 `append` 返回新数组、不修改原数组，“旧值不再被使用时可以在原处追加”只是实现层面的优化，标准库的其他算子同此。
 
-本基线的运行时还是旧的做法【实测 附录 A 的 `g1.cml`：`var xs = [1, 2]; xs->append<3>; println(xs)` 打印 `[1, 2, 3]`；图上 `append` 的输入是 `:var/get` 读出的数组，实现在原数组上追加，`src/builtin/operators/struct.cpp` 的 `__append_arr__`】。裁定的迁移把“写成语句、结果没有被使用的 `xs->append<5>`”定为编译期错误，所以这种依赖原地修改的程序以后不会到达转译器。生成的程序直接按裁定的语义做：
+本基线的运行时还是旧的做法【实测 附录 A 的 `g1.cml`：`var xs = [1, 2]; xs->append<3>; println(xs)` 打印 `[1, 2, 3]`；图上 `append` 的输入是 `:var/get` 读出的数组，实现在原数组上追加，`lib/std/builtin/operators/struct.cpp` 的 `__append_arr__`】。裁定的迁移把“写成语句、结果没有被使用的 `xs->append<5>`”定为编译期错误，所以这种依赖原地修改的程序以后不会到达转译器。生成的程序直接按裁定的语义做：
 
 - 数组、映射、字符串是带计数的句柄，**按值语义**：拷贝句柄就是共享，没有人能通过一个句柄看见另一个句柄上的修改，因为修改只发生在计数为 1 的时候。
 - “返回新值”的算子（`append`、`concat`、`slice`、字符串拼接、映射的 `put` 与 `remove`）按值接收第一个实参：转译器在它的最后一次使用处写 `std::move`，计数为 1 时直接在原处改，否则先拷贝。例如循环里的 `acc = acc->append<x>` 或 `acc + piece`，`acc` 被移动进算子，计数为 1，就地追加，摊还 O(1)。这就是 Perceus 式的“唯一时复用”。
@@ -300,7 +300,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, fib:
 
 ### 6.1 执行序
 
-每张图的语句按 `buildReachableExecutionTopoIndices` 给出的执行序排列【读码 `src/execute/graph_runtime_support.cpp`】。这是 `std::fvm` 编字节码用的同一个序（图数据模型 5.1 把它定为 `ExecPlan::order()`）。它是三组边（数据、`with`、控制）的拓扑序，只含从出口可达的活节点，并把每个分支的臂排成连续的一段。
+每张图的语句按 `buildReachableExecutionTopoIndices` 给出的执行序排列【读码 `lib/std/exec/graph_runtime_support.cpp`】。这是 `std::fvm` 编字节码用的同一个序（图数据模型 5.1 把它定为 `ExecPlan::order()`）。它是三组边（数据、`with`、控制）的拓扑序，只含从出口可达的活节点，并把每个分支的臂排成连续的一段。
 
 用同一个序有一个具体的好处：**语言没有规定先后的两个效应**（同步块之外互不依赖的两次打印），在生成的程序里与在 `std::fvm` 上也是同一个先后，于是两者的输出可以逐字节比较。这不是语义的要求（3.1），是测试的便利，代价为零。
 
@@ -352,13 +352,13 @@ if (cond) {
 
 ### 7.1 故障
 
-可能故障的算子（除零、越界、转换越界、文字不是一个数、`slice` 越界、`head` 空数组……）在生成的代码里多一个实参：它的 `site`。`site` 是一个 `constexpr` 对象，带转译时渲染好的两种报告（默认格式与一行格式）、种类的名字、消息与位置（`include/camel/standalone/core.h` 的 `Site`）。出故障时头文件里的函数抛出 `rt::Fault{种类, 实参, site}`。
+可能故障的算子（除零、越界、转换越界、文字不是一个数、`slice` 越界、`head` 空数组……）在生成的代码里多一个实参：它的 `site`。`site` 是一个 `constexpr` 对象，带转译时渲染好的两种报告（默认格式与一行格式）、种类的名字、消息与位置（`lib/std/cpp/include/camel/standalone/core.h` 的 `Site`）。出故障时头文件里的函数抛出 `rt::Fault{种类, 实参, site}`。
 
 `rt::run` 接住它：先刷新标准输出，再按 `CAMEL_ERROR_FORMAT`（`text`，或测试用的 `short`）写出报告，退出码 1。**报告写在标准输出上**，因为解释器就写在那里【实测：用 `std::fvm` 跑一个会除零的程序，`2>/dev/null` 仍然打印出报告；`2>&1 >/dev/null` 什么也没有】。
 
 报告的文字与解释器逐字节相同。做法是把它拆成三部分，各自取自编译器的唯一出处：
 
-- **种类的名字、消息、提示与源码摘录**：全部由编译器自己的渲染器（`src/core/error/diagnostics/render.cpp`）在转译时按诊断表（`getRuntimeDiagInfoMap`）渲染好，作为字符串常量写进 site；头文件不重写渲染器，免得两份代码在制表符、宽字符、长行截断上不一致。
+- **种类的名字、消息、提示与源码摘录**：全部由编译器自己的渲染器（`kernel/core/error/diagnostics/render.cpp`）在转译时按诊断表（`getRuntimeDiagInfoMap`）渲染好，作为字符串常量写进 site；头文件不重写渲染器，免得两份代码在制表符、宽字符、长行截断上不一致。
 - **运行时才知道的实参**（越界的下标、数组的长度、参数名）：渲染时留下占位符——字节 0x1F 加一位数字，数字是它是 `fault()` 的第几个实参；头文件在故障发生时用实参替换。
 - **转译时已经知道、运行时可以不同的实参**（递归上限）：整份报告直接写成转译时的上限，`Site::filled` 另记下这段文字；故障发生时头文件用生效的值替换它**第一次**出现的地方。所以生成程序的报告里总是实际生效的数字，与解释器逐字节相同。
 
@@ -395,7 +395,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 
 ### 7.4 递归上限
 
-规则与调度器相同【读码 `include/camel/execute/limits.h`】：数“同时打开的、不在尾位置的调用”，入口对 `main` 的那次不计；上限 L 时，`main` 调用的 `depth(L - 1)` 是能跑完的最深一次。故障报告名字是**发出调用的那张图**、位置是调用处【实测：`Maximum recursion depth (1000) exceeded when evaluating graph '__g_6__'`，位置是 `depth(n - 1)`】。
+规则与调度器相同【读码 `kernel/include/camel/execute/limits.h`】：数“同时打开的、不在尾位置的调用”，入口对 `main` 的那次不计；上限 L 时，`main` 调用的 `depth(L - 1)` 是能跑完的最深一次。故障报告名字是**发出调用的那张图**、位置是调用处【实测：`Maximum recursion depth (1000) exceeded when evaluating graph '__g_6__'`，位置是 `depth(n - 1)`】。
 
 三种做法的实测【实测：`proto/fib_sa.cpp`、`proto/fib_sa2.cpp`，`fib(37)`，各 9 轮】：
 
@@ -429,7 +429,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 
 表里每一项的行为以运行时的实现为准，按 URI 一一对照着写（例如整数乘方是 `static_cast<int64_t>(std::pow(base, exp))`【读码 `ops.cpp` 的 `__builtin__pow__`】，浮点除以零是故障）。打印的文字用 `camel/utils/number_text.h` 的 `floatText`，与运行时同一份代码。
 
-`random` 模块的算子（`rand:seed`、`rand`、`randn`、`randint`、`choice`、`sample`、`shuffle`）由 `camel/standalone/random.h` 译：与模块用同一个 `std::mt19937_64`（默认种子相同）和 `camel/utils/random.h` 的同一套分布（整数用 Lemire 的方法，正态用极坐标法与 fdlibm 的对数），洗牌与抽样的取下标方式也照模块写，所以种子相同时生成的程序与解释器打印相同的数【实测：`draws.cml`、`modules/std/random/basic.cml`】。
+`random` 模块的算子（`rand:seed`、`rand`、`randn`、`randint`、`choice`、`sample`、`shuffle`）由 `camel/standalone/random.h` 译：与模块用同一个 `std::mt19937_64`（默认种子相同）和 `camel/utils/random.h` 的同一套分布（整数用 Lemire 的方法，正态用极坐标法与 fdlibm 的对数），洗牌与抽样的取下标方式也照模块写，所以种子相同时生成的程序与解释器打印相同的数【实测：`draws.cml`、`test/cases/modules/std/random/basic.cml`】。
 
 内部算子 `:op/assn_owned` 与 `:struct/append_arr_in_place`（`acc = acc->append<v>` 按 `append` 声明的原地形式改写成的两个节点，`:var/take(acc)` 交出变量单元里的数组）写成 `acc = rt::append(std::move(acc), v);`，捕获或经 `var` 参数共享的单元写成 `acc.set(rt::append(acc.take(), v));`：变量在这次调用里交出它的数组，没有别人拿着时 `rt::append` 原地追加，这正是解释器里执行计划标的“复用输入自身的存储”与数组自己的计数（`Array::canWriteInPlace`）所做的；元素若是表达式先算进一个局部，读到的仍是交出之前的数组。`:var/peek`（不结束那份证明的读）在生成的程序里与 `:var/get` 相同，引用计数本身就记着同一件事【实测：`consistency/new_values/rebinding_loop.cml`、`peek_loop.cml`、`peek.cml` 与 `std::fvm` 相同】。
 
@@ -628,7 +628,7 @@ python3 test/tools/cppexec/run.py [--passes "std::cxx::inline"] [--jobs N] 程�
 
 3.6 说元素之间没有顺序、并行调度器可以并发执行。生成的程序第一步按下标顺序执行：一个元素出故障时报的就是下标最小的那个（3.6 的“并行的 map 中一个元素出了故障”一条），已经开始的元素跑完、没开始的不再开始，都自然成立。建议先这样，并行放在阶段 5。
 
-### Q7 生成的程序怎样接收 `main` 的参数（10.6：`--arg name=value`，与命令行一致；已实现，见 `include/camel/standalone/entry.h`）
+### Q7 生成的程序怎样接收 `main` 的参数（10.6：`--arg name=value`，与命令行一致；已实现，见 `lib/std/cpp/include/camel/standalone/entry.h`）
 
 9.8：“运行时由外部给值（命令行）”。建议与命令行工具相同：`./x --arg n=3 --arg name=hi`，按 `main` 的形参类型解析，缺少时给出带位置的错误（与 `camel` 的诊断相同）。另一个候选是按位置（`./x 3 hi`），更像普通的程序，但与 `camel` 的写法不同。
 
