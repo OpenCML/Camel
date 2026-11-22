@@ -48,12 +48,13 @@ function run(root, mode) {
     })
 }
 
-// The scratch tree mirrors the layout the generator reads. After the move the kernel's diagnostics
-// live under `kernel/` -- `kernel/diagnostics/registry.tsv`, `kernel/include/camel/core/error/
-// diagnostics/` and `kernel/core/error/diagnostics/` -- so the fixture and the generator carry the
-// same three spellings; a fixture in the old layout is a copy the generator cannot find, and every
-// reading here would be about a missing file rather than about the registry.
-const KERNEL = 'kernel'
+// The scratch tree mirrors the layout the generator reads. The kernel's diagnostics live under
+// `src/kernel/` since the 2026-11-22 move -- `src/kernel/diagnostics/registry.tsv`,
+// `src/kernel/include/camel/core/error/diagnostics/` and
+// `src/kernel/core/error/diagnostics/` -- and under `kernel/` after the layout move, so the fixture
+// and the generator carry the same spelling; a fixture in another layout is a copy the generator
+// cannot find, and every reading here would be about a missing file rather than about the registry.
+const KERNEL = 'src/kernel'
 
 function copyInto(root) {
     fs.mkdirSync(path.join(root, KERNEL, 'diagnostics'), { recursive: true })
