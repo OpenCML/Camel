@@ -12,6 +12,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effect_liveness.h"
@@ -54,12 +55,15 @@ class WeightedModel : public CostModel {
     double nodeCost(const CostContext &context, gc_node_ref_t node) const override {
         const auto &draft = context.transaction.graph();
         const auto *h     = draft.header(node);
+        // A conversion costs what the operator costs, asked of its shape rather than its kind
+        // (`camel/execute/shaped_operators.h`, refactor stage 2.3).
+        if (camel::execute::shapeOfKind(h->kind) == camel::execute::OperShape::Conversion) {
+            return 0.5;
+        }
         switch (h->kind) {
         case GCNodeKind::Data:
         case GCNodeKind::Port:
             return 0.1;
-        case GCNodeKind::Cast:
-            return 0.5;
         case GCNodeKind::Oper: {
             const std::string_view uri =
                 reinterpret_cast<const GCOperBody *>(draft.payloadOf(node).data())->uri();
@@ -235,7 +239,8 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
             (writtenInPlace(node) ||
              (carriesOrdering(draft_, node, true) && !isUnanchoredPure(draft_, node) &&
               draft_.header(node)->kind != GCNodeKind::Oper &&
-              draft_.header(node)->kind != GCNodeKind::Cast))) {
+              camel::execute::shapeOfKind(draft_.header(node)->kind) !=
+                  camel::execute::OperShape::Conversion))) {
             select(node);
         }
     }

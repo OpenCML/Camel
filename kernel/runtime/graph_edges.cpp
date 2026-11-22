@@ -26,6 +26,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_exit_type.h"
@@ -783,12 +784,28 @@ class EdgeChecker {
         const auto norm = graph_.normInputsOf(ref);
         const auto with = graph_.withInputsOf(ref);
         Type *type      = node.dataType();
-        switch (node.kind) {
-        case GCNodeKind::Copy:
+        // A copy and a conversion are checked by their shape, not their kind
+        // (`camel/execute/shaped_operators.h`, refactor stage 2.3): what must hold of the value
+        // they hand on is a property of the operator.
+        if (camel::execute::shapeOfKind(node.kind) == camel::execute::OperShape::Clone) {
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type)) {
                 report(ref, std::format("copies a {} as a {}", show(typeOf(norm[0])), show(type)));
             }
-            break;
+            return;
+        }
+        if (camel::execute::shapeOfKind(node.kind) == camel::execute::OperShape::Conversion) {
+            if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type) &&
+                type->castSafetyFrom(typeOf(norm[0])) == CastSafety::Forbidden) {
+                report(
+                    ref,
+                    std::format(
+                        "converts a {} to a {}, which is forbidden",
+                        show(typeOf(norm[0])),
+                        show(type)));
+            }
+            return;
+        }
+        switch (node.kind) {
         case GCNodeKind::Gate:
             // The first input is the value the gate forwards; the ones after it are reads it takes
             // and say nothing about what is handed on (design principles 3.1,
@@ -798,17 +815,6 @@ class EdgeChecker {
                 report(
                     ref,
                     std::format("forwards a {} as a {}", show(typeOf(norm.front())), show(type)));
-            }
-            break;
-        case GCNodeKind::Cast:
-            if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type) &&
-                type->castSafetyFrom(typeOf(norm[0])) == CastSafety::Forbidden) {
-                report(
-                    ref,
-                    std::format(
-                        "converts a {} to a {}, which is forbidden",
-                        show(typeOf(norm[0])),
-                        show(type)));
             }
             break;
         case GCNodeKind::Join:
@@ -1014,7 +1020,8 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
     // A conversion that was ordered when it could fail keeps its place: a pass that refines the
     // types can make it infallible, and dropping the order is the pass's choice, not a defect.
     const GCNode *node = graph.node(ref);
-    if (node != nullptr && node->kind == GCNodeKind::Cast) {
+    if (node != nullptr &&
+        camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
         return false;
     }
     return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);

@@ -28,6 +28,7 @@
 
 #include "runtime/graph_build.h"
 
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
@@ -46,19 +47,18 @@ namespace camel::runtime {
 namespace {
 
 std::string_view kindName(GCNodeKind kind) {
+    // The four operators the front end still builds as nodes of their own are named by their
+    // operator (`shapeName`), which is the same four names this function used to spell out and the
+    // name they keep once they are ordinary OPER nodes (refactor stage 2.3).
+    const camel::execute::OperShape shape = camel::execute::shapeOfKind(kind);
+    if (shape != camel::execute::OperShape::None) {
+        return camel::execute::shapeName(shape);
+    }
     switch (kind) {
     case GCNodeKind::Data:
         return "DATA";
     case GCNodeKind::Port:
         return "PORT";
-    case GCNodeKind::Cast:
-        return "CAST";
-    case GCNodeKind::Copy:
-        return "COPY";
-    case GCNodeKind::Fill:
-        return "FILL";
-    case GCNodeKind::Accs:
-        return "ACCS";
     case GCNodeKind::Brch:
         return "BRCH";
     case GCNodeKind::Join:

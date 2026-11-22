@@ -22,6 +22,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/program.h"
@@ -525,10 +526,10 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
         return call(graph, ref);
     case GCNodeKind::Loop:
         return loop(graph, ref);
-    case GCNodeKind::Copy:
-        // A copy is a new object nobody else refers to.
-        return NodeResources{};
     default:
+        // A copy is a new object nobody else refers to, and no other kind reaches a resource
+        // through this node: the answer is the same one, so it is asked once (the copy is a
+        // `Clone` by its shape, `camel/execute/shaped_operators.h`).
         return NodeResources{};
     }
 }
@@ -869,12 +870,16 @@ ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
     for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(ref); ++hops) {
         ref                = valueBehindGates(graph, ref);
         const GCNode *node = graph.node(ref);
+        // A copy and a construction make a value of their own; asked of their shape, not their
+        // kind (`camel/execute/shaped_operators.h`, refactor stage 2.3).
+        const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+        if (shape == camel::execute::OperShape::Clone ||
+            shape == camel::execute::OperShape::Construction) {
+            return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
+        }
         switch (node->kind) {
         case GCNodeKind::Port:
             return ValueOrigin{ValueOrigin::Kind::Port, ref};
-        case GCNodeKind::Copy:
-        case GCNodeKind::Fill:
-            return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
         case GCNodeKind::Oper:
         case GCNodeKind::Func:
         case GCNodeKind::Call:
@@ -914,6 +919,13 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
     for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(value); ++hops) {
         value              = valueBehindGates(graph, value);
         const GCNode *node = graph.node(value);
+        // A copy and a construction make a value of their own; asked of their shape, not their
+        // kind (`camel/execute/shaped_operators.h`, refactor stage 2.3).
+        const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+        if (shape == camel::execute::OperShape::Clone ||
+            shape == camel::execute::OperShape::Construction) {
+            return sem::ResultAlias{.kind = ResultAlias::Kind::Fresh};
+        }
         switch (node->kind) {
         case GCNodeKind::Port: {
             const auto norm = graph.normPorts();
@@ -925,9 +937,6 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
                                           .kind    = ResultAlias::Kind::Same,
                                           .operand = static_cast<uint8_t>(at - norm.begin())};
         }
-        case GCNodeKind::Copy:
-        case GCNodeKind::Fill:
-            return sem::ResultAlias{.kind = ResultAlias::Kind::Fresh};
         case GCNodeKind::Oper:
         case GCNodeKind::Func:
         case GCNodeKind::Call:

@@ -30,6 +30,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 
@@ -76,17 +77,26 @@ bool shapesAreFixed(const camel::core::type::Type *type) {
 bool nodeMayFault(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
+    // The four operators the front end still builds as nodes of their own -- a conversion, a
+    // copy, a construction, an access -- are asked by their shape, not by their kind: that is the
+    // one seam for them (`camel/execute/shaped_operators.h`, refactor stage 2.3), and what each of
+    // them can fail is a property of the operator, not of the record it is stored in today.
+    switch (camel::execute::shapeOfKind(kind)) {
+    case camel::execute::OperShape::Conversion:
+        return castMayFault(castTarget, castSource);
+    case camel::execute::OperShape::Clone:
+    case camel::execute::OperShape::Construction:
+    case camel::execute::OperShape::Access: // reads a field of a value whose type has it
+        return false;
+    case camel::execute::OperShape::None:
+        break;
+    }
     switch (kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Copy:
-    case GCNodeKind::Fill:
-    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
     case GCNodeKind::Brch:
     case GCNodeKind::Join:
         return false;
-    case GCNodeKind::Cast:
-        return castMayFault(castTarget, castSource);
     case GCNodeKind::Oper: {
         const std::optional<camel::core::OperatorTraits> traits =
             camel::core::OperatorTable::instance().find(oper);
@@ -127,11 +137,7 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     if (node == nullptr) {
         return false;
     }
-    switch (node->kind) {
-    case GCNodeKind::Oper: {
-        return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
-    }
-    case GCNodeKind::Cast: {
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return may_be_rearranged(
@@ -139,6 +145,10 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
             camel::core::kNoOper,
             node->dataType(),
             source != nullptr ? source->dataType() : nullptr);
+    }
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
     }
     default:
         return may_be_rearranged(node->kind, camel::core::kNoOper);
@@ -148,6 +158,11 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
 bool is_chain_statement(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool standsForRegion) {
+    if (camel::execute::shapeOfKind(kind) == camel::execute::OperShape::Conversion) {
+        // A conversion is a statement exactly when running it can fail: a value check the model
+        // cannot move is one the chain has to reach (design principles 3.4, 3.9).
+        return nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource);
+    }
     switch (kind) {
     case GCNodeKind::Call:
     case GCNodeKind::Func:
@@ -164,10 +179,6 @@ bool is_chain_statement(
         // A `GATE` is where a `sync` block hands its value on and where the chain's wait reaches
         // that value (edges.cn.md 5.3): the chain orders it even though the gate computes nothing.
         return true;
-    case GCNodeKind::Cast:
-        // A conversion is a statement exactly when running it can fail: a value check the model
-        // cannot move is one the chain has to reach (design principles 3.4, 3.9).
-        return nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource);
     case GCNodeKind::Oper: {
         const auto &table = camel::core::OperatorTable::instance();
         const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
@@ -181,8 +192,8 @@ bool is_chain_statement(
         return traits.has_value() && traits->mayFault;
     }
     default:
-        // A `Data`, a `Port`, a `Copy`, a `Fill`, an `Accs`, a `Join`: computed from what it
-        // reads, with nothing to fail and nothing to order.
+        // A `Data`, a `Port`, a `Join`, and the three of the four operators that cannot fail:
+        // computed from what it reads, with nothing to fail and nothing to order.
         return false;
     }
 }
@@ -193,6 +204,16 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
         return false;
     }
     const bool standsForRegion = nodeStandsForItsRegion(graph, ref);
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs    = graph.normInputsOf(ref);
+        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+        return is_chain_statement(
+            node->kind,
+            camel::core::kNoOper,
+            node->dataType(),
+            source != nullptr ? source->dataType() : nullptr,
+            standsForRegion);
+    }
     switch (node->kind) {
     case GCNodeKind::Oper: {
         const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
@@ -201,16 +222,6 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
             body != nullptr ? body->oper : camel::core::kNoOper,
             nullptr,
             nullptr,
-            standsForRegion);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs    = graph.normInputsOf(ref);
-        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-        return is_chain_statement(
-            node->kind,
-            camel::core::kNoOper,
-            node->dataType(),
-            source != nullptr ? source->dataType() : nullptr,
             standsForRegion);
     }
     default:
@@ -279,12 +290,7 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     if (node == nullptr) {
         return true;
     }
-    switch (node->kind) {
-    case GCNodeKind::Oper: {
-        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
-        return body == nullptr || nodeMayFault(node->kind, body->oper);
-    }
-    case GCNodeKind::Cast: {
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return nodeMayFault(
@@ -292,6 +298,11 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
             camel::core::kNoOper,
             node->dataType(),
             source != nullptr ? source->dataType() : nullptr);
+    }
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        return body == nullptr || nodeMayFault(node->kind, body->oper);
     }
     default:
         return nodeMayFault(node->kind, camel::core::kNoOper);
@@ -963,7 +974,8 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
 /// they ask it here so that they cannot answer it two ways.
 bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
+    if (header == nullptr || header->kind == GCNodeKind::Dead ||
+        camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion ||
         !nodeIsFreelySchedulable(draft, id)) {
         return false;
     }
@@ -1781,6 +1793,15 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     if (header == nullptr || !draft.alive(id)) {
         return false;
     }
+    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs             = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return nodeIsFreelySchedulable(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
+    }
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
@@ -1796,15 +1817,6 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
                    nullptr,
                    nullptr,
                    fixed);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return nodeIsFreelySchedulable(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
     }
     default:
         return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
@@ -1825,6 +1837,16 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             break;
         }
     }
+    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs             = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return isChainStatement(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr,
+            standsForRegion);
+    }
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
@@ -1835,16 +1857,6 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
                 : camel::core::kNoOper,
             nullptr,
             nullptr,
-            standsForRegion);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return isChainStatement(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr,
             standsForRegion);
     }
     default:
@@ -1925,6 +1937,15 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     if (header == nullptr || !draft.alive(id)) {
         return true;
     }
+    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs             = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return nodeMayFault(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
+    }
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
@@ -1940,15 +1961,6 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
                    nullptr,
                    nullptr,
                    fixed);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return nodeMayFault(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
     }
     default:
         return nodeMayFault(header->kind, camel::core::kNoOper);
@@ -1967,7 +1979,7 @@ bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
                 reinterpret_cast<const GCOperBody *>(payload.data())->oper)) {
             return false;
         }
-    } else if (header->kind != GCNodeKind::Cast) {
+    } else if (camel::execute::shapeOfKind(header->kind) != camel::execute::OperShape::Conversion) {
         return false;
     }
     const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
