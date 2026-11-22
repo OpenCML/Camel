@@ -2883,6 +2883,32 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "struct_member_read_grad.macro"
+desc = "A member read's gradient goes back to that member's place: the struct field (`:op/access_key`) and the tuple element (`:op/access`) of a model each carry their own gradient, and the printed sum of each field is what says where the gradient landed. (grad built by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/struct_member_read_grad.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "struct_member_read_grad value=7.0 dw=10.0 db=2.0\ntuple_member_read_grad value=28.0 dp=26.0 dq=2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "struct_member_read_grad.runtime"
+desc = "The same two member reads with the gradient graph built at run time rather than by std::macro: the rule reads the constant place (an int) or name (a string) of the read, and the gradient is written into that member's place either way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/struct_member_read_grad.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "struct_member_read_grad value=7.0 dw=10.0 db=2.0\ntuple_member_read_grad value=28.0 dp=26.0 dq=2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "grad_refuse_return"
 desc = "Refused at compile time with NotDifferentiable: the function returns an int, not a float."
 kind = "negative"

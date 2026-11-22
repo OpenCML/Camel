@@ -1,0 +1,54 @@
+/**
+ * A member read is differentiable in both of its spellings: `m.w` reads a struct field by name
+ * (`:op/access_key`) and a destructured tuple parameter reads an element by place
+ * (`:op/access`). The gradient of what a read returns belongs to that member's place in the
+ * model's gradient, and every member that was not read keeps the zero tangent: a member read
+ * neither drops the gradient nor passes it on whole.
+ *
+ * The two fields are made to answer different numbers, so the printed gradient of each field is
+ * what says where the gradient landed. The loss is `sum(m.w * x) + sum(m.b)`, so `w`'s gradient
+ * is `x` (sum 10) and `b`'s is the ones (sum 2); the tuple model is read the same way with
+ * `x2` in place of `x`, so `p`'s gradient is `x2` (sum 26) and `q`'s the ones (sum 2). A field
+ * whose gradient is the other field's, zero, or the whole gradient is not either number.
+ *
+ * Red when: the read has no derivative rule and the run refuses with "no derivative rule for
+ * operator", when the gradient lands on the wrong member, or when it is dropped.
+ */
+import { reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type M = { w: f64[2, 2], b: f64[2] }
+
+with <m: M>
+func pairLoss(x: f64[2, 2]): float {
+    return float(sum(m.w * x)) + float(sum(m.b))
+}
+
+with <t: (f64[2, 2], f64[2])>
+func tupleLoss(x: f64[2, 2]): float {
+    let (p, q) = t
+    return float(sum(p * x)) + float(sum(q))
+}
+
+func main(): int sync {
+    let w = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0])
+    let b = reshape<[2]>([1.0, 1.0])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
+    let model = { w: w, b: b }
+    let (value, gradient) = with_grad(pairLoss)<model>(x)
+    'struct_member_read_grad value={:.1f} dw={:.1f} db={:.1f}'->format<
+        value,
+        sum(gradient.w),
+        sum(gradient.b)>->println
+
+    let w2 = reshape<[2, 2]>([2.0, 0.0, 0.0, 2.0])
+    let x2 = reshape<[2, 2]>([5.0, 6.0, 7.0, 8.0])
+    let tmodel = (w2, b)
+    let (tvalue, tgradient) = with_grad(tupleLoss)<tmodel>(x2)
+    let (gp, gq) = tgradient
+    'tuple_member_read_grad value={:.1f} dp={:.1f} dq={:.1f}'->format<
+        tvalue,
+        sum(gp),
+        sum(gq)>->println
+    return 0
+}
