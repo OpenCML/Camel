@@ -151,10 +151,12 @@ const declarationFile = (name) =>
             path.join(MOVED_LIBRARY, 'std', `${name}.cml`),
             path.join(MOVED_LIBRARY, `${name}.cml`),
         ])
-/// The file a module's `computed:` names: `signatures/<name>.cml` from the library root.
+/// The file a module's `computed:` names: `signatures/<name>.cml`. It sits at the library root in
+/// the flat tree and inside the module's own directory once the modules keep their sources beside
+/// their declarations, so both are tried rather than one assumed.
 const computedFile = (name, file = path.join('signatures', `${name}.cml`)) =>
     FLAT
-        ? path.join(FLAT_LIBRARY, file)
+        ? firstOf([path.join(FLAT_LIBRARY, name, file), path.join(FLAT_LIBRARY, file)])
         : firstOf([
             path.join(MOVED_LIBRARY, name, file),
             path.join(MOVED_LIBRARY, file),
@@ -168,7 +170,7 @@ const sourceFile = (name, source) =>
         path.join(MOVED_LIBRARY, 'std', String(source)),
         path.join(MOVED_LIBRARY, String(source)),
     ])) : declarationFile(name)
-const MODULES_DIR = FLAT ? path.join(REPO_ROOT, 'modules') : MOVED_LIBRARY
+const MODULES_DIR = [MOVED_LIBRARY, path.join(REPO_ROOT, 'modules')].find((dir) => fs.existsSync(dir)) ?? MOVED_LIBRARY
 const REFERENCE = path.join(REPO_ROOT, 'scripts', 'stdlib-reference.mjs')
 
 const relative = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
