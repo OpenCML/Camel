@@ -36,8 +36,8 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/type.h"
-#include "compile/src/gct/builder.h"
-#include "compile/src/gir/builder.h"
+#include "src/compile/src/gct/builder.h"
+#include "src/compile/src/gir/builder.h"
 
 #include "camel/core/error/diagnostics.h"
 

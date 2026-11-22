@@ -9,11 +9,11 @@
 #include "camel/core/operator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
-#include "tools/profiler/core/trace.h"
+#include "src/tools/profiler/core/trace.h"
 
 #ifndef NDEBUG
-#include "tools/profiler/advanced/advanced_tracer.h"
-#include "tools/profiler/core/trace.h"
+#include "src/tools/profiler/advanced/advanced_tracer.h"
+#include "src/tools/profiler/core/trace.h"
 #endif
 
 #include <iostream>

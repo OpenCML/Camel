@@ -54,7 +54,7 @@
 #include "camel/runtime/writings.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/phase_timer.h"
-#include "lib/std/nvm/nodevm.h"
+#include "src/stdlib/std/nvm/nodevm.h"
 #include "verify/translate.h"
 
 #include <algorithm>

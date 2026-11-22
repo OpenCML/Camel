@@ -6,7 +6,7 @@
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/passes/opt/generic.h"
-#include "lib/std/cxx/opt/budget.h"
+#include "src/stdlib/std/cxx/opt/budget.h"
 
 #include <format>
 

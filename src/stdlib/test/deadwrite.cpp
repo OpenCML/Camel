@@ -16,7 +16,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/effect_liveness.h"
-#include "lib/std/cxx/opt/generic/rewrite.h"
+#include "src/stdlib/std/cxx/opt/generic/rewrite.h"
 
 const camel::runtime::Program *
 DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {

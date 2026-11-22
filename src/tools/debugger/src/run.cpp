@@ -21,7 +21,7 @@
 #include "state.h"
 
 #include "camel/passes/trans/json/gir.h"
-#include "lib/std/gir/dot/graphviz.h"
+#include "src/stdlib/std/gir/dot/graphviz.h"
 
 using namespace camel::core::error;
 

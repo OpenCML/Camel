@@ -35,12 +35,12 @@
 #include "config.h"
 #include "diag_limit.h"
 #include "module_failures.h"
-#include "lib/std/gir/dot/graphviz.h"
-#include "lib/std/stats/stats.h"
-#include "lib/std/tns/topo_node_seq.h"
-#include "tools/codegen/source/generator.h"
-#include "tools/profiler/advanced/advanced_tracer.h"
-#include "tools/profiler/core/trace.h"
+#include "src/stdlib/std/gir/dot/graphviz.h"
+#include "src/stdlib/std/stats/stats.h"
+#include "src/stdlib/std/tns/topo_node_seq.h"
+#include "src/tools/codegen/source/generator.h"
+#include "src/tools/profiler/advanced/advanced_tracer.h"
+#include "src/tools/profiler/core/trace.h"
 #include "timeit.h"
 
 #include <array>

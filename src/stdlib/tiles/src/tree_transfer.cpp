@@ -11,8 +11,8 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/tree.h"
-#include "lib/tensor/tensor.h"
-#include "lib/tensor/type.h"
+#include "src/stdlib/tensor/tensor.h"
+#include "src/stdlib/tensor/type.h"
 #include "tiles/device.h"
 #include <cstring>
 

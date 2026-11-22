@@ -50,7 +50,7 @@
 #include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
-#include "lib/std/nvm/nodevm.h"
+#include "src/stdlib/std/nvm/nodevm.h"
 
 #include <algorithm>
 #include <format>

@@ -77,8 +77,8 @@ static thread_local size_t s_jit_save_depth = 0;
 #include "opperf.h"
 
 #ifndef NDEBUG
-#include "tools/profiler/advanced/advanced_tracer.h"
-#include "tools/profiler/core/trace.h"
+#include "src/tools/profiler/advanced/advanced_tracer.h"
+#include "src/tools/profiler/core/trace.h"
 #endif
 #include <stdexcept>
 #include <unordered_set>

@@ -13,7 +13,7 @@
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
-#include "lib/tensor/type.h"
+#include "src/stdlib/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/dtype_map.h"

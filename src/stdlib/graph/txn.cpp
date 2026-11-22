@@ -43,7 +43,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/region_roots.h"
-#include "lib/std/cxx/opt/generic/rewrite.h"
+#include "src/stdlib/std/cxx/opt/generic/rewrite.h"
 
 #include <algorithm>
 #include <format>

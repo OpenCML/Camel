@@ -9,7 +9,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/tree.h"
 #include "camel/core/type/intern.h"
-#include "lib/tensor/type.h"
+#include "src/stdlib/tensor/type.h"
 #include <span>
 
 namespace camel::tiles {

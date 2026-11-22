@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "tools/profiler/core/trace.h"
+#include "src/tools/profiler/core/trace.h"
 #include <cstdint>
 #include <limits>
 #include <mutex>

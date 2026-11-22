@@ -10,7 +10,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
-#include "lib/tensor/type.h"
+#include "src/stdlib/tensor/type.h"
 #include "tiles/device.h"
 #include <mutex>
 #include <numeric>

@@ -13,7 +13,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata.h"
-#include "lib/std/fvm/bytecode.h"
+#include "src/stdlib/std/fvm/bytecode.h"
 
 #include <ostream>
 #include <unordered_map>

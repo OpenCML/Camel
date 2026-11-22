@@ -10,7 +10,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
-#include "lib/python/embed.h"
+#include "src/stdlib/python/embed.h"
 #include "executor.h"
 #include "operators.h"
 

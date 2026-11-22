@@ -6,7 +6,7 @@
 #include "../inline/engine.h"
 
 #include "camel/execute/pass/registration.h"
-#include "lib/std/cxx/opt/budget.h"
+#include "src/stdlib/std/cxx/opt/budget.h"
 
 const camel::runtime::Program *
 SpecializeRewritePass::apply(const camel::runtime::Program *program, std::ostream &) {
