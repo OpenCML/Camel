@@ -197,7 +197,7 @@ RuleChoice chooseTransposedRule(
         // The name is synthesized, and it is told apart from a fit the index really made: a caller
         // that wants to ask a second question (the extents a law of the reduction family names)
         // must not read a name handed back for its *message* as an answer.
-        const std::vector<camel::parse::ast::RuleMatch> filed =
+        const std::vector<camel::core::RuleMatch> filed =
             camel::core::transposeRulesOf(std::string(uri));
         if (!filed.empty()) {
             choice.rule = filed.front().rule;

@@ -6,6 +6,7 @@
 #include "camel/core/type/base.h"
 
 #include <array>
+#include <utility>
 
 namespace camel::core {
 
@@ -94,6 +95,14 @@ const std::array<RuleKeyException, 8> kRuleKeyExceptions{{
      ", so its rule is filed under `sum` at the one operand the parentheses carry"},
 }};
 
+/// The three ruleset modules the three transforms read, named once, here. A transform asks
+/// `vmapRuleOf` and this file answers it out of `rulesets.vmap`: which module a rule is written in
+/// is a fact about the direction being transformed, and it belongs where "where is the rule" is
+/// answered rather than in the caller.
+constexpr const char *kForwardFamily   = "rulesets.jvp";
+constexpr const char *kTransposeFamily = "rulesets.transpose";
+constexpr const char *kVmapFamily      = "rulesets.vmap";
+
 /// The name inside an operator URI: `:op/add_d` gives `add_d`, `tensor:sum_axis` gives `sum_axis`.
 std::string nameOf(const std::string &uri) {
     const size_t colon = uri.rfind(':');
@@ -131,12 +140,11 @@ std::optional<RuleKey> conversionKeyOf(const std::string &uri) {
     return RuleKey{camel::core::type::typeCodeToString(conversion->target), 1};
 }
 
-std::optional<camel::parse::ast::RuleMatch>
-ruleIn(const char *family, const std::optional<RuleKey> &key) {
+std::optional<RuleMatch> ruleIn(const char *family, const std::optional<RuleKey> &key) {
     if (!key.has_value()) {
         return std::nullopt;
     }
-    return camel::parse::ast::lookupRule(family, key->head, key->arity);
+    return lookupRule(family, key->head, key->arity);
 }
 
 } // namespace
@@ -185,7 +193,7 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
     // (`matmul(x, w)`, `sum<axis, keepdims>(xs)`), and how many operands that takes is what the
     // family's index holds for that name.
     const std::string name = nameOf(uri);
-    const auto arity       = camel::parse::ast::arityOfHead(family, name);
+    const auto arity       = arityOfHead(family, name);
     if (!arity.has_value()) {
         return std::nullopt;
     }
@@ -197,45 +205,51 @@ namespace {
 /// Every rule `family` files under `uri`'s key, in filing order: the single answer a one-law key
 /// holds, and every candidate a key that holds several laws holds. A family whose key says nothing
 /// about the operator answers nothing, which is not the same as a family that holds no rule there.
-std::vector<camel::parse::ast::RuleMatch> rulesIn(const std::string &family, const std::string &uri) {
-    std::vector<camel::parse::ast::RuleMatch> answers;
+std::vector<RuleMatch> rulesIn(const std::string &family, const std::string &uri) {
+    std::vector<RuleMatch> answers;
     const auto key = ruleKeyOf(family, uri);
     if (!key.has_value()) {
         return answers;
     }
-    const std::vector<std::string> names =
-        camel::parse::ast::lookupRules(family, key->head, key->arity);
-    answers.reserve(names.size());
-    for (const std::string &name : names) {
-        answers.push_back(camel::parse::ast::RuleMatch{camel::parse::ast::RuleLookup::Found, name});
+    std::vector<RuleObject> rules = lookupRules(family, key->head, key->arity);
+    answers.reserve(rules.size());
+    for (RuleObject &rule : rules) {
+        answers.push_back(RuleMatch{RuleLookup::Found, std::move(rule)});
     }
     return answers;
 }
 
 } // namespace
 
-std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri) {
-    return ruleIn("rulesets.jvp", ruleKeyOf("rulesets.jvp", uri));
+std::optional<RuleMatch> forwardRuleOf(const std::string &uri) {
+    return ruleIn(kForwardFamily, ruleKeyOf(kForwardFamily, uri));
 }
 
-std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri) {
-    return rulesIn("rulesets.jvp", uri);
+std::vector<RuleMatch> forwardRulesOf(const std::string &uri) {
+    return rulesIn(kForwardFamily, uri);
 }
 
-std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri) {
-    return ruleIn("rulesets.transpose", ruleKeyOf("rulesets.transpose", uri));
+std::vector<RuleObject> forwardRules() { return rulesOf(kForwardFamily); }
+
+std::optional<RuleMatch> transposeRuleOf(const std::string &uri) {
+    return ruleIn(kTransposeFamily, ruleKeyOf(kTransposeFamily, uri));
 }
 
-std::vector<camel::parse::ast::RuleMatch> transposeRulesOf(const std::string &uri) {
-    return rulesIn("rulesets.transpose", uri);
+std::vector<RuleMatch> transposeRulesOf(const std::string &uri) {
+    return rulesIn(kTransposeFamily, uri);
 }
 
-std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri) {
-    return ruleIn("rulesets.vmap", ruleKeyOf("rulesets.vmap", uri));
+std::optional<RuleMatch> vmapRuleOf(const std::string &uri) {
+    return ruleIn(kVmapFamily, ruleKeyOf(kVmapFamily, uri));
 }
 
-std::vector<camel::parse::ast::RuleMatch> vmapRulesOf(const std::string &uri) {
-    return rulesIn("rulesets.vmap", uri);
+std::vector<RuleMatch> vmapRulesOf(const std::string &uri) { return rulesIn(kVmapFamily, uri); }
+
+RuleMatch vmapRuleByHead(const std::string &head, uint32_t arity) {
+    // Every way this can answer is the index's: `NoSuchFamily` (the batching ruleset is not loaded),
+    // `NoRuleForPrimitive` (it holds no law for a call to that name at that count) and `Found`. The
+    // caller reports the first two differently, so they are handed on rather than folded.
+    return lookupRule(kVmapFamily, head, arity);
 }
 
 } // namespace camel::core

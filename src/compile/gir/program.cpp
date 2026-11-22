@@ -34,7 +34,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/type/composite/func.h"
-#include "camel/parse/ast/rule_head.h"
+#include "camel/core/rule_index.h"
 #include "camel/runtime/graph.h"
 
 #include "camel/compile/gir/reachable.h"
@@ -205,8 +205,8 @@ bool isWrittenName(const std::string &name) {
 /// `rulesets.jvp` is not one of these: `jvp` calls the right side itself, once with the operands
 /// and then with what it answers, so its rules write `x` and `w` on the right side and must
 /// (`modules/transforms/jvp.cpp`). `rulesets.vmap` is: the batched graph has no unbatched value to
-/// give the outer arrow, so the transform reads `rhsCalleeOf` and calls the named function with the
-/// batch (`modules/transforms/vmap.cpp`), and a rule that reads `x` has nothing to read.
+/// give the outer arrow, so the transform reads the rule's `rhsCallee` and calls the named function
+/// with the batch (`modules/transforms/vmap.cpp`), and a rule that reads `x` has nothing to read.
 bool familyCallsOnlyItsCallee(const std::string &family) {
     // `rulesets.probe_batch` is the fixture of the same shape: the refusal is reachable on purpose
     // there (stdlib/rulesets/probe_batch.cml), the way `rulesets.probe_missing` makes a missing
@@ -1045,10 +1045,10 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // taken once, and a second rule under one head is refused rather than chosen by order.
         if (!unit->failed && unit->module && unit->module->name().rfind("rulesets.", 0) == 0) {
             const std::string ruleset = unit->module->name();
-            std::vector<camel::parse::ast::RuleHead> rules =
-                camel::parse::ast::takeRuleHeads(ruleset);
+            std::vector<camel::core::RuleObject> rules =
+                camel::core::takeRuleHeads(ruleset);
             if (rules.empty()) {
-                rules = camel::parse::ast::takeRuleHeads(unit->diags->moduleName());
+                rules = camel::core::takeRuleHeads(unit->diags->moduleName());
             }
             // The key is the operator and how many operands it was given, not the token alone:
             // `-x` and `x - w` are two primitives (`__neg__` and `__sub__`) that write the same
@@ -1062,7 +1062,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 if (!rule.shape.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::RuleLeftIsNotAnOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
-                    diag.commit(rule.rule, rule.shape);
+                    diag.commit(rule.name, rule.shape);
                     continue;
                 }
                 // A family whose transform reads a rule's callee name and calls that function with
@@ -1074,14 +1074,14 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 if (familyCallsOnlyItsCallee(ruleset) && !rule.outerUses.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::RuleRightUsesOuterVariable);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
-                    diag.commit(rule.rule, rule.outerUses);
+                    diag.commit(rule.name, rule.outerUses);
                     continue;
                 }
-                const std::string first = camel::parse::ast::indexRule(ruleset, rule);
+                const std::string first = camel::core::indexRule(ruleset, rule);
                 if (!first.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::DuplicateRuleForOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
-                    diag.commit(first, rule.rule, rule.head, std::to_string(rule.arity));
+                    diag.commit(first, rule.name, rule.head, std::to_string(rule.arity));
                     continue;
                 }
             }

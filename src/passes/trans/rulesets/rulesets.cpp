@@ -4,8 +4,8 @@
 #include "passes/trans/rulesets/rulesets.h"
 
 #include "camel/execute/pass/registration.h"
-#include "camel/parse/ast/rule_head.h"
 #include "camel/core/forward.h"
+#include "camel/core/rule_index.h"
 
 #include <cstdlib>
 
@@ -45,16 +45,16 @@ void answerOne(const std::string &question, std::ostream &os) {
     const std::string head   = question.substr(bar1 + 1, bar2 - bar1 - 1);
     const long arity         = std::strtol(question.c_str() + bar2 + 1, nullptr, 10);
     const auto answer =
-        camel::parse::ast::lookupRule(family, head, static_cast<uint32_t>(arity < 0 ? 0 : arity));
+        camel::core::lookupRule(family, head, static_cast<uint32_t>(arity < 0 ? 0 : arity));
     os << "LOOKUP " << family << ' ' << head << '/' << arity << " -> ";
     switch (answer.status) {
-    case camel::parse::ast::RuleLookup::Found:
-        os << answer.rule;
+    case camel::core::RuleLookup::Found:
+        os << answer.rule.name;
         break;
-    case camel::parse::ast::RuleLookup::NoRuleForPrimitive:
+    case camel::core::RuleLookup::NoRuleForPrimitive:
         os << "no rule";
         break;
-    case camel::parse::ast::RuleLookup::NoSuchFamily:
+    case camel::core::RuleLookup::NoSuchFamily:
         os << "no such family";
         break;
     }
@@ -127,14 +127,16 @@ RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
             }
         }
     }
-    for (const std::string &family : camel::parse::ast::ruleFamilies()) {
-        for (const auto &entry : camel::parse::ast::rulesOf(family)) {
+    for (const std::string &family : camel::core::ruleFamilies()) {
+        for (const auto &entry : camel::core::rulesOf(family)) {
             os << "RULESET " << family << ' ' << entry.head << '/' << entry.arity << " -> "
-               << entry.rule;
+               << entry.name;
             // The function the rule calls is what a replacement has to call, and it is written in
             // the rule: printing it shows the two halves of a replacement -- which rule, and what
-            // to call -- without either half being copied into C++.
-            const std::string callee = camel::parse::ast::rhsCalleeOf(family, entry.rule);
+            // to call -- without either half being copied into C++. Both halves are members of the
+            // object the compiler filed (`camel/core/rule_index.h`), so printing them asks the index
+            // for nothing it was not already handed.
+            const std::string &callee = entry.rhsCallee;
             if (!callee.empty()) {
                 os << " (rhs " << callee << ')';
             }

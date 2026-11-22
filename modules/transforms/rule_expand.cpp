@@ -11,7 +11,6 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/array.h"
-#include "camel/parse/ast/rule_head.h"
 
 #include <algorithm>
 #include <cstring>
@@ -225,7 +224,7 @@ std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
 
 RuleChoice chooseRuleAmong(
     camel::core::context::Context &context,
-    const std::vector<camel::parse::ast::RuleMatch> &candidates,
+    const std::vector<camel::core::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
     const RuleChoiceWords &words, const std::vector<bool> *answered,
@@ -250,17 +249,17 @@ RuleChoice chooseRuleAmong(
     // and the choice made after it.
     struct Fit {
         const camel::compile::gir::GenericRuleInstance *instance = nullptr;
-        std::string rule;
+        camel::core::RuleObject rule;
         std::vector<Type *> ports;
     };
     std::vector<Fit> fitting;
-    for (const camel::parse::ast::RuleMatch &candidate : candidates) {
-        if (candidate.status != camel::parse::ast::RuleLookup::Found) {
+    for (const camel::core::RuleMatch &candidate : candidates) {
+        if (candidate.status != camel::core::RuleLookup::Found) {
             continue;
         }
         uint64_t ruleId = 0;
         for (size_t i = 0; i < table.size(); ++i) {
-            if (table[i] != nullptr && table[i]->name == candidate.rule) {
+            if (table[i] != nullptr && table[i]->name == candidate.rule.name) {
                 ruleId = static_cast<uint64_t>(i) + 1;
                 break;
             }
@@ -363,7 +362,7 @@ RuleChoice chooseRuleAmong(
             for (const WrittenConstant &one : written) {
                 writtenTypes.push_back(one.type);
             }
-            constantWhy = std::string("the ") + words.subject + " '" + candidate.rule + "' writes " +
+            constantWhy = std::string("the ") + words.subject + " '" + candidate.rule.name + "' writes " +
                           std::to_string(written.size()) + " `<>` value(s) of its own (" +
                           typeTextOf(writtenTypes) +
                           "), and this node's configuration is not that one (" +
@@ -432,7 +431,7 @@ RuleChoice chooseRuleAmong(
         std::string names;
         for (size_t i = 0; i < kept.size(); ++i) {
             names += (i == 0 ? "'" : " and '");
-            names += kept[i]->rule;
+            names += kept[i]->rule.name;
             names += "'";
         }
         choice.why = std::string("two laws both accept these ") + words.operands + ": " + names +
