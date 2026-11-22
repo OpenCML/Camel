@@ -11,7 +11,7 @@
 | lane/stage2-graph | 收两处红:`region_roots.branch_statement`(`JOIN` 应答它那个 `BRCH` 所在区域)与 `stream.generators_shapes_consumed` 的编码器残差 | `GraphRead` 12 → **4** 个文件;`LoopDraftView` 7(卡 `GCFillBody::slots()`) | 12 / 7 | 再做一轮(约 10 分钟构建 + `feat/opt`/`trans`/`compile` 复核) | 2026-11-22 23:30 |
 | lane/stage2-exec2 | 后端与运行时按 `Cast`/`Fill`/`Accs` 分支的地方改为问算子 | 已开,未提交 | 144 处 | 这一轮结束前 | 2026-11-22 23:35 |
 | lane/stage2-trans2 | `node_operator.h:150` 改为读 `GCOperBody` 的算子 URI;自己目录里直接读冻结图/草稿图的地方改读视图 | 已开,未提交 | — | 这一轮结束前 | 2026-11-22 23:35 |
-| lane/stage2-panic | 96 项写 `panic`,`C++` 侧同步填;然后 `graph.cpp` 改为从记录读,附改动前后对照表,要求一项不变 | 96 项 `panic=false` 写进记录;`nodeMayFault` 读记录;对照表 **733 项 0 变化**(637 真 / 96 假) | 50 处 / 96 项待写 | 闸门 `smoke`+`feat/**` 一轮 | 2026-11-22 23:52 |
+| lane/stage2-panic | 96 项写 `panic`,`C++` 侧同步填;然后 `graph.cpp` 改为从记录读,附改动前后对照表,要求一项不变 | 96 项 `panic=false` 写进记录;`nodeMayFault` 读记录;对照表 **733 项 0 变化**(637 真 / 96 假);闸门 `smoke`+`feat/**` 9835 项 12 红,逐条读因都在树龄与宿主(缺 `build/lib/tiles` 二进制、plan 引的 case 不在本树、`ast_hashes` 已由 `063e100e5` 补、`graph-diff` 无输出、`questions` 表手写落后),不在这一笔的文件里 | 50 处 / 96 项待写 | 收车道,等合入 | 2026-11-23 00:05 |
 | lane/stage2-graphwrite | 编辑会话的两个入口:记录编辑的种类与碰过的区域、通知监听者、发布时按编辑记录分档检查 | 已开,未提交 | — | 这一轮结束前 | 2026-11-22 23:35 |
 | lane/stats-macro | 已合入 | `std::stats` 每张可达图一个名字一个布尔 | 已合(`0699bc111`) | — | 2026-11-22 23:35 |
 | lane/stage2-frontend | 已合入 | 四个算子声明+内核+注册;前端不翻 | 已合(`801e22a43`) | — | 2026-11-22 23:20 |
