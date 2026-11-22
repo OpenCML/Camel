@@ -1523,20 +1523,24 @@ static camel::runtime::GCFillKind fillKindOfType(camel::core::type::Type *type) 
 
 // A construction as an ordinary operator (`fill::<T, ...F>` of `lib/std/prelude.cml`; plan
 // 2.3, step 2). The first ordinary operand is the template -- one constant of the target type per
-// construction site, made by the compiler -- and the `with` operands are the field values in
-// component order; the node's two payload facts are that order and the fill kind, and neither is
-// left to the payload now: the kind is the target type's own, and the order is the order the call
-// is built with (`writeRuntimeFillSlots` writes component i with the i-th value). The template is
-// cloned rather than written to, which is what a FILL did with its constant too.
+// construction site, made by the compiler -- and the rest are the field values in component order,
+// which is how the declaration writes them: `with` is what configures the function (which function
+// this is), and what a construction is made of is the data of this call, so it is an ordinary
+// parameter. The node's two payload facts are that order and the fill kind, and neither is left to
+// the payload now: the kind is the target type's own, and the order is the order the call is built
+// with (`writeRuntimeFillSlots` writes component i with the i-th value). The template is cloned
+// rather than written to, which is what a FILL did with its constant too.
 slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)ctx;
+    (void)with;
     Type *type = norm.resultType();
     GUARD(type != nullptr, "a construction must state the type it makes.");
     GUARD(
         isGCTraced(type->code()), "a construction's target type is not GC-traced.");
+    GUARD(norm.size() >= 1, "a construction must read its template.");
     Object *templateValue = norm.get<Object *>(0);
     GUARD(templateValue != nullptr, "a construction's template value is null.");
-    const size_t fieldCount = with.size();
+    const size_t fieldCount = norm.size() - 1;
     std::vector<size_t> slots(fieldCount);
     std::iota(slots.begin(), slots.end(), size_t{0});
     const std::vector<std::byte> payload =
@@ -1544,7 +1548,7 @@ slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(payload.data());
     std::vector<slot_t> values(fieldCount);
     for (size_t i = 0; i < fieldCount; ++i) {
-        values[i] = with.slot(i);
+        values[i] = norm.slot(i + 1);
     }
     Object *made = templateValue->clone(mm::autoSpace(), type, false);
     GUARD(made != nullptr, "a construction's target value is null.");
