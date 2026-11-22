@@ -1,0 +1,24 @@
+id = "modules.op_record"
+order = 1014
+tier = "fast"
+tags = ["feat", "modules", "registry", "record", "panic"]
+
+# The operator record has two equal entrances (`kernel/ops/include/camel/ops/operator_record.h`):
+# a Camel declaration the compiler compiles in, and the C++ registration API. Until this case
+# existed `Registry` had declarations and no definitions anywhere in the tree (`instance`, both
+# `intern`s, `find`, `declare`, `registerOperator`, `complete`, `epoch`, `Record::effect` and
+# `Record::external`), and `CppRegistration::kernel(void *)` had no definition either, so a C++
+# registration could be written and read by nobody. `camel-oprecord --self-check` runs that path
+# and asserts what a reader sees at each step, `panic` first among them.
+
+[[tests]]
+name = "op_record.cpp_registration_states_panic"
+desc = "A C++ registration states `panic` and a reader finds it in the record: the operator's `mayFault()` is the conservative true before anybody states it and the registration's second argument after, the record remembers that the C++ entrance is the one that spoke, the kernel `kernel(void *)` handed over is the pointer `Registry::kernel(id)` hands back, `pure()` is read as the Pure effect, a Camel declaration that states the other `panic` is refused naming the item, a completed record refuses a later statement and moves the epoch, and `bind` accepts a key of the same major version and refuses another major one."
+kind = "behavior"
+tool = "camel-oprecord"
+case = "../../../../tools/oprecord/main.cpp"
+args = ["--self-check"]
+expect_exit = 0
+expect_stdout_contains = ["the registration's second argument reaches the record: `mayFault()` is false where it was the conservative true before", "the kernel the registration handed over is the one Registry::kernel(id) hands back", "a Camel declaration stating `panic = true` where the C++ entrance stated false is refused, naming the item", "a completed record refuses a later statement", "bind refuses a key whose major version this process does not have", "oprecord self-check: passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000

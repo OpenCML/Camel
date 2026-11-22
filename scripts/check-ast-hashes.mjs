@@ -22,7 +22,7 @@
  * --- what is compared, and what is not --------------------------------------
  * A recorded line is `<16 hex> <ok|no> <path>`. The hash is a 64-bit FNV-1a over the normalized AST
  * with every node's token range and origin, or -- for a file the front end rejects -- over the
- * diagnostics' codes and places (`tools/parsecheck/snapshot.cpp`, `Diagnostics::dumpIdentity`);
+ * diagnostics' codes and places (`test/tools/parsecheck/snapshot.cpp`, `Diagnostics::dumpIdentity`);
  * `ok` and `no` say which of the two the line is about. So a comment is source text with a range
  * and rewording one moves the hash, while a diagnostic's wording is not recorded at all and
  * rewording a message leaves the line alone.
@@ -61,7 +61,7 @@
  *             claims a reading of a file the tree no longer has.
  *
  * A file the index holds and the worktree does not is *not* hashed, and it is the one place this
- * check answers a default instead of taking a reading: `tools/parsecheck/main.cpp#readFile` opens a
+ * check answers a default instead of taking a reading: `test/tools/parsecheck/main.cpp#readFile` opens a
  * missing path and gets an empty string, the parser accepts an empty program, and the hash that
  * comes back describes nothing -- it would read as `mismatch` only because an empty program's hash
  * is unlikely to be the recorded one. So the scope is filtered by what is on disk, and the missing
@@ -192,7 +192,7 @@ const SKIP_DIRS = new Set([
     'results'
 ])
 
-/** A reading: `<16 hex> <ok|no> <path>` (`tools/parsecheck/snapshot.cpp`, `runHashes`). */
+/** A reading: `<16 hex> <ok|no> <path>` (`test/tools/parsecheck/snapshot.cpp`, `runHashes`). */
 const READING = /^([0-9a-f]{16}) (ok|no) (.+)$/
 
 function usage(message) {
@@ -402,7 +402,7 @@ for (const rel of changed === null ? [...listed].sort() : changed) {
         continue
     }
     // The index holds a `.cml` the worktree does not: the file is deleted and the deletion is not
-    // committed yet. It is not handed to the tool, because `tools/parsecheck/main.cpp#readFile`
+    // committed yet. It is not handed to the tool, because `test/tools/parsecheck/main.cpp#readFile`
     // reads a missing file as an empty string and the parser accepts an empty program -- a
     // reading of nothing that looks exactly like a reading. This is the one default in the chain
     // that would land on "clean", so it is answered here instead: see `gone` below.

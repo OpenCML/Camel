@@ -11,7 +11,7 @@
  *   short (`-E short`):      `(module)path:line:col: [Error]: message suggestion (name=…, code=0x…)`
  *   json  (`-E json`):       the report as an object
  *
- * The form is chosen per run (`tools/camel-cli/config.cpp#applyDiagnosticOptions`): `-E` /
+ * The form is chosen per run (`src/tools/camel-cli/config.cpp#applyDiagnosticOptions`): `-E` /
  * `--error-format` for `run`, `-O` / `--output-format` for `check`, else `CAMEL_ERROR_FORMAT`, else
  * `text`. The plan runner sets `CAMEL_ERROR_FORMAT=short` for every child it starts
  * (`test/tools/run-tests.mjs`), so a *test case* sees the one-line form by construction -- and a tool

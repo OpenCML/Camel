@@ -11,7 +11,7 @@
     python3 test/tools/cppexec/run.py --standalone <program.cml>...
 
 For every program: `camel <program> [passes] std::cpp` writes a C++ file; the C++ compiler
-($CXX, else clang++, g++ or c++) builds it with the headers of the repository (lib/std/cpp/include,
+($CXX, else clang++, g++ or c++) builds it with the headers of the repository (src/stdlib/std/cpp/include/camel/standalone,
 where camel/standalone/ lives); the executable runs; `camel <program> [passes] std::fvm` runs too
 (after the same passes, so on the same graph). The two agree when their standard output and
 exit code are the same (a fault's report is on standard output in both, design note
@@ -78,9 +78,19 @@ IN_PLACE = re.compile(r"^\s*[\w.\[\]]+->(append|extend)<.*>\s*$", re.M)
 # Where the C++ headers a generated program includes live, newest layout first. The tree was laid
 # out again ("move: the tree is laid out as the map says"): the one include/ root that held every
 # camel/ header was split into one include directory per component, so camel/standalone/ (a header
-# set of the standard library) is under lib/std/cpp/include and camel/utils/, which those headers
-# include, under kernel/include. include/ is the root of the layout before that and is still read.
-CPP_INCLUDE_ROOTS = ("lib/std/cpp/include", "kernel/include", "include")
+# set of the standard library) is under src/stdlib/std/cpp/include and camel/utils/, which those
+# headers include, under src/kernel/include. The 2026-11-22 move put every block under src/, which is
+# why those two carry the prefix now; the spellings from before it stay readable, because a checkout of
+# that layout is a tree this harness can still compile against, and include/ is the root of the layout
+# before both. One written-down path is what went stale here before, so every spelling is tried and
+# the ones that are there are the ones passed.
+CPP_INCLUDE_ROOTS = (
+    "src/stdlib/std/cpp/include",
+    "src/kernel/include",
+    "lib/std/cpp/include",
+    "kernel/include",
+    "include",
+)
 
 
 def cpp_include_dirs():

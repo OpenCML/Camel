@@ -49,10 +49,12 @@ const check = (ok, label, detail) => {
 
 const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
 
-// The registry the fixes are read from lives under the kernel's block directory after the layout
-// move (`kernel/diagnostics/registry.tsv`) and at the tree's top before it. Either answers, so this
-// case reads the tree it runs in instead of one of the two spellings.
+// The registry the fixes are read from lives under the kernel's block directory, which is
+// `src/kernel/diagnostics/registry.tsv` since the 2026-11-22 move (`kernel/diagnostics/registry.tsv`
+// after the layout move) and was at the tree's top before that. Every spelling answers, so this case
+// reads the tree it runs in instead of one of them.
 const REGISTRY = [
+    path.join(REPO_ROOT, 'src', 'kernel', 'diagnostics', 'registry.tsv'),
     path.join(REPO_ROOT, 'kernel', 'diagnostics', 'registry.tsv'),
     path.join(REPO_ROOT, 'diagnostics', 'registry.tsv'),
 ].find((file) => fs.existsSync(file))

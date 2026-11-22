@@ -12,12 +12,12 @@
  * The **declaration** side is where an operator says `panic`:
  *
  *   1. a Camel declaration of an operator, `#op('<uri>')` and the `export func` line under it, the
- *      keyword written beside `pure` and `uses` (`lib/**\/*.cml`);
+ *      keyword written beside `pure` and `uses` (`src/stdlib/**\/*.cml`);
  *   2. the C++ entrance, `CppRegistration`'s second argument, which is required and has no default
- *      (`kernel/ops/include/camel/ops/operator_record.h`).
+ *      (`src/kernel/ops/include/camel/ops/operator_record.h`).
  *
  * The declarations state it now: `d39cd2464` wrote it on 42 operators, and the two scatters
- * `lib/rulesets/transpose.cml` declares privately take the count to 44 of the 378 this run reads. So
+ * `src/stdlib/rulesets/transpose.cml` declares privately take the count to 44 of the 378 this run reads. So
  * what the red side measures is the size of the remaining debt, not a regression. The promise a
  * declaration without `panic` makes is the reason the debt matters: "no `panic`" means "this call
  * cannot fail", and an optimizer may move a division out of a guard on the strength of it.
@@ -38,7 +38,7 @@
  *     faults of the program, classified by `X` -- division by zero, index out of range, `fail`
  *     (`ProgramFault`), and everything else the library reports as a runtime fault;
  *   - `ProcessExit` (and `ExitRequest`) is the program leaving, not failing: the scheduler catches it
- *     and sets the exit code (`kernel/execute/pass.cpp`), so `exit` returns no value without faulting;
+ *     and sets the exit code (`src/kernel/execute/pass.cpp`), so `exit` returns no value without faulting;
  *   - any other `throw` is counted under `unexpected-throw`: the operator leaves without a value,
  *     which is a path `panic` has to cover, and today the run does not report it as a fault at all.
  *
@@ -64,10 +64,10 @@
  * (`unkept`). What it cannot read is a `panic` that a *type rule* makes unnecessary.
  *
  * `:str/join` is the example. Its kernel raises `InvalidArgument` when the separator is null
- * (`lib/std/builtin/operators/str.cpp#__join__`), the raise is in the text, and the check counts it;
+ * (`src/stdlib/std/builtin/operators/str.cpp#__join__`), the raise is in the text, and the check counts it;
  * writing `panic` on `:str/join` was measured to change the reading by exactly one `agree` and to say
  * nothing else. That arm is not a fault a call can make: `with <sep: string>`
- * (`lib/std/cpp/operator_rules.cpp#withArgument`) makes the separator a type the compiler writes, so
+ * (`src/stdlib/std/cpp/operator_rules.cpp#withArgument`) makes the separator a type the compiler writes, so
  * no call hands the kernel a null one. The check cannot see the type rules, so it cannot say "you
  * declared a fault your implementation cannot raise".
  *
@@ -403,7 +403,7 @@ const NOT_A_FAULT = /^\s*(?:[\w:]+::)*(?:ProcessExit|ExitRequest)\b/
 /**
  * Every raise in one piece of code: the diagnostic it names, or the class of raise where it names
  * none. `exit` leaves the run through `ProcessExit` -- the scheduler catches it and sets the exit
- * code (`kernel/execute/pass.cpp`), so the operator returns no value without failing. Everything
+ * code (`src/kernel/execute/pass.cpp`), so the operator returns no value without failing. Everything
  * else that is not a `RuntimeFault` is counted under `unexpected-throw`: the operator leaves without
  * a value, which is a path `panic` has to cover whether or not the run reports it well today.
  */
@@ -584,12 +584,12 @@ function readDeclarations(cmlFiles, sourceFiles) {
  * The module each implementation map answers on, read from the C++ that states it.
  *
  * An implementation map is keyed by the module-internal name (`min_i`, `find`, `op/div_i`), so the
- * module is what a key means. The module is not the directory a file sits in -- `lib/random/`
+ * module is what a key means. The module is not the directory a file sits in -- `src/stdlib/`
  * answers the protocol `rand` -- and it is not inferred from the declaration side, which would be
  * the check reading its own answer. It is stated twice in C++, and this joins the two:
  *
  *   1. `registerExecutorFactory("<module>", ...)` names the protocol and writes the executor that
- *      answers it (`lib/re/module.cpp`, `lib/std/builtin/modules/globals.cpp`);
+ *      answers it (`src/stdlib/re/module.cpp`, `src/stdlib/std/builtin/modules/globals.cpp`);
  *   2. that expression names the map, directly or through the function or the class it builds
  *      from: `getArrayOpsMap()` outright, `createReExecutor` -> `getReOpsMap()`, `GraphExecutor`'s
  *      initializer list -> `kernels()`, `BasicBuiltinExecutor::create` -> `getOpsImplMap()` ->

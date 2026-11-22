@@ -65,7 +65,7 @@ SIG rulesets.jvp::jvp_float_from_string__rhs exit interned=no type=() => float p
 
 **0 与谁混淆**：两张图类型不同、但差异都落在 0 上时被判为"内容相同"——rebase 丢掉一个真的改了类型的版本，或 commit 把没有变的图记成新版本（两个方向都会让事实层拿到错的 revision）。
 
-### 2.8 `lib/test/retype.cpp#RetypeEnumTestPass::apply` —— 7 处
+### 2.8 `src/stdlib/test/retype.cpp#RetypeEnumTestPass::apply` —— 7 处
 
 `pair->typeId()`、两处 `countNodesTyped(..., pairId)`、`graphMentions(..., pairId, ...)`、`boxed->typeId()`、JOIN 的 `canonicalIdOf((*it)->typeId)`、臂与 JOIN 的 `canonicalIdOf(result->typeId) == joinType`。
 

@@ -98,9 +98,10 @@ report(
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'vjp-parity-copy-'))
 
-function link(name) {
-    const target = path.join(ROOT, name)
-    const link_ = path.join(scratch, name)
+function link(relative) {
+    const target = path.join(ROOT, relative)
+    const link_ = path.join(scratch, relative)
+    fs.mkdirSync(path.dirname(link_), { recursive: true })
     try {
         fs.symlinkSync(target, link_, process.platform === 'win32' ? 'junction' : 'dir')
     } catch {
@@ -109,35 +110,46 @@ function link(name) {
 }
 
 function buildCopy() {
-    // The rulesets are `lib/rulesets/` in the layout the map files the library under (one
-    // declaration per module beside `lib/std/`), so the copy is that directory, not `stdlib/`.
-    fs.mkdirSync(path.join(scratch, 'lib', 'rulesets'), { recursive: true })
+    // The rulesets are `src/stdlib/rulesets/` since the 2026-11-22 move, in the layout the map files
+    // the library under, so the copy is that directory and the blocks are under `src/` beside it.
+    const library = path.join('src', 'stdlib')
+    fs.mkdirSync(path.join(scratch, library, 'rulesets'), { recursive: true })
     // Every ruleset the tree holds, by directory: a copy that named two files compared a library the
     // tree does not have, and it said so in the readings instead of here -- `rulesets/vmap.cml` was
     // left out, the copy's library therefore filed no law for `argmax`, `argmin`, `concat`, `dim` or
     // `unsqueeze`, and the reading below ("the same law is not reported once the list holds it")
     // went red on five differences the *real* tree does not have. A copy is the tree plus one law,
     // and the only way to keep that true is to start from the directory.
-    const rulesets = path.join(ROOT, 'lib', 'rulesets')
+    const rulesets = path.join(ROOT, library, 'rulesets')
     for (const name of fs.readdirSync(rulesets).filter((name) => name.endsWith('.cml')).sort()) {
-        fs.copyFileSync(path.join(rulesets, name), path.join(scratch, 'lib', 'rulesets', name))
+        fs.copyFileSync(path.join(rulesets, name), path.join(scratch, library, 'rulesets', name))
     }
-    // The engine's own sources, so the table the copy is compared against is the tree's. `lib`
-    // cannot be linked whole -- the copy owns `lib/rulesets` -- and the gate's walker descends real
-    // directories only, so a linked `lib/<module>` would be read as nothing at all. The copy
-    // therefore holds a copy of each module directory, which is the same bytes and the same
+    // The engine's own sources, so the table the copy is compared against is the tree's. The library
+    // cannot be linked whole -- the copy owns `src/stdlib/rulesets` -- and the gate's walker descends
+    // real directories only, so a linked `src/stdlib/<module>` would be read as nothing at all. The
+    // copy therefore holds a copy of each module directory, which is the same bytes and the same
     // reading; the other block roots are linked whole.
-    for (const name of ['kernel', 'compile', 'parse']) {
+    for (const name of ['src/kernel', 'src/compile', 'src/parse']) {
         link(name)
     }
-    fs.mkdirSync(path.join(scratch, 'lib'), { recursive: true })
-    for (const entry of fs.readdirSync(path.join(ROOT, 'lib'), { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.name === 'rulesets') continue
-        fs.cpSync(path.join(ROOT, 'lib', entry.name), path.join(scratch, 'lib', entry.name), { recursive: true })
+    // The library's own `.cml` -- one declaration per module, at the root of the directory -- and a
+    // copy of each module directory. A file is copied, not linked, for the same reason: the walker
+    // reads what is really there.
+    for (const entry of fs.readdirSync(path.join(ROOT, library), { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+            if (entry.name === 'rulesets') continue
+            fs.cpSync(
+                path.join(ROOT, library, entry.name),
+                path.join(scratch, library, entry.name),
+                { recursive: true }
+            )
+        } else if (entry.name.endsWith('.cml')) {
+            fs.copyFileSync(path.join(ROOT, library, entry.name), path.join(scratch, library, entry.name))
+        }
     }
     // One law, filed under a name neither table has: the shape of `pick_at` on the day the library
     // answered it and the engine's table had no row.
-    const file = path.join(scratch, 'lib', 'rulesets', 'transpose.cml')
+    const file = path.join(scratch, library, 'rulesets', 'transpose.cml')
     fs.appendFileSync(
         file,
         `\n// written by test/tools/check-vjp-parity.mjs: a law nothing answers.\n` +

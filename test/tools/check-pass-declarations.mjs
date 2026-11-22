@@ -13,14 +13,14 @@
  *     parameter strings;
  *   * no parameter declaration written as a string literal
  *     (`"safe_fp: bool = false, ..."`) outside the library, where the declaration belongs;
- *   * every pass declared in `lib/std/std.cml` has exactly one kernel registered with
+ *   * every pass declared in `src/stdlib/std.cml` has exactly one kernel registered with
  *     `PassKernel`, and every kernel is declared: a bijection, stated as such rather than
  *     as a count. A count moves with every pass the language gains while the property it was
  *      meant to guard does not, which is why the rule that wrote the declarations down asks for
  *     the relation and not the number; what the two sets must not be is empty, and that lower
  *     bound is asserted so a run that examined nothing fails here instead of passing.
  *   * every pass a module contributes is a pass-shaped declaration in the module's own
- *     `.cml` file (`lib/<module>/<module>.cml`, `when is_function::<F>()`), and every
+ *     `.cml` file (`src/stdlib/<module>/<module>.cml`, `when is_function::<F>()`), and every
  *     declaration has a registration — the same relation
  *     one level up, over the modules themselves, with each side asserted non-empty for the same
  *     reason: a module that contributes no pass (`ckpt` registers operators and resources only)
@@ -44,13 +44,15 @@ const REPO_ROOT = path.resolve(HERE, '..', '..')
 
 // The block directories the layout map files the product's sources under
 // (`docs/design/architecture/layout-map.cn.md`): `src/`, `include/` and `modules/` before the
-// layout move, `kernel/`, `parse/`, `compile/` and `lib/` after it.
-const SOURCE_ROOTS = ['kernel', 'parse', 'compile', 'lib']
-const ROOTS = [...SOURCE_ROOTS, 'tools', 'scripts', 'examples']
-const LIBRARY = path.join(REPO_ROOT, 'lib')
-// The core's own declarations: one file, `lib/std/std.cml` after the layout move
-// (`stdlib/std.cml` before it).
-const CORE_DECLARATIONS = 'lib/std/std.cml'
+// layout move, `src/kernel/`, `src/parse/`, `src/compile/` and `src/stdlib/` after it, and all of
+// them under `src/` since the 2026-11-22 move. The names of the earlier layouts stay in the list, so
+// a checkout of one is read the same way.
+const SOURCE_ROOTS = ['src/kernel', 'src/parse', 'src/compile', 'src/stdlib', 'kernel', 'parse', 'compile', 'lib']
+const ROOTS = [...SOURCE_ROOTS, 'src/tools', 'scripts', 'examples']
+const LIBRARY = path.join(REPO_ROOT, 'src', 'stdlib')
+// The core's own declarations: one file, `src/stdlib/std.cml` -- the same spelling since the layout
+// move, when the flat library became one directory per module and this file kept its name.
+const CORE_DECLARATIONS = 'src/stdlib/std.cml'
 const SKIP_DIRS = new Set(['.git', 'out', 'node_modules', 'third_party', 'build', 'sdks'])
 const SOURCE_EXTENSIONS = new Set(['.cml', '.cpp', '.cc', '.c', '.h', '.hpp', '.mjs', '.js'])
 
@@ -118,7 +120,7 @@ for (const root of ROOTS) {
 // (3) Every declaration has exactly one kernel and every kernel a declaration.
 const declarations = []
 {
-    const file = path.join(REPO_ROOT, 'lib', 'std', 'std.cml')
+    const file = path.join(REPO_ROOT, 'src', 'stdlib', 'std.cml')
     let namespace = []
     for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
         const opened = line.trim().match(/^namespace\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/)
@@ -232,19 +234,22 @@ function ordinaryParameterCount(line) {
     return seen ? count + 1 : 0
 }
 
-// A module's declaration is beside its own sources: `lib/<module>/<module>.cml` after the layout
-// move (`stdlib/<module>.cml`, one flat directory, before it). `lib/std/` holds the core's own
-// declarations (`std.cml`, read above) and `lib/rulesets/` the dotted rulesets: neither is a
-// module declaration of its own name.
+// A module's declaration is the file of its own name in the library: `<module>.cml` at the root of
+// `src/stdlib/` since the 2026-11-22 move, beside the module's C++ directory rather than inside it
+// (it was `lib/<module>/<module>.cml` after the layout move, and one flat `stdlib/<module>.cml`
+// before it). A directory with no such file is not a module declaration: `src/stdlib/std/` holds the
+// module's C++ for the core's own declarations (`std.cml`, read above) and `src/stdlib/rulesets/` is
+// the dotted rulesets.
 const moduleDeclarations = new Set()
 for (const entry of fs.readdirSync(LIBRARY)) {
-    if (entry === 'std') {
+    if (!entry.endsWith('.cml')) {
         continue
     }
-    const file = path.join(LIBRARY, entry, `${entry}.cml`)
-    if (!fs.existsSync(file)) {
+    const name = entry.slice(0, -'.cml'.length)
+    if (name === 'std' || name === 'prelude') {
         continue
     }
+    const file = path.join(LIBRARY, entry)
     const text = fs.readFileSync(file, 'utf8')
     for (const match of text.matchAll(
         /^\s*export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)\s*::\s*<[^>]+>\s*\(/gm
@@ -262,7 +267,7 @@ for (const entry of fs.readdirSync(LIBRARY)) {
         if (!shaped || shaped[2] !== shaped[3] || compact.endsWith('{')) {
             continue
         }
-        moduleDeclarations.add(`${entry}::${match[1]}`)
+        moduleDeclarations.add(`${name}::${match[1]}`)
     }
 }
 
@@ -313,13 +318,13 @@ const corePaths = new Set(implementations.map((name) => `std::${name}`))
 // The core's aliases are a table of names, not a registry of kernels: each names a declared
 // pass, and resolution tries the written name first (so an alias never shadows a declaration).
 {
-    const file = path.join(REPO_ROOT, 'kernel', 'execute', 'pass.cpp')
+    const file = path.join(REPO_ROOT, 'src', 'kernel', 'execute', 'pass.cpp')
     const text = fs.readFileSync(file, 'utf8')
     const start = text.indexOf('const std::map<std::string, std::string> passAliases = {')
     const end = text.indexOf('\n};', start)
     if (start < 0 || end < 0) {
         problems.push(
-            'kernel/execute/pass.cpp: the core alias table is not where the guard reads it'
+            'src/kernel/execute/pass.cpp: the core alias table is not where the guard reads it'
         )
     } else {
         for (const match of text.slice(start, end).matchAll(/\{"(std::[^"]+)", "(std::[^"]+)"\}/g)) {
@@ -427,11 +432,11 @@ for (const path of moduleDeclarations) {
 // passes, and the Camel pass whose declaration is its own `with` list. A built-in pass's
 // parameters are its module's `.cml` declaration.
 const CPP_PARAMETERS = new Map([
-    ['lib/tensor/passes/fuse.cpp', 4], // tensor::test_echo, test-only
-    ['lib/test/params.cpp', 5], // test::params, test-only
+    ['src/stdlib/tensor/passes/fuse.cpp', 4], // tensor::test_echo, test-only
+    ['src/stdlib/test/params.cpp', 5], // test::params, test-only
     // Not a second declaration: built from the Camel function's `with` list, which is the
     // pass's declaration.
-    ['kernel/execute/camel_pass.cpp', 1],
+    ['src/kernel/execute/camel_pass.cpp', 1],
 ])
 for (const root of SOURCE_ROOTS) {
     for (const file of files(path.join(REPO_ROOT, root))) {
@@ -442,7 +447,7 @@ for (const root of SOURCE_ROOTS) {
         const text = fs.readFileSync(file, 'utf8')
         const named = (text.match(/PassParam\{/g) || []).length
         const aggregate =
-            relative === 'lib/test/params.cpp'
+            relative === 'src/stdlib/test/params.cpp'
                 ? (text.match(/\{\s*"[a-z_]+"\s*,\s*PassParamType::/g) || []).length
                 : 0
         const count = named + aggregate

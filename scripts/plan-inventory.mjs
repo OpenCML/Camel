@@ -315,17 +315,20 @@ const INDEX_FILES = new Set(['test/plan-selection.json'])
 // Where a reference counts: the compiler, the standard library, the modules, the tools, the tests
 // and the scripts -- the paths a gate or a plan reads a case through. A document or a report that
 // *describes* a measurement is not a reader of the workload it measured, and neither is the
-// benchmark pipeline, which is a harness of its own outside the plans. The layout move split `src/`
-// and `include/` into the four blocks (`kernel/`, `parse/`, `compile/`) and the library (`lib/`),
-// which also took `stdlib/` and `modules/`; the old names stay in the list so a checkout of either
-// layout is read the same way.
-const NAMING_ROOTS = ['test/', 'scripts/', 'kernel/', 'parse/', 'compile/', 'lib/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
+// benchmark pipeline, which is a harness of its own outside the plans. The 2026-11-22 move put every
+// block under `src/` (`src/kernel/`, `src/parse/`, `src/compile/`, `src/stdlib/`, `src/tools/`); the
+// layout move before it split `src/` and `include/` into four blocks and the library (`lib/`, which
+// also took `stdlib/` and `modules/`). The old names stay in the list so a checkout of any of the
+// three layouts is read the same way. `src/` is one root and not five: it holds every block since the
+// 2026-11-22 move, and listing `src/` beside `src/kernel/` would count every file of the compiler
+// twice (the walk returns a list per root, and the same file under two roots is two entries).
+const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'lib/', 'tools/', 'include/', 'stdlib/', 'modules/', 'examples/', 'exemplars/']
 
-// The four names of the layout before the move. They stay in the list so a checkout of either layout
-// is read the same way, and they are the only roots whose absence is expected: every root the tree
-// of today has is under `REQUIRED_ROOTS`, and a run that cannot find one refuses (exit 2) instead of
+// The names of the layouts before the move. They stay in the list so a checkout of an older layout is
+// read the same way, and they are the only roots whose absence is expected: every root the tree of
+// today has is under `REQUIRED_ROOTS`, and a run that cannot find one refuses (exit 2) instead of
 // walking around it.
-const LEGACY_NAMING_ROOTS = new Set(['src/', 'include/', 'stdlib/', 'modules/'])
+const LEGACY_NAMING_ROOTS = new Set(['lib/', 'tools/', 'include/', 'stdlib/', 'modules/'])
 
 // The directories a reading cannot be taken without: the naming roots of the tree this checkout has,
 // and the two the ledger reads by name. This list exists because of the shape `walkTreeFiles` used to
@@ -340,11 +343,12 @@ const REQUIRED_ROOTS = [
     'test/plans',
     'test/cases',
     'scripts',
-    'kernel',
-    'parse',
-    'compile',
-    'lib',
-    'tools',
+    'src',
+    'src/kernel',
+    'src/parse',
+    'src/compile',
+    'src/stdlib',
+    'src/tools',
     'examples',
     'exemplars',
 ]

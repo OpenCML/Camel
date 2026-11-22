@@ -9,7 +9,7 @@
  * compares is what a user would notice: the exit status and every byte of standard output.
  *
  * The eight cases of the author's defect list (A7) are the ones that behaved differently after a
- * print; a ninth (`compile/escapes/raw_roundtrip`) is the printer's raw form for a string with
+ * print; a ninth (`src/compile/escapes/raw_roundtrip`) is the printer's raw form for a string with
  * several backslashes, which is a literal rather than a graph shape. They are green today, and
  * this tool is the lock, not the fix. Its own discriminability is
  * checked by `--negative <case>`: the printed body has two of its `println` statements swapped and
@@ -33,7 +33,7 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 
 /// The repository root: the first ancestor of this tool that holds the standard library. The runner
 /// copies a case into a scratch tree, so neither `process.cwd()` nor `HERE` can be assumed to be it.
-/// The library is `stdlib/std.cml` before the layout move and `lib/std/std.cml` after it, and this
+/// The library is `stdlib/std.cml` before the layout move and `src/stdlib/std.cml` after it, and this
 /// tool runs against both trees, so either marker answers.
 const ROOT_MARKERS = [
     ['stdlib', 'std.cml'],
@@ -53,7 +53,7 @@ function repositoryRoot(start) {
     for (;;) {
         if (holdsLibrary(dir)) return dir
         const parent = path.dirname(dir)
-        if (parent === dir) throw new Error(`no stdlib/std.cml or lib/std/std.cml above ${start}`)
+        if (parent === dir) throw new Error(`no stdlib/std.cml or src/stdlib/std.cml above ${start}`)
         dir = parent
     }
 }
@@ -99,10 +99,10 @@ const CASES = [
     'linear/runtime/var_read_before_region',
     'linear/runtime/var_read_before_write',
     'linear/runtime/order_edges_regions',
-    'parse/rulings/power',
+    'src/parse/rulings/power',
     'trans/cpp/exec/print_formats',
     'consistency/values/float_special',
-    'compile/escapes/raw_roundtrip',
+    'src/compile/escapes/raw_roundtrip',
 ]
 
 const SCRATCH = path.join(tmpdir(), `camel-roundtrip-${process.pid}`)

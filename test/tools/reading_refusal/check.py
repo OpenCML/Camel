@@ -43,12 +43,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-# The transforms moved with the module: `lib/transforms` now that the module lives in `lib/`,
+# The transforms moved with the module: `src/stdlib/transforms/` since the 2026-11-22 move,
 # `modules/transforms` while it lived beside `Camel/CMakeLists.txt`. Either answers, so this check
 # reads whichever tree it is run in.
 TRANSFORMS = next(
     path
-    for path in (ROOT / "lib" / "transforms", ROOT / "modules" / "transforms")
+    for path in (ROOT / "src" / "stdlib" / "transforms", ROOT / "lib" / "transforms", ROOT / "modules" / "transforms")
     if path.is_dir()
 )
 # Where the table is, found by what it says rather than by its name: a header that is renamed is

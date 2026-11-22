@@ -33,17 +33,17 @@
 //
 // Four regions, each with one source:
 //
-//   lexical             parse/include/camel/parse/syntax/token_kinds.def -- the one keyword and
+//   lexical             src/parse/include/camel/parse/syntax/token_kinds.def -- the one keyword and
 //                       punctuation table the lexer, the parser and the page share; it stays beside
 //                       the rule it states, in §4 of the page
-//   precedence          parse/src/syntax/parser_expr.cpp -- the `///  name : production` comments
+//   precedence          src/parse/src/syntax/parser_expr.cpp -- the `///  name : production` comments
 //                       of the expression levels, loosest first, as the parser writes them; in §5
-//   diagnostics         kernel/diagnostics/registry.tsv -- every diagnostic, its name and message
+//   diagnostics         src/kernel/diagnostics/registry.tsv -- every diagnostic, its name and message
 //                       template; the severity is the heading of the block the row is in. Written
 //                       to docs/reference/camel-for-ai-diagnostics.md
 //   stdlib-signatures   docs/stdlib-reference.md -- the signatures of the standard library, which
-//                       scripts/stdlib-reference.mjs generates from lib/*.cml and
-//                       lib/*/signatures/*.cml (so the declarations stay the one source). Written
+//                       scripts/stdlib-reference.mjs generates from src/stdlib/*.cml and
+//                       src/stdlib/*/signatures/*.cml (so the declarations stay the one source). Written
 //                       to docs/reference/camel-for-ai-stdlib-signatures.md
 //
 // The first three spellings are the tree's current layout. The tree was laid out differently before
@@ -83,15 +83,27 @@ const PAGE_REL = 'docs/reference/camel-for-ai.md'
 const DIAGNOSTICS_REL = 'docs/reference/camel-for-ai-diagnostics.md'
 const SIGNATURES_REL = 'docs/reference/camel-for-ai-stdlib-signatures.md'
 
-// The sources the regions are read from, each with the spellings the two layouts of the tree give
-// it, current first. A tree is read as the layout it has: the proofs run against reduced trees in
-// the pre-move spelling, and a run that insisted on the current paths would report those trees as
-// missing every source instead of checking them. A tree that has none of the spellings is told it
+// The sources the regions are read from, each with the spellings the three layouts of the tree give
+// it, current first. A tree is read as the layout it has: the proofs run against reduced trees in the
+// spellings before the moves, and a run that insisted on the current paths would report those trees
+// as missing every source instead of checking them. A tree that has none of the spellings is told it
 // lacks the first one, which is where today's tree keeps it.
 const SOURCES = {
-    tokens: ['parse/include/camel/parse/syntax/token_kinds.def', 'include/camel/parse/syntax/token_kinds.def'],
-    parser: ['parse/src/syntax/parser_expr.cpp', 'src/parse/syntax/parser_expr.cpp'],
-    registry: ['kernel/diagnostics/registry.tsv', 'diagnostics/registry.tsv'],
+    tokens: [
+        'src/parse/include/camel/parse/syntax/token_kinds.def',
+        'parse/include/camel/parse/syntax/token_kinds.def',
+        'include/camel/parse/syntax/token_kinds.def',
+    ],
+    parser: [
+        'src/parse/src/syntax/parser_expr.cpp',
+        'parse/src/syntax/parser_expr.cpp',
+        'src/parse/syntax/parser_expr.cpp',
+    ],
+    registry: [
+        'src/kernel/diagnostics/registry.tsv',
+        'kernel/diagnostics/registry.tsv',
+        'diagnostics/registry.tsv',
+    ],
     stdlibPage: ['docs/stdlib-reference.md'],
     lexicalDoc: ['docs/language/02_lexical.md'],
 }

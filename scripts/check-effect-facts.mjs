@@ -22,11 +22,11 @@
  *
  *   1. the directory tree of the header that declares a named symbol, recursively, the files that
  *      declare or define it, and the implementation files named after that header --
- *      `isPure`/`hasExternalEffect` are declared in `kernel/include/camel/core/operator_table.h` and
- *      defined in `kernel/core/operator_table.cpp`, so `kernel/include/camel/core/` and that `.cpp` are home;
+ *      `isPure`/`hasExternalEffect` are declared in `src/kernel/include/camel/core/operator_table.h` and
+ *      defined in `src/kernel/core/operator_table.cpp`, so `src/kernel/include/camel/core/` and that `.cpp` are home;
  *   2. the same three things for `effectSummaryOf`, the function that hands out the fact layer's
- *      answer: it is declared in `kernel/include/camel/runtime/effects.h` and defined in
- *      `kernel/runtime/effects.cpp`, so `kernel/include/camel/runtime/` and that `.cpp` are home too.
+ *      answer: it is declared in `src/kernel/include/camel/runtime/effects.h` and defined in
+ *      `src/kernel/runtime/effects.cpp`, so `src/kernel/include/camel/runtime/` and that `.cpp` are home too.
  *
  * A named symbol used outside that home is a crossing, reported once per use (`path:line: symbol`).
  * A use whose **statement** also names the other atom is tagged as the combination the invariant
@@ -34,7 +34,7 @@
  * too, because it is the same question asked of the same two declarations in a second place.
  *
  * **This rule is mechanical, and it is the author's to change.** The judgement it encodes is that
- * the answer is one fact (`EffectSummary`, declared in `kernel/include/camel/runtime/effects.h`) and that
+ * the answer is one fact (`EffectSummary`, declared in `src/kernel/include/camel/runtime/effects.h`) and that
  * its two atoms (`OperatorTable::isPure`, `OperatorTable::hasExternalEffect`) are its inputs. If a
  * file outside these trees is where the answer belongs, move the answer there or add the file here,
  * deliberately, with the reason written beside it -- and if the second atom should be removed from
@@ -59,7 +59,10 @@ const NAME = 'check-effect-facts'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default, the same set the other source checks read. */
-const SCANNED = ['include', 'src', 'modules', 'tools']
+// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
+// tree of either layout is scanned instead of crashing on the way in.
+const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
 
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 const HEADER = /(?:\.h|\.hpp|\.hh|\.hxx)$/
@@ -166,7 +169,7 @@ function homeOf(files, symbols) {
     }
     // Only a header contributes its directory tree: the rule is "the tree of the header that
     // declares it", and letting an implementation file pull in its own directory would make all of
-    // `kernel/runtime/` the fact layer.
+    // `src/kernel/runtime/` the fact layer.
     const dirs = [...new Set([...declaring].filter((file) => HEADER.test(file)).map((file) => path.dirname(file)))]
     const stems = new Set([...declaring].map((file) => path.basename(file).replace(SOURCE, '')))
     const impls = new Set(
@@ -198,7 +201,9 @@ for (let index = 0; index < argv.length; index += 1) {
 
 // The home is always derived from the whole tree, never from the sample: a sample is a place to
 // read findings from, and moving the boundary with it would make `--path` measure another rule.
-const TREE = SCANNED.map((name) => path.join(ROOT, name)).flatMap((target) => sourceFilesUnder(target))
+const TREE = SCANNED.map((name) => path.join(ROOT, name))
+    .filter((target) => fs.existsSync(target))
+    .flatMap((target) => sourceFilesUnder(target))
 const atoms = homeOf(TREE, SYMBOLS)
 const fact = homeOf(TREE, [ANSWER])
 const homeFiles = new Set([...atoms.files, ...fact.files])
@@ -210,7 +215,7 @@ const isHome = (file) =>
     homeDirs.some((dir) => file.startsWith(dir + path.sep))
 
 const targets = paths.length > 0 ? paths : SCANNED.map((name) => path.join(ROOT, name))
-const scanned = targets.flatMap((target) => sourceFilesUnder(target))
+const scanned = targets.filter((target) => fs.existsSync(target)).flatMap((target) => sourceFilesUnder(target))
 if (scanned.length === 0) {
     console.error(
         `${NAME}: ${targets.join(', ')} holds no C++ source, so this check matched nothing and ` +
