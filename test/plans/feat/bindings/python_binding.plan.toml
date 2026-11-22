@@ -14,15 +14,20 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
 
-# The timing line inside the Python test (`pass_through[64 MiB] < 2 * copying[1 MiB]`) compares one
-# call's fixed cost with twice a 1 MiB memmove, so it can hold only where a call costs less than that
-# copy: on macOS arm64 the call read 46.0 us against 41.2 us (2 x 20.6) and the line red, although
-# the call still passed the buffer by pointer (the address check before it was green, and 64 MiB was
-# copied in 3109.7 us, 68x the call). That is a fact about the host's call cost and its copy, not
-# about whether the binding moves the bytes, so the entry declares the premise and is skipped where
-# it does not hold. The probe takes the fixed cost at four elements, which a copy at 64 MiB does not
-# move, so the entry's own line stays able to fail a binding that copies. It also asks the extension
-# question this entry already had, because `skip_unless` is one command.
+# The timing line inside the Python test used to compare one call's fixed cost with twice a 1 MiB
+# memmove, so it could hold only where a call cost less than that copy: on macOS arm64 the call read
+# 46.0 us against 41.2 us and the line red, and on the win-x64 runner 70.4 us against 62.6 us, both
+# times although the call still passed the buffer by pointer (the address checks were green, and
+# 64 MiB was copied on those hosts in 3109.7 and 3158.2 us, 68x and 45x the call). That was a fact
+# about the host's call cost and its copy, not about whether the binding moves the bytes, so the line
+# now compares 64 MiB with 64 MiB and carries no host term: it reds a binding that copies, and it
+# stays green wherever the call passes the buffer by pointer.
+#
+# The `skip_unless` probe stays after that change, for the second question it asks: whether the
+# extension module was built for this interpreter (it is one command, and the entry needs both). Its
+# headroom half no longer decides anything now that the line carries no host term, and the docstring
+# of `test/tools/have-binding-headroom.py` still quotes the old formula; dropping that half needs a
+# macOS run to verify, so it is left as it is rather than changed blind here.
 [[tests]]
 name = "python_binding.session"
 desc = "The whole contract in one run of the Python test: the module is found by path, the extension is imported by the package, and the addresses, the timing, the memory, the fault and the diagnostic are asserted inside the script. It skips where the extension module was not built for this interpreter (no Python development files at configure time, or another ABI)."
