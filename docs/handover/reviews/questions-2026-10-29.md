@@ -6856,3 +6856,23 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 - **U19 → `lib/verify/`**（路 A）：入口名就是 `verify::`。
 
 另：0.5 的演练做得扎实（两次生成逐字节相同、整树编译过、违例 157 条各有归属）。过渡包含路径只在演练与搬家后的迁移期存在，随违例清单清空而删除，与总方案第 6 节第 1 条一致。
+
+## 搬家窗口开启（2026-11-22 12:00，develop 头 `c675d22d0`）
+
+合并位。按 docs/handover/plans/2026-11-22-refactor-stage1-move.cn.md 开阶段 1 的搬家窗口。
+
+**开窗条件已核，两条：**
+- develop 头 CI `44980539602`（`a51e98ed7`）五条腿全绿；此后只多一笔报告（`c675d22d0`，只动 `docs/`）。
+- 远端未合分支只剩两条：`ckb-dev`（个人分支，不动）与 `lane/perfopt-design`（作者已核：领先的 129 笔只有文档）。
+
+**窗口内纪律：** 其余车道停止向 `develop` 合入，直到本页写「搬家窗口关闭」。搬家期间的构建、计划、差分都由合并位在搬家前后的两个提交上比对，**读数逐条一致**。
+
+**开窗前按作者的四问处置了五条落后很久的分支**（打 `archive/` 标签后删除，逐条验 `tag..branch=0`）：
+
+| 原分支 | 标签 | 那一笔 |
+|---|---|---|
+| `land/packing-and-rule` | `archive/land-packing-and-rule` | `1cbb4c07b` |
+| `land/packing-rule-nobit` | `archive/land-packing-rule-nobit` | `9deb5e0c9` |
+| `lane-eval` | `archive/lane-eval` | `c9e28898d` |
+| `lane-win-s1-6-diag` | `archive/lane-win-s1-6-diag` | `ea4b422e3` |
+| `handover/h484-flip-audit` | `archive/handover-h484-flip-audit` | `8fea81b14` |
