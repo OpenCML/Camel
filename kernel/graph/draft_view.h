@@ -127,6 +127,10 @@ class DraftGraphAdapter final : public GraphView {
     LoopForm loopFormOf(NodeRef ref) const override;
 
   private:
+    /// True when the draft holds a live node at the view's `ref`, whether or not the view has a
+    /// *node* there: a JOIN is a place of the draft and not a node of the view (`viewKind`), and
+    /// `regionOf` / `exit` answer for places rather than for nodes. `contains` is this and the kind.
+    bool holdsPlace(NodeRef ref) const;
     /// The draft's node the view's node `ref` is: `ref` itself when no table was given, else
     /// `kept_[ref]`, and `kNoNode` when the table says the runtime graph has no such node (a
     /// placeholder, or one outside the reachable set).

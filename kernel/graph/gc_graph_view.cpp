@@ -135,10 +135,14 @@ std::vector<NodeRef> FrozenGraphAdapter::ports(PortGroup group) const {
 }
 
 NodeRef FrozenGraphAdapter::exit() const {
+    // The place the graph names, if it holds a node there -- the same rule as `regionOf`: the
+    // answer is the graph's, and the graph may name a place the view has no node at.
     const camel::runtime::gc_node_ref_t ref = graph_.exitNodeRef();
-    return ref == camel::runtime::kInvalidNodeRef || !contains(static_cast<NodeRef>(ref))
-               ? kNoNode
-               : static_cast<NodeRef>(ref);
+    if (ref == camel::runtime::kInvalidNodeRef || ref >= nodeSlotCount() ||
+        graph_.node(ref) == nullptr) {
+        return kNoNode;
+    }
+    return static_cast<NodeRef>(ref);
 }
 
 std::uint32_t FrozenGraphAdapter::nodeSlotCount() const {
@@ -307,10 +311,16 @@ std::vector<NodeRef> FrozenGraphAdapter::regionNodes(RegionId id) const {
 }
 
 RegionId FrozenGraphAdapter::regionOf(NodeRef ref) const {
-    if (!contains(ref)) {
+    // Any place the graph holds a node at, not only a node of the view: a JOIN and a DEREF are
+    // folded into the node they serve (`viewKind`) and are not nodes here, but the graph's own
+    // region table still says where they run, and `decidingRegionOf` is asked about a JOIN by the
+    // branch-arm invariant (kernel/runtime/branch_arms.cpp). Answering "no region" there would put
+    // every JOIN in the body and redden that invariant for every branch inside an arm.
+    const auto stored = static_cast<camel::runtime::gc_node_ref_t>(ref);
+    if (ref >= nodeSlotCount() || graph_.node(stored) == nullptr) {
         return kNoRegion;
     }
-    return static_cast<RegionId>(graph_.nodeRegion(static_cast<camel::runtime::gc_node_ref_t>(ref)));
+    return static_cast<RegionId>(graph_.nodeRegion(stored));
 }
 
 bool FrozenGraphAdapter::isAncestorOf(RegionId ancestor, RegionId region) const {

@@ -184,16 +184,15 @@ std::vector<NodeRef> DraftGraphAdapter::ports(PortGroup group) const {
 }
 
 NodeRef DraftGraphAdapter::exit() const {
+    // The place the draft names, if it holds a live node there -- the same rule as the frozen
+    // adapter's, and not "a node of the view": the draft's own answer is the answer, and the place
+    // it names may be one the view folds into another node.
     const NodeRef exit = graph_->exitNode();
     if (exit == camel::runtime::kInvalidNodeRef) {
         return kNoNode;
     }
-    // The live table's answer, and then the view's: a draft keeps a place for a node the encoding
-    // dropped, so an id the table names can still be a place this view has no node at. `exit`
-    // answers a *node* of the view, and the frozen adapter asks the same question of its own ids --
-    // which is what makes the two readings comparable on a graph whose exit the encoder wrote dead.
     const NodeRef mapped = viewIdOf(exit);
-    return mapped != kNoNode && contains(mapped) ? mapped : kNoNode;
+    return mapped != kNoNode && holdsPlace(mapped) ? mapped : kNoNode;
 }
 
 std::uint32_t DraftGraphAdapter::nodeSlotCount() const {
@@ -202,18 +201,11 @@ std::uint32_t DraftGraphAdapter::nodeSlotCount() const {
 }
 
 bool DraftGraphAdapter::contains(NodeRef ref) const {
-    if (ref >= nodeSlotCount()) {
-        return false;
-    }
-    const NodeRef source = sourceOf(ref);
-    if (source == kNoNode) {
+    if (!holdsPlace(ref)) {
         return false;
     }
     const GraphDraft &draft = *graph_;
-    if (!draft.alive(source)) {
-        return false;
-    }
-    return viewHasNode(draft.header(source));
+    return viewHasNode(draft.header(sourceOf(ref)));
 }
 
 NodeKind DraftGraphAdapter::kindOf(NodeRef ref) const {
@@ -388,11 +380,20 @@ std::vector<NodeRef> DraftGraphAdapter::regionNodes(RegionId id) const {
 }
 
 RegionId DraftGraphAdapter::regionOf(NodeRef ref) const {
-    if (!contains(ref)) {
+    // A place the draft holds, not only a node of the view: see the frozen adapter's `regionOf`.
+    if (!holdsPlace(ref)) {
         return kNoRegion;
     }
     const DraftNodeHeader *head = graph_->header(sourceOf(ref));
     return head == nullptr ? kNoRegion : static_cast<RegionId>(head->region);
+}
+
+bool DraftGraphAdapter::holdsPlace(NodeRef ref) const {
+    if (ref >= nodeSlotCount()) {
+        return false;
+    }
+    const NodeRef source = sourceOf(ref);
+    return source != kNoNode && graph_->alive(source);
 }
 
 bool DraftGraphAdapter::isAncestorOf(RegionId ancestor, RegionId region) const {
