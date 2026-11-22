@@ -43,6 +43,7 @@
 
 #pragma once
 
+#include "camel/core/index_semantics.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
@@ -240,10 +241,14 @@ class DerivativeRegistry {
   public:
     static DerivativeRegistry &instance();
 
-    /// Registers (or replaces) the reverse-mode rule of `uri`.
+    /// Registers (or replaces) the reverse-mode rule of the operator `uri` names. The URI is the
+    /// name a module writes at load time; the rule is filed under the operator's `OperId`, which
+    /// is how it is read back -- the same key every other operator fact has
+    /// (camel/ops/operator_record.h: "never the URI text a rule happens to be named after").
     void setRule(std::string_view uri, VjpRule rule);
-    /// The rule of `uri`, or nullptr.
-    VjpRule findRule(std::string_view uri) const;
+    /// The rule of the operator `id`, or nullptr. A rule filed before the operator was first
+    /// mentioned is filed under the id that mention gave it, so the two always meet.
+    VjpRule findRule(OperId id) const;
 
     /// Registers a tangent space for the values of type code `code`. A space that owns all of
     /// them (no `owns` predicate) is the code's own entry; a space that owns some of them is
@@ -280,7 +285,9 @@ class DerivativeRegistry {
     };
 
     mutable std::shared_mutex mutex_;
-    std::unordered_map<std::string, VjpRule, StringHash, std::equal_to<>> rules_;
+    /// One rule per operator, by the operator's id: the same key every other operator fact has
+    /// (setRule files a module's URI under the id interning it gives the operator).
+    std::unordered_map<OperId, VjpRule> rules_;
     std::unordered_map<type::TypeCode, std::deque<TangentSpace>> tangents_;
     std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
