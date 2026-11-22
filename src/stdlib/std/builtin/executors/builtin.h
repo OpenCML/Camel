@@ -24,6 +24,13 @@ void registerBuiltinOperatorTraits();
 /// keys, numeric semantics and faults. Called after the traits, which it is checked against.
 void declareBuiltinOperatorSemantics();
 
+/// States `panic = false` for `uri` in the operator record (builtin_semantics.cpp): no call of the
+/// operator can fail. The record's `panic` and a stated-empty fault table are the same item in two
+/// places (design principles 3.9: one record, two entrances), so every place that states the one
+/// states the other, and an operator declared to raise nothing is never left reading "nobody said,
+/// so a call may fail".
+void stateNoFaultOperator(std::string_view uri);
+
 /// Declares the resources of the built-in operators that touch any (builtin_semantics.cpp;
 /// docs/design/op-semantics section 8): `:var/*` and the assignments (`names`: the built-in
 /// operator names, `op/assn...` among them) their variable cell, the console and the profiler
