@@ -46,21 +46,36 @@
  *    either adapter's answer would show up.
  *  - a node's source origin: it was not compared before this stage either, and a difference there
  *    is a fact about the front end's bookkeeping, not about the two readings of one graph.
+ *  - the order preds of a node the encoding gives no order edge: an order edge says "run before me
+ *    when both run", and a node that arranges itself freely says nothing with one, so the encoder
+ *    drops every order edge into it (`nodeTakesNoOrder`, camel/runtime/graph.h) while the draft
+ *    keeps the edge it was built with. The two readings are both right about what they hold, and
+ *    the rule that made them differ is the encoder's, so the caller says which nodes those are
+ *    (`orderDropped`) and the check compares the other nodes' order preds.
  */
 
 #pragma once
 
 #include "graph/graph_view.h"
 
+#include <functional>
 #include <string>
 
 namespace camel::graph {
 
+/// Whether the encoding gives `ref` (a node of the frozen reading) no order edge at all: the
+/// encoder's own rule (`nodeTakesNoOrder`, camel/runtime/graph.h), asked by whoever holds the frozen
+/// graph. A node this answers true for is not compared on its order preds -- see the file comment.
+using OrderDropped = std::function<bool(NodeRef)>;
+
 /// The first difference between two readings of one graph, in the order the checks run, or an empty
 /// string when they agree. `draft` is the graph the session built and `frozen` the graph it was
 /// encoded to; every line names which side said what, so a difference is a reading and not a
-/// verdict.
-std::string firstDifference(const GraphView &draft, const GraphView &frozen);
+/// verdict. `orderDropped` names the nodes whose order preds the encoding drops by rule; without it,
+/// every node is compared, which is what a reading of two graphs one of which was not encoded to the
+/// other wants.
+std::string firstDifference(
+    const GraphView &draft, const GraphView &frozen, const OrderDropped &orderDropped = {});
 
 /// One graph read through the view, for a diagnostic: the node slots, the kinds in node order and
 /// the number of regions. What a `GUARD` prints beside a difference so that the report names the

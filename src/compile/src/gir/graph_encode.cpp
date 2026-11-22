@@ -29,6 +29,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -311,8 +312,19 @@ class EncodeSession {
                     prepared.liveNodes,
                     calleeGraphOf);
                 const camel::graph::FrozenGraphAdapter frozenView(*prepared.runtime, calleeGraphOf);
+                // The one rule that makes the two readings differ on purpose, named to the check
+                // rather than read out of it: the encoder writes no order edge into a node that
+                // arranges itself freely (`nodeTakesNoOrder`, camel/runtime/graph.h), while the
+                // draft keeps the edge it was built with (consistency.h says the same).
+                const camel::runtime::GCGraph &frozenGraph = *prepared.runtime;
+                const camel::graph::OrderDropped orderDropped =
+                    [&frozenGraph](camel::graph::NodeRef ref) {
+                        return camel::runtime::nodeTakesNoOrder(
+                            frozenGraph,
+                            static_cast<camel::runtime::gc_node_ref_t>(ref));
+                    };
                 const std::string difference =
-                    camel::graph::firstDifference(draftView, frozenView);
+                    camel::graph::firstDifference(draftView, frozenView, orderDropped);
                 GUARD(
                     difference.empty(),
                     std::format(

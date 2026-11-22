@@ -126,7 +126,8 @@ std::string regionDifference(const GraphView &draft, const GraphView &frozen, Re
 
 } // namespace
 
-std::string firstDifference(const GraphView &draft, const GraphView &frozen) {
+std::string firstDifference(
+    const GraphView &draft, const GraphView &frozen, const OrderDropped &orderDropped) {
     // The graph's own facts, before its nodes: the regions it has.
     if (draft.regionCount() != frozen.regionCount()) {
         return std::format(
@@ -241,6 +242,12 @@ std::string firstDifference(const GraphView &draft, const GraphView &frozen) {
         // edges are compared as lists, because a port's position is part of the answer there.
         for (const EdgeKind kind : {EdgeKind::Sync, EdgeKind::Order}) {
             const char *what = kind == EdgeKind::Sync ? "sync predecessors" : "order predecessors";
+            // A node the encoding gives no order edge is not compared on them: the encoder drops
+            // the order inputs of a node that arranges itself freely (`nodeTakesNoOrder`), so the
+            // draft holds edges the frozen graph has none of, by rule and not by mistake.
+            if (kind == EdgeKind::Order && orderDropped && orderDropped(ref)) {
+                continue;
+            }
             std::vector<NodeRef> left  = draft.predecessors(ref, kind);
             std::vector<NodeRef> right = frozen.predecessors(ref, kind);
             std::sort(left.begin(), left.end());
