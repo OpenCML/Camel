@@ -19,7 +19,7 @@
 #include "ast_dump.h"
 #include "modes.h"
 
-#include "../format/fmt.h"
+#include "format/fmt.h"
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/path.h"
