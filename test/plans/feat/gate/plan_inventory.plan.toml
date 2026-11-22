@@ -26,6 +26,14 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["plan files, every one of them has a destination"]
 normalizers = ["normalize_newlines"]
-# 45 s, not 30: the walk reads 331 plan files and 3488 case files, and the CI runner measured 9410 ms
-# of CPU for it -- 3.2x the bound, under the 4x the margin rule asks for. 45 s is 4.8x that figure.
-timeout_ms = 45000
+# 48 s, read from the CPU time and never from the wall clock. Two CI legs have red on this walk, and
+# both printed the pair: `linux-x64-nojit` in 45003684718 said `used 11750 ms of CPU against a 45000
+# ms timeout, below the 4x margin` beside `The wall clock read 25144 ms, which on a shared host is
+# the neighbours'`, and `linux-x64` in 45013227906 said `used 11290 ms of CPU` beside a wall of
+# 25625 ms. So `[FAIL] gate.plan_inventory 25.63 s` is not the duration a bound is set from: that
+# wall runs 13.5-25.6 s for the same 11.3-11.8 s of CPU, and it follows whoever else is on the
+# runner. The bound is four times the slowest CPU reading -- 4 x 11750 = 47000, rounded up to 48 s,
+# 4.09x (4.25x of 11290) -- and the line the margin rule compares against is 12 s, so this plan reds
+# only when the walk's own CPU passes 12 s. The host reads about half of the leg's CPU, and a host
+# reading is never the figure a bound is set from.
+timeout_ms = 48000

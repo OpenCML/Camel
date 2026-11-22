@@ -108,7 +108,13 @@
  * and the run says so in that sentence rather than printing a `0 stale` that would read as a
  * reading of the tree. `--base` with an unreadable REF is a refusal (exit 2), never a silent fall
  * back to the whole tree: a narrowed gate that widens itself on a typo is the one failure a reader
- * cannot see in the output.
+ * cannot see in the output. A remote-tracking name this checkout does not have -- `origin/develop`
+ * on a machine whose only remote is a staging repository -- is the one case that is not a typo: the
+ * branch part is tried, then `HEAD~1`, and the ref it settled on is printed with its sha before
+ * anything is compared, so a fallback is read in the output rather than inferred from a diff that
+ * looks short. When nothing resolves, the refusal names what this checkout can resolve and the next
+ * step (`--base <the fork point's sha>`, or `git fetch <remote>`) instead of relaying git's
+ * `bad revision`.
  *
  * --- --update: the re-record, through `check.py snapshot` -------------------
  * The hash is not computed here and a second implementation of it never will be: `--update` hands
@@ -276,11 +282,94 @@ const listed = new Set([
 ])
 
 /**
+ * The refs a `--base` that does not resolve here is answered with, in the order they are read:
+ * first what this checkout calls the same history (`origin/develop` is `develop` on a machine that
+ * has no such remote-tracking ref), then the commit before HEAD, which is where a one-commit lane
+ * was cut. The refusal below lists whichever of them resolve, because a reader who cannot resolve
+ * one name needs to see the names that work.
+ */
+const BASE_CANDIDATES = ['origin/develop', 'develop', 'FETCH_HEAD', 'HEAD~1']
+
+/** What `ref` resolves to as a commit in this checkout, or `null` when it does not. */
+function refCommit(ref) {
+    const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], {
+        cwd: ROOT,
+        encoding: 'utf8'
+    })
+    if (result.error || result.status !== 0) return null
+    const sha = `${result.stdout || ''}`.trim()
+    return sha === '' ? null : sha
+}
+
+/**
+ * Answers what `--base` names, before any diff is taken, and says which ref it decided on.
+ *
+ * A checkout that fetches one lane from a staging repository holds that lane's commits and no
+ * `origin/develop`, so `git diff origin/develop...HEAD` died inside git as
+ * `fatal: bad revision 'origin/develop...HEAD'` -- a sentence about git rather than about the next
+ * step. On such a machine the same history is called `develop`, and `HEAD~1` is where a one-commit
+ * lane was cut, so a remote-tracking name that does not resolve is tried that way; every fallback
+ * is printed with the ref that was asked for, the ref that is used and that ref's sha, so the scope
+ * measured below is never a different diff than the run says it read. A name nothing resolves
+ * (`--base nosuchref`) is still a refusal -- never a silent widening to the whole corpus -- and it
+ * lists what this checkout can resolve plus the two ways on: the fork point's sha, or the fetch
+ * that makes the name exist here.
+ */
+function resolveBase(requested) {
+    const asked = refCommit(requested)
+    if (asked !== null) return { ref: requested, sha: asked }
+    const slash = requested.indexOf('/')
+    if (slash > 0 && slash < requested.length - 1) {
+        const remote = requested.slice(0, slash)
+        const branch = requested.slice(slash + 1)
+        for (const fallback of [branch, 'HEAD~1']) {
+            const sha = refCommit(fallback)
+            if (sha === null) continue
+            console.log(
+                `[${NAME}] --base ${requested}: this checkout has no ${requested} ` +
+                    `(\`git rev-parse --verify --quiet ${requested}^{commit}\` answered nothing)`
+            )
+            console.log(
+                `[${NAME}]   using ${fallback} (${sha.slice(0, 9)}) as the diff base -- ` +
+                    `the scope below is against ${fallback}, ` +
+                    (fallback === 'HEAD~1'
+                        ? 'which holds the last commit only, not the branch this one was cut from'
+                        : `not against ${requested}; this fallback is printed, never silent`)
+            )
+            console.log(
+                `[${NAME}]   to narrow against ${requested} itself: \`git fetch ${remote}\` so the ` +
+                    'name exists here, or name the fork point by sha: `--base <sha>`'
+            )
+            return { ref: fallback, sha }
+        }
+    }
+    const here = BASE_CANDIDATES.map((name) => ({ name, sha: refCommit(name) })).filter(
+        (each) => each.sha !== null
+    )
+    refuse([
+        `--base ${requested}: this checkout has no ref ${requested} ` +
+            `(\`git rev-parse --verify --quiet ${requested}^{commit}\` answered nothing), so there ` +
+            'is no diff to narrow to',
+        here.length === 0
+            ? `nothing here resolves either: ${BASE_CANDIDATES.join(', ')} all answered nothing`
+            : 'what this checkout can resolve: ' +
+              here.map((each) => `${each.name} ${each.sha.slice(0, 9)}`).join(', '),
+        'next: name the commit your branch was cut from (`--base <that sha>`); if ' +
+            `${requested} is a remote branch, run \`git fetch <remote>\` first so the name exists ` +
+            'here' +
+            (here.some((each) => each.name === 'HEAD~1')
+                ? '; `--base HEAD~1` reads the last commit only'
+                : '')
+    ])
+}
+
+/**
  * The `.cml` files this tree changed against `ref`: the committed ones (`ref...HEAD`), the working
  * tree's (`HEAD`, which is staged plus unstaged) and the untracked ones -- a lane runs this before
  * it commits, so a case it has just written is exactly the one that is unrecorded, and a diff of
  * committed work alone would miss it. `gitList` refuses on a failed command, so a `--base` naming an
- * unreadable ref stops the run (exit 2) instead of falling back to the whole corpus.
+ * unreadable ref stops the run (exit 2) instead of falling back to the whole corpus; `resolveBase`
+ * above is what turns that refusal into the ref this machine actually has.
  */
 function changedAgainst(ref) {
     const names = new Set()
@@ -293,6 +382,7 @@ function changedAgainst(ref) {
 }
 
 /** The diff this run narrows to, or `null` for the whole corpus. */
+if (base !== null) base = resolveBase(base).ref
 const changed = base === null ? null : changedAgainst(base)
 
 /** Is this path part of the corpus the snapshot records (`corpus.py`'s walk)? */
