@@ -178,7 +178,7 @@ OpenCML-Ext 通过原生适配器提供 GIR 和内存界面。配合 pass 序列
 GIR 调试栏区分真实执行位置与历史快照，选择历史不会继续执行。“查看调试内存”命令
 提供暂停区域用量、字节/对象分页与显式刷新；分配断点需 Debug 构建，在 allocator
 释放锁后暂停。详见
-[`tools/debugger/README.md`](../tools/debugger/README.md)。
+[`src/tools/debugger/README.md`](../src/tools/debugger/README.md)。
 
 ## 3. 你看到的是什么，为什么
 

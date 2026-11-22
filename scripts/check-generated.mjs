@@ -52,16 +52,29 @@ import { fileURLToPath } from 'node:url'
 const NAME = 'check-generated'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+// A source root in either layout: `src/` after the move, the tree's own top level before it. The
+// generators read wherever the tree kept the thing, so the copy carries whichever exists. Naming
+// both and filtering is what keeps this file honest through a move: a list that named only one
+// layout would find nothing, and a copy of nothing compares equal to nothing.
+const SOURCE_ROOTS = ['src', '.'].filter((dir) => fs.existsSync(path.join(ROOT, dir, 'stdlib')))
+const SOURCE_ROOT = SOURCE_ROOTS[0]
+
 // The library in either layout: `lib/` after the move, `stdlib/` before it. The generator reads
 // whichever the tree has, so the copy carries whichever exists.
-const LIBRARY_DIRS = ['lib', 'stdlib'].filter((dir) => fs.existsSync(path.join(ROOT, dir)))
+const LIBRARY_DIRS = ['lib', 'stdlib']
+    .map((dir) => path.join(SOURCE_ROOT, dir))
+    .filter((dir) => fs.existsSync(path.join(ROOT, dir)))
 
 // What the two node generators read. A directory is copied whole, so a module or a source file added
 // to it is read by the next run without this list naming it; a file is named where copying the
 // directory around it would carry the rest of the tree for nothing. A generator that grows an input
 // outside these entries fails loudly (`no such file under <copy>`) instead of comparing against a
 // copy it could not read.
-const SHADOW_DIRS = [...LIBRARY_DIRS, 'parse', 'kernel/diagnostics']
+const SHADOW_DIRS = [
+    ...LIBRARY_DIRS,
+    path.join(SOURCE_ROOT, 'parse'),
+    path.join(SOURCE_ROOT, 'kernel/diagnostics'),
+]
 const SHADOW_FILES = [
     'docs/stdlib-reference.md',
     'docs/reference/camel-for-ai.md',

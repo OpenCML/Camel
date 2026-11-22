@@ -2,7 +2,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// Generates lib/str/case_tables.cpp: the Unicode case mappings `str::to_upper` and
+// Generates src/stdlib/str/case_tables.cpp: the Unicode case mappings `str::to_upper` and
 // `str::to_lower` use. The tables are data of the Unicode Character Database, so they are
 // generated, not written.
 //
@@ -24,7 +24,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const out = join(root, 'lib/str/case_tables.cpp')
+const out = join(root, 'src/stdlib/str/case_tables.cpp')
 
 const args = process.argv.slice(2)
 const option = (name, fallback) => {

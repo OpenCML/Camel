@@ -80,8 +80,8 @@
 // Two shapes that the tensor module writes are resolved rather than reported:
 //
 //   - A module that exports the groups of its operator registry
-//     (`for (g: OpRegistry::instance().operatorGroups("<module>"))`, `lib/tensor` and
-//     `lib/nn`, where the registry is reached through `camel::tensor::ops::`). The names are
+//     (`for (g: OpRegistry::instance().operatorGroups("<module>"))`, `src/stdlib` and
+//     `src/stdlib`, where the registry is reached through `camel::tensor::ops::`). The names are
 //     the OpDef table, so the check reads the C++ skip list (`kDeclaredOperators`) and requires
 //     it to be exactly the declaration names, both ways; the loop then exports exactly the
 //     computed signatures, which `--verify-ops` proves is the rest of the registered operators.
@@ -121,17 +121,17 @@ import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // The library's declarations were one flat `stdlib/` before the layout move and are one file per
-// module after it: `lib/<name>/<name>.cml` beside the module's own sources, its computed
-// signatures in `lib/<name>/signatures/<name>.cml`, and the two declarations that belong to no
-// module in `lib/std/std.cml` and `lib/rulesets/`. There is no single directory to name either
+// module after it: `src/stdlib/<name>/<name>.cml` beside the module's own sources, its computed
+// signatures in `src/stdlib/<name>/signatures/<name>.cml`, and the two declarations that belong to no
+// module in `src/stdlib/std.cml` and `src/stdlib/rulesets/`. There is no single directory to name either
 // way, so the three spellings are resolved here and nowhere else, and this file measures whichever
 // tree it is run in.
 const MOVED_LIBRARY = path.join(REPO_ROOT, 'lib')
 const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
 const FLAT = fs.existsSync(path.join(FLAT_LIBRARY, 'std.cml'))
 const firstOf = (files) => files.find((file) => fs.existsSync(file)) ?? files[0]
-/// A module's declaration file: `<name>.cml` in the flat library, `lib/<name>/<name>.cml` in the
-/// moved one (`lib/std/<name>.cml` for the core's own).
+/// A module's declaration file: `<name>.cml` in the flat library, `src/stdlib/<name>/<name>.cml` in the
+/// moved one (`src/stdlib/<name>.cml` for the core's own).
 const declarationFile = (name) =>
     FLAT
         ? path.join(FLAT_LIBRARY, `${name}.cml`)
@@ -185,7 +185,7 @@ const UNDERIVABLE_OPERATORS = new Set([
 // checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
 //
 // Empty since `onnx` was declared (both of its names, `supported_operators` and `export_model`,
-// in lib/onnx/onnx.cml): every module that registers operators is now in the probe and in
+// in src/stdlib/onnx.cml): every module that registers operators is now in the probe and in
 // MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
 const UNCHECKED_MODULES = []
 
@@ -467,7 +467,7 @@ function coverageProblems(reference) {
     const operatorNames = new Set(operators.map((module) => module.name))
     const excluded = new Map(UNCHECKED_MODULES.map((entry) => [entry.name, entry]))
     const inReference = (name) => reference.find((module) => module.name === name && module.kind === 'cpp')
-    const where = (module) => `lib/${path.basename(module.dir)}`
+    const where = (module) => `src/stdlib/${path.basename(module.dir)}`
 
     for (const module of operators) {
         const entry = inReference(module.name)
@@ -512,7 +512,7 @@ function coverageProblems(reference) {
             if (!fs.existsSync(dir)) {
                 problems.push(
                     `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
-                        `lib/${module.name} does not exist`,
+                        `src/stdlib/${module.name} does not exist`,
                 )
             } else {
                 const registers = fs
@@ -524,7 +524,7 @@ function coverageProblems(reference) {
                 if (!registers) {
                     problems.push(
                         `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
-                            `no source of lib/${module.name} registers a pass (registerModulePass)`,
+                            `no source of src/stdlib/${module.name} registers a pass (registerModulePass)`,
                     )
                 }
             }
@@ -611,9 +611,9 @@ function coverageProblems(reference) {
 
 function declarationModules() {
     const modules = []
-    // The declaration files, by module name: the flat library's `*.cml`, or every `lib/<name>/`
-    // that holds `<name>.cml`. A directory without one is not a module (`lib/rulesets/`, whose
-    // files are the dotted prefix of `rulesets.jvp`, and `lib/std/`, whose declaration is
+    // The declaration files, by module name: the flat library's `*.cml`, or every `src/stdlib/<name>/`
+    // that holds `<name>.cml`. A directory without one is not a module (`src/stdlib/rulesets/`, whose
+    // files are the dotted prefix of `rulesets.jvp`, and `src/stdlib/`, whose declaration is
     // `std.cml` and belongs to the module whose C++ side is named `std`).
     const files = FLAT
         ? fs
@@ -730,7 +730,7 @@ function computedPlaces(module, entry) {
 // a `for (... get*Groups()) exportEntity(group->name(), group)` loop iterates. Comments are
 // stripped first, so a name in a comment is not a resolver or an export.
 //
-// Two more shapes are read, both written by `lib/tensor`:
+// Two more shapes are read, both written by `src/stdlib`:
 // - a loop over the module's operator registry
 //   (`for (g: OpRegistry::instance().operatorGroups("<module>"))`), whose groups are the OpDef
 //   table rather than `OperatorGroup::create` calls; the names it exports are the module's

@@ -7,8 +7,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { explicitFilesArg, splitLineList, uniqueFiles } from './file-list.js'
 
-// The layout moved once: `src/`, `include/` and `modules/` became `kernel/`, `parse/`, `compile/`
-// and `lib/`. The roots are probed rather than assumed, so a tree of either layout is covered: a
+// The layout moved once: `src/`, `include/` and `modules/` became `src/kernel/`, `src/parse/`, `src/compile/`
+// and `src/stdlib/`. The roots are probed rather than assumed, so a tree of either layout is covered: a
 // root is formatted when this tree has it. When none of them exists the run fails instead of
 // reporting that there was nothing to do, because a directory that was never reached is not the
 // same as a directory with nothing in it.

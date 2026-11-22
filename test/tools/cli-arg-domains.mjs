@@ -17,18 +17,18 @@
  *   * the runner (`test/tools/run-tests.mjs`), at load, through `argProblems(args)`: a plan that
  *     names a value the CLI does not take is a *plan* error, reported with `plan:line` and the
  *     legal values, and the run refuses instead of turning it into a red test;
- *   * this file, run as a script: it reads `tools/camel-cli/config.cpp` and checks that the two
+ *   * this file, run as a script: it reads `src/tools/camel-cli/config.cpp` and checks that the two
  *     sides say the same thing in both directions -- a value kept here that the CLI dropped, and a
  *     value the CLI gained that is not here yet (which would refuse a legal plan). A table that
  *     mirrors a parser has to be pinned to the parser, or it becomes a second truth.
  *
- * The words below were read out of `tools/camel-cli/config.cpp`: the `--gc-stress` and
+ * The words below were read out of `src/tools/camel-cli/config.cpp`: the `--gc-stress` and
  * `--gc-check` blocks of the run options, and `parseCollectorMode` for `--gc`. Written as the
  * parser reads them: `splitSpec` splits on commas into `key=value` words, and a key with no `=`
  * is a bare word whose value is "". `moves`, `poison` and `config` are matched by key alone, so
  * `moves=1` is accepted by the CLI and must not be refused here.
  *
- *   node test/tools/cli-arg-domains.mjs      check this table against tools/camel-cli/config.cpp
+ *   node test/tools/cli-arg-domains.mjs      check this table against src/tools/camel-cli/config.cpp
  */
 
 import fs from 'node:fs'
@@ -37,15 +37,21 @@ import url from 'node:url'
 
 const CWD = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(CWD, '..', '..')
-const CLI_SOURCE = path.join(REPO_ROOT, 'tools', 'camel-cli', 'config.cpp')
+// The option parser's source: `src/tools/camel-cli/config.cpp` since the 2026-11-22 move, the same
+// spelling after the layout move and `tools/camel-cli/config.cpp` before it.
+const CLI_SOURCE = [
+    path.join(REPO_ROOT, 'src', 'tools', 'camel-cli', 'config.cpp'),
+    path.join(REPO_ROOT, 'tools', 'camel-cli', 'config.cpp'),
+].find((candidate) => fs.existsSync(candidate)) ?? path.join(REPO_ROOT, 'src', 'tools', 'camel-cli', 'config.cpp')
 // `--gc` is read by the allocator rather than by the option parser: the CLI hands the word to this
 // function, which decides which collector modes exist. Where the allocator lives is a layout (the
-// layout map, table B: `src/core/` is `kernel/core/` after the move), so both spellings are asked
-// and the one the tree has decides.
+// layout map, table B: `src/core/` is `src/kernel/core/` after the move, and `kernel/core/` before
+// the 2026-11-22 one), so every spelling is asked and the one the tree has decides.
 const MM_SOURCE = [
+    path.join(REPO_ROOT, 'src', 'kernel', 'core', 'mm', 'mm.cpp'),
     path.join(REPO_ROOT, 'kernel', 'core', 'mm', 'mm.cpp'),
     path.join(REPO_ROOT, 'src', 'core', 'mm', 'mm.cpp'),
-].find((candidate) => fs.existsSync(candidate)) ?? path.join(REPO_ROOT, 'kernel', 'core', 'mm', 'mm.cpp')
+].find((candidate) => fs.existsSync(candidate)) ?? path.join(REPO_ROOT, 'src', 'kernel', 'core', 'mm', 'mm.cpp')
 
 // What the CLI takes, per option.
 //

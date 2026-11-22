@@ -33,7 +33,7 @@
 //   tool-state      `.camel-opts.json`, `internal/tools/camel-gate.local.json`, `.pypirc`, ...
 //   editor-residue  `.idea/`, `.vs/`, `.cursor/`, `.claude/`, and the local goal/report notes
 //   package-staging `pypi/camel-lang/{bin,stdlib,dist,build,src/camel/.cmlenv}`, `*.egg-info/`,
-//                   `lib/python/{sdks,dlls}` -- the wheel's ingredients and its vendored runtimes
+//                   `src/stdlib/{sdks,dlls}` -- the wheel's ingredients and its vendored runtimes
 //
 // Files that carry identity rather than process (`pyproject.toml`'s authors, the copyright line,
 // the repository URL in a document) are *tracked source* and therefore outside this table: deleting
@@ -121,8 +121,8 @@ const CLASSES = [
             'pypi/camel-lang/src/camel/.cmlenv',
             'pypi/camel-lang/python.stash',
             'pypi/camel-lang/src/camel_lang.egg-info',
-            'lib/python/sdks',
-            'lib/python/dlls'
+            'src/stdlib/sdks',
+            'src/stdlib/dlls'
         ],
         globs: ['*.egg-info']
     }

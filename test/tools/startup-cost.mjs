@@ -229,11 +229,14 @@ function measureCpu(argv, warmups, samples, runsPerSample) {
 
 // The declarations the standard library writes: one body-less `export func` per operator of a
 // declared module. Counting them keeps the unit of `declaration.cost` in the sources. A
-// declaration is `lib/<module>/<module>.cml` after the layout move (`lib/std/<module>.cml` for the
-// core's own files, `stdlib/<module>.cml` in the flat library before the move), so the file the
+// declaration is `src/stdlib/<module>.cml` since the 2026-11-22 move, the same spelling the core's
+// own files keep and the flat library used before the layout move; the layout move put it inside the
+// module's directory (`src/stdlib/<module>/<module>.cml`). Every spelling is asked, so the file the
 // tree has is read and no layout is spelled twice.
 function declarationFile(module) {
     const candidates = [
+        path.join(REPO_ROOT, 'src', 'stdlib', `${module}.cml`),
+        path.join(REPO_ROOT, 'src', 'stdlib', module, `${module}.cml`),
         path.join(REPO_ROOT, 'lib', module, `${module}.cml`),
         path.join(REPO_ROOT, 'lib', 'std', `${module}.cml`),
         path.join(REPO_ROOT, 'stdlib', `${module}.cml`),

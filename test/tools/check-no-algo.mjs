@@ -28,8 +28,10 @@
  *
  *   * REQUIRED_ROOTS should be there. They are walked, and a missing one is exit 2 with its path: a
  *     scope that quietly lost a root is the failure this guard was fixed for.
- *   * LEGACY_ROOTS are the names the layout had before the move to `kernel/parse/compile/lib`.
- *     They are walked when present, so a checkout of either layout is scanned, but their absence is
+ *   * LEGACY_ROOTS are the names the layout had before the move to `src/`: the five block directories
+ *     and the library sat at the top of the tree (`kernel/`, `parse/`, `compile/`, `lib/`,
+ *     `tools/`) until 2026-11-22, and `include/`, `modules/`, `stdlib/` before the layout move.
+ *     They are walked when present, so a checkout of any layout is scanned, but their absence is
  *     today's layout and is reported, not failed.
  *   * GONE_PATHS must NOT be there, and their absence is *half of this guard's PASS*: the deleted
  *     module's directory and its file. "Not found" is the expected answer for these, not a skipped
@@ -53,27 +55,30 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const SELF = url.fileURLToPath(import.meta.url)
 const REPO_ROOT = path.resolve(HERE, '..', '..')
 
-// The roots that carry code in this layout, and the names the old one gave them. `docs/` and
+// The roots that carry code in this layout, and the names the older ones gave them. `docs/` and
 // `out/` are deliberately absent from both: `docs/` is a record and `out/` is what a build wrote.
-// The layout move put the compiler in `kernel/`, `parse/`, `compile/` and the library in `lib/`
-// (which took `stdlib/` and `modules/`); the old names stay listed so a checkout of either layout
-// is walked.
+// The 2026-11-22 move put every block under `src/`: the compiler is `src/kernel/`, `src/parse/` and
+// `src/compile/`, the library `src/stdlib/` (which took `stdlib/` and `modules/`), the tools
+// `src/tools/` and the host binding `src/bindings/` -- that last one was named by no root before, so
+// the scan covered every C++ directory of the tree but one. The old names stay listed so a checkout of
+// either layout is walked.
 const REQUIRED_ROOTS = [
-    'kernel',
-    'parse',
-    'compile',
-    'lib',
-    'tools',
+    'src/kernel',
+    'src/parse',
+    'src/compile',
+    'src/stdlib',
+    'src/tools',
+    'src/bindings',
     'scripts',
     'examples',
     'benchmarks',
     'test'
 ]
-const LEGACY_ROOTS = ['src', 'include', 'modules', 'stdlib']
-// Paths that must not exist. `lib/algo/` is where a module lives after the layout move,
-// `stdlib/algo.cml` and `modules/algo/` where it lived before it; the file is named as well as the
-// directory, so a FAIL points at the exact path and not only at its parent.
-const GONE_PATHS = ['lib/algo', 'lib/algo/algo.cml', 'stdlib/algo.cml', 'modules/algo']
+const LEGACY_ROOTS = ['kernel', 'parse', 'compile', 'lib', 'tools', 'include', 'modules', 'stdlib']
+// Paths that must not exist. `src/stdlib/algo/` is where a module lives after the two moves,
+// `stdlib/algo.cml`, `modules/algo/` and `lib/algo/` where it lived before them; the file is named as
+// well as the directory, so a FAIL points at the exact path and not only at its parent.
+const GONE_PATHS = ['src/stdlib/algo', 'src/stdlib/algo/algo.cml', 'lib/algo', 'stdlib/algo.cml', 'modules/algo']
 
 const SKIP_DIRS = new Set(['.git', 'out', 'node_modules', 'third_party', 'build', 'sdks'])
 // Not source: the trees a run writes (`test/results` and `tmp`), which grow per run and are not part
@@ -103,6 +108,7 @@ const PATTERNS = [
     { name: 'a `from algo` import', pattern: /\bfrom\s+algo\b/ },
     { name: 'a `stdlib/algo` path', pattern: /\bstdlib\/algo\b/ },
     { name: 'a `modules/algo` path', pattern: /\bmodules\/algo\b/ },
+    { name: 'a `src/stdlib/algo` path', pattern: /\bsrc\/stdlib\/algo\b/ },
     { name: 'a `lib/algo` path', pattern: /\blib\/algo\b/ }
 ]
 

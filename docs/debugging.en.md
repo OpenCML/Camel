@@ -192,7 +192,7 @@ or returned-GIR boundaries. The compact GIR strip separates actual execution fro
 history; selecting history never resumes execution. Use **Camel: Inspect Debug Memory** for
 paused-region usage, paged bytes/objects and explicit refresh. Allocation breakpoints require
 Debug and pause after allocator locks are released. See
-[`tools/debugger/README.md`](../tools/debugger/README.md).
+[`src/tools/debugger/README.md`](../src/tools/debugger/README.md).
 
 ## 3. What you see, and why
 
