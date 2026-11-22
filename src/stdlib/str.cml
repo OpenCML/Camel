@@ -27,7 +27,8 @@ export func codepoints(s: string): int[]
 /// @fails error `EncodingError` when an element is not a code point (negative, above 0x10FFFF, or a surrogate)
 /// @example from_codepoints([104, 8364]) !! ''    // 'h€'
 /// @pure
-export func from_codepoints(xs: int[]): string!
+#op('str:from_codepoints')
+export func from_codepoints(xs: int[]): string! panic
 
 /// s with every letter in upper case, by the Unicode case mapping that does not depend on a
 /// language or on the context: a letter may become several (`'ß'` is `'SS'`), and a letter

@@ -12,7 +12,8 @@
 /// @effect waits
 /// @fails fault `InvalidArgument` when seconds is negative or not a number
 /// @example sleep(0.1)
-export func sleep(seconds: float): void
+#op('process:sleep')
+export func sleep(seconds: float): void panic
 
 /// The process as a resource: ending it is an effect on it, and a test that reads the number of its
 /// threads (`test_support::thread_count`) reads it too.
