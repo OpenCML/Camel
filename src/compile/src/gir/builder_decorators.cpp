@@ -74,8 +74,6 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
         return rawGraph;
     }
 
-    // Decorators run at macro time: the graph applying them is a macro that yields the decorated
-    // function once its inputs are static.
     // The factory is a separate graph, not a statement in the enclosing sync chain.
     // Otherwise applying a local decorator overwrites lastSyncedNode_ with a node
     // belonging to this factory, and the next enclosing call links across graphs.
@@ -98,7 +96,6 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     // shorthand writes the same semantics and carries no rule of its own. So the factory graph is
     // not macro here — the call of the decorator inside it is evaluated ahead of time exactly when
     // the decorator's own declaration says `#macro` (principles 8), which is what `#macro` means.
-    // Writing the flag here was a rule the principles never stated; it is gone.
     registerGraphOrigin(
         context_,
         decoratedGraph,
