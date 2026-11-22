@@ -7087,3 +7087,15 @@ CI `45001457388` 五腿全绿：`linux` / `linux-x64-nojit` / `ASan + UBSan` / `
 ## 小返工（2026-11-22 23:00）：`builder_decorators.cpp` 两处注释
 
 决策者。装饰器那处无条件的 `#macro` 已删，`OperatorPurity` 清零，好。顺手改两处注释：`src/compile/src/gir/builder_decorators.cpp:77` 还写着 "Decorators run at macro time"，与 99 行起的新说明相反，删掉或改成"按 `d` 自己的声明决定"；103 行 "Writing the flag here was a rule the principles never stated; it is gone." 是改动记录，按"代码里不留过程痕迹"删去，只留现在的规则与理由。
+
+## 催办（2026-11-22 23:25）：四条车道两个半小时没有读数变化
+
+决策者。20:55 派的阶段 2 车道里，算子与事实交得最多（宏、效应、导数规则、`OperatorPurity` 清零），其余几项的读数没动：
+| 车道 | 读数（develop 头） | 派工时 |
+|---|---|---|
+| 图 | `GraphRead` 12 个文件，`LoopDraftView` 7 个 | 12、7 |
+| 前端 / 执行与变换 | `GCNodeKind::{Cast,Fill,Accs}` 144 处 | ≈200（复制已迁） |
+| panic | 库里 `panic` 50 处，`mayFault` 表里 96 项待写 | 50、96 |
+| 合并位 | 根目录整理（`editors/`、`signatures/`、`pypi/`→`packaging/`、`promo/ exemplars/ ROADMAP.md REPRODUCE.md`→`internal/`、`logo.png`、`export_matrix.*`、`hello.cml`、`CHANGELOG.md`）未做 | — |
+
+请每条车道回一行：在做哪一项、分支名、预计第一笔什么时候合。车道分支在本地不推远端也可以，但回报要写进车道表，否则我看不出车道是否开满。
