@@ -48,9 +48,9 @@ PARSE_ROOT = Path("test/cases/parse")
 # holds - and a module enters the corpus where it is integrated into the standard library, not
 # while a draft of it still sits there. (The draft copies of the library modules were deleted on
 # 2026-11-14; the directory keeps its notes and the questions.) The document guards read the
-# directory the same way: test/tools/check-doc-pass-forms.mjs keeps docs/handover/ out of its
+# directory the same way: test/tools/check-doc-pass-forms.mjs keeps internal/ out of its
 # pages, because a note there quotes a spelling it is calling removed.
-HANDOVER = Path("docs/handover")
+HANDOVER = Path("internal")
 
 
 def walk(root: Path, suffix: str):

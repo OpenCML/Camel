@@ -1345,7 +1345,7 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 #
 # That is no longer what this program builds, and it is no longer what the guarantee is read from.
 # `v` is a same-region local `var`, so since stage S1 of the direct-SSA plan it is built as the
-# value it was given and there is no cell at all (`docs/handover/plans/
+# value it was given and there is no cell at all (`internal/plans/
 # 2026-11-16-direct-ssa-construction.cn.md`): no `:var/new`, no `:var/take`, no
 # `:op/assn_owned`, and `Builder::inPlaceRebindingOf` (src/compile/gir/builder_operators.cpp)
 # declines for want of a cell.
@@ -2718,7 +2718,7 @@ timeout_ms = 20000
 # of a differentiable type that is declared inside the differentiated function is read there'.
 # The read that rule is about is a read of a CELL taken as a constant, and since stage S1 a
 # same-region local `var` of a body is built as the value it was given -- there is no cell for
-# this program to read (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md). What the
+# this program to read (internal/plans/2026-11-16-direct-ssa-construction.cn.md). What the
 # rule protected against is a gradient that would be silently wrong, and the repair it names --
 # bind the value with `let` -- is what the compiler now builds, so the gradient flows and is the
 # true one: t = (p0 * x) * 2, sum(t) = 2, d sum(t) / d p0 = 2 * x = [2, 4], sum = 6. The rule

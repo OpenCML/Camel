@@ -354,6 +354,51 @@ enum class PlaceHandover {
     DissolvedIntoIdsBlock,
 };
 
+/// The kinds of edit a draft records: one name per row of the table in
+/// `docs/design/graph-editing/README.cn.md` 8.1, and `LowLevel` for its last row -- the kernel's
+/// primitives (a node added, an operand added or taken away, an operator swapped), which is what a
+/// pass written in C++ edits the graph with.
+enum class EditKind : uint8_t {
+    Replace,
+    Erase,
+    Eval,
+    Inline,
+    Outline,
+    Order,
+    ParamPort,
+    ExitValue,
+    LowLevel,
+};
+
+std::string_view editKindName(EditKind kind);
+
+/// One region one edit changed, with the kind of edit that changed it. The record of a draft is the
+/// list of these in the order the edits were made: an edit that changed three regions is three
+/// entries, so the record answers "which regions" without keeping a second table of node lists.
+struct EditNote {
+    EditKind kind   = EditKind::LowLevel;
+    uint32_t region = 0;
+};
+
+/// The part of the six commit checks the record owes an answer about (the table's right column is
+/// per edit kind; the four structural checks are asked of every commit and are not here). Both
+/// false is a draft whose edits keep both promises by theorem.
+struct EditTier {
+    bool effects = false;
+    bool order   = false;
+
+    bool owesAnything() const { return effects || order; }
+};
+
+/// Told about every edit the draft records, as it is recorded: the rewrite work queue, the facts a
+/// session keeps, the commit's check. A listener sees the record of the one edit being made -- the
+/// regions span is that edit's and is not kept by the draft for the listener to hold.
+class EditListener {
+  public:
+    virtual ~EditListener() = default;
+    virtual void onEditRecorded(EditKind kind, std::span<const uint32_t> regions) = 0;
+};
+
 /// Which part of a draft a rollback did not put back. One name per kind of state the journal
 /// records, in the order the self-check compares them: a class that is not back is reported alone,
 /// as the class, because that is what a hook that was forgotten is.
@@ -517,14 +562,46 @@ class GraphDraft {
     /// it changes is that edit's rather than this list's. A change that writes down the list a node
     /// already has is no change and is not recorded.
     std::span<const gc_node_ref_t> lowLevelEdits() const { return lowLevelEdits_; }
+    /// The edit record: every edit this draft made, as `(kind, region)` pairs in the order they were
+    /// made, whichever of the two entries made it -- a named edit operator, or a kernel primitive.
+    /// `editCount` counts the edits themselves (an edit that changed no region is still one edit),
+    /// and `editedRegions` and `editTier` are what a publish reads off the record. `EditListener`s
+    /// are told once per edit, as it is made. Kept on the draft and not on a journal beside it
+    /// because both entries already write through this type: a record kept anywhere else would be
+    /// one an edit could go round.
+    std::span<const EditNote> editNotes() const { return editNotes_; }
+    /// The edits recorded, one count per edit whatever it changed (`editNotes` has one entry per
+    /// region and so answers nothing for an edit that changed none).
+    size_t editCount() const { return editCount_; }
+    /// The kinds used, one bit per `EditKind` (bit `i` is the i-th kind).
+    uint32_t editKinds() const { return editKinds_; }
+    /// Whether the draft used this kind of edit.
+    bool editedWith(EditKind kind) const;
+    /// The regions the recorded edits changed, ascending and without repetition: what a commit
+    /// answers for, and the ancestor walk it does over them is the commit's own (a region around a
+    /// changed one is changed too, see `commitViolation`).
+    std::vector<uint32_t> editedRegions() const;
+    /// The checks the record owes at publish, read off the table of
+    /// `docs/design/graph-editing/README.cn.md` 8.1: the effect and order questions are asked when
+    /// the kinds used can have changed them, and a draft whose record names none of those kinds owes
+    /// neither in any build.
+    EditTier editTier() const;
+    /// Told about every edit as it is recorded, in the order the edits are made. The draft keeps the
+    /// pointer, not the listener: one that is removed before the draft dies is removed before it.
+    void addEditListener(EditListener *listener);
+    void removeEditListener(EditListener *listener);
     /// Says that what it covers is one named edit of that table, whose answer to the effect and the
     /// order checks is a theorem about the edit: the raw setters it is written with do not make the
     /// draft a low-level one. Nesting is counted, so a named edit that itself uses another is one
-    /// named edit.
+    /// named edit -- and the kind is the outermost one's, because that is the edit the table names.
+    ///
+    /// Closing it is the high-level entry's recording step: the regions the edit changed are the
+    /// union of the ones its primitives touched, and the close records them with the kind and tells
+    /// the listeners once (`recordEdit`).
     class NamedEdit {
       public:
-        explicit NamedEdit(GraphDraft &draft) : draft_(draft) { ++draft_.namedEdits_; }
-        ~NamedEdit() { --draft_.namedEdits_; }
+        NamedEdit(GraphDraft &draft, EditKind kind);
+        ~NamedEdit();
         NamedEdit(const NamedEdit &)            = delete;
         NamedEdit &operator=(const NamedEdit &) = delete;
 
@@ -1344,6 +1421,12 @@ class GraphDraft {
     };
     struct UndoLowLevel {
         size_t edits = 0;
+        /// The edit record as the segment found it (`editNotes_`, `editCount_`, `editKinds_`): the
+        /// record of an edit a rollback took back goes with the edit, or a commit would read the
+        /// kinds and regions of a change that is not in the graph it publishes.
+        size_t notes  = 0;
+        size_t count  = 0;
+        uint32_t kinds = 0;
     };
 
     bool journalOpen() const { return journalDepth_ != 0; }
@@ -1400,6 +1483,33 @@ class GraphDraft {
     /// The named edits open right now (NamedEdit); the raw setters record nothing into
     /// `lowLevelEdits_` while one is.
     unsigned namedEdits_ = 0;
+
+    /// The recording step both entries share: one note per region, then one notification per edit.
+    /// A rollback is not an edit and records nothing (`undoSuspended_`). Private with the rest of
+    /// the journal: `NamedEdit` is a member of this class and calls it, and a caller outside the
+    /// type reaches it only through an edit that changes the graph.
+    void recordEdit(EditKind kind, std::span<const uint32_t> regions);
+    /// One node an edit changed, and the region it was in. `inPlace` says the change is one the
+    /// commit answers for as a change *in place* (an operand added or taken away, an operator
+    /// swapped), which is the last row of the table and the list `lowLevelEdits_` keeps. A node the
+    /// edit made or erased is not that: `made` already names it.
+    ///
+    /// With a named edit open the node's region goes into that edit's union and no note is written
+    /// here: the named edit is the edit, and it records once when it closes.
+    void noteEditedNode(gc_node_ref_t id, bool inPlace);
+    /// The regions the named edit open right now has changed so far, ascending and without
+    /// repetition.
+    std::vector<uint32_t> namedEditRegions_;
+    /// The kind of the outermost named edit open now, recorded when it closes: a named edit written in
+    /// terms of another is still one row of the table, and the row is the outer one's.
+    EditKind namedEditKind_ = EditKind::LowLevel;
+    /// The edit record (see `editNotes`), and the listeners told about each entry.
+    std::vector<EditNote> editNotes_;
+    size_t editCount_ = 0;
+    /// The kinds used, one bit per `EditKind`: the record a region cannot answer for -- an edit
+    /// that changed no region is still an edit of its kind, and the tier reads kinds.
+    uint32_t editKinds_ = 0;
+    std::vector<EditListener *> editListeners_;
 
     gc_node_ref_t entry_      = kInvalidNodeRef;
     gc_node_ref_t exit_       = kInvalidNodeRef;
@@ -1553,6 +1663,12 @@ struct UndoSnapshot {
     std::vector<gc_node_ref_t> closureNodes;
     // The nodes this draft changed in place, as the commit checks read them.
     std::vector<gc_node_ref_t> lowLevelEdits;
+    /// The edit record, as the commit's tier reads it: a rollback that left an edit of a segment
+    /// that never happened in the record would be a commit reading kinds and regions the graph does
+    /// not have.
+    std::vector<EditNote> editNotes;
+    size_t editCount   = 0;
+    uint32_t editKinds = 0;
 };
 
 inline std::string_view undoClassName(UndoClass cls) {

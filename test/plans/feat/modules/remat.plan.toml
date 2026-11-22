@@ -6,7 +6,7 @@ tags = ["feat", "modules", "autodiff", "remat"]
 # `remat` names the memory-for-recomputation transform: JAX spells it `jax.checkpoint`, whose other
 # name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt` (stdlib/ckpt.cml),
 # so the transform takes the other word (author's ruling of 2026-10-30,
-# docs/handover/reviews/questions-2026-10-30-jax.md J8).
+# internal/reviews/questions-2026-10-30-jax.md J8).
 #
 # Since the author's ruling of 2026-11-01 the name is a *transform of the `transforms` module*
 # (stdlib/signatures/transforms.cml), not a library identity: `remat(f)` builds a new graph whose body
@@ -17,7 +17,7 @@ tags = ["feat", "modules", "autodiff", "remat"]
 #
 # What a *pass* stores is still a reading of the graph and not of the output; the count `split`
 # reports for a cut, and whether it is `split`'s to report, is
-# `who-owns-the-count-of-a-splits-residuals` in docs/handover/questions/.
+# `who-owns-the-count-of-a-splits-residuals` in internal/questions/.
 #
 # The name's arrival is also the tripwire of `modules.jax_alignment`: `remat` was pinned there as
 # a refused import, and that case flips to the value it prints when this module exports the name.

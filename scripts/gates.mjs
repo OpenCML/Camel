@@ -10,7 +10,7 @@
  * change did not re-record `test/plans/feat/parse/golden/ast_hashes.txt`, and the merge that landed
  * it had run what the project called "the six gates" -- a list in somebody's memory, which did not
  * name `scripts/check-ast-hashes.mjs`, a script that existed for exactly that red. The same merge
- * left `docs/handover/questions/` with an answered page still listed as pending, which
+ * left `internal/questions/` with an answered page still listed as pending, which
  * `check-doc-links.mjs --questions-index` reports. Neither check was broken. Neither was on the list.
  *
  * So the list is this file, and it is ten long. A number in a name goes stale -- "the six gates" was
@@ -21,7 +21,7 @@
  * starts the compiler last):
  *
  *   1  check-doc-links --all            every relative link in the reader-facing pages resolves
- *   2  check-doc-links --citations      no source is cited by line outside docs/handover, where a
+ *   2  check-doc-links --citations      no source is cited by line outside internal, where a
  *                                       line number is that day's reading and the index says so
  *   3  check-doc-links --questions-index  no page answered in reviews/ is still listed as pending
  *   4  check-process-traces             every trace a page describes is a reading the tree takes
@@ -67,7 +67,7 @@ const GATES = [
         args: ['scripts/check-doc-links.mjs', '--all'],
     },
     {
-        name: 'citations: no source cited by line outside docs/handover',
+        name: 'citations: no source cited by line outside internal',
         args: ['scripts/check-doc-links.mjs', '--citations'],
     },
     {

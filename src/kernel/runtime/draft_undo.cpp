@@ -225,6 +225,9 @@ snapshot->funcType         = draft.funcType();
     snapshot->withPorts.assign(draft.withPorts().begin(), draft.withPorts().end());
     snapshot->closureNodes.assign(draft.closureNodes().begin(), draft.closureNodes().end());
     snapshot->lowLevelEdits.assign(draft.lowLevelEdits().begin(), draft.lowLevelEdits().end());
+    snapshot->editNotes.assign(draft.editNotes().begin(), draft.editNotes().end());
+    snapshot->editCount = draft.editCount();
+    snapshot->editKinds = draft.editKinds();
     return snapshot;
 }
 
@@ -250,6 +253,22 @@ std::optional<UndoClass> undoMismatch(const GraphDraft &draft, const UndoSnapsho
     }
     if (!sameRun(draft.lowLevelEdits(), snapshot.lowLevelEdits)) {
         return UndoClass::LowLevel;
+    }
+    {
+        // The edit record, compared the way the self-check compares every other part: an edit the
+        // rollback left in the record is an edit that did not happen, and a commit would read it.
+        const std::span<const EditNote> notes = draft.editNotes();
+        if (notes.size() != snapshot.editNotes.size() ||
+            !std::equal(
+                notes.begin(),
+                notes.end(),
+                snapshot.editNotes.begin(),
+                [](const EditNote &left, const EditNote &right) {
+                    return left.kind == right.kind && left.region == right.region;
+                }) ||
+            draft.editCount() != snapshot.editCount || draft.editKinds() != snapshot.editKinds) {
+            return UndoClass::LowLevel;
+        }
     }
 
     return std::nullopt;
@@ -437,7 +456,12 @@ void GraphDraft::noteOriginalLowLevel() {
         return;
     }
     undoLowLevelEpoch_ = journalEpoch_;
-    undoLowLevel_.push_back(UndoLowLevel{.edits = lowLevelEdits_.size()});
+    undoLowLevel_.push_back(
+        UndoLowLevel{
+            .edits = lowLevelEdits_.size(),
+            .notes = editNotes_.size(),
+            .count = editCount_,
+            .kinds = editKinds_});
 }
 
 void GraphDraft::restoreUndoNode(UndoNode &record) {
@@ -564,6 +588,15 @@ void GraphDraft::replayJournal(const Savepoint &mark) {
         if (lowLevelEdits_.size() > base) {
             lowLevelEdits_.resize(base);
         }
+        // The edit record goes back with the edits it records: the notes a segment wrote are the
+        // ones above the mark's counts (a named edit's notes are written when it closes, which is
+        // inside the segment that opened it).
+        const UndoLowLevel &markLevel = undoLowLevel_[mark.undoLowLevel];
+        if (editNotes_.size() > markLevel.notes) {
+            editNotes_.resize(markLevel.notes);
+        }
+        editCount_ = markLevel.count;
+        editKinds_ = markLevel.kinds;
     }
     undoRegions_.resize(mark.undoRegions);
     undoScalars_.resize(mark.undoScalars);
@@ -683,22 +716,15 @@ void GraphDraft::rollbackTo(const Savepoint &mark) {
 }
 
 void GraphDraft::noteLowLevelEdit(gc_node_ref_t id) {
-    // A named edit is the edit: what it changes in place is that edit's, and the table of
-    // docs/design/graph-editing/README.cn.md 8.1 owes the effect and order checks nothing for it.
-    if (namedEdits_ != 0 || id == kInvalidNodeRef) {
+    if (id == kInvalidNodeRef) {
         return;
     }
-    if (id >= lowLevelSeen_.size()) {
-        lowLevelSeen_.resize(static_cast<size_t>(id) + 1, 0);
-    }
-    if (lowLevelSeen_[id] != 0) {
-        return;
-    }
-    lowLevelSeen_[id] = 1;
-    // The list the segment is about to grow, as it stood: a rolled back edit takes its id back
-    // out, or the commit would answer for a change that is not in the graph it publishes.
-    noteOriginalLowLevel();
-    lowLevelEdits_.push_back(id);
+    // The low-level entry of the edit record (src/kernel/runtime/draft_edit.cpp): the node and the
+    // region it is in. With a named edit open the node's region goes into that edit's union instead
+    // -- what it changes in place is that edit's, and the table of
+    // docs/design/graph-editing/README.cn.md 8.1 owes the effect and order checks nothing for a
+    // named edit that keeps both promises.
+    noteEditedNode(id, true);
 }
 
 } // namespace camel::runtime

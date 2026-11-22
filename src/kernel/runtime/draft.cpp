@@ -1363,6 +1363,10 @@ gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
     sourceRefsById_.push_back(kInvalidNodeRef);
     noteNodeKind(id, init.kind);
     liveNodeCount_++;
+    // The low-level entry of the edit record: a node the draft made, and the region it landed in.
+    // Not a change in place (`made` names it at the commit), but the same three things -- the kind,
+    // the region, the listeners -- are owed for it.
+    noteEditedNode(id, false);
 
     for (gc_node_ref_t input : init.normInputs) {
         appendUserRef(input, id, DraftEdgeSlot::NormalPorts);
@@ -1989,6 +1993,10 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
             "erase draft node {}, which this graph does not have (it holds {} nodes)",
             id,
             nodesById_.size()));
+    // The low-level entry of the edit record (src/kernel/runtime/draft_edit.cpp): the node goes and
+    // the region it stood in changed, recorded before the body does -- an erased node has no region
+    // to read afterwards, and a `BRCH` or `LOOP` takes the regions under it with it.
+    noteEditedNode(id, false);
     if (draftNode->header.kind == GCNodeKind::Brch || draftNode->header.kind == GCNodeKind::Loop) {
         dissolveRegionsOf(id);
     }

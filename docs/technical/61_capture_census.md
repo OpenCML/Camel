@@ -64,7 +64,7 @@ closures/branches），没有按算子的拆分，也没有捕获表；`std::gir
 - 默认 `scope`：`test/cases/**/*.cml`，按路径排序（计划按其目录选用例；没有哪个计划条目写 `.cml`
   路径，所以 `test/plans/**` 不会带来这套清单之外的用例）。
 - `--all`：仓库里每个 `.cml`，走的正是 `test/tools/parsecheck/corpus.py --scope repository` 的排除
-  规则（同样 `SKIP_DIRS`、同样排除 `docs/handover`）。
+  规则（同样 `SKIP_DIRS`、同样排除 `internal`）。
 - `list_sha`：把每个文件算成一行 `<内容 sha256>  <相对路径>`，按路径排好，再对整个清单做一次
   SHA-256。增删改名改内容都会变，同一棵树跑两次不变。**没有它的数就是没有分母的数。**
 
@@ -157,7 +157,7 @@ crashed=2 timeout=0 unreadable=0`。`capture_ports` 与 §3.1 那份相同（170
 这两笔提交都不在本树（`c736c0ae9` 里没有这段文字），引用时只能引提交号。
 
 这句话给了指标（census 的 `var_new`），**没有给分母，也没有算式**。算式在计划页
-（`docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`，同一小时写成，页首写「分母（不要重测）」）：
+（`internal/plans/2026-11-16-direct-ssa-construction.cn.md`，同一小时写成，页首写「分母（不要重测）」）：
 
 | 数 | 计划页的写法 | 复现 | 那一位数从哪来 |
 |----|--------------|------|----------------|

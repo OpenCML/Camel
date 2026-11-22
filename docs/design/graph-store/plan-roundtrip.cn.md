@@ -180,7 +180,7 @@ the literal into a constant array, and the program written back builds a differe
 | 其余 | `PLAIN` | **0** |
 | 合计 | | **293** |
 
-**291/293 = 99.3% 是"语言的事实"，不是打印机的手艺**：实例图在源码里**没有写法**（源写 `vmap(f)`，实例由调用点定），`namespace`/`module` 区域**打印机不支持**。所以这一族**不该在补名字这一层动**，两条路都等作者裁，页面见 `docs/handover/reviews/questions-2026-11-02-generic-instances-and-namespace-blocks.md`（两条各带代价，默认两条都不做）。
+**291/293 = 99.3% 是"语言的事实"，不是打印机的手艺**：实例图在源码里**没有写法**（源写 `vmap(f)`，实例由调用点定），`namespace`/`module` 区域**打印机不支持**。所以这一族**不该在补名字这一层动**，两条路都等作者裁，页面见 `internal/reviews/questions-2026-11-02-generic-instances-and-namespace-blocks.md`（两条各带代价，默认两条都不做）。
 
 **一处更正（把我上一刀的读数收回）：** 上一刀我报"`PLAIN` 两个、名字是 `rulesets.`（以句点结尾）⇒ 前端拼前缀漏了成员名"——**不成立**：那是我统计脚本的截断错误（`sed` 在第一个句点处截断），真名是 `rulesets.jvp::lift<float>` 与 `rulesets.probe_missing::add_ok__lhs`。用正确的提取重扫：**以 `::`、`.` 或 `<` 结尾的名字计数为 0**，`PLAIN` 为 0。所以"前端拼名字漏成员名"这条缺陷**没有可修的点**，这一刀只有分类、没有代码改动。
 **2026-11-02 第十一刀（作者缺陷清单 A7 的第 1 条）：`fail<'Kind'>(message)` 是语句，打印机漏了它。** 缺陷原文：`consistency/fail_never/statement_after_fail` 原程序打印 `before`、报故障、`exit 1`；打印出来的程序打印 `before`、`after`、`exit 0`——**`fail` 语句被丢了**。
@@ -429,7 +429,7 @@ type V = { x: int }  +  同一个 func f      -> status=0
 
 **一个口径坑（记下来）**：同一个普查脚本改成用**相对路径**跑（`camel test/cases/...`），读数变成 `printed=551 refused=1701 frontend=1125`——**和 `cml-sweep.mjs` 的 559/1814/1004 差 113 条**。`cml-sweep.mjs` 用 `ROOT` 绝对路径 + `cwd: ROOT`；复算必须照它，否则先差出 113 条再讨论分组。
 
-**2026-11-02 第二十四刀：五次都没落地，交班（页：`docs/handover/reviews/2026-11-02-cml-sync-tail-write.md`）**
+**2026-11-02 第二十四刀：五次都没落地，交班（页：`internal/reviews/2026-11-02-cml-sync-tail-write.md`）**
 
 按第二十三刀的入口判据动手，**只改入口**（`handsTail` 认"`tail` 站在退出链上"+ 放开 `regionNeedsSync(0)`），探针原文：
 
@@ -688,7 +688,7 @@ func pick(x: int): string { return 'wide' }
 | `DIFFERENT` | 50 行 | **49 行，新增 0** |
 | `families` | 52 | **52** |
 
-**这一刀没做、要单独一刀的**：①**区域内的读**（`arm_write.cml` 读的是分支留下的版本，那里变量名本来就对）；②另外两条**行为已相同**但 canonical 仍差，差的是**另一个缺陷**——循环/分支体的尾值打印成 `return i + 1` / `return println(2)`。问题页：`docs/handover/reviews/2026-11-02-cml-var-version-in-printed-text.md`。
+**这一刀没做、要单独一刀的**：①**区域内的读**（`arm_write.cml` 读的是分支留下的版本，那里变量名本来就对）；②另外两条**行为已相同**但 canonical 仍差，差的是**另一个缺陷**——循环/分支体的尾值打印成 `return i + 1` / `return println(2)`。问题页：`internal/reviews/2026-11-02-cml-var-version-in-printed-text.md`。
 
 **2026-11-02 第十四刀（A7 第 4 条）：前缀 `-` 比 `^` 松，括号表把它放严了一级。** 缺陷原文：`parse/rulings/power` 原程序第二行 `-9 9 -4 -4 12`；打印版 `-9 -9 -4 -4 12`——`(-x) ^ 2` 被打成 `-x ^ 2`，而解析器读它是 `-(x ^ 2)`，9 变成 -9。
 

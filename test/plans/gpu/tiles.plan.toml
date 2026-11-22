@@ -1629,7 +1629,7 @@ kind = "differential"
 case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
 # Adding the pass to the pipeline changes nothing, and this entry states that as a comparison
 # rather than as a second copy of the expected text: the language author's ruling of 2026-10-24
-# evening (`docs/handover/reviews/questions-2026-10-24-evening.md`,
+# evening (`internal/reviews/questions-2026-10-24-evening.md`,
 # `tiles-compile-resident-value-gradient`) has it that a program with no `#gpu` scope is not
 # touched by `tiles::compile` -- the values outside a scope stay on the host and do not become
 # resident `Device<T>` -- so its output is "identical word for word" with and without the pass

@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "runtime", "graph", "ledger"]
 desc = "The direct-connection ledger of graph-store step 2 b as a gate: the references to `GraphDraft` outside the transaction, the construction points and the `GraphDraft::decode` points may only fall, and the check names which number rose and where when one does."
 
-# The ledger page (docs/handover/reviews/graph-store-step2-b-ledger.cn.md) records three numbers per
+# The ledger page (internal/reviews/graph-store-step2-b-ledger.cn.md) records three numbers per
 # commit so that "GraphDraft is deleted" is a number and not a claim. This plan is that ledger as a
 # check, in the fast layer, because a number nobody runs is a promise nobody keeps: the case reads the
 # tracked tree with `git grep`, compares each number with the baseline it records, and fails when one

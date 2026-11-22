@@ -22,7 +22,7 @@ tags = ["feat", "modules", "autodiff", "jax"]
 #     refused with a reason (a pair result without the argument, and `has_aux: false`): what the
 #     surface does not accept is pinned as exactly what it does not accept.
 #
-# docs/handover/reviews/questions-2026-10-30-jax.md holds the gap list, the split between naming
+# internal/reviews/questions-2026-10-30-jax.md holds the gap list, the split between naming
 # and semantics, and the assertions each absent name must satisfy once it exists.
 
 [[tests]]

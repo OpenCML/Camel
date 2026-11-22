@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "compile", "effects", "resources", "inference"]
 desc = "Resource inference reads the bodies alone, bottom up (the author's ruling of 2026-11-15): a function's set is what its own body was measured to reach, so the place a value is used does not decide it -- a place that asks for one type and is given two function values that write different resources is a type error there, whose repair is a resource clause on the callee; and deleting a declaration nothing reaches changes no other function's set, byte for byte."
 
-# The ruling this plan holds (docs/handover/reviews/questions-2026-10-29.md, 2026-11-15):
+# The ruling this plan holds (internal/reviews/questions-2026-10-29.md, 2026-11-15):
 #
 #   推断只看函数体，自下而上。按调用图的强连通分量，从被调者到调用者逐个求最小不动点；使用处的
 #   类型约束（例如把函数放进对函数类型不变的位置）不反过来决定被调函数的资源。约束不满足就是

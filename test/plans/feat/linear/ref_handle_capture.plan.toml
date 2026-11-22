@@ -6,7 +6,7 @@ tags = ["feat", "linear", "var", "ref", "capture", "graph"]
 # The one reading that was missing from the corpus: a `var` whose value is a `state::Ref`, read and
 # written from inside a closure. No other case puts a `Ref` in a `var` at all (every `state::ref` in
 # `test/cases` is a `let`), so the semantic correction -- a cell holding a Ref is a holder, and the
-# cell should go -- was measured only on a probe under `docs/handover/`, which no plan selects.
+# cell should go -- was measured only on a probe under `internal/`, which no plan selects.
 # These two entries are the guard: one reads the graph the compiler builds, one runs the program.
 
 [[tests]]

@@ -1,7 +1,7 @@
 # 目录所有权表（搬家后生效）
 
 依据：`docs/design/architecture/refactor-plan.cn.md` 第 2、3 节（车道按**目录所有权**划分）、
-`docs/handover/plans/2026-11-22-refactor-stage0.cn.md`（阶段 0 的六条车道）。
+`internal/plans/2026-11-22-refactor-stage0.cn.md`（阶段 0 的六条车道）。
 
 两条规则，搬家（阶段 1）之后生效：
 
@@ -22,7 +22,7 @@
 | **差分** | 0.6 差分对照工具骨架 | `test/tools/` 下新增的工具、`tools/graph-diff/` | `test/tools/`、`tools/graph-diff/`；对照工具的实现在 `tools/` 内新开目录 |
 
 **结构车道不产分支以外的路径所有权。** 它只新增四个文件：`layout-map.cn.md`、`scripts/layout-move.mjs`、
-`layout-ownership.cn.md`（本页）、以及 `docs/handover/plans/` 下的违例清单。它对现有源码目录的
+`layout-ownership.cn.md`（本页）、以及 `internal/plans/` 下的违例清单。它对现有源码目录的
 所有权是**零**——这正是 0.5 的判据 ⑤ 要的：台账进库，代码一格不动。
 
 ## 合并位独占的公共文件
@@ -31,9 +31,9 @@
 |---|---|
 | `CMakeLists.txt`、`cmake/**`、`tools/libcamel_tool.cmake` | 构建文件：每条车道都想改它，谁改谁就成了冲突点。`camel_module.cmake` 也在这里（U16 把模块的构建胶水搬进了 `cmake/`） |
 | `test/plans/**/golden/**`、`test/plans/feat/parse/golden/ast_hashes.txt` | 测试金标：重录要跟提交一起进，不能各自录各自的 |
-| `docs/**/README*.md` 的索引段、`docs/handover/questions/` 的待定表 | 生成物：由生成器写，合并位重生成 |
+| `docs/**/README*.md` 的索引段、`internal/questions/` 的待定表 | 生成物：由生成器写，合并位重生成 |
 | `kernel/diagnostics/registry.tsv` | 诊断码登记表：诊断码是全仓库共享的编号空间（U17 定了它进 `kernel/`，文件仍归合并位重生成） |
-| `export_matrix.csv`、`export_matrix.md`、`docs/stdlib-reference.md` | 生成物：`--check` 会核对它们与生成器是否一致 |
+| `export_matrix.csv`、`docs/stdlib-reference.md` | 生成物：`--check` 会核对它们与生成器是否一致 |
 
 ## 搬家（阶段 1）之后的八条车道
 

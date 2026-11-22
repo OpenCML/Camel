@@ -307,7 +307,7 @@ different element types ('f32' and 'f64'): a tensor operator computes in one ele
 
 - 坐标：`modules/tensor/kernels/gradient.cpp` 的 `layerNormGrad` —— `asFloat(x)` 收下 f64 转成
   `float`，输出却写死 `createTensor(TypeCode::Float32, ...)`（`Input` 那一支在 433 行），所以
-  **f64 的归一化梯度是 f32 的**。 这跟 `docs/handover/reports/code-review-autodiff.md` 的 H3
+  **f64 的归一化梯度是 f32 的**。 这跟 `internal/reports/code-review-autodiff.md` 的 H3
   （`gelu_grad`/`erf_grad`/`layer_norm_grad` 按 f32 读 f64）是同一处，这里只是第一次在**训练循环里**
   撞到它，而且是在**引擎 `with_grad`** 上撞到的，不是库路径。
 - 为什么现在才炸：`layer_norm` 在反向链的**最后一环**时不炸（梯度没再流进 matmul），所以

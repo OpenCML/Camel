@@ -2005,7 +2005,16 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // made no node at all. `made` alone cannot see it, and a commit that read only `made`
         // published an edit that dropped an ordering without asking anything.
         std::vector<gc_node_ref_t> changed;
+        // The tier the record owes (GraphDraft::editTier): the kinds this draft used, read off the
+        // edit record both entries write (src/kernel/runtime/draft_edit.cpp). A draft whose record
+        // names only edits that keep both promises passes neither flag and is not asked either
+        // question, which is the table of docs/design/graph-editing/README.cn.md 8.1 read as the
+        // rule it is -- the tier is a fact about *which edit was used*, not about whether a node was
+        // made. A draft this commit cannot read the record of owes both, as every commit did before
+        // the record existed: no record is no promise.
+        EditTier tier{.effects = true, .order = true};
         if (const auto at = drafts_.find(graph); at != drafts_.end() && at->second->transaction) {
+            tier = at->second->transaction->edit().editTier();
             const std::span<const gc_node_ref_t> edits =
                 at->second->transaction->edit().lowLevelEdits();
             changed.assign(edits.begin(), edits.end());
@@ -2014,8 +2023,15 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // it: the reading of what the commit started from is taken there and not in `*committed`
         // (`resources.h`, `beforeProgram`), because this commit is publishing new declarations for
         // the callees it rewrote.
-        if (const auto violation =
-                commitViolation(*committed, *copy, made, changed, graph, program_)) {
+        if (const auto violation = commitViolation(
+                *committed,
+                *copy,
+                made,
+                changed,
+                graph,
+                program_,
+                tier.effects,
+                tier.order)) {
             throw GraphCommitRefused(*violation);
         }
     }

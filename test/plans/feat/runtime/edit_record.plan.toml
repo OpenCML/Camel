@@ -1,0 +1,32 @@
+id = "runtime.edit_record"
+order = 384
+tier = "fast"
+tags = ["feat", "runtime", "graph", "edit", "record", "witness"]
+desc = "The edit record of a draft: an edit through each of the two entries says which kind it was and which regions it changed, every edit tells each listener once, and the publish tier is read off that record -- a record naming the kernel's primitives owes the effect and order questions, one naming a named `replace` owes neither."
+# `test::edit_record` builds the drafts itself and asks the interface, because no program can see a
+# region, a notification or a tier: they are facts about the session editing the graph, and
+# `std::gir` and `std::stats` print the same document either way. So this plan pins what a program
+# cannot, and it is the reverse verification that makes the record a checked fact: with the
+# notification in `GraphDraft::recordEdit` commented out, `notified` falls to 0 while the record
+# still names what it made, `same` falls to 0, and this case goes red. With the record itself
+# emptied, `kinds` stops naming `low_level,erase` and `tier_effects` falls with it.
+#
+# The second line is the tier's control and not a repeat: that draft's whole record is one named
+# `replace`, so both flags are 0, while the first draft recorded the low-level entry and both are 1.
+# The two are printed in one run so that neither can pass on an interface that answers only one way.
+[[tests]]
+name = "runtime.edit_record.two_entries_one_record_and_the_tier_it_owes"
+desc = "A node made, an operand added and a named `erase` on one draft: kinds `low_level,erase`, region 0, one notification per edit and one record per notification, the named edit recording exactly once, and both tier flags owed. A second draft whose whole record is one named `replace` owes neither flag."
+kind = "behavior"
+case = "../../../cases/runtime/edit_record/a_program.cml"
+args = ["${case}", "test::edit_record"]
+expect_exit = 0
+# `kinds` is the record's kinds in the order first used; `regions` the regions it changed; the
+# notification count is the listeners' -- it must equal the record's own count (`same=1`) and not be
+# zero, which is the shape the commented-out notification has.
+expect_stdout_matches = ['\[EDIT_RECORD\] kinds=low_level,erase regions=0 notified=[1-9][0-9]* notes=[1-9][0-9]* same=1 named_calls=1 named_notes=1 tier_effects=1 tier_order=1 alive_after_erase=0', '\[EDIT_RECORD\] named_kind_recorded=1 named_regions=none named_calls=1 named_edits=1 named_tier_effects=0 named_tier_order=0', '\[EDIT_RECORD\] ok']
+# The pass says MISSING when it could not ask its own case as the interface says. That is the defect
+# coming back in the other direction, and it is red.
+expect_stdout_not_contains = ["[EDIT_RECORD] MISSING"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

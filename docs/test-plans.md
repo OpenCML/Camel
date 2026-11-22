@@ -857,7 +857,7 @@ everywhere is written once:
   - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
   - the file and the symbol that refuses: `lib/transforms/vmap.cpp#liftConstant`;
   - the page that decides the question:
-    `docs/handover/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
+    `internal/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
 
   It is refused at load with the same refusal the owner gets, and three more shapes are refused with
   it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
@@ -1353,7 +1353,7 @@ those 215 plans and the milestone layer grows by one entry that day: no command 
 the `[tier]` line prints the total of whatever run somebody started, and `--tier-report` is how the
 split is asked for. Whether that multiplier should be unbounded belongs to the layer's owner rather
 than to the runner, and it is asked in
-`docs/handover/reviews/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
+`internal/reviews/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
 
 ### The one sweep, and what it expands to
 
@@ -1732,7 +1732,7 @@ entry starts demanding a diagnostic it never wanted (`match.complete` in
 `consistency/match.plan.toml` was red that way when the line was deleted). Read it as "this entry
 inherits nothing here", and write the absence as `expect_no_diagnostics = true` -- the reasoning and
 the readings are in
-[`docs/handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+[`internal/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](../internal/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
 
 `test/tools/check-plan-fields.mjs` reads the plan tree against that table and reports every entry
 that writes a field its kind does not evaluate, naming the plan, the line and the entry:

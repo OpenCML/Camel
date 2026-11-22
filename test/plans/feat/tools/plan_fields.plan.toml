@@ -12,7 +12,7 @@ desc = "A plan field the runner never reads is not a test: the guard that reads 
 # compares.
 #
 # Nothing ran it. It went red only when a person typed the command in a worktree, which is the
-# shape `docs/handover/pending-work.cn.md` records as a red with no owner: the count drifted from
+# shape `internal/archive/pending-work.cn.md` records as a red with no owner: the count drifted from
 # 331 to 333 inside one lane's merge and the gate stayed green. These two entries are the door --
 # the tree reading and the table's own reading against the runner.
 #

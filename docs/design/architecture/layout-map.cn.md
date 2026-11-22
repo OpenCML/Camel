@@ -2,7 +2,7 @@
 
 依据：`docs/design/architecture/abstractions.cn.md` 第 9 节（仓库布局，已定）、
 `docs/design/architecture/refactor-plan.cn.md` 第 1、2 节（阶段与车道）、
-`docs/handover/plans/2026-11-22-refactor-stage0.cn.md` 0.5。
+`internal/plans/2026-11-22-refactor-stage0.cn.md` 0.5。
 
 这张表是**搬家脚本唯一的输入**（`scripts/layout-move.mjs`）。脚本读它，产出 `git mv` 序列、`#include`
 改写与每块的构建目标；脚本不执行，演练在临时树里跑（见 `scripts/layout-move.mjs --help`）。
@@ -60,7 +60,6 @@
 | `examples/` | — | — | 留 | 用户程序 |
 | `exemplars/` | — | — | 留 | 用户程序 |
 | `export_matrix.csv` | — | — | 留 | 生成物，索引页 |
-| `export_matrix.md` | — | — | 留 | 生成物，索引页 |
 | `hello.cml` | — | — | 留 | 仓库根的示例程序 |
 | `include/` | 拆到表 B | 各块 | 搬 | 拆完顶层不再有 `include/`（U10、U11 定了内核公开头进 `kernel/include/`） |
 | `internal/` | — | — | 留 | 构建与闸门 helper，不是独立程序（第 9 节的 `tools/` 指命令行、调试器、语言服务器） |
@@ -245,5 +244,5 @@ node scripts/layout-move.mjs --apply --root D:\Temp\layout-drill
 ```
 
 `--apply` 只会动 `--root` 指向的树，且拒绝在仓库主干上跑。演练结果与违例清单见
-`docs/handover/plans/2026-11-22-refactor-stage0-layout-violations.cn.md`；车道对目录的独占见
+`internal/plans/2026-11-22-refactor-stage0-layout-violations.cn.md`；车道对目录的独占见
 `layout-ownership.cn.md`。

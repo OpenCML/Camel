@@ -7,7 +7,7 @@ the step, and the operators it is made of, then a line with the sum, the ratio t
 itself reports, and the last logged loss.  The training program is not changed in any way: the
 attribution comes from the profiler's per-operator rows (`operator_rows`), which is why a transform
 that replaces the gradient's implementation shows up here as a different table rather than as a
-different program.  See `docs/handover/reports/s2-with-grad-time-split.md`.
+different program.  See `internal/reports/s2-with-grad-time-split.md`.
 
 Blocks are by what the step is computing, not by call site: `with_grad(loss)` returns the loss and
 the gradient in one call, so a call site cannot separate them.  `multiply` and `gt` run once per

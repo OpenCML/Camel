@@ -63,7 +63,7 @@ const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
 // The width every child run of this self-test is taken at. A runner that is not told takes
 // `availableParallelism` -- 32 on the gate host -- and then its readings move with its neighbours:
 // on 2026-11-03 the sweep fixture's 13 cases came back all FAIL with `pass: 0` while the same
-// fixture, run at 32 on a quieter host the same day, was 13/13 (`docs/handover/reviews/
+// fixture, run at 32 on a quieter host the same day, was 13/13 (`internal/reviews/
 // 2026-11-03-the-self-test-is-red-on-develop-and-has-no-name.cn.md`). All thirteen failing, none
 // passing, is the shape of "squeezed out", not the shape of "one assertion chose wrongly"; and a
 // judgement that moves with the load is neither a red nor a green (author ruling 2026-11-02 16:50).
@@ -75,7 +75,7 @@ const SELFTEST_JOBS = '4'
 // whole thing cost in CPU and in wall time. The three numbers belong together because the bound
 // this self-test runs under rose twice on readings that were never the same kind, and a host that
 // reports its own cost is the only thing that stops the next raise from being a guess.
-// See docs/handover/reviews/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
+// See internal/reviews/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
 const cost = { children: 0, cpuStart: process.cpuUsage(), wallStart: process.hrtime.bigint() }
 // What each child run was actually started with, counted at the spawn and never read back from
 // `SELFTEST_JOBS`. The distinction is the whole point of the [calibration] line: the constant says

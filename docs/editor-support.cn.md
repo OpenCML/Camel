@@ -63,9 +63,7 @@ code --install-extension camel-lang-0.1.0.vsix
 | `camel.graph.passes` | `[]` | 打印图之前施加的遍，例如 `["std::cxx::inline"]`。 |
 | `camel.run.passes` | `["std::cxx::inline", "std::fvm"]` | 第一次运行文件时建议的遍序列。 |
 | `camel.trace.server` | `off` | 记录协议消息（`messages` 或 `verbose`）。 |
-
-详见 [`editors/vscode/README.md`](../editors/vscode/README.md)。
-
+  那个扩展的源码已从本仓移出,不再随本仓分发。
 ---
 
 ## 2. 能力

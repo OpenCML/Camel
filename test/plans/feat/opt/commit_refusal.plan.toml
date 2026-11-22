@@ -5,7 +5,7 @@ tags = ["feat", "opt", "effects", "commit-checks"]
 
 # The checks a commit answers, as the author's rework of 2026-11-18 has them (the rework commit
 # `18ae6f296`, answering
-# `docs/handover/reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`
+# `internal/reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`
 # and `.../reviews/questions-2026-10-29.md`'s "the six checks of a commit"):
 #
 #   ① the exit is in the top region -- the value a graph hands on is read at its exit, and the exit,

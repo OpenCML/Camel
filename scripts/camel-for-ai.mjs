@@ -152,7 +152,7 @@ const LAYOUT = [
 // a growing budget ahead of itself. The lane that adds an entry owns fitting it into the room its
 // own document has, or tightening the wording around it. When the only way to make room would be to
 // drop something a reader needs, that is not a call for the lane that hit it: it opens a question
-// page under docs/handover/questions/ instead of deleting the information or editing a number here.
+// page under internal/questions/ instead of deleting the information or editing a number here.
 //
 // Nothing in this check warns that the room is nearly gone. Over budget is a failure and the merge
 // gate reports it; a warning that is not a failure is a warning readers learn to scroll past.
