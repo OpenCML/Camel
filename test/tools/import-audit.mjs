@@ -127,9 +127,13 @@ function bracedBody(text, from) {
 }
 
 // Every `.cmo` module has a directory of its own named after the module; `array` and `tree`
-// are Camel only and have no `module.cpp`.
+// are Camel only and have no `module.cpp`. The directory is `lib/<module>/` after the layout move
+// (a module's C++ and its declaration in one directory) and `modules/<module>/` before it, so both
+// are asked and the one the tree has decides.
 function moduleSource(module) {
     const candidates = [
+        path.join(REPO_ROOT, 'lib', module, 'module.cpp'),
+        path.join(REPO_ROOT, 'lib', module, 'src', 'module.cpp'),
         path.join(REPO_ROOT, 'modules', module, 'module.cpp'),
         path.join(REPO_ROOT, 'modules', module, 'src', 'module.cpp'),
     ]

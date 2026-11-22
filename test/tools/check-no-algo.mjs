@@ -31,8 +31,11 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const SELF = url.fileURLToPath(import.meta.url)
 const REPO_ROOT = path.resolve(HERE, '..', '..')
 
-// The roots that carry code. `docs/` and `out/` are deliberately absent.
-const ROOTS = ['src', 'include', 'modules', 'stdlib', 'tools', 'scripts', 'examples', 'benchmarks', 'test']
+// The roots that carry code. `docs/` and `out/` are deliberately absent. The layout move put the
+// compiler in `kernel/`, `parse/`, `compile/` and the library in `lib/` (which took `stdlib/` and
+// `modules/`); the old names stay listed so a checkout of either layout is walked, and a directory
+// that does not exist is simply skipped by the walk.
+const ROOTS = ['kernel', 'parse', 'compile', 'lib', 'src', 'include', 'modules', 'stdlib', 'tools', 'scripts', 'examples', 'benchmarks', 'test']
 const SKIP_DIRS = new Set(['.git', 'out', 'node_modules', 'third_party', 'build', 'sdks'])
 // Not source: the trees a run writes (`test/results` and `tmp`), which grow per run and are not part
 // of the checkout. Which paths those are is one answer, in runner-output.mjs beside the runner, so a
@@ -49,12 +52,14 @@ const PATTERNS = [
     { name: 'a `from algo` import', pattern: /\bfrom\s+algo\b/ },
     { name: 'a `stdlib/algo` path', pattern: /\bstdlib\/algo\b/ },
     { name: 'a `modules/algo` path', pattern: /\bmodules\/algo\b/ },
+    { name: 'a `lib/algo` path', pattern: /\blib\/algo\b/ },
 ]
 
 const problems = []
 
-// (1) The module's files are gone for good.
-for (const relative of ['stdlib/algo.cml', 'modules/algo']) {
+// (1) The module's files are gone for good. `lib/algo/` is where a module lives after the layout
+// move, `stdlib/algo.cml` and `modules/algo/` where it lived before it.
+for (const relative of ['lib/algo', 'lib/algo/algo.cml', 'stdlib/algo.cml', 'modules/algo']) {
     if (fs.existsSync(path.join(REPO_ROOT, relative))) {
         problems.push(`${relative} exists again: the module was folded into \`array\``)
     }
