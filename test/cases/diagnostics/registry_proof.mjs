@@ -48,24 +48,30 @@ function run(root, mode) {
     })
 }
 
+// The scratch tree mirrors the layout the generator reads. After the move the kernel's diagnostics
+// live under `kernel/` -- `kernel/diagnostics/registry.tsv`, `kernel/include/camel/core/error/
+// diagnostics/` and `kernel/core/error/diagnostics/` -- so the fixture and the generator carry the
+// same three spellings; a fixture in the old layout is a copy the generator cannot find, and every
+// reading here would be about a missing file rather than about the registry.
+const KERNEL = 'kernel'
+
 function copyInto(root) {
-    fs.mkdirSync(path.join(root, 'diagnostics'), { recursive: true })
+    fs.mkdirSync(path.join(root, KERNEL, 'diagnostics'), { recursive: true })
     fs.copyFileSync(
-        path.join(ROOT, 'diagnostics', 'registry.tsv'),
-        path.join(root, 'diagnostics', 'registry.tsv')
+        path.join(ROOT, KERNEL, 'diagnostics', 'registry.tsv'),
+        path.join(root, KERNEL, 'diagnostics', 'registry.tsv')
     )
     // The generated headers are checked against DiagType in base.h, so the scratch tree needs it.
-    const baseFrom = path.join(ROOT, 'include', 'camel', 'core', 'error', 'diagnostics', 'base.h')
-    const baseTo = path.join(root, 'include', 'camel', 'core', 'error', 'diagnostics')
+    const baseFrom = path.join(ROOT, KERNEL, 'include', 'camel', 'core', 'error', 'diagnostics', 'base.h')
+    const baseTo = path.join(root, KERNEL, 'include', 'camel', 'core', 'error', 'diagnostics')
     fs.mkdirSync(baseTo, { recursive: true })
     fs.copyFileSync(baseFrom, path.join(baseTo, 'base.h'))
-    for (const area of ['include', 'src']) {
-        const relative =
-            area === 'include'
-                ? path.join('camel', 'core', 'error', 'diagnostics', 'messages')
-                : path.join('core', 'error', 'diagnostics', 'messages')
-        const from = path.join(ROOT, area, relative)
-        const to = path.join(root, area, relative)
+    for (const relative of [
+        path.join(KERNEL, 'include', 'camel', 'core', 'error', 'diagnostics', 'messages'),
+        path.join(KERNEL, 'core', 'error', 'diagnostics', 'messages'),
+    ]) {
+        const from = path.join(ROOT, relative)
+        const to = path.join(root, relative)
         fs.mkdirSync(to, { recursive: true })
         for (const file of fs.readdirSync(from)) fs.copyFileSync(path.join(from, file), path.join(to, file))
     }
@@ -79,11 +85,11 @@ function fresh(label) {
 }
 
 function registryPath(root) {
-    return path.join(root, 'diagnostics', 'registry.tsv')
+    return path.join(root, KERNEL, 'diagnostics', 'registry.tsv')
 }
 
 function headerPath(root, section = 'semantic') {
-    return path.join(root, 'include', 'camel', 'core', 'error', 'diagnostics', 'messages', `${section}.h`)
+    return path.join(root, KERNEL, 'include', 'camel', 'core', 'error', 'diagnostics', 'messages', `${section}.h`)
 }
 
 function append(root, line) {

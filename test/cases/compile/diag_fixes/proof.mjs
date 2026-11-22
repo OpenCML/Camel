@@ -49,7 +49,13 @@ const check = (ok, label, detail) => {
 
 const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
 
-const REGISTRY = path.join(REPO_ROOT, 'diagnostics', 'registry.tsv')
+// The registry the fixes are read from lives under the kernel's block directory after the layout
+// move (`kernel/diagnostics/registry.tsv`) and at the tree's top before it. Either answers, so this
+// case reads the tree it runs in instead of one of the two spellings.
+const REGISTRY = [
+    path.join(REPO_ROOT, 'kernel', 'diagnostics', 'registry.tsv'),
+    path.join(REPO_ROOT, 'diagnostics', 'registry.tsv'),
+].find((file) => fs.existsSync(file))
 const SECTION_TYPE = {
     internal: 'InternalDiag',
     lexical: 'LexicalDiag',

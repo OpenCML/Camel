@@ -18,7 +18,7 @@
 //   a law with no rule     -- a copy of the rulesets with **one** rule added (`fake_parity_op_t`,
 //                             an operator whose name appears in neither table) and the engine's
 //                             table untouched: the gate must name that operator and exit 1. The
-//                             copy is a temp root with `src/` and `modules/` linked to the real
+//                             copy is a temp root with the engine's block roots linked to the real
 //                             tree, so the engine side of the comparison is the tree's own and the
 //                             only thing that changed is the law.
 //   the same law, exempted -- the same copy with the row the list would need: the gate must exit 0
@@ -109,23 +109,33 @@ function link(name) {
 }
 
 function buildCopy() {
-    fs.mkdirSync(path.join(scratch, 'stdlib', 'rulesets'), { recursive: true })
+    // The rulesets are `lib/rulesets/` in the layout the map files the library under (one
+    // declaration per module beside `lib/std/`), so the copy is that directory, not `stdlib/`.
+    fs.mkdirSync(path.join(scratch, 'lib', 'rulesets'), { recursive: true })
     // Every ruleset the tree holds, by directory: a copy that named two files compared a library the
     // tree does not have, and it said so in the readings instead of here -- `rulesets/vmap.cml` was
     // left out, the copy's library therefore filed no law for `argmax`, `argmin`, `concat`, `dim` or
     // `unsqueeze`, and the reading below ("the same law is not reported once the list holds it")
     // went red on five differences the *real* tree does not have. A copy is the tree plus one law,
     // and the only way to keep that true is to start from the directory.
-    const rulesets = path.join(ROOT, 'stdlib', 'rulesets')
+    const rulesets = path.join(ROOT, 'lib', 'rulesets')
     for (const name of fs.readdirSync(rulesets).filter((name) => name.endsWith('.cml')).sort()) {
-        fs.copyFileSync(path.join(rulesets, name), path.join(scratch, 'stdlib', 'rulesets', name))
+        fs.copyFileSync(path.join(rulesets, name), path.join(scratch, 'lib', 'rulesets', name))
     }
-    for (const name of ['src', 'modules']) {
+    // The engine's own sources, so the table the copy is compared against is the tree's. `lib`
+    // cannot be linked whole -- the copy has a `lib/rulesets` of its own -- so its module
+    // directories are linked one by one beside it, and the other block roots are linked as they are.
+    for (const name of ['kernel', 'compile', 'parse']) {
         link(name)
+    }
+    fs.mkdirSync(path.join(scratch, 'lib'), { recursive: true })
+    for (const entry of fs.readdirSync(path.join(ROOT, 'lib'), { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name === 'rulesets') continue
+        link(path.join('lib', entry.name))
     }
     // One law, filed under a name neither table has: the shape of `pick_at` on the day the library
     // answered it and the engine's table had no row.
-    const file = path.join(scratch, 'stdlib', 'rulesets', 'transpose.cml')
+    const file = path.join(scratch, 'lib', 'rulesets', 'transpose.cml')
     fs.appendFileSync(
         file,
         `\n// written by test/tools/check-vjp-parity.mjs: a law nothing answers.\n` +

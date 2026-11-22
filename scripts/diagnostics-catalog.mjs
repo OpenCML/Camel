@@ -593,18 +593,22 @@ function walk(dir, predicate, out = []) {
 }
 
 // The codes some code constructs. A producer is an occurrence of the name in the compiler's own
-// sources -- src, include, modules -- with comments removed and the message table left out (the
-// table names every code, including one nothing raises). Not the `.of(...)` shape alone: a code can
-// be chosen by a ternary inside the call (`of(cond ? SemanticDiag::A : SemanticDiag::B)`) or
-// returned by a helper that picks one (`return SemanticDiag::NotDifferentiable`) and constructed by
-// its caller. Both are producers, and a rule that read only `of(SemanticDiag::X)` would call ten
-// live codes dead.
+// sources -- the block directories `kernel`, `compile`, `parse` and the modules under `lib` -- with
+// comments removed and the message table left out (the table names every code, including one
+// nothing raises). Not the `.of(...)` shape alone: a code can be chosen by a ternary inside the
+// call (`of(cond ? SemanticDiag::A : SemanticDiag::B)`) or returned by a helper that picks one
+// (`return SemanticDiag::NotDifferentiable`) and constructed by its caller. Both are producers, and
+// a rule that read only `of(SemanticDiag::X)` would call ten live codes dead.
+//
+// The roots are spelled out rather than derived because a bare `'src'` is a word as much as a path:
+// the rewrite that carried the move will not touch it, and a root list that no longer exists makes
+// every code look unproduced, which is the reading this function exists to deny.
+const PRODUCER_ROOTS = ['kernel', 'compile', 'parse', 'lib']
+
 function producedNames(root) {
-    const files = [
-        ...walk(path.join(root, 'src'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
-        ...walk(path.join(root, 'include'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
-        ...walk(path.join(root, 'modules'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
-    ].filter((f) => !/[\\/]diagnostics[\\/]messages[\\/]/.test(f))
+    const files = PRODUCER_ROOTS.flatMap((dir) =>
+        walk(path.join(root, dir), (f) => /\.(cpp|h|hpp|cc)$/.test(f))
+    ).filter((f) => !/[\\/]diagnostics[\\/]messages[\\/]/.test(f))
     const names = new Set()
     for (const file of files) {
         const text = fs

@@ -40,12 +40,14 @@ const THIS_FILE = path.join(SCRIPT_DIR, 'check-source-artifacts.mjs')
 const HERE = path.resolve(SCRIPT_DIR, '..')
 
 // The directories a build reads (BUILD_INFO_ROOTS in scripts/common.js). `test/` is not one of
-// them: a test case is read at plan time, and its fixtures may be whatever they test.
-const SOURCE_DIRS = ['src', 'include', 'modules', 'tools', 'stdlib', 'third_party', 'cmake']
+// them: a test case is read at plan time, and its fixtures may be whatever they test. The block
+// directories the layout map files the sources under are listed beside the roots they replaced: a
+// list of stale names scans nothing and passes, which is the reading this check exists to deny.
+const SOURCE_DIRS = ['src', 'include', 'modules', 'tools', 'stdlib', 'third_party', 'cmake', 'kernel', 'parse', 'compile', 'lib']
 // Vendored Python runtimes: binary by nature, not produced by this build, and git-ignored.
-const VENDORED = /^modules\/python\/(?:sdks|dlls)\//
-// A `.cmo` is a module binary only in the two places a module can be built from.
-const CMO_DIRS = new Set(['stdlib', 'modules'])
+const VENDORED = /^(?:lib|modules)\/python\/(?:sdks|dlls)\//
+// A `.cmo` is a module binary only in the places a module can be built from.
+const CMO_DIRS = new Set(['stdlib', 'modules', 'lib'])
 // Linker output: produced by a build (or a test helper), never an input of one.
 const LINKER_OUTPUT = new Set(['.so', '.dll', '.pdb', '.o', '.obj', '.a', '.lib', '.dylib', '.exe', '.ilk'])
 

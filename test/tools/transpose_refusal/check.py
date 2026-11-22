@@ -50,7 +50,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-TRANSFORMS = ROOT / "modules" / "transforms"
+# The transforms moved with the module: `lib/transforms` now that the module lives in `lib/`,
+# `modules/transforms` while it lived beside `Camel/CMakeLists.txt`. Either answers, so this check
+# reads whichever tree it is run in.
+TRANSFORMS = next(
+    path
+    for path in (ROOT / "lib" / "transforms", ROOT / "modules" / "transforms")
+    if path.is_dir()
+)
 
 ENUM_START = "enum class TransposeRefusalCause {"
 WORD_FN = "const char *transposeRefusalWord(TransposeRefusalCause cause) {"

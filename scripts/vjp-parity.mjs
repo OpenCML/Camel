@@ -441,12 +441,18 @@ function readLibrary() {
 
 // ---- the engine's table -----------------------------------------------------------------------
 //
-// Every `setRule(uri, fn)` and every `setVjp(defs, "name", fn)` in `src/` and `modules/`. A
-// registration whose URI is a template parameter (`registerFloatRules<F64>` writing
+// Every `setRule(uri, fn)` and every `setVjp(defs, "name", fn)` in the engine's sources and in the
+// modules. A registration whose URI is a template parameter (`registerFloatRules<F64>` writing
 // `F::add`) is resolved through the struct that supplies it and the instantiation that asks for
 // it, so the two float widths are read as the four registers they are instead of as one.
+//
+// The roots are the block directories the layout map files the sources under, not `src/` and
+// `modules/`: after the move the engine is `kernel/`, `compile/` and `parse/`, and a module is
+// `lib/<name>`. They are spelled out because a bare `'src'` is a word as much as a path -- the
+// rewrite that carries the move will not touch it -- and a root list that no longer exists makes
+// every law look unanswered, which is how this comparison reported a whole table as missing.
 
-const ENGINE_ROOTS = ['src', 'modules']
+const ENGINE_ROOTS = ['kernel', 'compile', 'parse', 'lib']
 const SKIP_DIRS = new Set(['.git', 'out', 'node_modules', 'third_party', 'build', 'sdks', 'test'])
 
 function* cppFiles(dir) {

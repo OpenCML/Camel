@@ -43,7 +43,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-TRANSFORMS = ROOT / "modules" / "transforms"
+# The transforms moved with the module: `lib/transforms` now that the module lives in `lib/`,
+# `modules/transforms` while it lived beside `Camel/CMakeLists.txt`. Either answers, so this check
+# reads whichever tree it is run in.
+TRANSFORMS = next(
+    path
+    for path in (ROOT / "lib" / "transforms", ROOT / "modules" / "transforms")
+    if path.is_dir()
+)
 # Where the table is, found by what it says rather than by its name: a header that is renamed is
 # still the header, and one written twice is a red instead of a quiet choice of the first.
 ENUM_START = "enum class RefusalCause {"
