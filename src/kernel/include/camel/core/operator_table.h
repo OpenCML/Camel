@@ -71,6 +71,10 @@
 #include <utility>
 #include <vector>
 
+namespace camel::ops {
+struct Record;
+} // namespace camel::ops
+
 namespace camel::core::data {
 class Data;
 using data_ptr_t = std::shared_ptr<Data>;
@@ -364,6 +368,15 @@ class OperatorTable {
     /// Declared traits of the operator, or nullopt when nobody declared it.
     std::optional<OperatorTraits> find(OperId id) const;
     std::optional<OperatorTraits> find(std::string_view uri) const;
+
+    /**
+     * The operator's record (`camel/ops/operator_record.h`), or nullptr for `kNoOper`. The record
+     * is where an item both entrances state is kept once; a reader that holds an `OperId` -- a
+     * node, a pass looking at one -- reaches it here, because the record is keyed by its own id
+     * and this table seats that id when it interns the URI. Lock-free: the id is seated at intern
+     * and never moved, and the record is published once per statement.
+     */
+    const camel::ops::Record *recordOf(OperId id) const;
 
     /// True when the operator is declared pure.
     /// Whether the operator's kernel takes the with-arguments after the ordinary ones
@@ -770,6 +783,11 @@ class OperatorTable {
     struct Entry {
         SymId uri      = kEmptySym;
         uint8_t family = 0;
+        /// The operator's id in the operator registry (`camel/ops/operator_record.h`), seated when
+        /// the URI is interned and never changed after: `recordOf` reads this. A node holds an
+        /// `OperId` and the record is keyed by its own id, so this is the one place the two are
+        /// joined, and joining them at intern is what keeps a reader from searching by URI text.
+        std::uint32_t record = 0;
         // Guarded by mutex_. A folder is heap-allocated once and replaced only at load time, so
         // readers may keep the pointer after releasing the lock.
         type::resolver_ptr_t resolver;

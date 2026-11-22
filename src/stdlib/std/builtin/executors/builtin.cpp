@@ -749,6 +749,10 @@ void registerBuiltinOperatorTraits() {
     // `mayFault` becomes a guard that says nothing about a path that now exists unless all three
     // are decided again together.
     registry.set(":op/extent_of", {.pure = true, .elementwise = false, .mayFault = false});
+    // What that answer is, in the record: an operator declared never to fault states `panic`. The
+    // two statements are the same item in the two places design principles 3.9 gives it, and
+    // writing them together is what keeps a node reading the record from reading "nobody said".
+    stateNoFaultOperator(":op/extent_of");
     // A second name of a mutable value (`operators/copy.cpp`; plan 2.3, step 1): it clones a value
     // the collector traces and hands a scalar on, so it reads and writes nothing outside the
     // program's own values -- pure, not elementwise, and a copy of a value cannot fault. The loop
@@ -756,6 +760,7 @@ void registerBuiltinOperatorTraits() {
     // `kAccessFree` and outside `kConversions`, so its three answers are written here with the
     // kernel they belong to.
     registry.set(":op/copy", {.pure = true, .elementwise = false, .mayFault = false});
+    stateNoFaultOperator(":op/copy");
     // The three shapes plan 2.3, step 2 turns into operators (`operators/cast.cpp`,
     // `operators/struct.cpp`). Each reads the values of its own call and writes nothing outside
     // them, so each is pure and none is elementwise. Each may fault: a conversion checks the value

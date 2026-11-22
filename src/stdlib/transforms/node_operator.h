@@ -6,6 +6,8 @@
 #include "camel/runtime/graph.h"
 
 #include <cstdint>
+#include <string>
+#include <string_view>
 
 namespace camel::transforms {
 
@@ -25,26 +27,31 @@ namespace camel::transforms {
  *
  *     if (nodeOperatorOf(graph, ref) == NodeOperator::Fill) { ... }
  *
- * When the declarations and the front end's OPER nodes land, exactly one thing changes: the `kind`
- * arm of `nodeOperatorOf(GCNodeKind)` is deleted, and the OPER arm below answers from the operator
- * record (`GCOperBody::oper` through the table) instead of answering `NotOne`. The eight files do
- * not change again.
+ * The OPER arm of `nodeOperatorOf(Graph, ref)` answers from the operator record: it reads the
+ * node's URI out of `GCOperBody` and names the four by it, so a conversion the front end hands over
+ * as an ordinary operator is a conversion here too. What is left for the day the front end stops
+ * building the four node kinds is the deletion of the `kind` arm of `nodeOperatorOf(GCNodeKind)`;
+ * the eight files do not change again.
  *
  * **Two faces, one question.** `GraphRead` (`compile/gir/graph_read.h`) is the face the lift in
  * `jvp.cpp` reads; a `FrozenGraphRead` and a draft answer it. The overloads below are templates
- * over the face, because both a `GCGraph` and a `GraphRead` answer `nodeCount()` and
- * `node(ref)->kind` -- the one thing this file asks. What is *not* templated is the two payload
- * readers at the bottom: they hand out a pointer into the node's bytes, which a frozen graph can
+ * over the face, because both a `GCGraph` and a `GraphRead` answer `nodeCount()`, `node(ref)->kind`
+ * and the operator a node names: a frozen graph reads the URI in place out of `GCOperBody`, and a
+ * `GraphRead` copies the same body out of its payload and answers that URI. What is *not*
+ * templated is the two payload readers at the bottom: they hand out a pointer into the node's
+ * bytes, which a frozen graph can
  * promise and a draft cannot (a draft keeps its payload at an arbitrary offset, so `GraphRead`
  * copies a body out instead of reinterpreting it in place). A reader of a `GraphRead` keeps reading
  * its own payload, exactly as `jvp.cpp` does.
  *
  * **Still transitional, and deliberately small.** `NotOne` means "not one of the four", so a caller
- * that only wants a yes/no keeps reading as a predicate. `fillBodyOf` / `accsBodyOf` exist for the
- * same reason as the identity question: when a construction's slot list and a member read's key
- * move into the operator's instance bytes, those two readings change here and nowhere else -- and
- * until then they do something the direct `nodeBodyAs` call did not: they answer nullptr for a node
- * of another family, instead of reading those bytes as a fill body (`transpose/walk.cpp` used to
+ * that only wants a yes/no keeps reading as a predicate. `fillBodyOf` / `accsBodyOf` are the
+ * payload side of the same question, and they ask the node's *kind*, not its operator: a
+ * construction's slot list and a member read's key are the payload of the FILL and ACCS kinds, so a
+ * call that names `:op/fill` -- whose parameters are its own operands -- has no slot list to read
+ * here, and the reader that needs one reads the call's operands. When that payload moves into the
+ * operator, these two readings change here and nowhere else; today they also answer nullptr for a
+ * node of another kind, instead of reading those bytes as a fill body (`transpose/walk.cpp` used to
  * have to guard that by hand: "the kind is asked before the payload is read -- an OPER's bytes read
  * as a FILL are some other number").
  *
@@ -134,6 +141,28 @@ inline NodeCase nodeCaseOf(runtime::GCNodeKind kind) noexcept {
     }
 }
 
+/// Which of the four operators a URI names, or `NotOne`. This is what a graph says about a node
+/// that names an operator instead of wearing a kind: `:op/fill` is a construction, `:op/cast` a
+/// conversion, `:op/copy` a copy, and a member read is written two ways because the two reads ask
+/// the value different questions (a position, a name) -- `:op/access` and `:op/access_key` are both
+/// a member read. Any other URI, including the empty one a node without a record answers, is
+/// `NotOne`: an operator is one of the four by what it says it is, not by being an operator.
+inline NodeOperator nodeOperatorOf(std::string_view uri) noexcept {
+    if (uri == ":op/cast") {
+        return NodeOperator::Cast;
+    }
+    if (uri == ":op/copy") {
+        return NodeOperator::Copy;
+    }
+    if (uri == ":op/fill") {
+        return NodeOperator::Fill;
+    }
+    if (uri == ":op/access" || uri == ":op/access_key") {
+        return NodeOperator::Accs;
+    }
+    return NodeOperator::NotOne;
+}
+
 /// Which of the four operators node `ref` of `graph` is. A ref that is not a node is `NotOne`.
 ///
 /// `Graph` is a frozen graph or a `GraphRead`: both answer `nodeCount()` and the record
@@ -148,13 +177,21 @@ inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t re
         return NodeOperator::NotOne;
     }
     if (node->kind == runtime::GCNodeKind::Oper) {
-        // stage 2.3's first step -- the four declared in `lib/std` -- and its second -- the front end
-        // building OPER -- have not landed here yet, so an OPER is one of today's operators and
-        // not one of the four. When they land this arm reads the operator off the node's
-        // `GCOperBody` (`oper`, or its URI through the table) and answers which of the four it is;
-        // until then it must answer `NotOne`, because answering otherwise would claim a node is a
-        // construction that nobody built.
-        return NodeOperator::NotOne;
+        // An operator node is one of the four by the URI its record holds, and every other operator
+        // -- the overwhelming majority -- is `NotOne`, which is what makes a reader that only wants
+        // a yes/no keep working. A frozen graph reads the URI in place out of `GCOperBody`; a
+        // `GraphRead` copies the same body out of its payload and answers the URI as a value, so
+        // its answer is asked and used in one expression here.
+        if constexpr (requires { graph.template nodeBodyAs<runtime::GCOperBody>(ref); }) {
+            if (!node->hasPayload()) {
+                return NodeOperator::NotOne;
+            }
+            const auto *body = graph.template nodeBodyAs<runtime::GCOperBody>(ref);
+            return body == nullptr ? NodeOperator::NotOne : nodeOperatorOf(body->uri());
+        } else {
+            const std::string uri = graph.operUriOf(ref);
+            return nodeOperatorOf(uri);
+        }
     }
     return nodeOperatorOf(node->kind);
 }
@@ -185,29 +222,29 @@ inline NodeCase nodeCaseOf(const Graph &graph, runtime::gc_node_ref_t ref) noexc
 /// The construction `ref` is, as its payload -- the fill kind and the slot list that follows the
 /// header in the node's bytes -- or nullptr when `ref` is not one (or a node without a payload).
 ///
+/// The payload is asked of the *kind*, not of the operator: the slot list is the FILL kind's bytes.
+/// A construction a call names (`:op/fill`) passes its fields as the call's own operands and has no
+/// slot list here, so this answers nullptr for it rather than reading a `GCOperBody` as a fill
+/// body.
+///
 /// A frozen graph's payload is the graph's own bytes, so the answer points into them (that is what
 /// the readers copy from, and why this takes a `GCGraph` and not a `GraphRead`).
 inline const runtime::GCFillBody *
 fillBodyOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) noexcept {
-    if (nodeOperatorOf(graph, ref) != NodeOperator::Fill) {
-        return nullptr;
-    }
     const runtime::GCNode *node = graph.node(ref);
-    if (node == nullptr || !node->hasPayload()) {
+    if (node == nullptr || node->kind != runtime::GCNodeKind::Fill || !node->hasPayload()) {
         return nullptr;
     }
     return graph.nodeBodyAs<runtime::GCFillBody>(ref);
 }
 
 /// The member read `ref` is, as its payload -- which member, by place or by name -- or nullptr when
-/// `ref` is not one (or a node without a payload).
+/// `ref` is not one (or a node without a payload). The payload is the ACCS kind's, for the reason
+/// `fillBodyOf` gives: a read a call names passes its position or key as an operand.
 inline const runtime::GCAccsBody *
 accsBodyOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) noexcept {
-    if (nodeOperatorOf(graph, ref) != NodeOperator::Accs) {
-        return nullptr;
-    }
     const runtime::GCNode *node = graph.node(ref);
-    if (node == nullptr || !node->hasPayload()) {
+    if (node == nullptr || node->kind != runtime::GCNodeKind::Accs || !node->hasPayload()) {
         return nullptr;
     }
     return graph.nodeBodyAs<runtime::GCAccsBody>(ref);

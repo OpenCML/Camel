@@ -26,6 +26,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
+#include "camel/ops/operator_record.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
@@ -86,19 +87,11 @@ bool nodeMayFault(
     // them can fail is a property of the operator, not of the record it is stored in today.
     //
     // Design principles 3.9 makes "may fault" one item of the operator record, stated by `panic`,
-    // and this shape answer stands in for that item only while the record says nothing about these
-    // four: of them only `copy` is an operator (`:op/copy`), and it states no `panic`, so asking
-    // its record today would read "nobody said" -- the conservative `true` -- instead of the
-    // `false` this answer gives. A conversion, a construction and an access are not operators at
-    // all yet: each takes a compile-time parameter a record keyed by URI cannot carry
-    // (`lib/std/builtin/modules/globals.cpp`, refactor plan 2.3).
-    //
-    // So this is where the two readings would part: once the record states `panic` for the four,
-    // each arm below becomes that item's reading --
-    // `camel::ops::Registry::instance().find(oper)->mayFault()`, which is
-    // `!panic.stated() || panic.value` in `camel/ops/operator_record.h` -- and this switch goes.
-    // `oper` is the operator the node names once the front end builds these four as ordinary OPER
-    // nodes; today these kinds carry `kNoOper` and have no record to ask.
+    // and the answer below is that item for every node that names an operator. A conversion, a
+    // construction and an access are not operators at all yet: each takes a compile-time parameter
+    // a record keyed by URI cannot carry (`src/stdlib/std/builtin/globals.cpp`, refactor plan 2.3),
+    // so they carry `kNoOper` and have no record to ask; this shape answer is theirs until the
+    // front end builds them as ordinary OPER nodes.
     switch (camel::execute::shapeOfKind(kind)) {
     case camel::execute::OperShape::Conversion:
         return castMayFault(castTarget, castSource);
@@ -117,14 +110,20 @@ bool nodeMayFault(
     case GCNodeKind::Join:
         return false;
     case GCNodeKind::Oper: {
-        const std::optional<camel::core::OperatorTraits> traits =
-            camel::core::OperatorTable::instance().find(oper);
-        if (!traits.has_value()) {
-            return true; // nobody declared it: not known never to fault
+        // The operator's own answer, from its record: `panic` is the one statement of it
+        // (design principles 3.9), and a record nobody stated `panic` for answers that a call may
+        // fail. `recordOf` is the join from the node's operator id to the record.
+        const camel::ops::Record *record = camel::core::OperatorTable::instance().recordOf(oper);
+        if (record == nullptr) {
+            return true; // no operator, so no record: not known never to fault
         }
         // An elementwise operator fails only when its operands' shapes do not broadcast: asked
-        // with every shape the type states in full, it cannot (nodeIsFreelySchedulable).
-        return traits->mayFault && !(traits->elementwise && fixedShapes);
+        // with every shape the type states in full, it cannot (nodeIsFreelySchedulable). The
+        // elementwise bit is a second item and is still read from the table.
+        const std::optional<camel::core::OperatorTraits> traits =
+            camel::core::OperatorTable::instance().find(oper);
+        return record->mayFault() &&
+               !(traits.has_value() && traits->elementwise && fixedShapes);
     }
     default:
         // A call, a function, a gate, a loop: what it runs is not in this table, and nothing
