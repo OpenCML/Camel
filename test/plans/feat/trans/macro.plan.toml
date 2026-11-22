@@ -436,10 +436,21 @@ expect_stderr_contains = ["M[ACRO] graph=", "name=__root__ calls=1 inlined=0 brc
 normalizers = ["strip_ansi", "normalize_newlines"]
 [[tests]]
 name = "ordinary_function_graph"
-desc = "A program of ordinary functions holds no macro graph, so `std::cml` prints it and exits 0. A program holding one is refused by the same pass (the message is `it is a macro graph`), so this entry is what makes a refusal a reading rather than a property the pass always has."
+desc = "The counterpart of macro_graph_refused, and what makes that entry a measurement: a program of ordinary functions holds no macro graph, so the pass prints it and exits 0. Its red condition is `isMacro` answering true for every graph -- then this program is refused as `it is a macro graph` and the pass exits 1."
 kind = "behavior"
 case = "../../../cases/trans/macro/ordinary_function_graph.cml"
 args = ["${case}", "std::cml"]
 expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "macro_graph_refused"
+desc = "The macro side: `#macro` on the declaration is recorded on the graph's exit node, so the graph answers `isMacro` and the pass refuses to print it, naming the graph. Its red condition is that fact not reaching the graph -- the pass then prints the program and exits 0."
+kind = "behavior"
+case = "../../../cases/trans/macro/macro_graph_refused.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 1
+expect_stdout_contains = ["it is a macro graph", "cannot print twice"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
