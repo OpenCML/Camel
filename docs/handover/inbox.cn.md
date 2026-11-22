@@ -12,3 +12,4 @@
 - **D-1123-2** 开 `lane/stage3-facts`：五样分析（效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取）挪进事实框架，原缓存删除；33 处绕过事实层的纯度判断改问事实（`docs/handover/plans/2026-11-22-refactor-stage3-graph-storage.cn.md` 3b）。
 - **D-1123-3** 变换车道查明 `GCNodeKind::{Cast,Fill,Accs}` 引用 144→146 是新增还是挪动；迁读者只许让这个数减少。
 - **D-1123-4** 根目录剩余：`ROADMAP.md`、`REPRODUCE.md`、`exemplars/`、`promo/` → `internal/`；删 `export_matrix.md`（`docs/handover/plans/2026-11-22-root-cleanup.cn.md`）。
+- **D-1123-5** 协作体系重组：`docs/handover/` 整个移进 `internal/`，立 `inbox.md`、`backlog.md`、`lanes.md` 三份常设文件，旧的 pending-work、红基线、搁置分支里没做完的条目转进 backlog（`docs/handover/plans/2026-11-23-collaboration.cn.md`）。合并位一次做完；做完后 D-1123-1 到 -4 以同一编号出现在 backlog 里。
