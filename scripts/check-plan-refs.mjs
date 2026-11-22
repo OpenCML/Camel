@@ -8,7 +8,7 @@
  * arithmetic is a property of the walk, not of a program, so it must hold on every graph of every
  * case; one graph that does not balance means the walk missed a path, and a missed path is a
  * reference given back too early once a back end executes the table
- * (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md).
+ * (internal/reports/2026-11-15-the-refs-that-come-back.cn.md).
  *
  * One case at a time, without the arguments its own plan gives it: a case whose compilation needs
  * those arguments cannot be read here and is counted as skipped, not as balanced. A case that
@@ -140,7 +140,7 @@ function tablesOf(stdout) {
 /// other here. What the second count is for: a marked operator whose position carries a give row is
 /// one where a back end that does not count can be seen being short by exactly that row, which is
 /// what `PLAN_REF_MARKED` makes readable instead of inferring from a `live` that the collector can
-/// even out after the run (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md).
+/// even out after the run (internal/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md).
 function markedOf(stdout) {
     let marked = 0
     let withGive = 0

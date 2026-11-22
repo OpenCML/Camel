@@ -1,6 +1,6 @@
 # 工作路线与待办
 
-本文件只记录当前顺序、依赖和尚未完成的工作。完成的条目直接删除，历史见提交记录。语义以 [`docs/design-principles.cn.md`](design-principles.cn.md) 为准，最新裁定以 `fsh-dev` 的 `docs/handover/reviews/` 为准。
+本文件只记录当前顺序、依赖和尚未完成的工作。完成的条目直接删除，历史见提交记录。语义以 [`docs/design-principles.cn.md`](design-principles.cn.md) 为准，最新裁定以 `fsh-dev` 的 `internal/reviews/` 为准。
 
 ## 0. 当前排期（2026-11-21，负责人定：CC 截稿前瘦身重构优先）
 
@@ -20,10 +20,10 @@ ECOOP 已交稿。CC 2027（摘要 12-01、全文 12-03）之前，**第一优�
 
 ## 0′. 上一版排期（2026-11-18，论文优先期间，已结束）
 
-**第一优先：论文（ECOOP）需要的**，按车道图 `docs/handover/plans/2026-11-18-lane-map.cn.md`：提交检查六项与按编辑分档（设计稿 `docs/design/graph-editing/` 8.1）、看不到写法与 (a)(b)(c) 测量（A、B）、变换嵌套验收（C、D：`grad(grad(f))`、带效应的 `split`）、规则带访问（K）、图编辑块与动作规则（J、L、M）。
+**第一优先：论文（ECOOP）需要的**，按车道图 `internal/plans/2026-11-18-lane-map.cn.md`：提交检查六项与按编辑分档（设计稿 `docs/design/graph-editing/` 8.1）、看不到写法与 (a)(b)(c) 测量（A、B）、变换嵌套验收（C、D：`grad(grad(f))`、带效应的 `split`）、规则带访问（K）、图编辑块与动作规则（J、L、M）。
 
 **同时并行：收敛**（不让路给功能车道的下一步以外的任何事；与论文车道动的文件冲突时让论文先合）：
-- **N · SSA 收尾**：S3b 就地更新（随 I 车道"实参归谁"）→ S4b 删 `var` 形参单元 → S5 其余形状 → S7 删整套单元机制（`docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`）。生成器旧的单元路径不再修补，随 E 车道换到 GIR 后删除。
+- **N · SSA 收尾**：S3b 就地更新（随 I 车道"实参归谁"）→ S4b 删 `var` 形参单元 → S5 其余形状 → S7 删整套单元机制（`internal/plans/2026-11-16-direct-ssa-construction.cn.md`）。生成器旧的单元路径不再修补，随 E 车道换到 GIR 后删除。
 - **O · 事实与算子定义各一份**（目标架构路线二、三）：写谓词收成一个、赋值按 `ASSIGN` 建图不经 `__assn__` 名字、去掉前缀判断、`GATE` 布局一个访问函数、计数的故障归还收进执行层一处（每日审查 11-18 第 3–8 条）。
 - **P · 中心文件与两套实现**：超 2500 行的文件按部件拆、要求净减；两套求导在变换嵌套验收后收成一套。C++ 版优化遍**不删**（负责人 2026-11-18）：用命名空间与 Camel 原生版隔开（C++ 版归 `cxx::`，如 `std::cxx::fold`、`std::cxx::opt`；Camel 原生版在 `opt` 模块），默认流水线 `std::opt` 暂留在 C++ 版；做对比实验（同一语料与基准上：输出图是否规范相等、不等处逐例归因，优化耗时，优化后程序的运行时间），确定 Camel 原生版能挑大梁后，再另行决定换默认与是否删除。
 
@@ -46,7 +46,7 @@ ECOOP 已交稿。CC 2027（摘要 12-01、全文 12-03）之前，**第一优�
 - 两条 `*_large_bytecode` 在 poison 和移动压力下转绿；修好后加入不依赖 poison 的回归用例。
 - 真实程序上的内存安全失败不标 `known_fail`。
 
-入口：`docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`。
+入口：`internal/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`。
 
 ### 2. 完成库层自动微分迁移
 
@@ -56,7 +56,7 @@ ECOOP 已交稿。CC 2027（摘要 12-01、全文 12-03）之前，**第一优�
 - 库层与旧引擎在全部自动微分用例上对齐后，删除 `buildGradientGraph`、`GradResolver` 和 `pullback.cpp`，不留双实现兼容层。
 - 后续再做完整 `vmap` 覆盖、组合变换和 `remat`。
 
-依据：`docs/design/program-transforms/README.cn.md` 与 `docs/handover/batches-2026-10-31-72h.cn.md`。
+依据：`docs/design/program-transforms/README.cn.md` 与 `internal/archive/batches-2026-10-31-72h.cn.md`。
 
 ### 3. 收尾 P0-2 图语义
 

@@ -29,7 +29,7 @@
 # quiet a signalling NaN, so those four clauses compare NaN as NaN, the way the rest of those two
 # files already compares a host run against a device run; both cases are green and their entries
 # here are gone. The page that asked:
-# `docs/handover/questions/2026-11-19-the-card-quiets-signalling-nans.cn.md`.
+# `internal/questions/2026-11-19-the-card-quiets-signalling-nans.cn.md`.
 #
 # So THIRTEEN OF THESE NAMES ARE A FIX OWED, NOT A PERMISSION -- they are recorded here so that the
 # gate can run the layer without blocking merges, which is a different thing from saying the readings
@@ -67,7 +67,7 @@
 # count, `TILES_OUTLINED 5` where the recorded output says 10) and were all red for a different one:
 # `tiles::compile` publishing a body before the type that covers it, refused by the commit checks
 # (`PassEffectBeyondType 0x040001B0`, see
-# `docs/handover/questions/2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md`). For
+# `internal/questions/2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md`). For
 # weeks the file said "known red" about a failure that had gone away and been replaced, and nothing
 # in the gate could notice. The reasons below were re-read on 2026-11-18 and every one of them is the
 # failure that is actually there today.
@@ -128,7 +128,7 @@
 # expectation of 10 is stale in the cases themselves -- and correcting it is the author's decision
 # rather than a line in this file, because it is the decision that would make these names stop being
 # red. The two readings are side by side in
-# docs/handover/questions/2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five.cn.md
+# internal/questions/2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five.cn.md
 # and the question is open there. A reason recorded below does not answer it; this file says so rather
 # than let a green gate read as an answer.
 outlined_execution.fvm :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-12

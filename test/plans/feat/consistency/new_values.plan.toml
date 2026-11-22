@@ -327,7 +327,7 @@ expect_output_not_contains = ["[Warn]"]
 # cell; since stage S1 of the direct-SSA plan a same-region local `var` is the value it was given, so
 # there is no cell to take the array out of and no such marker is written any more. The author's
 # answer of 2026-11-18
-# (`docs/handover/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules that
+# (`internal/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules that
 # in-place is the execution plan's reuse decision: at `sort(v)`, when that is the old `v`'s last use,
 # the plan takes the in-place form (`StorageReuse::Input`, `ByArrayCount` when it can only count --
 # design principles 10.5), and the front-end rewrite and `inPlaceCalls_` are to be deleted with it.
@@ -351,7 +351,7 @@ expect_output_not_contains = ["[Warn]"]
 # value's last use must reuse its storage.
 
 # The same program read with the ruler stage S3b's criterion is stated in
-# (`docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`, its 2026-11-19 amendment): every
+# (`internal/plans/2026-11-16-direct-ssa-construction.cn.md`, its 2026-11-19 amendment): every
 # `v = v->append(x)` and `xs = sort(xs)` whose value nothing else reads is handed its storage and
 # runs the in-place form, and every one whose value another name still holds copies. The six
 # in-place rows below are the first readings of the mechanism; the three copied ones are the
@@ -507,7 +507,7 @@ expect_stdout = "a [1, 2]\nb [9, 2]\n[3, 4] [7, 4]\n[5, 6] [5, 8]\n"
 # `valueMadeHere` is what answers for these updates today, and the answer is `copied`. It has to be
 # `copied` and not `by-count`: `Array::writableInPlace` answers from the element's own block count,
 # and a container's slot never increments it, so the array's own count cannot see the container's
-# hold (docs/handover/plans/2026-11-20-container-held-elements-as-one-clause.cn.md, sections 3-4).
+# hold (internal/plans/2026-11-20-container-held-elements-as-one-clause.cn.md, sections 3-4).
 # The first reading below is the shape itself; the other three pin the two standing cases that the
 # clause exists for, so that the day the guard is loosened one of these goes red because a verdict
 # moved rather than because someone read the cases and noticed.

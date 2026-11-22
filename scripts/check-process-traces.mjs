@@ -19,7 +19,7 @@ const exts = new Set(['.cpp', '.h', '.hpp', '.cc', '.c', '.inc', '.def', '.cml',
 
 const pattern = new RegExp(
   [
-    'docs/handover',
+    'internal/(questions|plans|reports|reviews|archive)/|internal/(inbox|lanes|backlog)\.md',
     '\\bruling of 20\\d\\d',
     "\\bauthor'?s (ruling|answer|call|spec)",
     '\\(author[,)]',

@@ -1,7 +1,7 @@
 """Does a graph with an unreachable node have a canonical form? The acceptance of ① of the
 spelling handover.
 
-The question the handover left open (`docs/handover/reports/2026-11-18-commit-checks-and-spelling-
+The question the handover left open (`internal/reports/2026-11-18-commit-checks-and-spelling-
 spelling.cn.md`, item 1) is not "add a rule for the nodes nobody reaches". It is **where an
 unreachable node stands in the canonical order**, and that is a question about what the canonical
 order *is*: `nodes` is the order the graph's own structure decides, and a node no root reaches has

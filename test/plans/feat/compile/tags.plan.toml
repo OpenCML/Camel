@@ -601,7 +601,7 @@ expect_output_contains = ["The tag 'rule' cannot take 'Wide' as an argument: it 
 
 [[tests]]
 name = "argument_rule_binding"
-desc = "A tag whose argument is a rule with `with` parameters: its name is a function of them and the declaration carries the rule mark, so a use of the name as a value is a `Rule` and the program compiles and runs. The declaration carries the rule mark, and a use of its name becomes the call that binds the with-parameters, so the tag argument is a rule by the same judgement `rule_argument` exercises. Locked because the path with `with` parameters had no case; it does NOT guard the FUNC branch of `declarationOf`, which is unreachable today (see docs/handover/reports/guard-effectiveness-audit.md)."
+desc = "A tag whose argument is a rule with `with` parameters: its name is a function of them and the declaration carries the rule mark, so a use of the name as a value is a `Rule` and the program compiles and runs. The declaration carries the rule mark, and a use of its name becomes the call that binds the with-parameters, so the tag argument is a rule by the same judgement `rule_argument` exercises. Locked because the path with `with` parameters had no case; it does NOT guard the FUNC branch of `declarationOf`, which is unreachable today (see internal/reports/guard-effectiveness-audit.md)."
 case = "../../../cases/compile/tags/rule_binding_argument.cml"
 args = ["${case}"]
 expect_exit = 0

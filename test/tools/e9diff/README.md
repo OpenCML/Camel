@@ -132,7 +132,7 @@ over another seed range is not compared either -- both say so instead of reporti
 `--update-baseline` records a new full run, per-program classes included, and the numbers of the run
 that moved it belong in that commit's message; it judges the run against the baseline it replaces
 *before* writing, so a re-record cannot launder the movement that made somebody re-record. A ratchet
-may never be raised to make a gate green (`docs/handover/reports/`, 2026-11-17).
+may never be raised to make a gate green (`internal/reports/`, 2026-11-17).
 
 ## What it reuses, and what the port replaced
 

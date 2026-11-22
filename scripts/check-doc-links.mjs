@@ -8,9 +8,9 @@
 //   node scripts/check-doc-links.mjs            the reader-facing documents (see SCOPE)
 //   node scripts/check-doc-links.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
-//   node scripts/check-doc-links.mjs --source-line-citations  outside docs/handover no source is cited
+//   node scripts/check-doc-links.mjs --source-line-citations  outside internal no source is cited
 //                                               by line (a line moves with every edit; name the symbol)
-//   node scripts/check-doc-links.mjs --questions-defaults  every page under docs/handover/questions
+//   node scripts/check-doc-links.mjs --questions-defaults  every page under internal/questions
 //                                               names a default in a heading and gives it text (the
 //                                               author's rule of 2026-11-03: a question is asked with
 //                                               the answer this side would start on)
@@ -60,7 +60,6 @@ const SCOPE = [
     'CONTRIBUTING.md',
     'SECURITY.md',
     'CODE_OF_CONDUCT.md',
-    'ROADMAP.md',
     'docs/README.cn.md',
     'docs/design-principles.cn.md',
     'docs/design-principles.en.md',
@@ -202,7 +201,7 @@ function check(file) {
 // check above. This mode derives the page list from the tree, so the index cannot quietly fall
 // behind it. The pages of a subdirectory (jit/) are pages too; the top-level README is the index.
 const TECHNICAL = path.join(root, 'docs', 'technical')
-const QUESTIONS_DIR = path.join(root, 'docs', 'handover', 'questions')
+const QUESTIONS_DIR = path.join(root, 'internal', 'questions')
 const QUESTIONS_INDEX = path.join(QUESTIONS_DIR, 'README.md')
 const TECHNICAL_INDEX = path.join(TECHNICAL, 'README.md')
 
@@ -221,7 +220,7 @@ function technicalPages(directory = TECHNICAL) {
     return pages.sort()
 }
 
-// The pending table of docs/handover/questions lists the pages in that directory, and its header
+// The pending table of internal/questions lists the pages in that directory, and its header
 // says how many rows it has. Hand-kept counts went wrong three times in one night: a merge resolved
 // to their side dropped a row and the header still carried the old number. So both are derived here:
 // the rows of the pending table are the *.md files beside it (README.md aside), one row each, and
@@ -327,7 +326,7 @@ function renderQuestionsIndex() {
         '> 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。',
         '>',
         '> 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：',
-        '> 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。',
+        '> 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。',
         '',
         `## 现在在等作者：${pages.length} 页`,
         '',
@@ -375,7 +374,7 @@ function writeQuestionsIndex() {
 // how to count rows is a weaker version of the generator that already knows the whole answer.
 function checkQuestionsIndex() {
     if (!fs.existsSync(QUESTIONS_INDEX)) {
-        console.log('docs/handover/questions/README.md: no such file')
+        console.log('internal/questions/README.md: no such file')
         return 2
     }
     const { text: expected, pages, kept, rows } = renderQuestionsIndex()
@@ -391,7 +390,7 @@ function checkQuestionsIndex() {
     const limit = Math.max(actualLines.length, expectedLines.length)
     for (let i = 0; i < limit; i += 1) {
         if (actualLines[i] !== expectedLines[i]) {
-            console.log(`docs/handover/questions/README.md:${i + 1}: the page is not what the generator writes`)
+            console.log(`internal/questions/README.md:${i + 1}: the page is not what the generator writes`)
             console.log(`  generated: ${expectedLines[i] === undefined ? '(no line)' : expectedLines[i]}`)
             console.log(`  on disk:   ${actualLines[i] === undefined ? '(no line)' : actualLines[i]}`)
             break
@@ -407,7 +406,7 @@ function checkQuestionsIndex() {
 // what is left in `questions/` -- a merge can leave the answered page behind, and a leftover reads
 // as an unanswered question nobody is working on. So a page in `questions/` that already has a
 // page of its own in `reviews/` is a stale copy, and this check names the two files.
-const REVIEWS_DIR = path.join(root, 'docs', 'handover', 'reviews')
+const REVIEWS_DIR = path.join(root, 'internal', 'reviews')
 
 function pageStem(name) {
     return name.replace(/\.cn\.md$|\.md$/, '')
@@ -456,12 +455,12 @@ function checkAnsweredPages() {
                       })
                       .filter((entry) => entry.hits.length > 0)
         const where = [
-            ...answered.map((review) => `docs/handover/reviews/${review}`),
-            ...namedIn.map((entry) => `docs/handover/reviews/${entry.name}:${entry.hits.join(',')}`),
+            ...answered.map((review) => `internal/reviews/${review}`),
+            ...namedIn.map((entry) => `internal/reviews/${entry.name}:${entry.hits.join(',')}`),
         ]
         if (where.length > 0) {
             problems.push(
-                `docs/handover/questions/${page}: already answered by ${where.join('; ')}` +
+                `internal/questions/${page}: already answered by ${where.join('; ')}` +
                     ' -- the page was read and the reply is in reviews/, so this copy is left over',
             )
         }
@@ -534,11 +533,11 @@ function checkTechnicalIndex() {
 //
 // Not every `*.md` string is a citation: a script that writes its report names a run output. Only
 // the files listed above are read, and in code only a comment line is (a string literal that names
-// an output is not a citation). The records (docs/handover, docs/reviews, changes.log) are history
+// an output is not a citation). The records (internal, docs/reviews, changes.log) are history
 // and are not scanned. EXTERNAL_CITATIONS names files of other repositories: TSE2027 is the paper
 // repository, ECOOP2027 is that same repository under the name its rules file now lives in, and
 // docs/debugger-migration.md is in OpenCML-Ext.
-const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
+const RECORD_DIRS = new Set(['internal', 'docs/reviews'])
 const C_LIKE = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.cml', '.js', '.mjs', '.ts'])
 const HASH_COMMENT = new Set(['.py', '.sh', '.ps1'])
 const SCANNED = new Set(['.md', '.toml', ...C_LIKE, ...HASH_COMMENT])
@@ -905,7 +904,7 @@ if (args.includes('--self-test')) {
     process.exit(selfTestSkipDirs())
 }
 // A rule about the pages that only a reader of the rule could keep: "我方新问题一律一页一问放进
-// docs/handover/questions/" and "每页都要写默认建议，并当轮按默认开工" (author, 2026-11-03). The second
+// internal/questions/" and "每页都要写默认建议，并当轮按默认开工" (author, 2026-11-03). The second
 // half is a property of the page, so it is checked on the page rather than remembered: a section
 // whose heading names a default, and at least one line of text under it. The report names which of
 // the two is missing, because "this page is not compliant" sends the reader back to the rule to work
@@ -969,7 +968,7 @@ function checkQuestionsHaveDefaults() {
     return 0
 }
 // The rule the handover index states: a citation names a file and a symbol (`file#Symbol`), never a
-// line, because a line moves with every edit. Inside docs/handover/ the line numbers are that day's
+// line, because a line moves with every edit. Inside internal/ the line numbers are that day's
 // reading and stay; outside it, a line number on a repository source is a citation that will rot.
 // The match is deliberately narrow: a path that starts at one of the source roots and ends in a
 // position. A `.cml` name with a position is excluded: it is a tool's output or an example program's
@@ -992,10 +991,10 @@ function checkSourceLineCitations() {
         })
     }
     if (found > 0) {
-        console.log(`${found} source citation(s) outside docs/handover give a line number, which moves with every edit`)
+        console.log(`${found} source citation(s) outside internal give a line number, which moves with every edit`)
         return 1
     }
-    console.log(`no source citation outside docs/handover gives a line number: ${files.length} page(s) checked`)
+    console.log(`no source citation outside internal gives a line number: ${files.length} page(s) checked`)
     return 0
 }
 if (args.includes('--source-line-citations')) {

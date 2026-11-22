@@ -53,7 +53,7 @@
 # `sync` both report 2 (`free  serial 1001   parallel 2002`), and two that a `sync` body orders report 1
 # and 1 (`sync  serial 1001   parallel 1001`). Those are values that follow from the scheduler's
 # decision, not durations; the medians and the ratio are on
-# `docs/handover/reports/2026-11-18-eco-measurements.cn.md`, where a number belongs.
+# `internal/reports/2026-11-18-eco-measurements.cn.md`, where a number belongs.
 #
 # The torch.fx control of the same item is `test/cases/opt/writings/fx_greedy_fusion.py`. It is not a
 # test here: it needs a Python with `torch`, which the build host does not have, and a plan entry

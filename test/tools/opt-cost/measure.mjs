@@ -11,7 +11,7 @@
 // the runner's cost line (`timeout_ms / 4`, `TIMEOUT_MARGIN` in test/tools/run-tests.mjs) on all
 // four back ends at once -- 6480 / 6410 / 6550 / 6440 ms of CPU against 5000 -- and the reading the
 // author asked for is not "raise the line" but "measure where the slow-down is, and report each
-// check's share" (docs/handover/reviews/questions-2026-10-29.md, the dispatch of 2026-11-19 to the
+// check's share" (internal/reviews/questions-2026-10-29.md, the dispatch of 2026-11-19 to the
 // 0.2.45 blocker list, S3-2). A single absolute figure is not that reading: a millisecond on a
 // shared host is not evidence (the rule `test/tools/para-speedup.mjs` states and this tool follows).
 //

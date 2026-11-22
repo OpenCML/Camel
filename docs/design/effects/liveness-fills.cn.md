@@ -134,7 +134,7 @@ A/B 读数（都跑 `test/plans/feat/compile/branch_exit.plan.toml`，10 例）�
 
 上面 1–6 节量的是 `76297223f` 的树，不改。这一节记那之后改了什么：
 
-- **删 2 个字段**：`hasWaitEdge`、`isWaitedOn`。它们不在 `effectStandingOf` 的答案里（答案只读 `hasDataUser || isSyncStatement || isWriterWithLaterRead`），却是 5 处里 4 处填的字段，其中 `hasWaitEdge` 有**三种写法**（§3）。判据来自 `docs/handover/reports/code-review-2026-11-01.md` 第 4 条：**做不到经它判定的字段，删掉。**
+- **删 2 个字段**：`hasWaitEdge`、`isWaitedOn`。它们不在 `effectStandingOf` 的答案里（答案只读 `hasDataUser || isSyncStatement || isWriterWithLaterRead`），却是 5 处里 4 处填的字段，其中 `hasWaitEdge` 有**三种写法**（§3）。判据来自 `internal/reports/code-review-2026-11-01.md` 第 4 条：**做不到经它判定的字段，删掉。**
 - **4 处不再借壳**：`gates.cpp`、`graph.cpp`、`writings.cpp`、`draft_inline.cpp` 各写自己的 `bool`（分别叫 `carriesWait`/`waitOnAChain`、`hasWaitEdge`、`memberCarriesWait`、`callCarriesWait`/`callOnAChain`），注释写明这是**结构问题**、不是活性答案——带等待的 GATE 在答案里是 `HasNoCredential`，那个答案回答不了它。
 - **1 处改走单点**：`FusionGroupView::isPrivateTo` 现在调 `effectStandingOf(...) == HasNoCredential`，再与它自己那一条（`isWaitedOn`，不吃凭据，故不在答案里）相与。等价性：`isWriterWithLaterRead` 恒 false，所以 `HasNoCredential ∧ ¬isWaitedOn` 与改前的 `¬data ∧ ¬waited ∧ ¬sync` 同。
 - **字段集**：5 → 3。`isWriterWithLaterRead` 留着（赋值 0、读点 1），理由见 §2 第 44 行：它是 3.1 第三条凭据在全树唯一的表述。

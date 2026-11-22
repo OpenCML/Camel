@@ -7,13 +7,13 @@
  * wired to `GraphDraft`, and a gate that names whoever enters or leaves one of them.
  *
  * `GraphDraft` is going away. Until it does, the ledger in
- * `docs/handover/reviews/graph-store-step2-b-ledger.cn.md` records which places still connect to it
+ * `internal/reviews/graph-store-step2-b-ledger.cn.md` records which places still connect to it
  * directly, "one row per commit", so that "deleted" is a name and not a claim. This file is the same
  * three lists as a gate, because a ledger nobody checks is a promise nobody keeps.
  *
  * ## Why these are lists and not numbers
  *
- * Author's ruling of 2026-11-03 13:30 (`docs/handover/reviews/questions-2026-10-29.md`): a count
+ * Author's ruling of 2026-11-03 13:30 (`internal/reviews/questions-2026-10-29.md`): a count
  * that can drift while the behaviour stays the same protects nothing.
  *
  *   * The `references` count is **gone**. It counted how many times the whole word `GraphDraft`

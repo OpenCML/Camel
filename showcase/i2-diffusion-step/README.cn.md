@@ -86,7 +86,7 @@ $ camel showcase/i2-diffusion-step/step.cml --arg seed=7 --arg steps=3 --arg lr=
 所以"并行在哪里"的答案是：**这个例子里并行在算子内部，不在任务之间**——线程在 `tensor` 的 matmul
 与 relu 内核里，任务图上没有独立的东西可调度。这也正是两档打印同样的数的原因：调度器没有重排的自由。
 想看真的被切成链的计划（一个分支臂切成 11 条链、13 条链间边），见
-`docs/handover/reports/prl-two-reds-and-segments.md`。
+`internal/reports/prl-two-reds-and-segments.md`。
 
 ## 在 GPU 上
 

@@ -20,7 +20,7 @@ needs a Python with `torch`, and a plan entry that skipped for want of an interp
 a skip in the gate where there is nothing to measure. The host `zjwei` does have it -- the probe
 on 2026-11-18 answered `torch 2.14.1+cu130` with the interpreter a plan entry would use -- so the
 readings below were taken there, and the file is quoted in
-`docs/handover/reports/2026-11-18-commit-checks-and-spelling-spelling.cn.md`.
+`internal/reports/2026-11-18-commit-checks-and-spelling-spelling.cn.md`.
 
 Run: python test/cases/trans/spelling/torch_contrast.py
 Exit 0 when torch is present (the answer is the reading), 77 when it is not.
