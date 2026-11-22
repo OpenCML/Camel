@@ -2108,8 +2108,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // every type, and the operator's kernel is `operators/copy.cpp`. The other three kinds the
         // same plan turns into operators -- cast, fill, access -- take a compile-time parameter
         // (a target type, a member position, a fill's kind and field names) that a record keyed by
-        // URI cannot carry yet, so they are not declared here (`docs/handover/plans/
-        // 2026-11-22-refactor-stage2-interfaces.cn.md` 2.3, and the reader inventory beside it).
+        // URI cannot carry yet, so they are not declared here (see the stage 2 interfaces plan, 
+        // item 2.3, and the reader inventory beside it).
         OperatorGroup::create("copy", {}),
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,

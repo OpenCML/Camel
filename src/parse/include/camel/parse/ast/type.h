@@ -255,7 +255,7 @@ class ResourceClauseLoad : public Load {
     void setPure(bool pure) { pure_ = pure; }
 
     /// Whether the clause writes `panic`: a call of the operator this is declared on can fail
-    /// (design principles 3.9, 负责人 2026-11-22). It takes no list -- the kind of a fault is read
+    /// (design principles 3.9). It takes no list -- the kind of a fault is read
     /// from what the call raises, not from the declaration -- and a declaration that leaves it out
     /// promises that no call of it fails. It is carried here because it is written in this clause,
     /// beside `pure`: the word belongs to the clause, and `panic` is not part of the function type
@@ -279,9 +279,9 @@ class ResourceClauseLoad : public Load {
     const std::string geneCode() const override;
 
   private:
-    bool pure_ = false;
+    bool pure_     = false;
     bool spelling_ = false;
-    bool panic_ = false;
+    bool panic_    = false;
     std::vector<Uses> uses_;
 };
 

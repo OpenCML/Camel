@@ -13,8 +13,7 @@
 
 # One build serves every CPython 3.10 and later: the module is compiled against the stable ABI
 # (Limited API, `Py_LIMITED_API=0x030A0000`) and `Python3_add_library(... USE_SABI 3.10)` names the
-# artifact `_camel.abi3.<ext>`. This is the 2026-10-25 ruling carried out on 2026-11-02
-# (docs/handover/README.cn.md item 7, review index C28): before it the extension was built once per
+# artifact `_camel.abi3.<ext>`. One build covers every version, where before it was built once per
 # CPython version and `cp310-cp310` / `cp311-cp311` wheels covered nothing else.
 #
 # `USE_SABI` arrived in CMake 3.26, so this directory raises the minimum for its own subtree: the
