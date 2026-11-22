@@ -486,7 +486,11 @@ class GraphDraft : public camel::graph::Graph {
         return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeSlotTypes_.size();
     }
     bool hasFrameLayout() const { return hasFrameLayout_; }
-    bool isMacroGraph() const { return (flags_ & kGraphFlagMacro) != 0; }
+    /// Whether this graph may be evaluated ahead of time: the `#macro` fact of the declaration it
+    /// was built from (recorded on the exit node, tag::markMacro and read back by
+    /// tag::declaresMacro), or the flag the two writes with no witness inside the graph still set.
+    /// Defined in draft.cpp, where the tag interface is visible.
+    bool isMacroGraph() const;
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
     bool empty() const { return liveNodeCount_ == 0; }

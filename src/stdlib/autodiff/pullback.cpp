@@ -4213,7 +4213,13 @@ void Backward::visitOper(gc_node_ref_t node) {
                 uri,
                 whereIs(forward().nodeOrigin(node))));
     }
-    const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
+    // The rule is filed under the operator's id, so the node's URI is resolved to one first: a
+    // node names its operator by id (camel/ops/operator_record.h), and a rule keyed by text would
+    // be a second spelling of "which operator this is".
+    const std::optional<camel::core::OperId> ruleOf =
+        camel::core::OperatorTable::instance().lookup(uri);
+    const camel::core::VjpRule rule =
+        ruleOf ? DerivativeRegistry::instance().findRule(*ruleOf) : nullptr;
     if (rule == nullptr) {
         if (!valueWith.empty()) {
             failValueWith(

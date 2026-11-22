@@ -434,3 +434,48 @@ expect_stdout_contains = ["[[0.0625, 0.125], [0.1875, 0.25]]", "exported"]
 # these two, and a stale number is a red test about a program that is right.
 expect_stderr_contains = ["M[ACRO] graph=", "name=__root__ calls=1 inlined=0 brch=0 loops=0", "name=iterate calls=0 inlined=0 brch=1 loops=0"]
 normalizers = ["strip_ansi", "normalize_newlines"]
+[[tests]]
+name = "ordinary_function_graph"
+desc = "The counterpart of macro_graph_refused, and what makes that entry a measurement: a program of ordinary functions holds no macro graph, so the pass prints it and exits 0. Its red condition is `isMacro` answering true for every graph -- then this program is refused as `it is a macro graph` and the pass exits 1."
+kind = "behavior"
+case = "../../../cases/trans/macro/ordinary_function_graph.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "macro_graph_refused"
+desc = "The macro side: `#macro` on the declaration is recorded on the graph's exit node, so the graph answers `isMacro` and the pass refuses to print it, naming the graph. Its red condition is that fact not reaching the graph -- the pass then prints the program and exits 0."
+kind = "behavior"
+case = "../../../cases/trans/macro/macro_graph_refused.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 1
+expect_stdout_contains = ["it is a macro graph", "cannot print twice"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "grad_wrapper_graph"
+desc = "The other derivation: a graph whose exit is a call of a macro operator answers `isMacro` through the operator's own record, with no `#macro` declaration in the program. `make_gradient` returns `grad(weighted)`, so its graph is a wrapper of that call, and `std::stats` prints the fact beside the graph it belongs to -- one name and one boolean per graph, in the walk's order. The root graph's entry is asserted false beside it, so a derivation that answered true for everything is red here too. Its red condition is that the operator-record branch of `isMacro` is removed: the wrapper's boolean becomes false while the key is still printed for every graph."
+kind = "behavior"
+case = "../../../cases/trans/macro/grad_wrapper_graph.cml"
+args = ["${case}", "std::stats"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout || ''
+const line = out.split('\n').find((one) => one.startsWith('GRAPH_STATS '))
+assert(line, `the stats line is printed: ${out}`)
+const stats = JSON.parse(line.slice('GRAPH_STATS '.length))
+assert(stats.graph_names.length === stats.graphs, `one name per graph: ${stats.graph_names.length} names for ${stats.graphs} graphs`)
+assert(stats.macro.length === stats.graphs, `one boolean per graph: ${stats.macro.length} booleans for ${stats.graphs} graphs`)
+const wrapper = stats.graph_names.indexOf('make_gradient')
+assert(wrapper >= 0, `the wrapper graph is named among the graphs: ${line}`)
+assert(stats.macro[wrapper] === true, `the gradient wrapper is a macro graph: ${line}`)
+const root = stats.graph_names.indexOf('__root__')
+assert(root >= 0 && stats.macro[root] === false, `an ordinary graph is not one: ${line}`)
+}
+"""

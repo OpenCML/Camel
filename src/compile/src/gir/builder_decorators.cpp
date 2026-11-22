@@ -74,8 +74,6 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
         return rawGraph;
     }
 
-    // Decorators run at macro time: the graph applying them is a macro that yields the decorated
-    // function once its inputs are static.
     // The factory is a separate graph, not a statement in the enclosing sync chain.
     // Otherwise applying a local decorator overwrites lastSyncedNode_ with a node
     // belonging to this factory, and the next enclosing call links across graphs.
@@ -94,8 +92,10 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     graph_ptr_t decoratedGraph = enterScope(
         FunctionType::create(param_vec_t{}, param_vec_t{}, nullptr),
         "__decorated__" + funcName + "_" + std::to_string(syntheticRefIndex_++));
-    decoratedGraph->edit().setFlags(static_cast<uint8_t>(
-        decoratedGraph->view().flags() | camel::runtime::kGraphFlagMacro));
+    // `@d f` is `let f = d(f0)` and `d` is an ordinary function (design principles 6.1): the
+    // shorthand writes the same semantics and carries no rule of its own. So the factory graph is
+    // not macro here — the call of the decorator inside it is evaluated ahead of time exactly when
+    // the decorator's own declaration says `#macro` (principles 8), which is what `#macro` means.
     registerGraphOrigin(
         context_,
         decoratedGraph,

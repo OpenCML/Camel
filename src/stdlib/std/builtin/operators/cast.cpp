@@ -8,6 +8,8 @@
 #include "camel/core/numeric_convert_half.h"
 #include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/half.h"
+#include "camel/core/type/base.h"
+#include "camel/utils/assert.h"
 
 #include <sstream>
 
@@ -300,3 +302,20 @@ CAMEL_HALF_TO_INT(Int32, __f6toi__, camel::core::rtdata::Float16)
 CAMEL_HALF_TO_INT(Int64, __f6tol__, camel::core::rtdata::Float16)
 
 #undef CAMEL_HALF_TO_INT
+
+// A conversion as an ordinary operator (`cast::<T, U>` of `lib/std/prelude.cml`; plan 2.3,
+// step 2). The CAST node's two facts were its own type -- the target -- and the type of its one
+// input, and a call of an operator is given both: `resultType()` is the type the call's value has,
+// `type(0)` the type of the operand it reads. So the answer is the type's own conversion, exactly
+// what `runConversion` asked of the node (`lib/std/exec/shaped_operators.cpp`), and whether it was
+// the checking conversion of a pair or a hand-on of the slot is the type's to say, not this
+// kernel's.
+slot_t __cast_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    camel::core::type::Type *target = norm.resultType();
+    camel::core::type::Type *source = norm.type(0);
+    GUARD(target != nullptr, "a conversion must state the type it produces.");
+    GUARD(source != nullptr, "a conversion must state the type of its operand.");
+    return target->castSlotFrom(norm.slot(0), source);
+}

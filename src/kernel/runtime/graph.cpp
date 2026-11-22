@@ -25,6 +25,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
@@ -3104,7 +3105,32 @@ size_t GCGraph::frameSize() const {
     return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType()->size();
 }
 
-bool GCGraph::isMacro() const { return (flags_ & kGraphFlagMacro) != 0; }
+bool GCGraph::isMacro() const {
+    // Two statements, both facts and neither a copy:
+    //   1. `#macro` on the declaration, read off the exit node it was recorded on (tag::markMacro)
+    //      -- the same shape `independent` takes. The compiler no longer keeps a flag for it.
+    //   2. the operator a call is, where that operator's own record says macro
+    //      (operators declared `.macro = true`, e.g. `autodiff:grad`): a graph that is a wrapper
+    //      of such a call may be evaluated ahead of time for the same reason the operator may.
+    // A forwarder of a macro function value is neither: it needs the callee's graph, which the
+    // node does not name (a call names its callee by operand), so it waits for the graph view's
+    // callee accessor and is reported as not yet materialized meanwhile.
+    if (camel::core::tag::declaresMacro(*this)) {
+        return true;
+    }
+    const gc_node_ref_t exit = exitNodeRef();
+    if (exit != kInvalidNodeRef) {
+        const GCNode *n = node(exit);
+        if (n != nullptr && n->kind == GCNodeKind::Oper) {
+            const GCOperBody *body = nodeBodyAs<GCOperBody>(exit);
+            if (body != nullptr &&
+                camel::core::OperatorTable::instance().isMacro(body->oper)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 bool GCGraph::isRoot() const { return !isValid(outerGraphId_); }
 

@@ -188,6 +188,27 @@ bool OperatorTable::isPure(std::string_view uri) const {
     return id && isPure(*id);
 }
 
+sem::Effect OperatorTable::effectOf(OperId id) const {
+    // One statement, one reading: the access list (sem::OperatorSemantics::effect). An operator
+    // nobody recorded at all is `Undeclared`; a record that states no effect is read as effectful,
+    // which is what running it may do (design principles 3.3) and what `find` already reported as
+    // a trait pair with neither bit set.
+    const sem::OperatorSemantics *facts = record(id);
+    if (facts == nullptr) {
+        return sem::Effect::Undeclared;
+    }
+    const sem::Effect stated = facts->effect();
+    if (stated == sem::Effect::Undeclared) {
+        return sem::Effect::Effectful;
+    }
+    return stated;
+}
+
+sem::Effect OperatorTable::effectOf(std::string_view uri) const {
+    const auto id = lookup(uri);
+    return id ? effectOf(*id) : sem::Effect::Undeclared;
+}
+
 bool OperatorTable::withAfterNorm(std::string_view uri) const {
     const auto id = lookup(uri);
     const sem::OperatorSemantics *facts = id ? record(*id) : nullptr;

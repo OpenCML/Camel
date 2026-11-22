@@ -20,12 +20,6 @@
 
 namespace camel::core::module {
 
-/// Whether an operator was declared pure, declared to have effects, declared to touch only the
-/// program's own variables, or not declared at all (then treated as having effects).
-enum class OperatorPurity { Undeclared, Pure, Effectful, StateOnly };
-
-std::string_view to_string(OperatorPurity purity);
-
 struct OperatorDescription {
     std::string module;
     /// The name the module exports the operator group under.
@@ -36,7 +30,11 @@ struct OperatorDescription {
     /// Parameter counts; -1 for any number, -2 when the resolver does not tell.
     int withCount = -2;
     int normCount = -2;
-    OperatorPurity purity = OperatorPurity::Undeclared;
+    /// The effect, from the operator's one statement of it (`sem::Effect`): the same four answers
+    /// the access list gives every other reader, so a listing cannot state a purity the operators
+    /// themselves do not have. `camel inspect --ops` prints it as its "purity" member
+    /// (`sem::effectName`).
+    sem::Effect effect = sem::Effect::Undeclared;
     /// The declared semantics (owned by the operator table), nullptr when none is declared.
     const sem::OperatorSemantics *semantics = nullptr;
     /// Whether the module declares the group without exporting it: the kernel of an `#impl`

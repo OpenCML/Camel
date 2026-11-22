@@ -330,13 +330,11 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref);
 
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
-    /// The function of the graph is a macro (design principles 8): `std::macro` may evaluate a
-    /// call of it ahead of time and materialise the result as a constant. The fact is the
-    /// standard tag `#macro` on the declaration, or, for an operator value, the operator's
-    /// declared macro trait; it is recorded on the graph so that a runtime graph keeps it.
-    /// Bit 0 was once the flag of a graph that carried a derivative rule as a closure value
-    /// (the old `@vjp` decorator); that is a graph reference now (kGraphRefRule).
-    kGraphFlagMacro = 1 << 0,
+    /// Bit 0 is retired: it was once the flag of a graph that carried a derivative rule as a
+    /// closure value (the old `@vjp` decorator, now kGraphRefRule), and then the macro flag.
+    /// A graph's macro-ness is the declaration's fact -- `#macro`, read by tag::declaresMacro off
+    /// the exit node (GCGraph::isMacro) -- so there is no flag and no writer. The number stays
+    /// unused so that every other bit keeps the value it had.
     /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
     /// dissolveUnorderedGates). A graph without it is looked at by the first commit that
     /// reaches it; a graph with it is left as it is unless it is edited.

@@ -19,11 +19,62 @@ using camel::runtime::GCFillKind;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 
+namespace {
+
+/// A JSON string literal for `text`. Graph names are source identifiers, so this normally writes
+/// them unchanged; the reader of the line is a parser, and a name that held a quote or a backslash
+/// would end the object early if it were written as it is.
+std::string jsonString(const std::string &text) {
+    std::string out = "\"";
+    for (const char c : text) {
+        switch (c) {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            if (static_cast<unsigned char>(c) < 0x20) {
+                out +=
+                    std::format("\\u{:04x}", static_cast<unsigned>(static_cast<unsigned char>(c)));
+            } else {
+                out += c;
+            }
+            break;
+        }
+    }
+    out += '"';
+    return out;
+}
+
+} // namespace
+
 std::string GraphStats::toJson() const {
+    std::string names;
+    std::string macro;
+    for (const GraphEntry &entry : graphEntries) {
+        if (!names.empty()) {
+            names += ',';
+            macro += ',';
+        }
+        names += jsonString(entry.name);
+        macro += entry.macro ? "true" : "false";
+    }
     return std::format(
         "{{\"graphs\":{},\"nodes\":{},\"edges\":{},\"opers\":{},\"direct_calls\":{},"
         "\"indirect_calls\":{},\"closures\":{},\"branches\":{},\"loops\":{},\"bytes\":{},"
-        "\"specializations\":{},\"cycle_dropped_sessions\":{}}}",
+        "\"specializations\":{},\"cycle_dropped_sessions\":{},\"graph_names\":[{}],"
+        "\"macro\":[{}]}}",
         graphs,
         nodes,
         edges,
@@ -35,7 +86,9 @@ std::string GraphStats::toJson() const {
         loops,
         bytes,
         specializations,
-        cycleDroppedSessions);
+        cycleDroppedSessions,
+        names,
+        macro);
 }
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
@@ -46,13 +99,17 @@ GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context,
 
 GraphStats collectGraphStats(const camel::runtime::Program &program, GCGraph *root) {
     GraphStats stats;
-    stats.specializations = program.specializations().size();
+    stats.specializations      = program.specializations().size();
     stats.cycleDroppedSessions = camel::runtime::cycleDroppedSessions();
     if (!root) {
         return stats;
     }
     for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, root)) {
         ++stats.graphs;
+        // The graph the walk already holds, and its own derived answer: `isMacro` is a fact of the
+        // GCGraph (camel/runtime/graph.h#GCGraph::isMacro), not of a view or of a flag kept beside
+        // it, so reading it here adds no traversal and no second derivation.
+        stats.graphEntries.push_back({graph->name(), graph->isMacro()});
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const auto ref   = it.ref();
             const auto *node = *it;

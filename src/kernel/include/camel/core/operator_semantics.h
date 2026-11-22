@@ -441,6 +441,12 @@ struct ElementCalls {
  */
 enum class Effect : uint8_t { Undeclared, Pure, StateOnly, Effectful };
 
+/// The four answers as the one word each is printed as: "undeclared", "pure", "state",
+/// "effectful". There is one spelling of the effect in the process and this is how it reads, so a
+/// listing that prints it and a checker that compares a declaration's `@pure`/`@effect` against it
+/// cannot be a second statement of the same fact.
+std::string_view effectName(Effect effect);
+
 struct OperatorSemantics {
     OperatorKey key;
     /// What the declaration said about the effect where no access list itemizes it: `Pure` when

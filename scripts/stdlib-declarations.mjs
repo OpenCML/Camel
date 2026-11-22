@@ -126,8 +126,19 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // module in `src/stdlib/std.cml` and `src/stdlib/rulesets/`. There is no single directory to name either
 // way, so the three spellings are resolved here and nowhere else, and this file measures whichever
 // tree it is run in.
-const MOVED_LIBRARY = path.join(REPO_ROOT, 'lib')
-const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
+// The library has had three spellings and this file measures whichever tree it runs in. The flat
+// one is a single `stdlib/` at the root. The other two keep one directory per module: `lib/` before
+// our own sources moved under `src/`, and `src/stdlib/` after. Naming only one of them would make
+// this read a directory that is not there and throw instead of reporting.
+const MOVED_LIBRARY = [
+    path.join(REPO_ROOT, 'src', 'stdlib'),
+    path.join(REPO_ROOT, 'lib'),
+].find((dir) => fs.existsSync(dir)) ?? path.join(REPO_ROOT, 'src', 'stdlib')
+const FLAT_LIBRARY =
+    [
+        path.join(REPO_ROOT, 'src', 'stdlib'),
+        path.join(REPO_ROOT, 'stdlib'),
+    ].find((dir) => fs.existsSync(path.join(dir, 'std.cml'))) ?? path.join(REPO_ROOT, 'stdlib')
 const FLAT = fs.existsSync(path.join(FLAT_LIBRARY, 'std.cml'))
 const firstOf = (files) => files.find((file) => fs.existsSync(file)) ?? files[0]
 /// A module's declaration file: `<name>.cml` in the flat library, `src/stdlib/<name>/<name>.cml` in the
@@ -140,10 +151,12 @@ const declarationFile = (name) =>
             path.join(MOVED_LIBRARY, 'std', `${name}.cml`),
             path.join(MOVED_LIBRARY, `${name}.cml`),
         ])
-/// The file a module's `computed:` names: `signatures/<name>.cml` from the library root.
+/// The file a module's `computed:` names: `signatures/<name>.cml`. It sits at the library root in
+/// the flat tree and inside the module's own directory once the modules keep their sources beside
+/// their declarations, so both are tried rather than one assumed.
 const computedFile = (name, file = path.join('signatures', `${name}.cml`)) =>
     FLAT
-        ? path.join(FLAT_LIBRARY, file)
+        ? firstOf([path.join(FLAT_LIBRARY, name, file), path.join(FLAT_LIBRARY, file)])
         : firstOf([
             path.join(MOVED_LIBRARY, name, file),
             path.join(MOVED_LIBRARY, file),
@@ -157,7 +170,7 @@ const sourceFile = (name, source) =>
         path.join(MOVED_LIBRARY, 'std', String(source)),
         path.join(MOVED_LIBRARY, String(source)),
     ])) : declarationFile(name)
-const MODULES_DIR = FLAT ? path.join(REPO_ROOT, 'modules') : MOVED_LIBRARY
+const MODULES_DIR = [MOVED_LIBRARY, path.join(REPO_ROOT, 'modules')].find((dir) => fs.existsSync(dir)) ?? MOVED_LIBRARY
 const REFERENCE = path.join(REPO_ROOT, 'scripts', 'stdlib-reference.mjs')
 
 const relative = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
