@@ -36,6 +36,15 @@ seconds.** `rendezvous(2, t)` gives how many calls met at the meeting point: two
 same time both report 2, two that took turns report 1 and 1. So `sync` on against `sync` off on one
 unordered resource says whether the wall clock above is about resources at all.
 
+The window `t` is where a second of wall clock does enter, and it is the one thing here a loaded
+host can starve: a call that reports 1 has either been ordered after the other call or arrived
+after the window closed, and the two causes look the same at 200 ms. So the pair is read twice, at
+`DELAY_MS` and at ten times that. A pair the scheduler ordered reports 1 at *every* window, because
+a call that waits gives up only when the window closes; a pair the host starved reports 2 as soon
+as the window is wide enough. The narrow cell is the host reading, the wide cell is the scheduler
+reading, and a scheduler that is free of `sync` and still orders the two calls fails the wide cell
+(asked three times) and this case with it.
+
 **No verdict, no bound.** It prints medians, ranges, ratios and the scheduler's own decision, and
 names which shape the numbers have. Run:
 
@@ -124,6 +133,28 @@ func main(): int {{
     return 0
 }}
 """.format(delay=DELAY_MS)
+
+# The same `free` pair with a window wide enough that a stalled host cannot starve it. The count is
+# an answer about the schedule, not about seconds: two calls the scheduler put on two threads meet
+# at the point and both report 2, and two it ordered one after the other report 1 -- at *every*
+# window, because a serialized call waits the whole window out before it gives up. So a wide window
+# cannot turn an ordered pair into a met one; it only keeps a host that stalled for longer than
+# DELAY_MS from being read as a scheduler that ordered the two calls.
+WIDE_MS = DELAY_MS * 10
+
+FREE_PAIR_WIDE = """import {{ rendezvous }} from test_support
+
+func meet(): int {{
+    return rendezvous(2, {window})
+}}
+
+func main(): int {{
+    let a = meet()
+    let b = meet()
+    print(a * 1000 + b)
+    return 0
+}}
+""".format(window=f"{WIDE_MS / 1000.0}")
 
 BACKENDS = (
     # (name, the flags that come before the program, the pipeline that comes after it)
@@ -215,19 +246,67 @@ def main():
     say()
     say("control: two calls on `rendezvous_point` (unordered), `sync` on against `sync` off --")
     say("the number is a*1000+b, where each call reports how many calls met (2 = both at once):")
+    control = {}
     for label, text in (("sync", SYNC_PAIR), ("free", FREE_PAIR)):
         path = scratch / f"pair_{label}.cml"
         path.write_text(text, encoding="utf-8", newline="\n")
         cells = []
         for name, flags, passes in BACKENDS:
             _, out = run(scratch, path, flags, passes)
+            control[label, name] = out
             cells.append(f"{name} {out}")
         say(f"  {label:<6}{'   '.join(cells)}")
+
+    # The `free` cell again with the wide window. A host that stalled for longer than DELAY_MS
+    # reports 1 there for the same reason a `sync` body does, and those two causes have to be told
+    # apart before the value means anything: the serialized pair reports 1 at this window too, so
+    # this cell is the reading of the scheduler and the cell above is the reading of the host.
+    wide_path = scratch / "pair_free_wide.cml"
+    wide_path.write_text(FREE_PAIR_WIDE, encoding="utf-8", newline="\n")
+    say()
+    say(f"the same `free` pair with a {WIDE_MS} ms window ({WIDE_MS // DELAY_MS}x DELAY_MS):")
+    wide = {}
+    # The question is whether the back end *can* put the two calls on two threads, not whether it
+    # did it once: a pair it ordered reports 1 on every attempt, so asking three times decides the
+    # same thing for a scheduler that cannot and only forgives a host that was busy once.
+    for _ in range(3):
+        cells = []
+        for name, flags, passes in BACKENDS:
+            _, out = run(scratch, wide_path, flags, passes)
+            wide[name] = out
+            cells.append(f"{name} {out}")
+        say(f"  free  {'   '.join(cells)}")
+        if wide["parallel"] == "2002":
+            break
+
+    say()
+    if control["free", "parallel"] == "2002":
+        say("reading: two calls free of `sync` met on the parallel back end (both report 2)")
+    elif wide["parallel"] == "2002":
+        say(f"reading: the {DELAY_MS} ms window was missed on this host ({control['free', 'parallel']} "
+            f"on the parallel back end); at {WIDE_MS} ms, two calls free of `sync` met on the "
+            f"parallel back end")
+    else:
+        say(f"reading: two calls free of `sync` did NOT meet on the parallel back end, at the "
+            f"{DELAY_MS} ms window or at the {WIDE_MS} ms one: the scheduler ordered them one "
+            f"after the other")
+        return 1
 
     # The scheduler's own word, once: which graphs it kept serial and what it cut into tasks. It is
     # the reason behind the numbers above, and it is read here instead of inferred from them.
     say()
     say("the parallel back end's decision for the program (std::prl diag=true):")
+    done = subprocess.run(
+        [EXE, "-t", THREADS, str(pair), "std::prl", "diag=true"],
+        cwd=str(scratch),
+        capture_output=True,
+        text=True,
+        env=CHILD_ENV,
+    )
+    text = (done.stderr or "").strip().splitlines()
+    for line in text[:40]:
+        say(f"  {line}")
+    return 0
     done = subprocess.run(
         [EXE, "-t", THREADS, str(pair), "std::prl", "diag=true"],
         cwd=str(scratch),
