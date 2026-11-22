@@ -250,12 +250,12 @@
         {
             "comment": "The pass API headers: the translation, optimization and scheduler passes. The move distributed them over the block that owns each pass, so the rule names each block's `camel/passes/` directory.",
             "paths": ["src/stdlib/std/cml/include/camel/passes/", "src/stdlib/std/cxx/opt/include/camel/passes/", "src/stdlib/std/gir/include/camel/passes/", "src/stdlib/std/gir/dot/include/camel/passes/", "src/stdlib/std/gir/json/include/camel/passes/", "src/stdlib/std/macro/include/camel/passes/", "src/stdlib/test/include/camel/passes/"],
-            "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear", "feat/runtime/draft_erase_unread.plan.toml"]
+            "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear", "feat/runtime/draft_erase_unread.plan.toml", "feat/runtime/edit_record.plan.toml"]
         },
         {
             "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too. The ledger's `files`/`references` count is partly a header count (`kernel/include/camel/runtime/draft.h`, `draft_session.h`, ...), so this rule names the ledger plan for the same reason the core one does. `kernel/include/camel/runtime/node_ref.h` is where a handle's identity is written down -- the address and the epoch -- so the witness of it runs here too.",
             "paths": ["src/kernel/include/camel/core/", "src/kernel/include/camel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml", "feat/runtime/edit_record.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",
@@ -290,7 +290,7 @@
         {
             "comment": "The test-only passes (test::facts, test::regions, test::rules, ...): the plans that name them in their arguments.",
             "paths": ["src/stdlib/test/"],
-            "plans": ["smoke", "feat/compile", "feat/linear", "feat/mm", "feat/modules", "feat/opt", "feat/runtime/draft_erase_unread.plan.toml"]
+            "plans": ["smoke", "feat/compile", "feat/linear", "feat/mm", "feat/modules", "feat/opt", "feat/runtime/draft_erase_unread.plan.toml", "feat/runtime/edit_record.plan.toml"]
         },
         {
             "comment": "Any other pass, including the shared pass machinery.",
@@ -310,7 +310,7 @@
         {
             "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too. The direct-connection ledger of graph-store step 2 b is checked here as well: its three numbers count the references to `GraphDraft`, and `src/runtime/` is where both the storage and the transaction live, so this is the directory a commit can add a direct connection from. The plan is fast and cheap (one `git grep` pass), so it rides along rather than waiting for its own gate. The witness of a node handle's identity rides along for the same reason: the epoch a handle names its draft by is minted in `src/runtime/draft.cpp`.",
             "paths": ["src/kernel/core/", "src/kernel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml", "feat/runtime/draft_erase_unread.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml", "feat/runtime/draft_erase_unread.plan.toml", "feat/runtime/edit_record.plan.toml"]
         },
         {
             "comment": "Execution, entry arguments and the standalone bridge.",

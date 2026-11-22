@@ -468,10 +468,16 @@ struct CommitViolation {
 /// `chain` and its caller in the same commit, and the caller's old version is lawful in the old
 /// program and beyond in the new one. A caller whose two programs are the same object passes
 /// nothing, which is the whole answer there.
+/// sksEffects and sksOrder are the tier (GraphDraft::editTier): which of the two questions
+/// the edit record says this draft owes. Both true is the reading a caller that has no record gets
+/// -- it asks both, as the commit always has; a draft whose record names only the kinds that keep
+/// both promises passes both false and this reading returns nothing, in every build. The record is
+/// the rule (docs/design/graph-editing/README.cn.md 8.1's table), and the two flags are that table's
+/// right-hand columns.
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
-    const Program *beforeProgram = nullptr);
+    const Program *beforeProgram = nullptr, bool asksEffects = true, bool asksOrder = true);
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
 /// effect outside the program). This is the first half of the tier; the
