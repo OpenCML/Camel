@@ -748,6 +748,10 @@ function prefixRules (moves) {
   const out = []
   for (const m of moves) {
     if (!m.row.from.endsWith('/')) continue
+    // A bare name (`diagnostics`) is the same word as a deeper directory's last segment
+    // (`core/error/diagnostics`), so the match itself has to say which one it is: `applyRewrites`
+    // rewrites it only where a path starts at it. What this list carries is the pair, not the
+    // reach.
     out.push({ from: m.from, to: m.to })
     // When the target does not end with the old suffix, no include root can absorb the move:
     // `src/compile/...` was spelled `compile/...` against the `src` root, and the target is
@@ -995,6 +999,35 @@ function applyRewrites (tree, moves, scan) {
   }
   // The build files: the same prefix rule over every occurrence of a moved directory.
   const rules = prefixRules(moves)
+  // Whether the token at `offset` is a path spelled from the tree root. `.` and `..` are how a
+  // spelling is written, a root anchor names the root, and a slash that opens the spelling
+  // (`"/src/parse"`, i.e. from `/`) is the path's first component; any other segment to the left is
+  // a real directory name (`core/error`), which makes the token that directory's child instead.
+  const PATH_STOP = /[\s()"'`,;]/
+  const ROOT_ANCHORS = new Set([
+    '${CMAKE_SOURCE_DIR}',
+    '${PROJECT_SOURCE_DIR}',
+    '${CMAKE_CURRENT_SOURCE_DIR}',
+    '${CMAKE_CURRENT_LIST_DIR}',
+    '${CMAKE_BINARY_DIR}',
+    '${PROJECT_BINARY_DIR}',
+  ])
+  const rootedHere = (text, offset) => {
+    let at = offset
+    for (;;) {
+      if (at === 0 || PATH_STOP.test(text[at - 1])) return true
+      if (text[at - 1] !== '/') return false
+      let s = at - 1
+      while (s > 0 && !PATH_STOP.test(text[s - 1])) s--
+      const segment = text.slice(s, at - 1)
+      if (segment === '') return true
+      if (segment === '.' || segment === '..') {
+        at = s
+        continue
+      }
+      return ROOT_ANCHORS.has(segment)
+    }
+  }
   for (const rel of rewriteTargetsFrom(tree)) {
     const file = path.join(tree, rel)
     if (!fs.existsSync(file)) continue
@@ -1004,11 +1037,16 @@ function applyRewrites (tree, moves, scan) {
     for (const r of rules) {
       // A build file names a directory either with a trailing segment (`modules/ckpt/src`) or as a
       // whole token (`add_subdirectory(modules/ckpt)`), so the boundary after it is a slash or the
-      // end of the token. The boundary before it stops at a word character, a dot or a hyphen, and
-      // allows a slash: `${CMAKE_SOURCE_DIR}/modules/ckpt` is an absolute path to the same
-      // directory. Requiring the trailing slash is what left all 29 `add_subdirectory` calls
+      // end of the token. Requiring the trailing slash is what left all 29 `add_subdirectory` calls
       // pointing at a directory that no longer existed.
-      const re = new RegExp(`(?<![\\w.-])${escapeRe(r.from)}(?=[/\\s)"'\`]|$)`, 'g')
+      //
+      // The boundary before it is a path *component* boundary, which is why the match is checked
+      // instead of being written as a character class: `(?<![\w.-])` let `core/error/diagnostics`
+      // through, because the character before `diagnostics` is a slash and a slash is how a path
+      // continues, not how it starts. The move then read the kernel's own `core/error/diagnostics/`
+      // as the top-level `diagnostics/` the table moves, and put the moved path in front of a name
+      // that was already right -- eleven places, and the registry check could not read base.h.
+      const re = new RegExp(`${escapeRe(r.from)}(?=[/\\s)"'\`]|$)`, 'g')
       const snapshot = text
       // A path that already resolves from the file it appears in is that file's own path, not a
       // path into the moved tree: `tools/debugger/CMakeLists.txt` names its sources `src/core/...`,
@@ -1028,6 +1066,9 @@ function applyRewrites (tree, moves, scan) {
         return fs.existsSync(path.join(tree, local))
       }
       text = text.replace(re, (match, offset) => {
+        // The token names the moved directory only where the path starts at it; a match in the
+        // middle of a longer path is a different directory that happens to end in the same word.
+        if (!rootedHere(snapshot, offset)) return match
         if (keepLocal(offset)) return match
         count++
         return r.to
