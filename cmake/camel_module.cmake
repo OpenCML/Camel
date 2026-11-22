@@ -44,7 +44,7 @@ function(add_camel_module)
   else()
     set(_sources executor.cpp module.cpp operators.cpp)
   endif()
-  list(APPEND _sources ${CMAKE_SOURCE_DIR}/kernel/abi/camel_module_abi.cpp)
+  list(APPEND _sources ${CMAKE_SOURCE_DIR}/src/kernel/abi/camel_module_abi.cpp)
 
   # The sources are compiled as an OBJECT library and the .cmo is linked from those objects.
   # Compiling a module needs only the headers, so this target's objects exist before libcamel
@@ -102,7 +102,7 @@ function(add_camel_module)
 
   set(_libs libcamel fmt::fmt ${_linked_targets} ${ARG_EXTRA_LIBS})
   if(ARG_USE_PYTHON)
-    set(_python_sdks_root "${CMAKE_SOURCE_DIR}/lib/python/sdks")
+    set(_python_sdks_root "${CMAKE_SOURCE_DIR}/src/stdlib/python/sdks")
     # PyPI rollup only (env set by scripts/build.js when rollupMm passed). Normal build: env unset → full SDK scan.
     set(_rollup_mm "")
     set(_rollup_sdk "")
@@ -110,7 +110,7 @@ function(add_camel_module)
       set(_rollup_mm "$ENV{CAMEL_PYPI_SINGLE_SDK_MM}")
       set(_rollup_sdk "${_python_sdks_root}/python${_rollup_mm}")
     endif()
-    set(_python_dll_repo "${CMAKE_SOURCE_DIR}/lib/python/dlls")
+    set(_python_dll_repo "${CMAKE_SOURCE_DIR}/src/stdlib/python/dlls")
     if(EXISTS "${_python_dll_repo}")
       file(GLOB _python_repo_dlls "${_python_dll_repo}/python*.dll")
       list(LENGTH _python_repo_dlls _python_repo_dll_count)

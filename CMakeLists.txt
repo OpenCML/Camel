@@ -115,13 +115,13 @@ add_library(libcamel SHARED ${CAMEL_LAYOUT_ALL_OBJECTS})
 # no translation unit is compiled against a stale code table.
 find_program(CAMEL_DIAGNOSTICS_NODE NAMES node nodejs REQUIRED)
 set(_camel_diagnostic_sources
-    "${PROJECT_SOURCE_DIR}/kernel/diagnostics/registry.tsv"
+    "${PROJECT_SOURCE_DIR}/src/kernel/diagnostics/registry.tsv"
     "${PROJECT_SOURCE_DIR}/scripts/diagnostics-catalog.mjs"
-    "${PROJECT_SOURCE_DIR}/kernel/include/camel/core/error/diagnostics/base.h")
+    "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/core/error/diagnostics/base.h")
 foreach(_section internal lexical syntax semantic runtime)
     list(APPEND _camel_diagnostic_sources
-        "${PROJECT_SOURCE_DIR}/kernel/include/camel/core/error/diagnostics/messages/${_section}.h"
-        "${PROJECT_SOURCE_DIR}/kernel/core/error/diagnostics/messages/${_section}.cpp")
+        "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/core/error/diagnostics/messages/${_section}.h"
+        "${PROJECT_SOURCE_DIR}/src/kernel/core/error/diagnostics/messages/${_section}.cpp")
 endforeach()
 add_custom_command(
     OUTPUT "${PROJECT_BINARY_DIR}/diagnostics-registry.stamp"
