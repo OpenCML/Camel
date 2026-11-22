@@ -16,11 +16,11 @@
  *   2. the C++ entrance, `CppRegistration`'s second argument, which is required and has no default
  *      (`kernel/ops/include/camel/ops/operator_record.h`).
  *
- * Nothing in the tree states either today: no `.cml` declaration writes `panic` and no `CppRegistration`
- * exists. So every operator whose implementation raises is red by construction, and what this run
- * measures is the size of the debt, not a regression. The promise a declaration without `panic` makes
- * is the reason the debt matters: after the rework lands, "no `panic`" means "this call cannot fail",
- * and an optimizer may move a division out of a guard on the strength of it.
+ * The declarations state it now: `d39cd2464` wrote it on 42 operators, and the two scatters
+ * `lib/rulesets/transpose.cml` declares privately take the count to 44 of the 378 this run reads. So
+ * what the red side measures is the size of the remaining debt, not a regression. The promise a
+ * declaration without `panic` makes is the reason the debt matters: "no `panic`" means "this call
+ * cannot fail", and an optimizer may move a division out of a guard on the strength of it.
  *
  * The **implementation** side is the operator's kernel, found through the implementation map that
  * registers it (`{"op/div_i", __builtin__div__}`, `{"split", __str_split__}`, ...), together with
@@ -56,6 +56,24 @@
  * so the answer to "does this file define the kernel at all" is refused (exit 2) rather than read as
  * "raises nothing": a check of nothing is never a pass. The direction is stated here because it is
  * the one that would hide a fault, and the counters in the report are the size of it.
+ *
+ * --- the second direction, which this check does not read -------------------
+ * The comparison has two directions and this run takes one of them, plus half of the other. It reads
+ * the red side -- an implementation that raises and a declaration that does not say `panic` -- and it
+ * reads a declaration that states `panic` while its implementation raises **nothing at all**
+ * (`unkept`). What it cannot read is a `panic` that a *type rule* makes unnecessary.
+ *
+ * `:str/join` is the example. Its kernel raises `InvalidArgument` when the separator is null
+ * (`lib/std/builtin/operators/str.cpp#__join__`), the raise is in the text, and the check counts it;
+ * writing `panic` on `:str/join` was measured to change the reading by exactly one `agree` and to say
+ * nothing else. That arm is not a fault a call can make: `with <sep: string>`
+ * (`lib/std/cpp/operator_rules.cpp#withArgument`) makes the separator a type the compiler writes, so
+ * no call hands the kernel a null one. The check cannot see the type rules, so it cannot say "you
+ * declared a fault your implementation cannot raise".
+ *
+ * That is the boundary of the criterion, and it is not a place to loosen it: saying that declaration
+ * was wrong would take a reading of the type rules this check does not have, and calling it right by
+ * ignoring the raise would stop it reading the raise in the cases where the arm is real.
  *
  * --- what the scan root is, and why it is `git ls-files` --------------------
  * The scan reads **the repository**, not whatever a directory happens to hold. The two are not the
