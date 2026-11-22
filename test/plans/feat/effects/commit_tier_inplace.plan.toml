@@ -27,6 +27,14 @@ tags = ["feat", "effects", "commit-checks"]
 # reading: `unordered-published=0` is "asked, and refused", `ordered-published=1` is "asked, and the
 # graph did not break it" -- which is what keeps the refusal from meaning "an in-place edit is always
 # refused".
+#
+# The third draft reads the other half of the same rule: the chain is taken away in every kind it is
+# carried in and the same pair is ordered the other way round by an order edge, and the commit must
+# publish. The check asks that an order exist, not that it be the one the program wrote; a check that
+# refused a reversed pair would be fixing a meaning a pass is allowed to change (design principles 1),
+# and `reversed-published=1` is that reading. Every kind has to go: the chain reaches its statement
+# as an order edge as well as a wait, and an edge left behind is the old direction -- writing the
+# opposite one over it is a cycle, which the seal reports before the commit is asked.
 
 [defaults]
 kind = "behavior"
@@ -35,8 +43,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "commit_tier_inplace.inplace"
-desc = "An edit that makes no node takes a console write out of its block's chain: the commit is asked the order check and refuses the pair that is left unordered, and the same edit publishes where a data edge orders the two."
+desc = "An edit that makes no node takes a console write out of its block's chain: the commit is asked the order check and refuses the pair that is left unordered, the same edit publishes where a data edge orders the two, and the same pair with the order turned round publishes."
 case = "../../../cases/opt/commit_checks/inplace_edit.cml"
 args = ["${case}", "test::commit_inplace", "std::nvm"]
 expect_exit = 7
-expect_stdout_contains = ["commit_inplace: the tier is which edit the draft used, not whether it made a node", "waited for node", "and now waits for nothing; the draft makes no node", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and refused, check=order", "commit_inplace: two writes to stdout with no edge ordering either before the other -- refused", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and published", "published, which is the answer: the question was asked and the graph did not break it", "commit_inplace: unordered-published=0 ordered-published=1"]
+expect_stdout_contains = ["commit_inplace: the tier is which edit the draft used, not whether it made a node", "waited for node", "and now waits for nothing; the draft makes no node", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and refused, check=order", "commit_inplace: two writes to stdout with no edge ordering either before the other -- refused", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and published", "published, which is the answer: the question was asked and the graph did not break it", "commit_inplace: unordered-published=0 ordered-published=1", "now runs after node", "the order turned round", "published, which is the answer: the check asks for an order, not for the one the program wrote", "commit_inplace: reversed-published=1"]
