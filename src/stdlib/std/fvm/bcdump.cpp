@@ -9,7 +9,7 @@
 
 const camel::runtime::Program *
 BytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
     std::vector<camel::runtime::GCGraph *> allGraphs =
         camel::runtime::collectReachableGraphs(*program, graph);
 
@@ -43,8 +43,8 @@ BytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os
 
 const camel::runtime::Program *
 LinkedBytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
-    auto linked                    = compileAndLink(
+    auto *graph = program->root();
+    auto linked = compileAndLink(
         context_,
         *program,
         graph,

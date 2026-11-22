@@ -109,7 +109,7 @@ static const camel::runtime::Program *applyMirDump(
 
 const camel::runtime::Program *
 JitRmirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, *program, graph, os, true);
 #else
@@ -121,7 +121,7 @@ JitRmirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os)
 
 const camel::runtime::Program *
 JitMirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, *program, graph, os, false);
 #else
