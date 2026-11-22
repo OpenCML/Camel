@@ -117,7 +117,7 @@ template <k::ReduceOp Op> slot_t reduceAxisKernel(ArgsView &, ArgsView &norm, co
 /// leaves the rank open (`T[..]`). None of the three is guessed.
 ///
 /// This is the signature a program reads: the axis reductions are computed rather than declared
-/// (`modules/tensor/module.cpp#kDeclaredOperators`), because a declaration's result is a type and
+/// (`lib/tensor/module.cpp#kDeclaredOperators`), because a declaration's result is a type and
 /// these extents are a function of two values.
 InferFn reduceAxisInfer(k::ReduceOp op) {
     return [op](const InferContext &ctx) -> std::optional<Type *> {
@@ -316,7 +316,7 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// The three parameters carry the values `reduceAxisInfer` reads as arguments -- `axis`, `keepdims`
 /// and the operand's `extents` -- and each is read by name now, not by its place in a list. That is
 /// why this name is **computed** rather than declared
-/// (`modules/tensor/module.cpp#kDeclaredOperators`): a declaration's result is a type, and these
+/// (`lib/tensor/module.cpp#kDeclaredOperators`): a declaration's result is a type, and these
 /// extents are a function of three values, so the only type a declaration could write is `T[..]`.
 ///
 /// When a call states all three, the extents are known and the answer is stated with them: `axis

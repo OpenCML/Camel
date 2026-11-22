@@ -1,6 +1,6 @@
 // The smallest nest of `grad` inside `grad`, through the *library's* transform: `grad` here is
-// `vjp`'s (`stdlib/vjp.cml#grad`), which is `split(jvp(first_with_as_param(f)))` and not the
-// engine's operator (`stdlib/signatures/autodiff.cml#grad`, which nests by construction).
+// `vjp`'s (`lib/vjp/vjp.cml#grad`), which is `split(jvp(first_with_as_param(f)))` and not the
+// engine's operator (`lib/autodiff/signatures/autodiff.cml#grad`, which nests by construction).
 //
 //   f(x) = x*x,  f'(x) = 2x,  f''(x) = 2,  so the second derivative at 2 is 2.0
 //

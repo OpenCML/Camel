@@ -72,7 +72,7 @@ FunctionType *transposeSignature(
     // What the cotangent of the result is: the result's *tangent space*, asked of the type. A
     // `float` answers `float` and an `f32` answers `f32`, so this is one law for both widths rather
     // than a `float` law that a narrow float has to be read into: `Tangent<f32>` is `f32`
-    // (design principles 9.9, `stdlib/types.cml#Tangent`), and the cotangent the caller passes, the
+    // (design principles 9.9, `lib/types/types.cml#Tangent`), and the cotangent the caller passes, the
     // cotangent the answer's slots hold and the cotangent every rule is instantiated at are that
     // one type. A result whose cotangent this file has no arithmetic for is refused by
     // `transpose/cotangent.cpp#hasResultCotangent` -- it is the same question
@@ -89,7 +89,7 @@ FunctionType *transposeSignature(
     // call site still fills, and so is a value the body reads from outside; which parameters those
     // are is a fact of the body, read below from the function rather than from its type.
     //
-    // The declaration in `stdlib/types.cml#Transpose` is the contract: a declaration is what the builder makes, and no declaration is
+    // The declaration in `lib/types/types.cml#Transpose` is the contract: a declaration is what the builder makes, and no declaration is
     // approximate. That the two do not agree today is a missing capability of the type-bundle
     // splice
     // -- multiplicity is lost, and the exact shape needs an operation saying which parameters stand

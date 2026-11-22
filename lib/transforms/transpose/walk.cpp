@@ -3227,7 +3227,7 @@ bool buildTransposeMember(
                     // changes that (a call of a function value transposes into a call of `transpose(v)`, handled
                     // by content -- and that is what this branch does for the value it can carry; the case here is
                     // `f(x) = mk(x)(2.0)`). `transpose(v)` needs `v`, and the transposed function is handed **only
-                    // the cotangent** (the declaration in `stdlib/types.cml#Transpose`): a member that
+                    // the cotangent** (the declaration in `lib/types/types.cml#Transpose`): a member that
                     // recomputed `mk(x)` would need `x`, a parameter that carries no port of its
                     // own -- and a member that took `v` as a value port is what that declaration
                     // refuses. So the call is refused where the value stands, by the reason

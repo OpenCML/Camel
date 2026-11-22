@@ -133,7 +133,7 @@ export type FirstOf<P> = match type P { case (W, ...Rest) => W }
 /// place to read it. A `match type` written into the result of a generic function leaves the two
 /// names it binds as type variables of that call, and no argument binds them -- so a library
 /// function whose answer moves a pack's first member onto another list could not be called at all
-/// (`stdlib/vjp.cml#grad`). A primitive is evaluated with the pack in hand, which is what
+/// (`lib/vjp/vjp.cml#grad`). A primitive is evaluated with the pack in hand, which is what
 /// `grad`'s signature needs.
 /// @example is_same::<HeadOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
 export type HeadOf<P>
@@ -203,7 +203,7 @@ export type Gradient<F> =
 ///
 /// It is one shape with `Gradient<F>` above, written out of the same three pieces, and the two
 /// aliases denote one type: this one exists because it is the name `grad`'s own declaration spells
-/// (`stdlib/vjp.cml#grad`). Two names for one type is a spelling a reader has to learn, and merging
+/// (`lib/vjp/vjp.cml#grad`). Two names for one type is a spelling a reader has to learn, and merging
 /// them is not done here, where the subject is the call form.
 ///
 /// **The weight is inside the angle brackets.** Written as
@@ -217,7 +217,7 @@ export type Gradient<F> =
 /// and an inner `grad` of a library gradient would meet a function with no `with` parameter at
 /// all, so a nest of this `grad` would be refused at `first_with_as_param`. With this form a nest
 /// builds, and what refuses it is the layer after this one -- `jvp` over a function value computed
-/// at run time (`stdlib/vjp.cml#grad`) -- so the form is not the thing that stops it.
+/// at run time (`lib/vjp/vjp.cml#grad`) -- so the form is not the thing that stops it.
 ///
 /// **The whole `with` list is carried, in its own order.** A function with a second `with` value --
 /// the data `y` beside the weight in `examples/case-study/train.cml`, the port the derivative is

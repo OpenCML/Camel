@@ -2,7 +2,7 @@
 //
 // `jvp_of_a_power.cml` pins the forward rule of `^` (`:op/pow_d`); this case pins the forward rule of
 // `pow` (`math:pow_d`), which is a different operator reached through a declared function
-// (`stdlib/math.cml#pow`) and had no rule at all: until `jvp_pow_d` was written, a lifted program
+// (`lib/math/math.cml#pow`) and had no rule at all: until `jvp_pow_d` was written, a lifted program
 // that called `pow` stopped with `skip=rule uri=math:pow_d reason=no forward rule bound at all`, and
 // `rulesets_probe_missing.cml` pinned exactly that refusal as its negative.
 //

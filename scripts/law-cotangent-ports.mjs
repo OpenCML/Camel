@@ -14,7 +14,7 @@
 //     mean_axis_stated(t, at) => (ct: T[...]) => mean_axis_cotangent(ct, at)  // the lane's numbers
 //
 // `spread_over` takes one number (`lib/rulesets/transpose.cml#spread_over`: `ct: T`, feeding
-// `full(at, ct)` whose `value` is a `number`); `numel` reads an array (`stdlib/tensor.cml#numel`:
+// `full(at, ct)` whose `value` is a `number`); `numel` reads an array (`lib/tensor/tensor.cml#numel`:
 // `t: T[...]`). Write the port one way and the body the other and the law still parses, still
 // instantiates, still builds a graph -- and the slot the body reads is not the value the port
 // promised. Nothing compared the two sentences, so nothing said so.
@@ -48,7 +48,7 @@
 // it? Three kinds of witness, and each names where its requirement comes from:
 //
 //   * an exact argument position of a call whose declaration is in the tree -- `numel(ct)` reads an
-//     array because `stdlib/tensor.cml#numel` says `t: T[...]`, `spread_over(ct, at)` takes an element
+//     array because `lib/tensor/tensor.cml#numel` says `t: T[...]`, `spread_over(ct, at)` takes an element
 //     because `lib/rulesets/transpose.cml#spread_over` says `ct: T`;
 //   * an index or an arrow -- `ct[i]`, `ct->reduce<...>` read an array, whatever the callee says;
 //   * a companion of the same shape -- `ct * exp(x)` and `ct - sum<0, true>(ct)` are one array wide
@@ -295,7 +295,7 @@ function kindOfType(text, declaration = null) {
         // wrapped in an array somewhere (`spread_over::<T>(ct: T, ...): T[...]` is instantiated at `T`
         // = the element type, which is why its `ct` is one number), or the declaration is guarded by
         // `is_float::<T>()` / `is_numeric::<T>()`, and an array is neither a float nor a number
-        // (`stdlib/types.cml#is_float`). Otherwise the variable is a shape donor --
+        // (`lib/types/types.cml#is_float`). Otherwise the variable is a shape donor --
         // `sum_to::<T, S>(t: T[...], like: S): S` -- and says nothing about being an element.
         if (declaration !== null && declarationBindsElement(declaration, type)) return 'element'
         return 'unknown'
@@ -567,7 +567,7 @@ function requirementAt(declarations, name, index) {
     }
     const unique = new Set(kinds)
     // The source is the declaration and the position in it, so a reader can check the requirement
-    // instead of believing it: `stdlib/tensor.cml#numel, parameter 1 't: T[...]'`.
+    // instead of believing it: `lib/tensor/tensor.cml#numel, parameter 1 't: T[...]'`.
     const parameter = matching[0].params[index]
     const where = `${matching[0].where}, parameter ${index + 1} \`${parameter.name}: ${parameter.type}\``
     // The parameter's own type text travels with the requirement, because whether this use is the
@@ -701,7 +701,7 @@ function witnessOfLaw(law, portIndex, declarations) {
 }
 
 /// The witness the law's own guard gives. `when is_float::<T>()` says `T` is a float, and an array is
-/// neither a float nor a number (`stdlib/types.cml#is_float`); `when is_same::<T, float>()` says the
+/// neither a float nor a number (`lib/types/types.cml#is_float`); `when is_same::<T, float>()` says the
 /// same thing by name.
 function guardWitness(law, port) {
     const type = port.type.trim()

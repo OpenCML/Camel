@@ -3905,7 +3905,7 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         // What this engine can say about such a value by its content is the sentence below the switch: it is
         // computed at run time, so which function it calls is not evident where it is called. A
         // transform's own answer to "what is this function's derivative" is the library's rule --
-        // `stdlib/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the engine
+        // `lib/vjp/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the engine
         // neither repeats that rule nor guesses at it. `break`, not a fallthrough: the cases below
         // read the node as the kind they name, and an operator node is not one of them.
         break;

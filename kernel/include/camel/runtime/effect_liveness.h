@@ -99,7 +99,7 @@ bool valueIsRead(const GCGraph &graph, gc_node_ref_t ref);
 /// not that the set of final writes is the same before and after (design principles 9.7).
 ///
 /// Asked where a pass decides whether running a node is part of the program
-/// (`src/execute/pass.cpp#nodeRunsForItsEffect`, the pass boundary's effect credential check), and
+/// (`kernel/execute/pass.cpp#nodeRunsForItsEffect`, the pass boundary's effect credential check), and
 /// printed on its own for the tests by `test::deadwrite` (`src/passes/test/deadwrite.cpp`), so that
 /// the judgement is one function and can be asked without a pipeline around it.
 ///

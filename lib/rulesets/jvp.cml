@@ -1047,7 +1047,7 @@ export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
 
 // ---- the forward rule of `pow` (`math:pow_d`) ----
 //
-// `pow(x, w)` (`stdlib/math.cml#pow`) is the same arithmetic as `^` under another spelling, and it is
+// `pow(x, w)` (`lib/math/math.cml#pow`) is the same arithmetic as `^` under another spelling, and it is
 // a different operator: `^` on two floats is `:op/pow_d`, a written token whose key the core derives
 // (`src/core/forward.cpp#kWrittenOperations`), while `pow` reaches the same kernel through a declared
 // function and is `math:pow_d`, whose key is the name `pow_d` at two operands -- so the two families
@@ -1093,7 +1093,7 @@ export rule jvp_pow_d(x: float, y: float) {
 // parameter-type list, and `when` does not decide it). The two
 // shapes cannot be merged -- they answer closures of different arity, `(dx: S)` against `()`, and a
 // rule's right side cannot branch on a type -- so the sources with no tangent space are named:
-// `is_integer::<T>()` is `int | i32` (`stdlib/types.cml#is_integer`) and the third is `string`. The float
+// `is_integer::<T>()` is `int | i32` (`lib/types/types.cml#is_integer`) and the third is `string`. The float
 // sources stay one generic law per destination, `(x: S) when is_float::<S>()`, because the conversion
 // of the tangent is legal for every one of them and is checked where the source is known.
 //

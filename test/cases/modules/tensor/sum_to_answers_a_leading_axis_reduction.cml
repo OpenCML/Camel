@@ -1,7 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// `sum_to` reduces the **leading** axes and only those (ruling 甲, `stdlib/tensor.cml#sum_to`): its
+// `sum_to` reduces the **leading** axes and only those (ruling 甲, `lib/tensor/tensor.cml#sum_to`): its
 // second argument is the target extents themselves, and they must be a suffix of the operand's
 // shape, so the axes in front of them are summed away and every axis the target states is kept as
 // it states it.

@@ -256,7 +256,7 @@ into the `LOOP` node of the graph:
 
 The value of the expression is the last state. With both clauses a round runs while an element
 is left and the condition holds. The GCT builder turns it into the `LOOP` node
-(`src/compile/gct/builder_expr.cpp#Builder::visitLoopExpr`), and [39](39_loops.md) describes the node
+(`compile/src/gct/builder_expr.cpp#Builder::visitLoopExpr`), and [39](39_loops.md) describes the node
 and how each back end runs it; the formatter, the syntax index (scopes and bindings) and the
 editor grammar know the form.
 

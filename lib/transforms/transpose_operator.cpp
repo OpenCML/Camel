@@ -409,7 +409,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
 /// walk reads is that graph and every graph it refers to -- never the value of any call. Two calls
 /// that hand it the same graph version therefore ask for the same member, and building it again is
 /// work with no answer to show for it. The cut is already made once, where `vjp(f)` and `grad(f)`
-/// are evaluated (`stdlib/vjp.cml#vjp`); this is the other half of
+/// are evaluated (`lib/vjp/vjp.cml#vjp`); this is the other half of
 /// that step: `lin` is a new value on every call of a reading and always one of the same graph, so
 /// the walk runs once for that graph and the calls after it name the member the walk built:
 /// the transposition is a cost of the transform, not of every call.

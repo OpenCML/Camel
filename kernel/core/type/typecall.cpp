@@ -108,7 +108,7 @@ Type *TypeCallType::evaluate(
         const type_vec_t written(arguments.begin() + 1, arguments.end());
         return function->apply(written);
     }
-    // The two projections of a pack (`stdlib/types.cml#HeadOf`, `#RestOf`): the member at its head,
+    // The two projections of a pack (`lib/types/types.cml#HeadOf`, `#RestOf`): the member at its head,
     // and the pack of the members after it. They are read **before** the member-wise rule below,
     // because their answer is about the pack itself and not about each member of it: mapped over
     // the members, `HeadOf<(float, int)>` would ask `HeadOf<float>` for every one of them.
@@ -118,7 +118,7 @@ Type *TypeCallType::evaluate(
     // *read*: a `match type` written into the result of a generic function leaves its two names
     // (`W`, `Rest`) as type variables of that call, which no argument binds, so a library function
     // whose answer moves a pack's first member onto another list cannot be called at all
-    // (`stdlib/vjp.cml#grad`). A primitive is evaluated with the pack in hand.
+    // (`lib/vjp/vjp.cml#grad`). A primitive is evaluated with the pack in hand.
     if (name == "HeadOf" || name == "RestOf") {
         if (arguments.size() != 1 || arguments.front() == nullptr) {
             error = "it takes one pack";

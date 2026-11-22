@@ -76,12 +76,12 @@ of the generic function ...] (name=SemanticDiag::ArgumentsMismatch)
   跑不到；六个 API 级探针全部停在这里。
 - **性质**：这就是 develop 上那 29 个红的同一个根（另一条 lane 在修），所以这里只记读数，不动
   `stdlib/**`。
-- **要让它倒**：修 `stdlib/vjp.cml#vjp` 那处把 `(float, float) => float` 用单个参数调用的地方（第 73、78 行）
+- **要让它倒**：修 `lib/vjp/vjp.cml#vjp` 那处把 `(float, float) => float` 用单个参数调用的地方（第 73、78 行）
   （组合时的参数列表与类型律不一致）。
 
 **墙 1 的根因之一（2026-11-03 补，另一条车道的读数）**：类型包拼接把**数组参数按类型合并**。`(...ParamsOf<F>, ...Tangent<ParamsOf<F>>)` 在 `F` 有三个数组参数时给出 **2 个成员**（应 6 个）⇒ 调用点按 2 个实参填、被调方按 6 个读 ⇒ 上面那句 `cannot be called with argument types: <>`。
 - **判据**：纯函数最小例，`Swap` 对 1 / 2 / 3 个数组参数**全为 true** —— 分解本身没错，**拼接之后重数丢了**。
-- **现状**：拼接在类型层完成，重数在有数组参数时必错；与 `stdlib/vjp.cml#vjp` 的那处调用是同一堵墙的两面，不改这里它也不倒。
+- **现状**：拼接在类型层完成，重数在有数组参数时必错；与 `lib/vjp/vjp.cml#vjp` 的那处调用是同一堵墙的两面，不改这里它也不倒。
 ## 墙 2–7：前向规则缺失（`rulesets/jvp.cml`）
 
 六面墙的形状完全相同，只有算子名不同。 以 `08_embedding.cml` 为例，原样诊断：
@@ -349,7 +349,7 @@ Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true); 
 2. **复步参照 12 位一致**：用 `grow.py --exact`（`loss(x + ih)` 的虚部即导数，无相减抵消）重算，参照与引擎在 12 位上一个字都不差 ⇒ 原来的中心差分参照自己是误差源。
 3. **`matmulGradGemm` 的 dtype 门**：`lhs/rhs/dy` 任一不是 `Float32` 就 `return nullptr` ⇒ f64 物理上走不到那条 f32 快路（`modules/tensor/kernels/gradient.cpp#matmulGradGemm`）；且真有 f32 存货会给出 ~1e-7 相对（≈8e-10 绝对），比实测大一个量级。
 
-**关于 `grad` 的一条被更正的判断（2026-11-03）：这条被更正，因为** `grad` 有两个且泛型只对第一个 `with` 参数求导，我最初按"只接受单参数"记 —— 那是调用方式不对。：`grad` 有两个 —— `stdlib/vjp.cml#grad` 是**单 `float` 实例**（`(x: float) => float`），`stdlib/signatures/autodiff.cml#grad` 是泛型，**只对函数的第一个 `with` 参数求导**（设计原则 9.9：权重是 `with` 参数，普通参数是数据）。我最初按"`grad` 只接受一个 float 参数"记，那是**调用方式不对**（导错了 `grad`、也没给 `with` 参数），不是签名限制，故不成墙。
+**关于 `grad` 的一条被更正的判断（2026-11-03）：这条被更正，因为** `grad` 有两个且泛型只对第一个 `with` 参数求导，我最初按"只接受单参数"记 —— 那是调用方式不对。：`grad` 有两个 —— `lib/vjp/vjp.cml#grad` 是**单 `float` 实例**（`(x: float) => float`），`lib/autodiff/signatures/autodiff.cml#grad` 是泛型，**只对函数的第一个 `with` 参数求导**（设计原则 9.9：权重是 `with` 参数，普通参数是数据）。我最初按"`grad` 只接受一个 float 参数"记，那是**调用方式不对**（导错了 `grad`、也没给 `with` 参数），不是签名限制，故不成墙。
 
 **第四项：闭式标量算术（2026-11-03，不用 `vjp`/`grad` 的矩阵路径）**：`A = [[1,2],[3,4]]`、`B = [[5,6],[7,8]]`、`dC = 全 1` 时纸面 `dL/dA = dC·Bᵀ = [[11,15],[11,15]]`、`dL/dB = Aᵀ·dC = [[4,4],[6,6]]`。用八个**单参数标量函数**（把待测元素当唯一参数、其余写死）跑 `grad`，逐个取该元素的导数：`dL/da00` 实测 **11.0**，与纸面逐位一致；其余七个在此树上撞到**另一堵**既有墙（`transforms: split does not build this function (an operand of the node is not reachable from the half's exit)`），与 `matmul_grad` 无关，故只报 1/8 已测。
 
@@ -600,7 +600,7 @@ argmax **[1, 0]（两行都对）**。
 ## 墙 14（新，暂记）：`split` 拒绝"操作数不在半程出口可达集里"的函数
 
 - **判据**：`split(jvp(f))` 对某些形状的 `f` 报 `transforms: split does not build this function (an operand of the node is not reachable from the half's exit)` —— 是**具名拒绝**，不是崩溃，也不是类型错。
-- **原文（完整）**：`error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: split does not build this function (an operand of the node is not reachable from the half's exit).` 位置 `stdlib/vjp.cml#vjp` 的 `let (y, lin) = split(jvp(f))(...xs)`。
+- **原文（完整）**：`error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: split does not build this function (an operand of the node is not reachable from the half's exit).` 位置 `lib/vjp/vjp.cml#vjp` 的 `let (y, lin) = split(jvp(f))(...xs)`。
 - **证据**：单个函数的四个"把待测元素当唯一参数、其余写死"的标量函数里，`fa00` 通过（导数 11.0 = 纸面 `dC·Bᵀ[0][0]`），`fa11` 在 `split` 这一步被拒；同一份程序、同一棵树。
 - **现状**：同一个 `vjp` 组合，对同构但不同的求和形状一处通过一处被拒 —— **这是形状相关，不是类型相关**；根因未定（可能与"半程出口的可达集"如何收集有关），**判准与否待裁**，故按候选记录。
 ### stage8 按行拆开：两行都更差 ⇒ "因果注意力只对后一个位置可用"这个解释**不成立**

@@ -59,7 +59,7 @@ B 的机器那一半。**
 `:op/assn*`，没有 CALL/FUNC/ACCS/FILL/普通算子接手，也没有 `context` 边进入 FILL（＝没被闭包捕获）；
 ③ 至少一个读者、至少一个写者；④ 没有任何一处的 callee 形参是 `var T`（那归 D）。②③④ 一起就给出了
 「没作 `var` 实参传出、没存进容器」。这套判据与编译器自己判「值有没有观察者」的
-`src/execute/exec_plan.cpp#cellEscapes`（GATE 透明、非 `:var/*`/`:op/assn` 的用户即逃逸）同构，只是把「捕获」单列。
+`lib/std/exec/exec_plan.cpp#cellEscapes`（GATE 透明、非 `:var/*`/`:op/assn` 的用户即逃逸）同构，只是把「捕获」单列。
 
 81 个全部满足（C 里没有逃逸的）。其中 **55 个读写都落在 body 区、连 φ 都不需要**；26 个跨区：
 13 个只在 `arm` 区、7 个 `body+loop_body`、5 个 `arm+body`、1 个 `block+body`——这 26 个在 SSA 里变成汇合处或

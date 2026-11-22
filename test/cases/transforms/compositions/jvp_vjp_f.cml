@@ -7,13 +7,13 @@
  * that with respect to the primal in the direction `dx`. Its derivative in `x` is `2v`, so the
  * directional derivative is `2*v*dx`; with `v = 1` that is `2*dx`, i.e. 1, 2, 3.
  *
- * The cotangent is the pullback's argument, not the forward call's: `stdlib/vjp.cml#vjp` answers
+ * The cotangent is the pullback's argument, not the forward call's: `lib/vjp/vjp.cml#vjp` answers
  * `(value, pullback)` -- JAX's order, the author's ruling of 2026-11-01 -- so the reading is
  * `vjp(sq)(x).1(v)` and the one member a one-parameter pullback answers is read out by position
  * (`.0`), the same shape `grad` is built on.
  *
  * The batch is read point by point rather than through `vmap`: `vmap` takes a function of exactly
- * one parameter (`stdlib/array.cml#vmap`), and `jvp(f)` is the function `(x, dx) => (value,
+ * one parameter (`lib/array/array.cml#vmap`), and `jvp(f)` is the function `(x, dx) => (value,
  * tangent)`, so `vmap(jvp(pull))` is not a call the batch pass accepts. Three points, one call
  * each, and the three tangents are the numbers this case pins.
  *

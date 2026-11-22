@@ -235,7 +235,7 @@ func mul_tensor::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 }
 
 // The shape a law needs arrives as `at` and goes straight into `sum_to`, which takes the extents
-// themselves (`stdlib/tensor.cml#sum_to`): `sum_to(t, shape(x))` is the reduction, and there is no
+// themselves (`lib/tensor/tensor.cml#sum_to`): `sum_to(t, shape(x))` is the reduction, and there is no
 // helper between the list and the call: a `sum_to_stated(t, at)` that built `zeros::<T>(at)`
 // would be a second spelling of one call, and two spellings of one move are avoided.
 
@@ -448,7 +448,7 @@ export rule subtract_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) {
 // A product's cotangent is written with two more products: `a · b` passes `ct · bᵀ` back to `a` and
 // `aᵀ · ct` back to `b`. Both are the operator itself, so the law needs no arithmetic of its own and
 // no operator the library does not already publish -- the transposition of the *known* operand is
-// `tensor:transpose` (the last two axes swapped, `stdlib/signatures/tensor.cml#transpose`), which
+// `tensor:transpose` (the last two axes swapped, `lib/tensor/signatures/tensor.cml#transpose`), which
 // reads a value the cut already carries, not the cotangent. Nothing here asks for a shape: the
 // extents are the operands' own, `transpose` carries them through, and `matmul` checks the pair where
 // the node is built -- the same place the forward rule's `matmul(da, b)` is checked
@@ -478,7 +478,7 @@ export rule subtract_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) {
 //
 // The spread is a different operator and not a direction of `sum_to`: a reduction
 // removes leading axes from a target that is a suffix of its operand's shape, and `sum_to` refuses a
-// target longer than its operand by name (`stdlib/tensor.cml#sum_to`). Using it for the spread was
+// target longer than its operand by name (`lib/tensor/tensor.cml#sum_to`). Using it for the spread was
 // the wrong operator, and the two rules read better apart: the reduction names extents, the spread
 // names the value whose lanes are wanted.
 //
@@ -570,7 +570,7 @@ func ct_of_b::<T>(ct: T[...], a: T[?, ?], b: T[?]): T[?] when is_float::<T>() {
 // counterpart with `shape(a)` replaced by `sa` -- and that is the whole difference, which is why the
 // six are written out rather than folded into the six above: what changes is where the list comes
 // from, and the reduction itself is the same reduction. Both spellings pass a list into `sum_to`,
-// which is the one signature (`stdlib/tensor.cml#sum_to`): one operator, one spelling of the call.
+// which is the one signature (`lib/tensor/tensor.cml#sum_to`): one operator, one spelling of the call.
 //
 // **What the six still need of the answered operand is its rank, and what they may not ask the
 // caller for is its value.** The rank picks the helper (`matmul` reads a row operand as a row and
@@ -991,7 +991,7 @@ export rule mean_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, exte
 // ---- the transpose rules of the logarithm and of `pow` (`math:pow_d`) ----
 //
 // `pow(x, w)` is `math:pow_d`, and it is not `^`: `^` on two floats is `:op/pow_d`, a written token
-// whose key the core derives, while `pow` (`stdlib/math.cml#pow`) reaches the same kernel through a
+// whose key the core derives, while `pow` (`lib/math/math.cml#pow`) reaches the same kernel through a
 // declared function and its key is the name `pow_d` at two operands. `log(x)` is `math:log_d` the
 // same way. Both are filed here by declaring the call their operators are, the way `mul_tensor` and
 // `index_into` are (`rulesets.jvp` declares its own copies: a family cannot read another module's

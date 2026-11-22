@@ -563,7 +563,7 @@ std::vector<bool> portsReadByBody(const rt::GCGraph &body, const std::vector<boo
 /// The operator a law names when it wants an operand's **shape** and not its value.
 ///
 /// `tensor:shape` is the library's own name for the extents of an array
-/// (`stdlib/tensor.cml#shape`), and it is the name a law has always had for this: `jvp_sum` states
+/// (`lib/tensor/tensor.cml#shape`), and it is the name a law has always had for this: `jvp_sum` states
 /// a sum's extents by writing `sum_stated(dxs, shape(xs))`. What changes here is where the numbers
 /// come from when the caller carries no value for `xs` -- a transposition has none for the operand
 /// it differentiates -- so the rule layer answers the call from the type instead

@@ -4,7 +4,7 @@
  * derivative.
  *
  * Until this case answered it refused, and the refusal is worth keeping in the record because it named
- * the wrong thing twice over. The reading was (exit 1, `stdlib/vjp.cml#vjp`):
+ * the wrong thing twice over. The reading was (exit 1, `lib/vjp/vjp.cml#vjp`):
  *
  *     REINTERP split function=jvp_of___g_326__ skip=forward construct=a port uri=-
  *     why=the port is not a parameter of the graph, so neither half takes it

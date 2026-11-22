@@ -15,7 +15,7 @@
  *     write onto a type -- and so cannot be read back from the frozen graph's function type alone;
  *   - `runtime` is `runtime::footprintOf` over the frozen graph: the runtime's own walk.
  *
- * Both are written in the runtime's footprint text (src/runtime/resources.cpp#toString), because
+ * Both are written in the runtime's footprint text (kernel/runtime/resources.cpp#toString), because
  * the two answers are one claim in two notations and only the notation is shared.
  *
  * Two parts of a footprint are outside the comparison, and the plan says why: `result` (the

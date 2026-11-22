@@ -29,6 +29,21 @@ import { fileURLToPath } from 'node:url'
 import { CONTEXT_KEYWORDS, renderContextKeywordTable } from './context-keywords.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+// Where the parse block keeps its sources and its headers is a layout, not a path: the layout map
+// (docs/design/architecture/layout-map.cn.md, table B) moved `src/parse/` to `parse/src/` and
+// `include/camel/parse/` to `parse/include/camel/parse/`, and the two-install comparison runs this
+// script in both trees, so both spellings are resolved here and everywhere else in this file asks
+// them for a directory. Which one the tree has decides; no rule below spells either.
+const firstOf = (candidates) =>
+    candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+const PARSE_SOURCES = firstOf([
+    path.join(ROOT, 'parse', 'src'),
+    path.join(ROOT, 'src', 'parse'),
+])
+const PARSE_HEADERS = firstOf([
+    path.join(ROOT, 'parse', 'include', 'camel', 'parse'),
+    path.join(ROOT, 'include', 'camel', 'parse'),
+])
 // The grammar is read from the directory and not from a list of file names. A list is a decision
 // that nothing records: a new `parser_*.cpp` beside the old ones, or a parser source that moves
 // into a subdirectory, is read by nothing -- its productions are compared with nothing while every
@@ -36,7 +51,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // `scripts/vjp-parity.mjs`'s ruleset directory and `test/tools/reading_refusal/check.py`'s walk of
 // `lib/transforms` were fixed for). So every file at the top of the directory is read, with no
 // name and no extension filter: a filter is the same silent decision, one level down.
-const PARSER_DIRECTORY = path.join(ROOT, 'src', 'parse', 'syntax')
+const PARSER_DIRECTORY = path.join(PARSE_SOURCES, 'syntax')
+// The directory as the reports name it, so a message reads the tree it was run in.
+const PARSER_DIRECTORY_NAME = path.relative(ROOT, PARSER_DIRECTORY).split(path.sep).join('/')
 // The order the productions are written in is the reading order of the reference (08), not an
 // alphabetical one (`parser_type.cpp` comes before `parser_rule.cpp` there). This list decides the
 // order and not the membership: a file it does not name is read too, after the named ones, so a
@@ -46,7 +63,7 @@ let parserEntries
 try {
     parserEntries = fs.readdirSync(PARSER_DIRECTORY, { withFileTypes: true })
 } catch {
-    console.error('error: parse/src/syntax is not in the tree; the grammar is read from it')
+    console.error(`error: ${PARSER_DIRECTORY_NAME} is not in the tree; the grammar is read from it`)
     process.exit(1)
 }
 const PARSER_FILES = parserEntries
@@ -62,11 +79,13 @@ const PARSER_FILES = parserEntries
     .map((name) => path.join(PARSER_DIRECTORY, name))
 // An empty read set makes every check below true of nothing.
 if (PARSER_FILES.length === 0) {
-    console.error('error: parse/src/syntax holds no file; the grammar is read from it and there is nothing to compare')
+    console.error(
+        `error: ${PARSER_DIRECTORY_NAME} holds no file; the grammar is read from it and there is nothing to compare`
+    )
     process.exit(1)
 }
-const TOKENS = path.join(ROOT, 'include', 'camel', 'parse', 'syntax', 'token_kinds.def')
-const NODES = path.join(ROOT, 'include', 'camel', 'parse', 'syntax', 'node_kinds.def')
+const TOKENS = path.join(PARSE_HEADERS, 'syntax', 'token_kinds.def')
+const NODES = path.join(PARSE_HEADERS, 'syntax', 'node_kinds.def')
 const DOCS = [
     path.join(ROOT, 'docs', 'language', '08_top_level_and_grammar.md'),
     path.join(ROOT, 'docs', 'language', 'en', '08_top_level_and_grammar.md'),
@@ -246,7 +265,7 @@ for (const p of productions) {
 for (const unread of unreadSources()) {
     errors.push(
         `${unread} writes a \`/// name : \` production and is not read, so its productions are ` +
-            'compared with nothing: the grammar is read from the top of parse/src/syntax'
+            `compared with nothing: the grammar is read from the top of ${PARSER_DIRECTORY_NAME}`
     )
 }
 
@@ -328,8 +347,10 @@ for (const doc of DOCS.map((d) => d.replace('08_top_level_and_grammar.md', '02_l
 function flat(text) {
     return text.replace(/\s+/g, ' ').trim()
 }
-const BUILDER = path.join(ROOT, 'src', 'parse', 'ast', 'builder.cpp')
-if (!fs.existsSync(BUILDER)) errors.push('parse/src/ast/builder.cpp does not exist')
+const BUILDER = path.join(PARSE_SOURCES, 'ast', 'builder.cpp')
+if (!fs.existsSync(BUILDER)) {
+    errors.push(`${path.relative(ROOT, BUILDER).split(path.sep).join('/')} does not exist`)
+}
 const evidenceFlat = flat(parserText + '\n' + (fs.existsSync(BUILDER) ? readText(BUILDER) : ''))
 for (const entry of CONTEXT_KEYWORDS) {
     for (const line of entry.evidence) {
