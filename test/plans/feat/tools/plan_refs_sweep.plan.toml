@@ -27,4 +27,15 @@ expect_stdout_contains = ["unbalanced=0", "silent=0", "every graph of every case
 # 238500 ms of CPU on one core and 54 s of wall clock at eight at a time. The bound is four times
 # that work (the runner's margin), stated here because the number is the work's and not a guess; a
 # host that runs the sweep slower spends wall clock, not CPU, so the bound stays a bound.
-timeout_ms = 1200000
+#
+# 1400 s, line 350 s. The bound was 1200 s, and that was four times a figure the tree has outgrown:
+# on 2026-11-22 the `linux-x64-nojit` leg read 316220 and 340540 ms of CPU (runs 45003684718 and
+# 45007258569) and three runs of the same no-JIT build on the shared host read 264630, 263640 and
+# 267520 ms, so a 300 s line sat under the sweep's own cost and the nojit leg went red with
+# `unbalanced=0 skipped=1234 silent=0` -- the answer right and the bound the whole of the red.
+# 4 x 340540 ms is 1362160, rounded up here to 1400 s, which is 4.11x the worst CI reading and 5.2x
+# the host's. The sweep's cost is the coverage -- one `camel` per case the tree has -- so the way to
+# a smaller bound is fewer cases, which is the test doing less, and this is the raising instead.
+# The timeout only bites on a hang: the run above spent 129 s of wall clock against the 300 s the
+# old bound allowed, so nothing in the leg gets longer unless the sweep stops returning.
+timeout_ms = 1400000
