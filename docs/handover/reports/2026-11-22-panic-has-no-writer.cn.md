@@ -1,55 +1,112 @@
-# `panic` 的两个入口，今天一边也没有写入者
+# `panic` 的写入者：清点、检查与合入清单
 
-本页记一个**返工合入前必须先补的洞**。它不是缺陷报告，是一张**合入检查单**。
+本页是一张**合入检查单**，不是缺陷报告。要合入的那一半（`operator_record.h` + `facts.h`，`6489e1ca6`）把 `panic` 收成 `Stated<bool>`，两个入口都还没人写；而「不写」在这一版里被读成**承诺不会故障**。所以合入这一半，等于让库里每个算子同时作一次承诺——这不是重构，是改语义。
 
-## 一、读到的两个事实
+## 一、两个入口，今天一边也没有写入者
 
 ```
-$ git grep -n 'panic' -- 'lib/std/**/*.cml'      # 声明侧：只有一处提及，且不写 panic
-$ git grep -n 'mayFault\|panic' -- 'lib/std/builtin/**/*.cpp' 'compile/**'   # 登记侧：零写入者
+$ git grep -n 'panic' -- 'lib/**/*.cml'                          # 声明侧：零写入者
+$ git grep -n 'CppRegistration' -- lib                            # 登记侧：零写入者
 ```
 
-第二条是 `exf` 车道在 `391d7b2ce` 里查出来的，原文：
+`exf` 车道在 `391d7b2ce` 里记下的是同一件事：
 
 > 唯一的 `:op/copy` 声明不写 `panic`，且**整棵树没有任何 `panic` 写入者**（`compile/` 与 `CppRegistration` 皆无，返工版也没有），所以今天 `mayFault()` 对任何记录都读出保守的 `true`——对 COPY 与现有 `false` **不同**。
 
-## 二、为什么这是一个洞而不是一个待办
+（`nodeMayFault` 今天读的是另一张表，`OperatorTable::traitsOf` 从 `sem::OperatorSemantics` 的故障表推出 `mayFault`；记录里的 `mayFault()` 才是 `!panic.stated() || panic.value`。两条读数今天分家，见第三节。）
 
-`operator_record.h` 的返工版把 `panic` 定成 `Stated<bool>`：Camel 入口是「有没有写这个关键字」，C++ 入口是**必填的布尔值，不填即登记失败**。
+## 二、原则怎么说的
 
-于是：
+`docs/design-principles.cn.md` 第 165 行：
 
-| 入口 | 今天的状态 | 按新原则应是 |
+> **算子是否可能故障由它的声明说出**：没有函数体的原生算子用 `panic` 声明它可能故障（3.9），不写即承诺不会故障；仓库内的标准库由检查核对实现里有故障路径的算子都写了 `panic`。
+
+3.9（第 252、253 行）：
+
+> **`panic` 声明一个原生算子可能故障**（负责人 2026-11-22）：写在没有函数体的声明上，位置与 `pure`、`uses` 相同，如 `export func div(a: int, b: int): int pure panic`；不带种类列表（故障与错误一样以 Kind 区分）。不写即承诺不会故障。C++ 登记算子时"是否可能 panic"是必填的一项，与 Camel 声明是同一项信息的两个入口，两边都写了就必须一致。
+>
+> **故障只从故障源产生**：声明了 `panic` 的算子（除零、越界，以及 `fail` 这个内建算子），和运行时的资源极限（递归过深、内存耗尽）。
+
+同节第 243 行说清了两者不是一回事：
+
+> **错误与故障是两回事。** 只有声明为可能失败的操作（读文件、解析、网络等）才返回错误值。除零、越界、递归过深是故障，不变成错误值，否则每个除法和下标都要处理错误。
+
+所以 `T!`（错误值，内建 `enum`）与 `panic`（可能故障）**不比较、不互推**：算子可以返回 `T!` 而从不故障，也可以结果类型是 `int` 却故障（除零）。返工版 `operator_record.h` 里那句「`T!` 是写在类型里的 panic，完成时比较两者」已按此删除，`Signature::fallible` 保留为「签名写了 `T!`」这一条返回类型事实，注释写明它不蕴含 `panic`。
+
+**后果**：返工合入后，库里每个没写 `panic` 的算子都承诺不会故障。这条承诺会被优化器当真——除法可以挪出守卫，下标可以提前算。所以**写 `panic` 与改读取方必须是同一批**。
+
+## 三、清点：实现里有故障路径的算子
+
+### 怎么量的
+
+`scripts/check-operator-panic.mjs`（本批新增）从 21 张实现映射（`{"op/div_i", __builtin__div__}` 这样 376 个不同 URI）找到每个算子的 kernel，在**同一个翻译单元**里做调用闭包，读实现里的故障点：
+
+- 记故障：`throwRuntimeFault(RuntimeDiag::X)`、`RuntimeFault::make(X)`、`throw RuntimeFault(X)`；
+- 不记：`ProcessExit`（`exit` 是程序离开，调度器接住它并设退出码，不是故障）；
+- 记「别的 C++ 异常」：其余 `throw`——算子没交出值，`panic` 得盖住；而运行今天根本不把它报成故障；
+- 不计：`OperandTypeUnsupported`、`NullSlotUnwrapped`，两个都说编译器生成了类型规则不会接受的调用，是编译器缺陷；单独计数并打印，不藏起来；
+- 调用方传了枚举常量、被调方按它 `switch` 时，只走选中的那条臂。少了这一步，共用 `complexCompute` 的 `mul` 会读出 `Div` 臂的除零，一个不会故障的算子会被记成会。
+
+原始 grep 佐证：`lib` 里 224 处 `throwRuntimeFault`（`lib/std/builtin` 61 处），`.cml` 里 41 处 `fail<'…'>`，`DivisionByZero` 44 处、`IndexOutOfRange` 38 处。
+
+### 读数
+
+- 376 个算子，**92 个**的实现里有故障路径、且没写 `panic`（红）；284 个没有；**0 个**声明了实现里没有的故障。
+- 算子可达的故障点 348 处，去重后 **103 处**：其他运行时故障 58、别的 C++ 异常 21、除零 13、越界 10、`fail` 1。
+- 另有 38 个算子只抛编译器缺陷，不计。
+
+### 要写 `panic` 的 92 个（按文件）
+
+| 文件 | 算子 | 故障类别 |
 |---|---|---|
-| Camel 侧 `lib/std/prelude.cml` 的 `:op/copy` | **不写 `panic`** | 不写 = **承诺不会故障** ⇒ `false` |
-| C++ 侧 `lib/std/builtin/modules/globals.cpp:2105-2113` | **不填** | **必填** ⇒ 合入后会编译失败，或填了才知道填什么 |
-| **库里一个 `panic` 写入者都没有** | —— | —— |
+| `lib/ckpt/src/checkpoint.cpp` | `load_tree`, `save_tree` | 别的 C++ 异常 |
+| `lib/fs/operators.cpp` | `read_chunk` | 参数不合法 |
+| `lib/io/operators.cpp` | `get_chars` | 参数不合法 |
+| `lib/json/operators.cpp` | `encode`, `get` | 参数不合法 |
+| `lib/process/operators.cpp` | `sleep` | 参数不合法、运行时故障 |
+| `lib/pyplot/operators.cpp` | `plot` | 运行时故障、别的 C++ 异常 |
+| `lib/python/operators.cpp` | `attr`, `call`, `eval`, `exec`, `from_py`, `import_module`, `run_file`, `to_py`, `to_string` | 运行时故障、别的 C++ 异常 |
+| `lib/re/operators.cpp`、`lib/str/operators.cpp` | `find` | 参数不合法、正则不合法 |
+| `lib/rewrite/module.cpp` | `check`, `check_over`, `rewrite`, `run`, `saturate`, `why_not` | 别的 C++ 异常 |
+| `lib/sim/operators.cpp` | `asian_call_price`, `pi_hits` | 运行时故障 |
+| `lib/state/module.cpp` | `set`, `update` | 参数不合法 |
+| `lib/std/builtin/executors/builtin.cpp` | `enum/tag`, `io/eprintln`, `io/print`, `io/println`, `op/assn_div_*`（8 个）, `op/assn_mod_i`, `op/assn_mod_l`, `op/div`, `op/div_*`（8 个）, `op/fail`, `op/idx_arr`, `op/idx_str`, `op/idx_take`, `op/mod`, `op/mod_i`, `op/mod_l`, `op/set_field`, `op/set_index`, `op/set_index_in_place`, `op/slice_bytes`, `op/slice_str`, `op/slice_sub`, `str/format`, `str/join`, `struct/last_arr`, `struct/range`, `struct/zip`, `tangent/*`（7 个） | 除零、越界、`fail`、参数不合法、格式化失败、字段不存在、切片越界、运行时故障 |
+| `lib/std/builtin/operators/array.cpp` | `dim`, `max_d`, `max_f`, `max_i`, `max_l`, `min_d`, `min_f`, `min_i`, `min_l`, `to_bytes` | 参数不合法 |
+| `lib/str/operators.cpp` | `from_codepoints`, `repeat` | 参数不合法 |
+| `lib/test_support/operators.cpp` | `rendezvous`, `thread_count` | 参数不合法、运行时故障 |
+| `lib/time/operators.cpp` | `strftime` | 时间格式 |
 
-而 `mayFault()` 的实现是 `!panic.stated() || panic.value`，对「没人说」取保守的 `true`。所以：
+`min`/`max` 在空数组上是故障（`array_axis.cpp` 的 `refuse`），不是返回 `null`；`to_bytes` 在元素不是平凡数据上是故障。
 
-**今天每个算子的 `mayFault()` 都返回 `true`，包括 `:op/copy`。**
+## 四、检查
 
-## 三、后果：改成读记录会**真改语义**
+```powershell
+node scripts/check-operator-panic.mjs          # 报告，不一致 exit 1
+node scripts/check-operator-panic.mjs --list   # 每个算子的读数，不只是红的
+```
 
-`kernel/runtime/graph.cpp:79-95` 现在按形状判：CAST 可能故障、其余不会。对 `copy` 它给 `false`，因此 `copy` 是可自由调度的语句。
+**今天的读数：exit 1，红 92 行。红是预期的**——`panic` 还没写。这条检查不许为了绿而放松：它找不到某个算子的实现时报 exit 2（拒答），不当作「没抛异常」。
 
-若把那一处改成读记录的 `mayFault()`，`copy` 会从 `false` 变成 `true` —— **`copy` 不再是可自由调度的语句**。这不是重构，是行为改变。
+它现在**不进 `scripts/release-gate.mjs`**：一道按构造为红的检查进了闸门，只会挡住与它无关的发布。写 `panic` 的那一批把它加进闸门，判据是同一次提交里 exit 0。
 
-`exf` 因此**没有改**，只在 `graph.cpp:79-95` 留了注释：两条读数各是什么、今天为什么分家、记录带上 `panic` 后每臂改成 `camel::ops::Registry::instance().find(oper)->mayFault()`。
+它看不见的东西写在脚本头里：跨文件的 helper 不跟（名字不唯一，跟下去会让共用工具函数的算子全部变红）。这是会**漏**故障的方向，所以矩阵里只有 kernel 与它同一个文件里的 helper；补这一块要真的前端，不是正则。
 
-**判据写在那里之后，下一次有人「顺手把它改成读记录」时会看见分家的理由。**
+## 五、合入检查单
 
-## 四、合入检查单
+`operator_record.h` + `facts.h` 合入时，**同一批**必须做完：
 
-`operator_record.h` + `facts.h` 的返工（`6489e1ca6`）合入时，**同一批**必须做完：
+1. 给第三节表里每个算子写 `panic`：Camel 侧写在 `export func` 行上（与 `pure`、`uses` 同位置），C++ 侧 `CppRegistration` 第二个参数填 `true`。
+2. 表外的 284 个**不写** `panic`（不写 = `false`）。C++ 侧必填，填 `false`——包括 `lib/std/builtin/executors/builtin.cpp:747` 现在 `registry.set(":op/copy", {.mayFault = false})` 的那一处，`copy` 不故障。
+3. 把 `kernel/runtime/graph.cpp:79-95` 每臂改成读 `camel::ops::Registry::instance().find(oper)->mayFault()`，**并出一张表：改前改后每个算子的 `mayFault` 取值**。改前是今天的 `nodeMayFault`（`copy` 按形状已是 `false`；`Oper` 读 `OperatorSemantics` 的故障表，没人声明的按 `true`），改后是记录的 `mayFault()`。**必须一项不变**；变了的逐项说明。最可能的变法是今天没声明故障表、被默认读成 `true` 的算子——它们正是第 2 条要盯的。
+4. `node scripts/check-operator-panic.mjs` exit 0。
+5. 跑 `feat/compile`、`feat/runtime`、`feat/opt`、`feat/consistency`，四次 `[SUMMARY]` 的 `fail` 全为 0。
 
-1. `lib/std/builtin/modules/globals.cpp:2105-2113` 给 `:op/copy` 的 `CppRegistration` **填上 `mayFault`**（按原则：`copy` 不故障 ⇒ `false`）。不填就是编译失败——这是返工特意设计的，好。
-2. `lib/std/prelude.cml` 的 `copy` 声明**不写** `panic`，与上一条一致（不写 = `false`）。
-3. 把 `kernel/runtime/graph.cpp:79-95` 每臂改成读 `mayFault()`，**并报出改前改后对每个算子的取值表**——若表里只有 `copy` 变化且方向是 `false`，才说明这一改是「读数来源变了、语义没变」。
-4. 跑 `feat/compile`、`feat/runtime`、`feat/opt`、`feat/consistency`，四次 `[SUMMARY]` 的 `fail` 全为 0。
+## 六、本批不做什么
 
-**第 3 条的表是判据。** 没有那张表，「改成读记录没改语义」就只是一句话。
+`lib/**/*.cml` 一个 `panic` 也没动（那是单独一批，等清单点了再做）。本批只有三样东西：`operator_record.h` 的两处注释、这一页、`scripts/check-operator-panic.mjs`。
 
-## 五、一句话
+所以**还欠 92 个算子的 `panic`**，检查今天红 92 行，红的原因只是它们还没写。
 
-**一个「必填」，只有在有人真去填的时候才有约束力。** 今天两侧都空着，而读取方又对空取值取了保守默认——于是「必填」这件事在库代码里一次也没有发生过。返工把 `panic` 收成 `Stated<bool>` 是对的，但它**同时**需要一次真实写入，否则那个布尔值的第一个取值仍来自默认。
+## 七、一句话
+
+**一个「必填」，只有在有人真去填的时候才有约束力。** 今天两侧都空着，读取方又对空取值取了保守默认——于是「必填」这件事在库代码里一次也没有发生过。返工把 `panic` 收成 `Stated<bool>` 是对的，但它要的是一次真实写入：不是给 `copy` 填一个 `false` 就算完，而是把**每个实现里有故障路径的算子**都写出来，让「没写」重新等于「不会故障」。

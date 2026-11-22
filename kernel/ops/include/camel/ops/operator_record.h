@@ -15,11 +15,15 @@
  *
  * The basic properties are written with keywords and types, not with labels. `uses` states what
  * running the operator reads and writes besides the values of its operands; `pure` is that
- * clause empty (a word for the empty list, not a second field). `panic` states the failures a
- * call can produce, and is a parameter of the C++ entrance rather than a field with a default,
- * so a C++ operator always says whether its calls can fail: an empty list says they cannot.
- * `T!` states in the signature that a call may fail to give its result, which is the same fact
- * as the fault table, so the two are compared when the record is completed.
+ * clause empty (a word for the empty list, not a second field). `panic` states whether a call of
+ * the operator can fail (design principles 3.9): the Camel entrance states it by writing the
+ * keyword, and a declaration that does not write it promises that no call fails; the C++ entrance
+ * takes it as a required parameter, so a C++ operator always states one of the two answers. It
+ * carries no list of kinds: a fault's kind is reported where the fault happens, by the operator
+ * that raises it. `T!` is not that fact and says nothing about it: an error is a value (3.9, and
+ * `T!` is a built-in `enum`), so an operator can return `T!` and never fail, and can fail while its
+ * result is a plain `int` (a zero divisor). The signature records the `T!` as its own fact
+ * (`Signature::fallible`); neither is derived from the other, and completion does not compare them.
  *
  * A label is graph information and is no member here. `#jvp` and `#transpose`, the numeric
  * permissions a program grants, the hints a target reads, the concepts a library gives its own
@@ -29,17 +33,20 @@
  * Each property appears once. Four were stated in more than one place and are read from this
  * record now, from nowhere else:
  *
- *   - the effect: `uses` and its one reading (`effect()`), not the purity column the
- *     introspection JSON printed beside it (`module::OperatorPurity`) and not the
- *     `pure`/`stateOnly` bits of the traits struct the table used to hand out;
+ *   - the effect: `uses` and its one reading (`effect()`), not the purity column the module
+ *     introspection JSON used to print beside it and not the `pure`/`stateOnly` bits of the
+ *     traits struct the table used to hand out;
  *   - the macro fact: the node flag and the graph flag ask this record, and the standard tag
  *     `#macro` on a *declaration* says the same thing about a function, which is a different
  *     question and is not an operator trait;
  *   - the type rule: a group of overloads (`OperatorGroup`) is a name and the URIs of its
  *     overloads and keeps no second copy of the rules; the rule is stated here, once;
- *   - being elementwise: `elementwise` and an elementwise law of a binary operator's algebra are
- *     the same bit read twice, so only the bit is kept, and `ElementShape::Map` is the way an
- *     operator that calls a function value states its elements rather than a second copy of it.
+ *   - being elementwise: one bit, `elementwise` below, and nothing else states it. A binary
+ *     operator's algebra states its laws and the element type they are about, not a second copy
+ *     of the bit; and how an operator that calls a function value calls it -- a map, a filter, a
+ *     fold -- is `ElementCalls::shape`, which is a different question: a map may pass another
+ *     operand whole, so the shape says nothing about how an output element depends on an input
+ *     element.
  *
  * Two more were stated in more than one place and are settled without becoming members here. The
  * numeric permissions are a label: the one statement of a mask is the tag a node carries, and the
@@ -53,8 +60,8 @@
  * written for, and that key is an OperId like every other key in this file -- never the URI text
  * a rule happens to be named after.
  *
- * The value types a record is made of (`OperatorKey`, `ResourceSpec`, `FaultSpec`,
- * `ResourceAccess`, `NumericSemantics`, `ElementCalls`, `Definition`) are declared in
+ * The value types a record is made of (`OperatorKey`, `ResourceSpec`, `ResourceAccess`,
+ * `NumericSemantics`, `ElementCalls`, `Definition`) are declared in
  * camel/core/operator_semantics.h and are not restated here. The types an operator table keeps
  * beside its entries today (the folder, the in-place form, the conversion, the call shape, the
  * call-site facts, the decorator grant) are declared below, because they are properties of the
@@ -84,7 +91,6 @@
 
 #include <cstdint>
 #include <functional>
-#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <span>
@@ -103,6 +109,14 @@ class FunctionType;
 
 namespace camel::ops {
 
+// The blocks the entries below are made of, named once so that the text of the record does not
+// open a second spelling of any of them.
+namespace attr = ::camel::core::attr;
+namespace data = ::camel::core::data;
+namespace mm   = ::camel::core::mm;
+namespace sem  = ::camel::core::sem;
+namespace type = ::camel::core::type;
+
 /// The index of an operator's record. Process-local; see the note on lifetime above.
 using OperId = std::uint32_t;
 
@@ -116,10 +130,10 @@ enum class Origin : std::uint8_t { None, Camel, Cpp };
 /**
  * An item of the record together with the entrances that stated it.
  *
- * `stated()` is not `value == T{}`: an empty fault table is a statement ("no call of this
- * operator can fail") and is not the absence of one ("nobody said, so a call may fail"). The two
- * flags are what keeps that difference, and `complete` is what refuses a record whose two
- * entrances disagree (`byCamel && byCpp && !equal`).
+ * `stated()` is not `value == T{}`: `panic == false` is a statement ("no call of this operator
+ * can fail") and is not the absence of one ("nobody said, so a call may fail"). The two flags are
+ * what keeps that difference, and `complete` is what refuses a record whose two entrances
+ * disagree (`byCamel && byCpp && !equal`).
  */
 template <typename T> struct Stated {
     T value{};
@@ -142,8 +156,10 @@ struct Signature {
     /// result. Null when the operator has no stated signature (a dynamic rule, a kernel a module
     /// declares without a body).
     const type::FunctionType *type = nullptr;
-    /// The result is written `T!`: a call may fail to give one. The faults are `panic`; this is
-    /// the same fact stated in the type, and the completion check compares them.
+    /// The result is written `T!`: a call gives a value of the payload type, or hands on the error
+    /// it came back with (3.9; an error is a value, not a fault). This is the signature's own fact
+    /// and **not** `panic`: it does not imply that a call can fail, and `panic` does not imply it
+    /// (`div` fails and returns `int`).
     bool fallible = false;
 };
 
@@ -261,6 +277,25 @@ struct CallForm {
 };
 
 /**
+ * The laws of a binary operator, per element type, and how its operands and its result map to the
+ * element type the laws are about. The record's own statement of the algebra: it is
+ * `sem::BinaryAlgebra` without the elementwise bit, which the record states once as
+ * `Record::elementwise`. (The operator table's `sem::OperatorSemantics` keeps that bit until the
+ * table retires; the record is not the table and holds no second copy of it.)
+ *
+ * A law that holds on a tensor element by element says so by answering with the element type:
+ * the laws then hold element by element, and a rewrite may only combine operands of the type of
+ * the result (no broadcasting).
+ */
+struct BinaryLaws {
+    /// One law per element type the operator is a law about.
+    std::vector<sem::BinaryLaw> laws;
+    /// The element type of a value of this type, nullopt when the laws do not speak of it. An
+    /// empty function reads a scalar number as its own element type.
+    std::function<std::optional<type::TypeCode>(const type::Type *)> elementOf;
+};
+
+/**
  * Everything an operator is, stated once.
  *
  * The members are grouped by the question a reader asks, not by the entrance that stated them.
@@ -289,13 +324,15 @@ struct Record {
     Stated<sem::ResourceSpec> uses;
 
     /**
-     * `panic`: the failures a call of the operator can produce. An empty list states that no
-     * call of it can fail, which together with purity is what makes a node freely schedulable;
-     * a list names the failures and the operands they are about. Not stated: a call may fail in
-     * ways nobody enumerated. The C++ entrance has no default for it (`CppRegistration`), so a
-     * C++ operator always states one of the two.
+     * `panic`: whether a call of the operator can fail (design principles 3.9). The Camel
+     * entrance states it by writing the keyword, and a declaration that leaves it out states
+     * `false`: not writing `panic` promises that no call fails. `true` says a call may fail, and
+     * no list of kinds comes with it -- a fault's kind is reported where the fault happens, by
+     * the operator that raises it. Not stated: nobody said, and the operator is read as one that
+     * may fail. The C++ entrance has no default for it (`CppRegistration`), so a C++ operator
+     * always states one of the two answers.
      */
-    Stated<std::vector<sem::FaultSpec>> panic;
+    Stated<bool> panic;
 
     /**
      * The type of a call. The type rule below answers it for a call whose argument types are
@@ -349,14 +386,14 @@ struct Record {
     /// the special values it departs from IEEE on, and the algorithm its documentation names.
     sem::NumericSemantics numeric;
 
-    /// The laws of a binary operator, per element type. `BinaryAlgebra::elementwise` restates
-    /// `elementwise` below and is read as that bit rather than kept as a second one.
-    std::optional<sem::BinaryAlgebra> binary;
+    /// The laws of a binary operator, per element type. It states no elementwise bit of its own:
+    /// `elementwise` below is the one statement of that.
+    std::optional<BinaryLaws> binary;
 
     /// How the operator calls the function values it receives: which shape, and whether the
-    /// calls on different elements may run at once. `ElementShape::Map` restates `elementwise`
-    /// and is read as that bit; the operand that holds the function and the initial value of a
-    /// fold are what this member adds.
+    /// calls on different elements may run at once. The shape is not a second statement of
+    /// `elementwise`: a map may hand another operand whole, so the shape says which elements the
+    /// function is called on, not how an output element depends on an input element.
     std::optional<sem::ElementCalls> elementCalls;
 
     /// The definition: a function of a library module, written in Camel, that is the operator's
@@ -366,7 +403,8 @@ struct Record {
 
     // ---- The single statements of what was stated twice ------------------------------------
 
-    /// Output element i depends only on input elements i (after broadcasting).
+    /// Output element i depends only on input elements i (after broadcasting). The one statement
+    /// of it: an operator that is elementwise says so here and nowhere else.
     bool elementwise = false;
 
     /// While it runs, the operator calls function values it received as arguments. True for
@@ -407,8 +445,8 @@ struct Record {
     /// The operator touches no resource at all: its clause is stated and empty.
     bool pure() const { return uses.stated() && uses.value.none(); }
 
-    /// A call of it may fail: the fault table is absent, or it names a fault.
-    bool mayFault() const { return !panic.stated() || !panic.value.empty(); }
+    /// A call of it may fail: `panic` is stated true, or nobody stated it.
+    bool mayFault() const { return !panic.stated() || panic.value; }
 
     /// Whether running it is visible outside the program, which is what orders two effects of
     /// one resource and keeps them where the program wrote them.
@@ -471,9 +509,9 @@ class Registry {
     // ---- Completion ------------------------------------------------------------------------
 
     /**
-     * Checks a record whose entrances are all in and publishes it: `T!` against the fault table,
-     * purity against the accesses, an in-place form against its plain operator, a stated
-     * `elementwise` against the laws and the element calls. Throws std::invalid_argument naming
+     * Checks a record whose entrances are all in and publishes it: the two entrances' `panic`
+     * against each other, purity against the accesses, an in-place form against its plain operator,
+     * and an elementwise algebra against the bit that states it. Throws std::invalid_argument naming
      * the operator and the item that does not hold; a refused record is left as it was.
      *
      * A published record is never changed again: everything a program can ask about an operator
@@ -496,7 +534,7 @@ class Registry {
  *
  * ```cpp
  * // a library author's module, at load time
- * camel::ops::CppRegistration reg("mylib:scale", noFaults);   // panic is not optional
+ * camel::ops::CppRegistration reg("mylib:scale", false);   // panic is not optional
  * reg.pure()
  *    .resolver(myScaleRule)
  *    .signature(myScaleType)
@@ -513,12 +551,11 @@ class Registry {
 class CppRegistration {
   public:
     /**
-     * `panic` is a parameter, not a field with a default: an operator that can fail states its
-     * faults and an operator that cannot states the empty list. There is no third answer for a
-     * C++ operator, so a registration that forgot to think about failure does not compile.
+     * `panic` is a parameter, not a field with a default: `true` states that a call of the
+     * operator may fail and `false` that none does. There is no third answer for a C++ operator,
+     * so a registration that forgot to think about failure does not compile.
      */
-    CppRegistration(std::string_view uri, std::span<const sem::FaultSpec> panic);
-    CppRegistration(std::string_view uri, std::initializer_list<sem::FaultSpec> panic);
+    CppRegistration(std::string_view uri, bool mayFault);
 
     /// `uses` is the empty access list: running the operator touches nothing but its operands.
     CppRegistration &pure();
@@ -541,7 +578,8 @@ class CppRegistration {
     CppRegistration &callSpec(CallSpec spec);
     CppRegistration &callForm(CallForm form);
 
-    /// Output element i depends only on input elements i. The one statement of it.
+    /// Output element i depends only on input elements i. The one statement of it, and the way a
+    /// binary operator whose laws hold element by element says so.
     CppRegistration &elementwise();
     /// It calls the function values it receives; `calls()` states `callsGraphs` with it.
     CppRegistration &calls(sem::ElementCalls shape);
@@ -553,7 +591,7 @@ class CppRegistration {
     CppRegistration &indexing(sem::InstantiateFn instantiate);
     CppRegistration &laws(std::vector<sem::ReductionLaw> laws);
     CppRegistration &numeric(sem::NumericSemantics numeric);
-    CppRegistration &algebra(sem::BinaryAlgebra algebra);
+    CppRegistration &algebra(BinaryLaws laws);
     CppRegistration &definition(sem::Definition definition);
 
     /// The implementation this process runs for the operator. Not part of the record: a target
