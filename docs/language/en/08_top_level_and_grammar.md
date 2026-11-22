@@ -188,7 +188,8 @@ dataList           : dataExpr (',' dataExpr)*
 argumentList       : indexValues (',' pairedValues)? | pairedValues
 indexValues        : indexValue (',' indexValue)*
 indices            : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
-sliceIndices       : dataExpr? ':' dataExpr? (':' dataExpr?)?
+sliceIndices       : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | 'range' '(' dataExpr ','
+                     dataExpr ',' dataExpr ')'
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
 typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'

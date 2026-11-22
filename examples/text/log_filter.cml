@@ -22,12 +22,12 @@ func has(text: string, part: string): bool {
 // '09:00:07 WARN  disk usage at 81%': the time, then the level up to the next space, then
 // the message.
 func parse(line: string): Entry {
-    let rest = line[9:]
+    let rest = line[9..]
     let cut = rest->index_of<' '> ?? len(rest)
     return {
-        time: line[0:8],
-        level: rest[0:cut],
-        message: rest[cut:]->trim
+        time: line[0..8],
+        level: rest[0..cut],
+        message: rest[cut..]->trim
     }
 }
 

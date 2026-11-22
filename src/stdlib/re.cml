@@ -72,8 +72,8 @@ export func find_all(text: string): Match[] {
 with <pattern: string, by: (m: Match) => string>
 export func replace_with(text: string): string {
     let (out, at) = loop out = '', at = 0 for m in text->find_all<pattern> do
-        (out + text[at:m.start] + by(m), m.end)
-    return out + text[at:]
+        (out + text[at..m.start] + by(m), m.end)
+    return out + text[at..]
 }
 
 /// text with every match of pattern replaced by the text new, which is taken literally.
@@ -91,6 +91,6 @@ export func replace(text: string): string {
 with <pattern: string>
 export func split(text: string): string[] {
     let (parts, at) = loop parts = [] as string[], at = 0 for m in text->find_all<pattern> do
-        (concat(parts, [text[at:m.start]]), m.end)
-    return concat(parts, [text[at:]])
+        (concat(parts, [text[at..m.start]]), m.end)
+    return concat(parts, [text[at..]])
 }

@@ -56,7 +56,7 @@ func main(): int sync {
 | `t.0` | Tuple member; the index is a literal, and out of range is a compile-time error |
 | `xs[i]` | Array element. Out of range (including negative) is the fault `RuntimeDiag::IndexOutOfRange` |
 | `xs[idx]` | `idx` is an `int[]`: the elements at those positions, in the order of `idx` (that is `take`), see below |
-| `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[:]` | A slice, see below |
+| `xs[a..b]`, `xs[..b]`, `xs[a..]`, `xs[..]`, `xs[range(a, b, s)]` | A slice, see below |
 | `m[k]` | Map lookup; the type is `V?` ([3.6](03_data_model.md#36-maps-and-sets)) |
 | `mod::name` | Qualified name |
 
@@ -64,11 +64,11 @@ func main(): int sync {
 - A subscript directly follows the expression being accessed, with no whitespace.
 - **Subscripts start at 0, and a negative one does not count from the end**: `xs[-1]` is the fault `RuntimeDiag::IndexOutOfRange`. The last element is written `last(xs)`.
 - **`xs[idx]` is `take`**: `idx` must have the type `int[]`, and the result is the elements at the positions of `idx`, in the order of `idx`; a position that appears twice is taken twice. Out of range and negative are the fault `RuntimeDiag::IndexOutOfRange`. The result is a new array, not a view ([5.4](../../design-principles.en.md)).
-- **A slice is along the first dimension, left-closed right-open**: `xs[a:b]` is the positions `a` to `b-1`. An omitted `a` means from the start, an omitted `b` to the end, and `xs[:]` is the whole array; `s` is the step. A slice is a **view sharing the data block** ([5.4](../../design-principles.en.md)); it does not copy the elements.
+- **A slice is along the first dimension, left-closed right-open**: `xs[a..b]` is the positions `a` to `b-1`. An omitted `a` means from the start, an omitted `b` to the end, and `xs[..]` is the whole array. A slice is a **view sharing the data block** ([5.4](../../design-principles.en.md)); it does not copy the elements.
   - Both bounds are positions from 0 to `len(xs)` (`b` may equal the length, which takes up to the last element); a negative or out-of-range bound is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault ([3.9](../../design-principles.en.md)). `b < a` is the empty array, not a fault. When the length is known at compile time and the bounds are constants, an out-of-range bound is a compile-time error ([3.9](../../design-principles.en.md)).
-  - The step is written after a second colon: `xs[a:b:s]`, and the result is still a view sharing the data block; for a copy write `slice(xs, 0, a, b, s)`.
+  - A slice with a step is written `xs[range(a, b, s)]`: the three arguments of `range` are the slice's start, end and step, and the result is still a view sharing the data block; for a copy write `slice(xs, 0, a, b, s)`.
   - An array whose elements are objects (`[[1, 2], [3, 4]]` and the like) is copied row by row: a slot array has no data block to share.
-- **Multidimensional subscripts**: `xs[:, 0]` and `xs[a:b, c]` take coordinates along each dimension and give a view; `:` takes a whole dimension ([5.4](../../design-principles.en.md)).
+- **Multidimensional subscripts**: `xs[.., 0]` and `xs[a..b, c]` take coordinates along each dimension and give a view; `..` takes a whole dimension ([5.4](../../design-principles.en.md)).
 - **String subscripts are by code point**: `s[i]` is the `i`-th code point, and the result is a string containing just that one character (`'中文'[0]` is `'中'`); an out-of-range subscript is likewise a fault. For the numbers use `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)).
 
 ## 6.4 Calls

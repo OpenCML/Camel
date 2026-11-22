@@ -1,6 +1,6 @@
 /**
  * The core's own slice, on a rank-1 tensor whose length is stated: `reshape(x, [6])` gives
- * `f32[6]`, `a[1:4]` is the
+ * `f32[6]`, `a[1..4]` is the
  * core's `:op/slice_sub`, and its
  * adjoint is `:tangent/scatter_slice_arr`. That kernel used to build its result with
  * `Array::create(alloc, size)` -- an array of bare slots -- so the gradient carried no element
@@ -8,7 +8,7 @@
  * (exit 1). The adjoint now creates the value with the tangent type, so the value states the
  * element type the forward value has (`f32[6]`).
  *
- *   a = [1,2,3,4,5,6];  sum(a[1:4]) = 2 + 3 + 4 = 9.0
+ *   a = [1,2,3,4,5,6];  sum(a[1..4]) = 2 + 3 + 4 = 9.0
  *   d/da = [0, 1, 1, 1, 0, 0];  sum of it = 3.0
  *
  * Red when: the gradient has no element type (`sum(g)` refuses, exit 1), the gradient is the zero
@@ -21,7 +21,7 @@ import { grad } from autodiff
 with <x: f32[...]>
 func probe(): float {
     let a = reshape<[6]>(x)
-    return float(sum(a[1:4]))
+    return float(sum(a[1..4]))
 }
 
 func main(): int sync {

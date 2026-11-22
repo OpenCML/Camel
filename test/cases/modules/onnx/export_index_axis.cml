@@ -12,13 +12,13 @@ import { get_env } from env
 
 /// The position 0 on axis 1 of a rank-2 value.
 func position(x: f32[...]): f32[...] {
-    return reshape<[2, 3]>(x)[:, 0]
+    return reshape<[2, 3]>(x)[.., 0]
 }
 
 /// The positions an integer array names on axis 1, in that order, a repeated index among them.
 func taken(x: f32[...]): f32[...] {
     let idx = [2, 0, 2]
-    return reshape<[2, 3]>(x)[:, idx]
+    return reshape<[2, 3]>(x)[.., idx]
 }
 
 func main(): string! sync {

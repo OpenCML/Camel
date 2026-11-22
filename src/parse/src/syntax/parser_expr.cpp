@@ -241,11 +241,13 @@ void ParserImpl::parseRelational() {
 /// The range of two numbers and the composition of two functions, one level: `1..n+1` is
 /// `1..(n+1)`, and `...` is looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
 /// composition).
+/// Inside a subscript the same token is the slice's separator, and `noRange_` is on there: the
+/// dimension reads `a..b` as two ends, not as a range value (see `parseSliceIndices`).
 void ParserImpl::parseRange() {
     const size_t m = mark();
     parseAdditive();
     bool any = false;
-    while (cur_ == TK::DotDot && !panic_) {
+    while (cur_ == TK::DotDot && !noRange_ && !panic_) {
         bump();
         parseAdditive();
         any = true;
@@ -845,49 +847,57 @@ void ParserImpl::parseIndices() {
     close(m, NK::Indices);
 }
 
-/// sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?
+/// sliceIndices : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | 'range' '(' dataExpr ','
+///                dataExpr ',' dataExpr ')'
 ///
-/// One dimension of a subscript: a slice when a colon follows, an element index otherwise (the
-/// expression is then the whole dimension, which `indices` writes as its other alternative).
-/// The node keeps the colons it consumed as children, so which of the three parts were written
-/// is read from the tree itself and not recovered from token positions: the part before the
-/// first colon is the start, the one between the colons the end, the one after the second colon
-/// the step.
+/// One dimension of a subscript. A dimension that writes `..` is a slice: `t[a..b]`, and either
+/// end may be left out, `t[..b]` and `t[a..]`, where the omitted end is the array's bound on that
+/// side (design principles 4.2). The node keeps the `..` tokens it consumed as children, so which
+/// end was written is read from the tree itself and not recovered from token positions: an
+/// expression before the first `..` is the start, one after it the end.
+///
+/// A stepped slice is written with the core's `range(a, b, s)` as the whole dimension
+/// (`t[range(0, n, 2)]`): a range value is not an index, so the three parts are read here as the
+/// slice's start, end and step, and the `range` token stays in the tree as the marker of that
+/// reading. The step is written only this way; a slice has no third `..`.
 void ParserImpl::parseSliceIndices() {
     const size_t m = mark();
-    if (cur_ != TK::Colon && cur_ != TK::ColonColon) {
-        parseExpr();
-        if (cur_ != TK::Colon && cur_ != TK::ColonColon) {
-            return; // an element index: the expression is the whole dimension
+    NoRangeScope noRange(*this);
+    if (atWord(0, "range") && peek(1) == TK::LParen) {
+        bump(); // `range`, kept as the marker of the three parts
+        if (!panic_ && expect(TK::LParen)) {
+            parseExpr();
+            if (!panic_ && expect(TK::Comma)) {
+                parseExpr();
+            }
+            if (!panic_ && expect(TK::Comma)) {
+                parseExpr();
+            }
+            if (!panic_) {
+                expect(TK::RParen);
+            }
         }
-    }
-    if (cur_ == TK::ColonColon) {
-        // Two colons written together (`xs[:: -1]`, `xs[a:: s]`): the lexer keeps `::` as one
-        // token (a qualified name), so a slice reads it as the two colons it is.
-        bump();
-        parseSlicePart();
         close(m, NK::SliceIndices);
         return;
     }
-    bump(); // ':'
-    parseSlicePart();
-    if (cur_ == TK::ColonColon) {
+    if (cur_ == TK::DotDot) {
         bump();
-        parseSlicePart();
-    } else if (eat(TK::Colon)) {
-        parseSlicePart();
-    }
-    close(m, NK::SliceIndices);
-}
-
-/// One part of a slice: nothing at all when the next token is a colon or the end of the
-/// subscript, which leaves the part out of the tree.
-void ParserImpl::parseSlicePart() {
-    if (cur_ == TK::Colon || cur_ == TK::ColonColon || cur_ == TK::Comma ||
-        cur_ == TK::RBracket) {
+        if (cur_ != TK::Comma && cur_ != TK::RBracket) {
+            parseExpr();
+        }
+        close(m, NK::SliceIndices);
         return;
     }
     parseExpr();
+    if (cur_ == TK::DotDot) {
+        bump();
+        if (cur_ != TK::Comma && cur_ != TK::RBracket) {
+            parseExpr();
+        }
+        close(m, NK::SliceIndices);
+        return;
+    }
+    // An element index: the expression is the whole dimension, and there is no node to close.
 }
 
 /// parentArgues : '(' argumentList? ','? ')'

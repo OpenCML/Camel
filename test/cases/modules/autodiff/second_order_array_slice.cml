@@ -1,6 +1,6 @@
 // Second order through a slice whose bound is computed from the parameter.
 //
-// xs = [w, 2w, 3w, 4w]; k = int(w) = 2 at w = 2; s = xs[0:k] = [w, 2w]
+// xs = [w, 2w, 3w, 4w]; k = int(w) = 2 at w = 2; s = xs[0..k] = [w, 2w]
 //   f(w) = s[0]^2 + s[1]^2 = w^2 + 4w^2 = 5w^2
 //   f'(w) = 10w  -> f'(2) = 20
 //   f''(w) = 10  -> f''(2) = 10
@@ -20,7 +20,7 @@ with <w: float>
 func f(): float {
     let xs = [w, w * 2.0, w * 3.0, w * 4.0]
     let k = int(w)
-    let s = xs[0:k]
+    let s = xs[0..k]
     return s[0] * s[0] + s[1] * s[1]
 }
 
@@ -28,7 +28,7 @@ func f(): float {
 with <w: float>
 func bound_only(): float {
     let xs = [10.0, 20.0, 30.0, 40.0]
-    let s = xs[0:int(w)]
+    let s = xs[0..int(w)]
     return float(len(s))
 }
 
