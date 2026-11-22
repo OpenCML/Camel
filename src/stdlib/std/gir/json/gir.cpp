@@ -13,6 +13,7 @@
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/runtime/canonical.h"
 #include "camel/runtime/node_roles.h"
+#include "graph/gc_graph_view.h"
 #include "camel/runtime/reachable.h"
 #include "camel/runtime/writings.h"
 #include <algorithm>
@@ -428,7 +429,8 @@ std::string dumpJsonRuntimeGraph(
                         attrValueJson(a.value);
             }
             value["roles"] = json::array();
-            for (const auto &role : NodeRoleRegistry::instance().classify(*g, ref))
+            for (const auto &role : NodeRoleRegistry::instance().classify(
+                     camel::graph::FrozenGraphAdapter(*g), ref))
                 value["roles"].push_back(role.spec.name);
             graph["nodes"].push_back(std::move(value));
             // Explicit edge classes and indices preserve duplicate inputs and their order. The

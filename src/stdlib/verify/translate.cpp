@@ -10,6 +10,7 @@
 #include "translate.h"
 
 #include "camel/core/rtdata/base.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/core_facts.h"
 
 #include <format>
@@ -235,23 +236,28 @@ class SideWalker {
             return nullptr;
         }
         TermPtr made;
-        switch (node->kind) {
-        case GCNodeKind::Data:
-            made = constant(*node);
-            break;
-        case GCNodeKind::Port:
-            made = parameter(ref, *node);
-            break;
-        case GCNodeKind::Cast:
-        case GCNodeKind::Copy:
+        // A conversion and a copy hand their input on, and that is what the operation is: asked of
+        // the operation, because a graph may write them as the calls `cast` and `copy`, not only as
+        // the kinds the front end still builds (`camel/execute/shaped_operators.h`).
+        const camel::execute::OperShape shape = camel::execute::shapeOfOperation(graph_, ref);
+        if (shape == camel::execute::OperShape::Conversion ||
+            shape == camel::execute::OperShape::Clone) {
             made = forwarded(ref, *node);
-            break;
-        case GCNodeKind::Oper:
-            made = operate(ref, *node);
-            break;
-        default:
-            refuse(uncoveredNode(*node));
-            break;
+        } else {
+            switch (node->kind) {
+            case GCNodeKind::Data:
+                made = constant(*node);
+                break;
+            case GCNodeKind::Port:
+                made = parameter(ref, *node);
+                break;
+            case GCNodeKind::Oper:
+                made = operate(ref, *node);
+                break;
+            default:
+                refuse(uncoveredNode(*node));
+                break;
+            }
         }
         if (made != nullptr) {
             memo_.emplace(ref, made);

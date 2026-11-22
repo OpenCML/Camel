@@ -1,10 +1,10 @@
 // The gradient of a lane min along a negative axis, with a tie, through both legs.
 //
 // `jvp_min_axis` states the selection as `xs <= min<axis, true>(xs)` (`stdlib/rulesets/jvp.cml`)
-// and `min_axis_stated_t` keeps the spread cotangent only at those positions
-// (`stdlib/rulesets/transpose.cml`). The axis is written `-1`, the last one, so this is also the
-// reading that says the axis reaches the stated operator unresolved and the extents decide where the
-// lane's cotangent goes.
+// and the reverse of that masked tangent keeps the spread cotangent only at those positions --
+// `sum_axis_stated_t` spreads it and `where_t` zeroes the rest (`stdlib/rulesets/transpose.cml`).
+// The axis is written `-1`, the last one, so this is also the reading that says the axis reaches
+// `sum_axis_stated` unresolved and the extents decide where the lane's cotangent goes.
 //
 //     x     = [[2.0, 1.0, 1.0],
 //              [5.0, 4.0, 6.0]]

@@ -14,9 +14,8 @@
 // and `3*x*x = 12`, with the cotangent `(12.0)` -- one member, because a pullback answers one
 // cotangent per parameter and `f` has one. At `x = 3` all three numbers are 27, and an assertion
 // that only asked whether `27.0` appears could not tell a wrong gradient from the value it
-// differentiates: it stayed green with the gradient computed as the value (see P2-22 of
-// docs/handover/reports/). Each line below is pinned whole for that reason, and the plan also
-// refuses the old point's `27.0` outright.
+// differentiates: it stayed green with the gradient computed as the value. Each line below is pinned
+// whole for that reason, and the plan also refuses the old point's `27.0` outright.
 import { grad, vjp } from vjp
 
 func f(x: float): float {

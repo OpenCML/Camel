@@ -870,9 +870,10 @@ ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
     for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(ref); ++hops) {
         ref                = valueBehindGates(graph, ref);
         const GCNode *node = graph.node(ref);
-        // A copy and a construction make a value of their own; asked of their shape, not their
-        // kind (`camel/execute/shaped_operators.h`, refactor stage 2.3).
-        const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+        // A copy and a construction make a value of their own: asked of the operator the node
+        // names, or of the kind for the form the front end still builds
+        // (`camel/execute/shaped_operators.h`, refactor stage 2.3).
+        const camel::execute::OperShape shape = camel::execute::shapeOfOperation(graph, ref);
         if (shape == camel::execute::OperShape::Clone ||
             shape == camel::execute::OperShape::Construction) {
             return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
@@ -919,9 +920,10 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
     for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(value); ++hops) {
         value              = valueBehindGates(graph, value);
         const GCNode *node = graph.node(value);
-        // A copy and a construction make a value of their own; asked of their shape, not their
-        // kind (`camel/execute/shaped_operators.h`, refactor stage 2.3).
-        const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+        // A copy and a construction make a value of their own: asked of the operator the node
+        // names, or of the kind for the form the front end still builds
+        // (`camel/execute/shaped_operators.h`, refactor stage 2.3).
+        const camel::execute::OperShape shape = camel::execute::shapeOfOperation(graph, value);
         if (shape == camel::execute::OperShape::Clone ||
             shape == camel::execute::OperShape::Construction) {
             return sem::ResultAlias{.kind = ResultAlias::Kind::Fresh};

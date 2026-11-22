@@ -15,8 +15,7 @@
  * all reads `released=1` there too. Without it, a back end that skips the operator's rows leaves
  * `released=0 live=1 disposed=1` -- which is what std::fvm and std::jit read for this program before
  * the operator call became one function (include/camel/execute/operator_call.h) and the bytecode
- * SCHD instruction was given the rows
- * (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md).
+ * SCHD instruction was given the rows.
  *
  * `ref_reduce_takes_its_initial.cml` is the same reading for the other shape: an accumulator that
  * *is* the handle, where the node's own value takes the reference over instead of giving it back.

@@ -15,7 +15,6 @@
  */
 
 #include "camel/compile/gir/encode.h"
-#include "camel/compile/gir/graph_read.h"
 
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/reachable.h"
@@ -30,9 +29,14 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
+#include "graph/callee_graph_of.h"
+#include "graph/consistency.h"
+#include "graph/draft_view.h"
+#include "graph/gc_graph_view.h"
 #include "runtime/graph_build.h"
 
 #include <cstdio>
@@ -283,21 +287,44 @@ class EncodeSession {
             for (auto &prepared : prepared_) {
                 camel::runtime::validateRuntimeGraphCalls(program_, prepared.runtime);
             }
-            // The read face the lift will use on a draft (camel/compile/gir/graph_read.h) against
-            // the graph it was just encoded to: one graph, asked twice, and the two answers have to
-            // be the same answer. This is not a reading and not a switch: the face is either a face
-            // or a second model of the graph, so a graph whose two readings disagree is refused.
-            // It is asked of every graph of every program, which is the widest form the claim can
-            // take -- a program that compiles has had it asked and answered.
+            // One graph, read twice through the view (kernel/graph/graph_view.h) -- once as the
+            // draft it was built as and once as the frozen graph it was encoded to -- and the two
+            // answers have to be the same answer. This is not a reading and not a switch: the face
+            // is either a face or a second model of the graph, so a graph whose two readings
+            // disagree is refused. It is asked of every graph of every program, which is the widest
+            // form the claim can take -- a program that compiles has had it asked and answered.
+            //
+            // The callee of a FUNC node is named by value, which is a `Graph *`, and the one table
+            // that holds those graphs is the program's: that is why the resolver casts what
+            // `Program::graph` answers (callee_graph_of.h says the same thing beside the type).
+            const camel::graph::CalleeGraphOf calleeGraphOf =
+                [this](camel::runtime::GraphId id) -> const camel::graph::Graph * {
+                return program_.graph(id);
+            };
             for (auto &prepared : prepared_) {
                 if (prepared.runtime == nullptr) {
                     continue;
                 }
                 const auto transaction =
                     camel::runtime::GraphTransaction::borrow(prepared.source->view());
-                const DraftGraphRead draftFace(*transaction, prepared.liveNodes);
-                const FrozenGraphRead frozenFace(*prepared.runtime);
-                const std::string difference = firstDifference(draftFace, frozenFace);
+                const camel::graph::DraftGraphAdapter draftView(
+                    *transaction,
+                    prepared.liveNodes,
+                    calleeGraphOf);
+                const camel::graph::FrozenGraphAdapter frozenView(*prepared.runtime, calleeGraphOf);
+                // The one rule that makes the two readings differ on purpose, named to the check
+                // rather than read out of it: the encoder writes no order edge into a node that
+                // arranges itself freely (`nodeTakesNoOrder`, camel/runtime/graph.h), while the
+                // draft keeps the edge it was built with (consistency.h says the same).
+                const camel::runtime::GCGraph &frozenGraph = *prepared.runtime;
+                const camel::graph::OrderDropped orderDropped =
+                    [&frozenGraph](camel::graph::NodeRef ref) {
+                        return camel::runtime::nodeTakesNoOrder(
+                            frozenGraph,
+                            static_cast<camel::runtime::gc_node_ref_t>(ref));
+                    };
+                const std::string difference =
+                    camel::graph::firstDifference(draftView, frozenView, orderDropped);
                 GUARD(
                     difference.empty(),
                     std::format(
@@ -305,8 +332,8 @@ class EncodeSession {
                         "built from it: {}. draft {}, frozen {}.",
                         prepared.source->name(),
                         difference,
-                        describe(draftFace),
-                        describe(frozenFace)));
+                        camel::graph::describe(draftView),
+                        camel::graph::describe(frozenView)));
             }
         } catch (...) {
             // The program was bound to graphs before they were built; a failure (the graph space
@@ -410,7 +437,7 @@ class EncodeSession {
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
         // rest (a rewrite need not have erased a node nothing reads) and the graph does not name
         // it.
-        prepared.liveNodes = liveDraftNodes(graph->transaction());
+        prepared.liveNodes = camel::runtime::liveNodesOf(graph->transaction().graph());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepare compile graph '{}' reachable nodes={}.",

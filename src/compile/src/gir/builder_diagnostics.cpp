@@ -20,6 +20,7 @@
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/region_roots.h"
+#include "graph/draft_view.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -555,6 +556,10 @@ void Builder::layRegionWriteEdges() {
             regionWrites_.clear();
             DraftGraphBuilder *body = graph.get();
             auto &draft             = body->transaction().edit();
+            // The region questions below are asked through the view (camel/runtime/region_roots.h):
+            // one implementation for both representations, so this builder reads its draft through
+            // the same face a frozen graph is read through.
+            const camel::graph::DraftGraphAdapter view(draft);
             const auto exitOf       = [&draft](uint32_t region) -> runtime::gc_node_ref_t {
                 if (region == 0) {
                     for (runtime::gc_node_ref_t root :
@@ -660,13 +665,13 @@ void Builder::layRegionWriteEdges() {
             // the arm's exit -- the statement the arm ends with, or the GATE the block hands its
             // value out through -- is read by nothing. Everything below that says "it runs with the
             // exit" is then false: the exit does not run, so nothing behind it does.
-            const auto readerTakesExit = [&draft](
+            const auto readerTakesExit = [&draft, &view](
                                              uint32_t region, runtime::gc_node_ref_t exit) {
                 if (region == 0 || region >= draft.regionCount() ||
                     draft.region(region).kind != runtime::GCRegionKind::Arm) {
                     return true;
                 }
-                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
+                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOf(view, region);
                 if (owner == runtime::kInvalidNodeRef || !draft.alive(owner) ||
                     nodeKindOf(draft.ref(owner)) != runtime::GCNodeKind::Brch) {
                     return true;
@@ -721,7 +726,7 @@ void Builder::layRegionWriteEdges() {
                 if (statement == runtime::kInvalidNodeRef || !draft.alive(statement)) {
                     continue;
                 }
-                const uint32_t region = runtime::decidingRegionOfDraft(draft, statement);
+                const uint32_t region = runtime::decidingRegionOf(view, statement);
                 const runtime::gc_node_ref_t exit = exitOf(region);
                 // A statement that only *reads* the exit runs whenever the exit does; when the
                 // reader takes another value the exit runs for no one, so the statement is hung
@@ -773,11 +778,11 @@ void Builder::layRegionWriteEdges() {
             // an arm runs because its owner runs -- so what makes it run is the owner being one of
             // the enclosing region's GATE's inputs. Walked to a fixpoint, because an arm may hold a
             // loop whose body writes, and then the loop's owner is a write of the arm.
-            const auto markOwnerOf = [&draft, &chains](uint32_t region) {
+            const auto markOwnerOf = [&draft, &view, &chains](uint32_t region) {
                 if (region == 0 || region >= draft.regionCount()) {
                     return false;
                 }
-                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
+                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOf(view, region);
                 if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
                     return false;
                 }
@@ -799,7 +804,7 @@ void Builder::layRegionWriteEdges() {
                     return false;
                 }
                 std::vector<runtime::gc_node_ref_t> &bucket =
-                    chains[runtime::decidingRegionOfDraft(draft, statement)];
+                    chains[runtime::decidingRegionOf(view, statement)];
                 if (std::ranges::find(bucket, statement) != bucket.end()) {
                     return false;
                 }
@@ -857,7 +862,7 @@ void Builder::layRegionWriteEdges() {
                 bool readerReadsGiven         = false;
                 runtime::gc_node_ref_t given  = result;
                 if (region != 0) {
-                    owner = runtime::decidingOwnerOfDraft(draft, region);
+                    owner = runtime::decidingOwnerOf(view, region);
                     if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
                         return runtime::kInvalidNodeRef;
                     }

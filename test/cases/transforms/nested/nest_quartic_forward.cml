@@ -14,8 +14,8 @@
 // answer 32 twice.
 //
 // This case is the *green* half of the second-order question. `nest_quartic.cml` beside it is the
-// refused half (`grad(grad(f))`), and the type question behind that refusal is written down in
-// docs/handover/questions/2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md.
+// refused half (`grad(grad(f))`), and the type question behind that refusal is open: whether `jvp` of
+// a closure-answering function is a pair or a lifted closure.
 import rulesets.jvp
 import { jvp } from transforms
 

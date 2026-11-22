@@ -4,9 +4,8 @@
 // THIS IS A SCALAR MODEL, not S2's. The model is `pred = x * w + b`, `loss = 0.5 * (pred - t)^2`
 // with x = 1.5, t = 2.0 and the start w = 0.5, b = 0.75: one weight and one bias, two gradient
 // elements and the loss. A tensor model's three-way reading does not exist yet, because the
-// library's `vjp` cannot reverse four things the tensor path needs (see
-// `docs/handover/reports/2026-11-03-library-vjp-walls.cn.md`): a captured array operand, a `sum`
-// over an array, `softmax<1>`, and `mean` at an axis.
+// library's `vjp` cannot reverse four things the tensor path needs: a captured array operand, a
+// `sum` over an array, `softmax<1>`, and `mean` at an axis.
 //
 // What makes the two Camel legs comparable is only the spelling of the weight, which is the whole
 // point of design principles 9.9: `vjp` transforms the *ordinary* parameters and hands a `with`

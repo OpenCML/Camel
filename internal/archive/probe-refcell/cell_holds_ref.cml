@@ -1,8 +1,8 @@
 // Probe for the question "a cell holding a Ref": the four shapes in which a `state::Ref` may end
 // up in a cell, read through `test::plan_refs` and `--gc-check foreign` in one pipeline.
 //
-// This file sits under docs/handover/, which the AST corpus walks past, so it moves no recorded
-// reading. It is a probe, not a case: it is not selected by any plan of the tree.
+// It is a probe, not a case: no plan of the tree selects it, and the AST corpus does not record it,
+// so its four shapes are read only when someone runs this file.
 
 import state
 

@@ -13,8 +13,7 @@
 //     the cut carries every parameter whose type cannot state its own shape as one of its residuals
 //     (author, 2026-11-18 17:50), and the transposed half builds `zeros_like` of that value. At
 //     `[2.0, 3.0, 4.0]` the answer is `[0.0, 0.0, 0.0]` -- the width comes from the argument, not
-//     from an empty array the type would have stated (that reading is withdrawn:
-//     docs/handover/reviews/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md).
+//     from an empty array whose extent the type would have stated.
 //   * `float` -- `0.0`.
 //
 // Each answer is read twice where it is a number, at a cotangent of 1 and of 2: the answer is

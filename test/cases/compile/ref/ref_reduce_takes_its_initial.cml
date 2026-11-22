@@ -15,8 +15,7 @@
  * box while the program still held it: std::nvm and std::prl answered
  * `error[RuntimeDiag::InvalidArgument]: Invalid argument of 'state.get': the value is not a
  * reference.`, and std::fvm and std::jit printed the right number only because they ran no row at
- * the operator's position at all -- two defects cancelling
- * (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md). Both readings are
+ * the operator's position at all -- two defects cancelling. Both readings are
  * taken **without `--gc-stress`**, which would settle the account after the program stopped.
  *
  * `ref_foreach_gives_back.cml` is the same reading for the other shape: a closure that packs the

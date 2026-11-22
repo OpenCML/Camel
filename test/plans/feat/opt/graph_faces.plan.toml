@@ -35,6 +35,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "graph_faces.view_agrees"
+desc = "The view's own consistency check, in the fast layer: one graph read twice through `camel::graph::GraphView` -- once as the draft it is decoded to and once as the frozen graph -- has to answer the same thing twice, and `[VF] agree=1` says it did. This is the check the encoder asks of every graph it writes, printed here so that a change in either adapter is a changed line instead of silence; when it fails the line carries the first difference, so the failure names the field. The same case as the reading above, so the two lines are read from one graph."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::graph_faces", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[VF] agree=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "graph_faces.readings_body"
 desc = "The same readings on a graph whose body does work of its own (`arm_tail_gate_regions.cml`), after `test::regions` put its two blocks down: the plan reads the relations instead of that one graph's node numbers -- a reference five past the end answers nothing on both faces, the erased node is the last that is neither a port nor the answer, the branch is the graph's only BRCH with two arms on both, and the two faces name the same answer -- with five regions and two static slots on both."
 kind = "behavior"

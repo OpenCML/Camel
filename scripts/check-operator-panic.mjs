@@ -14,7 +14,14 @@
  *   1. a Camel declaration of an operator, `#op('<uri>')` and the `export func` line under it, the
  *      keyword written beside `pure` and `uses` (`src/stdlib/**\/*.cml`);
  *   2. the C++ entrance, `CppRegistration`'s second argument, which is required and has no default
- *      (`src/kernel/ops/include/camel/ops/operator_record.h`).
+ *      (`src/kernel/ops/include/camel/ops/operator_record.h`), written as a call with literals;
+ *   3. the same entrance written as a table of `CppPanicStatement` entries, `{":op/add_i", false}`,
+ *      which a loop hands to `CppRegistration` (`src/stdlib/std/builtin/executors/builtin_semantics.cpp`).
+ *      A table is read by its entry type, because the type is what says that a boolean beside a
+ *      URI is the `panic` answer and not some other flag. The URIs and the answers are literals in
+ *      both shapes: a registration built from a name the scan would have to evaluate is a
+ *      statement no check can read, and the report below counts how many operators it can read so
+ *      that such a gap is a number rather than a silence.
  *
  * The declarations state it now: `d39cd2464` wrote it on 42 operators, and the two scatters
  * `src/stdlib/rulesets/transpose.cml` declares privately take the count to 44 of the 378 this run reads. So
@@ -226,6 +233,47 @@ function blank(t) {
       }
       i++
       wipe(start, i)
+    } else i++
+  }
+  return out.join('')
+}
+
+/**
+ * The text with every comment blanked out and every string literal kept, offset for offset. The
+ * declarations the C++ entrance states are literals -- a URI and a boolean -- so a scan that
+ * blanks them reads none of them; and a shape written inside a comment states nothing, so the
+ * comments still have to go. Lengths are preserved, so an offset found here is an offset in the
+ * raw text (the two texts agree byte for byte).
+ */
+function blankComments(t) {
+  const out = t.split('')
+  const n = t.length
+  let i = 0
+  const wipe = (from, to) => {
+    for (let k = from; k < to && k < n; k++) if (out[k] !== '\n') out[k] = ' '
+  }
+  while (i < n) {
+    const c = t[i]
+    if (c === '/' && t[i + 1] === '/') {
+      const start = i
+      while (i < n && t[i] !== '\n') i++
+      wipe(start, i)
+    } else if (c === '/' && t[i + 1] === '*') {
+      const start = i
+      i += 2
+      while (i < n && !(t[i] === '*' && t[i + 1] === '/')) i++
+      i += 2
+      wipe(start, i)
+    } else if (c === '"' || c === "'") {
+      // A literal is kept, and it ends at its own quote: a backslash escapes the next character,
+      // and an unterminated literal ends at the end of the file rather than swallowing the rest.
+      const quote = c
+      i++
+      while (i < n && t[i] !== quote) {
+        if (t[i] === '\\') i++
+        i++
+      }
+      i++
     } else i++
   }
   return out.join('')
@@ -546,7 +594,7 @@ function uriKey(uri) {
 /**
  * The `panic` a declaration states, by `module:name`. The Camel entrance writes the keyword in the
  * declaration under `#op('<uri>')`; the C++ entrance passes it as the second argument, which has no
- * default.
+ * default, either as a call with literals or as a table of `CppPanicStatement` entries.
  */
 function readDeclarations(cmlFiles, sourceFiles) {
   const stated = new Map()
@@ -571,13 +619,59 @@ function readDeclarations(cmlFiles, sourceFiles) {
       record(marker[1], /\bpanic\b/.test(declaration.join(' ')), file, i + 1)
     }
   }
+  let calls = 0
+  let tables = 0
   for (const file of sourceFiles) {
-    const text = blank(readTracked(file))
+    const raw = readTracked(file)
+    // The URIs and the answers are literals, so the comments are blanked out and the literals are
+    // kept: `blank` would erase the very text this entrance states.
+    const text = blankComments(raw)
     const re = /CppRegistration\s*(?:&)?\s*\w*\s*\(\s*"([^"]+)"\s*,\s*(true|false)\s*\)/g
     let m
-    while ((m = re.exec(text))) record(m[1], m[2] === 'true', file, lineAt(text, m.index))
+    while ((m = re.exec(text))) {
+      record(m[1], m[2] === 'true', file, lineAt(text, m.index))
+      ++calls
+    }
+    tables += readStatements(file, blank(raw), text, record)
   }
-  return stated
+  return { stated, calls, tables }
+}
+
+/**
+ * A table of the C++ entrance's statements: `constexpr CppPanicStatement <name>[] = { ... }`. The
+ * type is what the scan matches on, because a table of string and boolean literals says nothing
+ * about which of the two the boolean is; the entries are then read off the text with the literals
+ * kept. A table whose head this scan finds and whose entries it cannot parse is refused rather
+ * than read as an empty statement, because an empty answer and a missing one look the same in a
+ * report and only one of them is a reading.
+ */
+const STATEMENT_TABLE = /constexpr\s+(?:[\w:]+::)*CppPanicStatement\s+[A-Za-z_]\w*\s*\[\s*\]\s*=\s*\{/g
+const STATEMENT_ENTRY = /\{\s*"([^"]+)"\s*,\s*(true|false)\s*\}/g
+
+function readStatements(file, blanked, text, record) {
+  let count = 0
+  STATEMENT_TABLE.lastIndex = 0
+  let m
+  while ((m = STATEMENT_TABLE.exec(blanked))) {
+    const open = m.index + m[0].length - 1
+    const close = closeBrace(blanked, open)
+    if (close < 0) continue
+    const body = text.slice(open, close + 1)
+    STATEMENT_ENTRY.lastIndex = 0
+    let p
+    let entries = 0
+    while ((p = STATEMENT_ENTRY.exec(body))) {
+      record(p[1], p[2] === 'true', file, lineAt(blanked, open + p.index))
+      ++entries
+    }
+    if (!entries) {
+      console.error(`[${NAME}] ${file}:${lineAt(blanked, open)}: the statement table states no entry this scan can read`)
+      console.error(`[${NAME}] a table of statements with nothing in it is refused: that answer would read as "nothing to compare"`)
+      process.exit(2)
+    }
+    count += entries
+  }
+  return count
 }
 
 /**
@@ -769,7 +863,7 @@ for (const registration of registrations) {
   }
 }
 
-const declarations = readDeclarations(cmlFiles, sourceFiles)
+const { stated: declarations, calls: statementCalls, tables: statementTable } = readDeclarations(cmlFiles, sourceFiles)
 
 // ---- the scan root's own check --------------------------------------------
 //
@@ -849,6 +943,10 @@ for (const operator of [...operators.values()].sort((a, b) => a.uri.localeCompar
 
 const line = message => console.log(message)
 line(`[${NAME}] ${sourceFiles.length} source files read from \`git ls-files\` under ${scanRoot}; ${operators.size} operators registered in ${new Set(registrations.map(r => r.file)).size} implementation maps`)
+// The size of what this run can say, stated before what it says: an operator whose declaration it
+// cannot read is not an operator it has cleared, and the two look the same in a red list.
+const visible = [...operators.keys()].filter(key => (declarations.get(key) ?? []).length > 0).length
+line(`[${NAME}] ${visible} of ${operators.size} registered operators state \`panic\` in a declaration this scan can read; the C++ entrance writes ${statementCalls} statements as calls and ${statementTable} in tables. The rest state nothing, which reads as "no statement", not as "answered".`)
 const protocols = [...new Set(operators.keys())].map(key => uriParts(key).module)
 const colours = [...new Set(protocols)].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
 line(`[${NAME}] the maps answer on ${colours.length} protocols (a map's key is a name inside one of them, so \`find\` in \`re\` and \`find\` in \`str\` are two operators): ${colours.map(module => (module === '' ? '\'\' (the core)' : module)).join(', ')}`)

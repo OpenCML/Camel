@@ -4,7 +4,7 @@
  * (JAX's `custom_vjp`), so there is no transform of that name and the call is refused.
  *
  * The call shape is the one the transform is expected to take; when it lands this case becomes the
- * pair it writes here (docs/handover/reviews/questions-2026-10-30-jax.md).
+ * pair it writes here.
  */
 
 func square(x: float): float {

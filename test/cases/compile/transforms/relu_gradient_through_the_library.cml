@@ -1,8 +1,8 @@
-// `relu`'s gradient through the library's own rules: the D1 member, and the same mask as the engine.
+// `relu`'s gradient through the library's own rules: the first operator given one, and the same mask
+// as the engine.
 //
-// The deletion audit (`docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`,
-// D1) asks that every operator the engine can differentiate carry a rule of the library's own, and
-// `relu` is the first one filled: `stdlib/rulesets/jvp.cml#jvp_relu` and
+// The deletion audit asks that every operator the engine can differentiate carry a rule of the
+// library's own, and `relu` is the first one filled: `stdlib/rulesets/jvp.cml#jvp_relu`
 // `stdlib/rulesets/transpose.cml#relu_t`. Before them this program stopped where the lift looks a
 // forward rule up, and said so:
 //

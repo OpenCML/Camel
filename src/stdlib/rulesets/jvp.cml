@@ -360,24 +360,31 @@ export rule jvp_sum_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_flo
     sum<axis, keepdims>(xs) => (dxs: T[...]) => sum_axis_stated(dxs, axis, keepdims, shape(xs))
 }
 
-/// `d(max<axis, keepdims>(xs)) = max<axis, keepdims>(dxs)` where the lane's largest element
-/// is: a max is a selection, and the tangent of a selection is the tangent of the element it chose.
+/// `d(max<axis, keepdims>(xs))` is the tangent of the lane's largest element: a max is a selection,
+/// and the tangent of a selection is the tangent of the element it chose.
 ///
-/// The selection is what the stated call carries. `xs >= max<axis, true>(xs)` is `true` exactly
-/// at the positions that hold the lane's largest element -- every tied one, since a value is greater
-/// than or equal to the max of its lane iff it is that max -- and the inner call states `keepdims` so
-/// that the comparison broadcasts against `xs` whatever axis was reduced. The mask depends on `xs`
-/// alone, so the cut carries it and the reverse law multiplies by it
-/// (`max_axis_stated_t`). NaN selects nothing on either side, which is the engine's `strict_eq`
-/// reading too (`extremumAxisVjp`).
+/// The selection is `xs >= max<axis, true>(xs)`, `true` exactly at the positions that hold the lane's
+/// largest element -- every tied one, since a value is greater than or equal to the max of its lane
+/// iff it is that max -- and the inner call states `keepdims` so that the comparison broadcasts
+/// against `xs` whatever axis was reduced. The mask reads `xs` alone, so it is the primal's fact and
+/// not the tangent's: the tangent is the masked tangents added down the same axis,
+/// `sum_axis_stated(where(mask, dxs, 0.0), ...)`. That is the transpose of the reverse law
+/// (`max_axis_stated_t` keeps the lane's cotangent at every position that holds the extremum, so a
+/// tie adds its members' tangents rather than sharing one out), and it is the shape the whole-tensor
+/// law already writes (`jvp_max`: `sum(where(xs >= max(xs), dxs, 0.0))`). The stated sum carries the
+/// axis, the flag and the extents as operands because a tangent a rule answers is itself transposed
+/// later, and `sum_axis_stated_t` reads them there. NaN selects nothing on either side -- `NaN >=
+/// NaN` is false, and the engine's `strict_eq` reads it the same way (`extremumAxisVjp`).
 export rule jvp_max_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    max<axis, keepdims>(xs) => (dxs: T[...]) => max_axis_stated(dxs, xs >= max<axis, true>(xs), axis, keepdims, shape(xs))
+    max<axis, keepdims>(xs) => (dxs: T[...]) =>
+        sum_axis_stated(where(xs >= max<axis, true>(xs), dxs, 0.0), axis, keepdims, shape(xs))
 }
 
-/// `d(min<axis, keepdims>(xs)) = min<axis, keepdims>(dxs)` where the lane's smallest element
-/// is: the same selection as the max's, read with `<=`.
+/// `d(min<axis, keepdims>(xs))` is the tangent of the lane's smallest element: the same selection as
+/// the max's, read with `<=`, and the same masked sum of tangents down the axis.
 export rule jvp_min_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    min<axis, keepdims>(xs) => (dxs: T[...]) => min_axis_stated(dxs, xs <= min<axis, true>(xs), axis, keepdims, shape(xs))
+    min<axis, keepdims>(xs) => (dxs: T[...]) =>
+        sum_axis_stated(where(xs <= min<axis, true>(xs), dxs, 0.0), axis, keepdims, shape(xs))
 }
 
 /// `d(mean(xs)) = mean(dxs)`: the mean of every element is a sum divided by a count, and the
@@ -1485,18 +1492,22 @@ export rule jvp_matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]) w
             shape(matmul(a, b)))
 }
 
-/// `d(max<axis, keepdims>(t, extents)) = max<axis, keepdims>(dt, extents)` where the lane's largest
-/// element is: the mask is the call's selection, so passing it through is the whole law -- the same
-/// reading `jvp_max_axis` writes, with the mask the caller already computed.
+/// `d(max_axis_stated(t, mask, axis, keepdims, extents))` is the tangent of the lane's largest
+/// element. The operator's value is `max<axis, keepdims>(t)` whatever the mask says
+/// (`stdlib/tensor.cml`), so the mask reaches this law as the selection and not as a second value:
+/// the tangent is `sum_axis_stated(where(mask, dt, 0.0), ...)`, the masked tangents added down the
+/// axis, and `sum_axis_stated_t` is its reverse. Handing `dt` to the stated operator's own first port
+/// would answer the largest *tangent* of each lane, which is a number and not the derivative of a
+/// selection.
 export rule jvp_max_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) when is_float::<T>() {
     max_axis_stated(t, mask, axis, keepdims, extents) => (dt: T[...]) =>
-        max_axis_stated(dt, mask, axis, keepdims, extents)
+        sum_axis_stated(where(mask, dt, 0.0), axis, keepdims, extents)
 }
 
-/// `min`'s mirror of the law above, the same mask rule turned round.
+/// `min`'s mirror of the law above, the same masked sum on the mask of the lane's smallest elements.
 export rule jvp_min_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) when is_float::<T>() {
     min_axis_stated(t, mask, axis, keepdims, extents) => (dt: T[...]) =>
-        min_axis_stated(dt, mask, axis, keepdims, extents)
+        sum_axis_stated(where(mask, dt, 0.0), axis, keepdims, extents)
 }
 
 /// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
