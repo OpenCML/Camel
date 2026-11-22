@@ -32,8 +32,9 @@
  *   GCNodeKind::Join / Dref / Dead           no node: `contains` is false, and the NodeRef is a gap
  *
  *   GCNode::kind                             kindOf
- *   GCNode::dataType / dataIndex             typeOf / dataIndexOf
- *   GCNode::flags (macro, constant)          isMacro / isConstant
+ *   GCNode::dataType                         typeOf
+ *   GCNode::flags (macro, constant)          nothing: a macro is the record of the callee or of
+ *                                            the operator (2.2), a constant is `constantOf`
  *   normInputsOf / withInputsOf              inputs(ref, Normal) / inputs(ref, Context)
  *   normUsersOf / withUsersOf                users(ref, Normal) / users(ref, Context)
  *   normInputsOf / withInputsOf / both       predecessors(ref, Data)
@@ -44,12 +45,15 @@
  *   GCRegion{kind,owner,index,parent,result} RegionRecord, copied
  *   loopKindOf, loopIterableFormOf,
  *   loopCollectionCountOf, loopBodyOf        loopFormOf, as one record
- *   calleeIdOf / GCFuncRef                   calleeOf
+ *   calleeIdOf / GCFuncRef                   calleeOf, as the graph that id names (by value)
  *   GCOperBody.oper / GCOperBody.uri         operatorOf (the URI comes from the operator table)
  *   armCountOf / loopRegionOf                regionsOwnedBy (a count is that list's size)
  *   GCGraph::exitNodeRef                     exit
- *   normPorts / withPorts / closureNodes     ports(Normal) / ports(Context) / captures
- *   closureType / staticSlots                captureType / staticArea
+ *   normPorts / withPorts / closureNodes     ports(Normal) / ports(Context) / ports(Capture)
+ *   closureType                              nothing: the captures' types are ports(Capture)
+ *   staticSlots                              constantOf, per DATA node (read from staticSlots)
+ *   GCNode::dataIndex                        nothing: which slot a value sits in is the execution
+ *                                            plan's (section 13)
  *   nodeOrigin                               originOf
  *   nodePayloadBytes / nodeBodyAs            nothing: no payload bytes leave this face
  *
@@ -66,6 +70,7 @@
 #include "camel/runtime/graph.h"
 #include "graph/graph_view.h"
 
+#include <optional>
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -85,18 +90,13 @@ class FrozenGraphAdapter final : public GraphView {
 
     camel::core::type::FunctionType *funcType() const override;
     std::vector<NodeRef> ports(PortGroup group) const override;
-    std::vector<NodeRef> captures() const override;
-    const camel::core::type::TupleType *captureType() const override;
-    std::span<const ::slot_t> staticArea() const override;
     NodeRef exit() const override;
 
     std::uint32_t nodeSlotCount() const override;
     bool contains(NodeRef ref) const override;
     NodeKind kindOf(NodeRef ref) const override;
     const camel::core::type::Type *typeOf(NodeRef ref) const override;
-    std::int32_t dataIndexOf(NodeRef ref) const override;
-    bool isMacro(NodeRef ref) const override;
-    bool isConstant(NodeRef ref) const override;
+    std::optional<::slot_t> constantOf(NodeRef ref) const override;
     std::uint64_t originOf(NodeRef ref) const override;
 
     std::span<const NodeRef> inputs(NodeRef ref, PortGroup group) const override;
@@ -111,7 +111,7 @@ class FrozenGraphAdapter final : public GraphView {
     bool isAncestorOf(RegionId ancestor, RegionId region) const override;
     std::vector<RegionId> regionsOwnedBy(NodeRef ref) const override;
 
-    camel::runtime::GraphId calleeOf(NodeRef ref) const override;
+    CalleeRef calleeOf(NodeRef ref) const override;
     camel::core::OperId operatorOf(NodeRef ref) const override;
     LoopForm loopFormOf(NodeRef ref) const override;
 
