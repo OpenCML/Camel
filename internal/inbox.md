@@ -11,3 +11,4 @@
 - **D-1123-5** 协作体系重组已由决策者做完（`docs/handover/` → `internal/`，见 `internal/README.md`）。合入 develop 前跑一遍本地闸门；之后所有协作文件只写在 `internal/`。
 - **D-1123-6** 把 `internal/archive/` 里 `pending-work.cn.md`、`pending-work-status.cn.md`、`red-baseline.cn.md`、`held-branches.cn.md` 中没做完的条目，以 `C-` 编号转进 `backlog.md`；本 inbox 的 D-1123-1 到 -4 接手后也进 backlog。完成：backlog 是协调者手上活的唯一清单。
 - **D-1123-7** 44 个 `.cml` 用例的注释里还写着 `docs/handover/…`（决策者没改，因为改注释会移动 AST 记录）：去掉这些交接路径（按"代码里不留过程痕迹"，用例注释只写测什么与为什么），并重录 AST 记录。完成：`git grep docs/handover -- '*.cml'` 为空。
+- **D-1123-8** 提交检查补两项（设计原则第 1 节红线 1、4、6，负责人 2026-11-23，与 ECOOP 稿的提交条件一致）：同一区域里两个冲突节点（访问同一资源、至少一个是写）之间必须有先后，遍可以颠倒、不能让它们无序；函数体访问的、图没绑定的资源必须写在签名的效应里。先核对现有提交校验做到了哪些，缺的补上，各配一条用例（删掉唯一的排序边被拒、颠倒顺序被接受）。归到图·写车道的发布检查里一起做。
