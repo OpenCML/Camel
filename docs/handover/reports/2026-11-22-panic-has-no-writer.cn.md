@@ -39,7 +39,7 @@ $ git grep -n 'CppRegistration' -- lib                            # 登记侧：
 
 ### 怎么量的
 
-`scripts/check-operator-panic.mjs`（本批新增）从 21 张实现映射（`{"op/div_i", __builtin__div__}` 这样 376 个不同 URI）找到每个算子的 kernel，在**同一个翻译单元**里做调用闭包，读实现里的故障点：
+`scripts/check-operator-panic.mjs`（本批新增）从 21 张实现映射（`{"op/div_i", __builtin__div__}` 这样 378 个不同 URI）找到每个算子的 kernel，在**同一个翻译单元**里做调用闭包，读实现里的故障点：
 
 - 记故障：`throwRuntimeFault(RuntimeDiag::X)`、`RuntimeFault::make(X)`、`throw RuntimeFault(X)`；
 - 不记：`ProcessExit`（`exit` 是程序离开，调度器接住它并设退出码，不是故障）；
@@ -51,11 +51,11 @@ $ git grep -n 'CppRegistration' -- lib                            # 登记侧：
 
 ### 读数
 
-- 376 个算子，**92 个**的实现里有故障路径、且没写 `panic`（红）；284 个没有；**0 个**声明了实现里没有的故障。
+- **378 个算子**（不是 376：旧裸键把 `find`（re + str）与 `get`（json + state）各折成一对，见「五、两次数错」）；写 `panic` 之前 **92 个**的实现里有故障路径、且没写 `panic`（红），284 个没有，**0 个**声明了实现里没有的故障。
 - 算子可达的故障点 348 处，去重后 **103 处**：其他运行时故障 58、别的 C++ 异常 21、除零 13、越界 10、`fail` 1。
 - 另有 38 个算子只抛编译器缺陷，不计。
 
-### 要写 `panic` 的 92 个（按文件）
+### 要写 `panic` 的 92 个（按文件）——其中 42 个已写，余 50
 
 | 文件 | 算子 | 故障类别 |
 |---|---|---|
@@ -96,7 +96,7 @@ node scripts/check-operator-panic.mjs --list   # 每个算子的读数，不只�
 `operator_record.h` + `facts.h` 合入时，**同一批**必须做完：
 
 1. 给第三节表里每个算子写 `panic`：Camel 侧写在 `export func` 行上（与 `pure`、`uses` 同位置），C++ 侧 `CppRegistration` 第二个参数填 `true`。
-2. 表外的 284 个**不写** `panic`（不写 = `false`）。C++ 侧必填，填 `false`——包括 `lib/std/builtin/executors/builtin.cpp:747` 现在 `registry.set(":op/copy", {.mayFault = false})` 的那一处，`copy` 不故障。
+2. 表外的 286 个（378 − 92）**不写** `panic`（不写 = `false`）。C++ 侧必填，填 `false`——包括 `lib/std/builtin/executors/builtin.cpp:747` 现在 `registry.set(":op/copy", {.mayFault = false})` 的那一处，`copy` 不故障。
 3. 把 `kernel/runtime/graph.cpp:79-95` 每臂改成读 `camel::ops::Registry::instance().find(oper)->mayFault()`，**并出一张表：改前改后每个算子的 `mayFault` 取值**。改前是今天的 `nodeMayFault`（`copy` 按形状已是 `false`；`Oper` 读 `OperatorSemantics` 的故障表，没人声明的按 `true`），改后是记录的 `mayFault()`。**必须一项不变**；变了的逐项说明。最可能的变法是今天没声明故障表、被默认读成 `true` 的算子——它们正是第 2 条要盯的。
 4. `node scripts/check-operator-panic.mjs` exit 0。
 5. 跑 `feat/compile`、`feat/runtime`、`feat/opt`、`feat/consistency`，四次 `[SUMMARY]` 的 `fail` 全为 0。
@@ -105,7 +105,7 @@ node scripts/check-operator-panic.mjs --list   # 每个算子的读数，不只�
 
 `lib/**/*.cml` 一个 `panic` 也没动（那是单独一批，等清单点了再做）。本批只有三样东西：`operator_record.h` 的两处注释、这一页、`scripts/check-operator-panic.mjs`。
 
-所以**还欠 92 个算子的 `panic`**，检查今天红 92 行，红的原因只是它们还没写。
+所以**还欠 50 个算子的 `panic`**（92 − 42 已写），检查今天红 50 行，红的原因只是它们还没写；那 47 个纯 C++ 的写上也没用，因为 `CppRegistration` 到 `Registry` 没有路：`Registry` 的 `instance`/`intern`/`find`/`declare`/`registerOperator`/`complete`/`epoch` 与 `Record::effect`/`external` 全树只有声明、零定义，填进登记处也到不了任何读数。
 
 ## 七、一句话
 
