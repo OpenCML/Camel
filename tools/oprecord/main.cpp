@@ -141,13 +141,17 @@ int selfCheck() {
     check(refusedAfterComplete, "a completed record refuses a later statement");
 
     // ---- a key read back from outside the process ------------------------------------------
-    camel::core::sem::OperatorKey key = camel::core::sem::OperatorKey::of(":test/copy");
-    key.minor                         = 3;
-    check(registry.bind(key).has_value(), "bind accepts a key of the same major version and a "
-        "higher minor one");
-    key.major = 2;
-    check(!registry.bind(key).has_value(), "bind refuses a key whose major version this process "
-        "does not have");
+    // A cache written by an older process records the key it was computed for; this process
+    // satisfies it while the major versions are equal and this process's minor is not lower.
+    registry.intern(camel::core::sem::OperatorKey::of(":test/versioned", 1, 2));
+    camel::core::sem::OperatorKey cached = camel::core::sem::OperatorKey::of(":test/versioned", 1, 0);
+    check(
+        registry.bind(cached).has_value(),
+        "bind accepts a key of the same major version whose minor version this process has passed");
+    cached.major = 2;
+    check(
+        !registry.bind(cached).has_value(),
+        "bind refuses a key whose major version this process does not have");
 
     check(
         registry.find(":test/nobody") == nullptr && !registry.lookup(":test/nobody").has_value(),
