@@ -77,3 +77,6 @@ promo/**/*.mp4
 # The repository names no host and no drive path; internal/tools/camel-gate.example.json shows the
 # shape, and each checkout keeps its own copy of the real file.
 internal/tools/camel-gate.local.json
+
+# A run that resolves a relative path from a stale cwd drops its scratch output here.
+tmp_artifacts/
