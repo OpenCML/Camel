@@ -46,6 +46,7 @@
 **★ 任何 `stdlib/*.cml`（含 `stdlib/rulesets/`）的改动 ⇒ 必须重生成 `docs/stdlib-reference.md`**，否则 `registry.reference_is_generated` 会红，而**没有任何计划看得见它**。
 **★ 不许放宽判据来变绿** —— 不许改 `test/plans/**` 之外的期望值（`baseline.json`、`*-exceptions.txt`、迁移台账的数），不许给它加 `known_fail` 来消红。
 **★ 不许在本机构建**（会蓝屏）。构建只在 88zjwei 上，用 `internal/tools/camel-remote.ps1`。
+**★ 手工 `ssh` 必须写 `ssh 88zjwei`，不许写 `ssh 88zjwei@10.126.62.88`。** 主机名带 `@` 地址时 rsync/ssh 不走 `~/.ssh/config` 里那个 `Host 88zjwei`（`IdentityFile` 只写在那里），于是卡在口令提示。2026-11-22 一条车道的 `-Clean` 因此没跑成。
 **★ 新工作树缺 `internal/tools/camel-gate.local.json`（git-ignored）⇒ 首跑 exit 2。** 从主检出复制过去，不入库。
 **★ `-AstOnly` 必须传真数组**：`pwsh -File … -AstOnly 'a','b'` 会变成一个含逗号的字符串（`--only selected none`），重复参数则绑定报错。必须在本会话里 `& .\internal\tools\camel-remote.ps1 … -AstOnly @('a','b')`。
 **★ 合并者：先提交后验证。** `git merge --no-commit` 之前不该有自己的脏改动；冲突一律用生成器解。

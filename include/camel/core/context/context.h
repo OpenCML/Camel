@@ -156,6 +156,8 @@ class Context : public std::enable_shared_from_this<Context> {
     std::shared_ptr<void> graphBuildSession_;
     /// See genericRuleTemplates.
     std::shared_ptr<void> genericRuleTemplates_;
+    /// See compiledRuleSets.
+    std::shared_ptr<void> compiledRuleSets_;
     /// The lookup of a module name: the one order it is searched in, what counts as a module file,
     /// and the directory listings that answer it (include/camel/core/context/module_resolver.h).
     /// It is built from the entry directory and the module roots of this context, and re-rooting a
@@ -474,6 +476,15 @@ class Context : public std::enable_shared_from_this<Context> {
      * camel/compile/gir/rule_templates.h, which creates it on first use.
      */
     std::shared_ptr<void> &genericRuleTemplates() { return genericRuleTemplates_; }
+
+    /**
+     * The rule values this context has already compiled for a rewrite engine, keyed by the values
+     * and the types of the program they were compiled for: a pass that runs an engine twice reads
+     * the rules it compiled the first time instead of compiling them again. Opaque here: the table's
+     * type belongs to the engine (modules/rewrite), which creates it on first use and keeps the
+     * constant slots of the compiled patterns relocatable for the context's life.
+     */
+    std::shared_ptr<void> &compiledRuleSets() { return compiledRuleSets_; }
 
     /**
      * The exported entities of the program compiled on this context: the names each module

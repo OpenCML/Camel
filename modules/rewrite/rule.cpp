@@ -11,6 +11,8 @@
 #include <ostream>
 #include <span>
 
+#include <atomic>
+
 namespace camel::rewritemod {
 
 using namespace camel::core::type;
@@ -90,9 +92,18 @@ bool RuleObject::equals(const rtdata::Object *other, const Type *, bool) const {
     return true;
 }
 
+uint32_t RuleObject::nextSerial() {
+    static std::atomic<uint32_t> next{1};
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
+
 rtdata::Object *RuleObject::clone(mm::IAllocator &allocator, const Type *, bool) const {
-    return create(
+    auto *copy      = create(
         name_, twoWay_, needs_, constParams_, lhs_, rhs_, when_, allocator, ruleId_, withValues_);
+    // The copy stands for the same declaration, so what was compiled for the value it copies is
+    // what holds for it too.
+    copy->serial_ = serial_;
+    return copy;
 }
 
 void RuleObject::print(std::ostream &os, const Type *) const {

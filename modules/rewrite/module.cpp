@@ -53,6 +53,7 @@
 #include "camel/runtime/rules.h"
 #include "camel/runtime/writings.h"
 #include "camel/utils/assert.h"
+#include "camel/utils/phase_timer.h"
 #include "src/passes/sched/nodevm/nodevm.h"
 #include "verify/translate.h"
 
@@ -67,6 +68,7 @@
 #include <format>
 #include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <numeric>
@@ -653,6 +655,7 @@ instanceRules(Context &ctx, const RuleObject &rule, GenericRuleEntry &entry, siz
         return none;
     }
     if (!compiled->made[index]) {
+        camel::utils::phase::count("rules.compiled", 1);
         const GenericRuleInstance &instance = entry.instances[index];
         std::shared_ptr<WhenCall> call;
         if (instance.when != nullptr) {
@@ -677,13 +680,123 @@ instanceRules(Context &ctx, const RuleObject &rule, GenericRuleEntry &entry, siz
     return compiled->perInstance[index];
 }
 
-/// The engine's rules for the rule values of an array.
+/// The rules a context has compiled for its engines, kept for the context's life: a pass that runs
+/// an engine twice reads what the first call compiled instead of compiling the set again.
+///
+/// The key is what the values stand for -- a declaration for a rule that is instantiated, a value
+/// for an ordinary rule -- in the order they were given, and the types of the program they are
+/// applied to, because a rule that is instantiated has one instance per type tuple the program has.
+/// Not an address: a value moves in a collection, and a table keyed by where a value happened to be
+/// would go on answering for whatever the collector put there next.
+///
+/// Compiling a rule copies constant slots out of the graph they were read from, so the table holds
+/// roots the collector must keep relocatable: the tracer below does for the compiled set what the
+/// engine's own root scope does for the rules of one run.
+class CompiledRuleSets {
+  public:
+    CompiledRuleSets() {
+        camel::core::mm::autoSpace().registerExternalRootTracer(
+            this,
+            "rewrite.compiledRules",
+            [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
+                for (auto &entry : sets_) {
+                    camel::runtime::traceRuleConstants(entry.second, relocate);
+                }
+                for (auto &entry : values_) {
+                    camel::runtime::traceRuleConstants(entry.second, relocate);
+                }
+            });
+    }
+    ~CompiledRuleSets() { camel::core::mm::autoSpace().unregisterExternalRootTracer(this); }
+    CompiledRuleSets(const CompiledRuleSets &)            = delete;
+    CompiledRuleSets &operator=(const CompiledRuleSets &) = delete;
+
+    /// The compiled rules kept under `key`, or null when this call is the first one.
+    const std::vector<camel::runtime::Rule> *find(const std::string &key) const {
+        const auto at = sets_.find(key);
+        return at == sets_.end() ? nullptr : &at->second;
+    }
+    /// Keeps `rules` under `key` and answers with them; a map node's address does not move when
+    /// another key is added, so the answer outlives the next store.
+    const std::vector<camel::runtime::Rule> &
+    keep(const std::string &key, std::vector<camel::runtime::Rule> rules) {
+        return sets_.emplace(key, std::move(rules)).first->second;
+    }
+
+    /// The compiled rules of one rule value (`serial`): a rule value's own sides are the same
+    /// wherever it is applied, so this half of the table is keyed by the value alone and a rule
+    /// that is applied to a program of other types is still compiled once.
+    const std::vector<camel::runtime::Rule> *findValue(uint32_t serial) const {
+        const auto at = values_.find(serial);
+        return at == values_.end() ? nullptr : &at->second;
+    }
+    const std::vector<camel::runtime::Rule> &
+    keepValue(uint32_t serial, std::vector<camel::runtime::Rule> rules) {
+        return values_.emplace(serial, std::move(rules)).first->second;
+    }
+
+  private:
+    std::map<std::string, std::vector<camel::runtime::Rule>> sets_;
+    std::map<uint32_t, std::vector<camel::runtime::Rule>> values_;
+};
+
+CompiledRuleSets &compiledRuleSetsOf(Context &ctx) {
+    std::shared_ptr<void> &slot = ctx.compiledRuleSets();
+    if (slot == nullptr) {
+        slot = std::make_shared<CompiledRuleSets>();
+    }
+    return *static_cast<CompiledRuleSets *>(slot.get());
+}
+
+/// The key a rule-value set is compiled under: what each value stands for, in the order the array
+/// writes them, and the types of the program they are applied to.
+///
+/// A rule that is instantiated stands for its declaration (`where`, the site it is written at,
+/// which the same declaration has again in another load of its module), because its instances are
+/// a fact about the declaration and the types -- unless it declares `with` parameters: those values
+/// decide its instances too, so the value itself is the key then. Two values of one declaration
+/// bound to different `with` values are different rules, and keying them by the declaration alone
+/// answered one with the other's instances (read on `modules.rules/rules.with_parameter_and_a_type_parameter`,
+/// whose dump lost two nodes). An ordinary rule stands for its value's serial: its two sides are
+/// the value's own functions, and nothing is shared between two loads of it.
+std::string ruleSetKey(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
+    std::string key;
+    const Array *values = norm.get<Array *>(argument);
+    for (size_t i = 0; i < values->size(); ++i) {
+        const RuleObject *value = values->get<RuleObject *>(i);
+        const GenericRuleEntry *entry =
+            value->ruleId() != 0 ? camel::compile::gir::genericRuleEntry(ctx, value->ruleId())
+                                 : nullptr;
+        if (entry == nullptr) {
+            key += 'o';
+            key += std::to_string(value->serial());
+        } else {
+            key += 'g';
+            key += std::to_string(entry->where);
+            if (!entry->withParams.empty()) {
+                key += ':';
+                key += std::to_string(value->serial());
+            }
+        }
+        key += ',';
+    }
+    if (base != nullptr) {
+        key += '|';
+        for (const Type *type : programValueTypes(*base)) {
+            key += type->toString();
+            key += ',';
+        }
+    }
+    return key;
+}
+
+/// The engine's rules for the rule values of an array, compiled now.
 ///
 /// Compiling a rule makes constants and can collect: the array is read again from the argument,
 /// which the collector keeps up to date, each time. A generic rule has no sides of its own: it
 /// contributes one instance per type tuple of the program it is applied to, made once and kept.
 std::vector<camel::runtime::Rule>
-engineRules(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
+buildEngineRules(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
     std::vector<camel::runtime::Rule> out;
     auto vm            = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
     uint16_t next      = 1;
@@ -734,12 +847,42 @@ engineRules(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime:
                 "rewrite.rule");
             call->vm = vm;
         }
+        // A rule value is compiled once: an engine call that comes after the one that compiled it
+        // reads what that one made, whatever program it is applying the rule to.
+        CompiledRuleSets &values = compiledRuleSetsOf(ctx);
+        if (const std::vector<camel::runtime::Rule> *known = values.findValue(rule->serial())) {
+            camel::utils::phase::count("rules.valueFromCache", 1);
+            for (const camel::runtime::Rule &compiled : *known) {
+                out.push_back(compiled);
+            }
+            continue;
+        }
         const camel::runtime::RuleSource source = sourceOf(*rule, next++, call);
+        camel::utils::phase::count("rules.compiled", 1);
+        std::vector<camel::runtime::Rule> mine;
         for (camel::runtime::Rule &compiled : camel::runtime::compileRule(ctx, source)) {
-            out.push_back(std::move(compiled));
+            mine.push_back(std::move(compiled));
+        }
+        for (const camel::runtime::Rule &compiled : values.keepValue(rule->serial(), std::move(mine))) {
+            out.push_back(compiled);
         }
     }
     return out;
+}
+
+/// The rules an engine runs, compiled: the first call for a set of values and a program compiles
+/// them, and every call after it reads the same rules again.
+const std::vector<camel::runtime::Rule> &
+engineRules(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
+    camel::utils::phase::count("rules.engineCalls", 1);
+    CompiledRuleSets &sets = compiledRuleSetsOf(ctx);
+    const std::string key  = ruleSetKey(ctx, norm, argument, base);
+    if (const std::vector<camel::runtime::Rule> *known = sets.find(key)) {
+        camel::utils::phase::count("rules.fromCache", 1);
+        return *known;
+    }
+    camel::utils::phase::count("rules.compiledSets", 1);
+    return sets.keep(key, buildEngineRules(ctx, norm, argument, base));
 }
 
 // ---------------------------------------------------------------------- the proof
@@ -935,7 +1078,7 @@ slot_t rewriteKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *base            = subjectOf(norm)->program();
     const bool strict           = with.size() > 1 && with.get<Bool>(1);
     try {
-        const auto compiled           = engineRules(ctx, with, 0, base);
+        const std::vector<camel::runtime::Rule> &compiled = engineRules(ctx, with, 0, base);
         const Application application = applyRewrite(
             ctx,
             base,
@@ -989,7 +1132,7 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(runType);
     try {
         const auto start    = std::chrono::steady_clock::now();
-        const auto compiled = engineRules(ctx, with, 0, base);
+        const std::vector<camel::runtime::Rule> &compiled = engineRules(ctx, with, 0, base);
         RewriteRecord record;
         record.strict                 = strict;
         record.ordered                = with.get<Bool>(6);
@@ -1550,7 +1693,7 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const int64_t rounds        = with.get<Int64>(1);
     const bool strict           = with.size() > 2 && with.get<Bool>(2);
     try {
-        const auto compiled = engineRules(ctx, with, 0, base);
+        const std::vector<camel::runtime::Rule> &compiled = engineRules(ctx, with, 0, base);
         camel::runtime::RuntimeGraphDraftSession session(
             ctx.shared_from_this(),
             base,

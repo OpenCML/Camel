@@ -75,6 +75,11 @@ class RuleObject final : public rtdata::Object {
     /// The values the rule's `with` parameters were bound to, in the order the declaration writes
     /// them. Empty for a rule that declares none.
     const std::vector<data::data_ptr_t> &withValues() const { return withValues_; }
+    /// The number a rule value is made with, unique in the process and kept across collections: a
+    /// value moves, so a table that keeps what was compiled for it is keyed by this number and not
+    /// by the address (which a collector reuses). A copy of a value keeps the number of the value
+    /// it was copied from: what is compiled is a fact about the declaration, not about the copy.
+    uint32_t serial() const { return serial_; }
     /// `<=>`: both sides are the same value.
     bool twoWay() const { return twoWay_; }
     /// The numeric permissions the rule needs (camel/core/operator_semantics.h).
@@ -99,7 +104,10 @@ class RuleObject final : public rtdata::Object {
         ::Function *lhs, ::Function *rhs, ::Function *when, uint64_t ruleId = 0,
         std::vector<data::data_ptr_t> withValues = {})
         : name_(name), twoWay_(twoWay), needs_(needs), constParams_(constParams), lhs_(lhs),
-          rhs_(rhs), when_(when), ruleId_(ruleId), withValues_(std::move(withValues)) {}
+          rhs_(rhs), when_(when), ruleId_(ruleId), withValues_(std::move(withValues)),
+          serial_(nextSerial()) {}
+
+    static uint32_t nextSerial();
 
     camel::core::SymId name_;
     bool twoWay_;
@@ -112,6 +120,8 @@ class RuleObject final : public rtdata::Object {
     uint64_t ruleId_ = 0;
     /// See withValues(): the values the rule was bound to, which are the instance key's value half.
     std::vector<data::data_ptr_t> withValues_;
+    /// See serial().
+    uint32_t serial_ = 0;
 };
 
 } // namespace camel::rewritemod
