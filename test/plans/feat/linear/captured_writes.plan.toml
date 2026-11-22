@@ -300,9 +300,14 @@ const edge = (from, to, type) =>
 // takes that version. Nothing stands in for it with a control edge any more.
 const writeA = one('write_a', 'FUNC')
 const readA = one('read_a', 'FUNC')
-const version = text.match(new RegExp(writeA + ' -> (N[0-9A-F]+) \\[label="1\\|0", type="NORM"'))
-assert(version, 'missing the access node of the second part of the value of write_a')
-assert(edge(version[1], readA, 'WITH'), 'missing the version of a -> read_a')
+const versionMatch = text.match(new RegExp(writeA + ' -> (N[0-9A-F]+) \\[label="1\\|1", type="NORM"'))
+assert(versionMatch, 'missing the access node of the second part of the value of write_a')
+// That node is the member-read operator: its second operand is the value, so the second part of
+// the call arrives at its input 1.
+const version = versionMatch[1]
+assert(new RegExp(version + ' \\[label=":op/(?:access|access_key)", type="OPER"').test(text),
+    'the second part of the value of write_a is not read by a member-read operator')
+assert(edge(version, readA, 'WITH'), 'missing the version of a -> read_a')
 assert(!edge(writeA, readA, 'CTRL'), 'the substituted control edge must be gone')
 // A writer still waits for the reader that comes before it.
 assert(edge(one('use_b', 'FUNC'), one('write_b', 'FUNC'), 'CTRL'), 'missing use_b -> write_b')
@@ -778,15 +783,25 @@ const funcNode = (label) => {
     assert(m, `no call of ${label}`)
     return { node: m[1], type: m[2] }
 }
-const accsType = (node) => {
-    const m = text.match(new RegExp(node + ' \\[label="\\.(\\d+)", type="ACCS", value_type="([^"]+)"'))
-    return m ? { part: Number(m[1]), type: m[2] } : null
+// A part is read by the operator that reads a member, whose row carries the operator's URI as its
+// label; `:op/access_key` reads by name, `:op/access` by position.
+const memberReadType = (node) => {
+    const m = text.match(new RegExp(node + ' \\[label=":op/(?:access|access_key)", type="OPER", [^\\]]*value_type="([^"]+)"'))
+    return m ? m[1] : null
 }
-// The parts of a call's value that are read through an access node.
+// The part such an operator selects is the key it takes as its first operand, so the number is read
+// off the data node feeding the operator rather than off the call's output port.
+const keyOf = (node) => {
+    const edge = text.match(new RegExp('(N[0-9A-F]+) -> ' + node + ' \\[label="[^"]*\\|0", type="NORM"'))
+    if (!edge) return null
+    const key = text.match(new RegExp(edge[1] + ' \\[label="(\\d+)", type="DATA"'))
+    return key ? Number(key[1]) : null
+}
+// The parts of a call's value that are read through such an operator.
 const accessParts = (node) =>
-    [...text.matchAll(new RegExp(node + ' -> (N[0-9A-F]+) \\[label="(\\d+)\\|0", type="NORM"', 'g'))]
-        .map(m => accsType(m[1]))
-        .filter(a => a !== null)
+    [...text.matchAll(new RegExp(node + ' -> (N[0-9A-F]+) \\[label="[^"]*", type="NORM"', 'g'))]
+        .map(m => ({ part: keyOf(m[1]), type: memberReadType(m[1]) }))
+        .filter(a => a.type !== null && a.part !== null)
         .sort((a, b) => a.part - b.part)
 // two_writes() writes both `p` and `q` and returns int: the return value, then the versions.
 const two = funcNode('two_writes')
