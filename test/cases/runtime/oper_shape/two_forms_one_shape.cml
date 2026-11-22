@@ -1,0 +1,62 @@
+// One operation, two writings. `cast`, `copy`, `fill`, `access` and `access_key` are declared in
+// stdlib/prelude.cml, so a call of one builds an OPER node that names the operator; the language's
+// own spelling of the same four -- `float(x)`, an aggregate, a member read, a value of its own --
+// builds the CAST, COPY, FILL and ACCS kinds the front end still makes. `test::oper_shape` prints
+// the shape each node answers, one line per form, and the two lines of one operation must agree:
+// the shape is the operator's, not the node kind's.
+//
+// Every writing stands in a function of its own so that nothing folds: a conversion of a literal,
+// or a member read of an aggregate the builder just made, could be computed before the graph is
+// handed to the pass, and then a form would be missing from the reading.
+
+type Point = { x: int, y: int }
+
+func via_cast(x: int): float {
+    return cast::<int, float>(x)
+}
+
+func via_copy(t: (int, int)): (int, int) {
+    return copy(t)
+}
+
+func via_fill(a: int, b: int): (int, int) {
+    return fill((0, 0), a, b)
+}
+
+func via_access(t: (int, int)): int {
+    return access::<(int, int), int>(0, t)
+}
+
+func via_access_key(p: Point): int {
+    return access_key::<Point, int>('y', p)
+}
+
+func by_conversion(x: int): float {
+    return float(x)
+}
+
+func by_rank_zero(x: int): int[...] {
+    return x
+}
+
+func by_aggregate(a: int, b: int): (int, int) {
+    return (a, b)
+}
+
+func by_member(t: (int, int)): int {
+    return t.0
+}
+
+func main(): int sync {
+    let point: Point = { x: 1, y: 2 }
+    let pair = (5, 6)
+    println(
+        via_copy(pair).0,
+        via_fill(3, 4).0,
+        via_access(pair),
+        via_access_key(point),
+        int(by_conversion(1)),
+        by_aggregate(7, 8).0,
+        by_member(pair))
+    return 0
+}
