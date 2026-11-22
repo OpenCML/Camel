@@ -18,6 +18,7 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/operator_call.h"
 #include "camel/execute/pass/registration.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
@@ -1984,6 +1985,23 @@ slot_t TaskflowExecSchedPass::executeLinearNodeBody(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     const auto *node = requireNode(graph, nodeRef);
 
+    // The four shaped operators run through their own fast path, and this scheduler reads no node
+    // kind for them (camel/execute/shaped_operators.h, plan 2.3).
+    if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+        shape != camel::execute::OperShape::None) {
+        if (shape == camel::execute::OperShape::Conversion) {
+            // A checked conversion (`x as T` into a module type) that fails is an error of the
+            // program, reported at the conversion like the fault of an operator: the failure model
+            // is this back end's, so it stays here and not in the operator.
+            try {
+                return camel::execute::runShapedOperator(*graph, nodeRef, *frame);
+            } catch (const RuntimeFault &fault) {
+                raiseFault(fault, graph, nodeRef);
+            }
+        }
+        return camel::execute::runShapedOperator(*graph, nodeRef, *frame);
+    }
+
     switch (node->kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
@@ -2015,90 +2033,6 @@ slot_t TaskflowExecSchedPass::executeLinearNodeBody(
         if (node->dataIndex != 0) {
             frame->set(node->dataIndex, value);
         }
-        return value;
-    }
-
-    case GCNodeKind::Copy: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow linear COPY node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode          = frame->codeAt(srcIdx);
-        if (camel::core::type::isGCTraced(srcCode)) {
-            Object *srcData  = frame->get<Object *>(srcIdx);
-            Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
-            auto *copy       = srcData->clone(camel::core::mm::autoSpace(), srcTypePtr, false);
-            frame->set(node->dataIndex, copy);
-            return toSlot(copy);
-        }
-        const slot_t value = frame->get<slot_t>(srcIdx);
-        frame->set(node->dataIndex, value);
-        return value;
-    }
-
-    case GCNodeKind::Cast: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow linear CAST node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                   = frame->typeAt<Type>(srcIdx);
-        Type *tgtType                   = node->dataType();
-        slot_t value                    = frame->get<slot_t>(srcIdx);
-        slot_t result                   = NullSlot;
-        try {
-            result = tgtType->castSlotFrom(value, srcType);
-        } catch (const RuntimeFault &fault) {
-            // A checked conversion (`x as T` into a module type) that fails is an error of the
-            // program, reported at the conversion like the fault of an operator.
-            raiseFault(fault, graph, nodeRef);
-        }
-        frame->set(node->dataIndex, result);
-        return result;
-    }
-
-    case GCNodeKind::Fill: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        const auto withInputs = graph->withInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                   = node->dataType();
-        GUARD(
-            camel::core::type::isGCTraced(srcType->code()),
-            "Taskflow linear FILL target must be GC-traced.");
-        Object *sourceObj = frame->get<Object *>(srcIdx);
-        GUARD(sourceObj != nullptr, "Taskflow linear FILL source object is null.");
-        Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
-        GUARD(srcObj != nullptr, "Taskflow linear FILL target clone is null.");
-        std::vector<slot_t> fillValues;
-        fillValues.reserve(withInputs.size());
-        for (auto input : withInputs) {
-            fillValues.push_back(frame->get<slot_t>(dataIndexOf(graph, input)));
-        }
-        camel::execute::writeRuntimeFillSlots(
-            srcObj,
-            srcType,
-            graph->nodeBodyAs<camel::runtime::GCFillBody>(nodeRef),
-            fillValues);
-
-        frame->set(node->dataIndex, srcObj);
-        return toSlot(srcObj);
-    }
-
-    case GCNodeKind::Accs: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow linear ACCS node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
-        if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
-            Tuple *tuple = frame->get<Tuple *>(srcIdx);
-            GUARD(body->value < tuple->size(), "Taskflow linear ACCS tuple index out of bounds.");
-            const slot_t value = tuple->get<slot_t>(body->value);
-            frame->set(node->dataIndex, value);
-            return value;
-        }
-        Struct *st                 = frame->get<Struct *>(srcIdx);
-        Type *stType               = frame->typeAt<Type>(srcIdx);
-        const std::string_view key = body->key();
-        slot_t value               = st->get<slot_t>(std::string(key.data(), key.size()), stType);
-        frame->set(node->dataIndex, value);
         return value;
     }
 
@@ -2384,6 +2318,21 @@ slot_t TaskflowExecSchedPass::executePreparedNodeBody(
     const RuntimeBuildInfo *buildInfo) {
     const GCNode *node = requireNode(graph, nodeRef);
 
+    // The four shaped operators run through their own fast path; this scheduler reads no node kind
+    // for them (camel/execute/shaped_operators.h, plan 2.3). The failure model of a conversion
+    // stays here, as it does on the linear path.
+    if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+        shape != camel::execute::OperShape::None) {
+        if (shape == camel::execute::OperShape::Conversion) {
+            try {
+                return camel::execute::runShapedOperator(*graph, nodeRef, *frame);
+            } catch (const RuntimeFault &fault) {
+                raiseFault(fault, graph, nodeRef);
+            }
+        }
+        return camel::execute::runShapedOperator(*graph, nodeRef, *frame);
+    }
+
     switch (node->kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
@@ -2415,89 +2364,6 @@ slot_t TaskflowExecSchedPass::executePreparedNodeBody(
         if (node->dataIndex != 0) {
             frame->set(node->dataIndex, value);
         }
-        return value;
-    }
-
-    case GCNodeKind::Copy: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow COPY node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const TypeCode srcCode          = frame->codeAt(srcIdx);
-        if (camel::core::type::isGCTraced(srcCode)) {
-            Object *srcData  = frame->get<Object *>(srcIdx);
-            Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
-            auto *copy       = srcData->clone(camel::core::mm::autoSpace(), srcTypePtr, false);
-            frame->set(node->dataIndex, copy);
-            return toSlot(copy);
-        }
-        const slot_t value = frame->get<slot_t>(srcIdx);
-        frame->set(node->dataIndex, value);
-        return value;
-    }
-
-    case GCNodeKind::Cast: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow CAST node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                   = frame->typeAt<Type>(srcIdx);
-        Type *tgtType                   = node->dataType();
-        slot_t value                    = frame->get<slot_t>(srcIdx);
-        slot_t result                   = NullSlot;
-        try {
-            result = tgtType->castSlotFrom(value, srcType);
-        } catch (const RuntimeFault &fault) {
-            // A checked conversion (`x as T` into a module type) that fails is an error of the
-            // program, reported at the conversion like the fault of an operator.
-            raiseFault(fault, graph, nodeRef);
-        }
-        frame->set(node->dataIndex, result);
-        return result;
-    }
-
-    case GCNodeKind::Fill: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        const auto withInputs = graph->withInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                   = node->dataType();
-        GUARD(
-            camel::core::type::isGCTraced(srcType->code()),
-            "Taskflow FILL target must be GC-traced.");
-        Object *sourceObj = frame->get<Object *>(srcIdx);
-        GUARD(sourceObj != nullptr, "Taskflow FILL source object is null.");
-        Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
-        GUARD(srcObj != nullptr, "Taskflow FILL target clone is null.");
-        std::vector<slot_t> fillValues;
-        fillValues.reserve(withInputs.size());
-        for (auto input : withInputs) {
-            fillValues.push_back(frame->get<slot_t>(dataIndexOf(graph, input)));
-        }
-        camel::execute::writeRuntimeFillSlots(
-            srcObj,
-            srcType,
-            graph->nodeBodyAs<camel::runtime::GCFillBody>(nodeRef),
-            fillValues);
-        frame->set(node->dataIndex, srcObj);
-        return toSlot(srcObj);
-    }
-
-    case GCNodeKind::Accs: {
-        const auto normInputs = graph->normInputsOf(nodeRef);
-        GUARD(!normInputs.empty(), "Taskflow ACCS node must have one norm input.");
-        const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
-        if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
-            Tuple *tuple = frame->get<Tuple *>(srcIdx);
-            GUARD(body->value < tuple->size(), "Taskflow ACCS tuple index out of bounds.");
-            const slot_t value = tuple->get<slot_t>(body->value);
-            frame->set(node->dataIndex, value);
-            return value;
-        }
-        Struct *st                 = frame->get<Struct *>(srcIdx);
-        Type *stType               = frame->typeAt<Type>(srcIdx);
-        const std::string_view key = body->key();
-        slot_t value               = st->get<slot_t>(std::string(key.data(), key.size()), stType);
-        frame->set(node->dataIndex, value);
         return value;
     }
 
@@ -2548,9 +2414,12 @@ slot_t TaskflowExecSchedPass::executePreparedNodeBody(
         // Reserved kinds: never part of a frozen graph (see GCNodeKind). Listed only to keep
         // this switch exhaustive.
         return NullSlot;
-    }
 
-    return NullSlot;
+    default:
+        // The four shaped operators returned above, and a LOOP node's rounds are the instructions
+        // of the plan's events, so neither reaches a body of its own here.
+        return NullSlot;
+    }
 }
 
 template <typename FlowT>
@@ -2587,24 +2456,19 @@ void TaskflowExecSchedPass::buildRuntimeNodeTasks(
         }
 
         tf::Task task;
+        // The four shaped operators are one task each, named by the operator they run; this
+        // builder reads no node kind for them (plan 2.3).
+        if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+            shape != camel::execute::OperShape::None) {
+            task = buildShapedTask(
+                flowLike, graph, nodeRef, frame, camel::execute::shapeName(shape));
+        } else
         switch (node->kind) {
         case GCNodeKind::Data:
             task = buildDataTask(flowLike, graph, nodeRef, frame);
             break;
         case GCNodeKind::Port:
             task = buildPortTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Copy:
-            task = buildCopyTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Cast:
-            task = buildCastTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Fill:
-            task = buildFillTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Accs:
-            task = buildAccsTask(flowLike, graph, nodeRef, frame);
             break;
         case GCNodeKind::Func:
             task = buildFuncTask(flowLike, graph, nodeRef, frame);
@@ -2696,39 +2560,13 @@ tf::Task TaskflowExecSchedPass::buildPortTask(
 }
 
 template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildCopyTask(
-    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+tf::Task TaskflowExecSchedPass::buildShapedTask(
+    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame,
+    const char *operatorName) {
     return flowLike
         .emplace(
             [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
-        .name("COPY");
-}
-
-template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildCastTask(
-    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
-    return flowLike
-        .emplace(
-            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
-        .name("CAST");
-}
-
-template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildFillTask(
-    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
-    return flowLike
-        .emplace(
-            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
-        .name("FILL");
-}
-
-template <typename FlowT>
-tf::Task TaskflowExecSchedPass::buildAccsTask(
-    FlowT &flowLike, GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
-    return flowLike
-        .emplace(
-            [this, graph, nodeRef, frame]() { (void)executeLinearNode(graph, nodeRef, frame); })
-        .name("ACCS");
+        .name(operatorName);
 }
 
 template <typename FlowT>

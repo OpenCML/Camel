@@ -11,6 +11,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/profile/operators.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/reachable.h"
@@ -318,104 +319,123 @@ static bytecode_vec_t compileRuntimeGraph(
             withOps.push_back(runtimeDataIndexOf(graph, inputRef));
         }
 
+        // The four shaped operators emit from the shape their operator gives -- a conversion, a
+        // clone, a construction, an access (camel/execute/shaped_operators.h, plan 2.3). This
+        // compiler reads no node kind for them; the instruction each one becomes is this back
+        // end's own, which is why the emission stays here and the operator supplies the shape.
+        const auto emitShaped = [&](camel::execute::OperShape shape) {
+            switch (shape) {
+            case camel::execute::OperShape::Conversion: {
+                requireInputCount("CAST", runtimeNodeIndex, "norm", normOps.size(), 1);
+                Type *targetType = record->dataType();
+                BytecodeExtra extra;
+                extra.pType = targetType;
+                appendBytecode(
+                    bytecodes,
+                    OpCode::CAST,
+                    record->dataIndex,
+                    {normOps.front()},
+                    {},
+                    {},
+                    true,
+                    extra);
+                return;
+            }
+
+            case camel::execute::OperShape::Clone:
+                requireInputCount("COPY", runtimeNodeIndex, "norm", normOps.size(), 1);
+                appendBytecode(bytecodes, OpCode::COPY, record->dataIndex, {normOps.front()});
+                return;
+
+            case camel::execute::OperShape::Construction: {
+                auto *bc = appendBytecode(
+                    bytecodes,
+                    OpCode::FILL,
+                    record->dataIndex,
+                    {},
+                    normOps,
+                    withOps,
+                    true,
+                    {.pType = record->dataType()},
+                    2);
+                *reinterpret_cast<const camel::runtime::GCFillBody **>(bc->extra2()) =
+                    graph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex);
+                return;
+            }
+
+            case camel::execute::OperShape::Access: {
+                requireInputCount("ACCS", runtimeNodeIndex, "norm", normOps.size(), 1);
+                const auto sourceRef  = graph->normInputsOf(runtimeNodeIndex).front();
+                const auto *srcRecord = graph->node(sourceRef);
+                const auto *accBody =
+                    graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
+                GUARD(
+                    srcRecord != nullptr && srcRecord->dataType() != nullptr,
+                    "ACCS source node must exist.");
+                GUARD(srcRecord->dataType()->isComposite(), "ACCS source node must be composite.");
+
+                size_t index = 0;
+
+                switch (srcRecord->dataType()->code()) {
+                case TypeCode::Tuple: {
+                    GUARD(
+                        accBody->accsKind == camel::runtime::GCAccsKind::TupleIndex,
+                        "ACCS tuple access must be numeric.");
+                    index                 = accBody->value;
+                    const auto &tupleType = tt::as_ptr<TupleType>(srcRecord->dataType());
+                    if (index >= tupleType->size()) {
+                        ctx->rtmDiags()
+                            ->of(SemanticDiag::InvalidAccessIndex)
+                            .commit(to_string(index));
+                        index = 0;
+                    }
+                    break;
+                }
+                case TypeCode::Struct: {
+                    GUARD(
+                        accBody->accsKind == camel::runtime::GCAccsKind::StructKey,
+                        "ACCS struct access must be keyed.");
+                    const std::string_view keyView = accBody->key();
+                    const std::string key(keyView.data(), keyView.size());
+                    const auto *structType =
+                        tt::as_ptr<camel::core::type::StructType>(srcRecord->dataType());
+                    const auto &optIndex = structType->findField(key);
+                    if (!optIndex.has_value()) {
+                        ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(key);
+                        index = 0;
+                    } else {
+                        index = optIndex.value();
+                    }
+                    break;
+                }
+                default:
+                    throw std::runtime_error(
+                        "Unsupported ACCS source node type.: the dispatch reached a case no handler "
+                        "covers");
+                }
+
+                appendBytecode(
+                    bytecodes,
+                    OpCode::ACCS,
+                    record->dataIndex,
+                    {
+                        normOps.front(),
+                        as_index(index),
+                    });
+                return;
+            }
+
+            case camel::execute::OperShape::None:
+                return;
+            }
+        };
+
+        if (const camel::execute::OperShape shape =
+                camel::execute::shapeOfNode(*graph, runtimeNodeIndex);
+            shape != camel::execute::OperShape::None) {
+            emitShaped(shape);
+        } else
         switch (record->kind) {
-        case camel::runtime::GCNodeKind::Cast: {
-            requireInputCount("CAST", runtimeNodeIndex, "norm", normOps.size(), 1);
-            Type *targetType = record->dataType();
-            BytecodeExtra extra;
-            extra.pType = targetType;
-            appendBytecode(
-                bytecodes,
-                OpCode::CAST,
-                record->dataIndex,
-                {normOps.front()},
-                {},
-                {},
-                true,
-                extra);
-            break;
-        }
-
-        case camel::runtime::GCNodeKind::Copy:
-            requireInputCount("COPY", runtimeNodeIndex, "norm", normOps.size(), 1);
-            appendBytecode(bytecodes, OpCode::COPY, record->dataIndex, {normOps.front()});
-            break;
-
-        case camel::runtime::GCNodeKind::Fill: {
-            auto *bc = appendBytecode(
-                bytecodes,
-                OpCode::FILL,
-                record->dataIndex,
-                {},
-                normOps,
-                withOps,
-                true,
-                {.pType = record->dataType()},
-                2);
-            *reinterpret_cast<const camel::runtime::GCFillBody **>(bc->extra2()) =
-                graph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex);
-            break;
-        }
-
-        case camel::runtime::GCNodeKind::Accs: {
-            requireInputCount("ACCS", runtimeNodeIndex, "norm", normOps.size(), 1);
-            const auto sourceRef  = graph->normInputsOf(runtimeNodeIndex).front();
-            const auto *srcRecord = graph->node(sourceRef);
-            const auto *accBody   = graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
-            GUARD(
-                srcRecord != nullptr && srcRecord->dataType() != nullptr,
-                "ACCS source node must exist.");
-            GUARD(srcRecord->dataType()->isComposite(), "ACCS source node must be composite.");
-
-            size_t index = 0;
-
-            switch (srcRecord->dataType()->code()) {
-            case TypeCode::Tuple: {
-                GUARD(
-                    accBody->accsKind == camel::runtime::GCAccsKind::TupleIndex,
-                    "ACCS tuple access must be numeric.");
-                index                 = accBody->value;
-                const auto &tupleType = tt::as_ptr<TupleType>(srcRecord->dataType());
-                if (index >= tupleType->size()) {
-                    ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(to_string(index));
-                    index = 0;
-                }
-                break;
-            }
-            case TypeCode::Struct: {
-                GUARD(
-                    accBody->accsKind == camel::runtime::GCAccsKind::StructKey,
-                    "ACCS struct access must be keyed.");
-                const std::string_view keyView = accBody->key();
-                const std::string key(keyView.data(), keyView.size());
-                const auto *structType =
-                    tt::as_ptr<camel::core::type::StructType>(srcRecord->dataType());
-                const auto &optIndex = structType->findField(key);
-                if (!optIndex.has_value()) {
-                    ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(key);
-                    index = 0;
-                } else {
-                    index = optIndex.value();
-                }
-                break;
-            }
-            default:
-                throw std::runtime_error(
-                    "Unsupported ACCS source node type.: the dispatch reached a case no handler "
-                    "covers");
-            }
-
-            appendBytecode(
-                bytecodes,
-                OpCode::ACCS,
-                record->dataIndex,
-                {
-                    normOps.front(),
-                    as_index(index),
-                });
-            break;
-        }
-
         case camel::runtime::GCNodeKind::Brch: {
             appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
             for (size_t armIndex = 0; armIndex < graph->armCountOf(runtimeNodeIndex); ++armIndex) {

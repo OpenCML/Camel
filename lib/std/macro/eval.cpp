@@ -28,6 +28,7 @@
 #include "camel/execute/limits.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/loop_frame.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -812,73 +813,13 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     auto executeNode = [&](uint32_t runtimeNodeIndex) {
         const auto *node = runtimeGraph->node(runtimeNodeIndex);
         GUARD(node != nullptr, "Macro execution encountered a null runtime node.");
+        // The four shaped operators run through their own fast path; this evaluator reads no node
+        // kind for them (camel/execute/shaped_operators.h, plan 2.3).
+        if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
+            shape != camel::execute::OperShape::None) {
+            camel::execute::runShapedOperator(*runtimeGraph, runtimeNodeIndex, *frame);
+        } else
         switch (node->kind) {
-        case GCNodeKind::Cast: {
-            const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
-            GUARD(!normInputs.empty(), "CAST node must have one norm input.");
-            gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-            Type *srcType        = frame->typeAt<Type>(srcIdx);
-            Type *dstType        = node->dataType();
-            slot_t value         = frame->get<slot_t>(srcIdx);
-            frame->set(node->dataIndex, dstType->castSlotFrom(value, srcType));
-        } break;
-
-        case GCNodeKind::Copy: {
-            const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
-            GUARD(!normInputs.empty(), "COPY node must have one norm input.");
-            gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-            TypeCode srcCode     = frame->codeAt(srcIdx);
-            if (isGCTraced(srcCode)) {
-                Object *srcData  = frame->get<Object *>(srcIdx);
-                Type *srcTypePtr = frame->typeAt<Type>(srcIdx);
-                frame->set(node->dataIndex, srcData->clone(mm::autoSpace(), srcTypePtr, false));
-            } else {
-                frame->set(node->dataIndex, frame->get<slot_t>(srcIdx));
-            }
-        } break;
-
-        case GCNodeKind::Fill: {
-            const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
-            const auto dataInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
-            GUARD(!normInputs.empty(), "FILL node must have one source input.");
-            gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-            Type *srcType        = node->dataType();
-            GUARD(isGCTraced(srcType->code()), "FILL target type is not GC-traced.");
-            Object *sourceObj = frame->get<Object *>(srcIdx);
-            GUARD(sourceObj != nullptr, "FILL source object is null.");
-            Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
-            GUARD(srcObj != nullptr, "FILL target data is null.");
-            std::vector<slot_t> fillValues;
-            fillValues.reserve(dataInputs.size());
-            for (auto input : dataInputs) {
-                fillValues.push_back(frame->get<slot_t>(dataIndexOf(runtimeGraph, input)));
-            }
-            camel::execute::writeRuntimeFillSlots(
-                srcObj,
-                srcType,
-                runtimeGraph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex),
-                fillValues);
-            frame->set(node->dataIndex, srcObj);
-        } break;
-
-        case GCNodeKind::Accs: {
-            const auto normInputs = runtimeGraph->normInputsOf(runtimeNodeIndex);
-            GUARD(!normInputs.empty(), "ACCS node must have one source input.");
-            gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-            const auto *body     = runtimeGraph->nodeBodyAs<GCAccsBody>(runtimeNodeIndex);
-            if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
-                size_t idx  = body->value;
-                auto *tuple = frame->get<::Tuple *>(srcIdx);
-                frame->set(node->dataIndex, tuple->get<slot_t>(idx));
-            } else {
-                const std::string_view keyView = body->key();
-                auto key                       = std::string(keyView.data(), keyView.size());
-                auto *st                       = frame->get<::Struct *>(srcIdx);
-                Type *structType               = frame->typeAt<Type>(srcIdx);
-                frame->set(node->dataIndex, st->get<slot_t>(key, structType));
-            }
-        } break;
-
         case GCNodeKind::Brch: {
             const size_t jumpIdx =
                 camel::execute::selectRuntimeBranchArm(runtimeGraph, runtimeNodeIndex, frame);

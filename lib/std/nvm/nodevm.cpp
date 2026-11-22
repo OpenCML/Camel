@@ -16,6 +16,7 @@
 #include "camel/execute/observer.h"
 #include "camel/execute/operator_call.h"
 #include "camel/execute/pass/registration.h"
+#include "camel/execute/shaped_operators.h"
 #include "execute/graph_caller.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
@@ -499,77 +500,16 @@ slot_t NodeVMSchedPass::call(
                     static_cast<int>(n->kind),
                     n->dataIndex);
             });
+            // CAST, COPY, FILL and ACCS are not kinds this back end looks at: each is a shaped
+            // operator whose fast path is its own implementation's
+            // (camel/execute/shaped_operators.h), and it writes the node's slot itself. The four
+            // kinds stay in the graph until the front end builds them as OPER (plan 2.3, steps 1
+            // and 2), so `shapeOfKind` is where the node VM still reads them -- once, here.
+            if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(n->kind);
+                shape != camel::execute::OperShape::None) {
+                camel::execute::runShapedOperator(*currRuntimeGraph, en, *currFrame);
+            } else
             switch (n->kind) {
-            case GCNodeKind::Cast: {
-                const auto normInputs = en.normInputs();
-                GUARD(!normInputs.empty(), "CAST node must have one norm input.");
-                const auto srcIdx = planDataIndex(*currPlan, normInputs.front());
-                Type *srcType     = currFrame->typeAt<Type>(srcIdx);
-                Type *tgtType     = n->dataType();
-                slot_t value      = currFrame->get<slot_t>(srcIdx);
-                slot_t result     = tgtType->castSlotFrom(value, srcType);
-                currFrame->set(n->dataIndex, result);
-            } break;
-
-            case GCNodeKind::Copy: {
-                const auto normInputs = en.normInputs();
-                GUARD(!normInputs.empty(), "COPY node must have one norm input.");
-                gc_data_idx_t srcIdx = planDataIndex(*currPlan, normInputs.front());
-                TypeCode srcCode     = currFrame->codeAt(srcIdx);
-                if (isGCTraced(srcCode)) {
-                    Object *srcData  = currFrame->get<Object *>(srcIdx);
-                    Type *srcTypePtr = currFrame->typeAt<Type>(srcIdx);
-                    currFrame->set(
-                        n->dataIndex,
-                        srcData->clone(mm::autoSpace(), srcTypePtr, false));
-                } else {
-                    currFrame->set(n->dataIndex, currFrame->get<slot_t>(srcIdx));
-                }
-            } break;
-
-            case GCNodeKind::Fill: {
-                const auto normInputs = en.normInputs();
-                const auto dataInputs = en.withInputs();
-                GUARD(!normInputs.empty(), "FILL node must have one source input.");
-                const auto srcIdx = planDataIndex(*currPlan, normInputs.front());
-                Type *srcType     = n->dataType();
-                GUARD(isGCTraced(srcType->code()), "FILL target type is not GC-traced in NodeVM.");
-                Object *sourceObj = currFrame->get<Object *>(srcIdx);
-                GUARD(sourceObj != nullptr, "FILL source object is null in NodeVM.");
-                Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
-                GUARD(srcObj != nullptr, "FILL target data is null.");
-                std::vector<slot_t> fillValues;
-                fillValues.reserve(dataInputs.size());
-                for (auto input : dataInputs) {
-                    fillValues.push_back(currFrame->get<slot_t>(planDataIndex(*currPlan, input)));
-                }
-                camel::execute::writeRuntimeFillSlots(
-                    srcObj,
-                    srcType,
-                    en.bodyAs<camel::runtime::GCFillBody>(),
-                    fillValues);
-                currFrame->set(n->dataIndex, srcObj);
-            } break;
-
-            case GCNodeKind::Accs: {
-                const auto normInputs = en.normInputs();
-                GUARD(!normInputs.empty(), "ACCS node must have one source input.");
-                gc_data_idx_t srcIdx = planDataIndex(*currPlan, normInputs.front());
-                const auto *body     = en.bodyAs<GCAccsBody>();
-                if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
-                    size_t idx = body->value;
-                    Tuple *t   = currFrame->get<Tuple *>(srcIdx);
-                    GUARD(idx < t->size(), "Tuple index out of bounds in NodeVM.");
-                    currFrame->set(n->dataIndex, t->get<slot_t>(idx));
-                } else {
-                    const std::string_view keyView = body->key();
-                    std::string key                = std::string(keyView.data(), keyView.size());
-                    Struct *s                      = currFrame->get<Struct *>(srcIdx);
-                    Type *structType               = currFrame->typeAt<Type>(srcIdx);
-                    currFrame->set(n->dataIndex, s->get<slot_t>(key, structType));
-                }
-            } break;
-
             case GCNodeKind::Brch: {
                 const size_t jumpIdx =
                     camel::execute::selectRuntimeBranchArm(*currPlan, en, currFrame);
