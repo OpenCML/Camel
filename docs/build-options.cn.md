@@ -27,8 +27,8 @@ Camel 将可配置的 CMake 选项集中在 `cmake/Options.cmake`，并在配置
 
 ### `CAMEL_ENABLE_PYTHON`
 
-- **含义**：是否构建 Python 嵌入相关产物：`python.cmo`、`pyplot.cmo`、`py_bridge*` 等（需要本机具备 Python **开发**布局：头文件与导入库；详见 `modules/python` 的探测逻辑）。
-- **实现**：普通 `option()`，**不**通过 `add_bool_option` 注入全局 `CAMEL_ENABLE_PYTHON=0|1` 编译宏；仅控制是否 `add_subdirectory(modules/python)` 与（在开发环境可用时）`modules/pyplot`。
+- **含义**：是否构建 Python 嵌入相关产物：`python.cmo`、`pyplot.cmo`、`py_bridge*` 等（需要本机具备 Python **开发**布局：头文件与导入库；详见 `lib/python/` 的探测逻辑）。
+- **实现**：普通 `option()`，**不**通过 `add_bool_option` 注入全局 `CAMEL_ENABLE_PYTHON=0|1` 编译宏；仅控制是否 `add_subdirectory(lib/python/)` 与（在开发环境可用时）`lib/pyplot/`。
 - **环境覆盖**：若设置 **`CAMEL_SKIP_PYTHON`** 为 `1`、`ON`、`YES`、`TRUE`（不区分大小写匹配规则以 `Options.cmake` 为准），配置阶段会将 **`CAMEL_ENABLE_PYTHON` 强制为 `OFF`**（写入缓存，优先级高于此前缓存值）；用于 CI 或无需 Python 模块的构建。
 
 ### `CAMEL_TARGET_ARCH`
@@ -40,11 +40,11 @@ Camel 将可配置的 CMake 选项集中在 `cmake/Options.cmake`，并在配置
 - **设置方式**：直接调用 CMake 时传 `-DCAMEL_TARGET_ARCH=<取值>`；经 `npm run build` / `debug` / `profile` / `pypi:rollup` 构建时设置**环境变量 `CAMEL_TARGET_ARCH`**。环境变量只在当次配置中优先于缓存，不写回缓存，取消后即回到缓存值（默认 `native`）。
 - **作用范围**：只影响 `libcamel`。各模块（`*.cmo`）与工具不带 `-march`；tensor 模块把 AVX2/AVX-512 内核编译成独立单元，运行时经 CPUID 检测后选用。FastVM JIT 只生成 SSE2 标量指令。
 - **发布包**不得使用 `native`；`.github/workflows/build-pypi.yml` 中固定了取值。
-- **舍入不随它变化。** 全部代码以 `-ffp-contract=off` 编译：无论 `-march` 允许什么，`a * b + c` 都不合并为一次乘加，于是程序在各平台上打印相同的数（`docs/design-principles.cn.md` 11.5；arm64 总有 FMA，Clang 默认会合并）。只有 tensor 的 GEMM 与一元运算单元重新打开合并（`modules/tensor/CMakeLists.txt`）；它们在有 FMA 的处理器上都合并，因此 x86-64 的 AVX2/AVX-512 单元与 arm64 的可移植单元算出相同的位。
+- **舍入不随它变化。** 全部代码以 `-ffp-contract=off` 编译：无论 `-march` 允许什么，`a * b + c` 都不合并为一次乘加，于是程序在各平台上打印相同的数（`docs/design-principles.cn.md` 11.5；arm64 总有 FMA，Clang 默认会合并）。只有 tensor 的 GEMM 与一元运算单元重新打开合并（`lib/tensor/CMakeLists.txt`）；它们在有 FMA 的处理器上都合并，因此 x86-64 的 AVX2/AVX-512 单元与 arm64 的可移植单元算出相同的位。
 
 ### 无 Python 开发环境时
 
-- `modules/python` 在检测到无法构建 `python.cmo` 时会跳过；`CAMEL_PYTHON_DEV_AVAILABLE` 为假时，根工程不会添加 `modules/pyplot`，避免 `find_package(Python3 REQUIRED)` 失败。
+- `lib/python/` 在检测到无法构建 `python.cmo` 时会跳过；`CAMEL_PYTHON_DEV_AVAILABLE` 为假时，根工程不会添加 `lib/pyplot/`，避免 `find_package(Python3 REQUIRED)` 失败。
 
 ## 与缓存的关系
 

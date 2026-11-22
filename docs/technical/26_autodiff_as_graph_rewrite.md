@@ -14,15 +14,15 @@ has been removed together with `Parameter`.
 
 Implementation map:
 
-- Core: `include/camel/core/derivative.h` (VjpBuilder, rule registry, tangent
+- Core: `kernel/include/camel/core/derivative.h` (VjpBuilder, rule registry, tangent
   spaces, tangent types of aggregates). Scalar rules live in
-  `src/builtin/operators/derivative.cpp`.
-- Engine: `modules/autodiff` (`grad`, `with_grad`,
+  `lib/std/builtin/operators/derivative.cpp`.
+- Engine: `lib/autodiff/` (`grad`, `with_grad`,
   `stop_gradient`; the pullback transform in `pullback.cpp`, and the custom-rule
   tag `vjp`). It is an ordinary package, not part of the core: grad is a macro
   operator like any other, and third-party packages can ship their own.
-- Tensor and nn rules: `modules/tensor/ops/vjp.cpp` and the `vjp` entries of the
-  op definitions; tree optimizers in `modules/nn/optim.cpp`.
+- Tensor and nn rules: `lib/tensor/ops/vjp.cpp` and the `vjp` entries of the
+  op definitions; tree optimizers in `lib/nn/optim.cpp`.
 - Verification: `test/cases/modules/autodiff` (finite differences, branches,
   recursion, `#vjp(rule)`), and `benchmarks/train.py --check`, which matches the
   MLP, GRU and Transformer gradients against PyTorch weight by weight.
@@ -128,7 +128,7 @@ into its own arm.
 - **Without `std::macro`, or with it after an inlining pass**, `grad` runs with
   the program on the graphs the passes left. The inlining engine
   (`std::cxx::inline`, `std::opt`, `std::opt`; `MacroOperandGraphs` in
-  `src/passes/opt/inline/engine.cpp`) therefore inlines nothing into the
+  `lib/std/cxx/opt/inline/engine.cpp`) therefore inlines nothing into the
   graphs an unexpanded macro operator can still reach: its function operand
   and what that calls or holds as a function constant. Calls of those
   functions from elsewhere are inlined as usual. The program runs and gives
@@ -259,7 +259,7 @@ and a closure built before a branch and called in its arms. Captured values
 are inputs of the call like any other, so gradients flow into captures that
 depend on the differentiated parameter.
 
-How (`modules/autodiff/pullback.cpp`):
+How (`lib/autodiff/pullback.cpp`):
 
 - *Following* (`ForwardRewrite::followFunctionValues`). Before a graph is
   differentiated, the calls in it that carry a function value are inlined into
@@ -451,7 +451,7 @@ on `fn`.
 
 ### Status
 
-What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
+What exists (`lib/onnx/passes/export.cpp`, `docs/cli.md`):
 
     camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
 
@@ -482,7 +482,7 @@ What differs from the design above:
   operators whose arguments are all constants and takes the arm of a branch on
   a constant condition, where folding left them (inside branch arms).
 - **Both export entries run the same export simplification** on the bound
-  function (`exportRewriteConfig`, `modules/onnx/exporter.cpp`), with settings
+  function (`exportRewriteConfig`, `lib/onnx/exporter.cpp`), with settings
   `std::opt` does not have: inlining regardless of size and up to 4096
   rounds (deeper static recursion). A branch pullback needs no split across the
   branch: the arms are regions of the branch's own graph, so the closure an arm
@@ -500,7 +500,7 @@ What differs from the design above:
   follows data dependencies only. Before it, both entries refuse a function in
   which an impure operator is reachable from the exit through data or control
   edges, in the function itself or in a function it calls or holds as a
-  constant (`Evaluator::refuseEffects`, `modules/onnx/exporter.cpp`): an effect
+  constant (`Evaluator::refuseEffects`, `lib/onnx/exporter.cpp`): an effect
   on the control path of a `sync` function (a `println` whose result nothing
   reads) is reported at the operator and no model is written. The check is
   structural: an effect in the arm of a branch on a constant condition that
@@ -523,7 +523,7 @@ What differs from the design above:
   recursion whose depth depends on the model input. When every recursive call
   is in tail position, the function is a loop over its arguments, and the
   exporter emits one `Loop` (`Evaluator::translateLoop`,
-  `modules/onnx/exporter.cpp`):
+  `lib/onnx/exporter.cpp`):
   - the carried values are the arguments a recursive call changes (found by a
     first, discarded evaluation of the body); the others stay what they are
     outside the loop, so constants keep folding inside the body. A carried

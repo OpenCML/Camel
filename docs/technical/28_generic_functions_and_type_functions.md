@@ -21,7 +21,7 @@ principles 5.1): `first<int>`, not `first<i64>`. That is the display name only: 
 name of a type (`Type::mangle`) and the structural comparison that finds an instance again
 do not use it.
 
-## 2. Representation (`include/camel/core/type/typevar.h`)
+## 2. Representation (`kernel/include/camel/core/type/typevar.h`)
 
 Two compile-time types, both flagged auxiliary:
 
@@ -55,7 +55,7 @@ That `substituteTypeVars` returns its argument unchanged when there is nothing t
 matters: the builders compare types by pointer in places, and code without type variables
 must not see new objects.
 
-## 3. The GCT builder (`src/compile/gct/builder.cpp`)
+## 3. The GCT builder (`compile/src/gct/builder.cpp`)
 
 The GCT builder only resolves names; it types nothing.
 
@@ -83,7 +83,7 @@ The GCT builder only resolves names; it types nothing.
 A function whose type still contains variables leaves the GCT as an ordinary `FUNC` node
 (plus the usual `DECL` at module level).
 
-## 4. The GIR builder (`src/compile/gir/builder.cpp`)
+## 4. The GIR builder (`compile/src/gir/builder.cpp`)
 
 The GIR builder types every node as it creates it and chooses operator overloads at once, so
 a body with type variables cannot be built. Instead of making that lazy, a generic function
@@ -154,7 +154,7 @@ the same types is not a new instance and is not limited.
 ## 5. Exported generic functions
 
 All modules of a program are built by one graph builder into one root graph (design
-principles 2.1; `src/compile/gir/program.cpp`). An instance of a generic function is
+principles 2.1; `compile/src/gir/program.cpp`). An instance of a generic function is
 therefore **one graph per set of types for the whole program**, under the graph the function
 was declared in (the root graph for a function of a module's top level), whichever module
 calls it. (Before the root graphs were merged, each importing module built instances of its

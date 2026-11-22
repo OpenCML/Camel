@@ -2,7 +2,7 @@
 
 `std::cml` 把当前的 `GCGraph` 打印回 Camel 源码，权威判据是 `test/tools/cml_roundtrip.py`（由
 `test/tools/cml-sweep.mjs` 驱动）：打印出的源码重新编译成 v2 规范文档，与原程序的文档逐顶点比较。
-判据本身未被放宽，本文只记录打印器（`src/passes/trans/cml/cml.cpp`）的缺口。
+判据本身未被放宽，本文只记录打印器（`lib/std/cml/cml.cpp`）的缺口。
 
 ## 读数
 
@@ -49,7 +49,7 @@ left:  <某个顶点>
 | 7 | `BRCH` 顶点 | 1 | 值被丢弃的臂整条打印不出来：`consistency/if_without_else/statement.cml` 的 `if x > 100 then 'huge'` 在打印文本里消失（臂的值没人要，语句也就没写），右边的分支顶点跟着消失 |
 | 8 | `FILL` 顶点 | 1 | 结构体做循环状态时被拆成字段元组：`loops/struct_state.cml` 的 `loop p = { x: 0, y: 1 } ... do { x: p.x + d, y: p.y * 2 }` 打印成 `loop cml2 = cml1.x, cml3 = cml1.y ... do (cml2 + d, cml3 * 2)` 再 `return { x: cml4.0, y: cml4.1 }`，循环里那个结构体构造的 `FILL` 在右边没有对应 |
 | 9 | `R` 区域顶点（`arm`） | 1 | 空臂被写成内联的 `()`，臂区域本身没有对应：`opt/progen/findings/inline_dce_arm_effect_lost.cml` 的 `if false then sync { null; }` 打印成 `if false then { () }`，原文档 arm 区域里的顶点在右边没有对应 |
-| 10 | 判据自己崩了 | 2 | `cml_roundtrip.py` 抛 Python 异常（不是文档不等价）：`feat/mm/writings/chains.cml`、`modules/rules/bench_target.cml` 走的是同一族形状，判据在配对一个顶点时抛 `Traceback`；判据不在本路可改范围，缺口记在这里 |
+| 10 | 判据自己崩了 | 2 | `cml_roundtrip.py` 抛 Python 异常（不是文档不等价）：`feat/mm/writings/chains.cml`、`test/cases/modules/rules/bench_target.cml` 走的是同一族形状，判据在配对一个顶点时抛 `Traceback`；判据不在本路可改范围，缺口记在这里 |
 | 11 | `COPY` 顶点 | 1 | 一个从没被写过的 `var` 被前端消掉，它唯一一次读取留下一个 `COPY`；打印器写的是那个值，`COPY` 在右边没有对应，而且没有 CML 拼写能造出它：develop 新增的 `opt/effects/fold_keeps_inner_fault.cml` 里 `var z = 0` 的 `z`，左文档是 `DATA 0 → COPY → :op/div_l`，右边直接 `DATA 0 → :op/div_l`。见下面「已登记：不能在打印器一侧保真」 |
 
 合计 11 + 12 + 12 + 6 + 3 + 1 + 1 + 1 + 1 + 2 + 1 = 51。

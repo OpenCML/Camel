@@ -76,7 +76,7 @@ Clang, CMake, Conan and Ninja are required for the build itself. Python is neede
 5. **Before committing**
 
    ```bash
-   npm run format    # format C++ sources under src/, include/, modules/ and tools/
+   npm run format    # format C++ sources under kernel/, parse/, compile/, lib/ and tools/ (the old src/, include/ and modules/ are taken too when the tree has them)
    npm run test      # fast test layer
    ```
 
@@ -84,7 +84,7 @@ Clang, CMake, Conan and Ninja are required for the build itself. Python is neede
 
 ## Style Guide
 
-- **C++ code**: Use `clang-format`—run `npm run format` for files under `src/`, `include/`, `modules/` and `tools/` (`.cpp`, `.h`)
+- **C++ code**: Use `clang-format`—run `npm run format` for files under the block roots (`kernel/`, `parse/`, `compile/`, `lib/`, `tools/`; `src/`, `include/`, `modules/`, `tools/` on a tree from before the layout move), `.cpp` and `.h` only. `scripts/format.js` probes the roots the tree actually has rather than assuming one set; when it finds none it exits 1 and names the roots, rather than treating that as nothing to format.
 - **Camel source**: Follow existing project syntax and style
 - **Documentation**: Markdown format, consistent with existing docs
 

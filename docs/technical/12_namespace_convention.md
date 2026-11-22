@@ -64,8 +64,8 @@
 - `debugger`：`tools/debugger/*`
 - `CmdLineArgs` / `Global` / `Run` / `Check` / `Inspect` / `CLI`：`tools/camel-cli/config.*`
 - `profiler`：`src/service/profiler/*`
-- `ASTCodeGen`：`src/service/codegen/*`
-- `opperf`：`src/passes/sched/fastvm/opperf.h`
+- `ASTCodeGen`：`tools/codegen/source/*`
+- `opperf`：`lib/std/fvm/opperf.h`
 
 ## 6. 迁移状态（参考）
 

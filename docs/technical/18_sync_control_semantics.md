@@ -121,7 +121,7 @@ func g(): int sync {
 
 1. 非同步函数体中，结果未被使用的效应调用（例如一条 `println(...)` 语句）不执行，在所有调度器上一致。
 2. 函数体位置的 `sync` 使这个函数体成为同步块：AST 上它记在 `stmtBlock` 的 `synced` 标志上
-   （`src/parse/ast/builder.cpp` 的 `visitStmtBlock`）。
+   （`parse/src/ast/builder.cpp` 的 `visitStmtBlock`）。
 3. 结果作为返回值的效应调用（`return println(...)`）在数据路径上，会执行。
 4. 读接到此前最近一次写的产出（2.3）：`var a = 1; let b = a; modify(a)` 读到 `1`，六种跑法一致
    （`test/plans/feat/linear/var_read_before_write.plan.toml`）。
@@ -166,7 +166,7 @@ func g(): int sync {
 
 ### 3.3 GIR Builder 状态机
 
-`src/compile/gir/builder.cpp` 中有一个关键状态：
+`compile/src/gir/builder.cpp` 中有一个关键状态：
 
 - `synced_`：当前是否在同步执行上下文。
 - `lastSyncedNode_`：这条同步链的尾（链上最后一条语句）。
@@ -191,10 +191,10 @@ func g(): int sync {
     “它捕获的变量都可能被写”来排序（保守，只多加同步/顺序约束）；函数建完后对外的摘要是精确的，告警也在全部
     函数体建完后按精确的集合发出。
   - 捕获端口绑定在被捕获的值本身（同一个节点，模块顶层的值是公共 root 上的节点），调用处传入的是同一个值
-    在调用者看来的样子，不按名字在调用处重找（`src/compile/gir/captures.cpp`）。不可变值的捕获可以在
+    在调用者看来的样子，不按名字在调用处重找（`compile/src/gir/captures.cpp`）。不可变值的捕获可以在
     调用之后才出现（递归函数先调用自己、后用到值），由链接步补上；变量的捕获不行：调用处已经按当时知道的
     变量排好了序，所以函数被直接调用之后再捕获变量是 `CaptureAfterRecursiveCall`。函数体在第一次被用到时
-    就建出来（三步加载的第二步，`src/compile/gir/program.cpp`），这只会出现在递归里：函数在调用自己之后才
+    就建出来（三步加载的第二步，`compile/src/gir/program.cpp`），这只会出现在递归里：函数在调用自己之后才
     第一次用到某个变量。写入摘要（`capturedWritesOf`）与"出口是否依赖效应"（`settleEffectfulGraphs`）都在
     全程序的函数体建完之后、在链接步取不动点。
   - 通过函数值的调用（`CALL` 节点、交给算子的 lambda）不查摘要。
@@ -219,7 +219,7 @@ func g(): int sync {
 顺序边的传递约简只有一个入口：`std::cxx::order`（`OrderReductionPass::apply`，预算 `250000`）。建图器不做传递约简：
 `shouldAddSyncCtrlLink` 只在“链尾已经是直接值输入”时跳过一次链上的边（`hasDirectDataDependency`），这是精确、
 局部的去重，不查路径。编码前的 `reduceControlDependencies(*prepared.draft, 8192)` 已删除。约简的判据读的是
-同步块的链与顺序边：一条同步边是链上的一环，没有冗余可去；`include/camel/runtime/control.h` 的规则不变：
+同步块的链与顺序边：一条同步边是链上的一环，没有冗余可去；`kernel/include/camel/runtime/control.h` 的规则不变：
 删除 Port/Data 的输入边和值已蕴含的边，保留 BRCH/JOIN 边界与 GATE 的第一条输入。
 
 本轮复核复测了上一轮对比过的 6 个程序：带不带 `std::cxx::order` 都与改动前逐字节相同，唯一例外是 `test/cases/linear/byref/element_assigned.cml` 在不带 `std::cxx::order` 时多一条 `:var/take -> :op/assn_owned` 的边。那是 `:var/take` 与随后 `:op/assn_owned` 之间真实的顺序要求（`assn_owned` 要排在取出之后），`std::cxx::order` 的传递约简会把它删掉；它不是使用关系，见下。
@@ -324,11 +324,11 @@ func g(): int sync {
   不修改实参（设计原则 11.3）。写成语句的 `acc = acc->append<v>` 由图构建器按算子声明的原地形式
   （`OperatorTable::setInPlaceForm`）写成 `:op/assn_owned(acc, :struct/append_arr_in_place(v, :var/take(acc)))`：
   `acc` 的单元作为 `var` 实参，记为对它的一次写入；`:var/take` 在单元只持有该数组时把原数组交给原地形式，
-  否则给一份复制，原地形式改完返回它（`src/builtin/operators/ops.cpp`、`struct.cpp`）。模块的算子仍可以
+  否则给一份复制，原地形式改完返回它（`lib/std/builtin/operators/ops.cpp`、`struct.cpp`）。模块的算子仍可以
   声明 `var` 形参：它们收到的是这个值（`:var/get` 的结果），该调用记为对这个变量的一次写入。
 - `:var/new`、`:var/get`、`:op/assn*` 都不是纯算子：折叠、CSE、特化不会越过它们；CSE 也不合并以
   `:var/get` 的结果为输入的相同表达式（两次求值之间对象可能被原地修改）。`isWrittenInPlace`
-  （`include/camel/runtime/draft_writes.h`）仍用于识别传给 `var` 形参的节点。
+  （`kernel/include/camel/runtime/draft_writes.h`）仍用于识别传给 `var` 形参的节点。
 - `let` 的检查在图构建时完成（`SemanticDiag::ImmutablePassedToVarParam`），运行期没有任何检查。
 
 ## 9. 回归样例

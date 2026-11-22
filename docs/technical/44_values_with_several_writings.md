@@ -138,7 +138,7 @@ neither consumes the program nor declares that it accepts writings gets a diagno
 the program.
 
 `std::cxx::saturate` reaches that state from the command line: it runs the standard rules library
-(`stdlib/rules.cml`) for `rounds` rounds (6 by default; `strict` keeps the laws that hold bit for
+(`lib/rules/rules.cml`) for `rounds` rounds (6 by default; `strict` keeps the laws that hold bit for
 bit, as `safe_fp` does for `std::opt`) and extracts nothing. It is the same saturation
 `saturate_all` runs, and the rules are one list (`saturateList`), so the pass and the library
 cannot drift apart.

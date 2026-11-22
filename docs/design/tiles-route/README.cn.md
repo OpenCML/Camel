@@ -2,7 +2,7 @@
 
 状态：**第 8 节六条已由语言作者裁定（2026-10-15），另定 `#kernel` 为 Tiles 模块提供的可选标注（第 6.5 节）。本稿不含源码改动。**
 日期：2026-10-15。
-依据：[设计原则](../../design-principles.cn.md)（尤其 3.3：纯度，7.2：`unordered_reduce`，5.4：命名维度 `constas`，3.10：`LOOP` 的 `do` 写法，第 7 节：浮点数值契约）；[索引计算、调度与资源图](../indexed-computation/README.md)（下称 IC 稿）；[图数据模型](../graph-model/README.cn.md)；[算子语义与图事实](../op-semantics/README.cn.md)（下称语义稿）；[`modules/tiles`](../../../lib/tiles/README.md)。
+依据：[设计原则](../../design-principles.cn.md)（尤其 3.3：纯度，7.2：`unordered_reduce`，5.4：命名维度 `constas`，3.10：`LOOP` 的 `do` 写法，第 7 节：浮点数值契约）；[索引计算、调度与资源图](../indexed-computation/README.md)（下称 IC 稿）；[图数据模型](../graph-model/README.cn.md)；[算子语义与图事实](../op-semantics/README.cn.md)（下称语义稿）；[`lib/tiles/`](../../../lib/tiles/README.md)。
 
 本稿回答两个问题：Tiles 以什么形式进入 Camel 的编译流水线；类似 Triton 的"由人写内核"在 Camel 里应当长什么样。它与语义稿分工：语义稿规定核心对外提供的算子语义、数值许可与图事实；本稿规定 Tiles 怎样使用它们，以及需要语言作者裁定的新写法。
 
@@ -17,7 +17,7 @@
 
 ---
 
-## 1. 现状（2026-10-15，`modules/tiles`）
+## 1. 现状（2026-10-15，`lib/tiles/`）
 
 【读码】Tiles 是一个运行时库：`run_preferred_resident<fn>(inputs)` 在调用时取函数的图，按实际输入特化，翻译为私有中间表示（`camel::tiles::Program`：节点为 `std::string op` 加整数属性与形状），做单一用途逐元素链的贪心融合（每组至多 64 个运算；共享结果与归约是物化边界），以字符串拼出 CUDA 源码，经 NVRTC 编译执行；按源码文本缓存最近 32 个模块。执行同步、串行；每次调用重新上传输入。
 
@@ -245,7 +245,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 
 ## 10. 2026-10-16 评审与下一步（语言作者已同意，交 Tiles 执行）
 
-依据：对 `develop` f2a12a5e 时 `modules/tiles` 的评审（读 README、IMPLEMENTATION、`docs/design/tiles-targets` 与源码结构；未在 GPU 上运行）。
+依据：对 `develop` f2a12a5e 时 `lib/tiles/` 的评审（读 README、IMPLEMENTATION、`docs/design/tiles-targets` 与源码结构；未在 GPU 上运行）。
 
 ### 10.1 已经做对、继续保持的
 
@@ -298,7 +298,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 
 ### 11.1 参数树：核心已有唯一的树视图（2026-10-19，核心侧已做）
 
-"什么是树、什么是叶子"与路径的写法现在只有一份：`include/camel/core/type/tree.h`（`core::type::tree`：`isInternal`、`arity`、`childType`、`childName`、`childPath`、`displayPath`、`forEachLeaf`、`firstRejectedLeaf`、`mapLeaves`）。规则按 13.5：结构体与普通元组是内部节点，`T?`/`T!`（带标记的元组）与可变格是叶子；空结构体、空元组在各处都是没有叶子的内部节点；路径是字段名（元组为下标）用点连接，`blocks.0.w`，根的路径为空。
+"什么是树、什么是叶子"与路径的写法现在只有一份：`kernel/include/camel/core/type/tree.h`（`core::type::tree`：`isInternal`、`arity`、`childType`、`childName`、`childPath`、`displayPath`、`forEachLeaf`、`firstRejectedLeaf`、`mapLeaves`）。规则按 13.5：结构体与普通元组是内部节点，`T?`/`T!`（带标记的元组）与可变格是叶子；空结构体、空元组在各处都是没有叶子的内部节点；路径是字段名（元组为下标）用点连接，`blocks.0.w`，根的路径为空。
 
 Tiles 里按类型工作的三处已机械地改用它，行为变化只有两点：`supportedLeaves` 不再拒绝空元组/空结构体（与 `tree_map` 一致），`Device<T>` 的诊断里路径不再带 `$.` 前缀（根写作 `<root>`）。其余各处是按值或按节点遍历的同类展开，不是机械替换，留给 Tiles：
 

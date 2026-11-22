@@ -68,7 +68,7 @@ one definition.
             +--------------------------+
 ```
 
-### 3.1 Kernel layer (`modules/tensor/kernels/`)
+### 3.1 Kernel layer (`lib/tensor/kernels/`)
 
 - Dtype dispatch happens once per operator call and selects a typed inner loop
   (`float`, `double`, `int32_t`, `int64_t`, `bool`). No per-element dispatch.
@@ -116,7 +116,7 @@ Tensors are never written after they are built, so the sharing is
 unobservable, and a view is still contiguous, so kernels need not know about
 it. Strided views are out of scope; `transpose`/`permute`/`slice` materialize.
 
-### 3.2 Operator definitions (`modules/tensor/ops/`)
+### 3.2 Operator definitions (`lib/tensor/ops/`)
 
 Every operator is one `OpDef` value:
 
@@ -240,14 +240,14 @@ Tensor`) and convert the value where it is read.
 
 ### 3.4 Operator traits and generic graph passes (core)
 
-`camel::core::OperatorTable` (`include/camel/core/operator_table.h`)
+`camel::core::OperatorTable` (`kernel/include/camel/core/operator_table.h`)
 maps operator URIs to traits: `pure` (no side effects, no hidden state) and
 `elementwise`. The builtin table registers its pure operators (`op/*` except the
 in-place assignment family, and the non-mutating string/array helpers); the
 tensor `OpRegistry` mirrors every `OpDef`'s traits. Unregistered operators are
 treated as effectful.
 
-Generic passes (`src/passes/opt/generic/`) use only traits, never module
+Generic passes (`lib/std/cxx/opt/generic/`) use only traits, never module
 knowledge:
 
 - `std::cxx::fold` evaluates pure operators whose inputs are all static DATA
@@ -273,7 +273,7 @@ one value. It is a variable's cell (created by `:var/new`, read by `:var/get`,
 stored into by `:op/assn*`; see doc 18 section 8.1) or an object an operator
 changes in place (a module operator with a `var` parameter; no built-in or
 standard-library operator does that since design principles 11.3). `isWrittenInPlace`
-(`include/camel/runtime/draft_writes.h`) answers this from the callee's
+(`kernel/include/camel/runtime/draft_writes.h`) answers this from the callee's
 signature (operator overload, FUNC target, CALL callee type), through GATEs. A
 written node is never replaced by a constant or by another node, a tuple
 projection is not forwarded out of a written FILL, a written constant has no
@@ -283,7 +283,7 @@ reads one or reads what `:var/get` returned (`len(a)` before and after
 
 ### 3.5 Module-contributed passes
 
-`registerModulePass(path, factory)` (`include/camel/execute/pass/base.h`) lets a
+`registerModulePass(path, factory)` (`kernel/include/camel/execute/pass/base.h`) lets a
 loaded module add a scoped pass; `findPassFactory` resolves it after the static
 `std` scope, and the "pass not found" listing includes module passes. A pass
 name `<module>::<pass>` that is not known when the names are checked
@@ -307,7 +307,7 @@ module contributes `tensor::fuse`:
 - The graph keeps the composition's derivative rules (matmul, add, relu), so
   fused training graphs differentiate like the patterns they replace.
 
-### 3.6 ONNX export (`modules/onnx/`)
+### 3.6 ONNX export (`lib/onnx/`)
 
 Export is a runtime operator, not a tracer:
 
@@ -463,7 +463,7 @@ Driven by the four benchmark models:
 
 ## 6. Landed: Foundation (step 1)
 
-Implemented in `modules/tensor/`:
+Implemented in `lib/tensor/`:
 
 | Path | Responsibility |
 |---|---|
@@ -541,7 +541,7 @@ rejection reason. That resolver extension is part of step 2.
 
 ### Step 4 landed: ONNX exporter
 
-- `modules/onnx`: `value.h` (constant / symbolic values), `emitter.*` (graph
+- `lib/onnx/`: `value.h` (constant / symbolic values), `emitter.*` (graph
   construction, initializer deduplication, dtype casts), `lowering.*` (49
   tensor and nn lowerings, opset-aware), `exporter.*` (partial evaluator),
   `module.*` (`onnx.export_model`).

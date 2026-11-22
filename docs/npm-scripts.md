@@ -11,7 +11,7 @@ This document describes the `package.json` scripts in the repository root.
 | `npm run profile` | RelWithDebInfo build |
 | `npm run config` | Edit CMake options interactively |
 | `npm run check` | Run repository checks |
-| `npm run format` | Format C++ sources under `src/` and `include/` |
+| `npm run format` | Format the changed `.cpp` and `.h` files that sit under a block root this tree has: `kernel/`, `parse/`, `compile/`, `lib/` or `tools/`, and `src/`, `include/`, `modules/` on a tree from before the layout move. `scripts/format.js` probes the roots against the tree instead of assuming one layout, and exits 1 when none of them exists, so a moved layout cannot pass for a tree with nothing to format. |
 | `npm run clean` | Remove build trees, installs, test scratch and polluted source files |
 | `npm run pypi:rollup` | Build the PyPI wheel bundle |
 
@@ -67,7 +67,7 @@ without deleting; `feat/tools/clean` pins the tiers, the dry run and the tracked
 |---|---|
 | `revision`, `dirty`, `dirtyCount`, `dirtyPaths` | `git rev-parse HEAD`, whether the tree had uncommitted changes, and up to 40 of those paths. `null` when git is unavailable: the stamp then says so, and the content fingerprint still guards the run. |
 | `builtAt`, `config`, `tag` | When, which configuration, and which install directory (`latest`, `debug`, or a release mirror tag). |
-| `fingerprint` | SHA-256 over the content of every path a build reads — `src/`, `include/`, `modules/`, `tools/`, `stdlib/`, `third_party/`, `cmake/`, `CMakeLists.txt`, `conanfile.txt` — with the file count and a per-file hash map (used to name the files that moved). |
+| `fingerprint` | SHA-256 over the content of every path a build reads — the roots `BUILD_INFO_ROOTS` in `scripts/common.js` names (`kernel/`, `parse/`, `compile/`, `lib/`, `tools/`, `third_party/`, `cmake/`, and `src/`, `include/`, `modules/`, `stdlib/` on a tree from before the layout move; a root the tree does not have is skipped) plus `CMakeLists.txt` and `conanfile.txt` — with the file count and a per-file hash map (used to name the files that moved). |
 | `buildOptions` | The configuration those sources were compiled with: the effective value of every `cmake/options.json` entry, the `CAMEL_TARGET_ARCH` / `CAMEL_SKIP_PYTHON` overrides `cmake/Options.cmake` honours, the platform, the compiler selection, and a hash over all of it. Two builds of the same sources with different options are two different installs, and the source fingerprint alone cannot tell them apart (`.camel-opts.json` is git-ignored). `scripts/common.js: buildOptions` says what is in and, on purpose, what is out. |
 | `schema`, `fingerprint.version`, `buildOptions.version` | The shape of the stamp, so a stamp written by an older build is refused instead of misread. A stamp from before the option record (schema 2) is untrustworthy: it cannot prove which options produced the install. |
 

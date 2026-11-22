@@ -2,7 +2,7 @@
 
 English | [中文](../02_lexical.md)
 
-This chapter describes the lexical structure of source code. The token table is `include/camel/parse/syntax/token_kinds.def`, the lexer `src/parse/syntax/lexer.cpp`.
+This chapter describes the lexical structure of source code. The token table is `parse/include/camel/parse/syntax/token_kinds.def`, the lexer `parse/src/syntax/lexer.cpp`.
 
 ---
 
@@ -57,7 +57,7 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 
 ### 2.4.1 Contextual keywords
 
-These words **are keywords only in the positions listed below, and ordinary names everywhere else**: the `when` of `let when = 1` is a name, and the `when` of `func f(x: T): T when is_integer::<T>()` opens a condition. They are not reserved words and not tokens of `token_kinds.def`: what reads them is parser code that decides by position (`atWord` and its kin in `src/parse/syntax/parser*.cpp`). There is one table, `scripts/context-keywords.mjs`, and every entry carries the line of code that reads it; the table below is written from it by `scripts/check-grammar.mjs --write`, and the editor grammar names exactly these words (`contextual-keywords` in `editors/vscode/`, pinned by the snapshot case `test/cases/tools/grammar/context_keywords.cml`).
+These words **are keywords only in the positions listed below, and ordinary names everywhere else**: the `when` of `let when = 1` is a name, and the `when` of `func f(x: T): T when is_integer::<T>()` opens a condition. They are not reserved words and not tokens of `token_kinds.def`: what reads them is parser code that decides by position (`atWord` and its kin in `parse/src/syntax/parser*.cpp`). There is one table, `scripts/context-keywords.mjs`, and every entry carries the line of code that reads it; the table below is written from it by `scripts/check-grammar.mjs --write`, and the editor grammar names exactly these words (`contextual-keywords` in `editors/vscode/`, pinned by the snapshot case `test/cases/tools/grammar/context_keywords.cml`).
 
 The other way round, `func` and `type` among the position names are reserved words, listed in the table of 2.4, read as position names only after `on`; and a `func` directly after `case` in a `match type` is read the same way, naming the shape of a function type.
 

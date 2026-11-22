@@ -74,7 +74,7 @@ sentence, which the debug console also prints:
 A member that has no origin cannot be named by a source breakpoint at all (the VJP's nodes have
 none today); a node step is how execution reaches the group, and it steps over the members to the
 tail. The profile says the same thing in its own words: the group has one row, its members have
-none (`include/camel/profile/profile.h`).
+none (`kernel/include/camel/profile/profile.h`).
 
 **What each view shows.** The source view: the location of the top frame, the call stack with
 a location per frame, the variables of the selected frame by their source names. The graph

@@ -23,4 +23,4 @@ This directory is the language reference of Camel, divided into chapters by topi
 - [Tutorial](../../tutorial/tutorial.en.md) and [examples](../../../examples/README.md)
 - [Command line](../../cli.md), [diagnostics catalogue](../../diagnostics.md)
 - [Technical documents](../../technical/README.md): compilation pipeline, the intermediate representation of the graph, runtime
-- Grammar: [8.5 The complete grammar](08_top_level_and_grammar.md#85-the-complete-grammar), generated from the production above each function of the parser (`src/parse/syntax/`); the token table is `include/camel/parse/syntax/token_kinds.def`
+- Grammar: [8.5 The complete grammar](08_top_level_and_grammar.md#85-the-complete-grammar), generated from the production above each function of the parser (`parse/src/syntax/`); the token table is `parse/include/camel/parse/syntax/token_kinds.def`

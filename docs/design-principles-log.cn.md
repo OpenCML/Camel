@@ -782,7 +782,7 @@ H15 的待决问题：分支臂里的 `return` 取臂位置的期望类型；数
 语言作者裁定（回答 `docs/technical/50_pyplot_cpython_init.md` 里 H203 的测量）：**`import` 不执行代码**
 （3.1），因此 `pyplot` 在导入期初始化 CPython 是违规，**可以优化掉**——在第一次真正使用时初始化，不在
 导入时。已按此实现（H221）：`pyplot` 与 `python` 的 `load()` 只注册执行器与算子的纯度；进程内唯一的
-解释器由第一次 `plot` 或 `py_*` 调用创建（共享入口 `modules/python/embed.h`，进程级一次的守卫是
+解释器由第一次 `plot` 或 `py_*` 调用创建（共享入口 `lib/python/embed.h`，进程级一次的守卫是
 `camel::utils::runOnce`），谁先用到谁创建、另一个附着而不新建；venv 版本检查也移到首次使用。初始化失败
 的种类与退出码不变（`RuntimeDiag::RuntimeError`、exit 1），但出现在调用处而不是导入处，诊断文本写明
 "at its first use"。改动前后的测量与守卫见 H221 报告与该技术页。

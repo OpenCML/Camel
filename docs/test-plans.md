@@ -125,7 +125,7 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
   left alone on purpose, one move at a time. Some individual entries are still `tier = "slow"` inside fast plans
   (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
-  `modules/random`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
+  `lib/random/`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
   `agents/test.md` holds back (the full suite, the GC poison sweep and stress plans, progen, the
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
@@ -470,7 +470,7 @@ scratch tree, with `CAMEL_TEST_RESULTS_ROOT` and `CAMEL_TEST_RUN_DIRS_KEEP=1`, a
 is good, and it cannot: the selection is the thing under test as much as the change is.** When the
 selection is incomplete, the run is green over a smaller question than the one it looks like it
 asked, and nothing in the report is worded differently. That is not a hypothetical: on 2026-11-15 a
-collection added after the entry graph returned in `src/passes/sched/nodevm/nodevm.cpp` selected
+collection added after the entry graph returned in `lib/std/nvm/nodevm.cpp` selected
 `feat/linear`, `feat/para`, `feat/trans` and `smoke`, passed them at 1356/1352, and left nine
 `defun` tests red on a pushed `develop` -- eight of them killed by a signal -- because no rule tied a
 scheduler file to a plan that runs a program whose function values stay alive. So when a change
@@ -487,7 +487,7 @@ local comparison.
 
 - **Directory rules** (`directoryRules`): a change under `modules/`, `tools/` or `test/cases/`
   selects the plan mirroring its directory. The deepest existing match wins, so
-  `modules/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor/`,
+  `lib/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
   `test/cases/modules/tensor/comparison.cml` selects `test/plans/feat/modules/tensor/`. This names
   the plan that mirrors the path; it cannot name a plan that lives outside that tree. Its `also`
@@ -497,9 +497,9 @@ local comparison.
   snapshot hashes every `.cml` of the repository, so a case that lands unrecorded is a file that
   changed and no plan read.
 - **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
-  reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under
+  reach but the same change can break. This is how `lib/tiles/**` selects the GPU plans under
   `test/plans/gpu/` (a change to the tiles C++ used to select only the CPU tiles plan),
-  `modules/onnx/**` selects the exporter dumps in `feat/trans`, and `modules/tensor/**` selects
+  `lib/onnx/**` selects the exporter dumps in `feat/trans`, and `lib/tensor/**` selects
   autodiff and the operator/index semantics plans. The union of the directory match and the file
   rule is the selection; a file rule with `"self": true` selects the changed plan file itself, and
   its `"except"` list keeps the forbidden plans out (see below).
@@ -517,7 +517,7 @@ An entry may also be `{ "plan": "...", "ownCases": true }`: the plan is added on
 changed file is one of the `case` paths that plan names. A plan that does not run the changed case
 cannot be invalidated by it, so a slow plan must not ride a shared directory into an edit it never
 reads. This is how a tiles case edit stops selecting the three GPU plans; the
-`modules/tiles/` rule still names them in full, because a change to the module can invalidate all
+`lib/tiles/` rule still names them in full, because a change to the module can invalidate all
 of them, while the case-directory rule adds each GPU plan only for the cases it runs.
 
 The rules are checked in the other direction too: `test/tools/selftest/run.mjs` walks every
@@ -633,10 +633,10 @@ and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpos
 (the rule that perf is manual), so a change there must not select a perf plan.
 
 Keep the file short and honest: map the smallest set of plans that would catch a regression in
-that area, specific rules first (`src/passes/sched/` before `src/passes/`, `modules/tiles/` before
+that area, specific rules first (`src/passes/sched/` before `src/passes/`, `lib/tiles/` before
 `modules/`). A rule that selects one plan too many is better than a rule that selects none, but say
-the cost: `stdlib/rules.cml` selects the whole `feat/opt` directory (the rewrite engine can change
-any optimized result), which is 710 tests plus smoke; `modules/tiles/**` selects six plan files and
+the cost: `lib/rules/rules.cml` selects the whole `feat/opt` directory (the rewrite engine can change
+any optimized result), which is 710 tests plus smoke; `lib/tiles/**` selects six plan files and
 the 87 GPU tests among them. Add a rule when a new subsystem gets a plan of its own; do not add a
 rule that maps every change to every plan.
 
@@ -855,7 +855,7 @@ everywhere is written once:
   **Required on every mark**, one sentence saying where the case is stuck -- which refusal, which
   law, which missing slot -- written in one of the three shapes this tree already records walls in:
   - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
-  - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
+  - the file and the symbol that refuses: `lib/transforms/vmap.cpp#liftConstant`;
   - the page that decides the question:
     `docs/handover/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
 
@@ -906,7 +906,7 @@ everywhere is written once:
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
 `parallel = false` test overlaps nothing), the tier filter (`fast`, `slow` and `all` select
 the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the scheduler
-plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
+plans, `docs/` the documentation checks, `lib/tiles/` the GPU plans, `lib/onnx/` a
 layered plan, a plan file itself, the forbidden perf/GC-stress plans nothing, an unknown
 path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
 The `known_fail` gate has five plan files of its own under `test/tools/selftest/knownfail/`: four
@@ -931,7 +931,7 @@ the four pass and that check red, which is the direction that matters.
   It replaces the install a run measures with `<INSTALL>` the same way. That root is the binary
   `--camel` names, its grandparent, and it need not be inside this checkout: a worktree running
   another tree's `out/latest/bin/camel` is told where the file is as that install's absolute path,
-  so without this rule an assertion on `stdlib/vjp.cml` hit in the checkout that owned the install
+  so without this rule an assertion on `lib/vjp/vjp.cml` hit in the checkout that owned the install
   and missed in the worktree -- one reading, red or green by where the run started. The repository
   root is replaced first, so a checkout measuring its **own** `out/latest` keeps the `<ROOT>`
   reading it has today, and the install rule only fires on an install outside the checkout. The
@@ -1126,7 +1126,7 @@ expect_refusal = ["jvp cause=rule function=f uri=math:sin_d"]
 
 The transform writes the machine-readable half of its reading beside the line a reader sees —
 `READING_REFUSAL {"transform":"jvp","function":"f","cause":"rule","uri":"math:sin_d"}` on stderr,
-from `modules/transforms/refusal_readings.h#noteRefusal` — and each entry here names the record
+from `lib/transforms/refusal_readings.h#noteRefusal` — and each entry here names the record
 fields it decides: `transform` (which may be written on its own first, as in the example above),
 `function`, `cause` (the named cause the transform's table spells,
 `refusal_readings.h#RefusalCause`) and the place the refusal names (`uri`, `rule`, `callee`,
@@ -1382,7 +1382,7 @@ Its dimensions, measured through `test/tools/run-tests.mjs#expandSweeps`:
 |-----------|------:|
 | `plans` entries (directories and plan files) | 11 |
 | plan files those entries reach | 220 |
-| left out by `exclude` (`modules/autodiff`, `modules/onnx`) | 5, leaving 215 |
+| left out by `exclude` (`lib/autodiff/`, `lib/onnx/`) | 5, leaving 215 |
 | source plans with at least one eligible test | 186 (29 contribute none) |
 | eligible source tests -- one copy each | 3507 |
 | tests those 215 plans declare, left out as ineligible | 1902 of 5409 (not `behavior`/`snapshot`, `sweep = false`, `known_fail`, own `--gc-` option, or not a run) |
@@ -1887,7 +1887,7 @@ that measures it.
    round (the rotation `scripts/perf-gate.mjs` already uses), N samples of R runs each, medians
    and p10..p90.
 4. **Read the phase table, not only the total.** Phases come from `--time-phases` (`cpu_ns` per
-   phase, `src/utils/phase_timer.cpp`); a saving is claimed against named phase rows, and the
+   phase, `kernel/utils/phase_timer.cpp`); a saving is claimed against named phase rows, and the
    report says which rows moved and by how much or says nothing.
 
 #### The verdicts, and "it cannot be resolved"
@@ -1988,7 +1988,7 @@ a command a plan writes against the checkout, not a test's own program.
   `--gc-check`; `kind=minor|major|both, alloc=<n>, safepoint=<n>` for `--gc-stress`; and
   `generational|gen|1|mark-sweep|marksweep|0` for `--gc`. The table lives in
   `test/tools/cli-arg-domains.mjs`, which reads those values out of `tools/camel-cli/config.cpp`
-  and `src/core/mm/mm.cpp` and fails when either side moves (`cli.arg_domains_match_the_cli`).
+  and `kernel/core/mm/mm.cpp` and fails when either side moves (`cli.arg_domains_match_the_cli`).
   Compound values (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`) and pass parameters
   (`std::opt safe_fp=true`) are not run options and are left alone.
 - Prefer explicit `expect_exit = 0` for successful behavior tests.

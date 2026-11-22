@@ -1,6 +1,6 @@
 # 放置解析
 
-状态：已实现（`modules/tiles/src/placement.cpp`）。本文记录 `docs/design/gpu/plan.cn.md` §2.2 的查询，以及 S2 留给 S3 的三个决定。查询只回答放置；选择执行器是后续步骤。
+状态：已实现（`lib/tiles/src/placement.cpp`）。本文记录 `docs/design/gpu/plan.cn.md` §2.2 的查询，以及 S2 留给 S3 的三个决定。查询只回答放置；选择执行器是后续步骤。
 
 ## 查询
 
@@ -31,7 +31,7 @@ PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_re
 
 ### 2. `#gpu`/`#cpu` 是核心标签，不是 Tiles 的模块标签
 
-决定：保留 S2 在 `src/core/tags.cpp` 的声明。两者写同一个键 `tiles.placement`，`read_by` 只把 `tiles::compile` 记为读者。
+决定：保留 S2 在 `kernel/core/tags.cpp` 的声明。两者写同一个键 `tiles.placement`，`read_by` 只把 `tiles::compile` 记为读者。
 
 理由：设计原则 6.2 把标准标签定为语言自己的名字，13.4 把 `#gpu`/`#cpu` 定为放置标签；标签的可用性不能取决于程序是否导入了 Tiles，`camel inspect --tags` 也不该为了看见它而加载一个模块。键必须在任何 Tiles 图存在之前登记，核心是唯一满足这一点的位置。
 
