@@ -27,7 +27,7 @@ REPO_ROOT = HERE.parents[3]
 sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
 from camel_arg import camel_from_argv  # noqa: E402
 PROGRAM = REPO_ROOT / "test" / "cases" / "trans" / "macro" / "basic.cml"
-GRAPH_DIFF = REPO_ROOT / "tools" / "graph-diff" / "graph_diff.py"
+GRAPH_DIFF = REPO_ROOT / "test" / "tools" / "graph-diff" / "graph_diff.py"
 
 
 # The install this case measures: `--camel <path>` names it; without it this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.

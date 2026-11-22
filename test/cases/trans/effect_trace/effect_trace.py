@@ -86,7 +86,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as t:
         trace = Path(t) / "trace.jsonl"
         if mode == "order":
-            program = REPO_ROOT / "exemplars" / "05_effect_order" / "program.cml"
+            program = REPO_ROOT / "internal" / "exemplars" / "05_effect_order" / "program.cml"
             pipelines = {"nvm": ["std::nvm"], "fvm": ["std::fvm"], "inline+nvm": ["std::cxx::inline", "std::nvm"]}
             results = {name: run(program, passes, trace) for name, passes in pipelines.items()}
             ref_code, ref_out, ref_lines = results["nvm"]
