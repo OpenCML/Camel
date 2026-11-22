@@ -753,21 +753,30 @@ CompiledRuleSets &compiledRuleSetsOf(Context &ctx) {
 ///
 /// A rule that is instantiated stands for its declaration (`where`, the site it is written at,
 /// which the same declaration has again in another load of its module), because its instances are
-/// a fact about the declaration and the types. An ordinary rule stands for its value's serial: its
-/// two sides are the value's own functions, and nothing is shared between two loads of it.
+/// a fact about the declaration and the types -- unless it declares `with` parameters: those values
+/// decide its instances too, so the value itself is the key then. Two values of one declaration
+/// bound to different `with` values are different rules, and keying them by the declaration alone
+/// answered one with the other's instances (read on `modules.rules/rules.with_parameter_and_a_type_parameter`,
+/// whose dump lost two nodes). An ordinary rule stands for its value's serial: its two sides are
+/// the value's own functions, and nothing is shared between two loads of it.
 std::string ruleSetKey(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
     std::string key;
     const Array *values = norm.get<Array *>(argument);
     for (size_t i = 0; i < values->size(); ++i) {
         const RuleObject *value = values->get<RuleObject *>(i);
-        if (value->ruleId() == 0) {
+        const GenericRuleEntry *entry =
+            value->ruleId() != 0 ? camel::compile::gir::genericRuleEntry(ctx, value->ruleId())
+                                 : nullptr;
+        if (entry == nullptr) {
             key += 'o';
             key += std::to_string(value->serial());
         } else {
-            const GenericRuleEntry *entry =
-                camel::compile::gir::genericRuleEntry(ctx, value->ruleId());
             key += 'g';
-            key += std::to_string(entry != nullptr ? entry->where : value->serial());
+            key += std::to_string(entry->where);
+            if (!entry->withParams.empty()) {
+                key += ':';
+                key += std::to_string(value->serial());
+            }
         }
         key += ',';
     }
