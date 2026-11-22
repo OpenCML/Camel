@@ -5,6 +5,7 @@
 #include "camel/runtime/graph.h"
 
 #include "lift.h"
+#include "node_operator.h"
 
 #include "refusal_readings.h"
 #include "rule_expand.h"
@@ -1430,8 +1431,12 @@ bool liftGraph(
             const uint32_t region = function.nodeRegion(ref);
             draft.setInsertRegion(
                 region != 0 && region < liftedRegion.size() ? liftedRegion[region] : 0);
-            switch (node->kind) {
-            case rt::GCNodeKind::Port: {
+            // The four families stage 2.3 turns into ordinary operators (a conversion, a copy, a
+            // construction, a member read) are cases by operator; every other kind is a case by its
+            // kind (`node_operator.h`).
+            const NodeCase nodeCase = nodeCaseOf(function, ref);
+            switch (nodeCase) {
+            case NodeCase::Port: {
                 if (copied[ref]) {
                     // A loop body's port, made before the walk so that a reader whose port is
                     // written after it finds it there (see the pre-pass above).
@@ -1538,7 +1543,7 @@ bool liftGraph(
                 }
                 break;
             }
-            case rt::GCNodeKind::Data: {
+            case NodeCase::Data: {
                 const std::vector<slot_t> slotValues(
                     function.staticSlots().begin(),
                     function.staticSlots().end());
@@ -1569,7 +1574,7 @@ bool liftGraph(
                 }
                 break;
             }
-            case rt::GCNodeKind::Fill: {
+            case NodeCase::Fill: {
                 // A tuple the body builds. Its members are the values it puts in the tuple, in
                 // order, and they go in as their *values*: the copy of a loop's state port is the
                 // pair, and the value the tuple is made of is that pair's first half. The payload
@@ -1592,6 +1597,9 @@ bool liftGraph(
                 const std::span<const std::byte> payload = function.payloadOf(ref);
                 // The payload *is* the fill body, slot list and all; a copy of the header alone
                 // would leave slots() reading past its end (measured: it read node references).
+                // The bytes are read here and not through `fillBodyOf` (`node_operator.h`): this
+                // walk reads a `GraphRead`, which copies a body out of a draft's payload instead
+                // of handing out a pointer into it, so the face's own bytes are what is copied.
                 const auto *fill = payload.size() >= sizeof(rt::GCFillBody)
                                        ? reinterpret_cast<const rt::GCFillBody *>(payload.data())
                                        : nullptr;
@@ -1738,7 +1746,7 @@ bool liftGraph(
                 }
                 break;
             }
-            case rt::GCNodeKind::Accs: {
+            case NodeCase::Accs: {
                 // A projection out of an aggregate: `.0` of a tuple state, `.a` of a struct state.
                 // Its value is the projection of the aggregate's value and its tangent is the
                 // projection of the aggregate's tangent, at the same member -- the tangent of an
@@ -1839,7 +1847,7 @@ bool liftGraph(
                 }
                 break;
             }
-            case rt::GCNodeKind::Join: {
+            case NodeCase::Join: {
                 // Made before the walk (its type is the pair of the value it yields). Its inputs
                 // are wired after it.
                 const auto at = liftedJoin.find(ref);
@@ -1852,7 +1860,7 @@ bool liftGraph(
                 ++copiedKinds;
                 break;
             }
-            case rt::GCNodeKind::Brch: {
+            case NodeCase::Brch: {
                 // The condition is wired after the walk, because it is a value the walk has not
                 // reached yet. What the branch does not change is the condition itself: it is
                 // copied as written and read by the Brch, never differentiated -- the choice of arm
@@ -1869,7 +1877,7 @@ bool liftGraph(
                 ++copiedKinds;
                 break;
             }
-            case rt::GCNodeKind::Func: {
+            case NodeCase::Func: {
                 // A `Func` node names its callee graph, and it is one of two things: a function
                 // *value* (a type of the function code, carried as it is -- nothing differentiates
                 // through a value) or the call itself (the type is the callee's result and the norm
@@ -2096,7 +2104,7 @@ bool liftGraph(
                 ++copiedKinds;
                 break;
             }
-            case rt::GCNodeKind::Call: {
+            case NodeCase::Call: {
                 // A `Call` node is a call **through a value**: the callee is a value the body reads
                 // (its first `with` input -- `nodevm.cpp#NodeVM::call` reads
                 // `withInputs().front()`), and which graph that value stands for is a question only
@@ -2243,7 +2251,7 @@ bool liftGraph(
                 ++copiedKinds;
                 break;
             }
-            case rt::GCNodeKind::Loop: {
+            case NodeCase::Loop: {
                 // A loop is a region of this graph: the rounds are the region's and the LOOP
                 // node's value is the state. Lifting it is lifting the state into a pair -- the
                 // node's type is the pair, the body's state port is a pair port (whose halves the
@@ -2336,7 +2344,7 @@ bool liftGraph(
                 }
                 break;
             }
-            case rt::GCNodeKind::Oper: {
+            case NodeCase::Oper: {
                 camel::runtime::GCOperBody operBody{};
                 const auto *body = function.bodyOf(ref, operBody) ? &operBody : nullptr;
                 const gc_node_ref_t made =

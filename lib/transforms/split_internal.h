@@ -17,6 +17,7 @@
 
 #include "jvp.h"
 #include "lift.h"
+#include "node_operator.h"
 #include "refusal_readings.h"
 
 #include "camel/core/mm.h"
@@ -453,8 +454,11 @@ struct Half {
             }
             inputs.push_back(copyOf[input]);
         }
-        switch (node->kind) {
-        case rt::GCNodeKind::Port: {
+        // The four families stage 2.3 turns into ordinary operators are cases by
+        // operator; every other kind is a case by its kind (`node_operator.h`).
+        const NodeCase nodeCase = nodeCaseOf(*source, ref);
+        switch (nodeCase) {
+        case NodeCase::Port: {
             // A `with` parameter is a value the caller supplies, not a component of a pair: this
             // half made a port of its own for it, and the read is that port.
             const auto with = withPortOf.find(ref);
@@ -527,7 +531,7 @@ struct Half {
         // to a comment -- do not delete it on the strength of a count. Never delete it while it is
         // the only refusal standing between this walk and a half that reads a value nothing
         // carries.
-        case rt::GCNodeKind::Data: {
+        case NodeCase::Data: {
             // A constant stands for the same value in the copy; `writeConstant` is that writer, so
             // the DATA case and the reachability walk write it the same way. A constant whose slot
             // is not readable has no copy.
@@ -543,15 +547,15 @@ struct Half {
             copyOf[ref] = written;
             return true;
         }
-        case rt::GCNodeKind::Oper: {
+        case NodeCase::Oper: {
             const auto *body         = source->nodeBodyAs<rt::GCOperBody>(ref);
             const gc_node_ref_t made = draft.addOperNode(node->dataType(), nullptr, body->uri());
             draft.setNormInputs(made, inputs);
             copyOf[ref] = made;
             return true;
         }
-        case rt::GCNodeKind::Fill: {
-            const auto *body       = source->nodeBodyAs<rt::GCFillBody>(ref);
+        case NodeCase::Fill: {
+            const auto *body       = fillBodyOf(*source, ref);
             const std::byte *begin = reinterpret_cast<const std::byte *>(body);
             const std::vector<std::byte> payload(
                 begin,
@@ -573,7 +577,7 @@ struct Half {
             copyOf[ref] = made;
             return true;
         }
-        case rt::GCNodeKind::Gate: {
+        case NodeCase::Gate: {
             // A gate forwards its **first** input; every input after it is a statement the gate
             // waits on (`camel/runtime/graph.h`). The value is what a reader of the gate reads, and
             // it is what this half copies.
@@ -614,7 +618,7 @@ struct Half {
             copyOf[ref] = inputs.front();
             return true;
         }
-        case rt::GCNodeKind::Call: {
+        case NodeCase::Call: {
             // A rule's right side reaches the transform as a call: the operands are its ordinary
             // inputs and the rule's own graph is the function value on its context port (`jvp.cpp`
             // builds exactly that shape). The callee is a graph of the program and is not copied,
@@ -682,7 +686,7 @@ struct Half {
             copyOf[ref] = made;
             return true;
         }
-        case rt::GCNodeKind::Func: {
+        case NodeCase::Func: {
             // A call to a named function, which is the shape a rule reaches a half in now that
             // `reinterp` expands a rule's right side at the match site (`jvp.cpp`): what was a call
             // through a function value is a call the graph names. The callee is a graph of the
@@ -758,14 +762,14 @@ struct Half {
             copyOf[ref] = made;
             return true;
         }
-        case rt::GCNodeKind::Accs: {
+        case NodeCase::Accs: {
             // A component of the pair a call answers. On the value half the call in hand answers
             // `(result, lin)`, so component 0 is the value the source's call computed and component
             // 1 is the linear half -- a function value, not the source's tangent. On the backward
             // half a read of component 1 is **the call of that linear half**: one indirect call, on
             // the tangents the source call passed, and the call site never sees what the callee's
             // body reads.
-            const auto *body                       = source->nodeBodyAs<rt::GCAccsBody>(ref);
+            const auto *body                       = accsBodyOf(*source, ref);
             const std::vector<gc_node_ref_t> reads = dataInputsOf(source, ref);
             if (body == nullptr || reads.empty()) {
                 return refuseAt(
