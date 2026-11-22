@@ -204,35 +204,35 @@ export func operator *(x: c128, y: c128): c128
 
 /// The quotient of two 32-bit floats.
 #op(':op/div_f')
-export func operator /(x: f32, y: f32): f32 panic
+export func operator /(x: f32, y: f32): f32
 
 /// The quotient of two 64-bit floats.
 #op(':op/div_d')
-export func operator /(x: float, y: float): float panic
+export func operator /(x: float, y: float): float
 
 /// The truncated quotient of two 32-bit integers.
 #op(':op/div_i')
-export func operator /(x: i32, y: i32): i32 panic
+export func operator /(x: i32, y: i32): i32
 
 /// The truncated quotient of two 64-bit integers.
 #op(':op/div_l')
-export func operator /(x: int, y: int): int panic
+export func operator /(x: int, y: int): int
 
 /// The quotient of two 16-bit floats.
 #op(':op/div_f6')
-export func operator /(x: f16, y: f16): f16 panic
+export func operator /(x: f16, y: f16): f16
 
 /// The quotient of two `bf16` values.
 #op(':op/div_bf')
-export func operator /(x: bf16, y: bf16): bf16 panic
+export func operator /(x: bf16, y: bf16): bf16
 
 /// The quotient of two single-precision complex numbers.
 #op(':op/div_c')
-export func operator /(x: c64, y: c64): c64 panic
+export func operator /(x: c64, y: c64): c64
 
 /// The quotient of two double-precision complex numbers.
 #op(':op/div_z')
-export func operator /(x: c128, y: c128): c128 panic
+export func operator /(x: c128, y: c128): c128
 
 /// The negation of a 32-bit float.
 #op(':op/neg_f')
@@ -283,12 +283,12 @@ export func operator -(x: c128): c128
 /// The element at position `i` on the first dimension of `xs`.
 /// @example [7, 8, 9][0]    // 7
 #op(':op/idx_arr')
-export func operator []::<T>(xs: T[], i: int): T panic
+export func operator []::<T>(xs: T[], i: int): T
 
 /// The character at position i of a string.
 /// @example 'abc'[1]    // 'b'
 #op(':op/idx_str')
-export func operator [](s: string, i: int): string panic
+export func operator [](s: string, i: int): string
 
 /// The value stored under key, or null when the map has no such key.
 /// @example ([('a', 1)] as Map<string, int>)['a']    // 1
@@ -297,7 +297,7 @@ export func operator []::<K, V>(m: Map<K, V>, key: K): V?
 
 /// A copy of the array holding the elements at the given indices along the axis.
 #op(':op/idx_take')
-export func operator []::<T>(arr: T[], indices: int[], axis: int): T[] panic
+export func operator []::<T>(arr: T[], indices: int[], axis: int): T[]
 
 // ---- the unary operators ----
 
@@ -321,12 +321,12 @@ export func operator !(x: bool): bool
 /// The remainder of dividing the first 32-bit integer by the second.
 /// @example i32(7) % i32(2)    // 1
 #op(':op/mod_i')
-export func operator %(x: i32, y: i32): i32 panic
+export func operator %(x: i32, y: i32): i32
 
 /// The remainder of dividing the first 64-bit integer by the second.
 /// @example 7 % 2    // 1
 #op(':op/mod_l')
-export func operator %(x: int, y: int): int panic
+export func operator %(x: int, y: int): int
 
 /// The conjunction of two booleans.
 /// @example true & false    // false
@@ -842,11 +842,11 @@ export func error(kind: string, message: string): Error
 /// @example print('a', 1)    // a 1
 #op(':io/print')
 with <fmt: string>
-export func print::<T>(x: T, ...rest): T panic
+export func print::<T>(x: T, ...rest): T
 #op(':io/print')
-export func print::<T>(x: T, ...rest): T panic
+export func print::<T>(x: T, ...rest): T
 #op(':io/print')
-export func print(): void panic
+export func print(): void
 
 /// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
 /// that the write can be part of the data flow). The other arguments may each have a type of
@@ -855,11 +855,11 @@ export func print(): void panic
 /// @example println('a', 1)    // a 1
 #op(':io/println')
 with <fmt: string>
-export func println::<T>(x: T, ...rest): T panic
+export func println::<T>(x: T, ...rest): T
 #op(':io/println')
-export func println::<T>(x: T, ...rest): T panic
+export func println::<T>(x: T, ...rest): T
 #op(':io/println')
-export func println(): void panic
+export func println(): void
 
 /// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
 /// the first one (so that the write can be part of the data flow). The other arguments may each
@@ -868,11 +868,11 @@ export func println(): void panic
 /// @example eprintln('a', 1)    // a 1
 #op(':io/eprintln')
 with <fmt: string>
-export func eprintln::<T>(x: T, ...rest): T panic
+export func eprintln::<T>(x: T, ...rest): T
 #op(':io/eprintln')
-export func eprintln::<T>(x: T, ...rest): T panic
+export func eprintln::<T>(x: T, ...rest): T
 #op(':io/eprintln')
-export func eprintln(): void panic
+export func eprintln(): void
 
 // ---- strings ----
 
@@ -891,7 +891,7 @@ export func eprintln(): void panic
 /// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
 #op(':str/format')
 with <...args>
-export func format(fmt: string): string panic
+export func format(fmt: string): string
 
 /// The strings of xs joined with sep between them.
 /// @example ['a', 'b']->join<', '>    // 'a, b'
@@ -973,7 +973,7 @@ export func copy::<T>(x: T): T
 /// @example range(0, 10, 3)     // [0, 3, 6, 9]
 /// @example range(10, 0, -3)    // [10, 7, 4, 1]
 #op(':struct/range')
-export func range(start: int, end: int, step: int): int[] panic
+export func range(start: int, end: int, step: int): int[]
 
 /// The last element. An empty array has none: check len first. Negative indices are not
 /// counted from the end (a negative index is a fault), so this is how the last element is
@@ -981,7 +981,7 @@ export func range(start: int, end: int, step: int): int[] panic
 /// @fails fault `IndexOutOfRange` when the array is empty
 /// @example last([1, 2, 3])    // 3
 #op(':struct/last_arr')
-export func last::<T>(xs: T[]): T panic
+export func last::<T>(xs: T[]): T
 
 /// The part of x from start up to, not including, end along one axis, taking every step-th
 /// position (a step of 1 by default, any non-zero value allowed). x is an array of any rank, a
@@ -993,14 +993,14 @@ export func last::<T>(xs: T[]): T panic
 /// @example [1, 2, 3, 4]->slice<0, 1, 3>    // [2, 3]
 #op(':op/slice_sub')
 with <axis: int, start: int, end: int, step: int = 1>
-export func slice::<T>(x: T[]): T[] panic
+export func slice::<T>(x: T[]): T[]
 
 /// The same slice of a string, by code point: a string has the one axis 0, and the result is a
 /// string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
 /// @example 'hello'->slice<0, 1, 4>    // 'ell'
 #op(':op/slice_str')
 with <axis: int, start: int, end: int, step: int = 1>
-export func slice(x: string): string panic
+export func slice(x: string): string
 
 /// The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 /// `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
@@ -1008,7 +1008,7 @@ export func slice(x: string): string panic
 /// @example-fragment the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 #op(':op/slice_bytes')
 with <axis: int, start: int, end: int, step: int = 1>
-export func slice(x: Bytes): Bytes panic
+export func slice(x: Bytes): Bytes
 
 /// The elements of xs followed by those of ys, as a new array.
 /// @example concat([1], [2, 3])    // [1, 2, 3]
@@ -1034,7 +1034,7 @@ export func contains(s: string): bool
 /// @fails fault `InvalidArgument` when the lengths differ
 /// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
 #op(':struct/zip')
-export func zip::<...A>(...xs: ...A): (...ElementOf<A>)[] panic when ...is_array::<A>()
+export func zip::<...A>(...xs: ...A): (...ElementOf<A>)[] when ...is_array::<A>()
 
 /// A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
 /// to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
@@ -1096,7 +1096,7 @@ export func foreach::<T>(xs: T[]): void
 /// @example fail<'BadLimit'>('the limit must be positive')
 #op(':op/fail')
 with <Kind: string>
-export func fail(message: string): never panic
+export func fail(message: string): never
 
 /// The function f with the faults of its calls turned into error values: `attempt(f)` takes the
 /// parameters of f and gives the result of f plus `!`. A fault raised inside a call becomes an

@@ -28,7 +28,7 @@ export func validate(pattern: string): string!
 
 #op('re:test')
 with <pattern: string>
-func has_match_kernel(text: string): bool panic
+func has_match_kernel(text: string): bool
 
 // ---- matching ----
 
@@ -39,7 +39,7 @@ func has_match_kernel(text: string): bool panic
 /// @example 'room 42'->find<'[0-9]+', 6> != null    // true
 #op('re:find')
 with <pattern: string, start: int = 0>
-export func find(text: string): Match? panic
+export func find(text: string): Match?
 
 /// Whether pattern matches somewhere in text.
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
