@@ -747,7 +747,15 @@ function walk (dir, root, out, skip) {
 function prefixRules (moves) {
   const out = []
   for (const m of moves) {
-    if (!m.row.from.endsWith('/')) continue
+    if (!m.row.from.endsWith('/')) {
+      // A moved file is a spelling of its own, and a build file names it one by one rather than
+      // through its directory: `cmake/camel_module.cmake` appends
+      // `${CMAKE_SOURCE_DIR}/modules/camel_module_abi.cpp` to every module's sources, and no
+      // directory rule carries that. Without this pair the configure step asks for a file the
+      // move took away.
+      out.push({ from: m.from, to: m.to })
+      continue
+    }
     // A bare name (`diagnostics`) is the same word as a deeper directory's last segment
     // (`core/error/diagnostics`), so the match itself has to say which one it is: `applyRewrites`
     // rewrites it only where a path starts at it. What this list carries is the pair, not the
