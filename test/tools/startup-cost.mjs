@@ -228,14 +228,33 @@ function measureCpu(argv, warmups, samples, runsPerSample) {
 }
 
 // The declarations the standard library writes: one body-less `export func` per operator of a
-// declared module. Counting them keeps the unit of `declaration.cost` in the sources.
+// declared module. Counting them keeps the unit of `declaration.cost` in the sources. A
+// declaration is `lib/<module>/<module>.cml` after the layout move (`lib/std/<module>.cml` for the
+// core's own files, `stdlib/<module>.cml` in the flat library before the move), so the file the
+// tree has is read and no layout is spelled twice.
+function declarationFile(module) {
+    const candidates = [
+        path.join(REPO_ROOT, 'lib', module, `${module}.cml`),
+        path.join(REPO_ROOT, 'lib', 'std', `${module}.cml`),
+        path.join(REPO_ROOT, 'stdlib', `${module}.cml`),
+    ]
+    const found = candidates.find((candidate) => fs.existsSync(candidate))
+    if (found === undefined) {
+        const tried = candidates.map((candidate) => path.relative(REPO_ROOT, candidate).split(path.sep).join('/')).join(', ')
+        throw new Error(`no declaration for module ${module}: tried ${tried}`)
+    }
+    return found
+}
+
 function declarationCount() {
     let count = 0
     for (const module of DECLARATION_MODULES) {
-        const text = fs.readFileSync(path.join(REPO_ROOT, 'stdlib', `${module}.cml`), 'utf8')
+        const file = declarationFile(module)
+        const text = fs.readFileSync(file, 'utf8')
         const declarations = (text.match(/^\s*export\s+func\s/gm) || []).length
         if (declarations === 0) {
-            throw new Error(`stdlib/${module}.cml declares no \`export func\`: the unit of declaration.cost would come from nothing`)
+            const where = path.relative(REPO_ROOT, file).split(path.sep).join('/')
+            throw new Error(`${where} declares no \`export func\`: the unit of declaration.cost would come from nothing`)
         }
         count += declarations
     }

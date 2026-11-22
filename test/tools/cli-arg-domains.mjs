@@ -39,8 +39,13 @@ const CWD = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(CWD, '..', '..')
 const CLI_SOURCE = path.join(REPO_ROOT, 'tools', 'camel-cli', 'config.cpp')
 // `--gc` is read by the allocator rather than by the option parser: the CLI hands the word to this
-// function, which decides which collector modes exist.
-const MM_SOURCE = path.join(REPO_ROOT, 'src', 'core', 'mm', 'mm.cpp')
+// function, which decides which collector modes exist. Where the allocator lives is a layout (the
+// layout map, table B: `src/core/` is `kernel/core/` after the move), so both spellings are asked
+// and the one the tree has decides.
+const MM_SOURCE = [
+    path.join(REPO_ROOT, 'kernel', 'core', 'mm', 'mm.cpp'),
+    path.join(REPO_ROOT, 'src', 'core', 'mm', 'mm.cpp'),
+].find((candidate) => fs.existsSync(candidate)) ?? path.join(REPO_ROOT, 'kernel', 'core', 'mm', 'mm.cpp')
 
 // What the CLI takes, per option.
 //

@@ -98,9 +98,11 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
 const BASELINE_PATH = path.join(HERE, 'baseline.json')
 
-// The roots the ledger reads. `test/`, `docs/` and `stdlib/` are deliberately absent: the ledger
-// page and this checker talk about `GraphDraft` by name all day, and Camel sources never do.
-const SOURCE_ROOTS = ['src', 'include', 'modules']
+// The roots the ledger reads: the four source roots of the layout map
+// (`docs/design/architecture/layout-map.cn.md`; `src/`, `include/` and `modules/` before the move).
+// `test/`, `docs/` and the library's own `.cml` are deliberately absent: the ledger page and this
+// checker talk about `GraphDraft` by name all day, and the engine's sources must not.
+const SOURCE_ROOTS = ['kernel', 'parse', 'compile', 'lib']
 
 // The transaction's own two files: the wall, not a resident (see the header).
 const TRANSACTION_FILES = new Set(['graph_txn.h', 'graph_txn.cpp'])
@@ -130,11 +132,11 @@ const LEDGERS = [
 // The files that must name the type nowhere: every place a handle is made and a graph is read.
 // A non-zero count here is the end of the step coming undone, whatever the lists say.
 const ZERO_FILES = [
-    'modules/graph/handle.h',
-    'modules/graph/handle.cpp',
-    'modules/graph/read.cpp',
-    'modules/rewrite/fact.cpp',
-    'modules/rewrite/module.cpp',
+    'lib/graph/handle.h',
+    'lib/graph/handle.cpp',
+    'lib/graph/read.cpp',
+    'lib/rewrite/fact.cpp',
+    'lib/rewrite/module.cpp',
 ]
 
 const RECORD = process.argv.includes('--record')
