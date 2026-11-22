@@ -475,9 +475,9 @@ position of the call. `return error(...)` hands it out of a function declared `T
 #### `print`
 
 ```camel
-print: <fmt: string> (x: T, ...rest) => T
-print: (x: T, ...rest) => T
-print: () => void
+print: <fmt: string> (x: T, ...rest) => T panic
+print: (x: T, ...rest) => T panic
+print: () => void panic
 ```
 
 Writes the arguments, separated by spaces, without a line end, and gives back the first one
@@ -490,9 +490,9 @@ also without a line end.
 #### `println`
 
 ```camel
-println: <fmt: string> (x: T, ...rest) => T
-println: (x: T, ...rest) => T
-println: () => void
+println: <fmt: string> (x: T, ...rest) => T panic
+println: (x: T, ...rest) => T panic
+println: () => void panic
 ```
 
 Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
@@ -505,9 +505,9 @@ one line end.
 #### `eprintln`
 
 ```camel
-eprintln: <fmt: string> (x: T, ...rest) => T
-eprintln: (x: T, ...rest) => T
-eprintln: () => void
+eprintln: <fmt: string> (x: T, ...rest) => T panic
+eprintln: (x: T, ...rest) => T panic
+eprintln: () => void panic
 ```
 
 Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
@@ -522,7 +522,7 @@ arguments put in and one line end.
 #### `format`
 
 ```camel
-format: <...args> (fmt: string) => string
+format: <...args> (fmt: string) => string panic
 ```
 
 The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
@@ -640,7 +640,7 @@ and what its static type is -- so the operator answers with their rule and not a
 #### `range`
 
 ```camel
-range: (start: int, end: int, step: int) => int[]
+range: (start: int, end: int, step: int) => int[] panic
 ```
 
 The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
@@ -657,7 +657,7 @@ array; this call builds one.
 #### `last`
 
 ```camel
-last: (xs: T[]) => T
+last: (xs: T[]) => T panic
 ```
 
 The last element. An empty array has none: check len first. Negative indices are not
@@ -670,7 +670,7 @@ written.
 #### `slice`
 
 ```camel
-slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
+slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[] panic
 ```
 
 The part of x from start up to, not including, end along one axis, taking every step-th
@@ -686,7 +686,7 @@ value. The last element is `last(x)` and the length of an axis `dim(x, axis)`.
 #### `slice`
 
 ```camel
-slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string
+slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string panic
 ```
 
 The same slice of a string, by code point: a string has the one axis 0, and the result is a
@@ -697,7 +697,7 @@ string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`
 #### `slice`
 
 ```camel
-slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
+slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes panic
 ```
 
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
@@ -741,7 +741,7 @@ string.
 #### `zip`
 
 ```camel
-zip: (...xs: ...A) => (...ElementOf<A>)[] when ...is_array::<A>()
+zip: (...xs: ...A) => (...ElementOf<A>)[] panic when ...is_array::<A>()
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.
@@ -824,7 +824,7 @@ inside the boundary. The name is provisional.
 #### `fail`
 
 ```camel
-fail: <Kind: string> (message: string) => never
+fail: <Kind: string> (message: string) => never panic
 ```
 
 Raises a fault of the kind the program writes, with the message it gives. The call gives no
@@ -1339,7 +1339,7 @@ The leaves of a tree, as a tuple.
 #### `save_tree`
 
 ```camel
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses var fs when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs when has_ckpt_form::<T>()
 ```
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
@@ -1359,7 +1359,7 @@ time; one of two racing saves fails, and a reader still sees a complete checkpoi
 #### `load_tree`
 
 ```camel
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, var stderr when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr when has_ckpt_form::<T>()
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
@@ -5594,7 +5594,7 @@ The pattern itself when it is a regular expression.
 #### `find`
 
 ```camel
-find: <pattern: string, start: int = 0> (text: string) => Match?
+find: <pattern: string, start: int = 0> (text: string) => Match? panic
 ```
 
 The first match of pattern in text that starts at or after start, or null. Native: the kernel
@@ -6523,7 +6523,7 @@ no callable Camel name, so they are not declared here.
 #### `rewrite`
 
 ```camel
-rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! panic when is_function::<F>()
 ```
 
 Applies `rules` until no rule changes the function, and gives the rewritten function.
@@ -6545,7 +6545,7 @@ These choices do not disable structural validation or prove whole-program equiva
 #### `saturate`
 
 ```camel
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! panic when is_function::<F>()
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
@@ -6576,7 +6576,7 @@ a writing is `cost(o, inputs)`: the operator and the costs of the writings of it
 #### `run`
 
 ```camel
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! panic when is_function::<F>()
 ```
 
 Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
@@ -6611,7 +6611,7 @@ checked at the types every operator group registered.
 #### `check`
 
 ```camel
-check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic when is_function::<F>()
 ```
 
 The same, with the law also checked at the types of the values `over` has, each once, in the
@@ -6689,7 +6689,7 @@ graph and the nodes that matched, were produced and were erased. This is the ful
 #### `why_not`
 
 ```camel
-why_not: <rule: Rule, v: Node> (r: Run<F>) => string!
+why_not: <rule: Rule, v: Node> (r: Run<F>) => string! panic
 ```
 
 Why the rule `rule` did not fire at the value `v` of the run `r`: the first place the left side
