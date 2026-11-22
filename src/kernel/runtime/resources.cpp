@@ -2261,6 +2261,28 @@ std::optional<CommitViolation> orderIncomplete(
 
 } // namespace
 
+/// What a graph's own type declares about what it may reach, as one line a reader can compare: the
+/// clause the analysis spells, "nothing" for a clause that covers nothing, and a phrase for a type
+/// that states no clause at all (which covers everything -- `effectBeyondDeclaration` passes over
+/// those). A commit compares the two it holds -- the graph it started from and the graph it
+/// publishes -- because the signature is the other side of the containment comparison: a body does
+/// not have to move for the comparison to stop holding.
+std::string declaredEffectText(const GCGraph &graph) {
+    const auto *type = graph.funcType();
+    if (type == nullptr) {
+        return std::string("nothing");
+    }
+    const sem::ResourceSignature &declared = type->resources();
+    if (declared.mode != sem::ResourceSignature::Mode::Concrete) {
+        return std::string("no clause, which covers everything");
+    }
+    if (declared.ambient.empty() && declared.params.empty() && declared.captures.empty() &&
+        declared.anyOf.empty() && !declared.external) {
+        return std::string("nothing");
+    }
+    return sem::toString(declared);
+}
+
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
     std::span<const gc_node_ref_t> changed, const GCGraph *before, const Program *beforeProgram,
@@ -2273,14 +2295,37 @@ std::optional<CommitViolation> commitViolation(
     // either, and a rewrite whose only interface is the graph module pays one size check per graph
     // and nothing else. A record that names `inline` or a kernel primitive is asked both, because
     // those can have changed them.
+    // The signature side of the containment comparison, read off the two types the commit holds.
+    // Neither list below can see it: a draft that republishes a graph under another type makes no
+    // node and adds no access, and the body does not have to move for a narrowed signature to
+    // leave it outside. Any change of the clause asks the effect question by itself, and a narrowed
+    // one is refused where the body already reaches past the new clause.
+    const bool signatureChanged =
+        before != nullptr && declaredEffectText(*before) != declaredEffectText(graph);
+    // Which side moved, said in the refusal itself: the access is the one the sentence already
+    // names, and this is the clause that stopped covering it. Both branches that answer the effect
+    // question go through here, so a signature that moved is named whether the commit also made a
+    // node or only republished the graph under another type.
+    const auto withSignatureNote = [&](CommitViolation violation) {
+        if (signatureChanged) {
+            violation.text += std::format(
+                "; the graph's signature changed at this commit: it declared {} and now declares {}",
+                declaredEffectText(*before),
+                declaredEffectText(graph));
+        }
+        return violation;
+    };
     if (!asksEffects && !asksOrder) {
-        return std::nullopt;
+        if (!signatureChanged) {
+            return std::nullopt;
+        }
+        asksEffects = true;
     }
     // One walk for the whole question: each callee's footprint is a finished fixpoint.
     FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
     Resolver resolver(program, [&walk](const GCGraph *callee) { return walk.run(callee); });
     const NodeAccessTable table(graph, resolver);
-    if (changed.empty() && !addsAnAccess(table, made)) {
+    if (changed.empty() && !addsAnAccess(table, made) && !signatureChanged) {
         return std::nullopt;
     }
     // The two readings the in-place half owes are asked of what the edit *did*, and the graph it
@@ -2334,7 +2379,7 @@ std::optional<CommitViolation> commitViolation(
             }
             if (auto effect =
                     effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
-                return effect;
+                return withSignatureNote(*effect);
             }
         }
         if (asksOrder) {
@@ -2355,7 +2400,7 @@ std::optional<CommitViolation> commitViolation(
     } else if (asksEffects) {
         if (auto effect =
                 effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
-            return effect;
+            return withSignatureNote(*effect);
         }
     }
     if (!asksOrder) {

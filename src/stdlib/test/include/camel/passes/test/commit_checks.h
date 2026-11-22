@@ -305,6 +305,20 @@ class CommitMadeGraphPortsTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
+ * The same reading for the order question: a graph this transaction makes, with two writes to the
+ * console in its body and nothing ordering them, then the same two with an edge between them. No
+ * program holds either graph, so no list of "nodes the draft changed" can name them -- every node in
+ * them is one this transaction put there, and the whole graph is what the commit answers for.
+ */
+inline constexpr const char *kCommitMadeGraphOrderTestPass = "test::commit_made_order";
+class CommitMadeGraphOrderTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
  * Reads the same defect through the exemption every pass written in Camel has, in one run:
  * the program the fold above makes is handed to a pass written in Camel (`opt::cse`) with the
  * commit checks asked of such a pass exactly as this build asks them, and -- when that answer was
