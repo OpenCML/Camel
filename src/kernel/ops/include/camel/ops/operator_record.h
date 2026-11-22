@@ -511,8 +511,8 @@ class Registry {
     /**
      * Checks a record whose entrances are all in and publishes it: the two entrances' `panic`
      * against each other, purity against the accesses, an in-place form against its plain operator,
-     * and an elementwise algebra against the bit that states it. Throws std::invalid_argument naming
-     * the operator and the item that does not hold; a refused record is left as it was.
+     * and an elementwise algebra against the bit that states it. Throws std::invalid_argument
+     * naming the operator and the item that does not hold; a refused record is left as it was.
      *
      * A published record is never changed again: everything a program can ask about an operator
      * is fixed before its first call is compiled, so the graph's own content and the facts
@@ -525,7 +525,7 @@ class Registry {
     std::uint64_t epoch() const;
 
     /**
-     * 待审（registry 车道 2026-11-22；新增成员，不改已有声明）：the implementation this process
+     * 待审（新增成员，不改已有声明）：the implementation this process
      * runs for `id`, or nullptr when the operator has none or `id` is `kNoOper`. It is what a
      * `CppRegistration` handed over with `kernel(void *)`, kept beside the record and not in it --
      * the note on `CppRegistration` says a target registers its own implementations against the
@@ -616,7 +616,7 @@ class CppRegistration {
     Record record_;
 
     /**
-     * 待审（registry 车道 2026-11-22；新增字段，不改已有声明）：the pointer `kernel(void *)`
+     * 待审（新增字段，不改已有声明）：the pointer `kernel(void *)`
      * was given. It is not a record item, so it is not in `record_`; `Registry::registerOperator`
      * is the one reader and keeps it beside the record, per OperId, for the process' life.
      */

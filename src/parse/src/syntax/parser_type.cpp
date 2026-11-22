@@ -430,7 +430,7 @@ void ParserImpl::parseFuncType() {
 /// a `uses` is read here and refused when the clause is compiled (PureAndUses), so the error names
 /// the two words rather than the token after them.
 ///
-/// `panic` is the fourth word of this position (design principles 3.9, 负责人 2026-11-22): a call of
+/// `panic` is the fourth word of this position (design principles 3.9): a call of
 /// the operator it is written on can fail, and a declaration that leaves it out promises that no
 /// call does. It takes no list, unlike `uses`, and it is written beside `pure`. It is consumed in
 /// the run of words before `uses` -- the run `Builder::visitResourceClause` reads as the clause's

@@ -31,7 +31,7 @@
  *
  * Stable ABI. This file is compiled with `Py_LIMITED_API=0x030A0000` (CMakeLists.txt,
  * `Python3_add_library(... USE_SABI 3.10)`), so one `_camel.abi3` build serves CPython 3.10 and
- * every version after it -- the 2026-10-25 ruling carried out on 2026-11-02. What that costs here
+ * every version after it. What that costs here
  * is macros and struct members that read a Python object's layout: `PyTuple_GET_SIZE` /
  * `GET_ITEM` / `SET_ITEM` and the three `PyTypeObject` members this file used (`tp_name`,
  * `tp_alloc`, `tp_free`) are replaced by their function forms. Nothing else needed to change: the

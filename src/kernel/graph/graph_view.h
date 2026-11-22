@@ -18,7 +18,7 @@
  * the fact layer (section 4), never a member here. The adapter computes such an answer at the call,
  * or hands back the cache it already keeps; it does not learn a new one.
  *
- * Four readings left this face in the interface review of 2026-11-22, and each says where it went
+ * Four readings left this face in the interface review, and each says where it went
  * so that a reader does not look for it here: a macro is read from the record of the callee or of
  * the operator (2.2 keeps macros in the records only), a constant is the node's kind and its
  * inputs, which slot a value sits in belongs to the execution plan (section 13), and the static
@@ -44,7 +44,7 @@
  *    value is its single data input and what it waits for is a sync edge, so nothing counts "the
  *    first input is the value" any more.
  *
- * A fifth one was added by the interface review of 2026-11-22: a callee is the graph it names, by
+ * A fifth one was added by the interface review: a callee is the graph it names, by
  * name (an entry of the environment table) or by value, where the stored graph names it by a
  * `GraphId` (`CalleeRef`).
  *
@@ -154,7 +154,7 @@ enum class EdgeKind : std::uint8_t {
 /// The role of a data port (section 1: a port carries a role; there is one data edge kind).
 /// Replaces `PortRole` unchanged, and the three runs `inBegin`/`withBegin`/`ctrlBegin` cut a node's
 /// input table into: `with` is a role here, and the third run is not a port at all. `Capture` is
-/// the third role a port has (interface review 2026-11-22): the values a graph's body captured are
+/// the third role a port has (interface review): the values a graph's body captured are
 /// the graph's own ports, and not a list beside them.
 /// Who migrates: `normInputsOf`/`withInputsOf`/`ctrlInputsOf`, every `portRoleOf`, and
 /// `closureNodes`.
@@ -293,9 +293,9 @@ class GraphView {
     /// `closureNodes`: a capture is not a port at a call site, but it is a port of the graph, and
     /// answering it as one group of the same query is what keeps a reader from learning a second
     /// list. The tuple the captures are read out of is the types of these ports, so `captureType()`
-    /// is not a query either (interface review 2026-11-22).
+    /// is not a query either (interface review).
     virtual std::vector<NodeRef> ports(PortGroup group) const = 0;
-    // The graph's static area is not a query of this face (interface review 2026-11-22): a span of
+    // The graph's static area is not a query of this face (interface review): a span of
     // raw slots hands a reader the representation of values and makes it index one, which is the
     // execution plan's business and not the graph's content. A constant is asked of the DATA node
     // that stands for it (`constantOf`), and the adapter reads the static area it keeps.
@@ -323,7 +323,7 @@ class GraphView {
     /// word is a value of the representation the graph and the back ends share (`slot_t`), so a
     /// reader decodes it through the node's `typeOf`.
     virtual std::optional<::slot_t> constantOf(NodeRef ref) const = 0;
-    // Three more readings are not here (interface review 2026-11-22), and a reader that wants one
+    // Three more readings are not here (interface review), and a reader that wants one
     // asks where it is derived rather than this face:
     //
     //   isMacro      the record of the callee, or of the operator the node names (2.2 keeps macros
@@ -434,7 +434,7 @@ class GraphView {
 
     NodeRange nodes() const { return NodeRange(this); }
 
-    // Additions, and not part of this rework (interface review 2026-11-22, item 6): the successors
+    // Additions, and not part of this rework (interface review, item 6): the successors
     // of an order edge and of a sync edge -- the scheduler needs them, where `predecessors` answers
     // the one direction the readers of this stage ask for -- and an entry that reads a node's tags,
     // which are content of the graph and which a pass has to read. Both arrive as additions;
