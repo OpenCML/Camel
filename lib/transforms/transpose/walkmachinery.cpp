@@ -19,6 +19,7 @@
 #include "transpose/walk.h"
 
 #include "rule_expand.h"
+#include "node_operator.h"
 #include "transpose/cotangent.h"
 #include "transpose/rules.h"
 #include "transpose/signature.h"
@@ -350,7 +351,7 @@ size_t aggregateSlotCount(const WalkContext &ctx, gc_node_ref_t ref) {
     if (node == nullptr) {
         return 0;
     }
-    if (node->kind == rt::GCNodeKind::Fill) {
+    if (nodeOperatorOf(*ctx.function, ref) == NodeOperator::Fill) {
         return ctx.function->withInputsOf(ref).size();
     }
     const Type *type = node->dataType();
@@ -815,9 +816,9 @@ void deliverCotangent(
     // slot's number. Nothing inside the arm stands for it, so dropping it here would be a claim
     // about the value rather than a rule about the cotangent.
     if (const camel::runtime::GCNode *targetNode = ctx.function->node(target);
-        targetNode != nullptr && targetNode->kind == rt::GCNodeKind::Accs) {
+        targetNode != nullptr && nodeOperatorOf(*ctx.function, target) == NodeOperator::Accs) {
         const auto readFrom = ctx.function->normInputsOf(target);
-        const auto *body    = ctx.function->nodeBodyAs<rt::GCAccsBody>(target);
+        const auto *body    = accsBodyOf(*ctx.function, target);
         const bool onAResidualPort =
             !readFrom.empty() && std::any_of(
                                      stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {

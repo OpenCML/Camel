@@ -8,6 +8,7 @@
  */
 
 #include "split_internal.h"
+#include "node_operator.h"
 #include "refusal_readings.h"
 
 namespace camel::transforms {
@@ -175,9 +176,10 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
             continue;
         }
         const rt::GCNode *node                     = function->node(ref);
-        const auto *body                           = function->nodeBodyAs<rt::GCAccsBody>(ref);
+        const auto *body                           = accsBodyOf(*function, ref);
         const std::span<const gc_node_ref_t> reads = function->normInputsOf(ref);
-        if (node == nullptr || node->kind != rt::GCNodeKind::Accs || body == nullptr ||
+        if (node == nullptr || nodeOperatorOf(*function, ref) != NodeOperator::Accs ||
+            body == nullptr ||
             body->accsKind != rt::GCAccsKind::TupleIndex || reads.size() != 1 ||
             reads.front() != cut.statePort) {
             continue;

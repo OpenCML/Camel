@@ -26,6 +26,7 @@
 #include "first_with_as_param_operator.h"
 #include "jvp.h"
 #include "jvp_operator.h"
+#include "node_operator.h"
 #include "remat_operator.h"
 #include "split.h"
 #include "split_operator.h"
@@ -127,12 +128,15 @@ void printRuleUris(
                 const camel::runtime::GCGraph *graph = instance.rhs;
                 for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
                     const camel::runtime::GCNode *node = graph->node(ref);
-                    if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Fill ||
-                        node->payload == camel::runtime::kNoPayload) {
+                    if (node == nullptr) {
                         continue;
                     }
-                    const auto *body = graph->nodeBodyAs<camel::runtime::GCFillBody>(ref);
-                    if (body->fillKind != camel::runtime::GCFillKind::FunctionClosure) {
+                    // The construction this graph builds, read as the operator it is becoming
+                    // (`node_operator.h`): `fillBodyOf` answers the payload of a construction and
+                    // nullptr for any other node, so the kind is not asked here.
+                    const auto *body = camel::transforms::fillBodyOf(*graph, ref);
+                    if (body == nullptr ||
+                        body->fillKind != camel::runtime::GCFillKind::FunctionClosure) {
                         continue;
                     }
                     closure = "fill=FunctionClosure slots=" + std::to_string(body->slotCount);

@@ -14,6 +14,7 @@ using namespace camel::core::rtdata;
 #include "../operators/array_convert.h"
 #include "../operators/cast.h"
 #include "../operators/collection.h"
+#include "../operators/copy.h"
 #include "../operators/enum.h"
 #include "../operators/half_ops.h"
 #include "../operators/higher_order.h"
@@ -460,6 +461,10 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         {"coll/map_items", __coll_map_items__},
         {"coll/set_items", __coll_keys__},
         {"coll/eq", __coll_eq__},
+        // A second name of a mutable value (`copy` of `lib/std/prelude.cml`; plan 2.3, step 1): the
+        // ordinary operator the COPY node kind becomes. Its answer is the one the three backends'
+        // COPY arms already give (`operators/copy.cpp`).
+        {"op/copy", __copy__},
     };
     for (const ConversionRegistration &conversion : kConversions) {
         map.emplace(conversion.name, conversion.impl);
@@ -733,6 +738,13 @@ void registerBuiltinOperatorTraits() {
     // `mayFault` becomes a guard that says nothing about a path that now exists unless all three
     // are decided again together.
     registry.set(":op/extent_of", {.pure = true, .elementwise = false, .mayFault = false});
+    // A second name of a mutable value (`operators/copy.cpp`; plan 2.3, step 1): it clones a value
+    // the collector traces and hands a scalar on, so it reads and writes nothing outside the
+    // program's own values -- pure, not elementwise, and a copy of a value cannot fault. The loop
+    // above registers every operator that has an implementation, and this one is outside
+    // `kAccessFree` and outside `kConversions`, so its three answers are written here with the
+    // kernel they belong to.
+    registry.set(":op/copy", {.pure = true, .elementwise = false, .mayFault = false});
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.

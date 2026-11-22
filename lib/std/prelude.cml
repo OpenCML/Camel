@@ -946,6 +946,21 @@ export func len(x: Bytes): int
 #op(':op/extent_of')
 export func extent_of::<A>(): int[] when is_array::<A>()
 
+/// A second name of a mutable value: a write the program makes through the copy is not seen
+/// through the original, and vice versa. A value the collector traces is cloned under its own
+/// type; a scalar and a value whose parts no write could be seen through are handed on as they
+/// are. `var b = a` asks the same question at a declaration, and the answer is the same one.
+///
+/// This is the COPY node kind written as an ordinary operator (plan 2.3, step 1): the three
+/// backends ask the same two things of the value -- whether its type is one the collector traces,
+/// and what its static type is -- so the operator answers with their rule and not a second one
+/// (`lib/std/builtin/operators/copy.cpp`).
+///
+/// @pure
+/// @example copy([1, 2])    // [1, 2]
+#op(':op/copy')
+export func copy::<T>(x: T): T
+
 // ---- arrays ----
 
 /// The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step

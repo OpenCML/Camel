@@ -737,25 +737,13 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame *frame);
 
+    /// The task of one of the four shaped operators (CAST, COPY, FILL, ACCS): one builder, named by
+    /// the operator, because how the scheduler runs them is the same and the name a dump shows is
+    /// the operator's (camel/execute/shaped_operators.h).
     template <typename FlowT>
-    tf::Task buildCopyTask(
+    tf::Task buildShapedTask(
         FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame *frame);
-
-    template <typename FlowT>
-    tf::Task buildCastTask(
-        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame *frame);
-
-    template <typename FlowT>
-    tf::Task buildFillTask(
-        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame *frame);
-
-    template <typename FlowT>
-    tf::Task buildAccsTask(
-        FlowT &flowLike, camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame *frame);
+        ctx::Frame *frame, const char *operatorName);
 
     template <typename FlowT>
     tf::Task buildFuncTask(

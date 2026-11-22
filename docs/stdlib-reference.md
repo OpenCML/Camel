@@ -616,6 +616,25 @@ type argument it was written with, so the run has nothing left to read
 - Pure.
 - Example: `extent_of::<float[2, 3]>()` gives `[2, 3]`
 
+#### `copy`
+
+```camel
+copy: (x: T) => T
+```
+
+A second name of a mutable value: a write the program makes through the copy is not seen
+through the original, and vice versa. A value the collector traces is cloned under its own
+type; a scalar and a value whose parts no write could be seen through are handed on as they
+are. `var b = a` asks the same question at a declaration, and the answer is the same one.
+
+This is the COPY node kind written as an ordinary operator (plan 2.3, step 1): the three
+backends ask the same two things of the value -- whether its type is one the collector traces,
+and what its static type is -- so the operator answers with their rule and not a second one
+(`lib/std/builtin/operators/copy.cpp`).
+
+- Pure.
+- Example: `copy([1, 2])` gives `[1, 2]`
+
 ### Arrays
 
 #### `range`

@@ -13,6 +13,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/ref.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/control_regions.h"
 
@@ -161,7 +162,8 @@ bool planStateComponents(
     ASSERT(!results.empty(), "A LOOP node has the result of its body region.");
     const gc_node_ref_t bodyValue = valueBehindGates(graph, results.front());
     const GCNode *fill            = graph.node(bodyValue);
-    if (fill == nullptr || fill->kind != GCNodeKind::Fill) {
+    if (fill == nullptr ||
+        camel::execute::shapeOfKind(fill->kind) != camel::execute::OperShape::Construction) {
         return false;
     }
     const camel::core::type::Type *fillType = fill->dataType();
@@ -586,21 +588,28 @@ bool cellDeclaredHere(const GCGraph &graph, gc_node_ref_t cell) {
     return body != nullptr && body->oper == camel::core::oper::VarNew;
 }
 
-/// Whether the value a variable starts with is one this graph makes: a `Copy` node (a clone of a
-/// literal, made when the graph runs), a `Fill` node (a value built here), or a value slot of the
-/// graph. A static value (a `Data` node that indexes the static area) is the program's constant:
-/// it stays as it is and its variable's update copies. A value from elsewhere -- a call's result,
-/// a read of another variable, a parameter -- has an owner the plan cannot see, so the variable's
-/// first update copies as well.
+/// Whether the value a variable starts with is one this graph makes: a copy (a clone of a literal,
+/// made when the graph runs), a construction (a value built here), or a value slot of the graph. A
+/// static value (a `Data` node that indexes the static area) is the program's constant: it stays as
+/// it is and its variable's update copies. A value from elsewhere -- a call's result, a read of
+/// another variable, a parameter -- has an owner the plan cannot see, so the variable's first update
+/// copies as well.
+///
+/// The two that make their value here are asked about by shape, not by node kind (plan 2.3): what
+/// makes the answer true is that the operator clones or constructs, which is what the operator says.
 bool initialValueMadeHere(const GCGraph &graph, gc_node_ref_t init) {
     const GCNode *node = init == kInvalidNodeRef ? nullptr : graph.node(init);
     if (node == nullptr) {
         return false;
     }
-    switch (node->kind) {
-    case GCNodeKind::Copy:
-    case GCNodeKind::Fill:
+    switch (camel::execute::shapeOfKind(node->kind)) {
+    case camel::execute::OperShape::Clone:
+    case camel::execute::OperShape::Construction:
         return true;
+    default:
+        break;
+    }
+    switch (node->kind) {
     case GCNodeKind::Data:
         return node->dataIndex >= 0;
     default:
@@ -652,17 +661,18 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses);
 /// tree say is missing where it is absent: a value *read out of a container* is the container's,
 /// and no count of the value reveals the container. Two shapes, one fact:
 ///
-///   * `b.xs` -- a field read is a node of its own (`GCNodeKind::Accs`) that writes the field into
-///     its slot, and `var b = a` is a second name of the struct, whose leaves are not counted for
-///     it at all (`test/cases/consistency/new_values/two_names_for_a_struct.cml`: the append wrote
+///   * `b.xs` -- a field read is a node of its own (an access, `OperShape::Access`) that writes the
+///     field into its slot, and `var b = a` is a second name of the struct, whose leaves are not
+///     counted for it at all
+///     (`test/cases/consistency/new_values/two_names_for_a_struct.cml`: the append wrote
 ///     where `a` still pointed, and the case printed `a [9, 2]` instead of `a [1, 2]`);
 ///   * `rows[1]` on a `int[][]` -- an element read hands out the inner array itself, the same
 ///     object the outer array holds, and `rows` is still a name of it
 ///     (`test/cases/consistency/new_values/value_used.cml`: `[[0], [1, 2]]` instead of
 ///     `[[0], [1]]`).
 ///
-/// The answer accepted here is the narrow one that is true today: a COPY (a value made for one
-/// holder), a FILL (an aggregate made from its inputs), a call's return (the callee's own value),
+/// The answer accepted here is the narrow one that is true today: a copy (a value made for one
+/// holder), a construction (an aggregate made from its inputs), a call's return (the callee's own value),
 /// and another *update* -- an operator that names an in-place form makes a new value out of the one
 /// it was given (`:struct/append_arr` clones when it is not handed storage, `array:sort_l` sorts
 /// into a clone, `:op/set_index` writes into one), so a chain of rebindings stays in place. Every
@@ -677,9 +687,16 @@ bool valueMadeHere(const GCGraph &graph, const camel::core::OperatorTable &table
     if (node == nullptr) {
         return false;
     }
+    // A copy and a construction are values made for one holder (plan 2.3: the operator's shape is
+    // what makes the answer true, not the node kind it was built as).
+    switch (camel::execute::shapeOfKind(node->kind)) {
+    case camel::execute::OperShape::Clone:
+    case camel::execute::OperShape::Construction:
+        return true;
+    default:
+        break;
+    }
     switch (node->kind) {
-    case GCNodeKind::Copy:
-    case GCNodeKind::Fill:
     case GCNodeKind::Call:
     case GCNodeKind::Func:
         return true;
@@ -1093,7 +1110,7 @@ bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
     if (node == nullptr) {
         return false;
     }
-    if (node->kind == GCNodeKind::Fill) {
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Construction) {
         return true;
     }
     if (node->kind == GCNodeKind::Func) {
@@ -1147,9 +1164,12 @@ bool passesWhatItReadsOn(
     if (node == nullptr) {
         return false;
     }
-    switch (node->kind) {
-    case GCNodeKind::Accs:
+    // A field or element access writes what it read into its own slot, so the value the reference
+    // was packed into is still its holder (plan 2.3: asked by shape, not by node kind).
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Access) {
         return true;
+    }
+    switch (node->kind) {
     case GCNodeKind::Func:
         return true;
     case GCNodeKind::Call: {
@@ -1713,14 +1733,15 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     // and only for the positions that have one, so the run pays one array read on the operator's
     // path and an empty table everywhere else.
     const auto runsItsOwnInstruction = [](GCNodeKind kind) {
+        // The four shaped operators each have an instruction of their own that writes their own
+        // slot, so they answer yes by shape (plan 2.3); the kinds below are the rest.
+        if (camel::execute::shapeOfKind(kind) != camel::execute::OperShape::None) {
+            return true;
+        }
         switch (kind) {
         case GCNodeKind::Oper:
         case GCNodeKind::Call:
         case GCNodeKind::Func:
-        case GCNodeKind::Fill:
-        case GCNodeKind::Copy:
-        case GCNodeKind::Cast:
-        case GCNodeKind::Accs:
         case GCNodeKind::Join:
             return true;
         default:

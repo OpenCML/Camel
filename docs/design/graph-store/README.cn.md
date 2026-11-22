@@ -271,7 +271,7 @@ export let simplify = [mul_one, add_assoc, fuse_map]
 - **函数值持（快照，`GraphId`）**：`Function::program()` 与 `Function::graphId()`，取图走 `program->graph(id)`（`kernel/include/camel/core/rtdata/func.h#graphId`）。
 - **程序快照**：`Program`（`include/camel/runtime/program.h`），`GraphId → 该图的一个版本`；快照与图版本由 GC 管（`GCGraphManager`，`include/camel/runtime/graph.h#GCGraphManager`），不是引用计数——这是第 8 节第 12 条，第 7 节第 1 步括号里的"（引用计数）"已被它取代，代码取第 12 条。
 - **`stableId`、`lineage`、`serial` 退役**：`include/`、`src/`、`modules/` 里已无这三个名字。
-- **其余键也已按编号**：引用表按 `GraphId`（`GCGraph::refs()`）、事实库键为（`GraphId`，节点）（`include/camel/runtime/facts.h#entries_`）、特化表按 `GraphId`、GIR 的编号由 `GraphId` 推出（`src/passes/trans/json/gir_canonical.cpp#graphIdByValue_`）。
+- **其余键也已按编号**：引用表按 `GraphId`（`GCGraph::refs()`）、事实库键为（`GraphId`，节点）（`kernel/include/camel/runtime/facts.h#entries_`）、特化表按 `GraphId`、GIR 的编号由 `GraphId` 推出（`src/passes/trans/json/gir_canonical.cpp#graphIdByValue_`）。
 
 ### 9.3 第 1 步剩下的那一处：运行时图的源位置不再按地址查
 
