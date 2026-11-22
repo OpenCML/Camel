@@ -29,21 +29,21 @@ import { argmax as tensor_argmax, argmin as tensor_argmin, max as tensor_max, me
 /// The elements in reverse order.
 /// @example [1, 2, 3]->reverse    // [3, 2, 1]
 export func reverse::<T>(xs: T[]): T[] {
-    return xs[::-1]
+    return xs[range(len(xs) - 1, -1, -1)]
 }
 
 /// The first n elements; all of them when there are fewer, none when n is not positive.
 /// @example [1, 2, 3, 4]->take<2>    // [1, 2]
 with <n: int>
 export func take::<T>(xs: T[]): T[] {
-    return xs[:math::clamp(n, 0, len(xs))]
+    return xs[..math::clamp(n, 0, len(xs))]
 }
 
 /// The elements after the first n; none when there are fewer, all when n is not positive.
 /// @example [1, 2, 3, 4]->drop<1>    // [2, 3, 4]
 with <n: int>
 export func drop::<T>(xs: T[]): T[] {
-    return xs[math::clamp(n, 0, len(xs)):]
+    return xs[math::clamp(n, 0, len(xs))..]
 }
 
 /// Consecutive pieces of n elements; the last is shorter when n does not divide the length.

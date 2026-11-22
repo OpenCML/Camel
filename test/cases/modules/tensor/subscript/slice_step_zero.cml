@@ -7,7 +7,7 @@ import { reshape, shape } from tensor
 
 func main(): int sync {
     let b = reshape<[4]>([1.0, 2.0, 3.0, 4.0])
-    println(shape(b[0:4:0]))
+    println(shape(b[range(0, 4, 0)]))
     println('not reached')
     return 0
 }

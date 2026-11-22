@@ -9,7 +9,7 @@ import { Tangent } from types
 
 func zeros::<T>(x: T): Tangent<T> {
     return match type T {
-        case struct | tuple => Tangent<T> { static for n, _ in fields T => zeros(x.[n]) }
+        case struct | tuple => Tangent<T> { static for n, _ in fields T do zeros(x.[n]) }
         case float => 0.0
         case _ => ()
     }

@@ -2,7 +2,7 @@
 import { ElementOf, is_array } from types
 
 func firsts::<...A>(...xs: ...A): (...ElementOf<A>) when ...is_array::<A>() {
-    return ( static for j in indices xs => xs.[j][0] )
+    return ( static for j in indices xs do xs.[j][0] )
 }
 
 func main(): int sync {

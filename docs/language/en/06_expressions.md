@@ -56,7 +56,7 @@ func main(): int sync {
 | `t.0` | Tuple member; the index is a literal, and out of range is a compile-time error |
 | `xs[i]` | Array element. Out of range (including negative) is the fault `RuntimeDiag::IndexOutOfRange` |
 | `xs[idx]` | `idx` is an `int[]`: the elements at those positions, in the order of `idx` (that is `take`), see below |
-| `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[:]` | A slice, see below |
+| `xs[a..b]`, `xs[..b]`, `xs[a..]`, `xs[..]`, `xs[range(a, b, s)]` | A slice, see below |
 | `m[k]` | Map lookup; the type is `V?` ([3.6](03_data_model.md#36-maps-and-sets)) |
 | `mod::name` | Qualified name |
 
@@ -64,11 +64,11 @@ func main(): int sync {
 - A subscript directly follows the expression being accessed, with no whitespace.
 - **Subscripts start at 0, and a negative one does not count from the end**: `xs[-1]` is the fault `RuntimeDiag::IndexOutOfRange`. The last element is written `last(xs)`.
 - **`xs[idx]` is `take`**: `idx` must have the type `int[]`, and the result is the elements at the positions of `idx`, in the order of `idx`; a position that appears twice is taken twice. Out of range and negative are the fault `RuntimeDiag::IndexOutOfRange`. The result is a new array, not a view ([5.4](../../design-principles.en.md)).
-- **A slice is along the first dimension, left-closed right-open**: `xs[a:b]` is the positions `a` to `b-1`. An omitted `a` means from the start, an omitted `b` to the end, and `xs[:]` is the whole array; `s` is the step. A slice is a **view sharing the data block** ([5.4](../../design-principles.en.md)); it does not copy the elements.
+- **A slice is along the first dimension, left-closed right-open**: `xs[a..b]` is the positions `a` to `b-1`. An omitted `a` means from the start, an omitted `b` to the end, and `xs[..]` is the whole array. A slice is a **view sharing the data block** ([5.4](../../design-principles.en.md)); it does not copy the elements.
   - Both bounds are positions from 0 to `len(xs)` (`b` may equal the length, which takes up to the last element); a negative or out-of-range bound is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault ([3.9](../../design-principles.en.md)). `b < a` is the empty array, not a fault. When the length is known at compile time and the bounds are constants, an out-of-range bound is a compile-time error ([3.9](../../design-principles.en.md)).
-  - The step is written after a second colon: `xs[a:b:s]`, and the result is still a view sharing the data block; for a copy write `slice(xs, 0, a, b, s)`.
+  - A slice with a step is written `xs[range(a, b, s)]`: the three arguments of `range` are the slice's start, end and step, and the result is still a view sharing the data block; for a copy write `slice(xs, 0, a, b, s)`.
   - An array whose elements are objects (`[[1, 2], [3, 4]]` and the like) is copied row by row: a slot array has no data block to share.
-- **Multidimensional subscripts**: `xs[:, 0]` and `xs[a:b, c]` take coordinates along each dimension and give a view; `:` takes a whole dimension ([5.4](../../design-principles.en.md)).
+- **Multidimensional subscripts**: `xs[.., 0]` and `xs[a..b, c]` take coordinates along each dimension and give a view; `..` takes a whole dimension ([5.4](../../design-principles.en.md)).
 - **String subscripts are by code point**: `s[i]` is the `i`-th code point, and the result is a string containing just that one character (`'中文'[0]` is `'中'`); an out-of-range subscript is likewise a fault. For the numbers use `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)).
 
 ## 6.4 Calls
@@ -439,20 +439,20 @@ func duplicate::<T>(t: T) {
 
 ### 6.8.4 `static for` and `t.[n]`
 
-`static for n, F in fields T => block` expands the **field list** of `T` when the function is instantiated (design principles 5.5): the block runs once per field, and the expanded code becomes straight-line code at that position. The graph has no loop node.
+`static for n, F in fields T do block` expands the **field list** of `T` when the function is instantiated (design principles 5.5): the block runs once per field, and the expanded code becomes straight-line code at that position. The graph has no loop node.
 
 - `T` must be concrete and an [R3 inner node](../../design/generic-structure/README.cn.md): a struct or an **ordinary** tuple. `T?`, `T!`, a mutable cell, a scalar, an array and a function are leaves and report `SemanticDiag::StaticForNotComposite`; handle them with `match type` first.
-- The head may write `n`, `n, F` or `n, F, tags` positionally. `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type, which may be written in a type position (`let x: F`) but is not a value. `tags` is a compile-time struct of every tag on that field: each field is named by a tag and holds that tag's argument record; a tag with no arguments is `{}`, as is a field with no tags. Two tags with the same name on one field are a compile-time error. These names are visible in the block only. Writing `_` in any position binds nothing for that round, as `_` does in `match`: `static for n, _ in fields T => e` takes the field name only, `static for _, F in fields T => e` the type only (`_` is not a name, so writing it in the block stays undefined).
+- The head may write `n`, `n, F` or `n, F, tags` positionally. `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type, which may be written in a type position (`let x: F`) but is not a value. `tags` is a compile-time struct of every tag on that field: each field is named by a tag and holds that tag's argument record; a tag with no arguments is `{}`, as is a field with no tags. Two tags with the same name on one field are a compile-time error. These names are visible in the block only. Writing `_` in any position binds nothing for that round, as `_` does in `match`: `static for n, _ in fields T do e` takes the field name only, `static for _, F in fields T do e` the type only (`_` is not a name, so writing it in the block stays undefined).
 - The type after `fields` is a type position too: a `(` there is always the start of a type, so the empty tuple is written `fields ()` without a `type EmptyTuple = ()` first; a function type takes one more pair of parentheses, `fields ((x: int) => int)`.
 - Fields are expanded in declaration order, each with its own block scope. An empty struct or tuple expands zero times and the block is not built at all.
 - As a statement, `static for` always drops the value of the block, and the construct has type `void`; where a value is needed, write the comprehension form (below).
-- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, the `n`/`j` of an enclosing `static for`, a `let` name bound to a constant (`let first = ...; t.[first]`; a `var` does not count, since it can be assigned another key before the access), an expression whose value is known at compile time (such as `( static for n, F in fields S => n ).[0]`), or a call of a pure function whose arguments are compile-time constants (`t.[first_field::<S>()]`), which the compiler folds to its value. A call whose body cannot be read at build time is refused by its own name (`SemanticDiag::FoldCallNotEvaluable`, and the other `FoldCall*` diagnostics for the reason it stopped). Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
+- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, the `n`/`j` of an enclosing `static for`, a `let` name bound to a constant (`let first = ...; t.[first]`; a `var` does not count, since it can be assigned another key before the access), an expression whose value is known at compile time (such as `( static for n, F in fields S do n ).[0]`), or a call of a pure function whose arguments are compile-time constants (`t.[first_field::<S>()]`), which the compiler folds to its value. A call whose body cannot be read at build time is refused by its own name (`SemanticDiag::FoldCallNotEvaluable`, and the other `FoldCall*` diagnostics for the reason it stopped). Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
 - A struct without that field reports `SemanticDiag::StaticAccessUnknownField`; a tuple index past the end (or a key that is not an index) reports `SemanticDiag::StaticAccessIndexOutOfRange`; a target that is not a struct or an ordinary tuple reports `SemanticDiag::StaticAccessNotInternal`. For a tuple, `t.["0"]` and `t.[0]` are the same element.
 - When the field's value is dropped (a `t.[n];` statement on its own), the field is checked but no `ACCS` is built; the target expression is still evaluated, so its effects remain.
 
 ```cml
 func show::<T>(t: T) {
-    static for n, F in fields T => {
+    static for n, F in fields T do {
         print(n, t.[n])
     }
 }
@@ -462,13 +462,13 @@ func first(t: (int, float)) {
 }
 ```
 
-**`indices`: expanding by tuple position.** `static for j in indices ts => block` expands the **positions** of the tuple value `ts` when the function is instantiated: the block runs once per position, `j` is this round's position (an `int`), and the trip count is the tuple's arity.
+**`indices`: expanding by tuple position.** `static for j in indices ts do block` expands the **positions** of the tuple value `ts` when the function is instantiated: the block runs once per position, `j` is this round's position (an `int`), and the trip count is the tuple's arity.
 
 - `ts` must be of tuple type (an ordinary tuple; `T?`, `T!` and a mutable cell are leaves). A type that is not a tuple reports `SemanticDiag::StaticIndicesNotTuple`; a type that is not concrete reports `SemanticDiag::StaticTypeNotConcrete`. The count is decided by `ts`'s type at instantiation.
 - **The operand only supplies its type.** When the operand is a compile-time tuple (a rest parameter's `ts`, or a tuple comprehension), no container node is built: `indices ts` builds no `FILL`, and `ts.[j]` in the body is the element node itself, with no `ACCS`. A runtime tuple variable or parameter already has its own node; `indices` does not build another.
 - `j` may be used as a value (`print(j)`, or in arithmetic) and as the key of `t.[j]`: it is a compile-time constant in every round. A local of the same name still shadows it, and using that as a key reports `SemanticDiag::StaticAccessNotConstant` (the same rule as `n` of `fields`).
 - `indices` binds one name only (there is no `F`); the element types come from `ts`'s type and are not given a name yet. `static for j, F in indices ts` is a syntax error.
-- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for j in indices ts => e }` has no field names to give and reports `SemanticDiag::StructComprehensionWithoutFields`; where a value is needed, write `( static for j in indices ts => e )`.
+- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for j in indices ts do e }` has no field names to give and reports `SemanticDiag::StructComprehensionWithoutFields`; where a value is needed, write `( static for j in indices ts do e )`.
 - The graph is the hand-written expansion: the generator leaves no node of its own. `ts.[j]` over a compile-time tuple is the element node itself, the same field selection `ts.[0]`, `ts.[1]` make; over a runtime tuple value it still builds one `ACCS`.
 
 ```cml
@@ -477,28 +477,28 @@ func sum(t: (int, int, int)): int {
 }
 
 func positions(t: (int, string)): (int, int) {
-    return ( static for j in indices t => j )
+    return ( static for j in indices t do j )
 }
 ```
 
-**Comprehensions: packing the rounds back into the same shape.** A `static for` may also be written where a value is needed: `{ static for n, F in fields T => e }` gives a struct and `( static for n, F in fields T => e )` gives a tuple, with the fields or elements of `T`, in the same names and order, each from one round's value.
+**Comprehensions: packing the rounds back into the same shape.** A `static for` may also be written where a value is needed: `{ static for n, F in fields T do e }` gives a struct and `( static for n, F in fields T do e )` gives a tuple, with the fields or elements of `T`, in the same names and order, each from one round's value.
 
 - The **value of the block is the round's value**: unlike the statement form, it is not dropped. The block may use `let`, and its last statement's value is the field's value; a block that gives none (an empty block, or one ending in a statement without a value) reports `SemanticDiag::StaticComprehensionVoidElement`.
 - Each field's or element's **type comes from that round's value**, not from `F`: with `F` an `int` and the value a `float`, the result field is a `float`. The field names and their order still come from `T` in declaration order, which is what lets an expansion such as `tree_map` change the leaves and keep the shape.
-- **The same shape is written `T { ... }`**: `T { static for n, F in fields T => e }` takes both the field names and the kind (struct or tuple) from the one type `T`, so one `case struct | tuple` branch is enough. That is a type position, and what stands there is a type expression rather than only a type name: the head of `Tangent<T> { static for n, _ in fields T => zero_tangent(x.[n]) }` is a computed type (design principles 5.6), its field names and kind come from it, each member's type comes from that round's value, and the two ways of writing the head are one rule. The head and the type the generator walks must have the **same shape** -- the same kind, the same field names and the same number of them -- or the comprehension reports `SemanticDiag::SameShapeComprehensionMismatch` (`Tangent<T>` and its argument `T` are the same shape); a head that computes to a leaf (no fields) reports `SemanticDiag::SameShapeComprehensionNotComposite`. `{ ... }` and `( ... )` still pack a struct and a tuple only.
+- **The same shape is written `T { ... }`**: `T { static for n, F in fields T do e }` takes both the field names and the kind (struct or tuple) from the one type `T`, so one `case struct | tuple` branch is enough. That is a type position, and what stands there is a type expression rather than only a type name: the head of `Tangent<T> { static for n, _ in fields T do zero_tangent(x.[n]) }` is a computed type (design principles 5.6), its field names and kind come from it, each member's type comes from that round's value, and the two ways of writing the head are one rule. The head and the type the generator walks must have the **same shape** -- the same kind, the same field names and the same number of them -- or the comprehension reports `SemanticDiag::SameShapeComprehensionMismatch` (`Tangent<T>` and its argument `T` are the same shape); a head that computes to a leaf (no fields) reports `SemanticDiag::SameShapeComprehensionNotComposite`. `{ ... }` and `( ... )` still pack a struct and a tuple only.
 - An empty struct or tuple has no round; the value is `{}` / `()` (a `FILL` with no slot).
 - The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and the comprehension leaves no node of its own. A tuple comprehension first stays a compile-time tuple: used only by `indices`, `...` or `.[j]`, its elements stay separate and no `FILL` is built; used as a value (printed, returned, assigned to a runtime position), one `FILL` at the use packs the rounds' values into the same shape. A struct comprehension always packs one `FILL`. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
-- `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for n, F in fields T => block`.
+- `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for n, F in fields T do block`.
 - To fold the rounds' values into one result (rather than pack them back into the same shape), use the `static loop` of [6.8.5](#685-static-loop).
 
 ```cml
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
-    return { static for n, F in fields {a: int, b: int} => t.[n] * 2 }
+    return { static for n, F in fields {a: int, b: int} do t.[n] * 2 }
 }
 
 func rebuild::<T>(t: T) {
     return match type T {
-        case struct | tuple => T { static for n, F in fields T => rebuild(t.[n]) }
+        case struct | tuple => T { static for n, F in fields T do rebuild(t.[n]) }
         case _ => t
     }
 }

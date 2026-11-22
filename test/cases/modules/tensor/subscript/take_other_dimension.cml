@@ -1,5 +1,5 @@
 /**
- * `m[:, idx]`: an integer array on a dimension other than the first, with a repeated index (design
+ * `m[.., idx]`: an integer array on a dimension other than the first, with a repeated index (design
  * principles 5.4). The positions the indices name are taken in the order the indices give, along
  * the dimension the subscript wrote them on, and every other dimension is kept whole: a repeated
  * index repeats that dimension's slab and the result states the indices' own length on that
@@ -8,7 +8,7 @@
  * not give. `main` prints the shape the read itself gives, so the type is pinned twice: by the
  * parameter's own spelling and by the shape the run reports.
  *
- *   m = [[1, 2, 3], [4, 5, 6]];  m[:, [1, 1, 0]] = [[2, 2, 1], [5, 5, 4]];  sum = 19.0
+ *   m = [[1, 2, 3], [4, 5, 6]];  m[.., [1, 1, 0]] = [[2, 2, 1], [5, 5, 4]];  sum = 19.0
  */
 import { reshape, shape, sum } from tensor
 
@@ -17,13 +17,13 @@ func columns(a: f32[2, 3]): float {
 }
 
 func taken(m: f32[2, 3], idx: int[3]): float {
-    return columns(m[:, idx])
+    return columns(m[.., idx])
 }
 
 func main(): int sync {
     println('ran')
     let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    println(shape(m[:, [1, 1, 0]]))
+    println(shape(m[.., [1, 1, 0]]))
     println("value={}"->format<taken(m, [1, 1, 0])>)
     return 0
 }

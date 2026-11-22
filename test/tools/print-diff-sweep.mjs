@@ -68,7 +68,7 @@ if (!existsSync(camel)) {
 }
 
 /// Directories the sweep reads. Everything else in the tree (build output, docs images) is noise.
-const scanRoots = ['test/cases', 'exemplars', 'stdlib']
+const scanRoots = ['test/cases', 'internal/exemplars', 'stdlib']
 /// Files that print. Read as text: a file that mentions `println` only in a comment prints
 /// nothing, which costs one extra run and no answer.
 const prints = (path) => /println/.test(readFileSync(path, 'utf8'))

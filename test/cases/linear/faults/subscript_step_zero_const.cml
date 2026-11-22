@@ -5,7 +5,7 @@
 
 func main(): int sync {
     let xs = [1, 2, 3, 4, 5, 6]
-    println(xs[0:6:0])
+    println(xs[range(0, 6, 0)])
     println('not reached')
     return 0
 }

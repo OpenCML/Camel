@@ -199,7 +199,7 @@ export func choice::<T>(xs: T[]): T {
 with <k: Key, n: int>
 export func sample::<T>(xs: T[]): T[] {
     let mixed = xs->shuffle<k>
-    return mixed[:n]
+    return mixed[..n]
 }
 
 // ---- the global stream ----

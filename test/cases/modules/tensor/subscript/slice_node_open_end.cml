@@ -1,5 +1,5 @@
 /**
- * One slice spelling, so that `std::gir` prints a graph small enough to read whole: `x[2:]` is the
+ * One slice spelling, so that `std::gir` prints a graph small enough to read whole: `x[2..]` is the
  * same slice of the same value with the end not written. See slice_one_node.cml.
  */
 
@@ -7,7 +7,7 @@ import { reshape } from tensor
 
 func main(): int sync {
     let x = reshape<[4]>([1.0, 2.0, 3.0, 4.0] as f32[])
-    let b = x[2:]
+    let b = x[2..]
     println(b)
     return 0
 }

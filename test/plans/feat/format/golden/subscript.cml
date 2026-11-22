@@ -1,33 +1,33 @@
 func part(xs: int[], a: int, b: int): int[] {
-    return xs[a:b]
+    return xs[a..b]
 }
 
 func until(xs: int[], b: int): int[] {
-    return xs[:b]
+    return xs[..b]
 }
 
 func whole(xs: int[]): int[] {
-    return xs[:]
+    return xs[..]
 }
 
 func stepped(xs: int[], a: int): int[] {
-    return xs[a:4:1]
+    return xs[range(a, 4, 1)]
 }
 
 func reversed(xs: int[]): int[] {
-    return xs[::-1]
+    return xs[range(len(xs) - 1, -1, -1)]
 }
 
 func everyOther(xs: int[]): int[] {
-    return xs[::2]
+    return xs[range(0, len(xs), 2)]
 }
 
 func after(xs: int[], start: int): int[] {
-    return xs[start:]
+    return xs[start..]
 }
 
 func window(xs: int[], a: int, b: int, step: int): int[] {
-    return xs[a:b:step]
+    return xs[range(a, b, step)]
 }
 
 func rows(xs: int[], idx: int[]): int[] {

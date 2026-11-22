@@ -15,7 +15,7 @@ func fl::<T>(xss: T[][]): T[] {
 }
 
 func fl::<T>(xs: T[...]): T[] when !is_arr::<T>() {
-    return xs[0:1] as T[]
+    return xs[0..1] as T[]
 }
 
 func main(): int sync {
