@@ -1580,10 +1580,12 @@ ba7fb0272ed1da30 ok test/cases/compile/return_type/tensor_shape.cml
 ebc4b7a691bfbd44 ok test/cases/compile/rulesets/ruleset_index_bodies.cml
 00b2bd84755e0f71 ok test/cases/compile/rulesets/ruleset_index_only.cml
 790fa27fe22e3620 ok test/cases/compile/rulesets/rulesets.err_duplicate_head.cml
+38b6b80b12ef110a ok test/cases/compile/rulesets/rulesets.err_duplicate_two_spellings.cml
 542b5f38a9f333bb ok test/cases/compile/rulesets/rulesets.err_left_not_operator.cml
 ff0da8f76ef1a45f ok test/cases/compile/rulesets/rulesets.probe_arity.cml
 a16d1cf037fd4cad ok test/cases/compile/rulesets/rulesets.probe_call_arity.cml
 0601547e27035d3f ok test/cases/compile/rulesets/rulesets.probe_rule_heads.cml
+105ca4010f9d50bf ok test/cases/compile/rulesets/rulesets.two_types_one_spelling.cml
 f13b46ba5b0dbef7 ok test/cases/compile/rulesets/rulesets_lookup.cml
 7fda3c6d7f3c9fec ok test/cases/compile/rulesets/rulesets_missing.cml
 65b96ae7db065b70 ok test/cases/compile/rulesets/rulesets_signature_interned.cml
