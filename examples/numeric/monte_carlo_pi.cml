@@ -17,7 +17,7 @@ func main(): int sync {
     let seeds = [11, 23, 37, 41, 53, 67, 79, 97]
 
     // pi_hits(n, seed) draws n points in the unit square and counts those inside the circle.
-    let estimates = seeds->map<(s: int): float => 4.0 * float(pi_hits(samples, s)) / float(samples)>
+    let estimates = seeds->map<func (s: int) => float { 4.0 * float(pi_hits(samples, s)) / float(samples) }>
 
     println(estimates->map<show>->join<' '>)
     println(format<mean(estimates), stdev(estimates)>('mean {:.4f}  stdev {:.4f}'))

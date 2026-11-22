@@ -48,11 +48,11 @@ func main(): int sync {
     println(get_x({ x: 2.5, y: 1 }))
     println(apply(inc, 41))
     println(apply(show, 7))
-    println(apply((s: string) => s + '!', 'hey'))
+    println(apply(func (s: string) { s + '!' }, 'hey'))
     println(twice(inc, 0))
     println(my_map([1, 2, 3], inc))
     println(my_map([1, 2, 3], show))
-    println(my_map(['a', 'b'], (s: string) => s + s))
+    println(my_map(['a', 'b'], func (s: string) { s + s }))
     println(compose(inc, show, 9))
     return 0
 }

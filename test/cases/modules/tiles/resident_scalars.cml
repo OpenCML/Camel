@@ -19,7 +19,7 @@ func mixed(x: f32[...]): (float, f32[...], float) {
 func read(x: Device<float>): float { return download(x) }
 func main(): int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
-    let vg = (v: f32[...]): (float, f32[...]) => with_grad(loss)<v>()
+    let vg = func (v: f32[...]) => (float, f32[...]) { with_grad(loss)<v>() }
     let result = run_preferred_resident<vg>(upload(x))
     println(read(result.0) - 14.0)
     println(sum(abs(download(result.1) - x * 2.0)))

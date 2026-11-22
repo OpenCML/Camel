@@ -29,7 +29,7 @@ func dcube(): float {
 
 func main(): int sync {
     let slope = dcube
-    let twice = <x: float>() => slope<x>()
+    let twice = func <x: float>() { slope<x>() }
     println(grad(twice)<2.0>())
     return 0
 }

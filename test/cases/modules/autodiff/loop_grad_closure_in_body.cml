@@ -18,7 +18,7 @@ type P = { a: float, b: float }
 with <x: float>
 func structToStruct(): float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
-        let g = (t: P): P => { a: t.a * d, b: t.b }
+        let g = func (t: P) => P { a: t.a * d, b: t.b }
         g(q)
     }
     return q.a
@@ -27,7 +27,7 @@ func structToStruct(): float {
 with <x: float>
 func readsState(): float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
-        let g = (): P => { a: q.a * d, b: q.b }
+        let g = func () => P { a: q.a * d, b: q.b }
         g()
     }
     return q.a
@@ -36,7 +36,7 @@ func readsState(): float {
 with <x: float>
 func scalarIn(): float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
-        let g = (u: float): float => u * d
+        let g = func (u: float) => float { u * d }
         { a: g(q.a), b: q.b }
     }
     return q.a
@@ -45,7 +45,7 @@ func scalarIn(): float {
 with <x: float>
 func scalarToStruct(): float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
-        let g = (u: float): P => { a: u * d, b: u }
+        let g = func (u: float) => P { a: u * d, b: u }
         g(q.a)
     }
     return q.a

@@ -3,9 +3,9 @@
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x: int): int => x * x>
-    let evens = squares->filter<(x: int): bool => x % 2 == 0>
-    let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
+    let squares = xs->map<func (x: int) => int { x * x }>
+    let evens = squares->filter<func (x: int) => bool { x % 2 == 0 }>
+    let total = evens->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 
     println(xs)
     println(squares)
@@ -17,6 +17,6 @@ func main(): int sync {
     println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<func (s: string) sync { println('item', s) }>
     return 0
 }

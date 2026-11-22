@@ -36,7 +36,7 @@ func main(): int sync {
     println(show(lookup(5)))
     println(save(true))
     println(save(false))
-    let f = (x: int): int! => { return x + 1 }
+    let f = func (x: int) => int! { return x + 1 }
     println(f(1) !! 0)
     var v = 3 as int?
     v = null as int?

@@ -3,13 +3,13 @@
 // (design principles 3.5, rule two; test/cases/compile/state_escape/err_escape_return.cml), so the
 // counter this file used to round-trip is gone.
 func make_adder(base: int): (x: int) => int {
-    return (x: int) => x + base
+    return func (x: int) { x + base }
 }
 
 func main(): int sync {
     let offset = 10
-    let add = (x: int) => x + offset
-    let twice = (x: int) => {
+    let add = func (x: int) { x + offset }
+    let twice = func (x: int) {
         let y = x * 2
         y
     }

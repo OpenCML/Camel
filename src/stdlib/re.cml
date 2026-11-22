@@ -81,7 +81,7 @@ export func replace_with(text: string): string {
 /// @example 'a1b22'->replace<'[0-9]+', '#'>    // 'a#b#'
 with <pattern: string, new: string>
 export func replace(text: string): string {
-    return text->replace_with<pattern, (m: Match): string => new>
+    return text->replace_with<pattern, func (m: Match) => string { new }>
 }
 
 /// The pieces of text between the matches of pattern; one piece, the whole text, when there is

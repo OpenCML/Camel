@@ -66,10 +66,10 @@ func main(): int sync {
     let w = reshape<[3]>([1.0, 2.0, 3.0])
     let x = reshape<[3]>([4.0, 5.0, 6.0])
 
-    let e1 = attempt(() => with_grad(weighted)<3.0>(2.0))()
-    let e2 = attempt(() => with_grad(point_loss)<p>(4.0))()
-    let e3 = attempt(() => with_grad(dot)<w>(x))()
-    let e4 = attempt(() => with_grad(scaled)<2.0, 3.0>())()
+    let e1 = attempt(func () { with_grad(weighted)<3.0>(2.0) })()
+    let e2 = attempt(func () { with_grad(point_loss)<p>(4.0) })()
+    let e3 = attempt(func () { with_grad(dot)<w>(x) })()
+    let e4 = attempt(func () { with_grad(scaled)<2.0, 3.0>() })()
 
     let k1 = match e1 {
         case error e => e.kind
@@ -93,7 +93,7 @@ func main(): int sync {
     }
     // `sx` is the same function with the *second* `with` parameter moved to the front of a lambda,
     // so the pair `sk`/`sx` separates "first" from "second" by two numbers (6.0 against 4.0).
-    let sx = engine_grad(<xx: float> (k: float): float => scaled<k, xx>())<3.0>(2.0)
+    let sx = engine_grad(func <xx: float> (k: float) => float { scaled<k, xx>() })<3.0>(2.0)
 
     'gx/vg  engine={} library={}'->format<engine_with_grad(weighted)<3.0>(2.0), k1>->println
     'pg/pvg engine={} library={}'->format<engine_with_grad(point_loss)<p>(4.0), k2>->println

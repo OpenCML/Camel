@@ -53,8 +53,8 @@ func opText(n: Node): string {
 }
 
 func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
-    return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+    return len(nodes(found[0])->filter<func (n: Node) => bool { opText(n) == operator }>)
 }
 
 export func report::<F>(p: F): F! spelling sync {

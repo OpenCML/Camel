@@ -9,8 +9,8 @@
 
 func f6(a7: (a0: string) => int): string {
     let n9 = [1.0];
-    return [0]->reduce<(p11: string, p12: int): string => {
-        let n15 = n9->reduce<(p13: string, p14: float): string => '', ''>;
+    return [0]->reduce<func (p11: string, p12: int) => string {
+        let n15 = n9->reduce<func (p13: string, p14: float) => string { '' }, ''>;
         return '';
     }, string(10)>;
 }
@@ -23,7 +23,7 @@ func f6(a7: (a0: string) => int): string {
             return '';
         }
         case 'k9' => ''
-        case _ => f6((p22: string): int => a17)
+        case _ => f6(func (p22: string) => int { a17 })
     });
 }
 

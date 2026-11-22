@@ -12,8 +12,8 @@ func sigmoid(x: float): float {
 // Vector dot product function
 func dot(a: float[], b: float[]): float {
     return zip(a, b)
-            ->map<(e: (float, float)) => e.0 * e.1>
-            ->reduce<(acc: float, cur: float) => acc + cur, 0.0>
+            ->map<func (e: (float, float)) { e.0 * e.1 }>
+            ->reduce<func (acc: float, cur: float) { acc + cur }, 0.0>
 }
 
 // Linear transformation function

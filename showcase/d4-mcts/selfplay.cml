@@ -75,10 +75,10 @@ func selfplay(k: Key): (int[], float) {
     let (board, moves) = loop b = [0, 0, 0, 0, 0, 0, 0, 0, 0] as int[], turn = 0
         while turn < 9 && winner(b) == 0
         do {
-            let places = (0..9)->filter<(i: int): bool => b[i] == 0>
+            let places = (0..9)->filter<func (i: int) => bool { b[i] == 0 }>
             let pick = places->choice<fold(k, turn)>
             let mark = turn % 2 + 1
-            let nextb = (0..9)->map<(i: int): int => if i == pick then mark else b[i]>
+            let nextb = (0..9)->map<func (i: int) => int { if i == pick then mark else b[i] }>
             return (nextb, turn + 1)
         }
     let settled = winner(board)

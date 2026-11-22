@@ -15,7 +15,7 @@ func main(): string! sync {
     let b = zeros::<f32>([8])
     let x = (next_key()->uniform::<f32><shape: [2, 4, 8]> * 2.0 - 1.0)
     // reshape(..., shape(...)) needs the static rank of the layer_norm/matmul result.
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[...]): f32[...] => reshape<shape(layer_norm(t, g, b) @ w)>(t), x) {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: f32[...]) => f32[...] { reshape<shape(layer_norm(t, g, b) @ w)>(t) }, x) {
         case error e => { return e }
         case v => 'exported'
     }

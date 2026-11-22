@@ -4,7 +4,7 @@
  */
 
 func main(): int sync {
-    let n: int = (x) => x + 1
+    let n: int = func (x) { x + 1 }
     println(n)
     return 0
 }

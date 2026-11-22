@@ -6,12 +6,12 @@ import { Graph, Node, RegionKind, commit, exit_of, graphs_of, id, inputs, nodes,
 
 /// The nodes of a graph that sit in an arm of a branch.
 func arm_nodes(g: Graph): Node[] {
-    return nodes(g)->filter<(n: Node): bool => region_kind(region_of(n)) == RegionKind::Arm>
+    return nodes(g)->filter<func (n: Node) => bool { region_kind(region_of(n)) == RegionKind::Arm }>
 }
 
 /// The one graph of the program that has exactly one node in an arm.
 func arm_graph::<F>(p: F): Graph? when is_function::<F>() {
-    let found = graphs_of(p)->filter<(g: Graph): bool => len(arm_nodes(g)) == 1>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { len(arm_nodes(g)) == 1 }>
     return if len(found) == 1 then found[0] else null
 }
 

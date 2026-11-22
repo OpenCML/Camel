@@ -25,12 +25,12 @@ func nonzero::<T>(c: T): bool {
 rule combine_nonzero::<T>(x: T, const c: T) when nonzero::<T>(c) { x * c + x => x * (c + 1.0) }
 
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
 func portOf::<F>(p: F, function: string): Node spelling {
-    let ports = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Port>
+    let ports = nodesOf(p, function)->filter<func (n: Node) => bool { kind(n) == NodeKind::Port }>
     return ports[0]
 }
 

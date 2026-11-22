@@ -13,7 +13,7 @@
 
 func main(): int sync {
     let k = 1
-    let bump = (): int => sync {
+    let bump = func () => int sync {
         k = k + 1
         k
     }

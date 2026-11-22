@@ -5,11 +5,11 @@
  */
 
 func kept(n: int, k: int): int[] {
-    return (0..n)->filter<(i: int): bool => (i + k) % 3 != 0>
+    return (0..n)->filter<func (i: int) => bool { (i + k) % 3 != 0 }>
 }
 
 func weigh(xs: int[]): int {
-    return len(xs) * 1000000 + xs->reduce<(acc: int, x: int): int => acc + x, 0>
+    return len(xs) * 1000000 + xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 }
 
 func repeat(n: int, left: int, total: int): int {

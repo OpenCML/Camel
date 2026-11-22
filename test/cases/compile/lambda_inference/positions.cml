@@ -16,24 +16,24 @@ func apply_f(f: (x: int) => f64, x: int): f64 { return f(x) }
 
 func add(f: (a: int, b: int) => int, x: int): int { return f(x, 10) }
 
-func adder(n: int): (x: int) => int { return (x) => x + n }
+func adder(n: int): (x: int) => int { return func (x) { x + n } }
 
-func step(c: bool): (x: int) => int { return if c then (x) => x + 1 else (x) => x - 1 }
+func step(c: bool): (x: int) => int { return if c then func (x) { x + 1 } else func (x) { x - 1 } }
 
 func main(): int sync {
     // An argument to a parameter of function type.
-    println('arg', apply((x) => x + 1, 3), apply((x: int) => x * 2, 3))
+    println('arg', apply(func (x) { x + 1 }, 3), apply(func (x: int) { x * 2 }, 3))
     // A `with` argument.
-    println('with', apply_with<(x) => x * 2>(21))
+    println('with', apply_with<func (x) { x * 2 }>(21))
     // One parameter type written, one not.
-    println('mixed', add((a: int, b) => a + b, 5))
+    println('mixed', add(func (a: int, b) { a + b }, 5))
     // A binding declared with a function type.
-    let g: (x: int) => int = (x) => x * 3
-    var h: (x: int) => int = (x) => x - 1
-    h = (x) => x + 100
+    let g: (x: int) => int = func (x) { x * 3 }
+    var h: (x: int) => int = func (x) { x - 1 }
+    h = func (x) { x + 100 }
     println('let', g(14), h(1))
     // A lambda that writes no return type takes it from the expected type.
-    println('exit', apply_f((x) => 1, 5))
+    println('exit', apply_f(func (x) { 1 }, 5))
     // The result of a function whose result type is a function type.
     let add5 = adder(5)
     println('return', add5(37), step(true)(41), step(false)(43))

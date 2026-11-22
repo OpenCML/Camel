@@ -1421,7 +1421,7 @@ import graph
 func mul_one(g: Graph): Graph! {
     let hits = [n for n in graph::nodes(g)
                   if graph::oper(n) == ':op/mul_l' && graph::const_int(graph::inputs(n)[1]) == 1]
-    return graph::apply(g, hits->map<(n: Node) => graph::replace(n, graph::node(graph::inputs(n)[0]))>)
+    return graph::apply(g, hits->map<func (n: Node) { graph::replace(n, graph::node(graph::inputs(n)[0])) }>)
 }
 ```
 
@@ -1445,10 +1445,10 @@ with <f: (a: int) => int, g: (b: int) => int>
 func map_map(xs: int[]): int[] { return xs->map<f>->map<g> }
 
 with <f: (a: int) => int, g: (b: int) => int>
-func map_fused(xs: int[]): int[] { return xs->map<(a: int) => g(f(a))> }
+func map_fused(xs: int[]): int[] { return xs->map<func (a: int) { g(f(a)) }> }
 
 // 附加条件：f 没有效应（否则"先对所有元素做 f，再做 g"与"逐个元素做 f 再做 g"可以被观察到）
-let fuse = graph::rule(map_map, map_fused, (m: graph::Match) => graph::is_pure(m['f']))
+let fuse = graph::rule(map_map, map_fused, func (m: graph::Match) { graph::is_pure(m['f']) })
 ```
 
 例三，一个遍：对每张图反复应用一组规则直到不变。

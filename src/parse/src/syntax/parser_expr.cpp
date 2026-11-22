@@ -510,130 +510,6 @@ void ParserImpl::parseAccess() {
     }
 }
 
-/// Whether the `(` at the current token opens the parameters of a lambda and not a tuple or a
-/// parenthesized expression. Parameters are `name: type` pairs, or `name` alone in a lambda,
-/// where the type comes from the function type of the position the lambda stands in (design
-/// principles 5.9). The head tells: `(name:`, `(var`, `(name)` / `(name, ...)` when the list
-/// closes and `=>` (or the `:` of a return type) follows, or an empty list followed by `=>` or
-/// by that `:`. Only parentheses nest inside a parameter list (a type or a default value may
-/// hold a tuple, a function type or a call), so the matching `)` is found by counting them.
-bool ParserImpl::lambdaAhead() const {
-    const TK t1 = peek(1);
-    if (t1 == TK::KwVar) {
-        return true;
-    }
-    // A rest parameter's head, `(...xs)` / `(...xs, ...)`, is a lambda's like any other: the reader of
-    // the list that follows is the same, `=>` (or a return type's `:`) after the `)`. A tuple
-    // written `(...xs)` -- one rest argument in it -- has that `=>` too only when it is a lambda.
-    if (t1 == TK::DotDot || t1 == TK::Ellipsis) {
-        uint32_t depth = 0;
-        for (uint32_t i = 0;; ++i) {
-            switch (peek(i)) {
-            case TK::Eof:
-                return false;
-            case TK::LParen:
-                ++depth;
-                break;
-            case TK::RParen:
-                if (--depth == 0) {
-                    const TK after = peek(i + 1);
-                    return after == TK::FatArrow || after == TK::Colon;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-    }
-    if (t1 == TK::Identifier) {
-        if (peek(2) == TK::Colon) {
-            return true;
-        }
-        if (peek(2) != TK::Comma && peek(2) != TK::RParen) {
-            return false;
-        }
-        uint32_t depth = 0;
-        for (uint32_t i = 0;; ++i) {
-            switch (peek(i)) {
-            case TK::Eof:
-                return false;
-            case TK::LParen:
-                ++depth;
-                break;
-            case TK::RParen:
-                if (--depth == 0) {
-                    const TK after = peek(i + 1);
-                    return after == TK::FatArrow || after == TK::Colon;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-    }
-    if (t1 == TK::RParen) {
-        const TK t2 = peek(2);
-        return t2 == TK::FatArrow || t2 == TK::Colon;
-    }
-    if (t1 == TK::LParen) {
-        // A parameter destructured as a tuple (`((a, b)) => ...`): the list starts with a
-        // parenthesised parameter, so the first `)` is not the end of the list. Only a list of
-        // names can be a tuple parameter, so the head decides at once: a `(` that opens anything
-        // else is the parenthesised expression (or tuple) it looks like, and is not scanned.
-        if (peek(2) != TK::Identifier) {
-            return false;
-        }
-        uint32_t i = 2;
-        while (true) {
-            if (peek(i) != TK::Identifier) {
-                return false;
-            }
-            ++i;
-            if (peek(i) == TK::Comma) {
-                ++i;
-                continue;
-            }
-            break;
-        }
-        if (peek(i) != TK::RParen) {
-            return false;
-        }
-        ++i;
-        if (peek(i) == TK::RParen) {
-            const TK after = peek(i + 1);
-            return after == TK::FatArrow || after == TK::Colon;
-        }
-        // More parameters after the tuple: find the end of the list, which the names keep
-        // short, so counting parentheses stays cheap.
-        if (peek(i) != TK::Comma) {
-            return false;
-        }
-        uint32_t depth = 1;
-        for (; ; ++i) {
-            switch (peek(i)) {
-            case TK::Eof:
-                return false;
-            case TK::LParen:
-                ++depth;
-                break;
-            case TK::RParen:
-                if (--depth == 0) {
-                    const TK after = peek(i + 1);
-                    return after == TK::FatArrow || after == TK::Colon;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-    }
-    if (t1 == TK::Comma && peek(2) == TK::RParen) {
-        const TK t3 = peek(3);
-        return t3 == TK::FatArrow || t3 == TK::Colon;
-    }
-    return false;
-}
-
 namespace {
 
 /// The bracket that ends the group `open` opens, when `open` opens one in a type.
@@ -764,6 +640,8 @@ void ParserImpl::parseShapeComp() {
 
 /// primaryData : identRef | constasData | literal | arrayData | structData | tupleData
 ///             | funcData
+/// A lambda starts with the `func` keyword (design principles 4.4), so a parenthesised list here
+/// is always a tuple or a parenthesised expression.
 void ParserImpl::parsePrimary() {
     switch (cur_) {
     case TK::Identifier:
@@ -800,9 +678,8 @@ void ParserImpl::parsePrimary() {
     case TK::LBrace:
         return parseStructData();
     case TK::LParen:
-        return lambdaAhead() ? parseFuncData() : parseTupleData();
-    case TK::Lt:
-    case TK::LAngle:
+        return parseTupleData();
+    case TK::KwFunc:
         return parseFuncData();
     default:
         break;
@@ -1189,11 +1066,15 @@ void ParserImpl::parseTupleData() {
     close(m, NK::TupleData);
 }
 
-/// funcData : angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+/// funcData : 'func' angledParams? parentParams ('=>' typeExpr)? blockExpr
+/// A lambda is a function declaration without a name (design principles 4.4): `func (x) { x * x }`,
+/// `func (x: int) => int { x }`. Its body is the brace block and its last statement is the value;
+/// an expression body is not a lambda's body, it is the block holding that expression.
 /// A lambda has no modifier: `sync` is written before a block (design principles 3.4), so a
-/// lambda that needs a synchronous body writes `(x) => sync { ... }`.
+/// lambda that needs a synchronous body writes `func (x) sync { ... }`.
 void ParserImpl::parseFuncData() {
     const size_t m = mark();
+    bump(); // `func`
     // A lambda's parameters may leave the type out: it comes from the function type of the
     // position the lambda stands in (design principles 5.9). Its return type and the types
     // written inside its parameters are parsed with the flag off, as everywhere else.
@@ -1201,7 +1082,7 @@ void ParserImpl::parseFuncData() {
     lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         // A pack among the `with` parameters is the same rule on a lambda as on a declaration
-        // (design principles 5.6): `<...ws> (...xs) => ...`
+        // (design principles 5.6): `func <...ws> (...xs) { ... }`
         // names the `with` list the position gives the value, so the lambda's body can forward it.
         parseAngledParams(true);
     }
@@ -1210,16 +1091,16 @@ void ParserImpl::parseFuncData() {
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncData);
     }
-    // A lambda's parameter list takes a rest parameter (`(...xs) => body`). It parses here and is
-    // refused where its parameters would have to be built: a lambda's rest parameter stands for
+    // A lambda's parameter list takes a rest parameter (`func (...xs) { ... }`). It parses here and
+    // is refused where its parameters would have to be built: a lambda's rest parameter stands for
     // parameters that come from the function type the lambda stands in, and the front end does not
     // build those yet (the semantic stage names the refusal).
     parseParentParams(true);
     lambdaParams_ = outerLambdaParams;
-    if (eat(TK::Colon)) {
+    if (eat(TK::FatArrow)) {
         parseType();
     }
-    if (!panic_ && expect(TK::FatArrow)) {
+    if (!panic_) {
         parseBlockExpr();
     }
     close(m, NK::FuncData);

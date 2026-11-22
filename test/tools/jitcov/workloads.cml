@@ -77,7 +77,7 @@ func calls(n: int, acc: int): int {
 }
 
 func scaled(xs: int[], k: int): int {
-    return xs->map<(x: int): int => x * k>->reduce<(a: int, b: int): int => a + b, 0>
+    return xs->map<func (x: int) => int { x * k }>->reduce<func (a: int, b: int) => int { a + b }, 0>
 }
 
 func hof(xs: int[], k: int, acc: int): int {

@@ -27,10 +27,10 @@ func main(): int sync {
     if warm != 6765 then {
         return 1
     } else {
-        let durations = chain(20, [], (): void => {
+        let durations = chain(20, [], func () => void {
             fib(20)
         })
-        let total = durations->reduce<(acc: float, d: float): float => acc + d, 0.0>
+        let total = durations->reduce<func (acc: float, d: float) => float { acc + d }, 0.0>
         if total < 0.0 then {
             return 2
         } else {

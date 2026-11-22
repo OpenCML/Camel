@@ -67,16 +67,16 @@ func isHit(n: Node): bool {
 /// The hits whose kept operand is not itself a hit of the round: replacing them together is
 /// sound. The rest are the hits of the next round.
 func independent(hits: Node[]): Node[] {
-    return hits->filter<(n: Node): bool => len(hits->filter<(m: Node): bool => m == kept(n)>) == 0>
+    return hits->filter<func (n: Node) => bool { len(hits->filter<func (m: Node) => bool { m == kept(n) }>) == 0 }>
 }
 
 func allNodes::<F>(p: F): Node[] {
-    return flatten(graphs_of(p)->map<(g: Graph): Node[] => nodes(g)>)
+    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] { nodes(g) }>)
 }
 
 func replaceHits::<F>(p: F, hits: Node[]): F! sync {
     let t = open(p)
-    independent(hits)->foreach<(n: Node) => replace(t, n, kept(n))>
+    independent(hits)->foreach<func (n: Node) { replace(t, n, kept(n)) }>
     return commit(t)
 }
 

@@ -19,7 +19,7 @@ expect_stdout_exact = "-5 -6 false -2 -25 -10\n5 2\n"
 
 [[tests]]
 name = "precedence.lambda_sync_prefix"
-desc = "`sync (x) => ...` is a syntax error: `sync` is written before a block, `(x) => sync { ... }`."
+desc = "`sync (x) => ...` is a syntax error: `sync` is written before a block, `func (x) sync { ... }`."
 kind = "negative"
 case = "../../../cases/compile/precedence/lambda_sync_prefix.cml"
 args = ["${case}"]

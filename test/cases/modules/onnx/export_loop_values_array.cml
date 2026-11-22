@@ -22,7 +22,7 @@ func main(): string! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
     let r = model(x)
     println(r.1)
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[...]): (float[...], int) => model(x), (x)) {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => (float[...], int) { model(x) }, (x)) {
         case error e => { return e }
         case v => 'exported'
     }

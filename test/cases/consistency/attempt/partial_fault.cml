@@ -28,7 +28,7 @@ func probe(x: int): int sync {
 }
 
 func main(): int sync {
-    let r = attempt(() => (0..64)->map<probe>)()
+    let r = attempt(func () { (0..64)->map<probe> })()
     println(match r {
         case error e => e.message
         case v => 'no fault'

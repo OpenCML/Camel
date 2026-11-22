@@ -36,7 +36,7 @@ func main(): int sync {
     let vs: f32[4] = [1.0, 2.0, 3.0, 4.0]
     // The cotangent of a scalar result is a scalar: c = 1. The pullback is then 2*v, and summing
     // it before differentiating keeps `grad`'s "the result must be a scalar" rule intact.
-    let f = <w: f32[4]> (): f32 => sum(vjp(g)(w).1(1.0).0)
+    let f = func <w: f32[4]> () => f32 { sum(vjp(g)(w).1(1.0).0) }
     let zero = grad(f)<vs>()
     println(zero[0])
     println(zero[1])

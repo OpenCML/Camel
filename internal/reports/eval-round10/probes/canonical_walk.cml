@@ -14,7 +14,7 @@ import { is_function } from types
 
 /// Reads the canonical order of every graph the entry function value reaches.
 export func walk::<F>(p: F): F! when is_function::<F>() sync {
-    let counts = graphs_of(p)->map<(g: Graph): int => len(nodes(g))>
+    let counts = graphs_of(p)->map<func (g: Graph) => int { len(nodes(g)) }>
     println(sum(counts))
     return p
 }

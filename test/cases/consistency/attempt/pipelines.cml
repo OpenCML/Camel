@@ -34,8 +34,8 @@ func main(): int sync {
     let b = attempt(risky)(0) !! 2
     println(a + b)
     let unused = attempt(risky)(0)
-    println(kind(attempt(() => add(risky(0), 1))()))
-    println(kind(attempt(() => add(risky(4), 1))()))
+    println(kind(attempt(func () { add(risky(0), 1) })()))
+    println(kind(attempt(func () { add(risky(4), 1) })()))
     println('end')
     return 0
 }

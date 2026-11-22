@@ -79,10 +79,10 @@ func report(r1: void!, r2: void!, r3: void!, r4: void!, r5: void!): string! {
 
 func main(): string! sync {
     let ex = reshape<[2, 2]>([1.0, -2.0, 0.5, 1.5] as f32[])
-    let r1 = export_model<out: 'identity.onnx'>((x: f32[...]): Run => identity(x, 1), ex)
-    let r2 = export_model<out: 'reordered.onnx'>((x: f32[...]): Run => reordered(x, 1), ex)
-    let r3 = export_model<out: 'declared.onnx'>((x: f32[...]): Run => declared(x, 1), ex)
-    let r4 = export_model<out: 'argument.onnx'>((x: f32[...]): (Run, int) => argument(x, 1), ex)
-    let r5 = export_model<out: 'walk.onnx'>((x: f32[...]): Run => walk(x, 0), ex)
+    let r1 = export_model<out: 'identity.onnx'>(func (x: f32[...]) => Run { identity(x, 1) }, ex)
+    let r2 = export_model<out: 'reordered.onnx'>(func (x: f32[...]) => Run { reordered(x, 1) }, ex)
+    let r3 = export_model<out: 'declared.onnx'>(func (x: f32[...]) => Run { declared(x, 1) }, ex)
+    let r4 = export_model<out: 'argument.onnx'>(func (x: f32[...]) => (Run, int) { argument(x, 1) }, ex)
+    let r5 = export_model<out: 'walk.onnx'>(func (x: f32[...]) => Run { walk(x, 0) }, ex)
     return report(r1, r2, r3, r4, r5)
 }

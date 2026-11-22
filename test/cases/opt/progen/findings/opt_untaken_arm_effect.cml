@@ -17,7 +17,7 @@ func f1(a2: string[]): int {
 
 func e8(): P sync {
     if false then sync {
-        let h11 = (p9: int): int => sync {
+        let h11 = func (p9: int) => int sync {
             println('L2 {} {} {} {}'->format<0, 0, 0, f1(if false then [''] else [''])>);
             return 0;
         };

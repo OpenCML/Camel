@@ -106,7 +106,7 @@ export func find::<T>(xs: T[]): T? {
 /// @example [3, 9, 2]->index_of<9> ?? -1    // 1
 with <x: T>
 export func index_of::<T>(xs: T[]): int? {
-    return xs->find_index<(y) => y == x>
+    return xs->find_index<func (y) { y == x }>
 }
 
 /// True when pred is true for at least one element; false for an empty array.
@@ -120,7 +120,7 @@ export func any::<T>(xs: T[]): bool {
 /// @example [3, 9, 2]->all<(x) => x > 4>    // false
 with <pred: (x: T) => bool>
 export func all::<T>(xs: T[]): bool {
-    return xs->find_index<(x) => !pred(x)> == null
+    return xs->find_index<func (x) { !pred(x) }> == null
 }
 
 /// The number of elements for which pred is true.
@@ -140,7 +140,7 @@ func some_elements::<T>(xs: T[...]): T[] {
 
 // The sum of the elements in f64, from +0 in order, never rounded into the element type.
 func sum64::<T>(es: T[]): float {
-    return es->reduce<(acc: float, x: T) => acc + float(x), 0.0>
+    return es->reduce<func (acc: float, x: T) { acc + float(x) }, 0.0>
 }
 
 /// The sum of the elements.
@@ -156,7 +156,7 @@ export func sum::<T>(xs: T[...]): T when is_numeric::<T>() {
     let es = flatten(xs)
     return match type T {
         case float | f32 | bf16 | f16 => T(sum64(es))
-        case _ => es->reduce<(acc, x) => acc + x, T(0)>
+        case _ => es->reduce<func (acc, x) { acc + x }, T(0)>
     }
 }
 
@@ -204,7 +204,7 @@ export func argmax::<T>(xs: T[...]): int when is_ordered::<T>() {
 /// @example [3, 1, 2, 1]->argmin    // 1
 export func argmin::<T>(xs: T[...]): int when is_ordered::<T>() {
     let es = some_elements(xs)
-    let nan_at = es->find_index<(x) => x != x>
+    let nan_at = es->find_index<func (x) { x != x }>
     return if nan_at != null then nan_at else loop best = 0 for i in 1..len(es) do if precedes(es[i], es[best]) then i else best
 }
 
@@ -366,7 +366,7 @@ export func flat_map::<T, U>(xs: T[]): U[] {
 /// @example zip_with<(a, b) => a + b>([1, 2], [10, 20])    // [11, 22]
 with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
-    return zip(xs, ys)->map<((a, b)) => f(a, b)>
+    return zip(xs, ys)->map<func ((a, b)) { f(a, b) }>
 }
 
 // ---- batching ----
@@ -391,7 +391,7 @@ export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
 /// @example vmap((x: float) => x * x)([0.0, 1.0, 2.0])    // [0.0, 1.0, 4.0]
 /// @example vmap((r: f32[3]) => r[2] * r[2])([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])    // [9.0, 36.0]
 export func vmap::<T, U>(f: (row: T) => U): (xs: RowsOf<T>) => U[] {
-    return (xs: RowsOf<T>): U[] => range(0, len(xs), 1)->map<(i: int): U => f(xs[i])>
+    return func (xs: RowsOf<T>) => U[] { range(0, len(xs), 1)->map<func (i: int) => U { f(xs[i]) }> }
 }
 
 // ---- native atoms and kernels ----

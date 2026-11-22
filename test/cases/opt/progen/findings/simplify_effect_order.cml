@@ -17,7 +17,7 @@ func w14(a15: int, var c16: int, a17: int): int sync {
 }
 
 func main(): int sync {
-    let n48 = [0]->reduce<(p46: int, p47: int): int => sync {
+    let n48 = [0]->reduce<func (p46: int, p47: int) => int sync {
         println('');
         return 0;
     }, 0>;

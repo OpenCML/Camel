@@ -38,5 +38,5 @@ export func net_total(total: float): float {
 /// Each element is read as f32, the rules themselves work in f64, and the answer is rounded once
 /// back into the element type, so the array answer is the same one the scalar entry point gives.
 export func net_totals(totals: f32[]): f32[] {
-    return totals->map<(total: f32): f32 => f32(net_total(float(total)))>
+    return totals->map<func (total: f32) => f32 { f32(net_total(float(total))) }>
 }

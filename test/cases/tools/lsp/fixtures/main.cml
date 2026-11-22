@@ -34,7 +34,7 @@ func main() sync {
     let fsum = add(1.5, 2.5)
     let pair: Pair = (1, 'one')
     let first = pair.0
-    let double = (v: int) => v * 2
+    let double = func (v: int) { v * 2 }
     let d = double(sum)
     println(format<i, s, d>('{} {} {}'))
     let t = now()

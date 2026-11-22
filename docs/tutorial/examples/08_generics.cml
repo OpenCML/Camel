@@ -19,6 +19,6 @@ func main(): int sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(swap((1, 2)), swap(('x', 'y')))
-    println(my_map([1, 2, 3], (x: int): string => string(x) + '!'))
+    println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
     return 0
 }

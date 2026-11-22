@@ -3,9 +3,9 @@
 
 func main(): int sync {
     let n = 300000
-    let values = (0..n)->map<(x: int): int => x * x % 1000 + 1>
-    let kept = values->filter<(x: int): bool => x % 3 == 0>
-    let total = kept->reduce<(acc: int, cur: int): int => acc + cur, 0>
+    let values = (0..n)->map<func (x: int) => int { x * x % 1000 + 1 }>
+    let kept = values->filter<func (x: int) => bool { x % 3 == 0 }>
+    let total = kept->reduce<func (acc: int, cur: int) => int { acc + cur }, 0>
     println(len(kept))
     println(total)
     return 0

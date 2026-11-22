@@ -1,5 +1,5 @@
 func f1(a2: string, a3: float[]): int {
-    return (loop s11 = (['']->reduce<(p6: int, p7: string): int => 10, 31>), c12 = ([1.0]->reduce<(p8: int, p9: float): int => 0, -3>) for q13 in [1.0] do (c12 - c12, 0)).0;
+    return (loop s11 = (['']->reduce<func (p6: int, p7: string) => int { 10 }, 31>), c12 = ([1.0]->reduce<func (p8: int, p9: float) => int { 0 }, -3>) for q13 in [1.0] do (c12 - c12, 0)).0;
 }
 
 func main(): int sync {

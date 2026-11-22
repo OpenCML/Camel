@@ -55,7 +55,7 @@ func variance_of(w: float[]): float {
     return if len(w) < 2 then fail<'InvalidArgument'>('a variance needs at least two elements')
         else {
             let m = sum(w) / float(len(w))
-            sum(w->map<(x) => (x - m) * (x - m)>) / float(len(w) - 1)
+            sum(w->map<func (x) { (x - m) * (x - m) }>) / float(len(w) - 1)
         }
 }
 

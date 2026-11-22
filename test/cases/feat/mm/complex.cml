@@ -40,10 +40,10 @@ func main(): int sync {
     let z0: c64 = 1 + 2i
     let z1: c64 = 3 + 4i
     let zs: c64[] = [z0, z1]
-    println(zs->map<(w: c64) => w * z>)
-    println(zs->map<(w: c64) => w + z0>)
-    println(zs->filter<(w: c64) => re(w) > 1.0>)
-    println(zs->reduce<(s: c64, w: c64) => s + w, c64(0)>)
+    println(zs->map<func (w: c64) { w * z }>)
+    println(zs->map<func (w: c64) { w + z0 }>)
+    println(zs->filter<func (w: c64) { re(w) > 1.0 }>)
+    println(zs->reduce<func (s: c64, w: c64) { s + w }, c64(0)>)
 
     // A compact aggregate with a complex field: the tuple's bytes hold both parts, and the
     // array of tuples is one run of them.

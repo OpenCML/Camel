@@ -3,11 +3,11 @@ func f1(a2: (a0: int, a1: string) => string, a3: float, a4: bool): string {
 }
 
 func r10(a11: int, a12: string, a13: int): string {
-    return f1((p16: int, p17: string): string => '', 2.5, true);
+    return f1(func (p16: int, p17: string) => string { '' }, 2.5, true);
 }
 
 func k21(a22: int): (a0: int) => int sync {
-    return (p24: int): int => sync {
+    return func (p24: int) => int sync {
         return 0;
     };
 }

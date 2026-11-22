@@ -93,7 +93,7 @@ func main(): int sync {
     save_npy(reshape<[1]>([r.8]), 'native_8.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
         match export_model<out: get_env('ONNX_OUT') ?? ''>(
-            (w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...], float[...], f32[...], float[...], f32[...], int) => step(w, x),
+            func (w: f32[...], x: f32[...]) => (float[...], f32[...], float[...], f32[...], float[...], f32[...], float[...], f32[...], int) { step(w, x) },
             (w, x)
         ) {
             case error e => sync {

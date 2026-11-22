@@ -59,52 +59,52 @@ export func values::<F>(p: F): F! sync {
 
 export func seq_order::<F>(p: F): F! sync {
     return p->seq<[[bump_one], [bump_ten]], strict: false>
-        -> (r: Run<F>) => sync { reported('seq_order', r) }
+        -> func (r: Run<F>) sync { reported('seq_order', r) }
 }
 
 export func seq_reverse::<F>(p: F): F! sync {
     return p->seq<[[bump_ten], [bump_one]], strict: false>
-        -> (r: Run<F>) => sync { reported('seq_reverse', r) }
+        -> func (r: Run<F>) sync { reported('seq_reverse', r) }
 }
 
 export func first_zero::<F>(p: F): F! sync {
     return p->first<[[int_add_zero], [bump_one]], strict: false>
-        -> (r: Run<F>) => sync { reported('first_zero', r) }
+        -> func (r: Run<F>) sync { reported('first_zero', r) }
 }
 
 export func first_bump::<F>(p: F): F! sync {
     return p->first<[[bump_one], [int_add_zero]], strict: false>
-        -> (r: Run<F>) => sync { reported('first_bump', r) }
+        -> func (r: Run<F>) sync { reported('first_bump', r) }
 }
 
 export func repeat_five::<F>(p: F): F! sync {
     return p->repeat<[step], 5, false>
-        -> (r: Run<F>) => sync { reported('repeat_five', r) }
+        -> func (r: Run<F>) sync { reported('repeat_five', r) }
 }
 
 export func repeat_two::<F>(p: F): F! sync {
     return p->repeat<[step], 2, false>
-        -> (r: Run<F>) => sync { reported('repeat_two', r) }
+        -> func (r: Run<F>) sync { reported('repeat_two', r) }
 }
 
 export func alternate_three::<F>(p: F): F! sync {
     return p->alternate<[step], [step_ten], 3, false>
-        -> (r: Run<F>) => sync { reported('alternate_three', r) }
+        -> func (r: Run<F>) sync { reported('alternate_three', r) }
 }
 
 export func until_now::<F>(p: F): F! sync {
     return p->until<[step], always, 10, false>
-        -> (r: Run<F>) => sync { reported('until_now', r) }
+        -> func (r: Run<F>) sync { reported('until_now', r) }
 }
 
 export func until_budget::<F>(p: F): F! sync {
     return p->until<[step], never, 2, false>
-        -> (r: Run<F>) => sync { reported('until_budget', r) }
+        -> func (r: Run<F>) sync { reported('until_budget', r) }
 }
 
 export func nothing::<F>(p: F): F! sync {
     return p->seq<[[int_mul_zero]], strict: false>
-        -> (r: Run<F>) => sync { reported('nothing', r) }
+        -> func (r: Run<F>) sync { reported('nothing', r) }
 }
 
 export func refuse::<F>(p: F): F! {

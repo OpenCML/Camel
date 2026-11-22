@@ -197,7 +197,7 @@ arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' data
                      ']'
 structData         : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
 tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
-funcData           : angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+funcData           : 'func' angledParams? parentParams ('=>' typeExpr)? blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr

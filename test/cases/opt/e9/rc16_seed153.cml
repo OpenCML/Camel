@@ -3,6 +3,6 @@ func f1(a2: (a0: bool) => int, a3: string): int {
 }
 
 func main(): int sync {
-    let o44: string? = '<{}|{}|'->format<f1((p45: bool): int => 0, ''), 0>;
+    let o44: string? = '<{}|{}|'->format<f1(func (p45: bool) => int { 0 }, ''), 0>;
     return 0;
 }

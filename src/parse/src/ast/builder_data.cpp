@@ -205,13 +205,13 @@ bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {
     return true;
 }
 
-/// Shown when the text taken as a format specification contains `=>`: the ':' of a lambda's
-/// return type at the top level of an interpolation was read as the start of the specification.
+/// Shown when the text taken as a format specification contains `=>`: at the top level of an
+/// interpolation a ':' starts the specification, so a lambda written there is read as its text.
 /// The same sentence is used where the format check fails (gir/builder_operators.cpp).
 constexpr std::string_view kLambdaNeedsParenthesesHint =
     "a lambda with a return type needs its own parentheses at the top level of an "
-    "interpolation: the ':' of the return type is read as the start of the format "
-    "specification. Write it as ${((x: int): int => x)}";
+    "interpolation: the ':' of the format specification is read first. Write it as "
+    "${(func (x: int) => int { x })}";
 
 /// The end (just past the closing `}`) of a valid `\u{H…}` escape that starts at `i`, or npos.
 /// Valid means what decodeEscapes decodes: 1 to 6 hex digits and a Unicode scalar value.

@@ -33,7 +33,7 @@ import { tree_unzip } from tree
 /// @pure
 /// @example constant(0.1)(3)    // 0.1
 export func constant(rate: float): (step: int) => float {
-    return (step: int) => rate
+    return func (step: int) { rate }
 }
 
 /// A rate that falls from `peak` to `floor` in a straight line: `peak * (1 - step / total)` below
@@ -41,7 +41,7 @@ export func constant(rate: float): (step: int) => float {
 /// @pure
 /// @example linear_decay(0.1, 4, 0.0)(2)    // 0.05
 export func linear_decay(peak: float, total: int, floor: float): (step: int) => float {
-    return (step: int) => linear_rate(peak, total, floor, step)
+    return func (step: int) { linear_rate(peak, total, floor, step) }
 }
 
 // The rate of one step of the ramp above, as a function of the step alone.
@@ -54,7 +54,7 @@ func linear_rate(peak: float, total: int, floor: float, step: int): float {
 /// @pure
 /// @example cosine_decay(0.1, 4, 0.0)(1)    // 0.08535533905932738
 export func cosine_decay(peak: float, total: int, floor: float): (step: int) => float {
-    return (step: int) => cosine_rate(peak, total, floor, step)
+    return func (step: int) { cosine_rate(peak, total, floor, step) }
 }
 
 // The rate of one step of the cosine above. The double nearest pi is written out here: the module

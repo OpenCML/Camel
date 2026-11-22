@@ -80,8 +80,8 @@ const DECLARATIONS = [
 ]
 const BODY = [
     '    if first > 0 then { sync { first = 3 } } else { sync { second = 4 } }',
-    '    let sum = (): int => { return first + second }',
-    '    let diff = (): int => { return first - second }',
+    '    let sum = func () => int { return first + second }',
+    '    let diff = func () => int { return first - second }',
     '    println(sum(), diff(), first, second)',
     '    return 0',
 ]

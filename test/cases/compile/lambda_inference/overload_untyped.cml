@@ -10,6 +10,6 @@ func over(f: (x: int) => int, v: int): int { return f(v) + 1 }
 func over(f: (x: float) => float, v: float): float { return f(v) + 0.5 }
 
 func main(): int sync {
-    println(over((x) => x * 2, 20))
+    println(over(func (x) { x * 2 }, 20))
     return 0
 }

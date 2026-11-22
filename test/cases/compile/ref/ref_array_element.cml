@@ -39,7 +39,7 @@ func two_names(): int {
 func carried(): () => int {
     let xs = [state::ref(0)]
     state::set(xs[0], 2)
-    return (): int => state::get(xs[0])
+    return func () => int { state::get(xs[0]) }
 }
 
 func main(): int sync {

@@ -6,6 +6,6 @@ func main(): int sync {
     let n31 = int((get_env('PROGEN_I0') ?? ''));
     let n54 = if false then sync {
         return [''];
-    } else (loop s51 = ['ab', 'cd', 'pq', 'a'], c52 = 0 while false do (['']->filter<(p53: string): bool => false>, 0)).0;
+    } else (loop s51 = ['ab', 'cd', 'pq', 'a'], c52 = 0 while false do (['']->filter<func (p53: string) => bool { false }>, 0)).0;
     return 0;
 }

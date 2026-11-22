@@ -7,7 +7,7 @@ func r10(a11: int, a12: string, a13: int): string {
 }
 
 func k21(a22: int): (a0: int) => int sync {
-    return (p24: int): int => sync {
+    return func (p24: int) => int sync {
         return 0;
     };
 }

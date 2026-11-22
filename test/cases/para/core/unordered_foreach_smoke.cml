@@ -11,7 +11,7 @@ func main(): int sync {
     let base_seed = 20260504
     let jobs = 0..workers
 
-    unordered_foreach<(i: int) => sync {
+    unordered_foreach<func (i: int) sync {
         let hits = pi_hits(samples_per_worker, base_seed + i * 7919)
         if hits < 0 then {
             println('unexpected negative hits')

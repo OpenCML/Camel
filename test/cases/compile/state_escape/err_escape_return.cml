@@ -13,7 +13,7 @@
 
 func make(): (x: int) => int {
     var acc = 0
-    return (x: int): int => sync {
+    return func (x: int) => int sync {
         acc = acc + x
         acc
     }

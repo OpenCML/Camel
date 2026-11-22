@@ -12,7 +12,7 @@ func main(): int sync {
     let zs = xs->append<5>
     println(xs, ys, zs)
     println(concat(xs, [7, 8]), xs)
-    println([1, 2, 3]->map<(x: int): int => x * 10>, xs)
+    println([1, 2, 3]->map<func (x: int) => int { x * 10 }>, xs)
     let unsorted = [3, 1, 2]
     println(sort(unsorted), unsorted->sort, unsorted)
 

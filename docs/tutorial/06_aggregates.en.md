@@ -141,7 +141,7 @@ The answer is [`examples/06_exercise.cml`](examples/06_exercise.cml):
 // Run: camel docs/tutorial/examples/06_exercise.cml
 
 func tally(words: string[]): Map<string, int> {
-    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+    return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
 func main(): int sync {

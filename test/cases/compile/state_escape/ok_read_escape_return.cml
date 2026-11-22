@@ -22,7 +22,7 @@
 
 func make(base: int): (x: int) => int {
     var acc = base * 3
-    return (x: int): int => acc + x
+    return func (x: int) => int { acc + x }
 }
 
 func main(): int sync {

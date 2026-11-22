@@ -31,7 +31,7 @@ func main(): int sync {
     println(kind(attempt(depth)(40)))
     println(kind(attempt(depth)(1000000)))
     println(kind(attempt(depth)(40)))
-    println(kind(attempt(() => quot(1, 2) + depth(3))()))
+    println(kind(attempt(func () { quot(1, 2) + depth(3) })()))
     println(warm(200, 0))
     println('end')
     return 0

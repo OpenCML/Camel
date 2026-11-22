@@ -12,7 +12,7 @@ func words(n: int): string.. {
 }
 
 func step(n: int): () => (string, string..)? {
-    return () => if n > 0 then (string(n), step(n - 1)) else null
+    return func () { if n > 0 then (string(n), step(n - 1)) else null }
 }
 
 func length(s: string..): int {

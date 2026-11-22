@@ -50,12 +50,12 @@ func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
 
 // The `float` constants of one graph.
 func floats_in(g: Graph): Node[] {
-    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'float')>
+    return nodes(g)->filter<func (n: Node) => bool { constant_of(n, 'float') }>
 }
 
 // The constants of type `Linear` in one graph.
 func models_in(g: Graph): Node[] {
-    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'Linear')>
+    return nodes(g)->filter<func (n: Node) => bool { constant_of(n, 'Linear') }>
 }
 
 // Whether one graph holds both of the constants the rewrite pairs, each exactly once.
@@ -76,7 +76,7 @@ func one_node(found: Node[]): Node? {
 // Erases the nodes given and commits: the changed function is the answer.
 func erased::<F>(p: F, hits: Node[]): F! sync {
     let t = open(p)
-    hits->foreach<(n: Node): void => erase(t, n)>
+    hits->foreach<func (n: Node) => void { erase(t, n) }>
     return commit(t)
 }
 
@@ -89,13 +89,13 @@ func swapped::<F>(p: F, old: Node, new: Node): F! sync {
 
 /// Lists every node the program is made of: the operator each one runs, and the type it carries.
 export func list::<F>(p: F): F! sync {
-    all_nodes(p)->foreach<(n: Node) => println(looks(n))>
+    all_nodes(p)->foreach<func (n: Node) { println(looks(n)) }>
     return p
 }
 
 /// Drops every printing call of the program: a rewrite that loses an effect.
 export func drop_print::<F>(p: F): F! sync {
-    let prints = all_nodes(p)->filter<(n: Node): bool => is_print(n)>
+    let prints = all_nodes(p)->filter<func (n: Node) => bool { is_print(n) }>
     return if len(prints) == 0 then p else erased(p, prints)
 }
 

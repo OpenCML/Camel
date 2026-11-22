@@ -20,11 +20,11 @@ func main(): int sync {
     let ps = [p, q, r]
     println(norm(p), norm(q), norm(s as Point))
     println(r.x, r.y, swap(p))
-    println(ps->map<(p: Point): int => p.x - p.y>)
+    println(ps->map<func (p: Point) => int { p.x - p.y }>)
     println(ps, w)
     // The array is built with `map`, not with a `foreach` whose body appends to a captured `var`:
     // a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
-    let acc = (0..3)->map<(i: int): Point => { x: i, y: 10 - i }>
+    let acc = (0..3)->map<func (i: int) => Point { x: i, y: 10 - i }>
     println(acc)
     return 0
 }

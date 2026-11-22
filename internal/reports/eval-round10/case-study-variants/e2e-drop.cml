@@ -10,7 +10,7 @@ func run(n: int, base: int): int sync {
     let twice = base * 2
     let thrice = base * 3
     let dead = base * 7
-    let f = (x: int): int => sync {
+    let f = func (x: int) => int sync {
         let weight = base + 1
         let value = weight + x
         '{} {} -> {}'->format<label, x, weight + x>->println

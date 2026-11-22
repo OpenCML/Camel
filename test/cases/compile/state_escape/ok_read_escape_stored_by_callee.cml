@@ -23,7 +23,7 @@ func keep(f: (x: int) => int): ((x: int) => int, int) {
 func make(base: int): int sync {
     var acc = 0
     acc = base * 3
-    let add = (x: int): int => acc + x
+    let add = func (x: int) => int { acc + x }
     let (kept, n) = keep(add)
     return kept(n)
 }

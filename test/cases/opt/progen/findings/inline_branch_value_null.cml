@@ -8,7 +8,7 @@
  */
 
 func f1(a2: int, a3: float): bool {
-    return ([0]->filter<(p5: int): bool => false>)->contains<0 % 5>;
+    return ([0]->filter<func (p5: int) => bool { false }>)->contains<0 % 5>;
 }
 
 func main(): int sync {

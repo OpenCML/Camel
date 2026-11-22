@@ -14,7 +14,7 @@
 var c: int = 0
 
 func probe(x: int): int sync {
-    let h = (): int => sync {
+    let h = func () => int sync {
         println(c)
         return c
     }

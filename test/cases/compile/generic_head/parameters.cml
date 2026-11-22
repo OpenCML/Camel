@@ -25,7 +25,7 @@ func main(): int sync {
     let p = pair(1, 2)
     println(p.0)
     println(p.1)
-    println(turn::<int, int><(x: int) => x + 1>(41))
-    println(feed((x: int) => x * 3, 7))
+    println(turn::<int, int><func (x: int) { x + 1 }>(41))
+    println(feed(func (x: int) { x * 3 }, 7))
     return 0
 }

@@ -63,12 +63,12 @@ func opText(n: Node): string {
 }
 
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
 func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
+    return len(nodesOf(p, function)->filter<func (n: Node) => bool { opText(n) == operator }>)
 }
 
 /// Prints the add and product counts of the functions of the target, so the tests can see what a

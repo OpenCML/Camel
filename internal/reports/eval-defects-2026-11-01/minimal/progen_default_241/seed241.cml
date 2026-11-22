@@ -7,7 +7,7 @@ func e21(a24: bool, var c23: string, var c22: int): float sync {
         c22 *= 3;
         return 3;
     };
-    let h36 = (p31: int): int => sync {
+    let h36 = func (p31: int) => int sync {
         let n32 = g26('');
         let n35 = r14(if false then c22 else c22, 'yz');
         return 0;

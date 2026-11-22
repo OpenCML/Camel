@@ -31,5 +31,5 @@ func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// per operand, so the law's ports are the operands' own types and the check has an operand type to
 /// compare the answer with.
 export rule add_tensor_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
-    add(x, w) => (ct: T[...]) => (ct as float[3], ct as float[3])
+    add(x, w) => func (ct: T[...]) { (ct as float[3], ct as float[3]) }
 }

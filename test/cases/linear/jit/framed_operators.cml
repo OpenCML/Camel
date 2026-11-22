@@ -79,7 +79,7 @@ func twice(f: (x: int) => int, x: int, n: int): int {
 }
 
 func scaled_total(xs: int[], k: int): int {
-    return xs->map<(x: int): int => x * k>->reduce<(a: int, b: int): int => a + b, 0>
+    return xs->map<func (x: int) => int { x * k }>->reduce<func (a: int, b: int) => int { a + b }, 0>
 }
 
 func totals(xs: int[], k: int, acc: int): int {
@@ -98,7 +98,7 @@ func main(): int sync {
     'swap_sum {}'->format<swap_sum((0, 0), 101)>->println
     'parity {} {}'->format<is_even(100000), is_odd(100000)>->println
     'fib {}'->format<fib(20)>->println
-    'twice {}'->format<twice((x: int): int => x * 3 + 1, 1, 50)>->println
+    'twice {}'->format<twice(func (x: int) => int { x * 3 + 1 }, 1, 50)>->println
     'totals {}'->format<totals(xs, 30, 0)>->println
     return 0
 }

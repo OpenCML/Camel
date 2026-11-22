@@ -14,7 +14,7 @@ func e10(): (float, bool, int) sync {
 }
 
 func main(): int sync {
-    let h35 = (p33: int): int => sync {
+    let h35 = func (p33: int) => int sync {
         let n34 = e10();
         return 7;
     };

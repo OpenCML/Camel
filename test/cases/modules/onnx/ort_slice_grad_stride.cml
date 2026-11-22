@@ -46,8 +46,8 @@ func main(): string! sync {
     println(r.1)
     println(r.2)
     return match export_model<out: get_env('ONNX_OUT') ?? ''>(
-        (w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[...], f32[...], f32[...]) => step(
-            w, x, a, b),
+        func (w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]) => (f32[...], f32[...], f32[...]) { step(
+            w, x, a, b) },
         (w, x, a, b)) {
         case error e => { return e }
         case v => 'exported'

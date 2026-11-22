@@ -8,6 +8,6 @@
 
 func main(): int sync {
     let xs = [1, 2, 3]
-    println(xs->map<(x) => x * x>)
+    println(xs->map<func (x) { x * x }>)
     return 0
 }

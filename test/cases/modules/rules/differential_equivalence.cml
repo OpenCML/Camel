@@ -219,7 +219,7 @@ func check_scalar::<T>(label: string, f: (x: T) => T, values: T[]): string[] {
         case error e => [`error ${label} ${e.kind}`]
         case r => concat(
             [`fired ${label} ${r.rewrites}`],
-            values->map<(v: T): string => pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`)>
+            values->map<func (v: T) => string { pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`) }>
         )
     }
 }
@@ -234,7 +234,7 @@ func check_array::<E>(
         case error e => [`error ${label} ${e.kind}`]
         case r => concat(
             [`fired ${label} ${r.rewrites}`],
-            values->map<(v: E[]): string => pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`)>
+            values->map<func (v: E[]) => string { pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`) }>
         )
     }
 }
@@ -255,7 +255,7 @@ func check_rearranging_three::<T>(
             case error e => [`error ${label} ${e.kind}`]
             case g => concat(
                 [`rearranged ${label} ${nodes_of(f)} ${nodes_of(g)}`],
-                values->map<(v: (T, T, T)): string => pair_line(label, `${v.0} ${v.1} ${v.2}`, `${f(v.0, v.1, v.2)}`, `${g(v.0, v.1, v.2)}`)>
+                values->map<func (v: (T, T, T)) => string { pair_line(label, `${v.0} ${v.1} ${v.2}`, `${f(v.0, v.1, v.2)}`, `${g(v.0, v.1, v.2)}`) }>
             )
         }
     }
@@ -528,7 +528,7 @@ func report(): string[] {
 
 func main(): int sync {
     let out = report()
-    out->foreach<(line: string): void => {
+    out->foreach<func (line: string) => void {
         println(line)
     }>
     return 0

@@ -28,7 +28,7 @@ fact sign: int match v {
 fact mul_by_one(a: Node, b: Node): bool match (a, b) {
     case x * y   => sign(y) == 1
     case _       => false
-} join (lhs: bool, rhs: bool) => lhs || rhs
+} join func (lhs: bool, rhs: bool) { lhs || rhs }
 
 rule mul_one_by_parts(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 
@@ -40,12 +40,12 @@ func opText(n: Node): string {
 }
 
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
 func mulsOf::<F>(p: F, function: string): int spelling {
-    let muls = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/mul_l'>
+    let muls = nodesOf(p, function)->filter<func (n: Node) => bool { opText(n) == ':op/mul_l' }>
     return loop total = 0 for n in muls do total + 1
 }
 

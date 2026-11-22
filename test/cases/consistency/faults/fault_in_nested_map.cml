@@ -3,7 +3,7 @@
  */
 
 func row(i: int): int[] {
-    return (0..4)->map<(j: int): int => 100 / (i * 4 + j - 9)>
+    return (0..4)->map<func (j: int) => int { 100 / (i * 4 + j - 9) }>
 }
 
 func main(): int sync {

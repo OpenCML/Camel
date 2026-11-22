@@ -20,9 +20,9 @@ func g(x: float): float {
 func main(): int sync {
     let xs: float[4] = [1.0, 2.0, 3.0, 0.5]
     println(vmap(f)(xs))
-    println(xs->map<(x: float) => f(x)>)
+    println(xs->map<func (x: float) { f(x) }>)
     let ys: float[3] = [0.25, -2.0, 4.0]
     println(vmap(g)(ys))
-    println(ys->map<(x: float) => g(x)>)
+    println(ys->map<func (x: float) { g(x) }>)
     return 0
 }

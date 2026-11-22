@@ -10,7 +10,7 @@ func call0(f: () => float): float {
 
 with <x: float>
 func loss(): float {
-    let g = if x > 0.0 then (): float => x * x else (): float => x
+    let g = if x > 0.0 then func () => float { x * x } else func () => float { x }
     return call0(g) + x
 }
 

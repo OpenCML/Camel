@@ -235,8 +235,8 @@ func f(): int {
   import { trim, split, to_upper } from str
   import { sort_by, take } from array
 
-  let words = '  pear, fig ,apple '->trim->split<','>->map<(w) => trim(w)>
-  let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
+  let words = '  pear, fig ,apple '->trim->split<','>->map<func (w) { trim(w) }>
+  let shortest = words->sort_by<func (w: string) { len(w) }>->take<2>     // ['fig', 'pear']
   ```
 
 - 可能没有结果的函数返回 `T?`（`find`、`index_of` 找不到，`min`、`max`、`median` 遇到空数组），用 `??` 处理；只有声明为可能失败的操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。

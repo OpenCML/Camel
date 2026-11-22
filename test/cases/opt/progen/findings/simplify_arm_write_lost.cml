@@ -9,7 +9,7 @@
 
 func main(): int sync {
     var v51 = '';
-    if [false]->reduce<(p63: bool, p64: bool): bool => false, false> then sync {
+    if [false]->reduce<func (p63: bool, p64: bool) => bool { false }, false> then sync {
         null;
     } else sync {
         let n71 = ('r:{}>{} '->format<'' + '', -0.5>, 0);

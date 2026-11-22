@@ -24,7 +24,7 @@ func report(j: Json): int sync {
     println(j->get<'tags'>->get<5>->as_string ?? 'out of range', j->get<'tags'>->get<2>->as_string ?? 'not a string')
     println(j->get<'ratio'>->as_float ?? 0.0, j->get<'ratio'>->as_int ?? 0, j->get<'on'>->as_bool ?? false)
     let tags = j->get<'tags'>->as_array ?? []
-    println(len(tags), tags->map<(t: Json): string => kind(t)>)
+    println(len(tags), tags->map<func (t: Json) => string { kind(t) }>)
     let members = j->as_object ?? ([] as Map<string, Json>)
     println(keys(members))
     let server = decode_as::<{ host: string, port: int }>(j->get<'server'> ?? j) !! { host: '-', port: -1 }
