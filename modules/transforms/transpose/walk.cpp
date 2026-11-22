@@ -1570,13 +1570,13 @@ bool buildTransposeMember(
                     },
                     armCotangentType,
                     nullptr);
-                if (armChoice.rule.empty()) {
+                if (armChoice.rule.name.empty()) {
                     armsOk = false;
                     refuse(TransposeRefusalCause::Rule);
                     os << " uri=" << body->uri() << " reason=" << armChoice.why << '\n';
                     return {};
                 }
-                chosenRule = armChoice.rule;
+                chosenRule = armChoice.rule.name;
                 noteRule(chosenRule);
                 for (size_t i = 0; i < inputs.size(); ++i) {
                     if (isConstant(inputs[i])) {
@@ -2225,7 +2225,7 @@ bool buildTransposeMember(
                     const auto rule = camel::core::transposeRuleOf(std::string(uri));
                     const char *reason =
                         !rule.has_value() ? "unbound"
-                        : rule->status == camel::parse::ast::RuleLookup::NoSuchFamily
+                        : rule->status == camel::core::RuleLookup::NoSuchFamily
                             ? "no-such-family"
                             : "no-rule";
                     refuse(TransposeRefusalCause::Rule);
@@ -2389,7 +2389,7 @@ bool buildTransposeMember(
                         }
                     }
                 }
-                if (choice.rule.empty()) {
+                if (choice.rule.name.empty()) {
                     // The key has a law and the law was written for another shape: not `Rule`. That
                     // sentence ("the rule table has no rule for a step of this body") describes a
                     // lookup that found nothing, and this lookup found a law that says this step is
@@ -2401,7 +2401,7 @@ bool buildTransposeMember(
                     // reader needs -- which node, which operator, and what the two type lists are
                     // -- go into the record the sentence is rendered from, and the log says them
                     // here so the reading above can be grepped to the same node.
-                    if (!choice.rule.empty()) {
+                    if (!choice.rule.name.empty()) {
                         // The name is the one `chooseTransposedRule` synthesized for a law no
                         // instance of which could be made: the expansion reports `rule-ranks` from
                         // the real instance count, so the walk leaves this step to it.
@@ -2428,8 +2428,8 @@ bool buildTransposeMember(
                         return false;
                     }
                 }
-                noteRule(choice.rule);
-                const std::string &chosenRule = choice.rule;
+                noteRule(choice.rule.name);
+                const std::string &chosenRule = choice.rule.name;
                 // The choice refused nothing; this asks the same question at the types the
                 // expansion will really build the right side from -- the choice decides *which*
                 // law answers, at the instance it is chosen at, and this says whether the law it

@@ -24,8 +24,9 @@
 //                        `src/core/forward.cpp#ruleKeyOf` reads the key off the operator --
 //                        `:op/add_d` is `+` at two operands, `tensor:pick_at` is the call
 //                        `pick_at` at two, a conversion is its destination's spelling at one --
-//                        and `src/parse/ast/rule_head.cpp#lookupRules` answers the laws filed
-//                        under it.
+//                        and `src/core/rule_index.cpp#lookupRules` answers the laws filed
+//                        under it. (Until 0.4 it answered from the syntax tree; the answer is
+//                        the same one, read from `RuleObject` instead of from `RuleHead`.)
 //
 // Nothing compared the two, and the shape of the failure that produced is a half-account: a law
 // the library answers and the engine refuses. `tensor:pick_at` was one -- the library filed

@@ -21,7 +21,6 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/extent.h"
-#include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
@@ -56,10 +55,6 @@ using camel::transforms::rules::ruleElementTypeOf;
 
 namespace {
 
-/// The ruleset this transform reads. A family is named by the module that declares it
-/// (`stdlib/rulesets/vmap.cml`), which is the name `lookupRule` and `rhsCalleeOf` are keyed by.
-constexpr const char *kFamily = "rulesets.vmap";
-
 /// `RowsOf<T>`: the value with one dimension of unknown length in front of it. The same shape
 /// `stdlib/types.cml` declares and `src/core/type/typecall.cpp` computes -- one element in front of
 /// what the type states, so `T` with no dimension is one row of the batch.
@@ -86,13 +81,13 @@ Type *rowsOfType(Type *type) {
 /// (`camel/core/forward.h#ruleKeyOf`): `tensor:matmul` is written `matmul(x, w)` because that is
 /// the operator's name, and the two operators that cannot be spelled that way are named, with their
 /// reasons, in `ruleKeyExceptions()`. Nothing is registered per operator.
-std::optional<camel::parse::ast::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
+std::optional<camel::core::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
     const auto answer = camel::core::vmapRuleOf(uri);
     if (!answer.has_value()) {
         why = "the operator's own name says no key (no rule is written for a call of it)";
         return std::nullopt;
     }
-    if (answer->status == camel::parse::ast::RuleLookup::NoRuleForPrimitive) {
+    if (answer->status == camel::core::RuleLookup::NoRuleForPrimitive) {
         why = "the family holds no rule under that key";
     }
     return answer;
@@ -120,10 +115,10 @@ uint64_t ruleIdOf(camel::core::context::Context &context, const std::string &nam
 /// `float[]` port. The relation is the call's (`Type::assignableFrom`, the port takes the operand),
 /// and among the laws that take them the narrowest wins (`narrowerPortsThan`); two that both take
 /// them with neither narrower are refused by name rather than picked by filing order.
-std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
+std::optional<camel::core::RuleMatch> chooseRuleOfUri(
     camel::core::context::Context &context, const camel::runtime::GCGraph &function,
     gc_node_ref_t ref, const std::string &uri, std::string &why) {
-    const std::vector<camel::parse::ast::RuleMatch> candidates = camel::core::vmapRulesOf(uri);
+    const std::vector<camel::core::RuleMatch> candidates = camel::core::vmapRulesOf(uri);
     if (candidates.empty()) {
         // One law, or no key, or no law: `ruleOfUri` says which, in the two reasons it already
         // spells.
@@ -163,7 +158,7 @@ std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
         why = choice.why;
         return std::nullopt;
     }
-    return camel::parse::ast::RuleMatch{camel::parse::ast::RuleLookup::Found, choice.rule};
+    return camel::core::RuleMatch{camel::core::RuleLookup::Found, choice.rule};
 }
 
 // The lifting of a constant is a lambda beside the draft it writes through, not a free function:
@@ -400,7 +395,7 @@ VmapGraph buildVmapGraph(
         const auto batchThroughRule =
             [&](gc_node_ref_t ref,
                 const std::string &uri,
-                const camel::parse::ast::RuleMatch &match) -> gc_node_ref_t {
+                const camel::core::RuleMatch &match) -> gc_node_ref_t {
             // The instance is made at the element type the primitive works on, because that is the
             // type the rule is generic in -- read from an operand, not from the node, whose type is
             // what the primitive answers.
@@ -417,7 +412,7 @@ VmapGraph buildVmapGraph(
             if (!seenElement) {
                 usedElements.push_back(element);
             }
-            const uint64_t ruleId = ruleIdOf(*context, match.rule);
+            const uint64_t ruleId = ruleIdOf(*context, match.rule.name);
             if (ruleId == 0) {
                 refused.refusedOrigin =
                     static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
@@ -444,7 +439,7 @@ VmapGraph buildVmapGraph(
             std::string calleeWhy;
             const rt::GCGraph *callee = calleeGraphOf(
                 entry->instances[at],
-                camel::parse::ast::rhsCalleeOf(kFamily, match.rule),
+                match.rule.rhsCallee,
                 calleeWhy);
             if (callee == nullptr || entry->instances[at].program == nullptr) {
                 refused.refusedOrigin =
@@ -626,14 +621,14 @@ VmapGraph buildVmapGraph(
                 const std::string uri(body->uri());
                 ++refused.asked;
                 const auto match = chooseRuleOfUri(*context, *function, ref, uri, why);
-                if (!match.has_value() || match->status != camel::parse::ast::RuleLookup::Found) {
+                if (!match.has_value() || match->status != camel::core::RuleLookup::Found) {
                     refused.refusedOrigin =
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri = uri;
                     refused.refusedWhy =
                         !match.has_value()
                             ? why
-                            : (match->status == camel::parse::ast::RuleLookup::NoSuchFamily
+                            : (match->status == camel::core::RuleLookup::NoSuchFamily
                                    ? "no ruleset module of that name is loaded"
                                    : "the ruleset holds no rule for this "
                                      "operator and operand count");
@@ -641,7 +636,7 @@ VmapGraph buildVmapGraph(
                     break;
                 }
                 ++refused.found;
-                usedRules.push_back(match->rule);
+                usedRules.push_back(match->rule.name);
                 copyOf[ref] = batchThroughRule(ref, uri, *match);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     complete = false;
@@ -669,6 +664,11 @@ VmapGraph buildVmapGraph(
                 // callee the family has no rule for stops here, with the ask counted (`asked=1
                 // found=0`), because "there is no rule for this call" is an answer and "nothing was
                 // asked" is not (design principles 9.9).
+                //
+                // A call has no operator URI to read a key off, so it is asked by its head --
+                // `camel/core/forward.h#vmapRuleByHead`, which is this family's question and names
+                // the family itself. The answer is the rule object, whose `rhsCallee` is the name
+                // the batched body calls: nothing here looks a rule set up by name.
                 const rt::GCGraph *callee = program->calleeOf(*function, ref);
                 const std::string name =
                     callee != nullptr ? leafNameOf(callee->name()) : std::string();
@@ -684,13 +684,13 @@ VmapGraph buildVmapGraph(
                     break;
                 }
                 const auto match =
-                    camel::parse::ast::lookupRule(kFamily, name, static_cast<uint32_t>(operands));
-                if (match.status != camel::parse::ast::RuleLookup::Found) {
+                    camel::core::vmapRuleByHead(name, static_cast<uint32_t>(operands));
+                if (match.status != camel::core::RuleLookup::Found) {
                     refused.refusedOrigin =
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedConstruct = "a call";
                     refused.refusedUri       = name;
-                    refused.refusedWhy = match.status == camel::parse::ast::RuleLookup::NoSuchFamily
+                    refused.refusedWhy = match.status == camel::core::RuleLookup::NoSuchFamily
                                              ? "no ruleset module of that name is loaded"
                                              : "the ruleset holds no rule for a call to `" + name +
                                                    "` with " + std::to_string(operands) +
@@ -699,7 +699,7 @@ VmapGraph buildVmapGraph(
                     break;
                 }
                 ++refused.found;
-                usedRules.push_back(match.rule);
+                usedRules.push_back(match.rule.name);
                 copyOf[ref] = batchThroughRule(ref, name, match);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     refused.refusedConstruct = "a call";

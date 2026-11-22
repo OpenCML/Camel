@@ -6,7 +6,7 @@
  * rule condition.
  *
  * A fact declaration is compiled by the front end to functions and one call of the operator
- * `__fact` (see src/parse/ast/builder.cpp, visitFactDecl):
+ * `__fact` (the front end's `visitFactDecl`):
  *
  *   __fact('range', 'int', initial, join, meet, widen, narrow, 0, n, case0, case0_fact, 1, ...)
  *

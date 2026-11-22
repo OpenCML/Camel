@@ -4,7 +4,7 @@
 #pragma once
 
 #include "camel/compile/gir/rule_templates.h"
-#include "camel/parse/ast/rule_head.h"
+#include "camel/core/rule_index.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
@@ -105,8 +105,10 @@ enum class RuleRefusal {
 struct RuleChoice {
     /// The law that answers, null when none does.
     const camel::compile::gir::GenericRuleInstance *instance = nullptr;
-    /// The law's name, as the index and the log write it.
-    std::string rule;
+    /// The law itself, as the rule set filed it: what the log writes as its name, and what a caller
+    /// that has to answer a later question about the same law (its right side's callee, the names
+    /// its left side binds) reads instead of asking the index by name a second time.
+    camel::core::RuleObject rule;
     /// Why nothing answered: the most specific refusal a candidate gave.
     std::string why;
     /// Which of the three answers this is. A caller that has a word of its own for a shape refusal
@@ -157,7 +159,7 @@ struct RuleChoiceWords {
 /// `reshape<[8, 2, 8]>` came out `[2, 2]`.
 RuleChoice chooseRuleAmong(
     camel::core::context::Context &context,
-    const std::vector<camel::parse::ast::RuleMatch> &candidates,
+    const std::vector<camel::core::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
     const RuleChoiceWords &words = {}, const std::vector<bool> *answered = nullptr,
