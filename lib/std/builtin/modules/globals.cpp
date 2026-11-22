@@ -2102,6 +2102,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     extentOfResolver(),
                 },
             }),
+        // `copy::<T>(x: T): T`, a second name of a mutable value (plan 2.3, step 1). The group is
+        // empty on purpose and its rule is the declaration of `lib/std/prelude.cml`, the way `len`
+        // and `zip` are declared there: the signature is the declaration's own, one overload for
+        // every type, and the operator's kernel is `operators/copy.cpp`. The other three kinds the
+        // same plan turns into operators -- cast, fill, access -- take a compile-time parameter
+        // (a target type, a member position, a fill's kind and field names) that a record keyed by
+        // URI cannot carry yet, so they are not declared here (`docs/handover/plans/
+        // 2026-11-22-refactor-stage2-interfaces.cn.md` 2.3, and the reader inventory beside it).
+        OperatorGroup::create("copy", {}),
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its
