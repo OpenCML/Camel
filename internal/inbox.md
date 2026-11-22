@@ -18,3 +18,4 @@
   5. `lane/3a-exec`：同上，`src/stdlib/std/{nvm,fvm,prl,cpp,exec}` 与 `src/tools`。
   3a 用一个只减不增的计数守着两个旧类型的直接引用，计数写进每次合入的说明。
 - **D-1123-20（紧急，先停）** `lane/data-arg-migration`（把 `with` 参数改成普通参数、803 个 `.cml`、约 1,321 处）**停下，不合入**。它来自决策者对 `fill` 那页的第二段，那段推广错了，已在原页更正（`internal/reviews/…fill-declares-its-fields…`）。`append`、`contains`、`reduce` 的 `init`、`format` 等声明在 `with` 里是对的（负责人的判据：`->` 只传一个值，其余放尖括号便于串成流水线）。只保留"声明与内核不一致"的修正（如 `fill`：按声明修内核），声明与内核一致的不动；backlog 的 `C-1123-8` 按此缩到这一类。问题页 `2026-11-23-a-literal-and-the-position-it-sits-in-decide-a-type-variable` 随之不成立（那四条红是迁移带来的），已在页上答复。
+- **D-1123-21（裁 C-1123-19/20，归 `lane/commit-checks`）** ① 签名改窄、不加节点也要查：红线 6 比较的是"体里的访问"与"签名的效应"两边，任何一边变了都要再比一次；改窄后体里已有的访问超出签名，就是越界，拒绝。`commit_refusal.retier` 钉的是旧的弱读法，按原则改用例，不放宽检查。② 遍新建的图同样经提交：新图的全部节点算作碰过的区域，结构、冲突访问的先后、未绑定资源三项照查；先量影响面（多少现有用例因此转红、各是哪类），读数写进车道报告，再合。
