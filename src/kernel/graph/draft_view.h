@@ -39,7 +39,7 @@
  *   regionPort(i) + GCRegion.portBegin/Count regionParameters
  *   armRegionOf / loopRegionOf               regionsOwnedBy
  *   payloadGraphs (by index) + `kept`        calleeOf, as the graph that id names (by value)
- *   GCOperBody in the payload tail           operatorOf         (same refusal: see gc_graph_view.h)
+ *   GCOperBody in the payload tail           operatorOf         (same four kinds: gc_graph_view.h)
  *   LOOP payload                             loopFormOf
  *   entryNode / exitNode                     exit
  *   closureNodes                             ports(Capture)
@@ -58,11 +58,13 @@
 #pragma once
 
 #include "camel/runtime/graph_txn.h"
+#include "callee_graph_of.h"
 #include "graph/graph_view.h"
 
 #include <optional>
 #include <span>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::graph {
@@ -74,13 +76,28 @@ static_assert(
 class DraftGraphAdapter final : public GraphView {
   public:
     /// The face of a draft read on its own: its own ids, no table.
-    explicit DraftGraphAdapter(const camel::runtime::GraphTransaction &transaction)
-        : transaction_(transaction) {}
+    /// `calleeGraphOf` is how a callee referred to by value is named (`callee_graph_of.h`): the
+    /// draft stores a `GraphId` and its owner holds the graph. Without it the adapter answers
+    /// every other question and refuses a callee, rather than answering that a node calls nothing.
+    explicit DraftGraphAdapter(
+        const camel::runtime::GraphTransaction &transaction, CalleeGraphOf calleeGraphOf = {})
+        : graph_(&transaction.graph()), calleeGraphOf_(std::move(calleeGraphOf)) {}
+
+    /// The face of a draft its owner holds directly -- a builder mid-construction has the draft and
+    /// no transaction, and a transaction is only the handle to it. The two forms answer the same
+    /// draft; a caller that has a transaction passes it, so the handle it holds and the graph this
+    /// reads cannot be two different ones.
+    explicit DraftGraphAdapter(
+        const camel::runtime::GraphDraft &draft, CalleeGraphOf calleeGraphOf = {})
+        : graph_(&draft), calleeGraphOf_(std::move(calleeGraphOf)) {}
 
     /// The face of a draft read beside the graph it was encoded to, through the encoder's id table.
     DraftGraphAdapter(
-        const camel::runtime::GraphTransaction &transaction, std::span<const NodeRef> kept)
-        : transaction_(transaction), kept_(kept) {}
+        const camel::runtime::GraphTransaction &transaction, std::span<const NodeRef> kept,
+        CalleeGraphOf calleeGraphOf = {})
+        : graph_(&transaction.graph()),
+          kept_(kept),
+          calleeGraphOf_(std::move(calleeGraphOf)) {}
 
     camel::core::type::FunctionType *funcType() const override;
     std::vector<NodeRef> ports(PortGroup group) const override;
@@ -110,6 +127,10 @@ class DraftGraphAdapter final : public GraphView {
     LoopForm loopFormOf(NodeRef ref) const override;
 
   private:
+    /// True when the draft holds a live node at the view's `ref`, whether or not the view has a
+    /// *node* there: a JOIN is a place of the draft and not a node of the view (`viewKind`), and
+    /// `regionOf` / `exit` answer for places rather than for nodes. `contains` is this and the kind.
+    bool holdsPlace(NodeRef ref) const;
     /// The draft's node the view's node `ref` is: `ref` itself when no table was given, else
     /// `kept_[ref]`, and `kNoNode` when the table says the runtime graph has no such node (a
     /// placeholder, or one outside the reachable set).
@@ -119,12 +140,26 @@ class DraftGraphAdapter final : public GraphView {
     NodeRef viewIdOf(NodeRef draftId) const;
     /// A list of the draft's ids translated the way `inputs` translates one.
     std::vector<NodeRef> viewIdsOf(std::span<const NodeRef> draftIds) const;
+    /// One entry of a side array (a sync or an order edge), translated and left out when the table
+    /// cannot name it: see the definition.
+    void pushMapped(std::vector<NodeRef> &into, NodeRef draftId) const;
+    /// A translated list, kept in a buffer this adapter owns, one per `slot`: the view's ids are
+    /// the encoder's numbering and the draft's are its own, so a list read through a table cannot
+    /// be handed out where it lies. `slot` names the *question* -- one slot per (node, group) of
+    /// `inputs`, per (node, group) of `users`, per region of `regionParameters` -- so an answer
+    /// stays valid until the same question is asked again, and answers to different questions
+    /// never share a buffer. Only used when a table was given: without one, `inputs` and `users`
+    /// answer the draft's own span and nothing is copied.
+    std::span<const NodeRef> translated(std::uint64_t slot, std::span<const NodeRef> list) const;
 
     static NodeKind viewKind(camel::runtime::GCNodeKind stored);
-    static bool awaitsOperatorRecord(camel::runtime::GCNodeKind stored);
 
-    const camel::runtime::GraphTransaction &transaction_;
+    /// The draft this adapter reads: whoever built the adapter keeps it alive (a transaction owns
+    /// its draft, and a borrowed draft outlives the handle to it).
+    const camel::runtime::GraphDraft *graph_;
     std::span<const NodeRef> kept_;
+    CalleeGraphOf calleeGraphOf_;
+    mutable std::unordered_map<std::uint64_t, std::vector<NodeRef>> translated_;
 };
 
 } // namespace camel::graph

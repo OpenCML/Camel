@@ -11,11 +11,15 @@
  * the rule (the runtime for effects and branch contracts, the tensor module
  * for scalar boundaries, the onnx module for export capabilities); dump passes
  * only ask the registry, so a new role needs no change to them.
+ *
+ * A classifier reads a `GraphView` (kernel/graph/graph_view.h), not a frozen graph: a role is a
+ * reading of the graph, so it must be askable of both representations, and it asks the view's
+ * questions -- the kind, the type, the inputs, the operator a node names, the regions it owns.
  */
 
 #pragma once
 
-#include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
 
 #include <functional>
 #include <optional>
@@ -32,8 +36,9 @@ struct NodeRoleSpec {
 };
 
 /// The role's detail for node `ref` of `graph` when the node has the role, else nullopt.
-using NodeRoleClassifier =
-    std::function<std::optional<std::string>(const GCGraph &graph, gc_node_ref_t ref)>;
+using NodeRoleClassifier = std::function<std::optional<std::string>(
+    const camel::graph::GraphView &graph,
+    camel::graph::NodeRef ref)>;
 
 class NodeRoleRegistry {
   public:
@@ -48,7 +53,8 @@ class NodeRoleRegistry {
     void add(NodeRoleSpec spec, NodeRoleClassifier classify);
 
     /// The roles node `ref` of `graph` has, in registration order.
-    std::vector<Match> classify(const GCGraph &graph, gc_node_ref_t ref) const;
+    std::vector<Match>
+    classify(const camel::graph::GraphView &graph, camel::graph::NodeRef ref) const;
 
   private:
     NodeRoleRegistry();

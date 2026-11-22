@@ -42,6 +42,7 @@
 #include "camel/runtime/draft_outline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
+#include "graph/draft_view.h"
 #include "camel/runtime/region_roots.h"
 #include "src/stdlib/std/cxx/opt/generic/rewrite.h"
 
@@ -625,7 +626,8 @@ gc_node_ref_t exitOfRegion(const camel::runtime::GraphDraft &draft, uint32_t reg
 /// that case is left as it is (the count answers how many were carried, so a caller can tell).
 size_t hangSplicedStatements(
     camel::runtime::GraphDraft &draft, gc_node_ref_t atRef, size_t slotsBefore) {
-    const uint32_t region = camel::runtime::decidingRegionOfDraft(draft, atRef);
+    const uint32_t region = camel::runtime::decidingRegionOf(
+        camel::graph::DraftGraphAdapter(draft), atRef);
     const gc_node_ref_t exit = exitOfRegion(draft, region);
     if (exit == kInvalidNodeRef || !draft.alive(exit)) {
         return 0;
