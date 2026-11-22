@@ -499,7 +499,7 @@ e24aa6d5e3d34cf4 ok lib/re/re.cml
 ef441b2c8bfac877 ok lib/rulesets/jvp.cml
 763a49f10d72fd4e ok lib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok lib/rulesets/probe_missing.cml
-d6ede758d7b2bc65 ok lib/rulesets/transpose.cml
+328d330e56d4d1e1 ok lib/rulesets/transpose.cml
 261482309fb1f2d3 ok lib/rulesets/vmap.cml
 c32080d3581938e7 ok lib/sim/sim.cml
 879b3dadd508cc8f ok lib/state/state.cml
