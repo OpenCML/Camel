@@ -8,7 +8,7 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
-| lane/stage2-graph | 收两处红:`region_roots.branch_statement`(`JOIN` 应答它那个 `BRCH` 所在区域)与 `stream.generators_shapes_consumed` 的编码器残差 | `GraphRead` 12 → **4** 个文件;`LoopDraftView` 7(卡 `GCFillBody::slots()`) | 12 / 7 | 再做一轮(约 10 分钟构建 + `feat/opt`/`trans`/`compile` 复核) | 2026-11-22 23:30 |
+| lane/stage2-graph | 收最后 4 例 `region_roots.branch_statement`(GATE 在 body 读 arm 里的 JOIN;两版 `controlOf` 各试一次都不对,现回到与 develop 逐字相同的那版);`pass_dump`/`roundtrip` 两例是搬家后测试工具拼错路径,`var_params` 的 `std::cpp` pass 失败待定位 | `GraphRead` 12 → **4**;`LoopDraftView` 7(卡 `GCFillBody::slots()`);三项迁移已落、编码器差分 0 差异;`[SUMMARY] total: 2783, pass: 2770, fail: 8` | 12 / 7 | 再做一轮(先与 develop 对照 `branch_statement` 是否既有红) | 2026-11-23 00:45 |
 | lane/stage2-exec2 | 后端与运行时按 `Cast`/`Fill`/`Accs` 分支的地方改为问算子 | 已开,未提交 | 144 处 | 这一轮结束前 | 2026-11-22 23:35 |
 | lane/stage2-trans2 | `node_operator.h:150` 改为读 `GCOperBody` 的算子 URI;自己目录里直接读冻结图/草稿图的地方改读视图 | 已开,未提交 | — | 这一轮结束前 | 2026-11-22 23:35 |
 | lane/stage2-panic | 96 项写 `panic`,`C++` 侧同步填;然后 `graph.cpp` 改为从记录读,附改动前后对照表,要求一项不变 | 已开,未提交 | 50 处 / 96 项待写 | 需要一轮以上(对照表 729 项) | 2026-11-22 23:35 |
