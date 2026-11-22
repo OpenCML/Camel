@@ -188,7 +188,7 @@ A failure arrives as a `camel.CamelError` carrying the diagnostic and its locati
 
 ## Status
 
-Camel is under active development and has not reached 1.0. The language changes without compatibility shims: when a spelling is replaced, the old one is simply gone. Release notes are in [changes.log](changes.log), and the plan is in the [roadmap](ROADMAP.md).
+Camel is under active development and has not reached 1.0. The language changes without compatibility shims: when a spelling is replaced, the old one is simply gone. Release notes are in [CHANGELOG.md](CHANGELOG.md), and the plan is in the [roadmap](ROADMAP.md).
 
 ## Contributing
 

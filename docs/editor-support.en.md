@@ -65,7 +65,7 @@ The extension looks for `camel-ls` in this order: the setting `camel.server.path
 | `camel.run.passes` | `["std::cxx::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
 | `camel.trace.server` | `off` | Logs the protocol messages (`messages` or `verbose`). |
 
-See [`editors/vscode/README.md`](../editors/vscode/README.md) for details.
+That extension's sources are no longer part of this repository and are not distributed with it.
 
 ---
 

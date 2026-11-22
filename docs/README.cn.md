@@ -188,7 +188,7 @@ y = stats.normalize(x)               # NumPy 数组零拷贝进出
 
 ## 状态
 
-Camel 在积极开发中，尚未到 1.0。语言变化时不留兼容层：一种写法被取代，旧写法就直接没有了。发布说明见 [changes.log](../changes.log)，计划见[路线图](../ROADMAP.md)。
+Camel 在积极开发中，尚未到 1.0。语言变化时不留兼容层：一种写法被取代，旧写法就直接没有了。发布说明见 [CHANGELOG.md](../CHANGELOG.md)，计划见[路线图](../ROADMAP.md)。
 
 ## 参与贡献
 
