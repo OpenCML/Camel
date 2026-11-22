@@ -47,4 +47,12 @@ args = ["--gc", "generational", "--gc-stress", "safepoint=1,kind=minor", "--gc-c
 expect_exit = 0
 expect_stdout_contains = ["residual_mlp start"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 120000
+# 200 s, line 50 s. This case moves every young object at every safepoint and then runs the same
+# pipeline as `residual_mlp_large_bytecode`, so its own cost is what decides the bound, and the
+# slowest leg is the one that reds: the `linux-x64-nojit` leg read 39150, 45770, 47320 and 48120 ms
+# of CPU over four runs (44996394183, 45005763652, 45007258569, 45003684718), while three runs of
+# the same no-JIT build on the shared host read 22870, 24310 and 23800 ms. Its answer was right in
+# every one of them (`value` equals `start`). 4 x 48120 ms is 192480, rounded up here to 200 s,
+# which is 4.16x the worst CI reading and 8.2x the host's; the old 120 s drew a 30 s line through
+# 48 s of work and redded the nojit leg on a run whose assertions all held.
+timeout_ms = 200000

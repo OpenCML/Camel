@@ -1281,13 +1281,17 @@ assert(byAdam < start, `expected adam training to lower the loss: start=${start}
 assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
 }
 """
-# 12 s, line 3.0 s. The 4x rule wants a test under a quarter of its timeout in its own CPU time, and
-# this one is not: on CI it read 2530 ms (linux-x64) and 3060 ms (linux-x64-nojit) of CPU against the
-# 2500 ms line a 10000 ms timeout draws, 0.99x and 0.82x of the line. The rule has no discriminating
-# power at that magnitude -- 2.5-3.1 s is this pipeline's normal cost, so a 2500 ms line drawn
-# through it reds a run for the hour the host was taken in, not for anything the case did. This is
-# not cover for the 0.2 regression (fixed in 618eea077, which gave the run window back to its
-# holder): it is so that the case measures compiling and running a large program rather than the
+# 16 s, line 4.0 s. The 4x rule wants a test under a quarter of its timeout in its own CPU time, and
+# the figure that decides is the slowest leg's, not the quietest host's. On 2026-11-22 the
+# `linux-x64-nojit` leg read this case at 3250, 3530, 3630 and 3830 ms of CPU over four runs
+# (44996394183, 45005763652, 45007258569, 45003684718), and three runs of the same no-JIT build on
+# the shared host read 1880, 1730 and 1760 ms. Its answer was right in every one of them (`value`
+# equals `start`), so the red was the bound, not the case: 4 x 3830 ms is 15320, rounded up here to
+# 16 s, which is 4.18x the worst CI reading and 8.5x the host's. The rule has no discriminating
+# power at that magnitude -- 1.7-3.8 s is this pipeline's normal cost -- so a bound drawn through
+# the middle of it reds a run for the hour the host was taken in, not for anything the case did.
+# This is not cover for the 0.2 regression (fixed in 618eea077, which gave the run window back to
+# its holder): it is so that the case measures compiling and running a large program rather than the
 # load of the CI host it ran on.
 #
 # The name says large bytecode, but what holds this case against the line is not the size of the
@@ -1296,7 +1300,7 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 # young object at every safepoint. If it should ever have discriminating power again, the way back
 # is a bigger input, not a higher bound: a higher bound keeps the same fixed overhead and reads the
 # same number.
-timeout_ms = 12000
+timeout_ms = 16000
 
 [[tests]]
 name = "gru_lite_large_bytecode.gc_stress"
