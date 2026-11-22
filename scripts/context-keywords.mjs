@@ -34,9 +34,17 @@ export const CONTEXT_KEYWORD_GROUPS = [
     { id: 'clause', zh: '声明里的子句', en: 'Clauses of a declaration' },
     { id: 'type', zh: '类型与模式位置', en: 'Type and pattern positions' },
     { id: 'tag-position', zh: '标签位置名', en: 'Tag position names' },
+    { id: 'expr', zh: '表达式位置', en: 'Expression positions' },
 ]
 
 export const CONTEXT_KEYWORDS = [
+    {
+        word: 'range',
+        group: 'expr',
+        zh: '带步长的切片：下标的一维整个写成 `range(a, b, s)`，三个实参是起点、终点与步长（`xs[range(0, n, 2)]`）',
+        en: 'a slice with a step: a whole dimension of a subscript written `range(a, b, s)`, whose three arguments are the start, the end and the step (`xs[range(0, n, 2)]`)',
+        evidence: ['if (atWord(0, "range") && peek(1) == TK::LParen) {'],
+    },
     {
         word: 'tag',
         group: 'declaration',

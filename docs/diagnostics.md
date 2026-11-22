@@ -1181,7 +1181,7 @@ An interval has two ends: 'a..' has no open form, and this '..' has no right-han
 **Help**
 
 ```text
-A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a:b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.
+A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a..b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.
 ```
 
 **Example** (`test/cases/parse/rulings/open_range.cml`, run as `camel test/cases/parse/rulings/open_range.cml`)
@@ -4706,7 +4706,7 @@ A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a mutable
 
 ```camel
 func walk(t: int) {
-    static for n, F in fields int => {
+    static for n, F in fields int do {
         println(n, t)
     }
 }
@@ -4867,7 +4867,7 @@ The block is the value of one field: its last statement must have a value. A cal
 
 ```camel
 func broken(t: {a: int, b: int}) {
-    return { static for n, F in fields {a: int, b: int} => {} }
+    return { static for n, F in fields {a: int, b: int} do {} }
 }
 
 func main(): int sync {
@@ -6004,7 +6004,7 @@ func nothing(): void {
 }
 
 func main(): int sync {
-    static for j, C in fields typeof(nothing()) => println(j)
+    static for j, C in fields typeof(nothing()) do println(j)
     return 0
 }
 ```
@@ -6033,7 +6033,7 @@ typeof is written inside the larger type {0}.
 
 ```camel
 func main(): int sync {
-    static for j, C in fields typeof(1)[] => println(j)
+    static for j, C in fields typeof(1)[] do println(j)
     return 0
 }
 ```
@@ -6064,7 +6064,7 @@ A same-shape comprehension names a struct or a tuple type; a leaf has no fields.
 type N = int
 
 func build(t: int) {
-    return N { static for n, F in fields N => t }
+    return N { static for n, F in fields N do t }
 }
 
 func main(): int sync {
@@ -6090,7 +6090,7 @@ The shape {0} is filled from the fields of {1}.
 **Help**
 
 ```text
-Write `T { static for n, F in fields T => ... }`: the generator must walk the shape the comprehension constructs.
+Write `T { static for n, F in fields T do ... }`: the generator must walk the shape the comprehension constructs.
 ```
 
 **Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
@@ -6100,7 +6100,7 @@ type A = {a: int}
 type B = {b: int, c: int}
 
 func build(u: B) {
-    return A { static for n, F in fields B => u.[n] }
+    return A { static for n, F in fields B do u.[n] }
 }
 
 func main(): int sync {
@@ -7423,7 +7423,7 @@ None: choice: the repair is a decision only the writer can make
 **Help**
 
 ```text
-'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.
+'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is. Nothing else is composed.
 ```
 
 **Example** (`test/cases/compile/stream/comp_operand_mismatch.cml`, run as `camel test/cases/compile/stream/comp_operand_mismatch.cml`)
@@ -7712,13 +7712,13 @@ None: choice: which step the slice takes is the writer's to say, and the message
 **Message**
 
 ```text
-The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.
+The slice 't[range(a, b, s)]' has a step of 0, so it takes no element at all, whatever its bounds are.
 ```
 
 **Help**
 
 ```text
-A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
+A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a..b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
 ```
 
 **Example** (`test/cases/linear/faults/subscript_step_zero_const.cml`, run as `camel test/cases/linear/faults/subscript_step_zero_const.cml`)
@@ -7726,7 +7726,7 @@ A slice takes every step-th element from its start, so the step decides which el
 ```camel
 func main(): int sync {
     let xs = [1, 2, 3, 4, 5, 6]
-    println(xs[0:6:0])
+    println(xs[range(0, 6, 0)])
     println('not reached')
     return 0
 }
@@ -8129,7 +8129,7 @@ None: choice: whether the value is a struct or a tuple is the writer's to write
 **Message**
 
 ```text
-A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.
+A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... do ... )', or walk 'fields T'.
 ```
 
 **Help**
@@ -8142,7 +8142,7 @@ A struct value is written as one value per field name, and `indices` walks the p
 
 ```camel
 func bad(t: (int, int)): {a: int, b: int} {
-    return { static for j in indices t => t.[j] }
+    return { static for j in indices t do t.[j] }
 }
 
 func main(): int {
@@ -10907,7 +10907,7 @@ A bound of 'slice' is a position from 0 to the length; the end is one past the l
 **Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel test/cases/consistency/faults/slice_out_of_range.cml ${backend}`)
 
 ```camel
-func head(xs: int[], n: int): int[] { return xs[0:n] }
+func head(xs: int[], n: int): int[] { return xs[0..n] }
 
 func main(): int sync {
     let xs = [10, 20, 30]

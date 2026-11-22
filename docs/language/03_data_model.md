@@ -105,7 +105,7 @@ func main(): int sync {
 - **元素是"有期望类型的位置"**（设计原则 5.1）：期望的类型就是数组的元素类型，字面量元素取它。`let xs: float[] = [1, 2.0]` 与 `let xs: float[] = [1, 2]` 都是 `float[]`；`[1, 2] as float[]` 也一样。
 - 没有期望类型时，同一个数组里的字面量取最宽的一种（整数 < 小数）：`[1, 2.0]` 是 `float[]`，也就是 `[1.0, 2.0]`。
 - 元素是**已经取好类型的值**（变量、调用结果）时不做隐式转换，类型不同就是错误：`let n = 1; let xs: float[] = [n, 2.0]` 与 `let xs: float[] = [n]` 都是 `SemanticDiag::ElementTypeMismatch`，报在元素上（`Cannot insert data of type 'int' into a(n) array with element type 'float'`）。元素类型之间没有共同的类型且不是字面量时同样是 `SemanticDiag::ElementTypeMismatch`。
-- 下标从 0 开始；越界（包括负数）是故障 `RuntimeDiag::IndexOutOfRange`。按整数数组一次取多个位置写 `xs[idx]`（即 `take`），切片写 `xs[a:b]`（是共用数据块的视图），见 [6.3](06_expressions.md#63-访问与下标)。
+- 下标从 0 开始；越界（包括负数）是故障 `RuntimeDiag::IndexOutOfRange`。按整数数组一次取多个位置写 `xs[idx]`（即 `take`），切片写 `xs[a..b]`（是共用数据块的视图），见 [6.3](06_expressions.md#63-访问与下标)。
 - 内建函数：
 
   | 写法 | 结果 |
@@ -113,7 +113,7 @@ func main(): int sync {
   | `len(xs)` | 长度 |
   | `last(xs)` | 最后一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`）。负数下标不是从尾部数，所以取末尾元素用它，不写 `xs[-1]` |
   | `a..b` | 区间 `[a, a+1, ..., b-1]`；`a >= b` 时为空。带步长写 `range(a, b, step)` |
-  | `xs[a:b]` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
+  | `xs[a..b]` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
   | `concat(xs, ys)` | 连接成新数组 |
   | `xs->contains<v>` | 是否含有等于 `v` 的元素；“等于”就是元素类型的 `==`（数组、元组、结构体按内容比较，见 [6.7.3](06_expressions.md)） |
   | `zip(xs, ys)` | `(x, y)` 元组的数组；三个或更多数组得到相应元数的元组（`zip(xs, ys, zs)`）；长度必须相同 |
@@ -190,7 +190,7 @@ func main(): int sync {
 | `strs->join<sep>` | 连接字符串数组 |
 | `s[i]` | 第 `i` 个码点，结果是只含这一个字符的字符串；越界是故障 |
 
-其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`index_of`（位置按码点；切片是核心的 `s[a:b]`）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
+其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`index_of`（位置按码点；切片是核心的 `s[a..b]`）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
 
 ```cml
 import { split, trim, to_upper } from str

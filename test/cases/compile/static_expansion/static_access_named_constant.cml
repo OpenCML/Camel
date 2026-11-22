@@ -6,7 +6,7 @@
  */
 
 func first_of::<T>(t: T) {
-    let first = ( static for n, _ in fields T => n ).[0]
+    let first = ( static for n, _ in fields T do n ).[0]
     return t.[first]
 }
 

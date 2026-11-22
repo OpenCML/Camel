@@ -8,9 +8,9 @@
  * The loss slices three times: with a step of 2, with a negative step of 2, and along the second
  * axis of a rank-2 value, with a negative step whose start the source left out.
  *
- *   loss = sum(w[0:5:2] * x[0:5:2])          the positions 0, 2, 4
- *        + sum(w[5:1:-2] * x[5:1:-2])        the positions 5, 3
- *        + sum(a[:, :0:-2] * b[:, :0:-2])    the columns 3 and 1 of every row
+ *   loss = sum(w[range(0, 5, 2)] * x[range(0, 5, 2)])          the positions 0, 2, 4
+ *        + sum(w[range(5, 1, -2)] * x[range(5, 1, -2)])        the positions 5, 3
+ *        + sum(a[.., range(3, 0, -2)] * b[.., range(3, 0, -2)])    the columns 3 and 1 of every row
  *
  * so `d loss / d x` is `w` at the positions 0, 2, 4, 5 and 3 and the zero tangent at 1, and
  * `d loss / d b` is `a` at the columns 3 and 1 of each row and the zero tangent at 0 and 2. The
@@ -26,8 +26,8 @@ type P = { w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4] }
 
 with <m: P>
 func loss(): f32 {
-    return sum(m.w[0:5:2] * m.x[0:5:2]) + sum(m.w[5:1:-2] * m.x[5:1:-2]) +
-        sum(m.a[:, :0:-2] * m.b[:, :0:-2])
+    return sum(m.w[range(0, 5, 2)] * m.x[range(0, 5, 2)]) + sum(m.w[range(5, 1, -2)] * m.x[range(5, 1, -2)]) +
+        sum(m.a[.., range(3, 0, -2)] * m.b[.., range(3, 0, -2)])
 }
 
 func step(w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[...], f32[...], f32[...]) {

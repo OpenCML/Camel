@@ -10,7 +10,7 @@ func sum(t: (int, int, int)): int {
 }
 
 func positions(t: (int, string)): (int, int) {
-    return ( static for j in indices t => j )
+    return ( static for j in indices t do j )
 }
 
 func count::<T>(t: T): int {
@@ -30,7 +30,7 @@ func weighted(t: (int, int, int)): int {
 func nested(t: {p: (int, int)}): int {
     var sum = 0
     sync {
-        static for n, F in fields {p: (int, int)} => {
+        static for n, F in fields {p: (int, int)} do {
             let sub = t.[n]
             sum = sum + (static loop acc = 0 for j in indices sub do acc + sub.[j])
         }

@@ -3,7 +3,7 @@
  */
 
 func every(xs: int[], a: int, b: int, s: int): int[] {
-    return xs[a:b:s]
+    return xs[range(a, b, s)]
 }
 
 func main(): int sync {

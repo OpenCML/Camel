@@ -655,7 +655,7 @@ Value Builder::visitArgumentList(cst::ArgumentList context) {
 
 /*
 indices : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']' ;
-sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)? ;
+sliceIndices : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | rangeCall ;
 */
 Value Builder::visitIndices(cst::Indices context) {
     ENTER("Indices");
@@ -665,27 +665,33 @@ Value Builder::visitIndices(cst::Indices context) {
         if (entry.is(NK::SliceIndices)) {
             // Three slots, one per part, an unwritten part a null load: the graph builder tells
             // a slice from an element subscript by the node, not by counting children. Which
-            // slot a part takes follows from the colons the tree kept: a part before the first
-            // colon is the start, one between the colons the end, one after the second the step.
+            // slot a part takes follows from the `..` tokens the tree kept: a part before the
+            // first `..` is the start, one after it the end. A stepped slice writes its three
+            // parts inside `range(...)`, where the `range` token is the marker of that reading
+            // and the parts are written in order.
             const cst::SliceIndices slice(entry);
             node_ptr_t sliceNode = createNodeAs<SliceLoad>();
             setNodeTokenRangeByContext(sliceNode, slice);
             node_ptr_t slots[3] = {nullptr, nullptr, nullptr};
-            size_t colons       = 0;
+            size_t marks        = 0;
+            size_t written      = 0;
+            bool stepped        = false;
             for (size_t i = 0; i < slice->childCount(); ++i) {
                 const auto child = slice->child(i);
                 if (child.isToken()) {
-                    if (child.token().kind() == TK::Colon) {
-                        ++colons;
-                    } else if (child.token().kind() == TK::ColonColon) {
-                        // `xs[:: -1]`: the two colons of an omitted start and end are one token.
-                        colons += 2;
+                    if (child.token().kind() == TK::DotDot) {
+                        ++marks;
+                    } else if (child.token().kind() == TK::Identifier &&
+                               child.token().text() == "range") {
+                        stepped = true;
                     }
                     continue;
                 }
-                if (colons < 3) {
-                    slots[colons] = any2node(visitExpr(child.node()));
+                const size_t slot = stepped ? written : marks;
+                if (slot < 3) {
+                    slots[slot] = any2node(visitExpr(child.node()));
                 }
+                ++written;
             }
             for (node_ptr_t &slot : slots) {
                 if (slot == nullptr) {

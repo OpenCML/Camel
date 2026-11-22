@@ -12,7 +12,7 @@
  * - A result that may not exist is `T?` (`index_of`, `strip_prefix`). A number that is not a
  *   code point is an error value (`from_codepoints`). An index outside the string is a fault.
  * - Only what Camel cannot say about a string is native: code points as numbers and
- *   letter case (cutting by code point is the subscript `s[a:b]` of the core). The rest is
+ *   letter case (cutting by code point is the subscript `s[a..b]` of the core). The rest is
  *   written here; `index_of` and `split` carry a native kernel under `#impl` for speed, with the same result as their bodies.
  */
 
@@ -68,7 +68,7 @@ func repeat_kernel(s: string): string panic
 with <sub: string>
 export func index_of(s: string): int? {
     let n = len(sub)
-    let i = loop i = 0 while i + n <= len(s) && s[i:i + n] != sub do i + 1
+    let i = loop i = 0 while i + n <= len(s) && s[i..i + n] != sub do i + 1
     return if i + n <= len(s) then i else null
 }
 
@@ -76,28 +76,28 @@ export func index_of(s: string): int? {
 /// @example 'hello'->starts_with<'he'>    // true
 with <prefix: string>
 export func starts_with(s: string): bool {
-    return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+    return len(s) >= len(prefix) && s[..len(prefix)] == prefix
 }
 
 /// Whether s ends with suffix. Every string ends with the empty string.
 /// @example 'hello'->ends_with<'lo'>    // true
 with <suffix: string>
 export func ends_with(s: string): bool {
-    return len(s) >= len(suffix) && s[len(s) - len(suffix):] == suffix
+    return len(s) >= len(suffix) && s[len(s) - len(suffix)..] == suffix
 }
 
 /// s without the prefix at its start, or null when s does not begin with it.
 /// @example 'v1.2'->strip_prefix<'v'>    // '1.2'
 with <prefix: string>
 export func strip_prefix(s: string): string? {
-    return if s->starts_with<prefix> then s[len(prefix):] else null
+    return if s->starts_with<prefix> then s[len(prefix)..] else null
 }
 
 /// s without the suffix at its end, or null when s does not end with it.
 /// @example 'a.cml'->strip_suffix<'.cml'>    // 'a'
 with <suffix: string>
 export func strip_suffix(s: string): string? {
-    return if s->ends_with<suffix> then s[:len(s) - len(suffix)] else null
+    return if s->ends_with<suffix> then s[..len(s) - len(suffix)] else null
 }
 
 // ---- cutting and joining ----
@@ -106,10 +106,10 @@ export func strip_suffix(s: string): string? {
 func cut(s: string, sep: string): string[] {
     let n = len(sep)
     let (parts, start, i) = loop parts = [] as string[], start = 0, i = 0 while i + n <= len(s) do
-        if s[i:i + n] == sep
-        then (concat(parts, [s[start:i]]), i + n, i + n)
+        if s[i..i + n] == sep
+        then (concat(parts, [s[start..i]]), i + n, i + n)
         else (parts, start, i + 1)
-    return concat(parts, [s[start:]])
+    return concat(parts, [s[start..]])
 }
 
 /// The pieces of s between occurrences of sep. An empty s gives one empty piece; a separator at
@@ -128,7 +128,7 @@ export func split(s: string): string[] {
 /// @example 'a\r\nb\n'->lines    // ['a', 'b']
 export func lines(s: string): string[] {
     let parts = s->replace<'\r\n', '\n'>->split<'\n'>
-    return if len(parts) > 0 && parts[len(parts) - 1] == '' then parts[:len(parts) - 1] else parts
+    return if len(parts) > 0 && parts[len(parts) - 1] == '' then parts[..len(parts) - 1] else parts
 }
 
 /// s with every occurrence of old replaced by new, found from left to right without overlap.
@@ -160,14 +160,14 @@ func is_space(c: string): bool {
 /// @example trim_start('  hi  ')    // 'hi  '
 export func trim_start(s: string): string {
     let i = loop i = 0 while i < len(s) && is_space(s[i]) do i + 1
-    return s[i:]
+    return s[i..]
 }
 
 /// s without the ASCII white space at its end.
 /// @example trim_end('  hi  ')    // '  hi'
 export func trim_end(s: string): string {
     let j = loop j = len(s) while j > 0 && is_space(s[j - 1]) do j - 1
-    return s[:j]
+    return s[..j]
 }
 
 /// s without the ASCII white space at both ends. Other white space, such as U+00A0, is kept.

@@ -15,14 +15,14 @@ type Pair = (int, string)
 /// One name: the field's name, once per field, in declaration order.
 func names(b: Box) {
     sync {
-        static for n in fields Box => println(n, b.[n])
+        static for n in fields Box do println(n, b.[n])
     }
 }
 
 /// Two names: the field's type is usable in a type position (`let v: F`).
 func total(b: Box): int {
     var sum = 0
-    static for n, F in fields Box => {
+    static for n, F in fields Box do {
         let v: F = b.[n]
         sum = sum + v
     }
@@ -33,7 +33,7 @@ func total(b: Box): int {
 /// `{width: {w: 8}}` and the untagged `high` gives `{}`.
 func widths(b: Box): int {
     var sum = 0
-    static for n, F, tags in fields Box => {
+    static for n, F, tags in fields Box do {
         sum = sum + (match type typeof(tags) {
             case { width: { w: int } } => tags.width.w
             case _ => 0
@@ -45,7 +45,7 @@ func widths(b: Box): int {
 /// `indices`: one name, the position in the tuple, a compile-time `int`.
 func positions(p: Pair) {
     sync {
-        static for j in indices p => println(j, p.[j])
+        static for j in indices p do println(j, p.[j])
     }
 }
 

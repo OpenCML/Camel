@@ -188,7 +188,8 @@ dataList           : dataExpr (',' dataExpr)*
 argumentList       : indexValues (',' pairedValues)? | pairedValues
 indexValues        : indexValue (',' indexValue)*
 indices            : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
-sliceIndices       : dataExpr? ':' dataExpr? (':' dataExpr?)?
+sliceIndices       : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | 'range' '(' dataExpr ','
+                     dataExpr ',' dataExpr ')'
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
 typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
@@ -200,7 +201,7 @@ tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
 funcData           : 'func' angledParams? parentParams ('=>' typeExpr)? blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
-staticForExpr      : 'static' staticForHeader '=>' blockExpr
+staticForExpr      : 'static' staticForHeader 'do' blockExpr
 staticForHeader    : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr

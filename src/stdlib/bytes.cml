@@ -5,7 +5,7 @@
  * Binary data. `Bytes` is an immutable value of the core; a string is text and never holds
  * arbitrary bytes, so the only crossing between the two is `encode` and `decode`.
  *
- * Length (`len`), concatenation (`a + b`) and cutting (`b[a:b]`) are the core's, as they are for
+ * Length (`len`), concatenation (`a + b`) and cutting (`b[a..b]`) are the core's, as they are for
  * a string. What is here converts, and is native: a `Bytes` is a data block, and reading or
  * building one needs the layout control the language does not show (design principles 10.4).
  */

@@ -66,7 +66,7 @@ CAMEL_NODE(StrayPositional, Other)     // indexValue (a positional written after
 CAMEL_NODE(PairedParams, Other)        // keyParamPair (',' keyParamPair)*
 CAMEL_NODE(ArgumentList, Other)        // indexValues (',' pairedValues)? | pairedValues
 CAMEL_NODE(Indices, Other)             // '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
-CAMEL_NODE(SliceIndices, Other)        // dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left out
+CAMEL_NODE(SliceIndices, Other)        // ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | rangeCall, a part not written left out
 CAMEL_NODE(ParentParams, Other)        // '(' pairedParams? ','? ')'
 CAMEL_NODE(ParentArgues, Other)        // '(' argumentList? ','? ')'
 CAMEL_NODE(AngledParams, Other)        // '<' pairedParams? ','? '>'
