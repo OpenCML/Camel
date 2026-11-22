@@ -614,6 +614,19 @@ attr::AttrKey independentKey() {
     return key ? *key : attr::kNoKey;
 }
 
+// `macro` is a standard tag too, so its key is the one declareStandardTags registered; asked the
+// same way declaresMacro(AttrSetId) asks it (by the declaration), so both sides read one key.
+constexpr std::string_view kMacro = "macro";
+
+attr::AttrKey macroKey() {
+    const auto id = find(std::string_view{}, kMacro);
+    if (!id.has_value()) {
+        return attr::kNoKey;
+    }
+    const Decl *decl = get(*id);
+    return decl != nullptr ? decl->key : attr::kNoKey;
+}
+
 } // namespace
 
 bool declaresIndependentElements(const camel::runtime::GraphDraft &draft) {
@@ -655,6 +668,35 @@ bool declaresMacro(attr::AttrSetId declaration) {
     }
     const Decl *decl = get(*id);
     return decl != nullptr && attr::valueOf(declaration, decl->key) != attr::kNoValue;
+}
+
+bool declaresMacro(const camel::runtime::GraphDraft &draft) {
+    const attr::AttrKey key = macroKey();
+    const auto exit         = draft.exitNode();
+    if (key == attr::kNoKey || exit == camel::runtime::kInvalidNodeRef) {
+        return false;
+    }
+    return attr::valueOf(draft.nodeAttrs(exit), key) != attr::kNoValue;
+}
+
+bool declaresMacro(const camel::runtime::GCGraph &graph) {
+    const attr::AttrKey key = macroKey();
+    const auto exit         = graph.exitNodeRef();
+    if (key == attr::kNoKey || exit == camel::runtime::kInvalidNodeRef) {
+        return false;
+    }
+    return attr::valueOf(graph.nodeAttrs(exit), key) != attr::kNoValue;
+}
+
+void markMacro(camel::runtime::GraphDraft &draft, attr::AttrSetId declaration) {
+    const attr::AttrKey key = macroKey();
+    const auto exit         = draft.exitNode();
+    if (key == attr::kNoKey || exit == camel::runtime::kInvalidNodeRef ||
+        attr::valueOf(declaration, key) == attr::kNoValue) {
+        return;
+    }
+    draft.setNodeAttrs(
+        exit, attr::unite(draft.nodeAttrs(exit), attr::single(key, attr::unit())));
 }
 
 void attachToField(

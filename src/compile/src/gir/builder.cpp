@@ -1155,19 +1155,18 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
             reportWhenProblem(early, name, when->condition);
         }
     }
-    if (camel::core::tag::declaresMacro(tags.declaration)) {
-        graph->edit().setFlags(
-            static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
-    }
     buildFuncBody(gct, graph, funcType, name, tags, written);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the
     // reader finds it in the frozen graph (GCGraph::ruleGraphs).
     attachRuleGraphs(graph, tags.declaration);
     // A declaration fact that has to live on the graph itself: a scheduler reads
-    // `#independent` from the exit node of the function it is about to call (design 3.6).
+    // `#independent` from the exit node of the function it is about to call (design 3.6), and
+    // `std::macro` reads `#macro` from the same node (design principles 8) — both are the
+    // declaration's fact, not a flag written beside it.
     if (!name.empty()) {
         camel::core::tag::markIndependentElements(graph->edit(), tags.declaration);
+        camel::core::tag::markMacro(graph->edit(), tags.declaration);
     }
     // The declaration's facts go with the graph (design principles 6.2, 10.1): a pass reads what
     // a declaration writes through the function it was given — `#jvp(rule)` names a rule graph,

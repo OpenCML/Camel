@@ -372,6 +372,14 @@ class OperatorTable {
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
 
+    /// The effect of the operator, as the one statement of it reads it
+    /// (`sem::OperatorSemantics::effect`): the access list a declaration writes, and nothing
+    /// beside it. `Undeclared` when nobody stated one at all -- which is what a listing reports,
+    /// while a reader that asks what running the operator may do takes the conservative reading
+    /// (`isPure` false, `hasExternalEffect` true).
+    sem::Effect effectOf(OperId id) const;
+    sem::Effect effectOf(std::string_view uri) const;
+
     /// True when a call of the operator may be computed by the compiler or a pass itself and its
     /// result treated as a value: it has no effect, and it is foldable (isPure and the foldable
     /// fact). False for every operator that has an effect, and for a pure one that must run where

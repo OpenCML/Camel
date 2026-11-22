@@ -765,7 +765,7 @@ class CmlPrinter {
         if (!graph->executable()) {
             fail(camel::runtime::kInvalidNodeRef, "it has writings (it is not executable)");
         }
-        if ((graph->flags() & camel::runtime::kGraphFlagMacro) != 0) {
+        if (graph->isMacro()) {
             fail(camel::runtime::kInvalidNodeRef, "it is a macro graph");
         }
         for (uint32_t r = 1; r < graph->regionCount(); ++r) {

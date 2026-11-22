@@ -209,6 +209,23 @@ std::string_view numericClassName(NumericClass cls) {
 
 // ---- The effect, derived from the access list ----------------------------------------------
 
+std::string_view effectName(Effect effect) {
+    // The four answers, spelled once: `camel inspect --ops` prints this word as its "purity"
+    // column, and the reference checker compares a declaration's `@pure`/`@effect` with it. There
+    // is no second spelling of the effect anywhere (operator_record.h, `Record::effect`).
+    switch (effect) {
+    case Effect::Pure:
+        return "pure";
+    case Effect::StateOnly:
+        return "state";
+    case Effect::Effectful:
+        return "effectful";
+    case Effect::Undeclared:
+        break;
+    }
+    return "undeclared";
+}
+
 bool OperatorSemantics::external() const {
     // Nobody declared its effect: the conservative reading, which is an effect outside the
     // program (design principles 3.3).
