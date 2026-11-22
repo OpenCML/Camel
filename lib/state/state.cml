@@ -14,7 +14,7 @@
  * made by two `ref` calls name two boxes, so the operations on one are ordered with the operations
  * on the other only where the program puts them in one `sync` block; two operations on one
  * reference keep the order they are written in. The type is provided by the module
- * (`modules/state`, design principles 10.4): `stdlib/state.cml` declares it and its four
+ * (`lib/state`, design principles 10.4): `lib/state/state.cml` declares it and its four
  * operators, and the module keeps the kernels, the resource contract of each operator and the
  * storage.
  *

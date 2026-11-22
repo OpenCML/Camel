@@ -250,7 +250,7 @@ export type Vjp<F> = <...WithOf<F>> (...ParamsOf<F>) => (ResultOf<F>, Pullback<F
 /// **This declaration is the contract**: the build
 /// makes the declared type, and no declaration is approximate. The order written above is "all the
 /// parameters, then all their tangents"; the build today pairs each parameter with its tangent as it
-/// goes (`modules/transforms/jvp.cpp#jvpSignature`), and gives a parameter with no tangent space one
+/// goes (`lib/transforms/jvp.cpp#jvpSignature`), and gives a parameter with no tangent space one
 /// place only. That difference is a **missing capability of the type-bundle splice** -- the exact shape
 /// needs an interleaving operation `(...A, ...B)` cannot express -- so the declaration is to be made
 /// exact when the splice can write it, and the gap is a defect of the declaration layer, not a
@@ -263,7 +263,7 @@ export type Jvp<F> =
 /// of `f`.
 ///
 /// **This declaration is the contract**: the build makes the declared type, and the build that makes
-/// it is `modules/transforms/transpose/signature.cpp#transposeSignature`. There is no value parameter and no
+/// it is `lib/transforms/transpose/signature.cpp#transposeSignature`. There is no value parameter and no
 /// `with` list here, because a value the transposed body needs beside the cotangent is not one its
 /// caller passes: it is a residual the function that is transposed was closed over -- `x` in
 /// `transpose((dx: float) => 2.0 * x * dx)`, and the residue a cut captured in `lin`'s closure --

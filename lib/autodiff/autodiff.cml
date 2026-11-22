@@ -40,18 +40,18 @@
  * autodiff lane, not before they work.
  *
  * The memory-for-recomputation transform -- `remat` -- is not here: it is a transform of the
- * `transforms` module (`stdlib/signatures/transforms.cml`), because what it changes is a property of
+ * `transforms` module (`lib/transforms/signatures/transforms.cml`), because what it changes is a property of
  * a graph and a call site, not a derivative. JAX calls the same transform `jax.checkpoint` and, by
  * its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
- * `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no second
+ * `lib/ckpt/ckpt.cml` and stays that, so the transform takes the other word and there is no second
  * name for a reader to disambiguate.
  *
  * `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
  * here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
  * of a primitive, `add_cotangent` and its siblings its cotangent. The rules themselves -- the
  * declarations that attach those statements to a primitive -- live in the ruleset modules, which is
- * what a transform reads: `stdlib/rulesets/jvp.cml` for the forward rules and
- * `stdlib/rulesets/transpose.cml` for the transposes. A tag gives a function's own rules
+ * what a transform reads: `lib/rulesets/jvp.cml` for the forward rules and
+ * `lib/rulesets/transpose.cml` for the transposes. A tag gives a function's own rules
  * (`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
  * is read back by structure (`graph::rule_of`); a primitive's rules are the ruleset's, by the
  * operator of their left side.

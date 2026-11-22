@@ -12,11 +12,11 @@
  * `export func numel::<T>(t: T[...]): int when is_numeric::<T>()`, a name whose result type follows
  * its argument declares fine, and the axis reductions below are written the same way. What a
  * declaration still cannot state is a signature that depends on a *value* argument. The operators
- * whose signature the page renders from `stdlib/signatures/tensor.cml` are the ones left in C++
+ * whose signature the page renders from `lib/tensor/signatures/tensor.cml` are the ones left in C++
  * (design principles 6.4).
  */
 
-// The fixed signatures of the operators of `modules/tensor` (design principles 6.4).
+// The fixed signatures of the operators of `lib/tensor` (design principles 6.4).
 // This file is the one source of those signatures; the C++ side keeps the kernels, the
 // executors, the operator traits, the resources and the folds (`shape`, `numel` and `dim` still
 // fold from a type that fixes every extent). A declaration names `tensor:<function>` by
@@ -46,8 +46,8 @@ import { is_float, is_numeric, is_plain, is_same, ShapeOf } from types
 // a fault at the call when the two differ -- the same shape of answer as `json::decode_as`'s
 // decode by type. Its element type is the *result's*, and a declaration's parameters cannot mention
 // a type variable that only the result mentions, so its signature is computed rather than
-// declared: `loadNpyOperatorGroup` in `modules/tensor` is the source and
-// `stdlib/signatures/tensor.cml` the reference, exactly as for `from_bytes`, whose element type is
+// declared: `loadNpyOperatorGroup` in `lib/tensor` is the source and
+// `lib/tensor/signatures/tensor.cml` the reference, exactly as for `from_bytes`, whose element type is
 // also the call's.
 //
 // `show` takes one arm over an array of any rank and any element type -- `A[...]`, whose element
@@ -232,9 +232,9 @@ export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[..
 // of one, so they follow from the *values* it states, and the only type
 // a declaration could write is `T[...]`. That type is what put a `float[...]` on a node whose value is
 // the element itself (design principles 5.4): `numel(ct)` in
-// `stdlib/rulesets/transpose.cml#mean_axis_cotangent` read a number as a pointer. Its signature
-// is computed (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`) and recorded in
-// `stdlib/signatures/tensor.cml`.
+// `lib/rulesets/transpose.cml#mean_axis_cotangent` read a number as a pointer. Its signature
+// is computed (`lib/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`) and recorded in
+// `lib/tensor/signatures/tensor.cml`.
 //
 // The other two stated spellings above stay declared beside it: a stated sum answers one number
 // whatever the extents are, and a stated take always answers at least the rows it read, so `T` and
@@ -316,7 +316,7 @@ export func save_npy::<T>(t: T[...], path: string): void when is_numeric::<T>()
 /// Prints t to the console, in the module's layout.
 ///
 /// The elements are the ones a tensor stores -- the numbers and the booleans (`x * s`, a bool's
-/// gradient and the widths the kernels carry are all read at those, modules/tensor/dtype.cpp
+/// gradient and the widths the kernels carry are all read at those, lib/tensor/dtype.cpp
 /// `isSupportedTensorScalar`) -- and the parameter says so, so an element type no kernel can read
 /// is refused at the call and not left to the runtime. The parameter takes `A[...]`, which includes
 /// rank 0 (design principles 5.4), so the condition is what keeps a `string` from being read as one
@@ -385,7 +385,7 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 // -- so they follow from the operand's type *and* from the value of `axis` and of `keepdims`, and
 // a declaration's result is a type, not a function of two values. Written here as a declaration
 // the name answered `T[...]`, which is a result that states no extent at all; the operator's own
-// inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
+// inference computes the extents (`lib/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
 // `support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` reads a
 // `float[3]`, not a `float[...]`.
 //
@@ -393,7 +393,7 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 // takes them as parameters of its own, so a call that leaves them to the run states no rank, and its
 // result is `T[...]` and honestly so. That is why it is still declared above and these six are not.
 //
-// `stdlib/signatures/tensor.cml` records the six computed signatures; `stdlib/array.cml` imports
+// `lib/tensor/signatures/tensor.cml` records the six computed signatures; `lib/array/array.cml` imports
 // the names instead of declaring a second spelling of each.
 
 /// `t` reduced over its **leading axes** to the extents `at`: a leading-axis reduction, and nothing
@@ -410,7 +410,7 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 /// the identity, which is the shape a gradient usually arrives in. Anything else is a fault named at
 /// the call: a target *longer* than `t`, or one asking for an extent `t` does not have at that
 /// position, is refused with both shapes in the sentence
-/// (`modules/tensor/kernels/gradient.cpp#requireSuffixTarget`). The operator never spreads;
+/// (`lib/tensor/kernels/gradient.cpp#requireSuffixTarget`). The operator never spreads;
 /// `broadcast_like` is the operator that does.
 ///
 /// The element type is `t`'s, and the answer is written at it (design principles 9.9: a gradient is
@@ -419,7 +419,7 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 ///
 /// The transposition laws reduce a product's cotangents with it (`rulesets.transpose`:
 /// `sum_to(ct * other, ax)` is one operand's cotangent at the extents that operand states), and the
-/// engine accumulates a tensor operand with it (`modules/tensor/ops/vjp.cpp#accumulateOperand`).
+/// engine accumulates a tensor operand with it (`lib/tensor/ops/vjp.cpp#accumulateOperand`).
 /// @pure
 /// @example sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [2])    // [3.0, 7.0]
 /// @example sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [])    // 10.0
@@ -443,7 +443,7 @@ export func sum_to::<T>(t: T[...], at: int[]): T[...] when is_float::<T>()
 /// (design principles 5.1).
 ///
 /// It is what the transpose laws of the broadcast products write where an operand has to grow
-/// (`stdlib/rulesets/transpose.cml`), and it is the adjoint-turned-around of `sum_to`.
+/// (`lib/rulesets/transpose.cml`), and it is the adjoint-turned-around of `sum_to`.
 /// @pure
 /// @example broadcast_like(2.0, [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])    // [[2.0, 2.0], [2.0, 2.0]]
 /// @example broadcast_like([1.0, 2.0] as float[2], [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])    // [[1.0, 2.0], [1.0, 2.0]]
@@ -452,4 +452,4 @@ export func broadcast_like::<T, S>(t: T, like: S): S
 // The axis forms of `mean`, `min`, `max`, `argmax` and `argmin` stand beside the axis form of `sum`
 // above and for the same reason: the extents of their result follow from the operand's type and
 // from the values of `axis` and `keepdims`, and their signatures are recorded in
-// `stdlib/signatures/tensor.cml`.
+// `lib/tensor/signatures/tensor.cml`.

@@ -10,7 +10,7 @@
  * The tree is the data, the directory is where it goes: `tree->save_tree<dir: 'out/ckpt'>` and
  * `'out/ckpt'->load_tree::<T>`. A failure of the file system is an error value; a directory that
  * holds something other than a tree of the type asked for is an error value too. Walking a tree is
- * the tree library's (`stdlib/tree.cml`), not this module's.
+ * the tree library's (`lib/tree/tree.cml`), not this module's.
  *
  * A checkpoint here is what is written down, not what is recomputed: the transform that trades
  * memory for recomputation (the same values, the annotated section recomputed in the backward pass)
