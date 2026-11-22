@@ -33,8 +33,8 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/operator_names.h"
-#include "camel/core/type/composite/func.h"
 #include "camel/core/rule_index.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/runtime/graph.h"
 
 #include "camel/compile/gir/reachable.h"
@@ -1045,9 +1045,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // indexed here, where the module and its diagnostics are in hand: one index per ruleset,
         // taken once, and a second rule under one head is refused rather than chosen by order.
         if (!unit->failed && unit->module && unit->module->name().rfind("rulesets.", 0) == 0) {
-            const std::string ruleset = unit->module->name();
-            std::vector<camel::core::RuleObject> rules =
-                camel::core::takeRuleHeads(ruleset);
+            const std::string ruleset                  = unit->module->name();
+            std::vector<camel::core::RuleObject> rules = camel::core::takeRuleHeads(ruleset);
             if (rules.empty()) {
                 rules = camel::core::takeRuleHeads(unit->diags->moduleName());
             }
@@ -1068,11 +1067,17 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 // (`include/camel/core/rule_index.h`). The parse-time collection could not answer
                 // this: a syntactically read declaration has no types.
                 std::vector<const camel::core::type::Type *> parameterTypes;
-                const camel::core::type::FunctionType *condition = nullptr;
+                // The condition's signature is compiled here and deliberately not stored: a rule's
+                // applicability condition belongs to the rule value the transform carries and the
+                // match reads, and this type is transitional. It held a field for it that nothing
+                // read; a written-but-unread field claims a reader that does not exist.
+                const camel::core::type::FunctionType *conditionSignature = nullptr;
                 if (camel::compile::gir::compiledRuleTypes(
-                        *context_, rule.name, parameterTypes, condition)) {
+                        *context_,
+                        rule.name,
+                        parameterTypes,
+                        conditionSignature)) {
                     rule.parameterTypes = std::move(parameterTypes);
-                    rule.condition      = condition;
                 }
                 if (!rule.shape.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::RuleLeftIsNotAnOperator);
