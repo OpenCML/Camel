@@ -3301,70 +3301,8 @@ class CmlPrinter {
             return expression(node->kind == camel::runtime::GCNodeKind::Gate ? inputs.front()
                                                                            : inputs.back());
         }
-        case camel::runtime::GCNodeKind::Cast: {
-            const auto inputs = graph_->normInputsOf(ref);
-            if (inputs.size() != 1 || node->dataType() == nullptr) {
-                fail(ref, "a cast without an input or a type");
-            }
-            Expr inner = expression(inputs.front());
-            // The entrance of an unnamed struct value into a named struct type is a conversion the
-            // compiler inserts by itself wherever the type is known -- a return type, an annotated
-            // `let`, a parameter, a field. Writing it is not the same graph: `return ({ x: 0 } as
-            // V)` folds to a literal of `V`, while the source has the literal and the conversion,
-            // so the printed program is one node short (`consistency/operator_overloads`
-            // `plus_b.cml`). The cast is dropped and the position it stands in supplies the type;
-            // a conversion between two named types (which the language only writes) stays.
-            const camel::runtime::GCNode *source = graph_->node(inputs.front());
-            const Type *from                     = source != nullptr ? source->dataType() : nullptr;
-            // A `T` and a `T[..]` are the same value (design principles 5.4): the run keeps the
-            // rank-zero array in the slot and the element in the type, and the conversion between
-            // them is the compiler's, supplied by whatever position the value stands in. It is
-            // not a program's `as` -- `as` between the two is `DynamicCastForbidden` -- so writing
-            // one is not a stronger statement, it is a program that does not compile:
-            // `compile/array_shape/rank_zero_parameter_slot` printed `(v as f32)` in the body and
-            // `elem((cml1 as f32[...]))` at the call, and neither cast is in the source.
-            if (from != nullptr && camel::core::type::isRankZeroEdge(
-                                       const_cast<Type *>(node->dataType()),
-                                       const_cast<Type *>(from))) {
-                return inner;
-            }
-            if (from != nullptr && from->code() == TypeCode::Struct &&
-                static_cast<const StructType *>(node->dataType())->named() &&
-                camel::core::type::relateStructs(
-                    static_cast<const StructType *>(node->dataType()),
-                    static_cast<const StructType *>(from)) !=
-                    camel::core::type::StructRelation::None) {
-                // ... but only when the value already *is* the type, field for field: the position
-                // supplies the conversion, and a position does not build the fields of a value
-                // that has none. A struct with no fields converted to one with a field has no
-                // spelling at all (`({  } as Inner)` is `LiteralNotRepresentable`,
-                // `compile/array_shape/rank_zero_slot_nested_field.cml`), so it is refused rather
-                // than written as the empty literal it is not.
-                const auto *target = static_cast<const StructType *>(node->dataType());
-                const auto *value  = static_cast<const StructType *>(from);
-                bool sameFields    = target->size() == value->size();
-                for (size_t i = 0; sameFields && i < target->size(); ++i) {
-                    sameFields = std::string_view(target->fieldName(i)) == value->fieldName(i) &&
-                                 target->typeAt(i) == value->typeAt(i);
-                }
-                if (sameFields) {
-                    return inner;
-                }
-                fail(
-                    ref,
-                    std::format(
-                        "a conversion of '{}' to the named type '{}': the two do not have the same "
-                        "fields, and the language has no spelling for the conversion itself",
-                        value->toString(),
-                        target->toString()));
-            }
-            return {
-                std::format(
-                    "({} as {})",
-                    parenthesize(inner, 80),
-                    writtenTypeText(node->dataType())),
-                80};
-        }
+        case camel::runtime::GCNodeKind::Cast:
+            return castExpression(ref);
         case camel::runtime::GCNodeKind::Accs:
             return accessExpression(ref);
         case camel::runtime::GCNodeKind::Fill:
@@ -3713,6 +3651,74 @@ class CmlPrinter {
         return {constantText(slot, type), 100};
     }
 
+    /// The text of a conversion, whether the graph carries it as a cast node or as the call of
+    /// `:op/cast` it became when conversions were given an operator (the `Cast` case of the
+    /// expression dispatch and the operator dispatch below both come here, so the two spellings
+    /// cannot drift apart).
+    Expr castExpression(gc_node_ref_t ref) {
+        const camel::runtime::GCNode *node = graph_->node(ref);
+        if (node == nullptr || node->dataType() == nullptr) {
+            fail(ref, "a cast without a type");
+        }
+        const auto inputs = graph_->normInputsOf(ref);
+        if (inputs.size() != 1) {
+            fail(ref, "a cast without an input");
+        }
+        Expr inner = expression(inputs.front());
+        // The entrance of an unnamed struct value into a named struct type is a conversion the
+        // compiler inserts by itself wherever the type is known -- a return type, an annotated
+        // `let`, a parameter, a field. Writing it is not the same graph: `return ({ x: 0 } as
+        // V)` folds to a literal of `V`, while the source has the literal and the conversion,
+        // so the printed program is one node short (`consistency/operator_overloads`
+        // `plus_b.cml`). The cast is dropped and the position it stands in supplies the type;
+        // a conversion between two named types (which the language only writes) stays.
+        const camel::runtime::GCNode *source = graph_->node(inputs.front());
+        const Type *from                     = source != nullptr ? source->dataType() : nullptr;
+        // A `T` and a `T[..]` are the same value (design principles 5.4): the run keeps the
+        // rank-zero array in the slot and the element in the type, and the conversion between
+        // them is the compiler's, supplied by whatever position the value stands in. It is
+        // not a program's `as` -- `as` between the two is `DynamicCastForbidden` -- so writing
+        // one is not a stronger statement, it is a program that does not compile:
+        // `compile/array_shape/rank_zero_parameter_slot` printed `(v as f32)` in the body and
+        // `elem((cml1 as f32[...]))` at the call, and neither cast is in the source.
+        if (from != nullptr && camel::core::type::isRankZeroEdge(
+                                   const_cast<Type *>(node->dataType()), const_cast<Type *>(from))) {
+            return inner;
+        }
+        if (from != nullptr && from->code() == TypeCode::Struct &&
+            static_cast<const StructType *>(node->dataType())->named() &&
+            camel::core::type::relateStructs(
+                static_cast<const StructType *>(node->dataType()),
+                static_cast<const StructType *>(from)) != camel::core::type::StructRelation::None) {
+            // ... but only when the value already *is* the type, field for field: the position
+            // supplies the conversion, and a position does not build the fields of a value
+            // that has none. A struct with no fields converted to one with a field has no
+            // spelling at all (`({  } as Inner)` is `LiteralNotRepresentable`,
+            // `compile/array_shape/rank_zero_slot_nested_field.cml`), so it is refused rather
+            // than written as the empty literal it is not.
+            const auto *target = static_cast<const StructType *>(node->dataType());
+            const auto *value  = static_cast<const StructType *>(from);
+            bool sameFields    = target->size() == value->size();
+            for (size_t i = 0; sameFields && i < target->size(); ++i) {
+                sameFields = std::string_view(target->fieldName(i)) == value->fieldName(i) &&
+                             target->typeAt(i) == value->typeAt(i);
+            }
+            if (sameFields) {
+                return inner;
+            }
+            fail(
+                ref,
+                std::format(
+                    "a conversion of '{}' to the named type '{}': the two do not have the same "
+                    "fields, and the language has no spelling for the conversion itself",
+                    value->toString(),
+                    target->toString()));
+        }
+        return {
+            std::format("({} as {})", parenthesize(inner, 80), writtenTypeText(node->dataType())),
+            80};
+    }
+
     Expr accessExpression(gc_node_ref_t ref) {
         const auto *body  = graph_->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
         const auto inputs = graph_->normInputsOf(ref);
@@ -3731,6 +3737,62 @@ class CmlPrinter {
                                        : std::to_string(body->value);
         if (member.empty()) {
             fail(ref, "an access without a member");
+        }
+        return {std::format("{}.{}", baseText, member), 90};
+    }
+
+    /// A member read that arrives as an operator prints the postfix the program wrote.
+    ///
+    /// The read is `:op/access_key` or `:op/access` now: the name or the place is the call's first
+    /// ordinary operand and the value is its second (`__access_value__`,
+    /// builtin/operators/struct.cpp), so `accessExpression` above -- which reads the position out
+    /// of an access node's body -- never sees it, and the call printing spells the operator's own
+    /// name: `access_key('x', p)`. A program written that way is one the front end refuses, because
+    /// the declaration is generic over the value's type (`(key: string, x: T) => U`) and a call in
+    /// the source cannot supply the instance: recompiling answers `NoMatchingFunction` at the two
+    /// lines the read is on (`trans/cml_contract`, `linear.cml`, measured). The postfix is the
+    /// spelling both graphs are built from, so it is what the printer writes.
+    Expr memberReadExpression(gc_node_ref_t ref) {
+        const auto *body  = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        const auto inputs = graph_->normInputsOf(ref);
+        if (body == nullptr || inputs.size() != 2) {
+            fail(ref, "a member read without a member and a value");
+        }
+        const bool byName = body->uri() == ":op/access_key";
+        std::string member;
+        if (byName) {
+            const camel::runtime::GCNode *key = graph_->node(inputs.front());
+            if (key == nullptr || key->kind != camel::runtime::GCNodeKind::Data ||
+                key->dataIndex >= 0 || key->dataType() == nullptr ||
+                key->dataType()->code() != TypeCode::String) {
+                fail(ref, "a member read whose name is not a constant string");
+            }
+            const auto *text =
+                fromSlot<String *>(graph_->staticArea()->get<slot_t>(-key->dataIndex));
+            member = text != nullptr ? std::string(text->view()) : std::string{};
+            // A name is written as a field name: anything else (`$tagged0`, a field a compiler
+            // made) has no postfix the front end reads back to this field.
+            if (!member.empty() && !isIdentifier(member)) {
+                fail(
+                    ref,
+                    std::format(
+                        "a member read of a name that is not a source identifier ('{}')", member));
+            }
+        } else {
+            const std::optional<int64_t> at = constantIntOf(inputs.front());
+            if (at.has_value() && *at >= 0) {
+                member = std::to_string(*at);
+            }
+        }
+        if (member.empty()) {
+            fail(ref, "a member read whose member is not a constant");
+        }
+        Expr base            = expression(inputs[1]);
+        std::string baseText = parenthesize(base, 90);
+        // A struct literal starts with `{`: as in `accessExpression`, the postfix needs the
+        // parentheses the source wrote, or it binds inside the braces.
+        if (!baseText.empty() && baseText.front() == '{') {
+            baseText = "(" + baseText + ")";
         }
         return {std::format("{}.{}", baseText, member), 90};
     }
@@ -3967,6 +4029,12 @@ class CmlPrinter {
         }
         if (isVariableOperator(oper)) {
             fail(ref, std::format("the operator '{}'", uri));
+        }
+        if (uri == ":op/access" || uri == ":op/access_key") {
+            return memberReadExpression(ref);
+        }
+        if (uri == ":op/cast") {
+            return castExpression(ref);
         }
         if (uri == ":op/idx_arr" || uri == ":op/idx_str" || uri == ":op/idx") {
             if (inputs.size() != 2 && inputs.size() != 3) {
