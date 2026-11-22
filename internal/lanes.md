@@ -15,6 +15,7 @@
 | lane/stage2-graphwrite | 编辑会话的两个入口:记录编辑的种类与碰过的区域、通知监听者、发布时按编辑记录分档检查 | 首笔 `cb647873f`(14 文件 +732/−65);本行所在的合并把 `develop` `fc2d7cae8` 合进来,无冲突;两个入口落在 `GraphDraft` 上(`NamedEdit` 关闭时记录、`noteEditedNode` 逐次记录),`editTier()` 喂 `commitViolation` 的两个 flag;`test::edit_record` 单计划合并后仍 1/1 绿,注掉通知即红(`notes=4 notified=0`) | 首笔已合(`9fcd1531b`);本行与两行拆分随下一笔带 | 收车道 | 2026-11-23 00:39 |
 | lane/stage2-frontend-oper | 建图器不再产出 `Cast`/`Fill`/`Accs` 节点,改为产出 `OPER` + `GCOperBody` | 已开,未提交 | 146 处(其中 2 处是 `tr2` 的 kind 闸门) | 这一轮结束前 | 2026-11-23 00:30 |
 | lane/stage3-facts | 五样分析搬进事实框架;33 处绕过事实层的纯度判断改问事实 | 已开,未提交;`facts.h` 全树零定义,先立起来 | — | 需要一轮以上 | 2026-11-23 00:30 |
+| lane/cleanup-cml-comments | 44 个 `.cml` 用例的注释去掉交接页路径(只写测什么、为什么),按计划目录重录被注释移动的 AST 记录 | 首笔 `cf8d1c342`;`git grep docs/handover -- '*.cml'` 44 文件 → 0;`feat/parse` 前后同组 126/125/1,`ast-hashes` 读 4479 行只剩 1 行旧账(`src/stdlib/prelude.cml`,合并 `9fcd1531b` 那一侧落下的);另两处红(`plan_validation`、`runner.backend_matrix`)在 `develop` `8ec3e301a` 的干净树上同样红 | 未合 | 等点名 | 2026-11-23 01:35 |
 | lane/stats-macro | 已合入 | `std::stats` 每张可达图一个名字一个布尔 | 已合(`0699bc111`) | — | 2026-11-22 23:35 |
 | lane/stage2-frontend | 已合入 | 四个算子声明+内核+注册;前端不翻 | 已合(`801e22a43`) | — | 2026-11-22 23:20 |
 | lane/stage2-opsfacts | 已合入 | 图上 `#macro` 五处写 → 零处写 | 已合(`215574512`、`257f84c7e`) | — | 2026-11-22 23:10 |

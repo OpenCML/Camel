@@ -6,8 +6,7 @@
  * uses it for (a count, a norm, anything a training step wants to log). With `f(x) = (x*x, 3x)`
  * at `x = 2`, JAX gives `jax.grad(f, has_aux=True)(2.0) == (4.0, 6.0)` and
  * `jax.value_and_grad(f, has_aux=True)(2.0) == ((4.0, 6.0), 4.0)`; Camel answers the same numbers
- * in the same order, with `has_aux` named at the call (§1 of
- * docs/handover/reviews/questions-2026-10-30-jax.md).
+ * in the same order, with `has_aux` named at the call.
  *
  * The `aux` value's type is the function's own (`int` in `report`): the pair is split by type, not
  * by a convention about floats.

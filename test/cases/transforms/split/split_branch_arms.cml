@@ -10,8 +10,7 @@
 // residual is what lets the backward half pick the arm by the *same* value the forward half picked it
 // by, instead of computing the comparison a second time.
 //
-// The acceptance numbers were written down before this case could read them
-// (`docs/handover/reviews/m2-split-call-and-branch.cn.md` §6): `d/dx (x*x) = 2x` is 4.0 at x = 2.0, and
+// The numbers this case accepts are the paper ones: `d/dx (x*x) = 2x` is 4.0 at x = 2.0, and
 // `d/dx (0.5*x) = 0.5` at any x. Both arms are exercised here, because a cut that only walks one arm is
 // not a cut of a branch.
 //

@@ -17,8 +17,7 @@
  * since; what it holds them to is that the number does not grow with the range.
  *
  * `live` = 0 is not reached and not asserted: a box is freed when its last handle goes only if the
- * handle count follows the holders, and it does not yet (see
- * `docs/handover/reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md`).
+ * handle count follows the holders, and it does not yet.
  */
 
 import state

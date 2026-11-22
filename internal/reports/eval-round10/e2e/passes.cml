@@ -196,9 +196,8 @@ export func instrument_unordered::<F>(p: F): F! sync {
 
 /// The same splice with the edge the other way round: the marker is said to run *before* the print.
 /// `commit` accepts it, and the marker never runs: the body's region runs nothing, so the write the
-/// check counted is not in the program that comes out. Shipped so that the reading
-/// `docs/handover/questions/2026-11-19-an-order-edge-across-an-inline-region-is-ignored-by-the-effect-check.cn.md`
-/// records can be reproduced, and for nothing else -- a pass that commits and changes nothing is not
+/// check counted is not in the program that comes out. Shipped so that this reading can be
+/// reproduced, and for nothing else -- a pass that commits and changes nothing is not
 /// a pass.
 export func instrument_reversed::<F>(p: F): F! sync {
     return match closure_body(p) {
