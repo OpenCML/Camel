@@ -3778,6 +3778,16 @@ class Builder {
     /// operator's rule does not cover keeps the node kind it had instead of disappearing.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// A construction written as the operator it is (`fill::<T, ...F>` of the prelude): an OPER node
+    /// whose ordinary operands are the template the compiler made and then the values, in component
+    /// order. Nothing about a construction configures the call -- `with` is what says which function
+    /// this is -- so the whole call is ordinary parameters: the declaration says so, and the order
+    /// the components are written in is the operand order. `target` is the type being made and the
+    /// values' types are the declaration's `...F`. Falls back to `addFillNode` where no declaration
+    /// answers, so a construction the rule does not cover keeps the node kind it had.
+    node_handle_t fillNodeOf(
+        node_handle_t tmpl, camel::core::type::Type *target,
+        const std::vector<node_handle_t> &values);
     /// A member read written as the operator it is (`access::<T, U>` by place, `access_key::<T, U>`
     /// by name, of the prelude): an OPER node whose first ordinary operand is the place or the name
     /// -- a constant of the program, so a DATA node -- and whose second is the value it reads,

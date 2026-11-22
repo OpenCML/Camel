@@ -1596,17 +1596,12 @@ node_handle_t Builder::fillStaticValues(
               : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
     auto &draft = currGraph_->transaction().edit();
     auto base   = draft.ref(draft.materializeStaticValue(empty, type));
-    std::vector<size_t> slots(values.size());
-    std::iota(slots.begin(), slots.end(), 0);
-    node_handle_t out = currGraph_->addFillNode(
-        type,
-        runtime::makeFillPayload(
-            tuple ? runtime::GCFillKind::Tuple : runtime::GCFillKind::Struct,
-            slots));
-    linkNodes(LinkType::Norm, base, out);
+    std::vector<node_handle_t> parts;
+    parts.reserve(values.size());
     for (const node_handle_t &value : values) {
-        linkNodes(LinkType::With, valueOf(value), out);
+        parts.push_back(valueOf(value));
     }
+    node_handle_t out = fillNodeOf(base, type, parts);
     registerNodeOrigin(context_, out, origin, originKind);
     return out;
 }

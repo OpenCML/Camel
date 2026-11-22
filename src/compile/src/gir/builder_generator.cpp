@@ -293,10 +293,9 @@ void Builder::buildGeneratorBody(
         // it is what can be built while a slot is still a cell, and it is written so that the next
         // reader knows which of the two shapes they are looking at. It is **not** the shape this
         // machine aims at -- the aim is a `T?` slot and no null-and-cast pair.
-        const std::vector<size_t> answerSlot{0};
         // The template a FILL of the round state reads: `(null, point)`. Its first part is the
-        // hole the `with` input fills, and the second is the point the round state starts from --
-        // a constant, so it is part of the constant and not a node of its own. Measured against
+        // hole the construction's first value fills, and the second is the point the round state
+        // starts from -- a constant, so it is part of the constant and not a node of its own. Measured against
         // the target: `(null, 0)` for the loop's first value, `(null, 1)` for a round that
         // answered.
         const auto roundStateTemplate = [&](int64_t point) -> node_handle_t {
@@ -307,11 +306,8 @@ void Builder::buildGeneratorBody(
         };
         node_handle_t initialAnswer =
             castNodeTo(currGraph_->addStaticDataNode(Data::null()), answerType, gct);
-        node_handle_t initialRoundState = currGraph_->addFillNode(
-            roundStateType,
-            runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
-        linkNodes(LinkType::Norm, roundStateTemplate(0), initialRoundState);
-        linkNodes(LinkType::With, initialAnswer, initialRoundState);
+        node_handle_t initialRoundState =
+            fillNodeOf(roundStateTemplate(0), roundStateType, {initialAnswer});
 
         const std::string answerPortName   = "__gen_answer__";
         const std::string answeredPortName = "__gen_answered__";
@@ -411,11 +407,9 @@ void Builder::buildGeneratorBody(
         // The answer a `yield` at statement `k` gives: `(element, the pull that goes on from it)`
         // declared as `answerType`, then packed with the point the next pull starts at.
         const auto packAnswer = [&](node_handle_t answer, int64_t point) -> node_handle_t {
-            node_handle_t fill = currGraph_->addFillNode(
-                roundStateType,
-                runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
-            linkNodes(LinkType::Norm, roundStateTemplate(point), fill);
-            linkNodes(LinkType::With, castNodeTo(answer, answerType, bodyGct), fill);
+            node_handle_t fill = fillNodeOf(
+                roundStateTemplate(point), roundStateType,
+                {castNodeTo(answer, answerType, bodyGct)});
             return fill;
         };
         // Where the body has run out of points: the round answers nothing and the pull is over.
@@ -437,28 +431,23 @@ void Builder::buildGeneratorBody(
                    << tree_->makeData(
                           tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(resume)));
             node_handle_t written = valueNodeOf(visit(write));
-            // `(element, rest)`: the element is the `yield`'s literal, which is part of the
-            // template; the rest is the closure, which is a node.
-            const std::vector<size_t> closureSlot{1};
-            node_handle_t pair = currGraph_->addFillNode(
-                pairType,
-                runtime::makeFillPayload(runtime::GCFillKind::Tuple, closureSlot));
+            // `(element, rest)`: the element is the `yield`'s literal and the rest is the closure, which is
+            // a node. Both are values of this construction, so both are operands -- the template
+            // supplies the same element, and a construction writes every component in the order the
+            // target lays them out.
             TupleDataFactory pairTemplate;
             pairTemplate.add(statement->at(0)->data());
             pairTemplate.add(Data::null());
-            auto pairStatic = currGraph_->addStaticDataNode(pairTemplate.build(), pairType);
-            linkNodes(LinkType::Norm, pairStatic, pair);
+            auto pairStatic  = currGraph_->addStaticDataNode(pairTemplate.build(), pairType);
+            auto pairElement = currGraph_->addStaticDataNode(statement->at(0)->data());
             // The state the closure pulls with: `(pc,)`, built here and captured whole by the
             // closure. The target builds this tuple *inside* the closure from a captured
             // `__gen_pc__`; that difference is written down in the lane's report and not hidden.
-            node_handle_t state = currGraph_->addFillNode(
-                stateType,
-                runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
-            linkNodes(LinkType::Norm, stateTemplate(), state);
-            linkNodes(LinkType::With, written, state);
+            node_handle_t state = fillNodeOf(stateTemplate(), stateType, {written});
             insertNode("__gen_state_now__", state);
             GCT::node_ptr_t stateRef = tree_->makeDRef("__gen_state_now__");
-            linkNodes(LinkType::With, streamValue(stateRef), pair);
+            node_handle_t pair =
+                fillNodeOf(pairStatic, pairType, {pairElement, streamValue(stateRef)});
             node_handle_t round = packAnswer(pair, resume);
             // The block of the arm is the head's `sync`, so what it gives is handed on behind a
             // GATE that waits for the statement it wrote.
@@ -516,17 +505,10 @@ void Builder::buildGeneratorBody(
                     return buildBranch(bodyGct, condition, &both, false);
                 };
                 node_handle_t dispatch = chain(0);
-                // What the round hands to the next one, rebuilt as one value: the two parts of the
-                // dispatch's answer, in the round state's own layout.
-                const std::vector<size_t> bothSlots{0, 1};
-                node_handle_t answerPart = memberReadNodeOf(dispatch, answerType, 0);
+                        node_handle_t answerPart = memberReadNodeOf(dispatch, answerType, 0);
                 node_handle_t pointPart  = memberReadNodeOf(dispatch, pcType, 1);
-                node_handle_t round = currGraph_->addFillNode(
-                    roundStateType,
-                    runtime::makeFillPayload(runtime::GCFillKind::Tuple, bothSlots));
-                linkNodes(LinkType::Norm, roundStateTemplate(0), round);
-                linkNodes(LinkType::With, answerPart, round);
-                linkNodes(LinkType::With, pointPart, round);
+                node_handle_t round =
+                    fillNodeOf(roundStateTemplate(0), roundStateType, {answerPart, pointPart});
                 linkNodes(LinkType::Ctrl, dispatch, round);
                 return round;
             },
@@ -563,13 +545,8 @@ void Builder::buildGeneratorBody(
         // parts (the shape the target publishes, and the only reader of the point).
         node_handle_t loopAnswer = memberReadNodeOf(loopNode, answerType, 0);
         node_handle_t loopPoint  = memberReadNodeOf(loopNode, pcType, 1);
-        const std::vector<size_t> roundSlots{0, 1};
-        node_handle_t loopValue = currGraph_->addFillNode(
-            roundStateType,
-            runtime::makeFillPayload(runtime::GCFillKind::Tuple, roundSlots));
-        linkNodes(LinkType::Norm, roundStateTemplate(0), loopValue);
-        linkNodes(LinkType::With, loopAnswer, loopValue);
-        linkNodes(LinkType::With, loopPoint, loopValue);
+        node_handle_t loopValue =
+            fillNodeOf(roundStateTemplate(0), roundStateType, {loopAnswer, loopPoint});
         node_handle_t pull = memberReadNodeOf(loopValue, answerType, 0);
         // The step's body is the head's `sync`, so its value goes behind a GATE that waits for the
         // loop -- the same GATE a sync block of any other function ends in.

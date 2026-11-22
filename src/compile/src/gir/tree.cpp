@@ -70,14 +70,12 @@ node_handle_t Builder::expandTreeCall(
             core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()));
         auto &draft = currGraph_->transaction().edit();
         auto base   = draft.ref(draft.materializeStaticValue(empty, type));
-        std::vector<size_t> slots(values.size());
-        std::iota(slots.begin(), slots.end(), 0);
-        auto out = currGraph_->addFillNode(
-            type,
-            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-        linkNodes(LinkType::Norm, base, out);
-        for (auto value : values)
-            linkNodes(LinkType::With, valueOf(value), out);
+        std::vector<node_handle_t> parts;
+        parts.reserve(values.size());
+        for (auto value : values) {
+            parts.push_back(valueOf(value));
+        }
+        auto out = fillNodeOf(base, type, parts);
         registerNodeOrigin(context_, out, origin, "gir.tree.fill");
         return out;
     };

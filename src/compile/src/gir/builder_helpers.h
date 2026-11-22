@@ -85,6 +85,70 @@ inline runtime::GCFillKind fillKindForType(Type *type) {
     }
 }
 
+/// Which construction a node states, if it states one: a FILL says it in its payload, and
+/// `:op/fill` says it by being that operator -- the type it makes then gives the kind
+/// (`fillKindForType`). Everything that reads a construction back asks this rather than the node
+/// kind, because both shapes say the same thing.
+inline std::optional<runtime::GCFillKind>
+constructionKindOf(node_handle_t node, const Type *type) {
+    if (node == nullptr) {
+        return std::nullopt;
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Fill)) {
+        if (!nodeIsKind(node, runtime::GCNodeKind::Oper) || type == nullptr) {
+            return std::nullopt;
+        }
+        const auto op = nodeGraphOf(node)->operTarget(node);
+        if (op == nullptr || op->uri() != ":op/fill") {
+            return std::nullopt;
+        }
+        return fillKindForType(const_cast<Type *>(type));
+    }
+    const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
+    if (payload.size() < sizeof(runtime::GCFillBody)) {
+        return std::nullopt;
+    }
+    return reinterpret_cast<const runtime::GCFillBody *>(payload.data())->fillKind;
+}
+
+/// The components a construction writes, as (component, value) in the order it writes them. A FILL
+/// carries the component list in its payload and the values as `With` inputs; `:op/fill` carries
+/// them as ordinary operands after the template, and the i-th value is component i. Components the
+/// template supplies are in neither: they are constants of the construction, not values of it.
+inline std::vector<std::pair<size_t, node_handle_t>> constructionValuesOf(node_handle_t node) {
+    std::vector<std::pair<size_t, node_handle_t>> values;
+    if (node == nullptr) {
+        return values;
+    }
+    if (nodeIsKind(node, runtime::GCNodeKind::Fill)) {
+        const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
+        if (payload.size() < sizeof(runtime::GCFillBody)) {
+            return values;
+        }
+        const auto slots = reinterpret_cast<const runtime::GCFillBody *>(payload.data())->slots();
+        const auto with  = withInputsOf(node);
+        values.reserve(slots.size() < with.size() ? slots.size() : with.size());
+        for (size_t i = 0; i < slots.size() && i < with.size(); ++i) {
+            values.emplace_back(
+                static_cast<size_t>(slots[i]), nodeDraftOf(node)->ref(with[i]));
+        }
+        return values;
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return values;
+    }
+    const auto op = nodeGraphOf(node)->operTarget(node);
+    if (op == nullptr || op->uri() != ":op/fill") {
+        return values;
+    }
+    const auto norm = normInputsOf(node);
+    for (size_t i = 1; i < norm.size(); ++i) {
+        // The template is the first ordinary operand and is not a value of the construction.
+        values.emplace_back(i - 1, nodeDraftOf(node)->ref(norm[i]));
+    }
+    return values;
+}
+
 inline void setGraphReturnFromResult(
     const compile_graph_ptr_t &graph, draft_node_ref_t outputNode, draft_node_ref_t valueNode,
     Type *resultType) {
