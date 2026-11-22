@@ -11,6 +11,7 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/utils/path.h"
 
 #include <algorithm>
@@ -142,19 +143,17 @@ bool isEntryName(const std::string &name) {
 }
 
 const char *kindName(GCNodeKind kind) {
+    // The four the execution side calls shaped operators are named by the operator, the same table
+    // a back end's dump reads (camel/execute/shaped_operators.h).
+    if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(kind);
+        shape != camel::execute::OperShape::None) {
+        return camel::execute::shapeName(shape);
+    }
     switch (kind) {
     case GCNodeKind::Data:
         return "DATA";
     case GCNodeKind::Port:
         return "PORT";
-    case GCNodeKind::Cast:
-        return "CAST";
-    case GCNodeKind::Copy:
-        return "COPY";
-    case GCNodeKind::Fill:
-        return "FILL";
-    case GCNodeKind::Accs:
-        return "ACCS";
     case GCNodeKind::Brch:
         return "BRCH";
     case GCNodeKind::Join:
@@ -173,6 +172,8 @@ const char *kindName(GCNodeKind kind) {
         return "DREF";
     case GCNodeKind::Loop:
         return "LOOP";
+    default:
+        break;
     }
     return "?";
 }
@@ -219,7 +220,7 @@ ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {
     }
     const gc_node_ref_t callee = root->withInputsOf(call).front();
     const auto *calleeNode     = root->node(callee);
-    if (calleeNode->kind == GCNodeKind::Fill &&
+    if (camel::execute::shapeOfKind(calleeNode->kind) == camel::execute::OperShape::Construction &&
         root->nodeBodyAs<GCFillBody>(callee)->fillKind == GCFillKind::FunctionClosure &&
         !root->normInputsOf(callee).empty()) {
         entry.main = functionConstant(root, root->normInputsOf(callee).front());

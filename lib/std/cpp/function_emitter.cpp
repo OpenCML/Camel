@@ -13,6 +13,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/shaped_operators.h"
 
 #include <algorithm>
 #include <cctype>
@@ -86,7 +87,8 @@ bool onlyTemplate(const GCGraph *graph, gc_node_ref_t ref) {
     }
     for (gc_node_ref_t user : graph->normOutputsOf(ref)) {
         const auto *node = graph->node(user);
-        if (node == nullptr || node->kind != GCNodeKind::Fill ||
+        if (node == nullptr ||
+            camel::execute::shapeOfKind(node->kind) != camel::execute::OperShape::Construction ||
             graph->normInputsOf(user).front() != ref) {
             return false;
         }
@@ -504,7 +506,9 @@ Block FunctionEmitter::lowerSequenceBody(
             // write nothing can follow (nothingAfter). They still give values: an arm laid out
             // after another one reads the gates the order put at the end of the other. A gate
             // of the value that ended the sequence (a tail call has none) gives nothing.
-            const bool forwards = node->kind == GCNodeKind::Gate || node->kind == GCNodeKind::Copy;
+            const bool forwards =
+                node->kind == GCNodeKind::Gate ||
+                camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Clone;
             const bool valueOnly =
                 forwards || node->kind == GCNodeKind::Data || node->kind == GCNodeKind::Port;
             const auto inputs = frame.graph->normInputsOf(ref);
@@ -628,6 +632,25 @@ bool FunctionEmitter::lowerNode(
     Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail) {
     const GCGraph *g = frame.graph;
     const auto *node = g->node(ref);
+    // The four shaped operators lower from the shape their operator gives, not from a node kind
+    // this emitter reads (plan 2.3, camel/execute/shaped_operators.h).
+    switch (camel::execute::shapeOfKind(node->kind)) {
+    case camel::execute::OperShape::Conversion:
+        lowerCast(frame, ref, out);
+        return false;
+    case camel::execute::OperShape::Clone:
+        lowerCopyValue(frame, ref);
+        return false;
+    case camel::execute::OperShape::Construction:
+        lowerFill(frame, ref, out);
+        return false;
+    case camel::execute::OperShape::Access:
+        lowerAccess(frame, ref);
+        return false;
+    case camel::execute::OperShape::None:
+        break;
+    }
+
     switch (node->kind) {
     case GCNodeKind::Data: {
         const Type *type = node->dataType();
@@ -677,30 +700,14 @@ bool FunctionEmitter::lowerNode(
             refuse(g, ref, std::format("a port of {} has no value", describeFunction(g)));
         }
         return false;
-    case GCNodeKind::Gate:
-    case GCNodeKind::Copy: {
-        // A GATE passes its value on once what it waits for has run; a COPY of a value that is
-        // not an object (or of a string, which never changes) is that value.
+    case GCNodeKind::Gate: {
+        // A GATE passes its value on once what it waits for has run.
         const auto inputs = g->normInputsOf(ref);
         if (!inputs.empty()) {
-            if (node->kind == GCNodeKind::Copy) {
-                // A copy of a value is that value: values have no identity (design principles
-                // 10.5), and every holder of a shared array sees it unchanged (array.h).
-                cppType(g, ref, node->dataType());
-            }
             frame.values[ref] = valueOf(frame, inputs.front());
         }
         return false;
     }
-    case GCNodeKind::Cast:
-        lowerCast(frame, ref, out);
-        return false;
-    case GCNodeKind::Fill:
-        lowerFill(frame, ref, out);
-        return false;
-    case GCNodeKind::Accs:
-        lowerAccess(frame, ref);
-        return false;
     case GCNodeKind::Call:
         lowerCallValue(frame, ref, out);
         return false;
@@ -1778,6 +1785,18 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
         false};
 }
 
+void FunctionEmitter::lowerCopyValue(Frame &frame, gc_node_ref_t ref) {
+    // A copy of a value is that value: values have no identity (design principles 10.5), and every
+    // holder of a shared array sees it unchanged (array.h).
+    const GCGraph *g  = frame.graph;
+    const auto *node  = g->node(ref);
+    const auto inputs = g->normInputsOf(ref);
+    if (!inputs.empty()) {
+        cppType(g, ref, node->dataType());
+        frame.values[ref] = valueOf(frame, inputs.front());
+    }
+}
+
 void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A call of a function value (design principles 2.1): with input 0 is the value,
     // the other `with` inputs and the normal ones its arguments.
@@ -1794,7 +1813,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
         for (gc_node_ref_t arg : g->normInputsOf(ref)) {
             expr += ", " + valueOf(frame, arg).text;
         }
-        if (g->node(closure)->kind == GCNodeKind::Fill) {
+        if (camel::execute::shapeOfNode(*g, closure) == camel::execute::OperShape::Construction) {
             for (gc_node_ref_t captured : g->withInputsOf(closure)) {
                 expr += ", " + valueOf(frame, captured).text;
             }

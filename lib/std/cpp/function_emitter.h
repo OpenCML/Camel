@@ -180,6 +180,8 @@ class FunctionEmitter {
     void lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out);
     void lowerFill(Frame &frame, gc_node_ref_t ref, Block &out);
     void lowerAccess(Frame &frame, gc_node_ref_t ref);
+    /// COPY: a copy of a value is that value, and every holder of a shared array sees it unchanged.
+    void lowerCopyValue(Frame &frame, gc_node_ref_t ref);
     void lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out);
     void lowerCast(Frame &frame, gc_node_ref_t ref, Block &out);
     /// `:var/new`, `:var/get` and the assignments; false for any other operator.
