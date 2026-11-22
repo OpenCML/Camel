@@ -1,0 +1,23 @@
+/**
+ * Two laws of one key whose parameter types are **written differently and are one type**: `(float)`
+ * is the parenthesized type `float` (`docs/technical/34_handwritten_parser.md`), not a one-element
+ * tuple.
+ *
+ * Compared as text -- which is what the rule index used to compare -- the two lists are
+ * `(float),float` and `float,float`, so the second law was filed beside the first and the transform
+ * would choose between them by the order they are written in. Compared as the types the compiler
+ * made of them both are `(float, float)`, which is the duplicate the index refuses.
+ */
+
+rule first_rule(x: (float), w: float) {
+    x + w => (dx: float, dw: float) => dx
+}
+
+rule second_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dw
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

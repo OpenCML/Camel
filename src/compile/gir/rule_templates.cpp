@@ -146,6 +146,7 @@ uint64_t registerGenericRule(
     entry->lhs             = lhs;
     entry->rhs             = rhs;
     entry->when            = when;
+    entry->genericSides    = true;
     table.push_back(std::move(entry));
     // Ids start at 1: a rule value that keeps 0 is an ordinary rule, whose two sides are its own
     // functions, and every path that reads a rule value goes on reading it the way it did.
@@ -163,6 +164,7 @@ uint64_t registerMonomorphicRule(
     entry->lhs             = lhs;
     entry->rhs             = rhs;
     entry->when            = when;
+    entry->genericSides    = false;
     // The one instance, made here and not on the first ask: the graphs are the declaration's own
     // functions, so there is no tuple to wait for, and an entry with `typeParams` empty and exactly
     // one instance is what `genericRuleInstance` answers without instantiating anything.
@@ -208,6 +210,55 @@ RuleConditionAt ruleConditionAt(
 
 std::vector<Type *> ruleInstanceTypes() {
     return camel::core::OperatorTable::instance().allRegisteredTypes();
+}
+
+namespace {
+
+/// The compiled signature of one of a rule's sides, or null when the rule has no such side. A
+/// generic rule's side is a template (its signature still holds the declaration's type variables);
+/// an ordinary rule's side is the graph the declaration already is.
+const camel::core::type::FunctionType *signatureOf(
+    const std::shared_ptr<void> &side, bool genericSides) {
+    if (side == nullptr) {
+        return nullptr;
+    }
+    if (genericSides) {
+        const auto tmpl = std::static_pointer_cast<GenericTemplate>(side);
+        return tmpl != nullptr ? tmpl->funcType : nullptr;
+    }
+    const auto graph = std::static_pointer_cast<DraftGraphBuilder>(side);
+    return graph != nullptr ? graph->funcType() : nullptr;
+}
+
+} // namespace
+
+bool compiledRuleTypes(
+    camel::core::context::Context &context, std::string_view rule,
+    std::vector<const camel::core::type::Type *> &parameterTypes,
+    const camel::core::type::FunctionType *&condition) {
+    Table &table             = rulesOf(context);
+    GenericRuleEntry *found  = nullptr;
+    for (const auto &entry : table) {
+        if (entry != nullptr && entry->name == rule) {
+            found = entry.get(); // the last one: the module under build registered last
+        }
+    }
+    if (found == nullptr) {
+        return false;
+    }
+    const camel::core::type::FunctionType *left = signatureOf(found->lhs, found->genericSides);
+    if (left == nullptr) {
+        // The left side is the one that has them: a rule whose left side is not a signature has no
+        // parameter list, and "no list" is not "no parameters".
+        return false;
+    }
+    parameterTypes.clear();
+    parameterTypes.reserve(left->normTypesCount());
+    for (size_t i = 0; i < left->normTypesCount(); ++i) {
+        parameterTypes.push_back(left->normTypeAt(i));
+    }
+    condition = signatureOf(found->when, found->genericSides);
+    return true;
 }
 
 size_t genericRuleInstance(

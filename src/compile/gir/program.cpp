@@ -38,6 +38,7 @@
 #include "camel/runtime/graph.h"
 
 #include "camel/compile/gir/reachable.h"
+#include "camel/compile/gir/rule_templates.h"
 
 #include <algorithm>
 #include <cctype>
@@ -1058,7 +1059,21 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
             // under that key when it is a different one, so the index cannot hold two rules for one
             // primitive and the table the transform will ask is the table built here -- one place,
             // not a table built to be thrown away.
-            for (const auto &rule : rules) {
+            for (camel::core::RuleObject &rule : rules) {
+                // What the declaration *compiled to*, filed with it: the types of its parameters
+                // and its condition's signature, read off the sides the maker registered for this
+                // very rule a moment ago. A rule's parameter types are types -- the text the
+                // declaration was written with is not one, and an index that compared texts would
+                // call two spellings of one type two laws and two types spelled alike one law
+                // (`include/camel/core/rule_index.h`). The parse-time collection could not answer
+                // this: a syntactically read declaration has no types.
+                std::vector<const camel::core::type::Type *> parameterTypes;
+                const camel::core::type::FunctionType *condition = nullptr;
+                if (camel::compile::gir::compiledRuleTypes(
+                        *context_, rule.name, parameterTypes, condition)) {
+                    rule.parameterTypes = std::move(parameterTypes);
+                    rule.condition      = condition;
+                }
                 if (!rule.shape.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::RuleLeftIsNotAnOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
