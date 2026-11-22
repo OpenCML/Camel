@@ -42,6 +42,30 @@ expect_diagnostic_code = "0x03000205"
 expect_diagnostic_line = 7
 
 [[tests]]
+name = "rulesets_duplicate_is_the_compiled_type_not_the_text"
+desc = "Two rules of one key whose parameter types are written differently and are one type: `(float)` is the parenthesized type `float`, so both laws answer for the same operands and the second is refused. The index compares the types a declaration compiled to, not the text it was written with -- as text the two lists are `(float),float` and `float,float`, and the pair used to be filed as two laws."
+kind = "negative"
+case = "../../../cases/compile/rulesets/rulesets.err_duplicate_two_spellings.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DuplicateRuleForOperator"
+expect_diagnostic_code = "0x03000205"
+expect_diagnostic_line = 16
+
+[[tests]]
+name = "rulesets_two_types_one_spelling_are_two_laws"
+desc = "Two rules of one key whose parameter types are written the same way and are two types: the module declares `type T = float`, the first rule's head declares a type parameter `T` that wins inside its own declaration, and the second rule's `T` is the module's. Both lists read `T, T` and neither is refused, because the index compares the compiled types -- `(T, T)` at the head's variable against `(float, float)` -- so the table holds both laws under `+/2`."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets.two_types_one_spelling.cml"
+args = ["${case}", "std::rulesets", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.two_types_one_spelling +/2 -> plus_any\nRULESET rulesets.two_types_one_spelling +/2 -> plus_float\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "rulesets_left_not_operator_refused"
 desc = "A rule whose left side is a bare name is refused, and the refusal says what was written: the shape is named, because the writer cannot see that the index needs an operator at the head."
 kind = "negative"

@@ -2,51 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 // What this file owns: the rewrite surface: `rule` and `fact` -- the sides, the const parameters,
-// the head the reader indexes a ruleset by, and the parameter-type string that tells two laws of
-// one operator apart.
+// the head the reader indexes a ruleset by, and the names the sides bind. The parameter types and
+// the condition are *not* read here: they are types, a declaration read as syntax has none, and
+// they are filed from the compiled sides when the module is built (the rule index,
+// `camel/core/rule_index.h`, and `camel/compile/gir/rule_templates.h#compiledRuleTypes`).
 
 #include "builder_internal.h"
 
 #include "camel/core/rule_index.h"
 
 namespace {
-
-/// A rule's parameters as one string: the type written for each, in order, with the whitespace
-/// between the tokens squeezed out and the positions joined by `|` (`T[...]|T`). Empty for a rule
-/// that takes none.
-///
-/// This is the part of a rule's signature the head cannot answer -- the head is the operator, and
-/// two laws of one operator with different parameter types are two laws (design principles 5.4,
-/// 9.11) -- and it is read here, where the declaration is
-/// still syntax, for the same reason the head is: at the stage a module's declarations are read a
-/// rule's `__lhs` has no body, so nothing later has these types as they were written.
-std::string parameterTypesOf(cst::ParentParams params) {
-    std::string joined;
-    const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
-    if (!paired) {
-        return joined;
-    }
-    bool first = true;
-    for (const syn::Node child : paired->nodes()) {
-        if (!child.is(NK::KeyParamPair)) {
-            continue; // a tuple parameter: one position, many types, not the one this string holds
-        }
-        const cst::KeyParamPair pair(child);
-        const auto type = pair->type();
-        if (!first) {
-            joined += '|';
-        }
-        first = false;
-        if (type) {
-            for (const char c : type->text()) {
-                if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-                    joined += c;
-                }
-            }
-        }
-    }
-    return joined;
-}
 
 // Whether an expression reads a name as data: a `RefData` of that text, at any depth (`x * c`
 // reads `x` and `c`). The left side of a rule is what binds its `const` parameters, and a read
@@ -127,18 +92,13 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // rule where it is written (the rule is wrong here, not at the call that would use it).
         std::string outerUses =
             sides[1] ? outerNamesUsedInRight(sides[0], sides[1]) : std::string();
-        // The rule's condition as written (`is_same::<T, int>()`), or empty. It is part of what a
-        // rule *is*: two rules filed under one key with the same condition could not be told apart
-        // by the engine, so that pair is a duplicate, while two that differ in their condition are
-        // a family it dispatches over.
-        const auto conditionClause = context->get<cst::WhenClause>();
-        std::string condition      = conditionClause ? conditionClause->text() : std::string();
-        // The type of each parameter, in order: the other half of what a duplicate is. A key holds
-        // one rule per parameter-type list, so the two
-        // laws of `T[...]` and `T` are filed under one key and the engine picks the one the
-        // operand's own type enters -- the declaration is not refused for writing the same
-        // `is_float::<T>()` twice.
-        std::string parameterTypes = parameterTypesOf(context->get<cst::ParentParams>());
+        // The rule's condition, and the type of each of its parameters, are *not* read here. They
+        // are what the declaration compiled to, and they are filed from the sides the compiler
+        // built (`program.cpp`, `camel/compile/gir/rule_templates.h#compiledRuleTypes`) for the
+        // reason the whole of this pass exists: a type is not its text, and a text that two
+        // different types can be written with is not a thing to judge a rule by. What is read here
+        // is what only the declaration's syntax can answer -- the head, the callee, the names each
+        // side binds, and whether it binds one the right side also writes.
         camel::core::collectRuleHead(
             diags_->moduleName(),
             std::move(head),
@@ -147,8 +107,6 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             std::move(shape),
             std::move(variables),
             std::move(outerUses),
-            std::move(condition),
-            std::move(parameterTypes),
             arity,
             range.start,
             range.end);

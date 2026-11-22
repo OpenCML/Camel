@@ -35,7 +35,8 @@ class Context;
 
 namespace camel::core::type {
 class Type;
-}
+class FunctionType;
+} // namespace camel::core::type
 
 namespace camel::runtime {
 class Program;
@@ -111,6 +112,11 @@ struct GenericRuleEntry {
     std::shared_ptr<void> lhs;
     std::shared_ptr<void> rhs;
     std::shared_ptr<void> when;
+    /// Whether `lhs`/`rhs`/`when` are templates (`GenericTemplate`, instantiated per type tuple) or
+    /// the graphs the declaration already is (a `DraftGraphBuilder`, one instance). The two are
+    /// both held as `void` here, and a reader that wants a side's compiled signature has to know
+    /// which it is looking at.
+    bool genericSides = false;
     /// The builder that holds the templates: an instance is built where the rule was declared,
     /// never in the program that matches it.
     void *owner = nullptr;
@@ -165,6 +171,30 @@ genericRuleTable(camel::core::context::Context &context);
 /// The rule registered under `ruleId`, or null when nothing is registered under it. An ordinary
 /// rule's value keeps 0, so no rule is ever registered under it.
 GenericRuleEntry *genericRuleEntry(camel::core::context::Context &context, uint64_t ruleId);
+
+/// The types a rule declaration compiled to, read off the sides the compiler registered for it:
+/// `parameterTypes` is the type of each of the rule's parameters, in the order the declaration
+/// writes them, and `condition` is its condition's compiled signature -- null when the rule has no
+/// condition.
+///
+/// This is the answer the rule index files (`camel/core/rule_index.h`): a rule's parameter types are
+/// *types*, and the declaration's text is not one -- two spellings of one type would read as two
+/// laws, and two types spelled alike would read as one. The compiled signatures are the only truth
+/// about them, and they exist here, on the sides the maker registered.
+///
+/// `rule` is the name the declaration gives itself. The table is walked for it, and the **last**
+/// entry of that name answers: the index files a module's rules right after the module's body is
+/// built (`program.cpp`), so the rule being filed is the one registered last, and a rule name two
+/// modules share (a ruleset a case shadows) is answered by the module under build rather than by
+/// the one it shadows.
+///
+/// Answers false when this context holds no such rule -- neither out parameter is written then,
+/// because an empty list would read as "a rule with no parameters", and the caller must not be
+/// handed one answer for two facts.
+bool compiledRuleTypes(
+    camel::core::context::Context &context, std::string_view rule,
+    std::vector<const camel::core::type::Type *> &parameterTypes,
+    const camel::core::type::FunctionType *&condition);
 
 /// Registers the templates of one generic rule and answers the id its value keeps: ids start at 1,
 /// and 0 means "not a generic rule" everywhere. `owner` is the builder the templates belong to,
