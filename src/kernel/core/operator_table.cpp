@@ -10,6 +10,7 @@
 #include "camel/core/operator_names.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/typevar.h"
+#include "camel/ops/operator_record.h"
 
 #include "camel/utils/assert.h"
 
@@ -69,12 +70,21 @@ OperId OperatorTable::internLocked(std::string_view uri) {
     if (isAssignmentUri(uri)) {
         family |= kFamilyAssignment;
     }
+    // The record is seated before the entry, so an id this table answers always has one to ask: a
+    // reader of a node holds the id and the record is keyed by its own (camel/ops).
+    const std::uint32_t record = camel::ops::Registry::instance().intern(uri);
     const OperId id = entries_.append([&](Entry &entry) {
         entry.uri    = symbol;
         entry.family = family;
+        entry.record = record;
     });
     ids_.emplace(symbol, id);
     return id;
+}
+
+const camel::ops::Record *OperatorTable::recordOf(OperId id) const {
+    const std::uint32_t record = entries_[id].record;
+    return record == 0 ? nullptr : camel::ops::Registry::instance().find(record);
 }
 
 OperId OperatorTable::intern(std::string_view uri) {
