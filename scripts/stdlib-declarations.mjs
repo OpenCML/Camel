@@ -134,7 +134,11 @@ const MOVED_LIBRARY = [
     path.join(REPO_ROOT, 'src', 'stdlib'),
     path.join(REPO_ROOT, 'lib'),
 ].find((dir) => fs.existsSync(dir)) ?? path.join(REPO_ROOT, 'src', 'stdlib')
-const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
+const FLAT_LIBRARY =
+    [
+        path.join(REPO_ROOT, 'src', 'stdlib'),
+        path.join(REPO_ROOT, 'stdlib'),
+    ].find((dir) => fs.existsSync(path.join(dir, 'std.cml'))) ?? path.join(REPO_ROOT, 'stdlib')
 const FLAT = fs.existsSync(path.join(FLAT_LIBRARY, 'std.cml'))
 const firstOf = (files) => files.find((file) => fs.existsSync(file)) ?? files[0]
 /// A module's declaration file: `<name>.cml` in the flat library, `src/stdlib/<name>/<name>.cml` in the
