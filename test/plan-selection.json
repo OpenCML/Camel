@@ -559,7 +559,7 @@
         },
         {
             "comment": "The exemplars and their checker: feat/exemplars re-runs every exemplar and checks its recorded output.",
-            "paths": ["exemplars/"],
+            "paths": ["internal/exemplars/"],
             "plans": ["feat/exemplars.plan.toml"]
         },
         {
@@ -589,7 +589,7 @@
         },
         {
             "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct, and the source package's REPRODUCE.md, whose commands and paths docs_links reads like any other page); agents/ is the development guide. llms.txt is the root index of the reference for AI readers, so a change to it is a documentation change. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
-            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "REPRODUCE.md", "llms.txt"],
+            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "internal/ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "internal/REPRODUCE.md", "llms.txt"],
             "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {
