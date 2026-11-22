@@ -1295,6 +1295,40 @@ CommitInPlaceTestPass::apply(const camel::runtime::Program *program, std::ostrea
     out << "commit_inplace: unordered-published=" << publishedUnordered
         << " ordered-published=" << publishedOrdered << '\n'
         << std::flush;
+    // The same two writes with the order turned round: the chain is taken away in all three kinds, and
+    // an order edge now says the second runs before the first. A commit that required the order the
+    // program was written in would refuse this; the check asks only that an order exist, because
+    // which of the two runs first is a meaning a pass may change (design principles 1) and not a
+    // promise this check fixes. All three kinds have to go: the block's chain reaches its statement
+    // as an order edge as well as a wait, and an edge left behind is the old direction -- writing
+    // the opposite one over it is a cycle, which the seal reports before the commit is asked.
+    const auto reverseTheOrder = [&](const ChainedPrints &pair) -> bool {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(const_cast<GCGraph *>(pair.graph)).edit();
+        const gc_node_ref_t waits = pair.second;
+        draft.setCtrlInputs(pair.second, none);
+        draft.setSyncInputs(pair.second, none);
+        draft.setOrderInputs(pair.second, none);
+        draft.setOrderInputs(pair.first, std::span<const gc_node_ref_t>(&waits, 1));
+        out << "commit_inplace: graph '" << pair.graph->name() << "': node " << pair.first
+            << " now runs after node " << pair.second << ", the order turned round\n"
+            << std::flush;
+        try {
+            session.commit();
+            out << "commit_inplace: the same edit with the order turned round -- published, which "
+                   "is the answer: the check asks for an order, not for the one the program wrote\n"
+                << std::flush;
+            return true;
+        } catch (const GraphCommitRefused &refused) {
+            out << "commit_inplace: the same edit with the order turned round -- refused, check="
+                << commitCheckName(refused.violation().check)
+                << ", which would mean the check fixes the direction\n"
+                << std::flush;
+            return false;
+        }
+    };
+    const bool reversedPublished = reverseTheOrder(byChain);
+    out << "commit_inplace: reversed-published=" << reversedPublished << '\n' << std::flush;
     // The program is handed back unchanged: the two commits above are the reading.
     return program;
 }

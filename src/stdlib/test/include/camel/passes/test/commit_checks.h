@@ -168,6 +168,11 @@ class CommitTierTestPass : public RuntimeGraphRewritePass {
  *   * in `carries` the second write reads the first one's value, so a data edge orders them with the
  *     chain gone: the same edit, asked the same question, publishes. Without that half "it was
  *     refused" would only mean "an in-place edit is always refused", which is a reading of nothing.
+ *   * the third draft reads the same pair with the order turned round: the chain is taken away in
+ *     every kind it is carried in, and an order edge says the second write runs before the first,
+ *     and the commit must publish. The pair is ordered either way, so a check that refused it would
+ *     be fixing the direction the program was written in, which is a meaning a pass may change and
+ *     not a promise the check makes.
  *
  * The pass returns the program it was given: the commits are the reading, and what runs next must be
  * the fixture.
