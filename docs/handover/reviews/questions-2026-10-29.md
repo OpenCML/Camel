@@ -7054,3 +7054,18 @@ CI `45001457388` 五腿全绿：`linux` / `linux-x64-nojit` / `ASan + UBSan` / `
 2. `--verify-ops` 比签名时不比 `panic`：签名字符串里本来就没有这一项；`panic` 是否一致由 `scripts/check-operator-panic.mjs` 单独管（它比的是实现里的故障路径与声明）。
 3. C++ 登记那一侧能填 `panic` 之后（`ce8332713` 已有设置函数），由登记表比两个入口的 `panic`；在那之前两边不一致是**对的红**，列待办，不消。
 4. `:struct/zip` 那一处（声明的容器写了 `[] panic`、算子是 `[]`）是真差别，单独看：这个 `panic` 写的位置不对的话改位置，不是删。
+
+## 派工（2026-11-22 20:55）：阶段 2 余下的活同时开，车道开满
+
+决策者。现在只有 `panic` 一条线在动，车道没开满。阶段 2 余下的活按目录分开，**当轮同时开**（计划仍是 `docs/handover/plans/2026-11-22-refactor-stage2-interfaces.cn.md`）：
+
+| 车道 | 做什么 | 完成 |
+|---|---|---|
+| 图 | 2.1 第一批迁移：`GraphRead` 的 12 个使用者迁到 `GraphView` 后删掉 `GraphRead`；`LoopView`/`LoopDraftView`、`decidingRegionOf`/`decidingRegionOfDraft` 各合成一份写在视图上；`ControlRegions`、`NodeRoleRegistry` 改接受视图；一致性检验进快层 | 三项迁完、被替代的那份删除；差分无差异 |
+| 算子与事实 | 2.2 收尾：`OperatorPurity` 清到 0；宏只留在记录里（节点、图上的标志改为推出）；解析器只留记录、`OperatorGroup` 只分组；导数规则按 `OperId` 取；框架外五样分析（效应汇总、使用索引、执行计划、`ControlRegions`、写法提取）登记为事实种类；"C++ 不写声明登记算子"与"草稿上挂事实"各一条用例 | 各项只剩一处；两条用例绿 |
+| 前端 | 2.3：转换、构造、取成员三个算子照复制的做法在 `lib/std` 声明，前端改为生成 OPER | 前端不再产出这三种节点 |
+| 执行与变换 | 2.3：各自目录里按 Cast/Copy/Fill/Accs 种类分支的读者（约 200 处）改为问算子；最后一个读者迁走的那次合并里从 `GCNodeKind` 删掉四项 | 种类表里没有这四项；性能读数不退 |
+| panic | 余下约 40 个算子写 `panic`；`graph.cpp` 改读记录，出"改前改后每个算子 `mayFault` 一项不变"的表 | 检查全绿，表一项不变 |
+| 合并位 | CI 稳定（最近一次全绿是 `246b9edf3`，之后都被新推送顶掉——合并攒成批，让 CI 能跑完）；`panic` 收尾合入且 CI 全绿后开第二次搬家窗口 | — |
+
+第二次搬家只改路径前缀，git 认得纯改名；窗口期间各车道**只停合入、不停手上的活**，关窗后先 `merge develop` 再合。接口有改动的一律单独一笔标"待审"。
