@@ -1,0 +1,28 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A function whose result is the gradient transform applied to a function: its graph's result is
+// the gradient call itself, and `autodiff:grad`'s own record says macro, so that wrapper graph
+// answers `isMacro` with no `#macro` declaration anywhere in the program. `std::stats` prints the
+// fact per graph.
+//
+// Red when the operator-record branch of the derivation is removed: the wrapper graph then
+// reports `false` in `macro` -- the key is still printed, one entry per graph -- and any
+// derivation that answered `true` for every graph is red on the root graph's entry beside it.
+import { grad } from autodiff
+
+with <xs: float[]>
+func weighted(): float {
+    return xs[0] * 2.0 + xs[1] * 3.0
+}
+
+func make_gradient() {
+    return grad(weighted)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0]
+    let g = make_gradient()<xs>()
+    println(g[0] + g[1])
+    return 0
+}
