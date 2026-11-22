@@ -1,0 +1,57 @@
+{
+  "//": [
+    "The pinned baseline of the stage 2 merge conditions, and the two corpora the two gates read.",
+    "",
+    "Everything a lane needs to paste into a dispatch ticket is written here and nowhere else: the",
+    "baseline commit, the two install roots, the jobs, the slices.  A gate refuses to run when the",
+    "baseline install is not the build of the commit written here (a reading against the wrong",
+    "baseline is the one failure that looks exactly like a green one), and it refuses when a slice",
+    "measures nothing.",
+    "",
+    "The baseline install is a copy of a Release install built from `baseline.commit` with a clean",
+    "tree: `out/latest/build-info.json` names that commit and `dirty: false`.  It is copied aside",
+    "once (`cp -a <checkout>/out/latest /home/zjwei/camel-baseline/df2-base`) and never rebuilt, so",
+    "both sides of every comparison stay the same two compilers for the whole stage.  It lives",
+    "OUTSIDE `~/camel-work/` on purpose: that root is the gate's work root, and a run there drops the",
+    "checkouts whose local worktree is gone -- a baseline install is not a checkout and must not be",
+    "read as one.",
+    "",
+    "`lane.install` is the install of the checkout this file lives in, built by",
+    "`internal/tools/camel-remote.ps1 -Path <worktree>` on the host."
+  ],
+  "baseline": {
+    "commit": "2576db7966d9600eb847b789b1f444f149678d18",
+    "short": "2576db796",
+    "install": "/home/zjwei/camel-baseline/df2-base"
+  },
+  "lane": {
+    "install": "/home/zjwei/camel-work/df2/out/latest"
+  },
+  "jobs": 8,
+  "gates": {
+    "view": {
+      "item": "2.1",
+      "name": "视图一致性",
+      "claim": "One program, before and after: the graph the view is asked to present, and the output the program prints, are the same on both sides. The frozen/draft two-reading check that the encoder asks of every graph it encodes is inside this reading: a graph whose two readings disagree is refused, so the case exits differently from the baseline and is counted here.",
+      "plans": [
+        "test/plans/smoke/core.plan.toml",
+        "test/plans/feat/compile/core.plan.toml",
+        "test/plans/feat/compile/gir.plan.toml",
+        "test/plans/feat/compile/graph_read.plan.toml",
+        "test/plans/feat/compile/branch_exit.plan.toml",
+        "test/plans/feat/compile/fold_arms.plan.toml"
+      ]
+    },
+    "nodes": {
+      "item": "2.3",
+      "name": "改前改后无差异",
+      "claim": "The programs that build a Cast, a Copy, a Fill and an Access answer the same thing and draw the same graph before and after the four kinds become ordinary operators.",
+      "plans": [
+        "test/plans/feat/compile/casts.plan.toml",
+        "test/plans/feat/compile/conversions.plan.toml",
+        "test/plans/feat/compile/array_alias.plan.toml",
+        "test/plans/feat/compile/broadcast_product_gradient.plan.toml"
+      ]
+    }
+  }
+}
