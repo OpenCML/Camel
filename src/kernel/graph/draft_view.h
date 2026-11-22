@@ -140,6 +140,9 @@ class DraftGraphAdapter final : public GraphView {
     NodeRef viewIdOf(NodeRef draftId) const;
     /// A list of the draft's ids translated the way `inputs` translates one.
     std::vector<NodeRef> viewIdsOf(std::span<const NodeRef> draftIds) const;
+    /// One entry of a side array (a sync or an order edge), translated and left out when the table
+    /// cannot name it: see the definition.
+    void pushMapped(std::vector<NodeRef> &into, NodeRef draftId) const;
     /// A translated list, kept in a buffer this adapter owns, one per `slot`: the view's ids are
     /// the encoder's numbering and the draft's are its own, so a list read through a table cannot
     /// be handed out where it lies. `slot` names the *question* -- one slot per (node, group) of

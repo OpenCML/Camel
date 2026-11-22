@@ -307,16 +307,28 @@ std::vector<NodeRef> DraftGraphAdapter::predecessors(NodeRef ref, EdgeKind kind)
         break;
     case EdgeKind::Sync:
         for (const NodeRef in : draft.syncInputsOf(source)) {
-            preds.push_back(viewIdOf(in));
+            pushMapped(preds, in);
         }
         break;
     case EdgeKind::Order:
         for (const NodeRef in : draft.orderInputsOf(source)) {
-            preds.push_back(viewIdOf(in));
+            pushMapped(preds, in);
         }
         break;
     }
     return preds;
+}
+
+void DraftGraphAdapter::pushMapped(std::vector<NodeRef> &into, NodeRef draftId) const {
+    // A side array of the draft may name a place that is not in the runtime graph (a placeholder,
+    // or a node the encoding dropped): the encoding's own array has no such entry, so an entry the
+    // table cannot name is not a predecessor of the view's node and is left out rather than
+    // answered as "no node" -- an order or sync edge names a *node*, and one that is not there
+    // names nothing.
+    const NodeRef mapped = viewIdOf(draftId);
+    if (mapped != kNoNode) {
+        into.push_back(mapped);
+    }
 }
 
 std::uint32_t DraftGraphAdapter::regionCount() const {
