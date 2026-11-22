@@ -504,7 +504,7 @@ f1249fa9455125b4 ok lib/rulesets/vmap.cml
 e5785f40146107c0 ok lib/sim/sim.cml
 5bf0e17861c0ec55 ok lib/state/state.cml
 eba878f8d66c3dbe ok lib/statistics/statistics.cml
-9e85f97db6af3694 ok lib/std/prelude.cml
+ba0156de730aa430 ok lib/std/prelude.cml
 8b155599d8b461ea ok lib/std/std.cml
 5b0539b0fbb86ec1 ok lib/str/str.cml
 1df6aaef0265dfcb ok lib/stream/stream.cml
