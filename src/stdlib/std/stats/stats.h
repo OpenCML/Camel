@@ -6,10 +6,17 @@
  * the pass pipeline. Prints one line
  *   GRAPH_STATS {"graphs":..,"nodes":..,"edges":..,"opers":..,"direct_calls":..,
  *                "indirect_calls":..,"closures":..,"branches":..,"loops":..,"bytes":..,
- *                "specializations":..,"cycle_dropped_sessions":..}
+ *                "specializations":..,"cycle_dropped_sessions":..,
+ *                "graph_names":[..],"macro":[..]}
  * over every graph reachable from the root, and passes the program on
  * unchanged, so `camel f.cml std::macro std::stats std::opt std::stats`
  * compares a program before and after simplification.
+ *
+ * `graph_names` and `macro` carry one entry per graph, in the order the walk reached the graphs --
+ * the order `graphs` counts them and the order `std::jgir` numbers them (`g0`, `g1`, ...). The
+ * boolean is `GCGraph::isMacro` read off the graph the walk already holds, so the line says which
+ * graph is a macro graph rather than how many are; no total is printed, because it is countable
+ * from the booleans.
  *
  * `cycle_dropped_sessions` is not a property of the graphs: it counts the rewrite sessions the
  * optimiser dropped because the graph they wrote closed a cycle (camel/runtime/cycle.h), so it is
@@ -23,8 +30,16 @@
 #include "camel/runtime/program.h"
 
 #include <string>
+#include <vector>
 
 struct GraphStats {
+    /// One graph of the walk: its name, and whether it answers `isMacro` (camel/runtime/graph.h).
+    /// `toJson` writes the vector as the two lists `graph_names` and `macro`, field by field and in
+    /// this order, so the two cannot drift apart.
+    struct GraphEntry {
+        std::string name;
+        bool macro = false;
+    };
     size_t graphs        = 0;
     size_t nodes         = 0;
     size_t edges         = 0;
@@ -48,6 +63,8 @@ struct GraphStats {
     // so one optimisation was skipped, and this counts how often. Kept so that a rule composing a
     // cycle shows up in a reading instead of quietly doing less work.
     size_t cycleDroppedSessions = 0;
+    /// The graphs of the walk, in the order it reached them: the same order `graphs` counts.
+    std::vector<GraphEntry> graphEntries;
 
     std::string toJson() const;
 };

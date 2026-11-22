@@ -594,7 +594,7 @@
         },
         {
             "comment": "Images the documents link to: docs_links checks that a relative link's target file exists, so adding or removing an asset is a documentation-link change. Images have no plan of their own.",
-            "paths": ["assets/", "logo.png"],
+            "paths": ["assets/"],
             "plans": ["feat/docs_links.plan.toml"]
         },
         {

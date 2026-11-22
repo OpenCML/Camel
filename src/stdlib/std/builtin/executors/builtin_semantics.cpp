@@ -19,7 +19,9 @@
  * (declareBuiltinOperatorSemantics below): the arithmetic that faults on a zero divisor, and the
  * operators with no fault path at all, which an empty table states. Nothing outside this file
  * says whether a built-in operator may fault; the traits and the node-level answer
- * (`src/runtime/graph.cpp#nodeMayFault`) are both read off this table.
+ * (`src/kernel/runtime/graph.cpp#nodeMayFault`) are both read off this table, and so is the
+ * record's `panic` -- an operator declared to raise nothing states `panic = false` in the same
+ * place, because the two are one item in two places (design principles 3.9).
  *
  * Beside them, `:mark/unordered_reduce_arr` declares its index semantics and its reduction law
  * (docs/design/op-semantics 6.6 and 7): an unordered reduction by the function it is given.
@@ -34,6 +36,7 @@
 #include "builtin.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/ops/operator_record.h"
 
 #include <bit>
 #include <string>
@@ -116,6 +119,10 @@ void declare(
     const std::string &name, const NumericType &t, NumericSemantics numeric,
     std::optional<std::vector<FaultSpec>> faults) {
     const std::string uri = ":op/" + name + "_" + t.suffix;
+    // An empty table is the statement "this operator can raise nothing" (the comment on
+    // declareBuiltinOperatorFaults says why that is written at all), and the record's `panic`
+    // states the same item: both are written here so the two cannot be stated apart.
+    const bool raisesNothing = faults.has_value() && faults->empty();
     OperatorTable::instance().declareSemantics(
         uri,
         OperatorSemantics{
@@ -124,6 +131,9 @@ void declare(
             .binary  = binaryLaws(name, t),
             .faults  = std::move(faults),
         });
+    if (raisesNothing) {
+        stateNoFaultOperator(uri);
+    }
 }
 
 /// No rounding: integer arithmetic and float sign and comparison operations. A float one can
@@ -350,7 +360,11 @@ void declareBuiltinOperatorFaults() {
         "op/eq_bytes",
     };
     for (const std::string_view name : kNoFaultPath) {
-        table.declareFaults(std::string(":") + std::string(name), {});
+        const std::string uri = ":" + std::string(name);
+        table.declareFaults(uri, {});
+        // The same statement in the record (`panic`), so an operator that raises nothing is never
+        // left reading "nobody said, so a call may fail" there.
+        stateNoFaultOperator(uri);
     }
     // `:op/tag_unwrap` is the one operator of the tagged forms that faults: a null where the tag has
     // already been read (`src/builtin/operators/tagged.cpp`). The fault is of no operand's value --
@@ -359,6 +373,16 @@ void declareBuiltinOperatorFaults() {
 }
 
 } // namespace
+
+void stateNoFaultOperator(std::string_view uri) {
+    // `CppRegistration`'s second argument is `panic`, and it has no default: a C++ operator states
+    // one of the two answers or it does not compile (camel/ops/operator_record.h). Registering an
+    // operator with that one item stated leaves every other item of its record to whoever states
+    // it next; nothing here is a second copy of the fault table, it is the same statement in the
+    // record the passes read.
+    camel::ops::CppRegistration registration(uri, false);
+    camel::ops::Registry::instance().registerOperator(registration);
+}
 
 void declareBuiltinOperatorSemantics() {
     const std::vector<FaultSpec> none;
