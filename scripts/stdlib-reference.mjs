@@ -479,7 +479,10 @@ function sourceOf(module) {
 
 /// The computed half of a module's declarations: `signatures/<name>.cml` beside the module after
 /// the move, in the one flat directory before it.
+/// A module with no computed half has no file, and `path.join` refuses `undefined`: the callers
+/// push the answer into a list they filter, so `null` is the shape they expect.
 function computedOf(module) {
+    if (!module.computed) return null
     return firstThere([
         path.join(MOVED_LIBRARY, module.name, module.computed),
         path.join(FLAT_LIBRARY, module.computed),
@@ -1401,7 +1404,7 @@ function moduleSource(module) {
         moduleSources.set(
             module.name,
             files
-                .filter((file) => fs.existsSync(file))
+                .filter((file) => file && fs.existsSync(file))
                 .map((file) => fs.readFileSync(file, 'utf8'))
                 .join('\n'),
         )
@@ -2881,75 +2884,75 @@ const EXAMPLE_STOPS = {
     // is missing, so a member that enters this list says which example stopped and why, and one that
     // leaves says which example the marker no longer excuses.
     'a semantic error': {
-        'stdlib/fs.cml#append_bytes#1':
+        'lib/fs/fs.cml#append_bytes#1':
             'the example hands `encode(\'abc\')` to an operator that takes `Bytes`, and `encode` is `bytes`\'s name, which this page does not import',
-        'stdlib/fs.cml#read_bytes#1':
+        'lib/fs/fs.cml#read_bytes#1':
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'stdlib/fs.cml#read_chunk#1':
+        'lib/fs/fs.cml#read_chunk#1':
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'stdlib/fs.cml#write_bytes#1':
+        'lib/fs/fs.cml#write_bytes#1':
             'the example builds its `Bytes` with `encode(\'abc\')`, which is `bytes`\'s name',
-        'stdlib/state.cml#set#1':
+        'lib/state/state.cml#set#1':
             'the example writes through `r`, a handle the surrounding program holds: an example program has no box to write',
-        'stdlib/state.cml#update#1':
+        'lib/state/state.cml#update#1':
             'the example updates through `r`, a handle the surrounding program holds: an example program has no box to update',
-        'stdlib/graph.cml#constant#1':
+        'lib/graph/graph.cml#constant#1':
             '`n` is a node of the surrounding pass, and no example program has one',
-        'stdlib/graph.cml#erase#1':
+        'lib/graph/graph.cml#erase#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/graph.cml#eval#1':
+        'lib/graph/graph.cml#eval#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/graph.cml#replace#1':
+        'lib/graph/graph.cml#replace#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/graph.cml#name#1':
+        'lib/graph/graph.cml#name#1':
             'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
-        'stdlib/graph.cml#origin#1':
+        'lib/graph/graph.cml#origin#1':
             'the example reads the origin of `n`, which is a node of the surrounding pass, and the reading needs the `spelling` capability no example program can declare (design principles 9.5)',
-        'stdlib/graph.cml#show#1':
+        'lib/graph/graph.cml#show#1':
             'the example prints a node, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
-        'stdlib/graph.cml#creation_id#1':
+        'lib/graph/graph.cml#creation_id#1':
             'the example reads the creation number of a handle, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
-        'stdlib/graph.cml#outline#1':
+        'lib/graph/graph.cml#outline#1':
             '`t` is an open transaction and `ns` a group of its graph\'s nodes: a doc example has neither',
-        'stdlib/graph.cml#order#1':
+        'lib/graph/graph.cml#order#1':
             '`t` is an open transaction and `a`, `b` are nodes of its graph: a doc example has neither',
-        'stdlib/graph.cml#inline#1':
+        'lib/graph/graph.cml#inline#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/hash.cml#sha256#1':
+        'lib/hash/hash.cml#sha256#1':
             'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
-        'stdlib/prelude.cml#len#3':
+        'lib/std/prelude.cml#len#3':
             'the `Bytes` overload\'s example builds its value with `encode(\'h€\')`, which is `bytes`\'s name',
-        'stdlib/prelude.cml#slice#3':
+        'lib/std/prelude.cml#slice#3':
             'the `Bytes` overload\'s example names `encode`, which is `bytes`\'s, and a doc example is compiled with this module\'s names only',
-        'stdlib/prelude.cml#tee_note#1':
+        'lib/std/prelude.cml#tee_note#1':
             'the last operand is the stream a tee reads, and no example program has one',
-        'stdlib/python.cml#call#1':
+        'lib/python/python.cml#call#1':
             'the callable is a Python object from `attr`, and `sqrt` is a name the surrounding program binds',
-        'stdlib/rewrite.cml#explain#1':
+        'lib/rewrite/rewrite.cml#explain#1':
             'a run and two of its values come from the caller, and `a` is one of those values',
-        'stdlib/rewrite.cml#explain_all#1':
+        'lib/rewrite/rewrite.cml#explain_all#1':
             'a run comes from the caller, and `r` is it',
-        'stdlib/rewrite.cml#extract#1':
+        'lib/rewrite/rewrite.cml#extract#1':
             'the cost function comes from `rules`, and `rules::nodes` is not a name the page binds',
-        'stdlib/rewrite.cml#rewrite#1':
+        'lib/rewrite/rewrite.cml#rewrite#1':
             'a rule set comes from the caller, and `rules` is it',
-        'stdlib/rewrite.cml#run#1':
+        'lib/rewrite/rewrite.cml#run#1':
             'a rule set comes from the caller, and `rules` is it',
-        'stdlib/rewrite.cml#saturate#1':
+        'lib/rewrite/rewrite.cml#saturate#1':
             'a rule set comes from the caller, and `rules` is it',
-        'stdlib/rewrite.cml#why_not#1':
+        'lib/rewrite/rewrite.cml#why_not#1':
             'a run, a rule and a value come from the caller, and `target` is one of them',
-        'stdlib/vjp.cml#grad#1':
+        'lib/vjp/vjp.cml#grad#1':
             '`grad` is generic in the function it takes (`F`), so the checker can write no value for the parameter: the function whose first `with` parameter is differentiated is a declaration in the surrounding program',
-        'stdlib/signatures/autodiff.cml#grad#1':
+        'lib/autodiff/signatures/autodiff.cml#grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
-        'stdlib/signatures/autodiff.cml#grad#2':
+        'lib/autodiff/signatures/autodiff.cml#grad#2':
             'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
-        'stdlib/signatures/autodiff.cml#with_grad#1':
+        'lib/autodiff/signatures/autodiff.cml#with_grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
-        'stdlib/signatures/autodiff.cml#with_grad#2':
+        'lib/autodiff/signatures/autodiff.cml#with_grad#2':
             'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
-        'stdlib/signatures/transforms.cml#first_with_as_param#1':
+        'lib/transforms/signatures/transforms.cml#first_with_as_param#1':
             'the example reinterprets a function that has a `with` parameter, and a `with` list is written on a declaration: no lambda this page can write inline has one'
     },
     // `an internal error` is gone (2026-11-03). The class held the examples that reached the
