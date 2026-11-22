@@ -14,7 +14,7 @@ add_camel_module(
 # tiles-plan-check is the target that imported OperatorTable::key and caught the gap.
 # kernel_ir_check.cpp exercises the boundary decision itself, so that decision and the placement
 # query it reads are compiled into this target; the rest of what they need comes from libcamel.
-add_library(tiles-plan-check_objects OBJECT src/resident_storage.cpp src/residency.cpp src/placement.cpp ../../test/cases/modules/tiles/plan_check.cpp ../../test/cases/modules/tiles/kernel_ir_check.cpp ../../test/cases/modules/tiles/reduction_domain_check.cpp ../../test/cases/modules/tiles/core_views_check.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/serial_execute.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
+add_library(tiles-plan-check_objects OBJECT src/resident_storage.cpp src/residency.cpp src/placement.cpp ../../../test/cases/modules/tiles/plan_check.cpp ../../../test/cases/modules/tiles/kernel_ir_check.cpp ../../../test/cases/modules/tiles/reduction_domain_check.cpp ../../../test/cases/modules/tiles/core_views_check.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/serial_execute.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
 target_link_libraries(tiles-plan-check_objects PRIVATE nlohmann_json::nlohmann_json)
 add_executable(tiles-plan-check $<TARGET_OBJECTS:tiles-plan-check_objects>)
 camel_register_export_scan_target(tiles-plan-check_objects)
@@ -26,7 +26,7 @@ target_link_libraries(tiles-plan-check PRIVATE libcamel fmt::fmt)
 # Load the driver and NVRTC lazily: importing tiles never requires a GPU.
 find_package(CUDAToolkit QUIET)
 if(CUDAToolkit_FOUND)
-  add_library(tiles-async-check_objects OBJECT ../../test/cases/modules/tiles/async_submission_check.cpp ../../test/cases/modules/tiles/async_submission_lifetime.cpp ../../test/cases/modules/tiles/memory_pool_check.cpp ../../test/cases/modules/tiles/memory_pool_failures.cpp src/resident_storage.cpp src/cuda.cpp src/mixed_gemm.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/cuda_resources.cpp src/cuda_submission.cpp src/capability.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
+  add_library(tiles-async-check_objects OBJECT ../../../test/cases/modules/tiles/async_submission_check.cpp ../../../test/cases/modules/tiles/async_submission_lifetime.cpp ../../../test/cases/modules/tiles/memory_pool_check.cpp ../../../test/cases/modules/tiles/memory_pool_failures.cpp src/resident_storage.cpp src/cuda.cpp src/mixed_gemm.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/cuda_resources.cpp src/cuda_submission.cpp src/capability.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
   add_executable(tiles-async-check $<TARGET_OBJECTS:tiles-async-check_objects>)
   camel_register_export_scan_target(tiles-async-check_objects)
   target_compile_features(tiles-async-check_objects PRIVATE cxx_std_23)
@@ -37,7 +37,7 @@ if(CUDAToolkit_FOUND)
   # the core's selection, so that one translation unit comes along (it depends on nothing else).
   # kernel expression construction names index expressions, so index_expr.cpp is one of the files
   # this target cannot leave out.
-  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp ../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/index_expr.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp ${CMAKE_SOURCE_DIR}/src/stdlib/std/exec/devices.cpp)
+  add_executable(tiles-module-lease ../../../test/cases/modules/tiles/module_lease.cpp ../../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/index_expr.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp ${CMAKE_SOURCE_DIR}/src/stdlib/std/exec/devices.cpp)
   target_compile_features(tiles-module-lease PRIVATE cxx_std_23)
   target_include_directories(tiles-module-lease PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CAMEL_LAYOUT_TRANSITIONAL_ROOTS})
   target_link_libraries(tiles-module-lease PRIVATE ${CMAKE_DL_LIBS})
