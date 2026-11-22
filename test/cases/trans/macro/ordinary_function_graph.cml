@@ -1,0 +1,14 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The counterpart: a program of ordinary functions holds no macro graph, so `std::cml` prints
+// it and exits 0. This is what makes the entry beside it a measurement: were `isMacro` to answer
+// true for every graph, this one would be refused too and the pass would exit 1.
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    print(square(3.0))
+    0
+}
