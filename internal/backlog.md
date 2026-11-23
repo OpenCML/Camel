@@ -115,7 +115,7 @@
 | D-1123-49 | 作者 fsh-dev | `__iter__` 改 `func operator for(r: Range): int..`；7.4.5 加 `for`；两条用例 | `lane/range-ri` | done | 2026-11-23 23:40 | `4d806f4776` |
 | D-1123-41(b)(c) | 作者 fsh-dev | (b) `a..b` 产生 `Range`；(c) 下标按类型分派，删掉解析器切片特例 | `lane/parser-old-spelling` | doing | 2026-11-23 23:00 | |
 | D-1123-50 | 作者 fsh-dev | 协作机制 ①②③：装 0.2、删定时任务与 camel-lanes、skill 合成 `internal/collab` | — | done | 2026-11-23 22:15 | `ae0e9501b8` |
-| D-1123-50④ | 作者 fsh-dev | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感独占、pre-push 限合并位 | `lane/host-locks` | doing | 2026-11-23 23:00 | |
+| D-1123-50④ | 作者 fsh-dev | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感独占、pre-push 限合并位 | — | done | 2026-11-24 03:20 | `53ddd6e923`|
 | D-1123-52② | 作者 fsh-dev | `moduleNamed` 撤名字搜索，改用类型记的声明模块引用（5.2）；`declaredName_` 删干净 | `lane/range-ri` | done | 2026-11-23 23:15 | `ff4639e261` |
 | D-1123-53① | 作者 fsh-dev | 节点效应 = 声明访问 ∪ 操作数访问（3.3）；删参数；粗标的高阶算子改声明 | `lane/effects-declarations` | doing | 2026-11-23 22:40 | |
 | D-1123-53② | 作者 fsh-dev | `.isPure(`/`hasExternalEffect(` 读者 19→0；两个公开接口删掉 | `lane/effects-declarations` | todo | 2026-11-23 22:40 | |
