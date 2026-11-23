@@ -475,9 +475,12 @@ template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
         reduced = sumTo(ctx, product, {dtype, productShape}, tensor::extentsOf(target));
     } else {
         // A shape list's own facts: one extent, its length -- the number of axes the target has,
-        // which is the rank this gradient is reduced to.
+        // which is the rank this gradient is reduced to (the one-entry shape `targetLength`
+        // reads). The extent is written at the type a shape's entries have
+        // (`std::optional<int64_t>`, tensor/type.h): a bare `{count}` of an int64_t also reaches
+        // the vector's count constructor, which states the rank as that many unknown extents.
         const TensorFacts listFacts{
-            TypeCode::Int64, tensor::StaticShape{static_cast<int64_t>(target.size())}};
+            TypeCode::Int64, tensor::StaticShape{std::optional<int64_t>(target.size())}};
         reduced = sumToRuntime(
             ctx, product, {dtype, productShape}, listFacts, shapeOperand(ctx, targetIndex));
     }
