@@ -43,6 +43,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
 #include "camel/graph/graph.h"
+#include "camel/runtime/fact_slots.h"
 #include "camel/runtime/graph_id.h"
 #include "camel/utils/assert.h"
 
@@ -1315,6 +1316,49 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
     ::Tuple *staticArea_ = nullptr;
     // Built by uses() on first demand, owned by the graph.
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
+
+  public:
+    /// The slots: where the fact store keeps what it computed about this graph, one per kind, by
+    /// the small integer registration gave the kind (`camel/facts/facts.h`, `camel/runtime/
+    /// fact_slots.h`). A Graph fact's slot holds the value itself; a Node fact's slot holds a
+    /// dense array indexed by node id. The store is the one owner of the values -- it writes a
+    /// slot when it stores a fact and clears it before it releases the value, and `~GCGraph`
+    /// (which ends the facts through `facts::forgetGraph`) is the other end. A reader that has
+    /// the graph asks here: one indexed load, and null means "ask the store".
+    ///
+    /// A kind registered after `kFactSlotCount` kinds is answered by the store alone; the slots
+    /// are a bound on the fast path, never on what can be stored.
+
+    /// The elements of a Node fact's dense array: each node's value, or null where the kind has
+    /// none there. Allocated by the graph on the first Node fact of that kind.
+    using FactNodeSlots = std::atomic<const void *>;
+
+    const void *factSlot(std::uint32_t kind) const noexcept {
+        return kind < kFactSlotCount ? factSlots_[kind].load(std::memory_order_acquire) : nullptr;
+    }
+    void setFactSlot(std::uint32_t kind, const void *value) const noexcept {
+        if (kind < kFactSlotCount) {
+            factSlots_[kind].store(value, std::memory_order_release);
+        }
+    }
+    const void *nodeFactSlot(std::uint32_t kind, gc_node_ref_t node) const noexcept {
+        if (kind >= kFactSlotCount) {
+            return nullptr;
+        }
+        const FactNodeSlots *array = nodeFactSlots_[kind].load(std::memory_order_acquire);
+        if (array == nullptr || node >= nodeCount()) {
+            return nullptr;
+        }
+        return array[node].load(std::memory_order_acquire);
+    }
+    /// Writes one node's slot, allocating the dense array on the first Node fact of `kind`. The
+    /// store calls it under its own lock, so two threads writing different nodes of one kind do
+    /// not make two arrays.
+    void setNodeFactSlot(std::uint32_t kind, gc_node_ref_t node, const void *value) const noexcept;
+
+  private:
+    mutable std::atomic<const void *> factSlots_[kFactSlotCount]{};
+    mutable std::atomic<FactNodeSlots *> nodeFactSlots_[kFactSlotCount]{};
 };
 
 /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture of
