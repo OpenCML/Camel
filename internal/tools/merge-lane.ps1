@@ -502,7 +502,7 @@ try {
             Write-Host 'STOPPED: the baseline could not be measured, so nothing was compared (exit 2, no reading taken)' -ForegroundColor Yellow
             Write-Host '  This is not a defect in your tree: the tree the baseline comes from was not available, so nothing was learned about this change.'
             Write-Host "  $worktreeProblem"
-            Write-Host "  What repairs it: the baseline is measured in a worktree detached at the first parent ($($developTip.Substring(0, 9))). Name one with -BaselineWorktree, or let this script create it; a path that holds somebody else's checkout is refused rather than checked out over."
+            Write-Host "  What repairs it: the baseline is measured in a worktree held at the first parent ($($developTip.Substring(0, 9))). Name one with -BaselineWorktree, or let this script create it; a path that holds somebody else's checkout is refused rather than checked out over."
             Write-Host ''
             Write-Host 'The merge commit is in this checkout and nothing was pushed.'
             exit 2
@@ -535,7 +535,7 @@ try {
         }
         $accept | ForEach-Object { "  $_" }
         $seededFrom = $measuredTree
-        Write-Host ("  baseline seeded from tree {0} (the first parent, checked out detached at {1}; NOT the tree above): {2} case(s), {3} already red on develop, {4:N0} s" -f `
+        Write-Host ("  baseline seeded from tree {0} (the first parent, in the worktree at {1} on the gate's own branch; NOT the tree above): {2} case(s), {3} already red on develop, {4:N0} s" -f `
             $measuredTree.Substring(0, 9), $baselinePath, $seedRows, $seedReds, $seedSeconds)
     } elseif ($probeExit -ne 0) {
         $probe | ForEach-Object { "  $_" }
