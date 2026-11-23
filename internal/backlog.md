@@ -26,11 +26,11 @@
 | D-1123-16 | 作者 inbox | 规范编号在宽度超过 6 的并列上回落到 `stable_sort`，创建次序漏进编号（`src/kernel/runtime/canonical.cpp`），违反原则 9.5。**归图车道，随阶段 3c** | 待派 | open | 2026-11-23 02:30 | — |
 | D-1123-8 | 作者 inbox | 提交检查补两项：同一区域里两个冲突节点（访问同一资源、至少一个是写）之间必须有先后；未绑定的资源在签名效应里必须出现。红线 1、4、6 | `lane/commit-checks` | done | 2026-11-23 04:45 | — |
 | D-1123-11/12/13 | 作者 inbox | 记号三批改动：lambda 改 `func (参数) { … }`（旧写法直接删，`9622bd21c`，已合）、`static for … do`（`9264dd508`）、切片改 `t[a..b]`/`t[..b]`/`t[a..]` 与带步长的 `t[range(a, b, s)]`（旧冒号写法直接删，`af7c8a92e`）、`f <> g`、空格规则（`camel-fmt` 全库跑一遍）。**算子 URI 改 `模块:路径` 一项与在跑的栈冲突，栈合入后单独一笔** | `lane/notation-b2` | doing | 2026-11-23 06:40 | `9264dd508`, `af7c8a92e` |
-| D-1123-19-3 | 作者 inbox | `panic` 收尾：余 168 个算子补可读陈述（`214/382` → 目标 `382/382`），逐项对照表要求一项不变 | `lane/panic-record` | doing | 2026-11-23 04:45 | — |
+| D-1123-19-3 | 作者 inbox | `panic` 收尾：余 168 个算子补可读陈述（`214/382` → 目标 `382/382`），逐项对照表要求一项不变 | `lane/panic-record` | done | 2026-11-23 22:45 | 分支已删，活已合或放弃 | — |
 | D-1123-26-2 | 作者 inbox（问题页 `what-a-read-of-a-cell-costs`） | 登记时把 `OperatorTable` 的效应语义写进 `Record::uses`（C++ 入口的 `pure` 词就是空 access list），事实层只读记录；加一条检查列出两个入口都没说的算子。读数：`uses_stated` 349 → **789**、沉默 465 → **25**、表里声明了 accesses 却没进记录 440 → **0**（814 个算子）；那 440 的成因是 `set()` 是唯一不过 `declareSemantics` 的陈述入口，不是记录被换掉 | `lane/record-uses` | doing | 2026-11-23 12:05 | — |
 | D-1123-26-3 | 同一读数 | 余下 25 个算子（18 个 URI：`graph:open`、`pyplot:plot`、`python:*`×9、`rewrite:*`×4、`transforms:*`×3）两个入口都没说效应，按 3.3 现在读作写全局资源，逐个补声明 | `lane/cleanup` | done | 2026-11-23 15:58 | `f3b2bb00c` |
 | D-1123-19-4 | 作者 inbox | 阶段 3a：`src/stdlib/{transforms,autodiff,rewrite}` 与 `src/kernel/rewrite` 里直接读 `GCGraph`/`GraphDraft` 的改读 `GraphView`；**用只减不增的计数守着** | `lane/3a-transforms` | doing | 2026-11-23 04:45 | — |
-| D-1123-19-5 | 作者 inbox | 阶段 3a：`src/stdlib/std/{nvm,fvm,prl,cpp,exec}` 与 `src/tools`，同上计数 | `lane/3a-exec` | doing | 2026-11-23 04:45 | — |
+| D-1123-19-5 | 作者 inbox | 阶段 3a：`src/stdlib/std/{nvm,fvm,prl,cpp,exec}` 与 `src/tools`，同上计数 | `lane/3a-exec` | done | 2026-11-23 22:45 | 分支已删，活已合或放弃 | — |
 | C-1123-14 | `3a-transforms` 的实测 | **`lane/stage3-facts` 的 WIP 搁在 `ft1` 上，已陈旧**：24 个已改文件 + 3 个未跟踪，HEAD `04b72ee82`，**落后 develop 139**。判据之一：其中 `M docs/handover/lanes.cn.md` —— **那个路径在 `5a63a3b52` 就搬成 `internal/lanes.md` 了**，所以这份 WIP **早于协作体系搬迁**，不能原样合。`src/stdlib/transforms/jvp.cpp` 也在里面（`3a-transforms` 要改它）。**未动、未 stash、未 reset；要重开这条车道必须先在现行树上重做** | 待裁 | open | 2026-11-23 04:50 | — |
 | C-1123-15 | `data-arg-migration` 实测 | **`camel-remote.ps1` 只把 `test/plans/feat/parse/golden/ast_hashes.txt` 一份 golden 从主机带回工作树**（脚本 320-322 行），其余由 `-UpdateGolden` 写入的记录**留在主机上**，下次按补丁重置时消失。于是「重录后绿、再跑就红」不是构建不同，是**那份记录根本没回来**。**症状会反复出现：任何靠 golden 的车道都会撞上，且误判方向几乎必然是「疑似不确定输出」** | `lane/tooling` | done | 2026-11-23 12:04 | `bf11b50cb`；`-UpdateGolden` 现在把这一跑写过的每一份基准都带回（按 mtime 标记列，全带或全不带，写一半算 exit 2）。验：故意改坏 `boundaries.agir.dot` 后跑重录，改前本地仍是有毒那份（1 行 diff），改后 `2 rewritten on the host, 1 written here, 1 already identical, 0 left stale`，再不带 `-UpdateGolden` 跑 `annotated_dump` 3/3 绿。第一条路（用 `git status` 列出写过的文件）实测答 0，已废弃并在注释里留了原因 |
 | C-1123-16 | 同上 | **`BUILD_FOOTPRINT=261122_184136_8929456aa` 每次运行都一样，不标识构建**（同一戳下构建时长 3–283 s 乱跳）。**一个每次都相同、又不区分任何东西的戳，比没有戳更坏 —— 它看起来像证据**。要让「两次跑用的不是同一个构建」可查，这个戳必须包含能区分构建的东西 | `lane/tooling` | done | 2026-11-23 12:04 | `bf11b50cb`；戳改成构建内容的身份（配置+选项+源码指纹的前 12 位，加 `git describe`）。验：新检查 `scripts/check-build-stamp.mjs` 对旧规则 3 项红（`261123_040107_abc1234` 无内容标签；同一内容两次全新配置 `…040108` vs `…040107`；一字节内容改动戳区分不出），新规则全绿（同内容同戳、一字节/换选项/换配置都换戳），主机 `-Check build-stamp` 1 run 0 failed；同一棵树上连续两跑都是 `8c0c8d1808c0_babd90eda_dirty reused` |
@@ -56,65 +56,21 @@
 | D-1123-41 | 作者 `fsh-dev` 的 inbox | `0.2.46` 的稳定点，最高优先：① `notation-corpus` 收尾（已合，语料 4,254→0、旧写法 0 处）；② `range-value` 拆三条 —— (a) 名字解析同层合成重载集 + prelude 导出名免导入 `lane/range-rn`、(b) `a..b` 产 `Range`/`for` 按 `__iter__`/转置反向/后端/打印 `lane/range-ri`、(c) 下标逐维按类型分派、删切片路径与按 `range` 名字判断 `lane/range-rx`；③ `nn-element-type` 返工 = `D-1123-38` | 见各行 | doing | 2026-11-23 20:15 | |
 | D-1123-42 | 作者 `fsh-dev` 的 inbox | **返工 `D-1123-39` 的槽表：不定死 32 格。** 合入的是固定 32 格、内嵌在 `GCGraph` 的两张表（`kFactSlotCount`），每张冻结图无论有没有事实都占 512 字节，第 33 种起退回查表 —— 而 `D-1123-39` 定稿写的是按需分配、可扩容。改法：`GCGraph` 只留**一个原子指针**指向 `{容量, 槽[]}`；第一次有事实写进这张图时才分配，容量取当时已登记的种类数；之后登记新种类时分配更大的表、复制、原子换指针，旧表留到图销毁时一起释放（读者无锁读到旧表也安全）；读 = 取指针、判越界、取槽。**删掉 `kFactSlotCount` 与「超出就走存储」的分支** | `lane/fact-slots-grow` | doing | 2026-11-23 20:44 | |
 | C-1123-33 | `oper-identity-write`（栈上量到） | **`[a:b]` 切片写法在 `develop` 上不解析，而五处语料与一处文档仍在写它**：`parser_expr.cpp:248` 起只把 `..` 与 `<>` 当切片分隔符，没有 `:`；而 `src/stdlib/prelude.cml:1055` 的注释写着「`'中文字'[1:3]` 与 `'中文字'->slice<0, 1, 3>` 都是 `'文字'`」，`str_unicode.cml:58`、`str_chars.cml:20`、`string_slice.cml:6`、`ort_core_slice*.cml` 都真的写着 `['hello'[1:4]]` 这类表达式。后果是 `feat/modules` 的 `stdlib_values` 24 条红（4 用例 × 6 后端）全部报 `Expected ']' before ':'`。**这不是迁移带来的** —— `develop` 上就是 24 条。要先答一个问题再动手：`[a:b]` 是该**恢复**（作者裁过切片只能用 `..`？见 3.x），还是这几处语料与那行注释是**旧写法的遗留**、该改成语料侧用 `..`。两个答案改动的地方完全不同。 **现状**：问题答了 —— `[a:b]` 是旧写法，七处文本已在 `8ee76003e` 迁移完，`git grep` 全树 0 行。余下的只有「反向切片的末端」一族：`ort_core_slice.cml:83/93/103/113/118` 与 `slice_step_negative.cml:15` 写的 `range(3, -1, -1)`，前端在问 extent **之前**就按「端点不许是负数」拒掉（`globals.cpp#staticSliceRejection`），而内核只把 `-1` 给**没写**的末端（`struct.cpp:357`），于是「走到了第一个元素」这件事在当前语法里写不出来。这不是文本迁移，是语言问题，交裁：`internal/questions/2026-11-23-how-a-backward-slice-names-the-position-before-the-first.cn.md`（两处、六条用例、两条计划红在编译） |
+| D-1123-41① | 作者 fsh-dev | 解析器删旧写法（`f::<A = int>`、`f..g` 当组合），两处都给诊断 | `lane/parser-old-spelling` | done | 2026-11-23 22:05 | `859c41200f` |
+| D-1123-33 | 作者 fsh-dev | 效应三个来源变一处；18 处直读留着 | `lane/effects-one-source` | done | 2026-11-23 22:12 | `b0dffac32f` |
+| D-1123-34 | 作者 fsh-dev | 内核 include 标准库：`shaped_operators` 16→0，stdlib 头 12→4 行 | `lane/operator-uri` | done | 2026-11-23 22:02 | `3bc124bfdb` |
+| D-1123-36 | 作者 fsh-dev | 注释里的过程痕迹 + 检查脚本；旧认领残留可弃 | `lane/comment-traces` | doing | 2026-11-23 22:40 | |
+| D-1123-48 | 作者 fsh-dev | `moduleNamed` 到不了 prelude：判据 0→1 | `lane/range-ri` | done | 2026-11-23 22:30 | `558819d0fa` |
+| D-1123-49 | 作者 fsh-dev | `__iter__` 改 `func operator for(r: Range): int..`；7.4.5 加 `for`；两条用例 | `lane/range-ri` | todo | 2026-11-23 22:40 | |
+| D-1123-50 | 作者 fsh-dev | 协作机制 ①②③：装 0.2、删定时任务与 camel-lanes、skill 合成 `internal/collab` | — | done | 2026-11-23 22:15 | `ae0e9501b8` |
+| D-1123-50④ | 作者 fsh-dev | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感独占、pre-push 限合并位 | `lane/host-locks` | doing | 2026-11-23 22:40 | |
+| D-1123-52② | 作者 fsh-dev | `moduleNamed` 撤名字搜索，改用类型记的声明模块引用（5.2）；`declaredName_` 删干净 | `lane/range-ri` | doing | 2026-11-23 22:40 | |
+| D-1123-53① | 作者 fsh-dev | 节点效应 = 声明访问 ∪ 操作数访问（3.3）；删参数；粗标的高阶算子改声明 | `lane/effects-declarations` | doing | 2026-11-23 22:40 | |
+| D-1123-53② | 作者 fsh-dev | `.isPure(`/`hasExternalEffect(` 读者 19→0；两个公开接口删掉 | `lane/effects-declarations` | todo | 2026-11-23 22:40 | |
+| D-1123-54 | 作者 fsh-dev | 规矩：删就删干净，历史只进提交说明 | — | done | 2026-11-23 22:40 | |
+| C-1123-6 | 撤掉的 inbox | `internal/archive/` 四个旧清单没做完的条目，逐条以 `C-` 号转进来 | — | todo | 2026-11-23 21:50 | |
+| C-1123-12⑥ | 作者 fsh-dev | URI 统一为 `std:模块:路径`；等算子身份那一摞合入后一刀切 | — | todo | 2026-11-23 21:50 | |
+| C-1123-37 | 作者 fsh-dev | 收工跑一轮 GitHub Actions，读数写进收工报告 | — | todo | 2026-11-23 21:50 | |
+| C-1123-52 | `lane/operator-uri` 实测 | 内核握着库的执行器：`executor.h` 2 include、`graph_runtime_support.h` 2 include | — | todo | 2026-11-23 22:25 | |
+| C-1123-53 | `lane/effects-one-source` 实测 | `scripts/check-effect-facts.mjs` 在干净 develop 上也 exit 2，从没读到过东西 | — | todo | 2026-11-23 22:25 | |
 
-## 2026-11-23 21:40 认领（决策者通道 D-1123-45）
-
-| 编号 | 事 | 车道 | 状态 |
-|---|---|---|---|
-| D-1123-41① | 解析器删旧写法 | `lane/parser-old-spelling` | doing |
-| D-1123-33 | 效应仍有两个来源，21 处读者 | `lane/effects-one-source` | doing |
-| D-1123-34 | 四算子按 URI 分类 + 内核 include 标准库 | `lane/operator-uri` | doing |
-| D-1123-36 | 注释里的过程痕迹 + 检查脚本 | `lane/comment-traces` | doing |
-
-## 2026-11-23 21:50 从撤掉的 inbox 转来（`D-1123-46`）
-
-| 编号 | 事 | 状态 |
-|---|---|---|
-| `C-1123-6` | `internal/archive/` 四个旧清单里没做完的条目，逐条以 `C-` 号转进本表；做过则记 done | todo |
-| `C-1123-12⑥` | URI 统一为 `std:模块:路径`；等「改算子身份」那一摞合入后一刀切，不许边改边切 | todo（等） |
-| `C-1123-37` | 今天收工跑一轮 GitHub Actions，读数写在收工报告里 | todo（收工做） |
-
-## 2026-11-23 21:58 takenNotRecorded 第一次跑就抓到的两条
-
-| 编号 | 事 | 状态 |
-|---|---|---|
-| `D-1123-43` | 决策者通道的第一条真派工兼测试；两条缺陷（render 两参、机器本地值）已由作者在 `c778e31c2` 修掉 | done |
-| `D-1123-43-defect` | 我绕过坏掉的工具、直接写 `log.jsonl` 送出的那条回执；工具修好后这条路不再用 | done |
-
-## 2026-11-23 22:00 两条裁定（决策者通道）
-
-| 编号 | 事 | 车道 | 状态 |
-|---|---|---|---|
-| `D-1123-48` | 返工 `e93a627d9d`：查清 prelude 的 `declaredName` 为何不等于文件名，让模块只有一个名字（10.1），`moduleNamed` 只比这一个，删掉两个名字的分支，全树量出不一致的模块 | `lane/range-ri` | doing |
-| `D-1123-49` | `__iter__` 改成 `func operator for(r: Range): int..`（运算符重载，同 `operator []`）；`prelude` 的 `iter` 函数换掉；7.4.5 加 `for`；补两条用例 | `lane/range-ri`（排 48 之后） | todo |
-
-## 2026-11-23 22:15 装协作机制（`D-1123-50`）
-
-| 编号 | 事 | 车道 | 状态 |
-|---|---|---|---|
-| `D-1123-50` | ①②③ 已装（合 fsh-dev 装 0.2、删定时任务与 watch-fsh-dev、撤 camel-lanes、skill 合成 `internal/collab`），`ae0e9501b` | — | done |
-| `D-1123-50④` | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感计划独占主机、pre-push 限合并位 | `lane/host-locks` | doing |
-
-## 2026-11-23 22:25 派工里三处量不到的判据
-
-| 编号 | 事 | 状态 |
-|---|---|---|
-| `C-1123-52` | 内核握着库的执行器：`camel/execute/executor.h`（2 include）、`graph_runtime_support.h`（2 include），`ExecutorManager` 是内核 `Context` 的成员（`context.cpp:431`），拆它要动 `context`/`pass` 归属 | todo |
-| `C-1123-53` | `scripts/check-effect-facts.mjs` 在干净 `develop` 上也 exit 2：它找 `effectSummaryOf` 紧跟 `(`，而名字是 `effectSummaryOfOperator` —— 从此没读到过任何东西 | todo |
-| `C-1123-54` | 派工判据三处量不到：`effectSummaryOfNode` 这个名字在基线不存在；「21 处读者」实测 2 处；`#include.*stdlib` 命中的是 C 标准库。判据要在基线上先量一次再写进派工 | done（教训） |
-
-## 2026-11-23 22:20 ④ 与 `D-1123-52`
-
-| 编号 | 事 | 车道 | 状态 |
-|---|---|---|---|
-| `D-1123-52①` | camel-oversight 防漂移三层 + 掉线预案 + 背压（fsh-dev `1a8da86a2`），已合 `3bc124bfd` | — | done（待重载） |
-| `D-1123-52②` | `moduleNamed` 改用类型记的**声明模块引用**（原则 5.2），不再拿名字去几个集合里搜；同一笔删掉 `declaredName_` | `lane/range-ri` | doing（排 49 前） |
-
-## 2026-11-23 22:35 三笔裁定（`D-1123-52②` / `53` / `54`）
-
-| 编号 | 事 | 车道 | 状态 |
-|---|---|---|---|
-| `D-1123-52②` | `moduleNamed` 撤掉名字搜索，改用类型记的声明模块引用（原则 5.2）；四个集合删掉；`declaredName_` 同一笔删干净，历史进提交说明 | `lane/range-ri` | doing（排 49 前） |
-| `D-1123-53①` | 节点效应 = 算子声明的访问 ∪ 操作数带来的访问（原则 3.3）；删掉那个参数，两个 kind 不再分歧；粗标成 external 的高阶算子改声明，不在读法里开口子 | `lane/effects-declarations` | doing |
-| `D-1123-53②` | `git grep -nE '\.isPure\(\|hasExternalEffect\(' -- src \| grep -v 'operator_table\.'` 从 19 行迁到 0，两个公开接口删掉，不留重定向 | `lane/effects-declarations` | todo |
-| `D-1123-54` | 删就删干净：代码里不留指向已删东西的说明，也不留「为什么不用 X」的记录，历史只进提交说明 | — | done（规矩） |
