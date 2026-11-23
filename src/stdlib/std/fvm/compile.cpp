@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "compile.h"
+#include "version_state.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
@@ -133,13 +134,14 @@ static bytecode_vec_t compileRuntimeGraph(
     const auto &plan = graph->execPlan();
     // The position-to-node side table: while --gc-check asks for the counted blocks, one row per
     // instruction that belongs to a node is written here, with what the plan says that node does to
-    // the count, and the table is kept with the plan it describes -- the run reads it after this
+    // the count, and the table is kept with the version's own state (fvm/version_state.h) -- not
+    // in the plan, which is an immutable fact of the graph -- because the run reads it after this
     // compile is over, at the moment a box is made, and a local table would be gone by then. A
     // compile that is not asked for it writes nothing and allocates nothing for it.
     const bool anchorSitesWanted = camel::core::mm::allocatorChecks().printForeignResources;
-    if (anchorSitesWanted) {
-        localPcNodes = &plan.countedSites.nodeAtPc;
-    }
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *countedSites =
+        anchorSitesWanted ? &camel::runtime::fastVmStateOf(*graph).nodeAtPc : nullptr;
+    localPcNodes = countedSites;
     const auto &topoSortedIndices = plan.topo;
     const auto returnNodeRef      = graph->returnNodeRef();
     const auto *returnNode        = graph->returnNode();
@@ -700,8 +702,8 @@ static bytecode_vec_t compileRuntimeGraph(
         // Read back out of the table the run will read: what is printed here and what the anchor
         // asks about later are one table, not a copy of one.
         std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(
-            plan.countedSites.nodeAtPc.begin(),
-            plan.countedSites.nodeAtPc.end());
+            countedSites->begin(),
+            countedSites->end());
         std::sort(sites.begin(), sites.end());
         for (const auto &[pc, ref] : sites) {
             const size_t position =
@@ -816,9 +818,9 @@ LinkedBytecodeResult compileAndLinkGraphs(
         // Where the table's own pc numbering starts in the image this run executes. Set from the
         // table rather than from the flag, so the two cannot describe different things: a graph
         // the compile was not asked to lay out keeps an empty table and no entry pc at all.
-        auto &countedSites = runtimeGraph->execPlan().countedSites;
-        if (!countedSites.nodeAtPc.empty()) {
-            countedSites.entryPc = start;
+        auto &versionState = camel::runtime::fastVmStateOf(*runtimeGraph);
+        if (!versionState.nodeAtPc.empty()) {
+            versionState.countedEntryPc = start;
         }
 
         linked.insert(linked.end(), codes.begin(), codes.end());
