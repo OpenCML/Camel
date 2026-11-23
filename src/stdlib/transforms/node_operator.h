@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include "camel/core/rtdata/string.h"
 #include "camel/runtime/graph.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -231,6 +233,80 @@ accsBodyOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) noexcept {
         return nullptr;
     }
     return graph.nodeBodyAs<runtime::GCAccsBody>(ref);
+}
+
+/// A member read's answer, in the form a walk asks it: which member of which value. The read is
+/// written two ways and both are the same read -- the `ACCS` node (`GCAccsBody`: the kind, the place
+/// or the key) and the operator its declaration names (`:op/access` by place, `:op/access_key` by
+/// key, each carried as the call's `with` argument; `lib/std/prelude.cml`). `accsBodyOf` answers the
+/// first only, so a walk that read the payload alone saw an operator-spelled read as *no read at
+/// all* -- and a walk that does not see a member read does not project its cotangent, which is a
+/// wrong number rather than a refusal.
+struct MemberRead {
+    runtime::GCAccsKind kind = runtime::GCAccsKind::TupleIndex;
+    runtime::gc_node_ref_t value = runtime::kInvalidNodeRef; // the aggregate the member is read of
+    uint32_t place           = 0;                            // TupleIndex: which member
+    std::string key;                                         // StructKey: which member, by name
+};
+
+/// The member read `ref` is, whichever spelling wrote it, or nothing when it is not one -- or is not
+/// the shape its declaration states. A node like that is reported by name where it runs (the
+/// kernel's own reading of its operands), so this answers "not a read" here instead of a second
+/// opinion about it.
+inline std::optional<MemberRead>
+memberReadOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) {
+    const std::span<const runtime::gc_node_ref_t> norm = graph.normInputsOf(ref);
+    if (const auto *body = accsBodyOf(graph, ref); body != nullptr) {
+        if (norm.empty()) {
+            return std::nullopt;
+        }
+        MemberRead read{.kind = body->accsKind, .value = norm.front(), .place = body->value};
+        read.key = std::string(body->key());
+        return read;
+    }
+    const runtime::GCNode *const node = graph.node(ref);
+    if (node == nullptr || node->kind != runtime::GCNodeKind::Oper || !node->hasPayload()) {
+        return std::nullopt;
+    }
+    const auto *const body = graph.nodeBodyAs<runtime::GCOperBody>(ref);
+    if (body == nullptr) {
+        return std::nullopt;
+    }
+    const std::string_view uri = body->uri();
+    const bool byKey           = uri == ":op/access_key";
+    if (!byKey && uri != ":op/access") {
+        return std::nullopt;
+    }
+    const std::span<const runtime::gc_node_ref_t> context = graph.withInputsOf(ref);
+    if (norm.size() != 1 || context.size() != 1) {
+        return std::nullopt;
+    }
+    const runtime::GCNode *const member = graph.node(context.front());
+    if (member == nullptr || member->kind != runtime::GCNodeKind::Data || member->dataIndex >= 0) {
+        return std::nullopt;
+    }
+    const std::span<const slot_t> slots = graph.staticSlots();
+    const size_t at                     = size_t(-member->dataIndex);
+    if (at >= slots.size()) {
+        return std::nullopt;
+    }
+    MemberRead read{
+        .kind  = byKey ? runtime::GCAccsKind::StructKey : runtime::GCAccsKind::TupleIndex,
+        .value = norm.front()};
+    if (byKey) {
+        const auto *text = camel::core::rtdata::fromSlot<::String *>(slots[at]);
+        if (text == nullptr) {
+            return std::nullopt;
+        }
+        read.key = text->toString();
+    } else {
+        const int64_t place = camel::core::rtdata::fromSlot<int64_t>(slots[at]);
+        if (place < 0) {
+            return std::nullopt;
+        }
+        read.place = static_cast<uint32_t>(place);
+    }
+    return read;
 }
 
 } // namespace camel::transforms

@@ -1523,20 +1523,24 @@ static camel::runtime::GCFillKind fillKindOfType(camel::core::type::Type *type) 
 
 // A construction as an ordinary operator (`fill::<T, ...F>` of `lib/std/prelude.cml`; plan
 // 2.3, step 2). The first ordinary operand is the template -- one constant of the target type per
-// construction site, made by the compiler -- and the `with` operands are the field values in
-// component order; the node's two payload facts are that order and the fill kind, and neither is
-// left to the payload now: the kind is the target type's own, and the order is the order the call
-// is built with (`writeRuntimeFillSlots` writes component i with the i-th value). The template is
-// cloned rather than written to, which is what a FILL did with its constant too.
+// construction site, made by the compiler -- and the rest are the field values in component order,
+// which is how the declaration writes them: `with` is what configures the function (which function
+// this is), and what a construction is made of is the data of this call, so it is an ordinary
+// parameter. The node's two payload facts are that order and the fill kind, and neither is left to
+// the payload now: the kind is the target type's own, and the order is the order the call is built
+// with (`writeRuntimeFillSlots` writes component i with the i-th value). The template is cloned
+// rather than written to, which is what a FILL did with its constant too.
 slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)ctx;
+    (void)with;
     Type *type = norm.resultType();
     GUARD(type != nullptr, "a construction must state the type it makes.");
     GUARD(
         isGCTraced(type->code()), "a construction's target type is not GC-traced.");
+    GUARD(norm.size() >= 1, "a construction must read its template.");
     Object *templateValue = norm.get<Object *>(0);
     GUARD(templateValue != nullptr, "a construction's template value is null.");
-    const size_t fieldCount = with.size();
+    const size_t fieldCount = norm.size() - 1;
     std::vector<size_t> slots(fieldCount);
     std::iota(slots.begin(), slots.end(), size_t{0});
     const std::vector<std::byte> payload =
@@ -1544,7 +1548,7 @@ slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(payload.data());
     std::vector<slot_t> values(fieldCount);
     for (size_t i = 0; i < fieldCount; ++i) {
-        values[i] = with.slot(i);
+        values[i] = norm.slot(i + 1);
     }
     Object *made = templateValue->clone(mm::autoSpace(), type, false);
     GUARD(made != nullptr, "a construction's target value is null.");
@@ -1553,27 +1557,29 @@ slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // A member read as an ordinary operator (`access::<T, U>` of `lib/std/prelude.cml`; plan 2.3,
-// step 2). The position or the name is the node's compile-time parameter and the call's first
-// ordinary operand -- an `int` for the element of a tuple, a `string` for the field of a struct --
-// and the second operand is the value it reads. Which of the two it is stays the operand type's
-// answer, the way `GCAccsBody`'s two kinds were the payload's answer: the value's type says whether
-// a member is read by place or by name.
+// step 2). The position or the name is the operator's compile-time parameter and a `with`
+// argument of the call -- an `int` for the element of a tuple, a `string` for the field of a
+// struct -- and the call's one ordinary operand is the value it reads. Which of the two it is
+// stays the member's own type, the way `GCAccsBody`'s two kinds were the payload's answer: the
+// with argument's type says whether a member is read by place or by name. The builder refuses a
+// member read whose operand count is not this shape (`Builder::memberReadNodeOf`), so a call that
+// reaches here has one value; the guards below are the kernel's own invariant, not that check.
 slot_t __access_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
     (void)ctx;
-    GUARD(norm.size() >= 2, "a member read must have a position and a value.");
-    if (norm.code(0) == TypeCode::String) {
-        String *key = norm.get<String *>(0);
+    GUARD(norm.size() == 1, "a member read reads one value.");
+    GUARD(with.size() == 1, "a member read takes its member as a with argument.");
+    if (with.code(0) == TypeCode::String) {
+        String *key = with.get<String *>(0);
         GUARD(key != nullptr, "a member read by name must read a name.");
-        auto *object = norm.get<Struct *>(1);
+        auto *object = norm.get<Struct *>(0);
         GUARD(object != nullptr, "a member read by name must read a struct.");
-        auto *structType = norm.type(1);
+        auto *structType = norm.type(0);
         GUARD(structType != nullptr, "a member read must state the type it reads.");
         return object->get<slot_t>(std::string(key->view()), structType);
     }
-    const Int64 at = norm.get<Int64>(0);
+    const Int64 at = with.get<Int64>(0);
     GUARD(at >= 0, "a member read by place must be given a place that is not negative.");
-    auto *tuple = norm.get<Tuple *>(1);
+    auto *tuple = norm.get<Tuple *>(0);
     GUARD(tuple != nullptr, "a member read by place must read a tuple.");
     GUARD(
         static_cast<uint64_t>(at) < tuple->size(),

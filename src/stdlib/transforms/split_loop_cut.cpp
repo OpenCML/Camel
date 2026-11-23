@@ -176,17 +176,15 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
             continue;
         }
         const rt::GCNode *node                     = function->node(ref);
-        const auto *body                           = accsBodyOf(*function, ref);
+        const std::optional<MemberRead> read       = memberReadOf(*function, ref);
         const std::span<const gc_node_ref_t> reads = function->normInputsOf(ref);
-        if (node == nullptr || nodeOperatorOf(*function, ref) != NodeOperator::Accs ||
-            body == nullptr ||
-            body->accsKind != rt::GCAccsKind::TupleIndex || reads.size() != 1 ||
-            reads.front() != cut.statePort) {
+        if (node == nullptr || !read.has_value() || read->kind != rt::GCAccsKind::TupleIndex ||
+            reads.size() != 1 || reads.front() != cut.statePort) {
             continue;
         }
-        if (body->value == 0) {
+        if (read->place == 0) {
             cut.stateValue = ref;
-        } else if (body->value == 1) {
+        } else if (read->place == 1) {
             cut.stateTangent = ref;
         }
     }

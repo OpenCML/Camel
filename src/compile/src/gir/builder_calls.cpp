@@ -313,19 +313,8 @@ node_handle_t Builder::createFuncDataNode(
             }
             refNodes.push_back(ref);
         }
-        std::vector<size_t> closureSlots;
-        closureSlots.reserve(refNodes.size());
-        for (size_t i = 0; i < refNodes.size(); ++i) {
-            closureSlots.push_back(i);
-        }
-        auto fillPayload =
-            runtime::makeFillPayload(runtime::GCFillKind::FunctionClosure, closureSlots);
-        auto fillNode = currGraph_->addFillNode(graph->funcType(), fillPayload);
+        auto fillNode = fillNodeOf(dataNode, graph->funcType(), refNodes);
         markMacroNode(fillNode);
-        linkNodes(LinkType::Norm, dataNode, fillNode);
-        for (const auto &refNode : refNodes) {
-            linkNodes(LinkType::With, refNode, fillNode);
-        }
         resultNode = fillNode;
     }
     if (!callableAsResult) {

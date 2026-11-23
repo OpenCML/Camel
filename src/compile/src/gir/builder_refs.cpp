@@ -160,25 +160,17 @@ struct HeldMember {
 /// graph.
 optional<vector<HeldMember>> membersOf(node_handle_t value) {
     value = throughCopy(value);
-    if (value == nullptr || !nodeIsKind(value, runtime::GCNodeKind::Fill)) {
-        return nullopt;
-    }
-    Type *type = valueTypeOf(nodeTypeOf(value));
+    Type *type = value != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
     if (type == nullptr) {
         return nullopt;
     }
-    const auto payload = nodeDraftOf(value)->payloadOf(nodeIdOf(value));
-    if (payload.size() < sizeof(runtime::GCFillBody)) {
+    const auto fillKind = constructionKindOf(value, type);
+    if (!fillKind.has_value()) {
         return nullopt;
     }
-    const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-    const auto slots = fill->slots();
-    const auto with  = withInputsOf(value);
     vector<HeldMember> members;
-    for (size_t i = 0; i < slots.size() && i < with.size(); ++i) {
-        const size_t slot          = slots[i];
-        const node_handle_t member = nodeDraftOf(value)->ref(with[i]);
-        switch (fill->fillKind) {
+    for (const auto &[slot, member] : constructionValuesOf(value)) {
+        switch (*fillKind) {
         case runtime::GCFillKind::Struct: {
             const auto *record =
                 type->code() == TypeCode::Struct ? static_cast<const StructType *>(type) : nullptr;

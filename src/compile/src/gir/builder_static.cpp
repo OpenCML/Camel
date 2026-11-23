@@ -1433,9 +1433,8 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             // type, so the next round reads the state's type and the same rule applies.
             for (size_t j = 0; j < k; ++j) {
                 Type *componentType = tuple->typeAt(j);
-                node_handle_t component =
-                    currGraph_->addAccsNode(componentType, static_cast<uint32_t>(j));
-                linkNodes(LinkType::Norm, valueOf(value), component);
+                node_handle_t component = memberReadNodeOf(
+                    valueOf(value), componentType, static_cast<uint32_t>(j), body);
                 registerNodeOrigin(context_, component, body, "gir.static.loop.state");
                 node_handle_t stateValue = stateTypes[j]->assignableFrom(componentType)
                                                ? component
@@ -1597,17 +1596,12 @@ node_handle_t Builder::fillStaticValues(
               : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
     auto &draft = currGraph_->transaction().edit();
     auto base   = draft.ref(draft.materializeStaticValue(empty, type));
-    std::vector<size_t> slots(values.size());
-    std::iota(slots.begin(), slots.end(), 0);
-    node_handle_t out = currGraph_->addFillNode(
-        type,
-        runtime::makeFillPayload(
-            tuple ? runtime::GCFillKind::Tuple : runtime::GCFillKind::Struct,
-            slots));
-    linkNodes(LinkType::Norm, base, out);
+    std::vector<node_handle_t> parts;
+    parts.reserve(values.size());
     for (const node_handle_t &value : values) {
-        linkNodes(LinkType::With, valueOf(value), out);
+        parts.push_back(valueOf(value));
     }
+    node_handle_t out = fillNodeOf(base, type, parts);
     registerNodeOrigin(context_, out, origin, originKind);
     return out;
 }
@@ -1767,9 +1761,8 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
 
     // The tuple key is the `uint32_t` index and the struct key its field name: the nodes a
     // comprehension over `fields T` builds for the same tree.
-    node_handle_t accsNode = byIndex ? currGraph_->addAccsNode(fieldType, index)
-                                     : currGraph_->addAccsNode(fieldType, fieldId);
-    linkNodes(LinkType::Norm, target, accsNode);
+    node_handle_t accsNode = byIndex ? memberReadNodeOf(target, fieldType, index, gct)
+                                     : memberReadNodeOf(target, fieldType, fieldId, gct);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs.static");
     if (staticExpansionDepth_ > 0) {
         staticAccessCache_[{target, cacheKey}] = accsNode;

@@ -29,7 +29,7 @@ digraph GraphIR {
         }
         O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
         N06 [label="3", type="DATA", shape=circle, style=solid, value_type="int", origin=80, span="10:16-10:17", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="3\nmain::node#-1"];
-        N07 [label="CAST", type="CAST", shape=diamond, style=solid, value_type="int?", origin=81, span="10:16-10:25", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="CAST\nmain::node#1"];
+        N07 [label=":op/\ncast", type="OPER", shape=diamond, style=solid, value_type="int?", origin=81, span="10:16-10:25", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip=":op/cast\nmain::node#1"];
         N08 [label="4", type="DATA", shape=circle, style=solid, value_type="int", origin=82, span="10:27-10:28", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="4\nmain::node#-2"];
         N09 [label="pick", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=83, span="10:11-10:29", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="pick\nmain::node#2"];
         N09 -> O01 [label="0", type="EXIT", style=solid];

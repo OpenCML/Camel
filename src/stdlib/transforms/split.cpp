@@ -438,8 +438,8 @@ pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_
     if (nodeOperatorOf(graph, ref) != NodeOperator::Accs) {
         return rt::kInvalidNodeRef;
     }
-    const auto *body = accsBodyOf(graph, ref);
-    if (body == nullptr || body->accsKind != rt::GCAccsKind::TupleIndex || body->value != 1) {
+    const std::optional<MemberRead> read = memberReadOf(graph, ref);
+    if (!read.has_value() || read->kind != rt::GCAccsKind::TupleIndex || read->place != 1) {
         return rt::kInvalidNodeRef;
     }
     const std::vector<gc_node_ref_t> reads = dataInputsOf(&graph, ref);
@@ -1703,9 +1703,8 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
                 readsTheCell || (source != nullptr && source->kind == rt::GCNodeKind::Loop);
         }
         if (readsTheCell) {
-            const auto *body = accsBodyOf(*function, ref);
-            if (nodeOperatorOf(*function, ref) != NodeOperator::Accs || body == nullptr ||
-                body->accsKind != rt::GCAccsKind::TupleIndex || body->value > 1) {
+            const std::optional<MemberRead> read = memberReadOf(*function, ref);
+            if (!read.has_value() || read->kind != rt::GCAccsKind::TupleIndex || read->place > 1) {
                 return LoopReach{};
             }
             // Which component, kept as which component. A chain that reads both is not refused
@@ -1713,7 +1712,7 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
             // loop's result, which crosses the cut as a residual taken after the loop
             // (`afterLoop`).
             std::vector<gc_node_ref_t> &into =
-                body->value == 0 ? reach.valueProjections : reach.tangentProjections;
+                read->place == 0 ? reach.valueProjections : reach.tangentProjections;
             if (std::find(into.begin(), into.end(), ref) == into.end()) {
                 into.push_back(ref);
             }
