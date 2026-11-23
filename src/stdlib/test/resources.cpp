@@ -472,6 +472,30 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             .result   = ResultAlias{.kind = ResultAlias::Kind::View, .operand = 0}});
     const ResourceAccess cellWrite = operandAccess(ResourceClass::Variable, 0, AccessMode::Write);
     attempt(os, "valid", "semtest:cell_write", ResourceSpec{.accesses = {cellWrite}});
+    // A node's effect has two sources and they may both be stated (design principles 3.3): the
+    // accesses the operator declares for itself and the accesses of the function value its
+    // `functionOperand` names. The union is the true shape of an operator that runs the program's
+    // code and touches something itself, so a spec with both is a declaration, not a contradiction.
+    // The operator is its own (`semtest:hof`) because an accepted declaration replaces the record's
+    // resources, and `semtest:cell_write` is read by the program below.
+    table.set("semtest:hof", {.stateOnly = true});
+    attempt(
+        os,
+        "union_of_accesses_and_function_operand",
+        "semtest:hof",
+        ResourceSpec{
+            .accesses        = {cellWrite},
+            .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::Norm, .index = 1}});
+    // The one thing such a spec cannot say: that the operand carrying the function is itself a
+    // resource. A function value has no identity (design principles 5.2), so there is no resource
+    // for an access to bind to there.
+    attempt(
+        os,
+        "access_on_the_function_operand",
+        "semtest:hof",
+        ResourceSpec{
+            .accesses        = {cellWrite},
+            .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::Norm, .index = 0}});
     attempt(
         os,
         "unknown_class",

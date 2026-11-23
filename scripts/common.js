@@ -402,11 +402,28 @@ export function pinnedFootprint(config, cmakeOptionFlags, gitVersion, root = BAS
  */
 export function runCmakeBuild(config, cmakeOptionFlags) {
     process.chdir(BASEDIR)
-    // The diagnostic numbers are assigned in src/kernel/diagnostics/registry.tsv and the headers and message
-    // tables are generated from it. Generate before CMake configures, so a new declaration
-    // is numbered and the tree CMake reads already carries the emitted files; CMake then runs
-    // --check again as a dependency of libcamel_objects, so a direct cmake build is guarded too.
-    execSync('node scripts/diagnostics-catalog.mjs --generate', { cwd: BASEDIR, stdio: 'inherit' })
+    // The diagnostic numbers are assigned in src/kernel/diagnostics/registry.tsv and the headers and
+    // message tables are generated from it, so a build compiles what those files say -- and they are
+    // generated, tracked files, which is what makes them the one place where "the tree I tested is
+    // the commit" can quietly stop being true. Check, never generate: `--generate` here repaired a
+    // stale table inside the build, and CMake's own --check (a dependency of libcamel_objects) then
+    // read the repaired tree, so a commit whose `semantic.cpp` did not match its `registry.tsv`
+    // built green. Measured on 2026-11-24: the build rewrote
+    // src/kernel/core/error/diagnostics/messages/semantic.cpp (md5 045daa5c24fc5e09ebda443da85f5810
+    // -> a5a331016f37621247627e8071273ce7, the four lines of `ForRequiresIterable`) and then compiled
+    // that copy, while `--check` on the same commit was red. A declaration with no number yet is red
+    // here like any other disagreement, and the fix is a deliberate `--write` whose emitted diff is
+    // committed -- the number is a published value, not a build artifact.
+    try {
+        execSync('node scripts/diagnostics-catalog.mjs --check', { cwd: BASEDIR, stdio: 'inherit' })
+    } catch {
+        logFail(
+            'The diagnostics registry and the generated code tables disagree, and a build must ' +
+                'compile the tables the commit carries, so nothing was regenerated. Run ' +
+                '`node scripts/diagnostics-catalog.mjs --write`, read the emitted diff, and commit it.'
+        )
+        process.exit(1)
+    }
     const buildDir = path.join(BASEDIR, 'build')
     const conanToolchain = path.join(buildDir, 'conan_toolchain.cmake')
     if (!fs.existsSync(conanToolchain)) {
