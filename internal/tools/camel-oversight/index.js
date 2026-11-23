@@ -53,7 +53,12 @@ const DEFAULTS = {
     buildHost: '',
     buildProbe: 'cat /proc/loadavg; nproc; pgrep -fc "ctest|camel" || true',
     rulesFile: 'internal/collab/rules.md',
-    rulesRefreshMinutes: 60,
+    rulesRefreshMinutes: 30,
+    // A tool call in the claimed session that has not returned after blockWarnMinutes is reported;
+    // after blockCancelMinutes the turn is cancelled (queued messages kept) and the coordinator told why.
+    blockWarnMinutes: 10,
+    blockCancelMinutes: 30,
+    blockExempt: [],
     limits: {},
 }
 
@@ -108,6 +113,8 @@ export function apply(ctx, rawConfig) {
     const delivered = new Map() // id -> {id, at, mode, text}
     const acks = new Map() // id -> {id, at, status, note}
     let claimed = null // the session that called oversight_claim last
+    let dmLastSeen = null // the last request the decision-maker's client made
+    const promptReach = { target: 0, other: 0, none: 0 } // whom the prompt context was assembled for
     const tells = [] // what the model sent the decision-maker with oversight_tell
     const record = (entry) => {
         try {
@@ -135,11 +142,17 @@ export function apply(ctx, rawConfig) {
     // ---- what the sessions are doing ---------------------------------------------------------
     const tails = new Map() // session id -> [{seq, time, type, line}]
     const since = new Map() // agent id -> time its status last changed
+    // The claimed session's tool calls that have not returned, and its last assistant text: what the
+    // drift checks below read (a call that blocks the session, a turn that ends by asking the owner).
+    const pendingCalls = new Map() // callId -> {name, at, warned}
+    let lastAssistantText = ''
+    let onTargetEvent = () => {}
     ctx.effect(() =>
         ctx.on('session/event', (session, event) => {
+            const id = String(session.id)
+            if (id === claimed) onTargetEvent(event)
             const line = summarize(event)
             if (line === null) return
-            const id = String(session.id)
             const tail = tails.get(id) || []
             tail.push({ seq: event.seq, time: event.time, type: event.type, line })
             if (tail.length > config.tailLimit) tail.splice(0, tail.length - config.tailLimit)
@@ -236,8 +249,12 @@ export function apply(ctx, rawConfig) {
                 path: pathname,
                 handler: async (req, res) => {
                     if (req.method !== method) return answer(res, 405, { error: `use ${method}` })
+                    const url = new URL(req.url, 'http://local')
+                    // The decision-maker's client names itself, so its absence can be read: the GUI
+                    // polls the same routes and must not count as the decision-maker being there.
+                    if (url.searchParams.get('client') === 'dm') dmLastSeen = Date.now()
                     try {
-                        await handler(req, res, new URL(req.url, 'http://local'))
+                        await handler(req, res, url)
                     } catch (error) {
                         answer(res, 500, { error: clip(error && error.message ? error.message : error, 300) })
                     }
@@ -251,8 +268,20 @@ export function apply(ctx, rawConfig) {
     // What the coordinator says back (an acknowledgement, a message of its own, the claimed session
     // ending) is pushed to every open /oversee/events stream as it happens, so the reader learns it
     // without polling. A comment line every 25 seconds keeps proxies from closing an idle stream.
+    // Every event worth replaying is kept (and rebuilt from the log at load), so a reader that lost
+    // the stream -- a tailnet hiccup, a restart on either side -- asks for what it missed with
+    // `?since=<ms>` instead of losing it.
     const streams = new Set()
+    const replayable = []
+    const remember = (event) => {
+        if (event.kind === 'beat') return
+        replayable.push(event)
+        if (replayable.length > 500) replayable.splice(0, replayable.length - 500)
+    }
+    for (const entry of [...acks.values(), ...tells]) remember(entry)
+    replayable.sort((a, b) => a.at - b.at)
     const emit = (event) => {
+        remember(event)
         const frame = `data: ${JSON.stringify(event)}\n\n`
         for (const res of streams) res.write(frame)
     }
@@ -347,23 +376,112 @@ export function apply(ctx, rawConfig) {
         }
     }
 
-    // The standing rules, re-stated once an hour while the coordinator is at work: a long context
-    // forgets what it read at the start. Read from the repository each time, so an edit to the
-    // rules reaches the next refresh without a reload.
-    const refreshRules = async (now) => {
+    // ---- keeping the standing rules in front of the coordinator --------------------------------------
+    // A long-running session forgets what its skill said and drifts: it asks the owner, it runs a long
+    // job in the foreground and cannot answer. Three layers, each measurable:
+    //   always      the rules text is part of the claimed session's prompt context at every step
+    //               (`promptReach` counts which sessions the prompt actually reached);
+    //   periodic    every rulesRefreshMinutes, and right after a claim, the rules are injected into the
+    //               session's context -- this path does not depend on the prompt reaching it;
+    //   on sight    a turn that ends by asking the owner, or a call to a question tool, gets a reminder at
+    //               once; a tool call that blocks the session is reported, and cancelled when it lasts.
+    let rulesText = ''
+    const loadRules = async () => {
+        if (!config.repo) return
+        const text = await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
+        if (text.trim()) rulesText = text.trim()
+    }
+    void loadRules()
+
+    const nudge = (id, level, text, how) => {
         const agent = target()
-        if (!agent || !config.repo || now - lastRefresh < config.rulesRefreshMinutes * 60_000) return
+        const now = Date.now()
+        const mode = agent ? (how ? how(agent) : sendToTarget(agent, level, text)) : 'held (no claimed session)'
+        const entry = { kind: 'reminder', at: now, level, mode, rules: [id], text }
+        record(entry)
+        emit(entry)
+        reminders.push(entry)
+        if (reminders.length > 50) reminders.splice(0, reminders.length - 50)
+    }
+
+    const refreshRules = async (now, force = false) => {
+        const agent = target()
+        if (!agent || !rulesText) return
+        if (!force && now - lastRefresh < config.rulesRefreshMinutes * 60_000) return
         const tail = tails.get(String(agent.id)) || []
         const active = tail.length > 0 && now - tail[tail.length - 1].time < 60 * 60_000
-        if (!active) return
-        const rules = await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
-        if (!rules.trim()) return
+        if (!force && !active) return
         lastRefresh = now
-        sendToTarget(agent, 'quiet', `[oversight · 铁律复读]\n${rules.trim()}`)
+        sendToTarget(agent, 'quiet', `[oversight · 铁律复读]\n${rulesText}`)
         const entry = { kind: 'reminder', at: now, level: 'quiet', mode: 'inject', rules: ['rules-refresh'], text: '铁律复读' }
         record(entry)
         reminders.push(entry)
     }
+
+    // A turn that ends by asking the owner: the last assistant text ends in a question mark, or asks for
+    // a decision in so many words. The owner is not there to answer; the rule is to go on with the default.
+    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|Should I|Would you like|Let me know|shall I)/i
+    const asksOwner = (text) => {
+        const tailText = String(text || '').trim().slice(-400)
+        return tailText !== '' && (/[?？]\s*$/.test(tailText) || ASKS.test(tailText))
+    }
+    let lastAskNudge = 0
+    const QUESTION_TOOLS = new Set(['ask_user_question', 'ask_user'])
+    onTargetEvent = (event) => {
+        const d = event.data || {}
+        const at = event.time || Date.now()
+        if (event.type === 'tool/call') {
+            pendingCalls.set(String(d.callId), { name: d.name, at, warned: false })
+            if (QUESTION_TOOLS.has(d.name) && Date.now() - lastAskNudge > 10 * 60_000) {
+                lastAskNudge = Date.now()
+                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问、不等——按默认建议继续；真是问句就写 internal/questions/ 一页，再用 oversight_tell 报页名。')
+            }
+        } else if (event.type === 'tool/result') {
+            const callId = d.message && d.message.source ? d.message.source.callId : d.callId
+            pendingCalls.delete(String(callId))
+        } else if (event.type === 'assistant/message') {
+            lastAssistantText = textOf(d.message && d.message.content)
+        } else if (event.type === 'turn/start') {
+            lastAssistantText = ''
+        } else if (event.type === 'turn/end') {
+            pendingCalls.clear()
+            const aborted = d.reason && d.reason.kind === 'aborted'
+            if (!aborted && asksOwner(lastAssistantText) && Date.now() - lastAskNudge > 10 * 60_000) {
+                lastAskNudge = Date.now()
+                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问、不等——按默认建议继续干；真是问句就写 internal/questions/ 一页（问句、读数、两三条路各带代价、默认建议），再用 oversight_tell 报页名。')
+            }
+        }
+    }
+
+    // A call that does not return blocks the session: dispatches queue behind it, reminders cannot reach
+    // it, and nobody can talk to it. Reported at blockWarnMinutes; at blockCancelMinutes the turn is
+    // cancelled with its queued messages kept, and the coordinator is told why in the next turn.
+    const checkBlocking = () => {
+        const agent = target()
+        if (!agent) return
+        const now = Date.now()
+        for (const [callId, call] of pendingCalls) {
+            if ((config.blockExempt || []).includes(call.name)) continue
+            const minutes = (now - call.at) / 60_000
+            if (minutes >= config.blockCancelMinutes) {
+                pendingCalls.delete(callId)
+                nudge('blocked-cancelled', 'urgent',
+                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
+                    (a) => {
+                        a.cancel({ kind: 'user' }, { keepInbox: true })
+                        a.followup(Object.freeze({
+                            id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
+                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
+                        }))
+                        return 'cancel+followup'
+                    })
+            } else if (minutes >= config.blockWarnMinutes && !call.warned) {
+                call.warned = true
+                nudge('blocking', 'wake', `协调者的工具调用 ${call.name} 已阻塞会话 ${Math.round(minutes)} 分钟；到 ${config.blockCancelMinutes} 分钟插件会中断那一轮。`, () => 'reported')
+            }
+        }
+    }
+    ctx.effect(() => ctx.timer.interval(checkBlocking, 60_000))
 
     const beat = async () => {
         if (beating || !config.repo) return
@@ -388,6 +506,7 @@ export function apply(ctx, rawConfig) {
                 taken: takenIds(),
                 backlogOpen: backlogOpen(),
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
+                dmLastSeen,
             }
             const due = []
             for (const rule of RULES) {
@@ -415,6 +534,7 @@ export function apply(ctx, rawConfig) {
                 if (held && cooled) due.push({ id: rule.id, level: rule.level, key: found.key, text: found.text })
             }
             if (due.length > 0) deliver(due, now)
+            await loadRules()
             await refreshRules(now)
             emit({ kind: 'beat', at: now, alerts: [...alerts.keys()] })
         } finally {
@@ -475,6 +595,9 @@ export function apply(ctx, rawConfig) {
             sessions: sessionsNow(),
             recentTurns: id ? recentTurns(id, config.turnsInState) : [],
             unacknowledged: pending(),
+            decisionMaker: { lastSeen: dmLastSeen },
+            promptReach,
+            blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
             watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
         })
     })
@@ -490,13 +613,17 @@ export function apply(ctx, rawConfig) {
         answer(res, 200, { acks: [...acks.values()], tells: tells.slice(-50), unacknowledged: pending() })
     })
 
-    route('/oversee/events', 'GET', (req, res) => {
+    route('/oversee/events', 'GET', (req, res, url) => {
         res.writeHead(200, {
             'content-type': 'text/event-stream; charset=utf-8',
             'cache-control': 'no-store',
             connection: 'keep-alive',
         })
         res.write(`: open, target ${claimed ?? 'none'}\n\n`)
+        const after = Number(url.searchParams.get('since'))
+        if (Number.isFinite(after) && after > 0) {
+            for (const event of replayable) if (event.at > after) res.write(`data: ${JSON.stringify({ ...event, replayed: true })}\n\n`)
+        }
         streams.add(res)
         const beat = setInterval(() => res.write(': ping\n\n'), 25_000)
         req.on('close', () => {
@@ -545,6 +672,8 @@ export function apply(ctx, rawConfig) {
                 const agent = ctx.agents.currentInitiator()
                 if (!agent) return { result: 'no initiating session; nothing claimed' }
                 claimed = String(agent.id)
+                pendingCalls.clear()
+                void refreshRules(Date.now(), true)
                 record({ kind: 'claim', session: claimed, at: Date.now() })
                 return { result: `the oversight channel now targets session ${claimed}` }
             },
@@ -614,17 +743,29 @@ export function apply(ctx, rawConfig) {
             name: 'camel-oversight',
             order: 950,
             text: () => {
-                // Only the target session is told about the channel; another session that happens to
-                // run in this process has nothing to acknowledge.
+                // Only the claimed session gets the rules and the channel's state; another session in
+                // this process has nothing to do with them. With no claim, a session working in the
+                // repository is reminded that the coordinator claims first.
                 const aimed = target()
-                if (!aimed || ctx.agents.currentInitiator() !== aimed) return ''
+                const initiator = ctx.agents.currentInitiator()
+                if (!initiator) promptReach.none += 1
+                else if (aimed && initiator === aimed) promptReach.target += 1
+                else promptReach.other += 1
+                if (!aimed) {
+                    const cwd = String((headerOf(initiator) || {}).cwd || '').toLowerCase().replace(/\//g, '\\')
+                    const repo = String(config.repo || '').toLowerCase().replace(/\//g, '\\')
+                    return initiator && repo && cwd.startsWith(repo)
+                        ? '没有会话认领 camel-oversight 通道。若你是 Camel 的协调者，第一件事调 oversight_claim，然后按 internal/collab/SKILL.md 与 coordinator.md 工作。'
+                        : ''
+                }
+                if (initiator !== aimed) return ''
                 const waiting = pending()
                 const head =
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +
                     'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit). ' +
                     'Messages prefixed "[oversight · …]" are the plugin\'s own reminders from its measurements; act on them, no acknowledgement needed. oversight_readings gives the measurements on demand.'
                 const open = [...alerts.keys()]
-                const parts = [head]
+                const parts = rulesText ? [rulesText, head] : [head]
                 if (waiting.length > 0) parts.push(`Not yet acknowledged: ${waiting.join(', ')}.`)
                 if (open.length > 0) parts.push(`Open alerts: ${open.join(', ')}.`)
                 return parts.join(' ')

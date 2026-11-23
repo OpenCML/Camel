@@ -190,6 +190,20 @@ export const RULES = [
         },
     },
     {
+        id: 'decision-maker-offline',
+        level: 'quiet',
+        hold: 0,
+        cooldown: 120,
+        check: ({ dmLastSeen, now, limits }) => {
+            if (!dmLastSeen || now - dmLastSeen < limits.dmOfflineMinutes * 60_000) return null
+            const minutes = Math.round((now - dmLastSeen) / 60_000)
+            return {
+                key: 'offline',
+                text: `决策者 ${minutes} 分钟没有连上通道（可能掉线或在重启）。照 backlog 与铁律继续，不等他：回执与 oversight_tell 都记在日志里，他回来会补读；原则问题照写问题页、按默认建议开工。`,
+            }
+        },
+    },
+    {
         id: 'day-end',
         level: 'wake',
         hold: 0,
@@ -216,6 +230,7 @@ export const DEFAULT_LIMITS = {
     staleMinutes: 120,
     hostFull: 0.9,
     slotWaitMinutes: 30,
+    dmOfflineMinutes: 45,
     dayEndMinutes: 23 * 60 + 30,
 }
 
