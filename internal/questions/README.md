@@ -5,13 +5,14 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：8 页
+## 现在在等作者：9 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
 | [`2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup`](2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup.cn.md) | 一个 Oper 的身份是 payload 里的 URI，还是算子表查出来的名字 |
 | [`2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner`](2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner.cn.md) | 一条算子 URI 只有一种写法，而把 2,677 处改成它归谁 |
+| [`2026-11-23-float-and-f32-name-one-type-or-two`](2026-11-23-float-and-f32-name-one-type-or-two.cn.md) | 一个 f64 的卷积答什么：`float`，还是 `f32` —— 规则的答案从入参来，还是从注册表来 |
 | [`2026-11-23-how-a-backward-slice-names-the-position-before-the-first`](2026-11-23-how-a-backward-slice-names-the-position-before-the-first.cn.md) | 反向切片的末端怎么写：`-1` 是唯一能用的写法，而它现在是故障 |
 | [`2026-11-23-the-dots-type-column-for-a-structural-operator`](2026-11-23-the-dots-type-column-for-a-structural-operator.cn.md) | DOT 的 `type=` 对一个写成算子的成员读/构造写哪种名字：`OPER` 加 URI，还是 `ACCS`/`FILL` 加原来的标签 |
 | [`2026-11-23-what-a-read-of-a-cell-costs`](2026-11-23-what-a-read-of-a-cell-costs.cn.md) | 「读一个格子」算不算一个效应，以及算子记录的沉默在放置判断里值多少 |
