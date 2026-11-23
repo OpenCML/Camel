@@ -29,8 +29,8 @@ std::string regionMemoryRawToJson(const char *regionName, size_t offset, size_t 
 
 // Object view: return the object list for a region, paginated by [offset, offset+limit).
 // Returns JSON: { "region", "objects": [ { "addr", "size", "age", "region" }, ... ], "total",
-// "hasMore" }. Currently implemented only for bump-type regions; other types temporarily return
-// an empty list (reserved for architecture work).
+// "hasMore" }. Implemented only for bump-type regions; other types return an empty list
+// (reserved for architecture work).
 std::string regionObjectsToJson(const char *regionName, size_t offset, size_t limit);
 
 } // namespace profiler

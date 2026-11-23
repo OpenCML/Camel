@@ -105,17 +105,17 @@ std::string indexRule(const std::string &family, const RuleObject &rule) {
         // Two rules of one operator that cannot be told apart -- one spelling, one operand count,
         // one compiled parameter-type list -- are a duplicate: neither can be preferred, and a
         // family that holds both would answer by filing order. The condition is *not* part of that
-        // test: a `when` clause is a question about the same operands, not a different shape, so two
-        // laws of one parameter-type list are one law written twice whatever their guards say. A rule
-        // that wants to answer two questions of one operand writes two laws of two parameter types
+        // test: a `when` clause is a question about the same operands, not a different shape, so
+        // two laws of one parameter-type list are one law written twice whatever their guards say.
+        // A rule that wants to answer two questions of one operand writes two laws of two parameter
+        // types
         // (`jvp_float_from_float::<S>` beside `jvp_float_from_int(x: int)`,
         // `stdlib/rulesets/jvp.cml`) or one law that branches on the type.
         //
         // Anything else is two laws of one key, which is what a family is for. Two rules whose
         // parameter types differ (`(T[...], T[...])` and `(T[...], T)`, `(x: S)` and `(x: int)`)
         // answer for different operands -- `T[...]`'s `t[0]` is the open-rank array and `T[]`'s is
-        // the element (design principles 5.4), and an `int` source is not a float one -- and this
-        // text used to call them a duplicate because both wrote `is_float::<T>()`.
+        // the element (design principles 5.4), and an `int` source is not a float one.
         //
         // The comparison is of types, not of the text the two declarations were written with: a
         // type has one identity however it is spelled, and two different types can be spelled

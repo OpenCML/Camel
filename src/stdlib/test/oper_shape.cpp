@@ -25,8 +25,8 @@ namespace {
 using namespace camel::runtime;
 
 /// The word a reading prints for a shape. `shapeName` (shaped_operators.h) is a back end's dump and
-/// spells the node kind it used to be ("CAST"); this names the operation, which is what the two
-/// forms are being compared by.
+/// spells the node kind ("CAST"); this names the operation, which is what the two forms are being
+/// compared by.
 const char *shapeText(camel::execute::OperShape shape) {
     switch (shape) {
     case camel::execute::OperShape::Conversion:

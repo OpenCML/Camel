@@ -166,7 +166,7 @@ enum class PortGroup : std::uint8_t {
     /// it. Nothing at a call site names a capture -- it is bound from the closure tuple -- and it
     /// is a port of the graph all the same: a reader that walks a graph's ports asks one query
     /// three times instead of two plus a list of its own. The tuple those ports are read out of is
-    /// their types, which `captureType()` used to answer and which is not a query any more.
+    /// their types.
     Capture = 2,
 };
 
@@ -274,9 +274,9 @@ struct CalleeRef {
  *
  * The parameters are a virtual interface on purpose. The readers on it -- the encoder's self-check,
  * `LoopView`, `decidingRegionOf`, `ControlRegions`, `NodeRoleRegistry` --
- * are not inner loops, and the two representations are what stage 3 deletes: a seam that costs a
- * virtual call for one stage is worth less than a template that would put both representations'
- * types into every reader this stage exists to shrink. When one representation is left, the virtual
+ * are not inner loops, and there are two representations behind this interface: a seam that costs
+ * a virtual call is worth less than a template that would put both representations' types into
+ * every reader this interface exists to shrink. When one representation is left, the virtual
  * dispatch goes with the adapters and the predicates stay.
  */
 class GraphView {
@@ -324,14 +324,14 @@ class GraphView {
     // Three more readings are not here (interface review), and a reader that wants one
     // asks where it is derived rather than this face:
     //
-    //   isMacro      the record of the callee, or of the operator the node names (2.2 keeps macros
+    //   isMacro      the record of the callee, or of the operator the node names (macros live
     //                in the records only, so a copy of the answer on a node would be a second
     //                truth).
     //   isConstant   the node's kind and its inputs: a DATA node whose value the graph was given,
     //                which is what `constantOf` answers.
     //   dataIndexOf  which slot the value sits in is the execution plan's (section 13), not the
-    //                graph's content. The back ends keep reading the frozen payload; stage 3 moves
-    //                the slot into the execution plan.
+    //                graph's content. The back ends read the slot from the frozen payload, which
+    //                is where it lives.
     /// Where the node was written, 0 when unknown. Compile and debug metadata, not content.
     virtual std::uint64_t originOf(NodeRef ref) const = 0;
 

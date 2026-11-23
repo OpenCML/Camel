@@ -39,8 +39,8 @@ FastVmVersionState &fastVmStateOf(const GCGraph &graph) {
     auto &states = versionStates();
     auto found   = states.find(plan.get());
     if (found != states.end() && found->second.plan.lock() != plan) {
-        // The address of a plan the store freed, handed to this one. The entry belongs to the
-        // version that used to be here; answering it would report code this version never made.
+        // The address of a plan the store freed, handed to this one. The entry belongs to an
+        // earlier plan at that address; answering it would report code this version never made.
         states.erase(found);
         found = states.end();
     }

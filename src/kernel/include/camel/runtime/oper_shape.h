@@ -2,15 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Which of the four operations a node performs, read from the operator's record (D-1123-34).
+ * Which of the four operations a node performs, read from the operator's record.
  *
- * These are the kernel's answers, and they used to live in the library's header
- * (`camel/execute/shaped_operators.h`) with a table that spelled the four URIs out. Two things were
- * wrong with that: the kernel included a standard-library header to ask a question about a graph,
- * and the answer was decoded from the letters of a URI -- which is the one thing the operator table
- * says a reader must not do (design section 3.8, R10). The shape is now a property the operator is
- * registered with (`camel/ops/oper_shape.h`, `Record::shape`), so a reader asks the record and no
- * table of names exists to drift from the registration that states it.
+ * These are the kernel's answers. The shape is a property the operator is registered with
+ * (`camel/ops/oper_shape.h`, `Record::shape`), so a kernel reader asks the record and never the
+ * letters of a URI -- which is the one thing the operator table says a reader must not do (design
+ * section 3.8, R10) -- and no table of names exists to drift from the registration that states it.
  *
  * The two questions, and why they are two:
  *

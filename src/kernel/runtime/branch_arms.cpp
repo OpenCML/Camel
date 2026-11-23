@@ -48,8 +48,8 @@ namespace {
 
 std::string_view kindName(GCNodeKind kind) {
     // The four operators the front end still builds as nodes of their own are named by their
-    // operator (`shapeName`), which is the same four names this function used to spell out and the
-    // name they keep once they are ordinary OPER nodes (refactor stage 2.3).
+    // operator (`shapeName`): the name belongs to the operator, so a node of one of the four kinds
+    // and an OPER node that names the operator answer the same word.
     const camel::ops::OperShape shape = camel::runtime::shapeOfKind(kind);
     if (shape != camel::ops::OperShape::None) {
         return camel::ops::shapeName(shape);

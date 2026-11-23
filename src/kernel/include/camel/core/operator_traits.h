@@ -5,8 +5,8 @@
  * Hooks that modules register about the values of their own types.
  *
  * The properties of operators (purity, type rules, type folders) live in the operator table,
- * camel/core/operator_table.h, which this header includes for the code that used to find
- * them here.
+ * camel/core/operator_table.h, which this header includes so that a caller of one of them does not
+ * have to.
  */
 
 #pragma once

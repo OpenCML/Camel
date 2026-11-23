@@ -25,6 +25,6 @@ class SpecializeRewritePass : public RuntimeGraphRewritePass {
     /// The nodes this pass has copied against `growth_budget`: required by
     /// `applyOptimizeRewritePass` the same way, and cleared where a run starts, so each run spends
     /// the budget `stdlib/std.cml` declares on this pass and no run starts on what one before it
-    /// left. The engine used to make its own count here, which dropped the budget at every call.
+    /// left.
     size_t growthSpent_{};
 };

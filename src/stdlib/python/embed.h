@@ -34,9 +34,9 @@
  * one sequence for both, so "who was first" does not decide how the interpreter is set up: the
  * venv is honoured, libpython is promoted to the global namespace (a C extension module imported
  * later resolves interpreter symbols from there), Python's output is line-buffered and flushed at
- * exit, and the site-packages and extra paths are in `sys.path`. `modules/pyplot` used to create
- * an interpreter with a shorter sequence and a program that plotted and then imported `_ssl`
- * failed; that is fixed here, in the one place both modules go through.
+ * exit, and the site-packages and extra paths are in `sys.path`. Both modules go through that one
+ * sequence, so neither can set the interpreter up differently: a shorter one leaves a program that
+ * plots and then imports a C extension (`_ssl`) without what the extension needs.
  *
  * The one-time state is in libcamel (`camel::utils::runOnce`), not in this header: the header is
  * compiled into each module's own shared object, so a function-local flag here would be one flag

@@ -1772,8 +1772,9 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     // jitEntryOffset_ (body start) so rbx/r12 pool+graph cache is already live.
     //
     // Windows: rcx/rdx → rdi/rsi + load rbx/r12 (MIR/regalloc assume these on body entry).
-    // Linux SysV: rdi/rsi already hold slots/ctx; historically only Windows emitted this prologue,
-    // so Linux ran the body with garbage rbx/r12 and mis-compared / mis-loaded frame slots.
+    // Linux SysV: rdi/rsi already hold slots/ctx, and rbx/r12 are loaded here too: the body assumes
+    // both on entry, so a prologue that only Windows emitted ran Linux with garbage rbx/r12 and
+    // mis-compared / mis-loaded frame slots.
     // A fault site in the body leaves through the wrapper: it restores the stack pointer saved
     // in r14 (callee-saved, untouched by the body) and jumps to the wrapper's epilogue, which
     // returns to the C++ caller. Nothing else is between the two: the body calls only itself.

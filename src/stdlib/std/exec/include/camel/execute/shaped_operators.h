@@ -5,17 +5,18 @@
  * The four shaped operators' fast paths, and the library's names for the question that says which
  * of the four a node performs.
  *
- * **Where the question lives now.** It is the kernel's (`camel/runtime/oper_shape.h`): the shape is
- * a property of the operator's record, so a kernel reader does not include a standard-library header
- * to ask it (D-1123-34). This header re-exports those names, so the back ends, the analyses and the
+ * **Where the question lives.** It is the kernel's (`camel/runtime/oper_shape.h`): the shape is
+ * a property of the operator's record, so a kernel reader does not include a standard-library
+ * header to ask it. This header re-exports those names, so the back ends, the analyses and the
  * passes that already ask `camel::execute::shapeOfOperation` keep asking it, of one implementation.
  *
  * The two questions, and why they are two:
  *
  *   - `shapeOfOperation` answers *which of the four operations a node performs*, for both forms: it
- *     asks the operator record an OPER node names (`:op/cast`, `:op/copy`, `:op/fill`, `:op/access`,
- *     `:op/access_key`, whose shapes are stated where those operators are registered), and reads the
- *     kind for a node of one of the four kinds, which is what the front end still builds. A
+ *     asks the operator record an OPER node names (`:op/cast`, `:op/copy`, `:op/fill`,
+ * `:op/access`,
+ *     `:op/access_key`, whose shapes are stated where those operators are registered), and reads
+ * the kind for a node of one of the four kinds, which is what the front end still builds. A
  *     classification, an analysis and a plan ask this.
  *   - `shapeOfKind` / `shapeOfNode` answer the other question: which kind's body a node carries.
  *     That is what a reader of the payload is asking, since those bytes are the kinds' payloads
@@ -36,8 +37,8 @@
  * knows its instruction set.
  *
  * **What is left of the name table.** `shapeOfUri` below is the last reader that classifies by URI
- * text; its two callers are the ONNX exporter and the shape test. It goes when the identity half of
- * D-1123-34 lands -- the operators' records already state the four shapes, which is what
+ * text; its two callers are the ONNX exporter and the shape test. It goes when those two ask the
+ * record instead -- the operators' records already state the four shapes, which is what
  * `camel/runtime/oper_shape.h` reads -- and no new caller may be added to it.
  */
 
@@ -70,9 +71,8 @@ using camel::runtime::shapeOfOperation;
 ///   1. It classifies by the operator's **name**, comparing URI text: `":op/cast"` -> Conversion,
 ///      and so on. That is the one thing a reader of a graph must not do (operator_table.h, design
 ///      section 3.8 R10): what an operator is, is stated in its record.
-///   2. When the identity half of D-1123-34 lands -- every reader asking the record, which is what
-///      `camel/runtime/oper_shape.h` already does -- **this function must be gone**, not left as a
-///      second reading that nothing keeps in step with the registrations.
+///   2. **This function must be gone**, not left as a second reading that nothing keeps in step
+///      with the registrations.
 ///   3. Why it is still here: its two callers hold a URI and no node -- the ONNX exporter
 ///      (`src/stdlib/onnx/exporter.cpp`) and the shape test (`src/stdlib/test/oper_shape.cpp`) --
 ///      and neither has been moved to the record yet.

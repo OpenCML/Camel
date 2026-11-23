@@ -541,15 +541,14 @@ class CanonicalWalk {
     /// Order a run the node key left equal by the graph's structure, and count what the structure
     /// leaves equal in `unresolved`.
     ///
-    /// Two cuts, in the order of how much of the numbering they read. The fragment is the node's own
-    /// table plus the numbers of the readers already numbered: it reads the decisions this walk has
-    /// taken. The shape is the class `shapeLabels` gives the node, which reads no number at all. Both
-    /// are functions of the graph, so the order they leave is the same for two writings of one
-    /// graph, which is the property the numbering must have (design principles 9.5) and the one a
-    /// stable sort on the nodes' arrival used to break. What the two cuts leave equal is a part the
-    /// graph does not separate, and it is written back into `unresolved`: the walk has no criterion
-    /// left for it, so it says so rather than presenting the order it met the nodes in as the
-    /// graph's.
+    /// Two cuts, in the order of how much of the numbering they read. The fragment is the node's
+    /// own table plus the numbers of the readers already numbered: it reads the decisions this walk
+    /// has taken. The shape is the class `shapeLabels` gives the node, which reads no number at
+    /// all. Both are functions of the graph, so the order they leave is the same for two writings
+    /// of one graph, which is the property the numbering must have (design principles 9.5). What
+    /// the two cuts leave equal is a part the graph does not separate, and it is written back into
+    /// `unresolved`: the walk has no criterion left for it, so it says so rather than presenting
+    /// the order it met the nodes in as the graph's.
     void cutByFragmentAndShape(std::vector<gc_node_ref_t> &run, size_t &unresolved) {
         std::vector<std::pair<std::string, gc_node_ref_t>> keyed;
         keyed.reserve(run.size());

@@ -80,12 +80,11 @@ VjpRule DerivativeRegistry::findRule(OperId id) const {
 void DerivativeRegistry::setTangentSpace(type::TypeCode code, TangentSpace space) {
     std::unique_lock lock(mutex_);
     auto &spaces = tangents_[code];
-    // One entry per owner, replaced in place. A registration used to clear the whole code when it
-    // owned every value of it, which took a module's subset entry (a narrower `owns`) with it: the
-    // registry is one per process, a second `Context` registers the core's spaces again, and the
-    // module registers its own once, so the values that module owns fell back to the generic space
-    // for the rest of the process (C24, AD/H1). Replacement keeps the registration order the
-    // lookup reads.
+    // One entry per owner, replaced in place. The registry is one per process: a second `Context`
+    // registers the core's spaces again, and a module registers its own once, so an owner's entry
+    // is replaced rather than the whole code cleared -- clearing takes a module's subset entry (a
+    // narrower `owns`) with it, and those values then fall back to the generic space for the rest
+    // of the process. Replacement keeps the registration order the lookup reads.
     for (TangentSpace &existing : spaces) {
         if (existing.owns == space.owns) {
             existing = std::move(space);

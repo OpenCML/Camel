@@ -88,13 +88,13 @@ bool nodeMayFault(
     const camel::core::type::Type *castSource, bool fixedShapes) {
     // The four operators the front end still builds as nodes of their own -- a conversion, a
     // copy, a construction, an access -- are asked by their shape, not by their kind: that is the
-    // one seam for them (`camel/runtime/oper_shape.h`, refactor stage 2.3), and what each of
+    // one seam for them (`camel/runtime/oper_shape.h`), and what each of
     // them can fail is a property of the operator, not of the record it is stored in today.
     //
     // Design principles 3.9 makes "may fault" one item of the operator record, stated by `panic`,
     // and the answer below is that item for every node that names an operator. A conversion, a
     // construction and an access are not operators at all yet: each takes a compile-time parameter
-    // a record keyed by URI cannot carry (`src/stdlib/std/builtin/globals.cpp`, refactor plan 2.3),
+    // a record keyed by URI cannot carry (`src/stdlib/std/builtin/globals.cpp`),
     // so they carry `kNoOper` and have no record to ask; this shape answer is theirs until the
     // front end builds them as ordinary OPER nodes.
     switch (camel::runtime::shapeOfKind(kind)) {

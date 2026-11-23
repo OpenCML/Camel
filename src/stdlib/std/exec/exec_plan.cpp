@@ -2165,8 +2165,8 @@ namespace {
 
 /// The key of the kind. The store's rule is `owner.name` and the owner before the first dot; the
 /// execution plan serves one module, so the module is the owner and the core does not name it
-/// (facts.h, "The store belongs to nothing that is dumped"; the ruling that the plan is `std::exec`'s
-/// kind and not `core.execPlan`).
+/// (facts.h, "The store belongs to nothing that is dumped"). The kind is `std::exec`'s, not
+/// `core.execPlan`'s.
 constexpr std::string_view kExecPlanKey = "std.execPlan";
 
 /// The registration, made while the program loads -- the moment and the way a pass's C++

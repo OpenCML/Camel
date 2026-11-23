@@ -93,8 +93,8 @@ node_handle_t Builder::fillNodeOf(
     // makes and the values it is made of: the template comes first as an ordinary operand and the
     // values follow it in the order the target lays its components out, which is the order the call
     // is built with. Nothing here configures the call -- `with` is what says which function this
-    // is -- so the whole call is ordinary parameters, and the two facts the FILL payload used to
-    // carry are the type (the result and the first type argument) and the order (the operand
+    // is -- so the whole call is ordinary parameters, and the two facts of the payload are carried
+    // by the call: the type (the result and the first type argument) and the order (the operand
     // order). The values' types are the written `...F`, so the call is resolved with the list it is
     // linked with.
     if (type != nullptr) {

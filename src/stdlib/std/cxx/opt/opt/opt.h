@@ -12,8 +12,8 @@ class OptimizeRewritePass : public RuntimeGraphRewritePass {
         const camel::core::context::context_ptr_t &ctx, const OptimizeRewriteConfig &config = {})
         : RuntimeGraphRewritePass(ctx), config_(config) {
         // The not-settling count is this run's, not the process's: a second program in the same
-        // process starts from zero, and so does a second run of this pass. The engine used to keep
-        // the count in a function-local static, which carried one program's count into the next.
+        // process starts from zero, and so does a second run of this pass. The count lives in the
+        // run's state, so nothing carries one program's count into the next.
         config_.settleStreak = &settleStreak_;
     }
     ~OptimizeRewritePass() override = default;

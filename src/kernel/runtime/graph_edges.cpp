@@ -785,7 +785,7 @@ class EdgeChecker {
         const auto with = graph_.withInputsOf(ref);
         Type *type      = node.dataType();
         // A copy and a conversion are checked by their shape, not their kind
-        // (`camel/runtime/oper_shape.h`, refactor stage 2.3): what must hold of the value
+        // (`camel/runtime/oper_shape.h`): what must hold of the value
         // they hand on is a property of the operator.
         if (camel::runtime::shapeOfKind(node.kind) == camel::ops::OperShape::Clone) {
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type)) {

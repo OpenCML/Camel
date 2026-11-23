@@ -1390,9 +1390,8 @@ bool specializeDirectFuncInDraft(
                 break;
             }
             // A gate answers through the kernel; a copy, a conversion and Dref carry the value in
-            // their first input too, so the walk reads the same end for all four (it read the
-            // last). Which of the four a node is is asked by its shape, not its kind (refactor
-            // stage 2.3).
+            // their first input too, so the walk reads the same end for all four. Which of the
+            // four a node is is asked by its shape, not its kind.
             if (header->kind == GCNodeKind::Gate) {
                 current = forwardedInputOf(draft, current);
                 continue;

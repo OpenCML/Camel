@@ -19,8 +19,7 @@
  * the format string, what is wrong).
  *
  * `println` with a format string ends with one line break and `print` with one with none, as
- * without a format. (Both used to write one more, copied from the interpreter, whose defect it
- * was: design principles 10.6.)
+ * without a format (design principles 10.6).
  */
 
 #pragma once

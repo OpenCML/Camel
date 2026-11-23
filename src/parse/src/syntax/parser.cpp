@@ -906,7 +906,7 @@ void ParserImpl::parseTagReaders() {
 
 /// tagUse : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 /// The `#` forms of design principles 6.2: `#name`, `#name(args)` and the group
-/// `#[a, b(v)]`. `#` used to start a comment; it is now always a tag (2.1).
+/// `#[a, b(v)]`. `#` is always a tag, never the start of a comment (2.1).
 void ParserImpl::parseTagUse() {
     const size_t m = mark();
     bump(); // `#`

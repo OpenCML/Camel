@@ -204,9 +204,8 @@ FactSlotsTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         // the freeze itself writes one into every graph it encodes (`core.controlRegions`, through
         // `validateRuntimeGraphPayload`'s branch-arm check in graph_encode.cpp), so a graph of a
         // compiled program has a table before any pass sees it. What is read here instead is the
-        // size of that table: it is the kinds registered when its first fact was written, which is
-        // smaller than the fixed thirty-two every graph used to carry, and registering more kinds
-        // does not make it larger.
+        // size of that table: it is the kinds registered when its first fact was written, and
+        // registering more kinds does not make it larger.
         std::vector<std::uint32_t> atPassStart;
         for (GCGraph *graph : graphs) {
             const std::uint32_t capacity = graph->factSlotCapacity();

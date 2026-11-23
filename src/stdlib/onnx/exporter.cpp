@@ -3808,8 +3808,8 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     // values, not on ONNX tensors: a tuple or a struct is a `Value::Aggregate` with no ONNX value
     // of its own (value.h), so reading a member out of one, or making one from a template, writes
     // no ONNX node at all -- what it does is choose or assemble the fields. They are asked of the
-    // graph by the operation the node names, not by a node kind it used to have
-    // (camel/execute/shaped_operators.h), because the front end now builds them as operator calls
+    // graph by the operation the node names, not by a node kind
+    // (camel/execute/shaped_operators.h), because the front end builds them as operator calls
     // of the same four operations; the lowering table below is for operators that do become ONNX
     // nodes, and a call of one of these four has no row in it and must not be given one: a node
     // there would stand for a value ONNX does not have.
@@ -5094,8 +5094,7 @@ enum class Preparation {
     /// onnx.export_model: macro expansion and the whole std::opt fixpoint.
     Full,
     /// onnx::export: the same simplification without macro expansion, which is the business
-    /// of std::macro before the pass (the name is historical: the pass used to fold shapes
-    /// only).
+    /// of std::macro before the pass.
     ShapesOnly,
 };
 

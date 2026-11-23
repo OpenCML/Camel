@@ -872,7 +872,7 @@ ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
         const GCNode *node = graph.node(ref);
         // A copy and a construction make a value of their own: asked of the operator the node
         // names, or of the kind for the form the front end still builds
-        // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+        // (`camel/runtime/oper_shape.h`).
         const camel::ops::OperShape shape = camel::runtime::shapeOfOperation(graph, ref);
         if (shape == camel::ops::OperShape::Clone ||
             shape == camel::ops::OperShape::Construction) {
@@ -922,7 +922,7 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
         const GCNode *node = graph.node(value);
         // A copy and a construction make a value of their own: asked of the operator the node
         // names, or of the kind for the form the front end still builds
-        // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+        // (`camel/runtime/oper_shape.h`).
         const camel::ops::OperShape shape = camel::runtime::shapeOfOperation(graph, value);
         if (shape == camel::ops::OperShape::Clone ||
             shape == camel::ops::OperShape::Construction) {
@@ -1449,9 +1449,8 @@ struct BeyondCoverage {
 /// access is beyond the declaration when a source that is that access by itself is not covered.
 ///
 /// A reading of unknown class is judged like any other and refused when the clause does not
-/// promise it. It used to be counted and passed -- "a possibility is not an access" -- but a clause
-/// that cannot name what the body reaches proves nothing about it, and a body that may reach past
-/// its own promise is what the check is for. A declaration that does
+/// promise it: a clause that cannot name what the body reaches proves nothing about it, and a body
+/// that may reach past its own promise is what the check is for. A declaration that does
 /// promise it (`any unknown`, which a widened signature can carry) still covers it: the refusal is
 /// the clause's answer applied to the reading, not an unconditional one.
 ///

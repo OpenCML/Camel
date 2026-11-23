@@ -6,7 +6,7 @@
  * a session built and once as the frozen graph it was encoded to -- and the two answers have to be
  * the same answer.
  *
- * This is the guarantee that "every predicate is written once" is worth anything (stage 2.1): a
+ * This is the guarantee that "every predicate is written once" is worth anything: a
  * query the adapter gets wrong on one side shows up here as a difference, and a query one side
  * simply cannot answer is named below rather than silently skipped. It is asked of two readers:
  *

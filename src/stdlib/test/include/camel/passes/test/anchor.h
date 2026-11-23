@@ -19,9 +19,9 @@ namespace camel::passes::test {
 /// lets an order edge end on a conversion (`EdgeChecker::isFreelySchedulable` keeps a Cast ordered:
 /// whether one can fail depends on the types, and a pass that refines them may make it one that
 /// cannot, docs/design/effects/edges.cn.md 4.6), and a `sync` block's chain may run through it, so
-/// it stands where a statement of the source would. It is not a GATE, so a chain that forks on it is
-/// a fork, and it runs as the conversion it is. The tests use it where they need a statement the
-/// source did not write; the SYNC node that used to stand there is gone (edges.cn.md 5.3).
+/// it stands where a statement of the source would. It is not a GATE, so a chain that forks on it
+/// is a fork, and it runs as the conversion it is. The tests use it where they need a statement the
+/// source did not write.
 inline camel::runtime::gc_node_ref_t anchorNode(camel::runtime::GraphTransaction &transaction) {
     auto &draft = transaction.edit();
     const camel::runtime::gc_node_ref_t value = draft.materializeStaticValue(

@@ -586,8 +586,7 @@ ProgramExports::importedEntity(const Module &importer, const Reference &ref, Imp
     auto merged = mergeImportedEntities(collected);
     if (merged) {
         // Not the reference taken above: declaring a module writes its exports, and every write
-        // clears this cache (`exportEntity`), which would leave that reference dangling. The
-        // write used to happen before any lookup was made, so it could not.
+        // clears this cache (`exportEntity`), which would leave that reference dangling.
         imported_[&importer].merged[static_cast<size_t>(layer)][ref] = *merged;
     }
     return merged;

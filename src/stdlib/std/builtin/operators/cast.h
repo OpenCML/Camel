@@ -79,7 +79,6 @@ slot_t __f6tod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &
 
 /// A conversion as an ordinary operator: `cast::<T, U>` of `lib/std/prelude.cml`, the
 /// operator the CAST node kind becomes (plan 2.3, step 2). The target type is the call's result
-/// type and the source type is the operand's own, so the kernel asks the two facts the node used to
-/// carry and hands them to the type's own conversion -- the rule the CAST node ran, not a second
-/// one.
+/// type and the source type is the operand's own, so the kernel asks those two facts and hands them
+/// to the type's own conversion -- the rule the CAST node ran, not a second one.
 slot_t __cast_value__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

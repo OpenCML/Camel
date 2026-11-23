@@ -5,7 +5,7 @@
  * DraftGraphAdapter: `GraphView` over the graph a session is building or editing (`GraphDraft`,
  * camel/runtime/draft.h), reached through the `GraphTransaction` that owns it.
  *
- * The second of the two transitional adapters stage 2.1 asks for. It keeps the encoder's id table,
+ * The draft side of the two adapters a graph is read through. It keeps the encoder's id table,
  * `kept`: that table is the only way a draft's ids and a graph's ids can be the same answer.
  *
  * Who reads through it: the draft side of the encoder's self-check, the encoder's own `kept` table

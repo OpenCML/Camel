@@ -335,8 +335,7 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref);
 
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
-    /// Bit 0 is retired: it was once the flag of a graph that carried a derivative rule as a
-    /// closure value (the old `@vjp` decorator, now kGraphRefRule), and then the macro flag.
+    /// Bit 0 is retired.
     /// A graph's macro-ness is the declaration's fact -- `#macro`, read by tag::declaresMacro off
     /// the exit node (GCGraph::isMacro) -- so there is no flag and no writer. The number stays
     /// unused so that every other bit keeps the value it had.

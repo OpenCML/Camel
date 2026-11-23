@@ -149,7 +149,7 @@ std::optional<type::Type *> accsResultType(const GraphDraft &draft, gc_node_ref_
 std::optional<type::Type *> nodeResultType(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     // A copy has the type of the value it copies; asked of its shape rather than its kind
-    // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+    // (`camel/runtime/oper_shape.h`).
     if (camel::runtime::shapeOfKind(h->kind) == camel::ops::OperShape::Clone) {
         const auto inputs = draft.normInputsOf(id);
         return inputs.empty() ? std::nullopt : std::optional(typeOf(draft, inputs.front()));

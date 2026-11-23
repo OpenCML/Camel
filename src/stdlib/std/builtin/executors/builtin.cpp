@@ -788,7 +788,7 @@ void registerBuiltinOperatorTraits() {
     registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = true});
     // Which of the four each of them is: the one fact a reader of a graph asks instead of comparing
     // the letters of the URI (`camel/runtime/oper_shape.h`). Written here, where the operator is
-    // registered with the kernel that runs it, and at no second place (D-1123-34).
+    // registered with the kernel that runs it, and at no second place.
     registry.declareShape(":op/cast", camel::ops::OperShape::Conversion);
     registry.declareShape(":op/fill", camel::ops::OperShape::Construction);
     registry.declareShape(":op/access", camel::ops::OperShape::Access);

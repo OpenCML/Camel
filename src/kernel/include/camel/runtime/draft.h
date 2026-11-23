@@ -693,7 +693,7 @@ class GraphDraft : public camel::graph::Graph {
     /// The role of the port at `port` of the node's data port list.
     PortRole portRoleOf(gc_node_ref_t id, size_t port) const;
     PortRole portRoleOf(const DraftNode *node, size_t port) const;
-    /// The context-role (`with`) view, kept as the historical name of `contextPortsOf`.
+    /// The context-role (`with`) view: the same list `contextPortsOf` answers.
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> withInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t id) const;
