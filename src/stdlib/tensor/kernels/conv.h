@@ -2,9 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Spatial kernels on NCHW float tensors: 2-D convolution (forward and the
- * three gradients), max/average pooling (forward and gradient), and
- * inference-mode batch normalization.
+ * Spatial kernels on NCHW tensors of one element type: 2-D convolution
+ * (forward and the three gradients), max/average pooling (forward and
+ * gradient), and batch normalization in both its inference and its training
+ * mode.
+ *
+ * Every kernel here is instantiated for f32 and for f64, and computes in the
+ * element type its tensors state: a call whose tensors state two element types
+ * is refused rather than converted (there is no implicit conversion between
+ * numeric types, design principles 5.1), and so is an element type these
+ * kernels have no instance for (an integer, a bool, a bf16 or an f16).
  *
  * Convolution is cross-correlation (no kernel flip) implemented as
  * im2col + GEMM: each image is unfolded into a [C*KH*KW, OH*OW] column
