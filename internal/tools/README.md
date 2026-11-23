@@ -18,6 +18,8 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `camel-test.ps1` | Local helper: one plan run at a time under a lock of its own, publishing to the panel's test state file. |
 | `watch-fsh-dev.ps1` | Watcher for a branch moving on `origin`; not a gate entry and unrelated to the two locks. |
 | `camel-gate-config.ps1` | The loader the four scripts above use for their machine-local settings. |
+| `camel-remote-args.ps1` | The argument rules `camel-remote.ps1` applies before it pushes anything: comma-split lists (`-Plan`, `-AstOnly`, `-AstDrop`), the `--only`/`--drop` words built from them, and the refusal for a glob that names no `.cml` of this tree. Separated out because those rules are the part that used to fail silently on the host. |
+| `camel-remote-args.test.ps1` | Their test, run without a host: `pwsh -NoProfile -File internal/tools/camel-remote-args.test.ps1` prints `N checks, M failed` and exits 1 on a failure. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
 
 ## The machine-local settings file
