@@ -31,8 +31,9 @@
  *   core.regionEffects Node, (ii) the regions a control node runs -- a JOIN's arms, a LOOP's body
  *                                 and condition -- each with its own summary. A region is not an
  *                                 anchor a fact can name, so the answer is kept at its owner.
- *   core.operatorEffects Node, (ii) the clause of the operator a node runs, without the node's own
- *                                 operands: what `graph.is_pure` asks for.
+ *   core.operatorEffects Node, (ii) the effect of the operator a node runs, read at the node: the
+ *                                 accesses its record states united with the ones its function
+ *                                 operand brings. What `graph.is_pure` asks for.
  *   core.loopDomain   CrossGraph, (ii)  a LOOP node and its body graph (design 11.3): the form,
  *                                 the Sequential dim of For/ForWhile, `t < len(xs)`, with the
  *                                 extent — `shape[0]`, the rows of a constant array — and the
@@ -153,10 +154,10 @@ struct RegionEffects {
 RegionEffects regionEffectsOf(
     FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node);
 
-/// The clause of the operator the node runs, without the node's own operands: the
-/// `core.operatorEffects` fact, and the answer `graph.is_pure` asks for. An operator that takes its
-/// accesses from a function operand is read conservatively here -- what the operand is, is the
-/// node's to say.
+/// The effect of the operator the node runs, read at the node: the `core.operatorEffects` fact, and
+/// the answer `graph.is_pure` asks for. It is the same reading `core.nodeEffects` takes at an
+/// operation node -- the accesses the declaration states united with the ones the node's function
+/// operand brings (design principles 3.3) -- so the two facts cannot disagree about that node.
 EffectSummary operatorEffectsOf(
     FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node);
 

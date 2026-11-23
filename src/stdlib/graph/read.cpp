@@ -561,10 +561,13 @@ slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                        .pure();
         } else {
             // A node of a draft: a draft is not a frozen graph, so there is no answer a fact can be
-            // kept at. The declaration is what is asked, and it is the same line the walk starts a
-            // node from (effects.h), not a second reading of a graph's summary.
-            pure =
-                camel::runtime::effectSummaryOfOperator(operOf(node, handle, "graph.is_pure")).pure();
+            // kept at, and no node to read a function operand's clause off either. The declaration
+            // is what is asked (`declaredEffectsOfOperator`), which is the same reading the walk
+            // starts a node from (effects.h) with the operand's half taken conservatively -- never
+            // narrower than the answer a frozen graph gives.
+            pure = camel::runtime::declaredEffectsOfOperator(
+                       operOf(node, handle, "graph.is_pure"))
+                       .pure();
         }
     }
     return toSlot<Bool>(pure);
