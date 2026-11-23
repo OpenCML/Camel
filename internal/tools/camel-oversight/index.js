@@ -10,16 +10,16 @@
 //   GET  /oversee/acks   what the model said about each message (taken, declined, done);
 //   tool oversight_ack   how the model says it.
 //
-// The routes are raw web-server routes, which the GUI's launch-token login does not cover, so they
-// check their own bearer token. The token is read from a file outside the repository; without one
-// every route answers 503 rather than serving unauthenticated.
+// The routes are raw web-server routes, outside the GUI's launch-token login. The gate is the network:
+// the web server stays on loopback and `tailscale serve` publishes it to the tailnet, whose ACL decides
+// who reaches it. A delivery records the Tailscale login that `tailscale serve` attached, as a claim.
 //
 // A message is queued with `agent.followup` (the next turn) or, with mode "steer", `agent.steer` (the
 // nearest step). Neither cancels the running turn. Each message carries an id; a second delivery
 // of the same id is acknowledged and dropped, so a retried request does not start a second turn.
 
 import { execFile } from 'node:child_process'
-import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -28,7 +28,6 @@ export const name = 'camel-oversight'
 export const inject = ['agents', 'webServer', 'tools', 'systemPrompt']
 
 const DEFAULTS = {
-    tokenFile: path.join(os.homedir(), '.camel-oversight', 'token'),
     logFile: path.join(os.homedir(), '.camel-oversight', 'log.jsonl'),
     sessionId: '',
     sender: 'decision-maker',
@@ -181,21 +180,6 @@ export function apply(ctx, rawConfig) {
         )
     }
 
-    // ---- authentication ------------------------------------------------------------------------
-    const token = (() => {
-        try {
-            const value = readFileSync(config.tokenFile, 'utf8').trim()
-            return value.length >= 16 ? Buffer.from(value) : null
-        } catch {
-            return null
-        }
-    })()
-    const authorized = (req) => {
-        const header = String(req.headers.authorization || '')
-        const given = Buffer.from(header.startsWith('Bearer ') ? header.slice(7).trim() : '')
-        return token !== null && given.length === token.length && timingSafeEqual(given, token)
-    }
-
     const answer = (res, status, value) => {
         const body = JSON.stringify(value)
         res.writeHead(status, {
@@ -229,8 +213,6 @@ export function apply(ctx, rawConfig) {
                 kind: 'exact',
                 path: pathname,
                 handler: async (req, res) => {
-                    if (token === null) return answer(res, 503, { error: `no token in ${config.tokenFile}` })
-                    if (!authorized(req)) return answer(res, 401, { error: 'bearer token required' })
                     if (req.method !== method) return answer(res, 405, { error: `use ${method}` })
                     try {
                         await handler(req, res, new URL(req.url, 'http://local'))
@@ -286,7 +268,8 @@ export function apply(ctx, rawConfig) {
         })
         if (mode === 'steer') agent.steer(message)
         else agent.followup(message)
-        const entry = { kind: 'say', id, at: Date.now(), mode, text, session: String(agent.id) }
+        const from = req.headers['tailscale-user-login'] || null
+        const entry = { kind: 'say', id, at: Date.now(), mode, text, session: String(agent.id), from }
         delivered.set(id, entry)
         record(entry)
         answer(res, 202, { id, mode, session: String(agent.id), status: agent.status })

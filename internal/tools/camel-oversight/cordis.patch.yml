@@ -2,8 +2,6 @@
     - id: camel-oversight
       name: '@local/camel-oversight'
       config:
-        # A file holding the bearer token (at least 16 characters). Without it every route answers 503.
-        # tokenFile: 'C:\Users\<you>\.camel-oversight\token'
         # Where deliveries and acknowledgements are logged, one JSON object per line.
         # logFile: 'C:\Users\<you>\.camel-oversight\log.jsonl'
         # The session messages land in. Empty: the only root agent; several roots are refused.

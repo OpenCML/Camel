@@ -15,19 +15,17 @@ system-prompt paragraph that names the messages it has not acknowledged yet.
 
 ## Setup on the machine that runs DSH
 
-1. Put a random token of at least 16 characters in `%USERPROFILE%\.camel-oversight\token` (or set
-   `tokenFile`). Without it every route answers 503. The routes are raw web-server routes, outside the GUI's
-   launch-token login, so the token is their only lock besides the network.
-2. Add the plugin to the profile (this directory's `cordis.patch.yml`); set `buildHost` to the ssh target of
+1. Add the plugin to the profile (this directory's `cordis.patch.yml`); set `buildHost` to the ssh target of
    the build server if its load should be reported (key-based ssh, no prompt).
-3. Keep the web server on loopback and publish it on the tailnet: `tailscale serve --bg <port>`. Restrict the
-   tailnet ACL so that only the decision-maker's machine reaches this one.
-4. `camel-lanes` registers `/camel/say` without authentication; set its `http: false` once this plugin is in.
+2. Keep the web server on loopback and publish it on the tailnet: `tailscale serve --bg <port>`. The routes
+   sit outside the GUI's login; the tailnet is the gate, so its ACL decides who reaches them.
+3. `camel-lanes` also registers `/camel/state` and `/camel/say`; set its `http: false` once this plugin is in,
+   so there is one channel.
 
 ## Calling it
 
 ```sh
-curl -s -H "Authorization: Bearer $TOKEN" https://<host>.ts.net/oversee/state
-curl -s -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+curl -s https://<host>.ts.net/oversee/state
+curl -s -H 'content-type: application/json' \
      -d '{"id":"D-1123-43","text":"...","mode":"queue"}' https://<host>.ts.net/oversee/say
 ```
