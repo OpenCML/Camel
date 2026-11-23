@@ -663,7 +663,8 @@ try {
             --diff (Join-Path $comparison.OutDir 'diff.json') --merge $m.Sha --first-parent $m.FirstParent `
             --second-parent $m.SecondParent --branch $m.Lane.Name --tree $script:mergeTree --out $passedDir `
             --baseline-source $baselineSource --gate headers --gate clang-syntax --gate rows `
-            --batch-size $built.Merges.Count --batch-tip $script:mergeTip @batchLaneArgs 2>&1)
+            --batch-size $built.Merges.Count --batch-tip $script:mergeTip @batchLaneArgs `
+            --written-by 'internal/tools/merge-batch.ps1' 2>&1)
         $writeExit = $LASTEXITCODE
         $write | ForEach-Object { "[batch]   $_" }
         if ($writeExit -ne 0) {
