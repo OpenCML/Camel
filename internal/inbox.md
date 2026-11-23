@@ -35,3 +35,8 @@
   另：记号的语料改写（返回类型 `:` → `=>` 等，约 4,248 个文件）等翻转那一摞合入后，由合并位排空档一笔做完，然后删掉旧写法。
 - **D-1123-27** 车道表去重后在跑的是 5 条（`tooling`、`flip-consumers`、`facts-arrangeable`、`record-uses`、`onnx-lowering`，前三条各重复了一行）。请删重复行，并补开 D-1123-26 的 `3a-b3`；`C-1123-33`（5 个用例、1 处注释还写 `[a:b]`）顺手在一条车道里改成 `[a..b]`。
 - **D-1123-28（在跑只剩 3 条：`onnx-lowering`、`oper-identity-write`、`device-programs`）** 先把 fsh-dev 整枝合进 develop（领先 15 笔，含 D-1123-25 起的派工与三页问题的答复），再当轮开到 6 条以上：`3a-b3`（直接读 `GCGraph`/`GraphDraft` 的引用继续减，分目录）、`facts-b3`（效应汇总、使用索引、执行计划、`ControlRegions`、写法提取五样挪进事实框架）、`slice-cleanup`（`C-1123-33` 的 6 处 `[a:b]`，加 25 个真沉默算子逐个补 `uses`/`pure` 声明）。
+- **D-1123-29（在跑 4 条，补到 8 条）** 当轮开四条，开了在车道表加行：
+  1. `lane/3a-b3`：直接读 `GCGraph`/`GraphDraft` 的引用继续减，分目录，计数写进合入说明。
+  2. `lane/facts-tools`：`camel inspect --facts` 接线、`computeAll` 给它与测试用；每个已落地的 kind 配一条"事实答案与旧算法逐项对照"的用例；调试器 `regionOuter` 改读 `ControlRegions`（问题页 `who-holds-the-facts-store` 的答复）。
+  3. `lane/exec-plan-kind`：执行计划作为 `std::exec` 登记的事实 kind，不可变的计划进事实、fvm 的可变状态留在 fvm；删 `GCGraph::execPlan_`（同一页答复的 ③④）。与 `facts-b3` 分文件：`facts-b3` 做内核框架侧，本车道只动 `src/stdlib/std/{exec,nvm,fvm,prl}`。
+  4. `lane/cleanup`：`C-1123-33` 剩余的旧切片写法、25 个真沉默算子逐个补 `uses`/`pure` 声明、`:op/` 以外的其余小欠账。
