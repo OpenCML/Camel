@@ -10,8 +10,18 @@ leave it messages without waiting for a git round trip.
 | `/oversee/say` | POST | `{"id": "D-1123-43", "text": "...", "mode": "queue"}` queues a user message prefixed `[decision-maker · D-1123-43]`; `mode: "steer"` delivers it at the nearest step instead of the next turn; neither cancels the running turn; a repeated id is dropped |
 | `/oversee/acks` | GET | what the model answered for each message |
 
-The model gets one tool, `oversight_ack(id, status, note)` with status `taken`, `declined` or `done`, and a
-system-prompt paragraph that names the messages it has not acknowledged yet.
+The model gets two tools: `oversight_claim()`, which makes the calling session the target, and
+`oversight_ack(id, status, note)` with status `taken`, `declined` or `done`. The target session also gets a
+system-prompt paragraph naming the messages it has not acknowledged yet.
+
+## Which session is the target
+
+A process may hold many sessions, and none is guessed at. The target is the session that last called
+`oversight_claim` (the coordinator does so at the start of each session, as its skill
+`internal/coordinator/SKILL.md` says), or the session a request names (`session` in the `say` body or the
+`tail` query). `/oversee/state` lists every root session with its directory, status and last activity, and
+marks the claimed one. With no claim, `say` refuses and lists the sessions instead of delivering to an
+unrelated one.
 
 ## Setup on the machine that runs DSH
 
