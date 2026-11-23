@@ -28,7 +28,7 @@ struct ArmLoop {
 };
 
 ArmLoop findArmLoop(const Program *program) {
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!graph->hasNodePayload()) {
             continue;
         }

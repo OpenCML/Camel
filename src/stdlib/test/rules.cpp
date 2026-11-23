@@ -33,7 +33,7 @@ std::vector<Rule> compiledRules(
     bool greedy, std::ostream &os) {
     std::vector<Rule> rules;
     uint16_t next = 1;
-    for (const GCGraph *left : program->graphs()) {
+    for (const auto *left : program->graphs()) {
         const std::string &name = left->name();
         if (!name.ends_with("__lhs")) {
             continue;
@@ -44,7 +44,7 @@ std::vector<Rule> compiledRules(
             continue;
         }
         const GCGraph *right   = nullptr;
-        for (const GCGraph *other : program->graphs()) {
+        for (const auto *other : program->graphs()) {
             if (other->name() == base + "__rhs") {
                 right = other;
             }
@@ -131,7 +131,7 @@ std::optional<std::vector<uint64_t>> shapeAfter(
     const camel::core::context::context_ptr_t &context_, const camel::runtime::Program *program,
     const std::string &name, Work &&work) {
     GCGraph *graph = nullptr;
-    for (GCGraph *candidate : program->graphs()) {
+    for (auto *candidate : program->graphs()) {
         if (candidate->name() == name) {
             graph = candidate;
         }
@@ -158,7 +158,7 @@ const camel::runtime::Program *run(
 
     RuntimeGraphDraftSession session(context_, program);
     std::vector<std::pair<std::string, GraphId>> done;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!kTargets.contains(graph->name())) {
             continue;
         }
@@ -179,7 +179,7 @@ const camel::runtime::Program *run(
     const Program *next_program = session.commit();
     for (const auto &[name, id] : done) {
         size_t adds = 0, muls = 0, divs = 0;
-        const GCGraph *graph = next_program->graph(id);
+        const auto *graph    = next_program->graph(id);
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             if (graph->node(ref)->kind != GCNodeKind::Oper) {
                 continue;

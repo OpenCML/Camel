@@ -80,7 +80,7 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
     }
     // The largest graph, so that there is a region beyond the function's own to ask about.
     GCGraph *target = nullptr;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (target == nullptr || graph->regionCount() > target->regionCount() ||
             (graph->regionCount() == target->regionCount() &&
              graph->nodeCount() > target->nodeCount())) {

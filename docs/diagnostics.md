@@ -7417,13 +7417,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.
+'..' takes two functions or two integers, and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'.
 ```
 
 **Help**
 
 ```text
-'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is. Nothing else is composed.
+'..' has two readings and '<>' has one (design principles 4.2). Between two functions the construct is the composition, written `f <> g` -- and `..` still reads it while the corpus spells it that way: it is the lambda `(x) => g(f(x))`, so 'f' is unary and 'g' takes what 'f' returns. Between two integers, and with `..` alone, it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is. Nothing else is composed or bounded, so `1 <> 2` is refused where `1..2` is an interval.
 ```
 
 **Example** (`test/cases/compile/stream/comp_operand_mismatch.cml`, run as `camel test/cases/compile/stream/comp_operand_mismatch.cml`)
@@ -7450,13 +7450,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-'..' composes a unary function on the left; '{0}' takes {1} parameters.
+'..' and '<>' compose a unary function on the left; '{0}' takes {1} parameters.
 ```
 
 **Help**
 
 ```text
-The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.
+The composition `f <> g` (written `f..g` while the corpus spells it that way) is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.
 ```
 
 **Example** (`test/cases/compile/stream/comp_operand_not_unary.cml`, run as `camel test/cases/compile/stream/comp_operand_not_unary.cml`)
@@ -7516,13 +7516,13 @@ None: choice: which instance the operand stands for is the writer's to say, and 
 **Message**
 
 ```text
-'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.
+'{0}' composes two functions, and its {1} operand, the generic function '{2}', has no instance here: write its type arguments ('{2}::<int>'), or give the whole expression an expected function type.
 ```
 
 **Help**
 
 ```text
-The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.
+The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f <> g` (written `f..g` while the corpus spells it that way) is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident <> ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int> <> ident::<int>`. Only a name that is generic is refused here; an operand of a type the construct cannot take stays CompOperandMismatch.
 ```
 
 **Example** (`test/cases/compile/stream/comp_operand_generic.cml`, run as `camel test/cases/compile/stream/comp_operand_generic.cml`)
@@ -11460,9 +11460,12 @@ A call site carries the type of the function value it calls, and a pass can leav
 
 ```camel
 // Two functions of the same shape -- same argument type, same result type, same value -- that differ
-// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
-// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
-// defect `test::fold_function_type` writes on purpose.
+// in one thing: one of them prints. `announced` is called both ways: directly, so the fold has the
+// pair of calls it is about, and through a function value, so the clause the call site carries is
+// the value's and not the callee's own. Giving that value the pure function's type is how a fold
+// leaves a printing body called through a `pure` clause, which is the defect
+// `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
+// so the commit that publishes this program has nothing of its own to refuse.
 
 func doubled(x: int): int {
     return x * 2
@@ -11473,10 +11476,12 @@ func announced(x: int): int sync {
     return x * 2
 }
 
-func main(): int {
+func main(): int sync {
     let quiet = doubled(21)
-    let noisy = announced(3)
-    return quiet + noisy
+    let f = announced
+    let noisy = f(3)
+    let direct = announced(3)
+    return quiet + noisy + direct
 }
 ```
 
@@ -11504,9 +11509,12 @@ A commit owes the program it publishes the effect its target function declares: 
 
 ```camel
 // Two functions of the same shape -- same argument type, same result type, same value -- that differ
-// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
-// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
-// defect `test::fold_function_type` writes on purpose.
+// in one thing: one of them prints. `announced` is called both ways: directly, so the fold has the
+// pair of calls it is about, and through a function value, so the clause the call site carries is
+// the value's and not the callee's own. Giving that value the pure function's type is how a fold
+// leaves a printing body called through a `pure` clause, which is the defect
+// `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
+// so the commit that publishes this program has nothing of its own to refuse.
 
 func doubled(x: int): int {
     return x * 2
@@ -11517,10 +11525,12 @@ func announced(x: int): int sync {
     return x * 2
 }
 
-func main(): int {
+func main(): int sync {
     let quiet = doubled(21)
-    let noisy = announced(3)
-    return quiet + noisy
+    let f = announced
+    let noisy = f(3)
+    let direct = announced(3)
+    return quiet + noisy + direct
 }
 ```
 
@@ -11548,9 +11558,12 @@ Analysis 4.1 asks a commit for order completeness: within one region, any two ac
 
 ```camel
 // Two functions of the same shape -- same argument type, same result type, same value -- that differ
-// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
-// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
-// defect `test::fold_function_type` writes on purpose.
+// in one thing: one of them prints. `announced` is called both ways: directly, so the fold has the
+// pair of calls it is about, and through a function value, so the clause the call site carries is
+// the value's and not the callee's own. Giving that value the pure function's type is how a fold
+// leaves a printing body called through a `pure` clause, which is the defect
+// `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
+// so the commit that publishes this program has nothing of its own to refuse.
 
 func doubled(x: int): int {
     return x * 2
@@ -11561,10 +11574,12 @@ func announced(x: int): int sync {
     return x * 2
 }
 
-func main(): int {
+func main(): int sync {
     let quiet = doubled(21)
-    let noisy = announced(3)
-    return quiet + noisy
+    let f = announced
+    let noisy = f(3)
+    let direct = announced(3)
+    return quiet + noisy + direct
 }
 ```
 

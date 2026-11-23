@@ -22,7 +22,7 @@ const camel::runtime::Program *
 DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
     const auto &table = camel::core::OperatorTable::instance();
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -54,7 +54,7 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     }
     // Every aggregate, and what the judgement says about its last member: a refusal that cannot say
     // which guard refused cannot be told from a guard written wrong.
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         for (uint32_t index = 0; index < graph->nodeCount(); ++index) {
             const gc_node_ref_t ref = static_cast<gc_node_ref_t>(index);
             if (camel::runtime::aggregateArity(*graph, ref) == 0) {

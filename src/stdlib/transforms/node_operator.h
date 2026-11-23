@@ -33,16 +33,11 @@ namespace camel::transforms {
  * building the four node kinds is the deletion of the `kind` arm of `nodeOperatorOf(GCNodeKind)`;
  * the eight files do not change again.
  *
- * **Two faces, one question.** `GraphRead` (`compile/gir/graph_read.h`) is the face the lift in
- * `jvp.cpp` reads; a `FrozenGraphRead` and a draft answer it. The overloads below are templates
- * over the face, because both a `GCGraph` and a `GraphRead` answer `nodeCount()`, `node(ref)->kind`
- * and the operator a node names: a frozen graph reads the URI in place out of `GCOperBody`, and a
- * `GraphRead` copies the same body out of its payload and answers that URI. What is *not*
- * templated is the two payload readers at the bottom: they hand out a pointer into the node's
- * bytes, which a frozen graph can
- * promise and a draft cannot (a draft keeps its payload at an arbitrary offset, so `GraphRead`
- * copies a body out instead of reinterpreting it in place). A reader of a `GraphRead` keeps reading
- * its own payload, exactly as `jvp.cpp` does.
+ * **One face, one question.** Every caller reads a frozen graph (`GCGraph`): the four kinds and
+ * their payloads are what the stored graph has, and the two readers at the bottom hand out a
+ * pointer into the node's bytes, which only a graph that stores its payload in one piece can do. A
+ * draft keeps its payload at an arbitrary offset and is read through its own accessors; nothing in
+ * this directory asks these questions of one.
  *
  * **Still transitional, and deliberately small.** `NotOne` means "not one of the four", so a caller
  * that only wants a yes/no keeps reading as a predicate. `fillBodyOf` / `accsBodyOf` are the
@@ -164,11 +159,7 @@ inline NodeOperator nodeOperatorOf(std::string_view uri) noexcept {
 }
 
 /// Which of the four operators node `ref` of `graph` is. A ref that is not a node is `NotOne`.
-///
-/// `Graph` is a frozen graph or a `GraphRead`: both answer `nodeCount()` and the record
-/// `node(ref)` hands out, and the record's `kind` is the same field in both (see the file comment).
-template <typename Graph>
-inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
+inline NodeOperator nodeOperatorOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) noexcept {
     if (ref >= graph.nodeCount()) {
         return NodeOperator::NotOne;
     }
@@ -179,27 +170,19 @@ inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t re
     if (node->kind == runtime::GCNodeKind::Oper) {
         // An operator node is one of the four by the URI its record holds, and every other operator
         // -- the overwhelming majority -- is `NotOne`, which is what makes a reader that only wants
-        // a yes/no keep working. A frozen graph reads the URI in place out of `GCOperBody`; a
-        // `GraphRead` copies the same body out of its payload and answers the URI as a value, so
-        // its answer is asked and used in one expression here.
-        if constexpr (requires { graph.template nodeBodyAs<runtime::GCOperBody>(ref); }) {
-            if (!node->hasPayload()) {
-                return NodeOperator::NotOne;
-            }
-            const auto *body = graph.template nodeBodyAs<runtime::GCOperBody>(ref);
-            return body == nullptr ? NodeOperator::NotOne : nodeOperatorOf(body->uri());
-        } else {
-            const std::string uri = graph.operUriOf(ref);
-            return nodeOperatorOf(uri);
+        // a yes/no keep working.
+        if (!node->hasPayload()) {
+            return NodeOperator::NotOne;
         }
+        const auto *body = graph.nodeBodyAs<runtime::GCOperBody>(ref);
+        return body == nullptr ? NodeOperator::NotOne : nodeOperatorOf(body->uri());
     }
     return nodeOperatorOf(node->kind);
 }
 
 /// Which case node `ref` is. A ref that is not a node is `Other`, the case a walk's `default:`
 /// already answered.
-template <typename Graph>
-inline NodeCase nodeCaseOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
+inline NodeCase nodeCaseOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) noexcept {
     switch (nodeOperatorOf(graph, ref)) {
     case NodeOperator::Cast:
         return NodeCase::Cast;
@@ -228,7 +211,7 @@ inline NodeCase nodeCaseOf(const Graph &graph, runtime::gc_node_ref_t ref) noexc
 /// body.
 ///
 /// A frozen graph's payload is the graph's own bytes, so the answer points into them (that is what
-/// the readers copy from, and why this takes a `GCGraph` and not a `GraphRead`).
+/// the readers copy from).
 inline const runtime::GCFillBody *
 fillBodyOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) noexcept {
     const runtime::GCNode *node = graph.node(ref);

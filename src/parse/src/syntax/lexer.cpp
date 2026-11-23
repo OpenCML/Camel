@@ -921,11 +921,15 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 break;
             case '<':
                 // Rule 1: `<=` is always the comparison; a lone `<` opens an argument list
-                // exactly when it touches a token an operand can end with.
+                // exactly when it touches a token an operand can end with. `<>` is one token of
+                // its own -- the composition -- and never an empty list: `f<>` is `f` followed by
+                // the composition, which has no operand before it.
                 if (c1 == '=' && c2 == '>') {
                     three(TokenKind::Equiv);
                 } else if (c1 == '=') {
                     two(TokenKind::LtEq);
+                } else if (c1 == '>') {
+                    two(TokenKind::LtGt);
                 } else {
                     one((pending == 0 && endsAngleHost(previous)) ? TokenKind::LAngle
                                                                   : TokenKind::Lt);

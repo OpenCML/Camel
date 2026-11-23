@@ -81,7 +81,7 @@ void dumpPredecessors(
     using camel::execute::ExecutionPredecessor;
     using camel::runtime::gc_node_ref_t;
     os << "# predecessors: what each node that runs waits for, and the edge that says so\n";
-    for (camel::runtime::GCGraph *graph :
+    for (auto *graph :
          camel::runtime::collectReachableGraphs(programs.of(root), root)) {
         std::vector<gc_node_ref_t> nodes(
             graph->execPlan().topo.begin(), graph->execPlan().topo.end());

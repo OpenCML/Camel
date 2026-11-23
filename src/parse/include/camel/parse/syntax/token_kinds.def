@@ -76,6 +76,10 @@ CAMEL_PUNCT(RBrace, "}")
 CAMEL_PUNCT(LAngle, "<")
 CAMEL_PUNCT(Lt, "<")
 CAMEL_PUNCT(Gt, ">")
+// The composition of two functions (design principles 4.2). It is one token even when it touches a
+// name, so `f<>` is not an empty angle-bracket argument list: it is a composition missing both of
+// its operands, and the parser says so.
+CAMEL_PUNCT(LtGt, "<>")
 CAMEL_PUNCT(LtEq, "<=")
 CAMEL_PUNCT(Equiv, "<=>")
 CAMEL_PUNCT(GtEq, ">=")

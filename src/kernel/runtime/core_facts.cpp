@@ -255,7 +255,7 @@ std::optional<LoopDomain> computeLoopDomain(std::span<const Anchor> anchors) {
     if (anchors.size() != 2 || graph.node(anchors[0].node)->kind != GCNodeKind::Loop) {
         return std::nullopt;
     }
-    const LoopView loop(*anchors[0].program, graph, anchors[0].node);
+    const LoopView loop(graph, anchors[0].node);
     if (anchors[1].graph != &graph) {
         return std::nullopt;
     }
@@ -274,7 +274,7 @@ std::vector<std::vector<Anchor>> loopAnchors(const Program &program, const GCGra
         if (graph.node(ref)->kind != GCNodeKind::Loop) {
             continue;
         }
-        const LoopView loop(program, graph, ref);
+        const LoopView loop(graph, ref);
         all.push_back(
             {Anchor{&program, &graph, ref},
              Anchor{&program, &graph, loop.bodyElementParam().value_or(kInvalidNodeRef)}});

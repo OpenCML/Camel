@@ -228,7 +228,7 @@ slot_t firstWithAsParamKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError, "transforms: first_with_as_param needs a function value");
     }
-    const rt::GCGraph *source = function->graph();
+    const auto *source        = function->graph();
     FunctionType *reinterpreted = firstWithAsParamSignature(source->funcType());
     if (reinterpreted == nullptr) {
         if (source->funcType() != nullptr && source->funcType()->withTypesCount() > 0) {
@@ -293,7 +293,7 @@ slot_t firstWithAsParamKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         draft.setFlags(source->flags());
     }
     group.encode();
-    const rt::GCGraph *reinterpretedGraph = group.encoded(made);
+    const auto *reinterpretedGraph        = group.encoded(made);
     if (reinterpretedGraph == nullptr) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,

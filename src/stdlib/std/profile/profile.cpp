@@ -159,7 +159,7 @@ void ProfilePass::noteLoopsOf(const Program &program) {
                 graph->node(ref)->kind != GCNodeKind::Loop) {
                 continue;
             }
-            LoopView view(program, *graph, ref);
+            LoopView view(*graph, ref);
             const std::vector<camel::runtime::gc_node_ref_t> body =
                 nodesOfRegion(*graph, view.bodyRegion());
             const std::vector<std::string> uris = operatorUris(*graph, body);

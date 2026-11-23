@@ -24,7 +24,7 @@ using namespace camel::runtime;
 
 const camel::runtime::Program *
 BreakExitTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    GCGraph *root = program->root();
+    auto *root    = program->root();
     if (root == nullptr) {
         os << "test::break_exit: no root graph\n";
         return program;
@@ -43,7 +43,7 @@ BreakExitTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 
 const camel::runtime::Program *
 BreakPortsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    GCGraph *root = program->root();
+    auto *root    = program->root();
     if (root == nullptr) {
         os << "test::break_ports: no root graph\n";
         return program;
@@ -54,7 +54,7 @@ BreakPortsTestPass::apply(const camel::runtime::Program *program, std::ostream &
     // so the operator is in the graph of the function itself.
     GCGraph *targetGraph = nullptr;
     gc_node_ref_t target = kInvalidNodeRef;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const GCNode *record = graph->node(it.ref());
             if (record != nullptr && record->kind == GCNodeKind::Oper) {
@@ -92,7 +92,7 @@ const camel::runtime::Program *
 DanglePortTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     GCGraph *targetGraph = nullptr;
     gc_node_ref_t target = kInvalidNodeRef;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const GCNode *record = graph->node(it.ref());
             if (record != nullptr && record->kind == GCNodeKind::Oper) {
@@ -138,7 +138,7 @@ BreakJoinTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         os << "test::break_join: no root graph\n";
         return program;
     }
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         // A branch, and a node of the same draft that is not a join: the draft is allowed to be
         // inconsistent, and the encoder is the place that refuses it.
         gc_node_ref_t brch = kInvalidNodeRef;

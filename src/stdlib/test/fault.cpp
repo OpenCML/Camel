@@ -20,7 +20,7 @@ const camel::runtime::Program *
 DropCallArgumentTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
-    for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+    for (auto *owner : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(owner);
         auto &draft       = transaction.edit();
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -48,7 +48,7 @@ const camel::runtime::Program *breakFirstBranchOfMain(
     Fn breakBranch) {
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context, program);
-    for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+    for (auto *owner : session.collectReachableRuntimeGraphs()) {
         if (owner->name() != "main") {
             continue;
         }
@@ -110,7 +110,7 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
     using camel::runtime::DraftEdgeKind;
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
-    for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+    for (auto *owner : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(owner);
         auto &draft       = transaction.edit();
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -265,7 +265,7 @@ template <typename Draft>
 bool givesMismatchedCall(
     const Draft &draft, camel::runtime::gc_node_ref_t call, const ::Function *candidate,
     bool arity) {
-    const camel::runtime::GCGraph *target = candidate->graph();
+    const auto *target                    = candidate->graph();
     if (target == nullptr) {
         return false;
     }
@@ -300,7 +300,7 @@ const camel::runtime::Program *retargetFirstCall(
     bool arity) {
     using namespace camel::runtime;
     RuntimeGraphDraftSession session(context, program);
-    for (GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+    for (auto *owner : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(owner);
         auto &draft       = transaction.edit();
         // The static functions this graph holds, in node order: what a call of it may be pointed

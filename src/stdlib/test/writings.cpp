@@ -108,7 +108,7 @@ std::vector<gc_node_ref_t> portsOf(const GraphTransaction &transaction) {
 }
 
 const GCGraph *graphNamed(const Program &program, const std::string &name) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph->name() == name) {
             return graph;
         }
@@ -118,7 +118,7 @@ const GCGraph *graphNamed(const Program &program, const std::string &name) {
 
 /// The writings of `a + 1`, written twice, and what merging two parameters makes of the rest.
 void congruence(Report &r, const Program &program) {
-    const GCGraph *graph = graphNamed(program, "f");
+    const auto *graph    = graphNamed(program, "f");
     if (graph == nullptr) {
         return;
     }
@@ -150,7 +150,7 @@ void congruence(Report &r, const Program &program) {
 
 /// Nodes that look alike and are not one value.
 void apart(Report &r, const Program &program) {
-    const GCGraph *graph = graphNamed(program, "g");
+    const auto *graph    = graphNamed(program, "g");
     if (graph == nullptr) {
         return;
     }
@@ -194,7 +194,7 @@ void apart(Report &r, const Program &program) {
 /// The equivalences go through a commit and come back from a decode; a commit that adds none
 /// changes nothing; a draft with equivalences refuses to change nodes.
 void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const Program &program) {
-    const GCGraph *graph = graphNamed(program, "f");
+    const auto *graph    = graphNamed(program, "f");
     if (graph == nullptr) {
         graph = graphNamed(program, "chains");
     }
@@ -226,7 +226,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     }
     r.check("draft_refuses_changes", refused);
     const Program *tabled = first.commit();
-    const GCGraph *after  = tabled->graph(id);
+    const auto *after     = tabled->graph(id);
     r.check("commit_makes_new_version", after != nullptr && after != graph);
     r.check("flag_set", after != nullptr && !after->executable() && !after->writings().empty());
     r.check("other_graphs_executable", graph->executable() && program.root()->executable());
@@ -330,7 +330,7 @@ gc_node_ref_t firstOperWith(
 /// the program with the first extraction committed.
 const Program *extraction(
     Report &r, const camel::core::context::context_ptr_t &ctx, const Program &program) {
-    const GCGraph *graph = graphNamed(program, "f");
+    const auto *graph    = graphNamed(program, "f");
     if (graph == nullptr) {
         return &program;
     }
@@ -413,7 +413,7 @@ const Program *extraction(
 /// The fact of a value with several writings is the join of the facts of the writings: here
 /// the largest node number, over `a + 1` written as `1 + a`.
 void facts(Report &r, const camel::core::context::context_ptr_t &ctx, const Program &program) {
-    const GCGraph *graph = graphNamed(program, "f");
+    const auto *graph    = graphNamed(program, "f");
     if (graph == nullptr) {
         return;
     }
@@ -447,7 +447,7 @@ void facts(Report &r, const camel::core::context::context_ptr_t &ctx, const Prog
 
 /// Two chains of 300 steps: merging their parameters merges every step.
 void chains(Report &r, const Program &program) {
-    const GCGraph *graph = graphNamed(program, "chains");
+    const auto *graph    = graphNamed(program, "chains");
     if (graph == nullptr) {
         return;
     }
@@ -481,7 +481,7 @@ WritingsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
 const camel::runtime::Program *
 TabledTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     (void)os;
-    const GCGraph *graph = graphNamed(*program, "f");
+    const auto *graph    = graphNamed(*program, "f");
     if (graph == nullptr) {
         return program;
     }

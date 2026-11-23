@@ -948,7 +948,7 @@ const runtime::Program *outlineRegions(
         for (const auto &region : analysis.regions)
             for (auto id : region.members)
                 if (graph->node(id)->kind == rt::GCNodeKind::Loop)
-                    for (auto inner : rt::LoopView(*program, *graph, id).regionNodes())
+                    for (auto inner : rt::LoopView(*graph, id).regionNodes())
                         draft.eraseNode(inner);
         for (const auto &region : analysis.regions)
             for (auto it = region.members.rbegin(); it != region.members.rend(); ++it)

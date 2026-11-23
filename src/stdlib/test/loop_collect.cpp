@@ -81,7 +81,7 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
 
     size_t changed = 0;
     for (gc_node_ref_t id : loops) {
-        const LoopView view(session.work(), *owner, id);
+        const LoopView view(*owner, id);
         if (view.collectionCount() != 0) {
             continue; // already a collecting loop (the pass ran before)
         }
@@ -239,7 +239,7 @@ const camel::runtime::Program *applyCollect(
     RuntimeGraphDraftSession session(context, program);
     const std::vector<GCGraph *> graphs = session.collectReachableRuntimeGraphs();
     size_t rewrites                     = 0;
-    for (GCGraph *owner : graphs) {
+    for (auto *owner : graphs) {
         rewrites += rewriteGraph(session, owner, summary);
     }
     return rewrites == 0 ? program : session.commit();

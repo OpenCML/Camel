@@ -65,7 +65,7 @@ BoundsFlipTestPass::apply(const camel::runtime::Program *program, std::ostream &
     declareRead();
     RuntimeGraphDraftSession session(context_, program);
     size_t flipped = 0;
-    for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+    for (auto *graph : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(graph);
         auto &draft       = transaction.edit();
         std::vector<gc_node_ref_t> prints;
