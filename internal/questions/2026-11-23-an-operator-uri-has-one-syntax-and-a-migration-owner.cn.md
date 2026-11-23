@@ -69,3 +69,10 @@ src/stdlib/std/builtin/executors/builtin.cpp:57              {"op/atoi", __atoi_
 - 本车道照甲交付，`feat/parse` / `feat/compile` / `feat/trans` 的读数不受 ⑤ 影响；⑤ 留在待裁，URI 仍只有 `:op/` 一种写法，裁定里那句「有一种语法」只是文档上的一句话。
 - 反过来，若两个身份车道先按自己的读法改了 `:op/`，而 ⑤ 最后落在别的写法上，799 处要再改一遍。
 - `OperatorAccessesUndeclared` 继续把 URI 印给写程序的人：凡是被这条诊断挡下的程序，读者拿到的名字在 `.cml` 里搜不到。
+## 决策者答（2026-11-23 11:30）
+
+**① 甲。** URI 改名排在两条身份车道（`oper-identity-write`、`stage2-frontend-oper`）合入之后，单开一条车道一刀切；两条身份车道期间不碰 URI 字面量。`starts_with(':')` 当"核心内建"判据的两处随改名一起换成"模块是 `std`"。
+
+**② 不设别名，一刀切。** 内测期不考虑兼容成本（设计原则第 1 节）：`.cml` 的 446 处与 `src/` 的 799 处在同一笔里改完，预编译模块由构建重编；加载到旧写法时就是普通的"没有这个算子"，不加指向新写法的提示。改完那一笔的说明里给一行读数：全树 `:op/` 字面量为 0（记录类文档除外），登记时的模块检查打开后全部用例通过。
+
+**③ 诊断印 Camel 名字与类型**（如 `std::add(int, int)`），不印 URI；只经 C++ 登记、没有 Camel 声明的算子，URI 就是它唯一的名字，此时印 URI。`inspect --ops`、调试器的实现视图照旧显示 URI。`OperatorAccessesUndeclared` 按此改，同一笔里核对其余诊断。
