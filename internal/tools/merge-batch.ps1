@@ -427,6 +427,10 @@ try {
         $made = @()
         $first = $true
         foreach ($lane in $Lanes) {
+            # What HEAD is before this merge. Each merge's first parent must be exactly this, and the
+            # first one's must be the baseline: that chain is what makes the merged tree and the
+            # baseline two ends of one comparison instead of two unrelated trees.
+            $expectedFirstParent = (Invoke-Git $script:mergeTree @('rev-parse', 'HEAD')).Text
             $subjects = @((Invoke-Git $ToolTree @('log', '--reverse', '--format=%h %s', "$base..$($lane.Tip)")).Lines |
                 ForEach-Object { "$_".Trim() } | Where-Object { $_ })
             $tipSubject = (Invoke-Git $ToolTree @('log', '-1', '--format=%s', $lane.Tip)).Text
@@ -457,19 +461,26 @@ try {
             $sha = (Invoke-Git $script:mergeTree @('rev-parse', 'HEAD')).Text
             $parents = @((Invoke-Git $script:mergeTree @('rev-list', '--parents', '-n', '1', 'HEAD')).Text.Split(' ') | Where-Object { $_ })
             if ($parents.Count -lt 3) { Stop-With "the merge of $($lane.Name) is not a merge commit" "HEAD $($sha.Substring(0, 9)) has $($parents.Count - 1) parent(s)." 1 }
+            if ($parents[1] -ne $expectedFirstParent) {
+                Stop-With "the merge of $($lane.Name) landed on $($parents[1]) and HEAD was $expectedFirstParent" 'A merge whose first parent is not what HEAD was means something else moved the branch. That is a tool fault, not a lane fault: report it rather than merging.' 2
+            }
+            $script:mergeTip = $sha
             $made += [pscustomobject]@{ Lane = $lane; Sha = $sha; FirstParent = $parents[1]; SecondParent = $parents[2] }
             Write-Host ("  merged {0} at {1} -> {2} (first parent {3})" -f $lane.Short, $lane.Tip.Substring(0, 9), $sha.Substring(0, 9), $parents[1].Substring(0, 9))
         }
         $head = (Invoke-Git $script:mergeTree @('rev-parse', 'HEAD')).Text
-        $headParents = @((Invoke-Git $script:mergeTree @('rev-list', '--parents', '-n', '1', 'HEAD')).Text.Split(' ') | Where-Object { $_ })
-        # The identity the whole tool rests on: the tree being compared is a tree whose first parent
-        # IS the baseline. If these differ, the comparison is between two trees nobody named and every
-        # reading after it is about the wrong pair.
-        if ($headParents[1] -ne $base) {
-            Stop-With "the merged tree's first parent is $($headParents[1]) and the baseline is $base" 'The comparison would be between two unrelated trees. That is a tool fault, not a lane fault: report it rather than merging.' 2
+        # The identity the whole tool rests on: walking the merged commit's FIRST-PARENT chain back
+        # must arrive at the baseline. Checking only HEAD's first parent would pass a batch whose
+        # first merge landed somewhere else and whose last one landed on the second, so the chain is
+        # walked to its root.
+        $chain = @((Invoke-Git $script:mergeTree @('rev-list', '--first-parent', $head)).Lines |
+            ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        if ($chain.Count -eq 0 -or $chain[$chain.Count - 1] -ne $base) {
+            $root = if ($chain.Count -gt 0) { $chain[$chain.Count - 1] } else { '(unreadable)' }
+            Stop-With "the merged tree's first-parent chain ends at $root and the baseline is $base" 'The comparison would be between two unrelated trees. That is a tool fault, not a lane fault: report it rather than merging.' 2
         }
         Write-Host ''
-        Write-Host "[batch] merged tree $($head.Substring(0, 9)); first parent $($headParents[1].Substring(0, 9)) -- the tree the baseline was measured on"
+        Write-Host "[batch] merged tree $($head.Substring(0, 9)); its first-parent chain ($($chain.Count) commit(s)) ends at $($base.Substring(0, 9)) -- the tree the baseline was measured on"
         Write-Host "[batch] baseline $($base.Substring(0, 9)) and merged tree $($head.Substring(0, 9)) are two different commits" -ForegroundColor Cyan
         return [pscustomobject]@{ Tip = $head; Merges = $made }
     }
