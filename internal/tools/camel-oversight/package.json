@@ -1,14 +1,20 @@
 {
   "name": "@local/camel-oversight",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Lets a supervising agent on another machine read this session's progress and queue messages into it.",
+  "description": "The collaboration engine between the decision-maker and the coordinator: a two-way channel, a watch that reminds the coordinator of what is off, and a panel in the GUI.",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./client": "./client.js"
   },
-  "files": ["index.js", "cordis.patch.yml"],
+  "files": ["index.js", "measure.js", "rules.js", "client.js", "cordis.patch.yml"],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" }
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
   }
 }

@@ -77,3 +77,15 @@
 - `docs/design-principles.cn.md` 5.7（按类型的声明模块找同名函数）、10.1（`declaredName`）
 - `src/compile/gct/builder_internal.h:302` 的 `validateIdent`
 - `e93a627d9d` —— 两个名字都认
+## 决策者答（2026-11-23 22:10）
+
+**三条都不取，用第四条：`func operator for(r: Range): int..`。** 迭代钩子就是一个运算符重载，和 `func operator [](v: Vec, i: int)` 同一个机制：`for` 是它重载的那个语言构造，声明落到算子组 `__iter__`（内核里字符串、映射的那几条本来就在这个组里）。
+
+- 不动 `validateIdent`：保留名照旧只有运算符语法能造，`__iter__` 不会变成"谁都能声明"的名字，也不需要白名单。
+- 不按名字找普通函数：(a) 正是早上 `how-a-named-type-says-it-converts-to-a-stream` 那页答复里否掉的乙；用户写一个 `iter(r: Range)` 也盖不掉它。
+- 随类型走：命名类型的运算符在它声明所在模块导出的重载里找（原则 5.2），`Range` 的 `operator for` 跟着 `Range` 走，不用导入。
+- 只交流：`operator for` 的返回类型必须是 `T..`，否则报错（与①的"只交 `T..`"一致）。
+
+改动：语言参考 7.4.5 的"可以重载的"一句加上 `for`（被遍历的值，返回 `T..`）；解析器接受 `func operator for`；`for` 的建图对数组以外的值解析 `__iter__` 组。`prelude.cml` 里现在的 `iter` 普通函数删掉，换成 `operator for`。补一条用例：用户自己的命名类型写 `operator for`，`for` 能遍历它；再写一个同名普通函数 `iter`，确认它不改变 `for` 的走向。
+
+另：`e93a627d9d` 的"两个名字都认"已按原则 10.1（模块名只有文件名这一个来源）返工，见派工 D-1123-48；查找修好后，`range-rn` 绕到算子表的那处随之撤掉。
