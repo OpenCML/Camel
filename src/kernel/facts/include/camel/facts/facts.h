@@ -489,8 +489,12 @@ class Store {
 /// Computes and stores, for every graph reachable from `root` (read through `rootView`), the facts
 /// of every registered kind that has compute and is not a Content kind, at every anchor the kind
 /// names (`anchorsIn`): what a consumer would obtain one by one. Facts already stored and valid
-/// are kept.
-void computeAll(Store &store, const graph::Graph &root, const graph::GraphView &rootView);
+/// are kept. `only` computes just those kinds, which is how a caller that prints one kind at a
+/// time (`--fact`) isolates a kind whose computation refuses the graph: the throw is that kind's,
+/// and the kinds after it are still computed.
+void computeAll(
+    Store &store, const graph::Graph &root, const graph::GraphView &rootView,
+    std::span<const KindId> only = {});
 
 // ---- Which store holds a graph ---------------------------------------------------------------
 
@@ -525,13 +529,22 @@ Store *storeHolding(const graph::Graph &graph);
 void forgetGraph(const graph::Graph *graph);
 
 /**
- * `camel inspect --facts`: one line `FACT {json}` per fact about the graphs reachable from `root`.
- * Fields: "kind", "version", "class" ("content", "derived", "target"), "anchors" (a list of
- * {"graph", "node"}, the node omitted for a graph as a whole), "value" (the kind's print),
- * "stamp" ({"versions": [...], "reads": {"nodes", "regions", "names", "records"}, "epoch",
- * "target"}; null for a Content kind). A stale fact is not printed, and is dropped.
+ * `camel inspect --facts`: one line `FACT {json}` per fact about `root` (the graph the tool
+ * compiled, read through `rootView`). Fields: "library" (which store answered: `facts` for this
+ * one, `runtime.facts` for the older store of `camel/runtime/facts.h` -- a tool that prints both
+ * has to say which line came from where, because the two agree on kind names), "kind", "version",
+ * "class" ("content", "derived", "target"), "anchors" (a list of {"graph", "node"}, the node
+ * omitted for a graph as a whole), "value" (the kind's print), "stamp" ({"versions": [...],
+ * "reads": {"nodes", "regions", "names", "records"}, "epoch", "target"}; null for a Content
+ * kind). A stale fact is not printed, and is dropped.
+ *
+ * `only` prints just those kinds -- the tool's `--fact <key>`, which asks by name. Empty prints
+ * every registered kind, which is what `--facts` asks for. A kind nobody registered is not a
+ * request this function can answer: an enumeration of what is registered never mentions what is
+ * not, so the caller resolves the key (`findKind`) and reports the absence itself.
  */
 void dump(
-    Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os);
+    Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os,
+    std::span<const KindId> only = {});
 
 } // namespace camel::facts
