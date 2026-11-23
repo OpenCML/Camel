@@ -151,6 +151,11 @@ window.__ModuleLoader__.load({
                     ? h('div', { style: { opacity: 0.7 } }, '无')
                     : reminders.map((e, i) => h('div', { key: i, style: { opacity: 0.85 } },
                           `${ago(e.at)} · ${e.mode} · ${(e.rules || []).join('、')}`)),
+                h('div', { style: { fontWeight: 600, marginTop: 6 } }, '主机上在跑的'),
+                h('div', { style: { opacity: 0.85 } },
+                    ((s.reading && s.reading.panel && s.reading.panel.running) || [])
+                        .map((run) => `${run.worktree || '?'}（${run.phase || '?'}${run.slot !== null && run.slot !== undefined ? `，槽 ${run.slot}` : ''}${run.queueSeconds ? `，已等 ${Math.round(run.queueSeconds / 60)} 分钟` : ''}）`)
+                        .join('、') || '无'),
                 h('div', { style: { fontWeight: 600, marginTop: 6 } }, '会话与车道'),
                 h('div', { style: { opacity: 0.85 } },
                     ((s.lanes && s.lanes.lanes) || []).map((l) => `${l.name || l.path || l.id}（${l.activity === 'running' ? '在跑' : '闲'}）`).join('、') || '无活子代理'))

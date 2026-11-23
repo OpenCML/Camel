@@ -109,10 +109,21 @@ async function buildPanelOf(repo, stateDir) {
         }
     }
     const runs = [...latest.values()]
+    const open = runs.filter((row) => !row.finishedAt)
     return {
         ageSeconds: Math.round((Date.now() - info.mtimeMs) / 1000),
-        unfinished: runs.filter((row) => !row.finishedAt).length,
+        unfinished: open.length,
         total: runs.length,
+        // Each run still going: where it is, which slot it holds, and how long it has waited for one.
+        // A queue that is long, or two runs whose phases overlap, is read here rather than assumed.
+        running: open.map((row) => ({
+            worktree: row.worktree ?? null,
+            phase: row.phase ?? null,
+            slot: row.slot ?? null,
+            queuedAt: row.queuedAt ?? null,
+            queueSeconds: row.queueSeconds ?? (row.queuedAt && !row.buildStartedAt ? Math.round((Date.now() - Date.parse(row.queuedAt)) / 1000) : null),
+            startedAt: row.startedAt ?? null,
+        })),
     }
 }
 

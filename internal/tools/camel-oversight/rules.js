@@ -151,6 +151,22 @@ export const RULES = [
         },
     },
     {
+        id: 'slot-wait',
+        level: 'quiet',
+        hold: 0,
+        cooldown: 60,
+        check: ({ m, limits }) => {
+            const p = readable(m.panel) && m.panel
+            if (!p || !p.running) return null
+            const waiting = p.running.filter((run) => run.queueSeconds !== null && run.queueSeconds > limits.slotWaitMinutes * 60)
+            if (waiting.length === 0) return null
+            return {
+                key: waiting.map((run) => run.worktree).join(','),
+                text: `主机上有运行等槽超过 ${limits.slotWaitMinutes} 分钟：${waiting.map((run) => `${run.worktree}（${Math.round(run.queueSeconds / 60)} 分钟）`).join('、')}。看是谁占着槽、是不是该排到后面。`,
+            }
+        },
+    },
+    {
         id: 'fetch-failed',
         level: 'quiet',
         hold: 10,
@@ -199,6 +215,7 @@ export const DEFAULT_LIMITS = {
     developStallMinutes: 25,
     staleMinutes: 120,
     hostFull: 0.9,
+    slotWaitMinutes: 30,
     dayEndMinutes: 23 * 60 + 30,
 }
 
