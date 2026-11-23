@@ -33,6 +33,10 @@ namespace camel::runtime::fact {
 class FactStore;
 } // namespace camel::runtime::fact
 
+namespace camel::facts {
+class Store;
+} // namespace camel::facts
+
 namespace camel::core::module {
 class Module;
 class ProgramExports;
@@ -127,6 +131,11 @@ class Context : public std::enable_shared_from_this<Context> {
 
     std::unique_ptr<ExecutorManager> exeMgr_;
     std::unique_ptr<camel::runtime::GCGraphManager> runtimeGraphMgr_;
+    /// The facts of this context's frozen graphs (camel/facts/facts.h). The destructor gives the
+    /// graphs back before this member is destroyed, so a graph's end is announced to a live store;
+    /// a store that went first would leave the announcement with nothing to find, which is what
+    /// `forgetGraph` is written for.
+    std::unique_ptr<camel::facts::Store> factsStore_;
     camel::runtime::GraphIdAllocator graphIds_;
     /// See facts(). Created on first use.
     std::unique_ptr<camel::runtime::fact::FactStore> facts_;
@@ -339,6 +348,12 @@ class Context : public std::enable_shared_from_this<Context> {
     /// about its graphs, each with a stamp that a read checks. Lives as long as the context;
     /// a fact survives rewrites of the program and reads as absent once it no longer holds.
     camel::runtime::fact::FactStore &facts();
+    /// The facts of this context's frozen graphs (camel/facts/facts.h): one store for the whole
+    /// context, keyed by the graph as a value, made here rather than by whoever asks first so that
+    /// the graph manager can tell it about every graph the context makes. A graph's facts end with
+    /// the graph (`forgetGraph`), not with the store; `facts()` is the older per-program store
+    /// beside it, and the two do not know each other yet.
+    camel::facts::Store &factsStore();
     /// The definition graphs of operators built in this context (camel/runtime/definitions.h):
     /// their libraries are compiled the first time a definition is asked for, and their
     /// graphs kept (pinned) for as long as the context.

@@ -15,8 +15,18 @@
 
 namespace camel::runtime {
 
-ControlRegions::ControlRegions(const GCGraph &graph)
-    : view_(&graph.view()), tree_(camel::facts::controlRegionsOf(graph)) {
+ControlRegions::ControlRegions(const GCGraph &graph) : view_(&graph.view()) {
+    // The tree lives in the store of the context that made this graph, which the context told so
+    // when the graph entered its books.
+    camel::facts::Store *store = camel::facts::storeHolding(graph);
+    if (store == nullptr) {
+        // No store holds the graph: there is nothing that could answer, and answering anyway would
+        // be a tree nobody keeps (facts.h: a reader that finds nothing reports a red).
+        throw std::logic_error(
+            "core.controlRegions: no fact store holds graph '" + graph.name() +
+            "', so it has no tree to read");
+    }
+    tree_ = camel::facts::controlRegionsOf(*store, graph);
     if (!tree_) {
         // The fact layer has no tree for a graph it was handed: that is a defect in the kind, not
         // a state to guess an answer for (facts.h: a kind's compute answers, or says nothing).

@@ -18,8 +18,11 @@
  * makes the trees of two parts one tree (facts.h, "Merging and monotonicity"). It reports the
  * regions it read, and a region's record is what the tree is made of.
  *
- * A frozen graph's content never changes, so a stored tree cannot go stale; what ends it is the
- * graph's lifetime, which the graph's owner states by calling `forgetGraph` when it frees one.
+ * A frozen graph's content never changes, so a stored tree cannot go stale while the graph lives;
+ * what ends it is the graph's lifetime. The store it is stored in is the one of the context that
+ * made the graph, which is why the builder asks a store rather than a process-wide one: the
+ * caller names the store it asks (the reader gets it from `storeHolding`, facts.h), and the graph
+ * announces its end to that same store (`forgetGraph`).
  */
 
 #pragma once
@@ -57,14 +60,10 @@ struct ControlRegionTree {
 /// The id of the kind `core.controlRegions`, registered the first time it is asked for.
 KindId controlRegionKind();
 
-/// The control regions of `graph`, built the first time it is asked for and kept while the graph
-/// lives: the one place the tree is computed. `graph` is the graph as a value, which is what the
-/// fact is anchored on.
-std::shared_ptr<const ControlRegionTree> controlRegionsOf(const graph::Graph &graph);
-
-/// Drops every fact anchored on `graph`: its owner calls this when it frees the graph, since an
-/// address is only a graph while the graph is there.
-void forgetGraph(const graph::Graph *graph);
+/// The control regions of `graph`, built the first time it is asked for in `store` and kept there
+/// while the graph lives: the one place the tree is computed. `graph` is the graph as a value,
+/// which is what the fact is anchored on; `store` is the store of the context that made it.
+std::shared_ptr<const ControlRegionTree> controlRegionsOf(Store &store, const graph::Graph &graph);
 
 /// One line of text: the number of control regions in the tree.
 std::string toString(const ControlRegionTree &tree);
