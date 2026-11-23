@@ -12,6 +12,7 @@
 
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/passes/test/cost.h"
 #include "camel/runtime/rules.h"
 
 #include <cstdint>
@@ -172,7 +173,7 @@ const camel::runtime::Program *run(
         } else {
             writings.build();
             writings.saturate(rules);
-            writings.extract(*findCostModel("nodes"), context_.get());
+            writings.extract(camel::test::NodeCountCost{}, context_.get());
         }
         done.emplace_back(graph->name(), graph->id());
     }
@@ -302,13 +303,13 @@ SavepointTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             // The draft the cut leaves is where the full run starts: the cut landed nothing, so this
             // is the same draft a run that was never cut starts from.
             writings.saturate(both);
-            writings.extract(*findCostModel("nodes"), context_.get());
+            writings.extract(camel::test::NodeCountCost{}, context_.get());
         });
     const auto never =
         shapeAfter(context_, program, target, [&](DraftWritings &writings, GraphDraft &) {
             writings.build();
             writings.saturate(both);
-            writings.extract(*findCostModel("nodes"), context_.get());
+            writings.extract(camel::test::NodeCountCost{}, context_.get());
         });
     os << "SAVEPOINT budget_cut cut=" << cut << " applied=" << cutApplied
        << " rounds=" << cutRounds << " nodes=" << (clean ? clean->front() : 0) << "\n";

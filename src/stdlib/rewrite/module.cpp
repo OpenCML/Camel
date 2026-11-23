@@ -45,6 +45,9 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/pass/opt.h"
+#include "camel/execute/pass/params.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/execute/shaped_operators.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
@@ -1825,6 +1828,38 @@ slot_t extractKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     } catch (const std::logic_error &e) {
         return makeError("NoCostModel", e.what(), "<rewrite::extract>");
     }
+}
+
+/// `rewrite::extract cost=<module>::<function>`: the same choice as a **pass** of the pipeline, the
+/// only extraction there is (D-1123-78: extraction names its cost, and nothing extracts on its
+/// own). The cost is a function value the pipeline names -- `rules::nodes` counts the nodes of a
+/// writing -- so the pass hands the function to `CamelCostModel` and the kernel's `extractWritings`
+/// does the rest. The pass lives in this module and not in the kernel because a cost function is
+/// called with a node of the `graph` module's `Node` type, which the kernel does not link.
+///
+/// It accepts the state with several writings, which is the state it is for: a driver that refused
+/// it would leave the pipeline no way to extract at all.
+class ExtractPass final : public RuntimeGraphRewritePass {
+  public:
+    ExtractPass(const camel::core::context::context_ptr_t &ctx, const PassFunction &cost)
+        : RuntimeGraphRewritePass(ctx), cost_(cost) {}
+    const camel::runtime::Program *apply(const camel::runtime::Program *program, std::ostream &)
+        override {
+        CamelCostModel model(*context_, fromSlot<::Function *>(cost_.value), cost_.type);
+        return camel::runtime::extractWritings(context_, program, model);
+    }
+    bool acceptsWritings() const override { return true; }
+
+  private:
+    PassFunction cost_;
+};
+
+void registerExtractPass() {
+    camel::execute::registerPassKernel(
+        "rewrite::extract",
+        [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+            return std::make_unique<ExtractPass>(ctx, args.getFunction("cost"));
+        });
 }
 
 // ---- the check of a rule (graph store decision 5) ----
@@ -4896,6 +4931,10 @@ class RewriteModule final : public BuiltinModule {
                  {"why_not", readsGraph},
                  {"check_over", readsGraph}});
         }
+        // The pass of the module: the kernel is registered when the module loads, and its
+        // declaration is `stdlib/rewrite.cml` (`extract`, `with <cost: ...>`), which is where its
+        // parameters and its documentation come from.
+        registerExtractPass();
         loaded_ = true;
         return true;
     }

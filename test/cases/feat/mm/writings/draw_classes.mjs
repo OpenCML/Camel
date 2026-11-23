@@ -12,17 +12,18 @@
  *
  *   * every class is one dashed cluster holding one class node (`type="CLASS"`) and two or more
  *     writings, all of them naming that one class, all of one type;
- *   * exactly one writing of a class is marked (`chosen="true"`), and for the class that holds
- *     `x + x` and `x * 2` it is the one the cost model the pipeline itself extracts by likes: an
- *     add costs 1.0 and reads its value twice (0.1 each), a product costs 3.0 and reads it once
- *     plus a constant (0.1 each), so 1.2 against 3.2;
+ *   * no writing is marked and no cost is printed: `chosen` and `writings_cost` are gone, and not
+ *     even `unknown` takes their place — what a writing costs is the target library's judgement,
+ *     and the kernel has none of its own;
  *   * the value a graph returns is read from its class, not from one writing: the `EXIT` edge of
  *     the graph that holds the pair leaves the class node;
- *   * `std::jgir` carries the same classes as `classes`, and `std::jgir egraph=true` writes the
- *     document `egraph-serialize` reads, whose every child is an e-class of the document, whose
- *     roots are e-classes, and in which the two writings are one e-class;
- *   * a pass that consumes the program still gets one writing per value (the program prints 42)
- *     and a rewrite pass that does not declare that it accepts the state is still refused;
+ *   * `std::jgir` carries the same classes as `classes` (`id`, `writings`), and
+ *     `std::jgir egraph=true` writes the document `egraph-serialize` reads, whose every child is an
+ *     e-class of the document, whose roots are e-classes, in which the two writings are one
+ *     e-class, and whose `class_data` is empty;
+ *   * a pass that consumes the program without a named extraction is refused (the driver used to
+ *     extract by itself and no longer does), and with `rewrite::extract cost=rules::nodes` the
+ *     program prints 42;
  *   * the pass declares `rounds` and `strict`, and a parameter written after it reaches it: 0
  *     rounds applies no rule at all (so the check above refuses that dump), 1 round already leaves
  *     the pair in one class, a bit-for-bit pass keeps that pair, an int takes a constant
@@ -112,8 +113,8 @@ function classClusters(dot) {
 }
 
 /// Everything the drawing must be, as refusals that name the case and the line they caught.
-/// `rich` adds what only the styled dump promises (`style=dashed` on the cluster, a heavier border
-/// on the marked writing). The list is empty exactly when the dump draws the state.
+/// `rich` adds what only the styled dump promises (`style=dashed` on the cluster). The list is
+/// empty exactly when the dump draws the state.
 function drawingProblems(dot, rich = false) {
     const problems = []
     const lines = dot.split(/\r?\n/)
@@ -132,7 +133,6 @@ function drawingProblems(dot, rich = false) {
         const classNodes = cluster.body.filter(({ text }) => attribute(text, 'type') === 'CLASS')
         const names = new Set(members.map(({ text }) => attribute(text, 'class')))
         const types = new Set(members.map(({ text }) => attribute(text, 'value_type')))
-        const marked = members.filter(({ text }) => attribute(text, 'chosen') === 'true')
         if (classNodes.length !== 1) {
             problems.push(
                 `${CASE}: the class at dump line ${cluster.line} has ${classNodes.length} class ` +
@@ -159,12 +159,6 @@ function drawingProblems(dot, rich = false) {
                 )
             }
         }
-        if (members.length > 0 && marked.length !== 1) {
-            problems.push(
-                `${CASE}: the class at dump line ${cluster.line} marks ${marked.length} ` +
-                    `writing(s): extraction takes exactly one, whatever the cost model`
-            )
-        }
         if (types.size > 1) {
             problems.push(
                 `${CASE}: the writings at dump line ${cluster.line} have ${types.size} types ` +
@@ -178,20 +172,11 @@ function drawingProblems(dot, rich = false) {
                     `${CASE}: the class at dump line ${cluster.line} is not drawn dashed`
                 )
             }
-            const heavy =
-                marked.length === 1 && /penwidth=2/.test(marked[0].text)
-            if (!heavy) {
-                problems.push(
-                    `${CASE}: the marked writing at dump line ` +
-                        `${marked.length === 1 ? marked[0].line : cluster.line} has no heavier ` +
-                        `border in the styled dump`
-                )
-            }
         }
         const add = members.find(({ text }) => isAdd(text))
         const mul = members.find(({ text }) => isMul(text))
         if (add && mul) {
-            pairs.push({ cluster, add, mul, marked })
+            pairs.push({ cluster, add, mul })
         }
     }
     if (pairs.length === 0) {
@@ -201,27 +186,18 @@ function drawingProblems(dot, rich = false) {
         )
         return problems
     }
-    // `x + x` and `x * 2` is the pair this case exists for: the model the pipeline extracts by
-    // must be the one that chose. The numbers are the model's own: a parameter or a constant
-    // costs 0.1, an add 1.0, a product 3.0.
-    const parameter = 0.1
-    const addCost = 1.0 + 2 * parameter
-    const mulCost = 3.0 + parameter + parameter
-    const { add, mul, marked } = pairs[0]
-    if (addCost >= mulCost) {
-        problems.push(`${CASE}: the guard's own reading of the weighted model is stale`)
-    } else if (marked.length === 1 && marked[0].line !== add.line) {
-        problems.push(
-            `${CASE}: the marked writing is the node at dump line ${marked[0].line}, and the ` +
-                `weighted model likes the add at dump line ${add.line} ` +
-                `(${addCost} against ${mulCost})`
-        )
+    // `x + x` and `x * 2` is the pair this case exists for: one class, two writings. No cost is
+    // read and none is drawn -- not a mark on a writing, not a model's name -- because the cost is
+    // the target library's judgement and the kernel has none.
+    const { add, mul } = pairs[0]
+    if (/chosen\s*=/.test(dot)) {
+        problems.push(`${CASE}: the dump marks a writing as the one to keep (\`chosen\`)`)
     }
-    if (!/writings_cost="weighted"/.test(dot)) {
-        problems.push(
-            `${CASE}: the dump does not say which cost model chose ` +
-                `(no \`writings_cost="weighted"\`)`
-        )
+    if (/cost\s*=/.test(dot)) {
+        problems.push(`${CASE}: the dump names a cost (\`cost\`, \`writings_cost\`)`)
+    }
+    if (add.line === mul.line) {
+        problems.push(`${CASE}: the add and the mul of the pair are the same line`)
     }
     // The value the graph returns is a value, so its edge leaves the class and not a writing.
     const classNode = pairs[0].cluster.body.find(
@@ -261,7 +237,7 @@ if (MODE === 'gir' || MODE === 'rgir') {
         const writings = pair.body.filter(({ text }) => attribute(text, 'class') !== null)
         console.log(
             `DRAW ${MODE} classes=${clusters.length} pair=add+mul pair_writings=${writings.length} ` +
-                `marked=1 cost=weighted${rich ? ' dashed=1 heavy=1' : ''}`
+                `marked=0 cost=none${rich ? ' dashed=1' : ''}`
         )
     }
     verdicts.push(`DRAW-${MODE}`)
@@ -288,28 +264,20 @@ if (MODE === 'gir' || MODE === 'rgir') {
         })
         check('jgir carries the classes', writings.length > 0, JSON.stringify(document.graphs?.[0]?.classes))
         check(
-            'jgir every class holds several writings, one chosen among them and a cost',
+            'jgir every class holds several writings and nothing about a cost',
             writings.every(
                 (entry) =>
                     Array.isArray(entry.writings) &&
                     entry.writings.length >= 2 &&
-                    entry.writings.includes(entry.chosen) &&
-                    typeof entry.cost === 'number' &&
-                    entry.cost > 0
+                    Object.keys(entry).sort().join(',') === 'id,writings'
             ),
             JSON.stringify(writings)
         )
         check('jgir the pair is one class', Boolean(pair), JSON.stringify(writings))
         if (pair) {
-            const chosen = labels.get(pair.chosen) || ''
-            check(
-                'jgir the chosen writing is the one the weighted model likes',
-                /add/i.test(chosen) && !/mul/i.test(chosen),
-                `chosen=${pair.chosen} label=${chosen}`
-            )
             console.log(
                 `DRAW jgir classes=${writings.length} pair=add+mul ` +
-                    `pair_writings=${pair.writings.length} chosen=add`
+                    `pair_writings=${pair.writings.length} chosen=none cost=none`
             )
         }
     }
@@ -355,9 +323,9 @@ if (MODE === 'gir' || MODE === 'rgir') {
         )
         const data = document.class_data || {}
         check(
-            'egraph every class says what computing the value costs',
-            Object.keys(data).length > 0 &&
-                Object.values(data).every((entry) => typeof entry.cost === 'number' && entry.cost > 0),
+            'egraph the document reports no cost: class_data is empty and no node carries one',
+            Object.keys(data).length === 0 &&
+                Object.values(nodes).every((node) => !('cost' in node)),
             JSON.stringify(data).slice(0, 200)
         )
         if (add && mul && add[1].eclass === mul[1].eclass) {
@@ -401,18 +369,24 @@ if (MODE === 'gir' || MODE === 'rgir') {
     }
     verdicts.push('DRAW-guard')
 } else if (MODE === 'extract') {
-    // Nothing is extracted by the pass, and the pipeline still works: the driver extracts before
-    // the pass that consumes the program.
-    const run1 = run(['std::cxx::saturate', 'std::nvm'])
-    check('extract the program runs', run1.status === 0 && /(^|\n)42(\r?\n|$)/.test(run1.stdout), run1.output)
-    const extracted = run(['std::cxx::saturate', 'std::cxx::extract', 'std::nvm'])
+    // Nothing is extracted by the pass, and nothing extracts on the way either: the pipeline names
+    // the extraction and its cost, and a pass that consumes the program without one is refused.
+    const refusedBackend = run(['std::cxx::saturate', 'std::nvm'])
+    check(
+        'extract a backend is refused the state',
+        refusedBackend.status === 1 &&
+            /PassNeedsExtraction/.test(refusedBackend.output) &&
+            /rewrite::extract cost=/.test(refusedBackend.output),
+        refusedBackend.output
+    )
+    const extracted = run(['std::cxx::saturate', 'rewrite::extract cost=rules::nodes', 'std::nvm'])
     check(
         'extract one writing per value still runs',
         extracted.status === 0 && /(^|\n)42(\r?\n|$)/.test(extracted.stdout),
         extracted.output
     )
-    // A rewrite pass that does not declare that it accepts the state is still refused: the new
-    // rule is about a pass that asked for the state, not about every pass.
+    // A rewrite pass that does not declare that it accepts the state is refused too: the rule is
+    // about every pass that did not ask for the state.
     const refused = run(['std::cxx::saturate', 'std::cxx::fold', 'std::nvm'])
     check(
         'extract a rewrite pass is refused the state',
@@ -420,7 +394,7 @@ if (MODE === 'gir' || MODE === 'rgir') {
         refused.output
     )
     if (!failed) {
-        console.log('DRAW extract printed=42 refused_fold=1')
+        console.log('DRAW extract printed=42 refused_fold=1 refused_backend=1')
     }
     verdicts.push('DRAW-extract')
 } else if (MODE === 'params') {

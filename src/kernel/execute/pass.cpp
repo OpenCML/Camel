@@ -608,6 +608,7 @@ std::optional<camel::execute::detail::ParamProblem> bindFunctionValues(
         PassFunction argument;
         argument.name = written;
         argument.value = camel::core::rtdata::toSlot(value);
+        argument.type  = found->graph->funcType();
         argument.root  = std::make_shared<camel::core::mm::RootHandle>(
             camel::core::mm::autoSpace(),
             value,
@@ -2638,31 +2639,15 @@ PassApplyResult applyPassesDetailed(
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }
-            // A program with graphs that have several writings per value: a pass that consumes
-            // it (a back end, an exporter) gets one writing per value, picked by the default
-            // cost; a pass that does not know the state does not get the program. A consuming
-            // pass that declares it reads the state (a dump drawing the classes) is given
-            // the program as it is.
+            // A program with graphs that have several writings per value: a pass that consumes it (a back
+            // end, an exporter) is not given the program and nothing extracts it on the way. What a
+            // writing costs is the target library's judgement, so the pipeline must say it
+            // (`rewrite::extract cost=...`) before the pass that needs one writing per value: there
+            // is no implicit extraction, because the kernel has no cost of its own to extract by.
             if (camel::runtime::hasWritings(*program) && !pass->acceptsWritings()) {
-                const bool consumes = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
-                                      dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr;
-                if (consumes) {
-                    CAMEL_LOG_INFO_S(
-                        "Pass",
-                        "run | passes | extract before {}: one writing per value, cost model "
-                        "'{}'",
-                        p,
-                        camel::runtime::kWritingsCostModel);
-                    program = camel::runtime::extractWritings(
-                        ctx,
-                        program,
-                        *camel::runtime::findCostModel(camel::runtime::kWritingsCostModel));
-                    ctx->settleRuntimeGraphs(program);
-                } else {
-                    setPipelineStage("pass:" + specName(p));
-                    ctx->rtmDiags()->of(RuntimeDiag::PassNeedsExtraction).commit(p);
-                    return {nullptr, PassApplyStatus::Failed};
-                }
+                setPipelineStage("pass:" + specName(p));
+                ctx->rtmDiags()->of(RuntimeDiag::PassNeedsExtraction).commit(p);
+                return {nullptr, PassApplyStatus::Failed};
             }
             // The effects the program writes, and the order it writes them in, before the pass
             // runs: the effects on one resource keep that order through every pass (design
