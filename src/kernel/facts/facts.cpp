@@ -430,7 +430,7 @@ namespace {
 /// reach the store of the context that made it, without the graph carrying a member and without
 /// the framework reaching for a context the graph does not know.
 ///
-/// Allocated once and never freed, for the reason the store used to be: a graph can be freed after
+/// Allocated once and never freed, as the store is: a graph can be freed after
 /// the last context's teardown, and a table that is gone by then would turn a graph's last act
 /// into a use of a dead object. A store that is destroyed takes its rows out, so a graph whose
 /// store is gone names nothing rather than a dead store.

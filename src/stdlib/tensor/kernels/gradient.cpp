@@ -483,12 +483,13 @@ Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     if (!xs->sameShape(gs)) {
         throw ShapeError("gelu gradient: dy shape differs from the input");
     }
-    // A gradient is the width of the value it belongs to (design principles 9.9), and the operator's
-    // signature is `::<T>(x: T[..], dy: T[..])`: a second operand at another width is refused here
-    // rather than read through the first one's width, which is what answered with a number nobody
-    // computed. This kernel and `erfGrad` used to write `f32` whatever the input was, so an `f64`
-    // model's gradient came back typed `f64` over an `f32` buffer and what was read past the written
-    // bytes was whatever held them (a denormal of order 1e-314, a different one per run).
+    // A gradient is the width of the value it belongs to (design principles 9.9), and the
+    // operator's signature is `::<T>(x: T[..], dy: T[..])`: a second operand at another width is
+    // refused here rather than read through the first one's width, which is what answered with a
+    // number nobody computed. This kernel and `erfGrad` write the input's element type: writing
+    // `f32` whatever the input is stores an `f64` model's gradient as `f32` behind a `f64`-typed
+    // view, and what is read past the written bytes is whatever holds them (a denormal of order
+    // 1e-314, a different one per run).
     if (gs->dtype() != xs->dtype()) {
         refuseTensorElementType("gelu gradient", gs, {xs->dtype()});
     }
@@ -511,12 +512,11 @@ Array *erfGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
 
 namespace {
 
-/// The element type the gradient is written in is the input's, not `f32`: `layerNormGrad` used to
-/// read its inputs through `asFloat` (which only validates, it does not convert) and then write
-/// `createTensor(TypeCode::Float32, ...)` whatever it was given, so the normalization gradient of an
-/// `f64` model came back `f32` and the next `matmul_grad_lhs` refused the pair `('f32' and 'f64')`.
-/// The arithmetic below already accumulates in `double`; only the element the answer is stored in
-/// follows the input, which is the same rule `sumToArm` beside it follows (`SumElement<Code>`).
+/// The element type the gradient is written in is the input's, not `f32`: the answer is stored in
+/// an element of the input's type, so the normalization gradient of an `f64` model comes back `f64`
+/// and the next `matmul_grad_lhs` takes the pair. The arithmetic below already accumulates in
+/// `double`; only the element the answer is stored in follows the input, which is the same rule
+/// `sumToArm` beside it follows (`SumElement<Code>`).
 template <TypeCode Code>
 Array *layerNormGradArm(
     const Array *xs, const Array *ws, const Array *gs, double eps, LayerNormGrad which,

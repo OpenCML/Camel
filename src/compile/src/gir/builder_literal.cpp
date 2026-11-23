@@ -777,10 +777,10 @@ data_ptr_t Builder::compositeWithHolesInType(
     const std::vector<size_t> &refHoles, std::vector<size_t> &holeSlots) {
     // Design principles 5.1: a literal in a position takes the position's type element by
     // element. A literal with a computed element is a FILL, not one constant, so
-    // compositeDataInType cannot walk it — and its written elements used to keep their default
-    // types (`{ n: x, t: (1.0, 2.0), v: [1.0] }` was `(float, float)` and `float[]` where the
-    // declared fields are `(f32, f32)` and `f32[]`). The computed element is a value of its own
-    // type and enters only when the type it has is one the position takes there; when it is
+    // compositeDataInType cannot walk it — and its written elements keep the types the fields
+    // declare, not their own defaults (`{ n: x, t: (1.0, 2.0), v: [1.0] }` is `(f32, f32)` and
+    // `f32[]` where the fields are `(f32, f32)` and `f32[]`). The computed element is a value of
+    // its own type and enters only when the type it has is one the position takes there; when it is
     // not, the position does not fit and the literal keeps the type its own elements give it.
     if (data == nullptr || position == nullptr || asTagged(position) != nullptr ||
         origin == nullptr) {

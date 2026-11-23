@@ -134,10 +134,10 @@ enum class RuntimeDiag : uint32_t {
     // still changing.
 
     // The growth budget is the pass's other bound, and it ends the pass the same way: a round that copies
-    // nothing further leaves every count at zero, so `std::opt` used to report that round as its fixed
-    // point. It is not one -- the inliner recorded the call it left because the copy did not fit what was
-    // left of the budget -- so that round reports here instead, one diagnostic for "the pass stopped at a
-    // bound, not at the end of its work" the two bounds share.
+    // nothing further leaves every count at zero, and that is not a fixed point -- the inliner
+    // recorded the call it left because the copy did not fit what was left of the budget -- so that
+    // round reports here instead, one diagnostic for "the pass stopped at a bound, not at the end of
+    // its work" the two bounds share.
     OptimizationStoppedShort = 0x100019,
 };
 

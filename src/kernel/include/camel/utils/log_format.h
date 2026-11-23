@@ -5,12 +5,12 @@
  * The argument list of a log line, carried to the one translation unit that owns the string
  * formatting.
  *
- * A logging macro used to format its line with `std::format` inside `camel/utils/log.h`, the header
- * every translation unit includes: the whole format engine -- the format-string scanner, the sinks,
- * a formatter for every argument type of every call site -- was instantiated once per unit that can
- * log, whether or not that unit ever emitted a line. The values are therefore erased here into a
- * fixed shape and substituted in one place, `src/utils/log_format.cpp`, which is the equivalent of
- * what `camel/core/error/diagnostics/arguments.h` already does for a diagnostic message.
+ * A log call's arguments are erased here into a fixed shape and substituted in one place,
+ * `src/utils/log_format.cpp`: formatting them in the macro itself, inside `camel/utils/log.h`, the
+ * header every translation unit includes, would instantiate the whole format engine -- the
+ * format-string scanner, the sinks, a formatter for every argument type of every call site -- once
+ * per unit that can log, whether or not that unit ever emits a line. That one substitution site is
+ * the equivalent of what `camel/core/error/diagnostics/arguments.h` does for a diagnostic message.
  *
  * A log call site carries a format *specifier* (`{:>4}`, `{:p}`), which a diagnostic message does
  * not, so the substitution site hands each field's specifier to the standard engine for the erased

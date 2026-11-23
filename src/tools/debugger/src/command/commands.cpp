@@ -3,8 +3,7 @@
 
 #include "camel/utils/windows_parser_guard.h"
 
-// nlohmann/json uses the C macro EOF: keep it above any header that defines or undefines it. The
-// ANTLR headers that used to `#undef` it are gone (docs/technical/34_handwritten_parser.md).
+// nlohmann/json uses the C macro EOF: keep it above any header that defines or undefines it.
 #include "nlohmann/json.hpp"
 
 #include "command.h"

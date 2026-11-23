@@ -52,7 +52,7 @@ class Submission final : public DeviceCompletion {
     // recorded their final event; a finished submission can never gain an edge.
     Resources &resources();
     // Identity for diagnostics only. Completion releases the actual stream;
-    // this historical handle must never be used to enqueue additional work.
+    // this handle must never be used to enqueue additional work.
     CUstream stream() const noexcept;
     // A completion edge retains events and faults, not producer output storage.
     // Inputs must be owned by program.resident or explicitly retained with

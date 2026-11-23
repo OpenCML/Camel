@@ -82,7 +82,7 @@ const DeviceType *asDeviceType(const core::type::Type *type);
 // The element type a scalar leaf keeps on the device, or nothing when the device has no value of
 // that type. A scalar leaf takes the element type it is written with (design principles 7.3), so
 // `Device<f32>` holds a 4-byte value with an empty shape and `Device<float>` holds 8 bytes: the
-// two are the same rank-0 value the tensor path already carries, and every place that used to
-// name `Float64` alone asks here instead. `tensor::isTensorType` answers for tensor leaves.
+// two are the same rank-0 value the tensor path already carries, and the places that name one
+// element type alone ask here instead. `tensor::isTensorType` answers for tensor leaves.
 std::optional<DType> deviceScalarDType(const core::type::Type *leaf);
 } // namespace camel::tiles

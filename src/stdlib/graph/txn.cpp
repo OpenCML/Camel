@@ -492,8 +492,8 @@ bool regionIsLookedThrough(camel::runtime::GCRegionKind kind) {
 /// A region that is looked through has no owner to lift to, and the pure `GATE` standing at its
 /// boundary is no node of its own either: a gate orders the value it reads and runs nothing
 /// (design principles 3.1), so what the end names there is the value behind it (`ungated`). That is
-/// the whole of why an edge into such a region used to say nothing: the caller ordered the
-/// forwarder, and the write it forwards stayed unordered with the access on the other side.
+/// why the end is the value and not the gate: ordering the forwarder would leave the write it
+/// forwards unordered with the access on the other side.
 gc_node_ref_t representativeIn(
     const camel::runtime::GraphDraft &draft, gc_node_ref_t ref, uint32_t common) {
     gc_node_ref_t at = ref;

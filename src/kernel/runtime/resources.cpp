@@ -1449,9 +1449,8 @@ struct BeyondCoverage {
 /// access is beyond the declaration when a source that is that access by itself is not covered.
 ///
 /// A reading of unknown class is judged like any other and refused when the clause does not
-/// promise it. It used to be counted and passed -- "a possibility is not an access" -- but a clause
-/// that cannot name what the body reaches proves nothing about it, and a body that may reach past
-/// its own promise is what the check is for. A declaration that does
+/// promise it: a clause that cannot name what the body reaches proves nothing about it, and a body
+/// that may reach past its own promise is what the check is for. A declaration that does
 /// promise it (`any unknown`, which a widened signature can carry) still covers it: the refusal is
 /// the clause's answer applied to the reading, not an unconditional one.
 ///

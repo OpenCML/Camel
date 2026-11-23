@@ -318,7 +318,7 @@ void registerOperatorMetadata() {
     //
     // Pure is not foldable: the call does something the compiler cannot see from the arguments
     // alone, which is why it is not recomputable either (`foldable` false, `mayBeRecomputed`). The
-    // two answers used to be one flag; they are two here, and both are true.
+    // two are separate answers here, and both are true.
     camel::core::OperatorTable::instance().set(
         "transforms:jvp",
         {.pure = true, .readsGraphs = true, .foldable = false});

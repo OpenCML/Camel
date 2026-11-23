@@ -57,8 +57,7 @@ PythonModule::PythonModule(context_ptr_t ctx) : BuiltinModule("python", ctx) {
 
 module_ptr_t PythonModule::create(context_ptr_t ctx) { return std::make_shared<PythonModule>(ctx); }
 
-// What interpreter is running and which environment it came from: the INFO lines `load()` used to
-// write, at the first use, where the rest of the interpreter's story now happens.
+// What interpreter is running and which environment it came from, logged once at the first use.
 static void logInterpreterMetadata() {
     try {
         py::module_ sys     = py::module_::import("sys");

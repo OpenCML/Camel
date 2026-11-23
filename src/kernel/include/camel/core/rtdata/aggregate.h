@@ -6,10 +6,10 @@
  * store-side materialisation that keeps a view out of a value that survives the element read.
  *
  * The array store path bulk-copies a slot-shaped compact element into a materialised Struct or
- * Tuple. It used to compute the offset of `data_` by hand (`sizeof(void *) + 2 * sizeof(uint32_t)`),
- * which silently encoded the header layout in a second place. Each class now states where its
- * slot data begins (`slotDataOffset()`), and this file only checks that the two agree: a change
- * to either header fails the static assertion instead of corrupting an element.
+ * Tuple. The offset of `data_` is not computed here: computing it by hand
+ * (`sizeof(void *) + 2 * sizeof(uint32_t)`) would encode the header layout in a second place. Each
+ * class states where its slot data begins (`slotDataOffset()`), and this file only checks that the
+ * two agree: a change to either header fails the static assertion instead of corrupting an element.
  */
 
 #pragma once

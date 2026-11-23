@@ -356,7 +356,8 @@ void validateRuntimeLoopInterface(
         expectedValue = expected;
     } else {
         // A collecting loop's state and its tapes travel together in one tuple: the k state
-        // values first, so a consumer that ignores the tapes reads the state where it used to.
+        // values first, so a consumer that ignores the tapes reads the state in the slots it looks
+        // at.
         if (valueType == nullptr || valueType->code() != TypeCode::Tuple) {
             loopFails(
                 graph,

@@ -121,8 +121,8 @@ std::string operationOf(const std::string &name) {
 /// Which operators are conversions, and which types each one converts between, is written where
 /// the operator is registered (`builtin/executors/builtin.cpp#kConversions`, handed to
 /// `OperatorTable::declareConversion`): the registration that gives the operator its
-/// implementation also gives its two types, because they are what the operator *is*. This used to
-/// be read off the letters of the name instead (`d` is float, `f` is f32, ...), which called
+/// implementation also gives its two types, because they are what the operator *is*. Reading it
+/// off the letters of the name instead (`d` is float, `f` is f32, ...) would call
 /// every name containing `to` a conversion, and `:op/var/get` -- an operator whose result is a
 /// float and which converts nothing -- then got a conversion's key.
 ///

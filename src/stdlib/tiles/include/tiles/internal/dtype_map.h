@@ -1,11 +1,11 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The two names one element type has: the language's `TypeCode` and the kernel's `DType`. Every site
-// that used to write `dtype != Float32` or `width == DType::F32 ? Float32 : Float64` was a two-way
-// guess between these two names, and a fifth element type breaks the guess silently. Both
-// directions are exhaustive, so a value added to either enum fails to compile here rather than
-// being read as its neighbour.
+// The two names one element type has: the language's `TypeCode` and the kernel's `DType`. A test
+// that compares one against the other (`dtype != Float32`, `width == DType::F32 ? Float32 :
+// Float64`) is a two-way guess between these two names, and a fifth element type breaks the guess
+// silently. Both directions are exhaustive, so a value added to either enum fails to compile here
+// rather than being read as its neighbour.
 
 #pragma once
 

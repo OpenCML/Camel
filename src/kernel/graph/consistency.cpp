@@ -176,9 +176,9 @@ std::string firstDifference(
             continue;
         }
         // The region a node is in belongs to the graph the node is in, so it is compared beside the
-        // record rather than in it. It is also what a control input used to say (`with`/ctrl runs):
-        // the arm a node runs in, which is why the check does not compare a control-input list --
-        // the view has no such list, and this is the same fact.
+        // record rather than in it. It states the same fact a control-input list would (`with`/ctrl
+        // runs): the arm a node runs in, which is why the check does not compare such a list -- the
+        // view has no such list.
         if (draft.regionOf(ref) != frozen.regionOf(ref)) {
             return std::format(
                 "node {}: region draft={} frozen={}",
@@ -288,8 +288,7 @@ std::string firstDifference(
         if (leftCallee.kind == CalleeRef::Kind::Name && leftCallee.name != rightCallee.name) {
             return std::format("node {}: callee name differs", ref);
         }
-        // The regions a structural node owns: a BRCH's arms and a LOOP's condition and body. This
-        // is what a BRCH's arm count and its JOIN used to be, in one answer.
+        // The regions a structural node owns: a BRCH's arms and a LOOP's condition and body.
         if (draft.regionsOwnedBy(ref) != frozen.regionsOwnedBy(ref)) {
             return std::format(
                 "node {}: regions owned draft={} frozen={}",

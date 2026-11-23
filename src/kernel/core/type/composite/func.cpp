@@ -187,7 +187,8 @@ FunctionType *FunctionType::intern(const Parts &unfrozen) {
     // a component the table does not hold is a word the table cannot compare: `kNoTypeId` is 0, and
     // every `TypeId` key that reads it reads one and the same type. The result type of a rule whose
     // right side is a function value is exactly such a component -- the closure's signature, which
-    // the builder made open and never registered -- so a signature used to record a result of 0.
+    // the builder made open and never registered -- so a signature whose parts are not frozen first
+    // records a result of 0.
     const Parts parts = frozenParts(unfrozen);
     // The key is everything a signature consists of (see intern.h; the component types by id):
     // the counts, the result type, each parameter with its `var` mark, and the

@@ -82,8 +82,7 @@ inline void finalize() {
     if (!runtimeInitialized().exchange(false, std::memory_order_acq_rel)) {
         return;
     }
-    // Keep a single finalization entry point for now; release future global
-    // objects here as they are added.
+    // One finalization entry point: release global objects here as they are added.
 }
 
 /// Scope lifetime guard: call initialize() on construction and finalize() on destruction.

@@ -166,7 +166,7 @@ enum class PortGroup : std::uint8_t {
     /// it. Nothing at a call site names a capture -- it is bound from the closure tuple -- and it
     /// is a port of the graph all the same: a reader that walks a graph's ports asks one query
     /// three times instead of two plus a list of its own. The tuple those ports are read out of is
-    /// their types, which `captureType()` used to answer and which is not a query any more.
+    /// their types.
     Capture = 2,
 };
 

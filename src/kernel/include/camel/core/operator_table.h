@@ -520,7 +520,7 @@ class OperatorTable {
     // reader needs to know is "which of the four does this node perform". The answer is the
     // operator's (`Record::shape`, camel/ops/oper_shape.h), stated here where the operator is
     // registered with its implementation -- one statement, read by the operator's identity, and no
-    // reader comparing the letters of a URI (design section 3.8, R10; D-1123-34).
+    // reader comparing the letters of a URI (design section 3.8, R10).
 
     /// Declares which of the four `uri` is (module load time). An operator that is not one of them
     /// declares nothing, which is what `shapeOfOperator` (camel/runtime/oper_shape.h) reads as None.

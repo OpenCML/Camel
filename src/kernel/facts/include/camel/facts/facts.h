@@ -57,8 +57,7 @@
  * yet: each still keeps its own cache where its computation lives, because a kind is a promise
  * that the computation runs through the store with the store's view, and moving those
  * computations is a change of its own that no answer depends on yet. A reader of one of them
- * today asks the code that owns it, not this framework; the sentence that used to stand here said
- * the five were registered, and the tree never had them.
+ * today asks the code that owns it, not this framework.
  *
  * Thread-safety: every member of the registry and of a store may be called from any thread. A
  * kind is registered while modules load; a value is computed at most once per stamp, even when

@@ -63,8 +63,8 @@ TypeId cacheKey(const Type *type) { return TypeTable::instance().canonicalId(typ
 
 /// Set while the answer being computed leans on something that is not finished: a field whose
 /// type is not known yet (a struct read while its declaration is still being read, a reference
-/// to a type that is not resolved), or a cycle the walk cut. Such an answer is right for now and
-/// may be wrong later, so it is returned and never cached.
+/// to a type that is not resolved), or a cycle the walk cut. Such an answer holds only while the
+/// walk is unfinished, so it is returned and never cached.
 thread_local bool unfinished = false;
 
 // Guards the structural walk against a cycle of pure types (a recursive struct whose fields

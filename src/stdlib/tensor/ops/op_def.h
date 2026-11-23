@@ -67,9 +67,8 @@ using ConstArg = std::variant<int64_t, double, bool, std::string, std::vector<in
 /// {nullopt, 3}. What inference sees of an array written in place with computed elements.
 using PartialInts = std::vector<std::optional<int64_t>>;
 
-/// The facts of a tensor-valued argument: `camel::tensor::TensorFacts` (modules/tensor/type.h),
-/// where one definition serves the operators and the callers outside this module that used to
-/// import it from here.
+/// The facts of a tensor-valued argument: `camel::tensor::TensorFacts` (modules/tensor/type.h), the
+/// one definition the operators and the callers outside this module share.
 using TensorFacts = ::camel::tensor::TensorFacts;
 
 class InferContext {

@@ -88,13 +88,13 @@ inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) no
  * `copy`, `fill` and `access` are declared operators, and the front end still builds the same four
  * operations as nodes of those kinds.
  *
- * **Why one place.** A reader that has to know "is this node a construction" used to say
- * `node->kind == rt::GCNodeKind::Fill`, and this directory said it, in its own words, in eight
- * files: `jvp.cpp`, `module.cpp`, `rule_expand.cpp`, `split.cpp`, `split_loop_cut.cpp`,
- * `split_internal.h`, `transpose/walk.cpp` and `transpose/walkmachinery.cpp`. Once the front end
- * builds these four as OPER nodes, every one of those tests is *wrong*: not by a little, but by
- * asking a question the node no longer answers (a construction is then an OPER node whose operator
- * says it constructs). So the question is asked here instead, and the eight files ask it:
+ * **Why one place.** A reader that has to know "is this node a construction" asks here, once: the
+ * question has one answer -- a construction is an OPER node whose operator says it constructs, or a
+ * node of the FILL kind the front end builds -- and a site that asks it in its own words
+ * (`node->kind == rt::GCNodeKind::Fill`) answers it for one form only, and is wrong for the other.
+ * So the sites that ask it (`jvp.cpp`, `module.cpp`, `rule_expand.cpp`, `split.cpp`,
+ * `split_loop_cut.cpp`, `split_internal.h`, `transpose/walk.cpp`, `transpose/walkmachinery.cpp`)
+ * ask it here:
  *
  *     if (nodeOperatorOf(graph, ref) == NodeOperator::Fill) { ... }
  *
@@ -123,8 +123,8 @@ inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) no
  * first, then the values in the target type's layout order, which is the slot list a construction
  * needs. So a reader asks for the payload and gets one answer, instead of asking the kind and
  * reading the bytes of a node that no longer has any -- which is what an OPER node would give it,
- * and "an OPER's bytes read as a FILL are some other number" (`transpose/walk.cpp` used to guard
- * that by hand).
+ * and "an OPER's bytes read as a FILL are some other number", a guard no caller has to write for
+ * itself.
  *
  * **A member read is asked of `memberReadOf`, and its shape is the declared one.** The declaration
  * is the authority (`__access_value__`, `builtin/operators/struct.cpp`): one ordinary operand, the

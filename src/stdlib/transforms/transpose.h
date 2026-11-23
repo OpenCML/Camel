@@ -10,7 +10,7 @@
  * rule that makes `reinterp` produce a new function applies here, and for the same reason: a
  * published graph is never replaced.
  *
- * Straight-line code only, for now. Every primitive on the path must have one operand that carries
+ * Straight-line code only. Every primitive on the path must have one operand that carries
  * the data and only constants beside it, which is what `is_linear` means for the rules the
  * transpose family holds (`stdlib/rulesets/transpose.cml`: "the cotangent of the result => the
  * cotangent of the operand that carries the data"). A primitive whose other operand is not a

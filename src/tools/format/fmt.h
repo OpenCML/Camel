@@ -305,8 +305,8 @@ class Formatter {
                 // this can be helpful when the list is not continuous
                 return result;
             }
-            // TODO: handle empty list to proc comments
-            // here temporarily ignores the ctrl flags
+            // With no list, only the context's comments are printed, the ones between its first and
+            // last token.
             const size_t firstTokIdx = context->firstToken()->index();
             const size_t lastTokIdx  = context->lastToken()->index();
             bool foundComment        = false;

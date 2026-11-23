@@ -1586,9 +1586,9 @@ bool liftGraph(
                 // The *template* is the node's own Norm input, copied: a FILL takes every slot its
                 // payload does not list from that template, so the template has to have the tuple's
                 // arity and hold the same constants. `(x, 0.0)` lists one member and takes the
-                // second slot from the template; a template of one field, as this walk used to
-                // make, makes the fill read field 1 of a one-field tuple (measured: `fa`, "Tuple
-                // field out of range: field 1 of a tuple with 1 fields").
+                // second slot from the template; a template of one field makes the fill read field
+                // 1 of a one-field tuple (measured: `fa`, "Tuple field out of range: field 1 of a
+                // tuple with 1 fields").
                 //
                 // The tangent is the Fill of the components' tangents: the tangent of a tuple is
                 // the tuple of the tangents of its parts (design principles 9.9), and that is the
@@ -2062,9 +2062,9 @@ bool liftGraph(
                 // Which of this call's arguments are tangents, written onto the call itself: the
                 // list a lifted callee takes is "every value first, and their tangents after them",
                 // so the second run of `tangents.size()` positions is the tangent half. A reader
-                // cannot recover this from the signature -- the cut used to read the seam at
-                // `normTypesCount() / 2`, and a call that passes a function value as an argument
-                // puts a value where that arithmetic expects a tangent.
+                // cannot recover this from the signature: the seam at `normTypesCount() / 2` is not
+                // it, because a call that passes a function value as an argument puts a value where
+                // that arithmetic expects a tangent.
                 uint16_t tangentMask = 0;
                 if (!isValue) {
                     const size_t total = values.size() + tangents.size();
@@ -2850,7 +2850,7 @@ bool liftGraph(
         // operands), so the value is the copy of the exit itself -- and a Gate only forwards, so it
         // is followed to what it carries.
         // valueBehindGates is the walk (camel/runtime/graph.h): the value a gate carries is its
-        // first ordinary input, and this used to take back() -- the last wait -- for both kinds.
+        // first ordinary input.
         const gc_node_ref_t oldValue = valueBehindGates(function, function.exitNodeRef());
         if (oldValue >= function.nodeCount() || !copied[oldValue]) {
             os << "REINTERP jvp function=" << name

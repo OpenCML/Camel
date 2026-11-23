@@ -5,12 +5,12 @@
  * The one place a node's rows are run, and the one place an operator is called.
  *
  * Four back ends call operators -- std::nvm, std::fvm, std::jit, and the taskflow scheduler -- and
- * each of them used to apply the count's rows itself, at every place a call can happen. The places
- * that forgot are exactly the places the count went missing: the SCHD instruction in gotovm.cpp and
- * fastvm.cpp's interpreter exit, and the Oper branch of TaskflowExecSchedPass::executePreparedNode.
- * A list that has to be remembered at each call site is
- * how that happens twice; here the list is one call, so no back end has a place left to forget it
- * and no back end has a place left to add a second one.
+ * the count's rows are applied here, once, rather than at each place a call can happen. A list that
+ * has to be remembered at each call site is how a row goes missing: the SCHD instruction in
+ * gotovm.cpp, fastvm.cpp's interpreter exit and the Oper branch of
+ * TaskflowExecSchedPass::executePreparedNode each had their own, and a call that forgets it applies
+ * no rows. Here the list is one call, so no back end has a place left to forget it and no back end
+ * has a place left to add a second one.
  *
  * `runNode` is that same call for every other node kind: a value's rows are laid out at the
  * position of the node that runs when they are due, and only the operator kind reaches its position

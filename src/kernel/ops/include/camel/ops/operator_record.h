@@ -30,12 +30,10 @@
  * operators: the compiler puts them on the nodes of a program and a pass reads them there. A
  * label says what a pass may do with a node; it never says what the operator is.
  *
- * Each property appears once. Four were stated in more than one place and are read from this
- * record now, from nowhere else:
+ * Each property appears once. Four that could be stated in more than one place are read from this
+ * record, from nowhere else:
  *
- *   - the effect: `uses` and its one reading (`effect()`), not the purity column the module
- *     introspection JSON used to print beside it and not the `pure`/`stateOnly` bits of the
- *     traits struct the table used to hand out;
+ *   - the effect: `uses` and its one reading (`effect()`);
  *   - the macro fact: the node flag and the graph flag ask this record, and the standard tag
  *     `#macro` on a *declaration* says the same thing about a function, which is a different
  *     question and is not an operator trait;
@@ -367,7 +365,7 @@ struct Record {
 
     /**
      * Which of the four shaped operations it is -- a conversion, a copy, a construction, a member
-     * read -- or None for an operator that is not one of them (D-1123-34). Stated where the operator
+     * read -- or None for an operator that is not one of them. Stated where the operator
      * is registered, and the only place a reader asks: what a node does is the record of the
      * operator it names, and a reader that decoded the letters of a URI instead would hold a second
      * statement of one fact ("never by comparing URI text", operator_table.h).
@@ -512,15 +510,15 @@ class Registry {
     void declare(OperId id, const Record &statement);
 
     /**
-     * States the shape of the four that have one (D-1123-34), at module load time. It is a statement
+     * States the shape of the four that have one, at module load time. It is a statement
      * of one item rather than a `Record` merge because it is the one item no Camel declaration can
      * state: the four are written in `prelude.cml` as functions and the front end builds them as
      * operators, so "this one is a construction" is the C++ side's to write, where the operator is
      * registered with the executor that runs it.
      *
      * Before the record is completed a later statement stands (the bare-value convention of
-     * `CppRegistration`'s seven setters); a completed record refuses a statement that disagrees with
-     * the one it holds, naming the operator and both shapes.
+     * `CppRegistration`'s seven setters); a completed record refuses a statement that disagrees
+     * with the one it holds, naming the operator and both shapes.
      */
     void stateShape(OperId id, OperShape shape);
 

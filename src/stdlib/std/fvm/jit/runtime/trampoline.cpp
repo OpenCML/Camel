@@ -554,8 +554,8 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         vm->populateIndirectCallFrame(frame, funcFrame, function, nargs, wargs);
 
         // Indirect CALL still crosses a runtime Function carrier and closure
-        // object. Keep this path on the interpreter entry for now until the
-        // JIT indirect-call path is proven against recursive closure-heavy
+        // object, so this path stays on the interpreter entry until the JIT
+        // indirect-call path is proven against recursive closure-heavy
         // workloads such as perf::timeit.
         slot_t result = vm->call(vm->graphEntryPc(runtimeTarget), funcFrame);
         if (bc.result != 0) {

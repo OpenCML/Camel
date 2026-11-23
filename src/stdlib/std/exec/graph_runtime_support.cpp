@@ -208,9 +208,9 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     //     its result is part of the execution whether or not anything downstream reads it.
     //
     // The members of a region are not seeds. They are the region's *range*: laid out below as the
-    // arm's own piece because the arm runs, not because liveness reached them. Seeding them, as
-    // this walk used to, is what made the control edge from the branch to its arm the only reason
-    // an arm's statements were ever laid out.
+    // arm's own piece because the arm runs, not because liveness reached them. Seeding them would
+    // make the control edge from the branch to its arm the only reason an arm's statements are
+    // laid out.
     std::vector<uint8_t> used(graph->nodeCount(), 0);
     std::vector<uint8_t> live(graph->nodeCount(), 0);
     const camel::runtime::ControlRegions seedRegions(*graph);
@@ -613,8 +613,7 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     // uses it; 3.4: a sync block does not inherit inward, so a region's membership says *when* a
     // node of the region runs, never *whether* it runs). The region's result is part of the walk
     // above because a region that runs makes its value; its members are not, and seeding them here
-    // is what used to make a control edge from the branch the only reason an arm's statements were
-    // laid out.
+    // would make a control edge from the branch the only reason an arm's statements are laid out.
     //
     // This sweep is the walk's last resort: it is what lays a node out when nothing the exit
     // depends on leads to it, and the case that makes it load-bearing is the effect nothing reads,

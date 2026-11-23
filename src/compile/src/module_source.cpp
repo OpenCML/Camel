@@ -215,7 +215,7 @@ class SourceModuleFrontEnd final : public SourceModuleLoader {
             return false;
         }
         // The `library` phase is the kernel's: it opens around the declaration and this build
-        // together, as the one function that did both used to.
+        // together.
         // The module is built by the graph builder of its program, not one of its own: the
         // modules written in Camel it imports are declared there already, by compileImportedModules
         // when this module's construction tree was built (each of them had to be declared before a

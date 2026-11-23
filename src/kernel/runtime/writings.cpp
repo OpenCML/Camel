@@ -485,7 +485,7 @@ void DraftWritings::index(gc_node_ref_t node) {
     // ascending (rewrite design 6, and the canonical form the plan fixes: the same-operator terms
     // flattened and sorted by identity). The key is what the congruence closure reads, so two
     // writings that differ only in the order or the bracketing of such a chain become one class
-    // without a rule saying so, which is what the commutation and association rules used to say.
+    // without a rule saying so.
     // Only the declared laws decide, per element type: a float sum is commutative and is read as
     // two terms in either order, while regrouping it stays with `reassociate` and its rules.
     if (h->kind == GCNodeKind::Oper && !key.norm.empty()) {
