@@ -2,13 +2,15 @@
  * Negative case: conv2d must reject channel mismatch at runtime. The operands
  * go through a function whose parameters state only their element type and
  * rank, so their shapes are not known statically (static_shape_error covers the
- * compile-time check).
+ * compile-time check). The return type is the operands' own element type: this
+ * case asks about geometry, and the conv2d kernel never checks the element type
+ * (it rejects the channel mismatch first).
  */
 
 import { conv2d } from nn
 import { reshape, sum } from tensor
 
-func convolve(x: f64[...], kernel: f64[...], bias: f64[...]) => f32[...] {
+func convolve(x: f64[...], kernel: f64[...], bias: f64[...]) => f64[...] {
     return conv2d(x, kernel, bias)
 }
 
