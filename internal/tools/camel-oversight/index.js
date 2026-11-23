@@ -170,10 +170,21 @@ export function apply(ctx, rawConfig) {
     )
 
     const headerOf = (agent) => (agent && agent.session && agent.session.header) || {}
+    // The subagent runtime is not a dependency of the whole plugin (the channel works without it); it is
+    // bound when present, the way DSH's own plugins bind an optional service, and released with it.
+    let subagentsRef = null
+    if (typeof ctx.inject === 'function') ctx.inject(['subagents'], (inner) => {
+        const bound = inner.subagents
+        subagentsRef = bound
+        inner.effect(() => () => {
+            if (subagentsRef === bound) subagentsRef = null
+        })
+    })
+    const subagentService = () => subagentsRef || ctx.get('subagents')
     // A root session is one no other session spawned: the coordinator's own, never a lane.
     const isRoot = (agent) => {
         if (!agent) return false
-        const subagents = ctx.get('subagents')
+        const subagents = subagentService()
         try {
             if (subagents && typeof subagents.rootOf === 'function') return subagents.rootOf(agent) === agent
         } catch {
@@ -325,7 +336,7 @@ export function apply(ctx, rawConfig) {
     // history and does not return within seconds, and a lane that is not live is not a lane at work.
     // A lane run by another process is not in this process and is not counted.
     const lanesOf = async (id) => {
-        const subagents = ctx.get('subagents')
+        const subagents = subagentService()
         const root = id ? ctx.agents.get(id) : null
         if (!root || !subagents || typeof subagents.rootOf !== 'function') return { unreadable: 'no target or no subagent service' }
         const members = []
