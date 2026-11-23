@@ -7,8 +7,11 @@
 //                        through this channel that are not yet acknowledged, and the build host's load;
 //   GET  /oversee/tail   the last n events of a session, each reduced to one line;
 //   POST /oversee/say    {id, text, mode} queues a user message into the target session;
-//   GET  /oversee/acks   what the model said about each message (taken, declined, done);
-//   tool oversight_ack   how the model says it.
+//   GET  /oversee/acks   what the model said about each message (taken, declined, done), and what it
+//                        sent of its own accord;
+//   GET  /oversee/events a server-sent event stream that pushes each acknowledgement, each message
+//                        the model sends, and the claimed session ending, as they happen;
+//   tools oversight_claim, oversight_ack, oversight_tell  the model's side.
 //
 // The routes are raw web-server routes, outside the GUI's launch-token login. The gate is the network:
 // the web server stays on loopback and `tailscale serve` publishes it to the tailnet, whose ACL decides
@@ -87,6 +90,7 @@ export function apply(ctx, rawConfig) {
     const delivered = new Map() // id -> {id, at, mode, text}
     const acks = new Map() // id -> {id, at, status, note}
     let claimed = null // the session that called oversight_claim last
+    const tells = [] // what the model sent the decision-maker with oversight_tell
     const record = (entry) => {
         try {
             mkdirSync(path.dirname(config.logFile), { recursive: true })
@@ -103,6 +107,7 @@ export function apply(ctx, rawConfig) {
                 if (entry.kind === 'say') delivered.set(entry.id, entry)
                 if (entry.kind === 'ack') acks.set(entry.id, entry)
                 if (entry.kind === 'claim') claimed = entry.session
+                if (entry.kind === 'tell') tells.push(entry)
             } catch {
                 // A torn last line from a crash is skipped; the rest of the log still holds.
             }
@@ -247,6 +252,21 @@ export function apply(ctx, rawConfig) {
 
     const pending = () => [...delivered.values()].filter((entry) => !acks.has(entry.id)).map((entry) => entry.id)
 
+    // ---- the push half: a server-sent event stream ----------------------------------------------
+    // What the coordinator says back (an acknowledgement, a message of its own, the claimed session
+    // ending) is pushed to every open /oversee/events stream as it happens, so the reader learns it
+    // without polling. A comment line every 25 seconds keeps proxies from closing an idle stream.
+    const streams = new Set()
+    const emit = (event) => {
+        const frame = `data: ${JSON.stringify(event)}\n\n`
+        for (const res of streams) res.write(frame)
+    }
+    ctx.effect(() =>
+        ctx.on('agent/disposed', ({ agent }) => {
+            if (String(agent.id) === claimed) emit({ kind: 'session-ended', session: claimed, at: Date.now() })
+        }),
+    )
+
     route('/oversee/state', 'GET', (req, res) => {
         probeBuild()
         const agent = target()
@@ -269,7 +289,22 @@ export function apply(ctx, rawConfig) {
     })
 
     route('/oversee/acks', 'GET', (req, res) => {
-        answer(res, 200, { acks: [...acks.values()], unacknowledged: pending() })
+        answer(res, 200, { acks: [...acks.values()], tells: tells.slice(-50), unacknowledged: pending() })
+    })
+
+    route('/oversee/events', 'GET', (req, res) => {
+        res.writeHead(200, {
+            'content-type': 'text/event-stream; charset=utf-8',
+            'cache-control': 'no-store',
+            connection: 'keep-alive',
+        })
+        res.write(`: open, target ${claimed ?? 'none'}\n\n`)
+        streams.add(res)
+        const beat = setInterval(() => res.write(': ping\n\n'), 25_000)
+        req.on('close', () => {
+            clearInterval(beat)
+            streams.delete(res)
+        })
     })
 
     route('/oversee/say', 'POST', async (req, res) => {
@@ -341,7 +376,37 @@ export function apply(ctx, rawConfig) {
                 const entry = { kind: 'ack', id, at: Date.now(), status, note: note || '' }
                 acks.set(id, entry)
                 record(entry)
+                emit(entry)
                 return { result: `${id}: ${status}` }
+            },
+        }),
+    )
+
+    ctx.effect(() =>
+        ctx.tools.register({
+            name: 'oversight_tell',
+            description:
+                'Send the decision-maker a message of your own, pushed to it at once: a blocker, a reading it must see now, a result that changes what it would dispatch next. Not for acknowledging its messages (use oversight_ack) and not for questions of principle (write a page under internal/questions/ and tell it the page).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    text: { type: 'string', description: 'What to tell it, self-contained.' },
+                    urgent: { type: 'boolean', description: 'True only when it should act before its next scheduled check.' },
+                },
+                required: ['text'],
+                additionalProperties: false,
+            },
+            output: {
+                schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+                render: (_args, value) => value.result,
+            },
+            async execute({ text, urgent }) {
+                const entry = { kind: 'tell', at: Date.now(), urgent: urgent === true, text: String(text), session: claimed }
+                tells.push(entry)
+                if (tells.length > 200) tells.splice(0, tells.length - 200)
+                record(entry)
+                emit(entry)
+                return { result: streams.size > 0 ? 'pushed to the decision-maker' : 'logged; the decision-maker reads it at its next check' }
             },
         }),
     )
