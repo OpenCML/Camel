@@ -29,7 +29,15 @@ import { argmax as tensor_argmax, argmin as tensor_argmin, max as tensor_max, me
 /// The elements in reverse order.
 /// @example [1, 2, 3]->reverse    // [3, 2, 1]
 export func reverse::<T>(xs: T[]): T[] {
-    return xs[range(len(xs) - 1, -1, -1)]
+    // The order is built as an index array and the elements are taken by it, because a stepped
+    // slice writes both of its bounds: a walk from the last position to the beginning writes an
+    // end of -1, and a slice refuses a bound outside the axis (a negative one included), so it is
+    // a fault (design principles 5.4). An index array is not a bound. `range` answers the empty
+    // sequence when its step does not carry its start towards its end, so the empty array takes
+    // no position (`range(-1, -1, -1)` is empty) and the one-element array takes position 0
+    // (`range(0, -1, -1)` is `[0]`) -- never -1, which no array has.
+    let order = range(len(xs) - 1, -1, -1)
+    return xs[order]
 }
 
 /// The first n elements; all of them when there are fewer, none when n is not positive.

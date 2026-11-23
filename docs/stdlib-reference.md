@@ -766,7 +766,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string pa
 ```
 
 The same slice of a string, by code point: a string has the one axis 0, and the result is a
-string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
+string. `'中文字'[1..3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
 
 - Example: `'hello'->slice<0, 1, 4>` gives `'ell'`
 
@@ -1137,7 +1137,7 @@ Text functions. A string is always valid UTF-8, and its length and indices count
 - A result that may not exist is `T?` (`index_of`, `strip_prefix`). A number that is not a
   code point is an error value (`from_codepoints`). An index outside the string is a fault.
 - Only what Camel cannot say about a string is native: code points as numbers and
-  letter case (cutting by code point is the subscript `s[a:b]` of the core). The rest is
+  letter case (cutting by code point is the subscript `s[a..b]` of the core). The rest is
   written here; `index_of` and `split` carry a native kernel under `#impl` for speed, with the same result as their bodies.
 
 ### Native primitives
@@ -1331,7 +1331,7 @@ s without the ASCII white space at both ends. Other white space, such as U+00A0,
 Binary data. `Bytes` is an immutable value of the core; a string is text and never holds
 arbitrary bytes, so the only crossing between the two is `encode` and `decode`.
 
-Length (`len`), concatenation (`a + b`) and cutting (`b[a:b]`) are the core's, as they are for
+Length (`len`), concatenation (`a + b`) and cutting (`b[a..b]`) are the core's, as they are for
 a string. What is here converts, and is native: a `Bytes` is a data block, and reading or
 building one needs the layout control the language does not show (design principles 10.4).
 
