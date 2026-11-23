@@ -18,6 +18,7 @@ model reads every step says so without being asked.
 | `maxBehind` | commits the worst lane branch is behind | 100 |
 | `mergedLocal` | local branches already merged and not deleted | 20 |
 | `mergedRemote` | remote branches already merged and not deleted | 10 |
+| `takenNotRecorded` | items acknowledged as taken on the oversight channel that have no row in `internal/backlog.md` | 0 |
 
 The first four are branch hygiene: crossing one stops new branches being opened, because a branch a hundred
 commits behind cannot be merged with a conflict surface anyone can reason about, and its own run cannot
