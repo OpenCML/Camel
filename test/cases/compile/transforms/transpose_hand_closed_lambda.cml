@@ -30,7 +30,7 @@ func main(): int sync {
     println("cut ct3=", byCut(3.0))
     // The same map, closed by hand over the same value.
     let x = 3.0
-    let hand = (dx: float) => 2.0 * x * dx
+    let hand = func (dx: float) { 2.0 * x * dx }
     let byHand = transpose(hand)
     println("hand ct1=", byHand(1.0))
     println("hand ct3=", byHand(3.0))

@@ -19,6 +19,7 @@
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics/messages/runtime.h"
+#include "camel/graph/graph.h"
 #include "camel/runtime/graph.h"
 
 #include "cpp_types.h"
@@ -31,8 +32,9 @@
 namespace camel::passes::cpp {
 
 /// The source origin of `ref`, or of the nearest input that has one (a node the compiler
-/// synthesized carries none; what it reads does).
-uint64_t nodeOriginNear(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref);
+/// synthesized carries none; what it reads does). Asked of the graph's view: the origin and the
+/// two port groups are shape, which the view answers for both representations.
+uint64_t nodeOriginNear(const camel::graph::Graph *graph, camel::runtime::gc_node_ref_t ref);
 
 /// The definition of the function `graph` was compiled from, or the first of its nodes that
 /// has a source position.

@@ -1,6 +1,6 @@
 """Checks the effect trace written by `std::profile effect_trace=...`.
 
-  order   exemplars/05_effect_order runs under NodeVM, FastVM and inline + NodeVM; the three
+  order   internal/exemplars/05_effect_order runs under NodeVM, FastVM and inline + NodeVM; the three
           traces are identical line by line once `seq` is dropped, every line names an
           effectful operator with a source origin, and stdout is the same.
   stage   a macro function with a println in its body: the println is traced with stage

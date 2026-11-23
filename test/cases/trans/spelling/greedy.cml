@@ -81,7 +81,7 @@ func same_operand(a: Node, b: Node): bool {
 
 func same_operands(xs: Node[], ys: Node[]): bool {
     return len(xs) == len(ys)
-        && zip(xs, ys)->all<(p: (Node, Node)): bool => same_operand(p.0, p.1)>
+        && zip(xs, ys)->all<func (p: (Node, Node)) => bool { same_operand(p.0, p.1) }>
 }
 
 // Whether the two nodes compute the same product: the same operator over operands that are one
@@ -112,7 +112,7 @@ func fuse_of::<F>(t: Txn<F>, muls: Node[]): void {
 
 // The multiplications in the order the source created them, which is the spelling query.
 func by_creation(g: Graph): Node[] {
-    return nodes(g)->filter<is_multiplication>->sort_by<(n: Node): int => creation_id(n)>
+    return nodes(g)->filter<is_multiplication>->sort_by<func (n: Node) => int { creation_id(n) }>
 }
 
 func muls_in_nodes_order(g: Graph): Node[] {
@@ -123,7 +123,7 @@ func muls_in_nodes_order(g: Graph): Node[] {
 // `sync` block because the closure that walks the graphs writes through the transaction.
 func fuse_round::<F>(f: F): F! sync {
     let t = open(f)
-    graphs_of(f)->foreach<(g: Graph): void => fuse_of(t, muls_in_nodes_order(g))>
+    graphs_of(f)->foreach<func (g: Graph) => void { fuse_of(t, muls_in_nodes_order(g)) }>
     return commit(t)
 }
 
@@ -132,7 +132,7 @@ func fuse_round::<F>(f: F): F! sync {
 // the kind and could not call this function.
 func fuse_round_by_creation::<F>(f: F): F! spelling sync {
     let t = open(f)
-    graphs_of(f)->foreach<(g: Graph): void => fuse_of(t, by_creation(g))>
+    graphs_of(f)->foreach<func (g: Graph) => void { fuse_of(t, by_creation(g)) }>
     return commit(t)
 }
 

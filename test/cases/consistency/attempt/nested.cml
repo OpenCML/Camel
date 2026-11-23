@@ -41,7 +41,7 @@ func main(): int sync {
     println(kind(attempt(twice)(0)))
     println(kind(attempt(deep)(6, 0)))
     println(kind(attempt(deep)(0, 0)))
-    println(kind(attempt(() => attempt(() => attempt(risky)(0) !! 7)() !! 8)()))
+    println(kind(attempt(func () { attempt(func () { attempt(risky)(0) !! 7 })() !! 8 })()))
     println('end')
     return 0
 }

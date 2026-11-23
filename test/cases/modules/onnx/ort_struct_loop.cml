@@ -102,27 +102,27 @@ func main(): string! sync {
     let out = get_env('ONNX_OUT') ?? ''
     let which = get_env('MODEL') ?? ''
     return if out == '' then '0' else if which == 'rec' then sync {
-        match export_model<out: out>((x: f32[...]): Run => start(x), (x)) {
+        match export_model<out: out>(func (x: f32[...]) => Run { start(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }
     } else if which == 'tup' then sync {
-        match export_model<out: out>((x: f32[...]): (f32[...], f32[...], int) => startT(x), (x)) {
+        match export_model<out: out>(func (x: f32[...]) => (f32[...], f32[...], int) { startT(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }
     } else if which == 'nest' then sync {
-        match export_model<out: out>((x: f32[...]): Outer => startN(x), (x)) {
+        match export_model<out: out>(func (x: f32[...]) => Outer { startN(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }
     } else if which == 'scal' then sync {
-        match export_model<out: out>((x: f32[...]): Small => startS(x), (x)) {
+        match export_model<out: out>(func (x: f32[...]) => Small { startS(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }
     } else sync {
-        match export_model<out: out>((x: f32[...]): Hold => startE(x), (x)) {
+        match export_model<out: out>(func (x: f32[...]) => Hold { startE(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }

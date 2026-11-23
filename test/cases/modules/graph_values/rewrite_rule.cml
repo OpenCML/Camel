@@ -64,7 +64,7 @@ func main(): int spelling sync {
     println(`rewritten: ${addOnes(targetIn(q))}`)
     println(`given: ${addOnes(targetIn(p))}`)
     println(`running: ${target(5)} ${addOnes(graph_of(target))}`)
-    let later = (x: int): int => target(x) + 1000
+    let later = func (x: int) => int { target(x) + 1000 }
     println(`made after: ${later(5)}`)
     println(`current: ${addOnes(targetIn(main))}`)
     return 0

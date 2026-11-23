@@ -19,25 +19,25 @@ with <p: Broadcast>
 func weighted_loss(): float { return float(sum(p.a * p.b)) }
 func main(): int sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    let derivative = (v: f32[...]): f32[...] => grad(square)<v>()
+    let derivative = func (v: f32[...]) => f32[...] { grad(square)<v>() }
     let cpu = derivative(x)
     let gpu = download(run_preferred_resident<derivative>(x))
     println(sum(abs(cpu - gpu)))
     println(sum(abs(gpu - x * 2.0)))
-    let row_grad = (v: f32[...]): f32[...] => grad(rows)<v>()
+    let row_grad = func (v: f32[...]) => f32[...] { grad(rows)<v>() }
     println(sum(abs(download(run_preferred_resident<row_grad>(x)) - row_grad(x))))
     let p = { x: x, w: reshape<[3, 2]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]), b: zeros::<f32>([1, 2]) }
-    let dense_grad = (q: Dense): Dense => grad(dense)<q>()
+    let dense_grad = func (q: Dense) => Dense { grad(dense)<q>() }
     let dc = dense_grad(p)
     let dg = download(run_preferred_resident<dense_grad>(p))
     println(sum(abs(dc.x - dg.x)) + sum(abs(dc.w - dg.w)) + sum(abs(dc.b - dg.b)))
-    let broad_grad = (q: Broadcast): Broadcast => grad(broadcast_loss)<q>()
+    let broad_grad = func (q: Broadcast) => Broadcast { grad(broadcast_loss)<q>() }
     let bp = { a: zeros::<f32>([2, 1, 3]), b: zeros::<f32>([1, 4, 1]) }
     let bg = download(run_preferred_resident<broad_grad>(bp))
     let bc = broad_grad(bp)
     println(sum(abs(bg.a - bc.a)) + sum(abs(bg.b - bc.b)))
     println(sum(abs(bg.a - 4.0)) + sum(abs(bg.b - 6.0)))
-    let weighted_grad = (q: Broadcast): Broadcast => grad(weighted_loss)<q>()
+    let weighted_grad = func (q: Broadcast) => Broadcast { grad(weighted_loss)<q>() }
     let wp = { a: zeros::<f32>([1, 2]), b: reshape<[3, 2]>([100000000.0, 100000000.0, 1.0, 1.0, -100000000.0, -100000000.0] as f32[]) }
     let wg = download(run_preferred_resident<weighted_grad>(wp))
     println(sum(abs(wg.a)))

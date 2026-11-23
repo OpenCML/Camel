@@ -38,10 +38,10 @@ import { reshape, sum } from tensor
 func main(): int sync {
     let w = reshape<[3]>([1.0, 2.0, 3.0])
     let x = reshape<[3]>([4.0, 5.0, 6.0])
-    let (y, pb) = vjp((ww: f64[3]): float => float(sum(ww * x)))(w)
+    let (y, pb) = vjp(func (ww: f64[3]) => float { float(sum(ww * x)) })(w)
     println(`captured value={} pullback={}`->format<y, pb(1.0)>)
     let x2 = reshape<[3]>([-1.0, 2.0, 0.5])
-    let (z, pb2) = vjp((ww: f64[3]): float => float(sum(ww * x2)))(w)
+    let (z, pb2) = vjp(func (ww: f64[3]) => float { float(sum(ww * x2)) })(w)
     println(`captured value={} pullback={}`->format<z, pb2(1.0)>)
     return 0
 }

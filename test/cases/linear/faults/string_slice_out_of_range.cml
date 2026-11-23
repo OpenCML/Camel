@@ -3,7 +3,7 @@
 func main(): int sync {
     let s = 'hello'
     let n = len(s) + 4
-    println(s[1:n])
+    println(s[1..n])
     println('not reached')
     return 0
 }

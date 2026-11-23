@@ -53,7 +53,7 @@ func firstIsPrint(pres: Node[]): bool {
 }
 
 func mainGraph::<F>(p: F): Graph spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == 'main'>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == 'main' }>
     return found[0]
 }
 

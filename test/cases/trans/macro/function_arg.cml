@@ -3,7 +3,7 @@
  */
 
 #macro func id_func(): (x: int) => int {
-    return (x: int): int => { return x }
+    return func (x: int) => int { return x }
 }
 
 #macro func apply_once(f: (x: int) => int, x: int): int {

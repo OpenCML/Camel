@@ -168,7 +168,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.subscript_snapshot"
-desc = "Every subscript form prints with no space around a slice's colons: `xs[a:b]`, `xs[:b]`, `xs[:]`, `xs[a:4:1]`, `xs[::-1]`, `xs[::2]`, `xs[start:]`, `xs[a:b:step]`, and a plain index."
+desc = "Every subscript form prints as it is written: `xs[a..b]`, `xs[..b]`, `xs[..]`, `xs[a..]`, `xs[range(a, 4, 1)]`, `xs[range(len(xs) - 1, -1, -1)]`, `xs[range(0, len(xs), 2)]`, `xs[range(a, b, step)]`, and a plain index."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/subscript.cml"

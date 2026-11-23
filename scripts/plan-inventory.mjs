@@ -322,13 +322,16 @@ const INDEX_FILES = new Set(['test/plan-selection.json'])
 // three layouts is read the same way. `src/` is one root and not five: it holds every block since the
 // 2026-11-22 move, and listing `src/` beside `src/kernel/` would count every file of the compiler
 // twice (the walk returns a list per root, and the same file under two roots is two entries).
-const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'lib/', 'tools/', 'include/', 'stdlib/', 'modules/', 'examples/', 'exemplars/']
+// The exemplars moved from the top level to `internal/exemplars/`: the root is the moved directory
+// itself and not `internal/`, because the other blocks under `internal/` are notes and drafts, and
+// `exemplars/` stays in the legacy set so a checkout from before the move is read the same way.
+const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'lib/', 'tools/', 'include/', 'stdlib/', 'modules/', 'examples/', 'internal/exemplars/']
 
 // The names of the layouts before the move. They stay in the list so a checkout of an older layout is
 // read the same way, and they are the only roots whose absence is expected: every root the tree of
 // today has is under `REQUIRED_ROOTS`, and a run that cannot find one refuses (exit 2) instead of
 // walking around it.
-const LEGACY_NAMING_ROOTS = new Set(['lib/', 'tools/', 'include/', 'stdlib/', 'modules/'])
+const LEGACY_NAMING_ROOTS = new Set(['lib/', 'tools/', 'include/', 'stdlib/', 'modules/', 'exemplars/'])
 
 // The directories a reading cannot be taken without: the naming roots of the tree this checkout has,
 // and the two the ledger reads by name. This list exists because of the shape `walkTreeFiles` used to
@@ -350,7 +353,7 @@ const REQUIRED_ROOTS = [
     'src/stdlib',
     'src/tools',
     'examples',
-    'exemplars',
+    'internal/exemplars',
 ]
 
 /** The roots this checkout does not have and the check cannot be taken without. */

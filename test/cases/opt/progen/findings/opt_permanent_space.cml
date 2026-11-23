@@ -22,7 +22,7 @@ func r5(a6: int, a7: float, a8: float): float {
     return if false then 1.0 else {
         let n9 = r5(0, 0.25, a8);
         let n10 = r5(a6, r1(9, 4.75), a8);
-        return [0]->reduce<(p11: float, p12: int): float => if false then n10 else n9, a8>;
+        return [0]->reduce<func (p11: float, p12: int) => float { if false then n10 else n9 }, a8>;
     };
 }
 

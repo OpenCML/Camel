@@ -577,7 +577,7 @@ void DebugCore::beforeNode(
 }
 
 void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
-    GCGraph *graph = site.frame ? site.frame->runtimeGraph() : nullptr;
+    auto *graph = site.frame ? site.frame->runtimeGraph() : nullptr;
     if (graph == nullptr) {
         return;
     }

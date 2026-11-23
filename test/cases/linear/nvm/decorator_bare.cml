@@ -3,7 +3,7 @@
  */
 
 func twice(f: (x: float) => float): (x: float) => float {
-    return (x: float): float => {
+    return func (x: float) => float {
         return f(f(x))
     }
 }

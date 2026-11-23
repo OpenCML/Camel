@@ -41,11 +41,11 @@ func drain_set(s: Set<string>, i: int, n: int, a: int, b: int): Set<string> {
 
 // A number that depends on every entry and on their order.
 func digest(m: Map<int, int>): int {
-    return items(m)->reduce<(acc: int, kv: (int, int)): int => (acc * 31 + kv.0 * 7 + kv.1) % 1000003, len(m)>
+    return items(m)->reduce<func (acc: int, kv: (int, int)) => int { (acc * 31 + kv.0 * 7 + kv.1) % 1000003 }, len(m)>
 }
 
 func digest_set(s: Set<string>): int {
-    return items(s)->reduce<(acc: int, k: string): int => (acc * 31 + len(k) * 7 + (if s->contains<k> then 1 else 0)) % 1000003, len(s)>
+    return items(s)->reduce<func (acc: int, k: string) => int { (acc * 31 + len(k) * 7 + (if s->contains<k> then 1 else 0)) % 1000003 }, len(s)>
 }
 
 func main(): int sync {

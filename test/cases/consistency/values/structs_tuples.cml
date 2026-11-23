@@ -14,6 +14,6 @@ func main(): int sync {
     let t = pair(3, 4)
     println(t.0 * 10 + t.1)
     let ps = [p, q, swap(q)]
-    println(ps->map<(p: Point): int => p.x - p.y>)
+    println(ps->map<func (p: Point) => int { p.x - p.y }>)
     return 0
 }

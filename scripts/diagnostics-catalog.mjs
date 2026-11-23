@@ -964,7 +964,7 @@ if (mode === '--coverage' || mode === '--coverage-check') {
     const files = [
         ...walk(path.join(root, 'test', 'plans'), () => true),
         ...walk(path.join(root, 'test', 'cases'), (f) => /\.(mjs|js|py)$/.test(f)),
-        ...walk(path.join(root, 'exemplars'), (f) => /\.(mjs|json|toml|md)$/.test(f)),
+        ...walk(path.join(root, 'internal', 'exemplars'), (f) => /\.(mjs|json|toml|md)$/.test(f)),
     ]
     const corpus = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n')
     // A test mentions a code by its name (`SemanticDiag::UnresolvedReference`, the `name=` field of

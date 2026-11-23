@@ -26,7 +26,7 @@
 // 改一个函数：块的值是改好的函数，或一个错误值
 export func fold_zero_adds::<F>(f: F): F! when is_function::<F>() {
     return edit d = f {
-        nodes(d)->filter<is_add_zero>->foreach<(n: Node) => replace(n, inputs(n)[0])>
+        nodes(d)->filter<is_add_zero>->foreach<func (n: Node) { replace(n, inputs(n)[0]) }>
     }
 }
 
@@ -34,7 +34,7 @@ export func fold_zero_adds::<F>(f: F): F! when is_function::<F>() {
 export func log_result(f: (x: float) => float): ((x: float) => float uses console)! {
     return edit d = f {             // 结果类型取自函数的返回类型
         let out = exit_of(d)
-        let w = inline(out, (y: float) => sync { println(`result = ${y}`); y }, out)
+        let w = inline(out, func (y: float) sync { println(`result = ${y}`); y }, out)
         replace(out, w)
     }
 }
@@ -47,8 +47,7 @@ func count_muls::<F>(f: F): int when is_function::<F>() {
 // 没有"程序"这个单独的概念：编辑一个函数，就是编辑它和它可达的全部图；对 main 编辑就是整个程序
 export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
     return edit d = f {
-        graphs(d)->foreach<(g: Graph) =>
-            nodes(g)->filter<is_debug_print>->foreach<(n: Node) => erase(n)>>
+        graphs(d)->foreach<func (g: Graph) { nodes(g)->filter<is_debug_print>->foreach<func (n: Node) { erase(n) }> }>
     }
 }
 ```

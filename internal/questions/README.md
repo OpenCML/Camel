@@ -5,15 +5,16 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：3 页
+## 现在在等作者：4 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
+| [`2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup`](2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup.cn.md) | 一个 Oper 的身份是 payload 里的 URI，还是算子表查出来的名字 |
 | [`2026-11-23-the-dots-type-column-for-a-structural-operator`](2026-11-23-the-dots-type-column-for-a-structural-operator.cn.md) | DOT 的 `type=` 对一个写成算子的成员读/构造写哪种名字：`OPER` 加 URI，还是 `ACCS`/`FILL` 加原来的标签 |
-| [`2026-11-23-two-cases-read-one-record-file-in-opposite-directions`](2026-11-23-two-cases-read-one-record-file-in-opposite-directions.cn.md) | 两个用例按相反方向读同一份记录文件 |
+| [`2026-11-23-who-owns-freely-arrangeable`](2026-11-23-who-owns-freely-arrangeable.cn.md) | 「可自由调度」这句判断归谁：事实层给一个 kind，还是各处自己拼 |
 
-## 生成器不会删的行：240 行（页已不在 `questions/` 里）
+## 生成器不会删的行：242 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -244,7 +245,9 @@
 | [`2026-11-22-paused-branches-and-the-drift-gate`](../reviews/2026-11-22-paused-branches-and-the-drift-gate.md) | 暂停中的分支撞上「落后 100」这条闸门，闸门该不该对它们生效 | 在 `reviews/` |
 | [`2026-11-22-residual-mlp-margin-was-already-thin`](../reviews/2026-11-22-residual-mlp-margin-was-already-thin.md) | `residual_mlp_large_bytecode` 的时间余量在 0.2 之前就没有，现在要不要抬 | 在 `reviews/` |
 | [`2026-11-22-where-the-rule-instantiation-happens`](../reviews/2026-11-22-where-the-rule-instantiation-happens.md) | 0.4 只把「编译一次」放在值上，实例仍按程序的类型组合预先展开——这算 0.4 还是匹配那一项 | 在 `reviews/` |
+| [`2026-11-23-a-literal-and-the-position-it-sits-in-decide-a-type-variable`](../reviews/2026-11-23-a-literal-and-the-position-it-sits-in-decide-a-type-variable.cn.md) | 位置上的载荷与字面量，谁决定类型变量的取值 | 在 `reviews/` |
 | [`2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with`](../reviews/2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with.cn.md) | `fill` declares its fields as ordinary parameters and reads them from `with`, so neither side can call the other | 在 `reviews/` |
+| [`2026-11-23-two-cases-read-one-record-file-in-opposite-directions`](../reviews/2026-11-23-two-cases-read-one-record-file-in-opposite-directions.cn.md) | 两个用例按相反方向读同一份记录文件 | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
 | [`decorators-and-macro`](../reviews/decorators-and-macro.cn.md) | 装饰器的声明要不要带 `#macro`？ | 在 `reviews/` |

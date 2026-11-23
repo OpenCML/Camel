@@ -272,7 +272,7 @@ inline bool loopEnd(
         // is the moment it means: the loop is leaving, so what the rounds held a value for comes
         // back (camel/runtime/exec_plan.h, `applyRefEntriesForLoopExit`, the give-back at the loop's exit). The loop's value is final here, which is why
         // this runs after the tuple above was brought up to date.
-        if (const camel::runtime::GCGraph *graph = frame.graph()) {
+        if (const auto *graph = frame.graph()) {
             camel::runtime::applyRefEntriesForLoopExit(graph->execPlan(), &frame, loop.position);
         }
         return false;

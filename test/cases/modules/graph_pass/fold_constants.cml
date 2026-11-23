@@ -4,7 +4,7 @@ import { starts_with } from str
 import { Graph, Node, Txn, nodes, inputs, constant, add_constant, open, commit, replace, op, op_name, graphs_of } from graph
 
 func allNodes::<F>(p: F): Node[] {
-    return graphs_of(p)->flat_map<(g: Graph): Node[] => nodes(g)>
+    return graphs_of(p)->flat_map<func (g: Graph) => Node[] { nodes(g) }>
 }
 
 func valueAt(n: Node): int {
@@ -47,7 +47,7 @@ func isGolden(n: Node): bool {
 
 export func fold::<F>(p: F): F! sync {
     let t = open(p)
-    graphs_of(p)->foreach<(g: Graph) => nodes(g)->foreach<(n: Node) => foldAdd(t, g, n)>>
+    graphs_of(p)->foreach<func (g: Graph) { nodes(g)->foreach<func (n: Node) { foldAdd(t, g, n) }> }>
     let g0 = graphs_of(p)[0]
     let golden = add_constant(t, g0, 'h36-golden')
     let junk = churn(200)

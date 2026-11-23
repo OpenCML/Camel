@@ -21,6 +21,6 @@ func run(a: () => void, b: () => void): int {
 }
 
 func main(): int sync {
-    println(run(() => { counter = counter + 1 }, () => { counter = counter + 10 }))
+    println(run(func () { counter = counter + 1 }, func () { counter = counter + 10 }))
     return 0
 }

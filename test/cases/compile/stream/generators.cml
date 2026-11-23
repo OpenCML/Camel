@@ -37,7 +37,7 @@ func sign(x: int): int.. sync {
 // captured by value, and the value a later pull writes into the box is what `read()` gives -- 5
 // here, not 0.
 func reading(box: state::Ref<int>): int.. sync {
-    let read = () => state::get(box)
+    let read = func () { state::get(box) }
     yield 0
     state::set(box, 5)
     yield read()

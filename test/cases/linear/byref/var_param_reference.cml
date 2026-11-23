@@ -140,7 +140,7 @@ func main(): int sync {
     println(s)
 
     var w = 0
-    println(write_then_read(w, (): int => w))
+    println(write_then_read(w, func () => int { w }))
 
     var d = 0
     let seen = mixed(d, d)

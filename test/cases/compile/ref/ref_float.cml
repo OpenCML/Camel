@@ -10,6 +10,6 @@ func main(): int sync {
     println(state::get(r))
     state::set(r, 2.5)
     println(state::get(r))
-    println(state::update(r, (x: float) => x * 2.0))
+    println(state::update(r, func (x: float) { x * 2.0 }))
     return 0
 }

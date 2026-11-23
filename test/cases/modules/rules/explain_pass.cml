@@ -26,13 +26,13 @@ rule add_zero_when(x: int) when never(x) { x + 0 => x }
 func never(n: Node): bool { return false }
 
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
 /// The operations of `f`: the values the cases chain.
 func addsOf::<F>(p: F): Node[] spelling {
-    return nodesOf(p, 'f')->filter<(n: Node): bool => kind(n) == NodeKind::Oper>
+    return nodesOf(p, 'f')->filter<func (n: Node) => bool { kind(n) == NodeKind::Oper }>
 }
 
 /// The one addition of `f` in the program a pass gets.
@@ -42,7 +42,7 @@ func addOf::<F>(p: F): Node spelling {
 
 /// The parameter of `f`: a value no rewrite made, so no chain starts there.
 func portOf::<F>(p: F): Node spelling {
-    let ports = nodesOf(p, 'f')->filter<(n: Node): bool => kind(n) == NodeKind::Port>
+    let ports = nodesOf(p, 'f')->filter<func (n: Node) => bool { kind(n) == NodeKind::Port }>
     return ports[0]
 }
 

@@ -99,7 +99,7 @@ import { Graph, Node, NodeKind, TypeRef } from graph
 // under test as both of their parameters, so any port answers \`a\` (or \`b\`), and which port stands
 // first does not matter.
 func firstType(g: Graph): TypeRef? {
-    let ports = nodes(g)->filter<(n: Node): bool => kind(n) == NodeKind::Port>
+    let ports = nodes(g)->filter<func (n: Node) => bool { kind(n) == NodeKind::Port }>
     return match len(ports) {
         case 0 => null
         case _ => type_of(ports[0])
@@ -107,7 +107,7 @@ func firstType(g: Graph): TypeRef? {
 }
 
 func graphNamed(label: string): Graph {
-    let found = graphs_of(reach)->filter<(g: Graph): bool => name(g) == label>
+    let found = graphs_of(reach)->filter<func (g: Graph) => bool { name(g) == label }>
     return found[0]
 }
 `

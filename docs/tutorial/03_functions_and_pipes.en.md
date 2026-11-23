@@ -74,7 +74,7 @@ argument of the function on the right, so a run of `->` reads "work this out, th
 <!-- camel-snippet: fragment: one chained call; `xs` comes from the context, it is not a program -->
 
 ```cml
-let ys = xs->map<(x) => x * x>->filter<(x) => x % 2 == 0>
+let ys = xs->map<func (x) { x * x }>->filter<func (x) { x % 2 == 0 }>
 ```
 
 ## A lambda: a function with no name
@@ -88,11 +88,11 @@ A function is a value, so it need not have a name. `(parameters): return type =>
 // Run: camel docs/tutorial/examples/03_lambdas.cml
 
 func main(): int sync {
-    let twice = (x: int): int => x * 2
+    let twice = func (x: int) => int { x * 2 }
     println(twice(21))
 
-    println([1, 2, 3]->map<(x) => x + 10>)
-    println([1, 2, 3, 4]->filter<(x) => x % 2 == 0>)
+    println([1, 2, 3]->map<func (x) { x + 10 }>)
+    println([1, 2, 3, 4]->filter<func (x) { x % 2 == 0 }>)
     return 0
 }
 ```
@@ -145,7 +145,7 @@ func max_of(a: int, b: int): int {
 func main(): int sync {
     let xs = [3, 9, 4]
     println(max_of(3, 7))
-    println(xs->reduce<(acc: int, x: int): int => max_of(acc, x), xs[0]>)
+    println(xs->reduce<func (acc: int, x: int) => int { max_of(acc, x) }, xs[0]>)
     return 0
 }
 ```

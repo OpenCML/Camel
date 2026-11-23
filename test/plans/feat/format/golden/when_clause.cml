@@ -3,15 +3,15 @@ func pick::<T>(x: T): T when is_ordered::<T>() {
 }
 
 func total(xs: int[]): int when is_numeric::<int>() {
-    return xs->reduce<(a, b) => a + b, 0>
+    return xs->reduce<func (a, b) { a + b }, 0>
 }
 
 func maybeSum(xs: float[]): float? when is_numeric::<float>() {
-    return xs->reduce<(a, b) => a + b, 0.0>
+    return xs->reduce<func (a, b) { a + b }, 0.0>
 }
 
 func sumOrZero(xs: int[], fallback: int): int when is_numeric::<int>() {
-    return xs->reduce<(a, b) => a + b, fallback>
+    return xs->reduce<func (a, b) { a + b }, fallback>
 }
 
 rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }

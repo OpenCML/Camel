@@ -21,7 +21,7 @@ func cube(): float {
 
 func main(): int sync {
     let nested = grad(grad(cube))<2.0>()
-    let lambda = grad(<x: float>() => grad(cube)<x>())<2.0>()
+    let lambda = grad(func <x: float>() { grad(cube)<x>() })<2.0>()
     'second_order_nest nested={} lambda={}'->format<nested, lambda>->println
     return 0
 }

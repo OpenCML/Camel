@@ -46,7 +46,7 @@ func g(x: float): float {
 }
 
 func f(x: float): float {
-    let h = (y: float, z: float) => y * z * x
+    let h = func (y: float, z: float) { y * z * x }
     return h(g(x), 1.0)
 }
 

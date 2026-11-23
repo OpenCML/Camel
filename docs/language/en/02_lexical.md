@@ -97,6 +97,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Tag position names | `field` | after the `on` of a tag declaration: the tag holds for a struct field |
 | Tag position names | `nodes` | after the `on` of a tag declaration: the tag holds for the nodes written lexically in a region |
 | Tag position names | `param` | after the `on` of a tag declaration: the tag holds for a function parameter |
+| Expression positions | `range` | a slice with a step: a whole dimension of a subscript written `range(a, b, s)`, whose three arguments are the start, the end and the step (`xs[range(0, n, 2)]`) |
 
 <!-- context-keywords:end -->
 

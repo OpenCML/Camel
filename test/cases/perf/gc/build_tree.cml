@@ -11,7 +11,7 @@ func build(d: int, i: int): int[][] {
 }
 
 func weigh(t: int[][]): int {
-    return t->reduce<(acc: int, xs: int[]): int => acc + xs[0] + xs[2], 0>
+    return t->reduce<func (acc: int, xs: int[]) => int { acc + xs[0] + xs[2] }, 0>
 }
 
 func run(d: int, left: int, total: int): int {

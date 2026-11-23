@@ -48,22 +48,22 @@ func main(): string! sync {
     let out   = get_env('ONNX_OUT') ?? ''
     let which = get_env('MODEL') ?? ''
     return if out == '' then '0' else if which == 'total' then sync {
-        match export_model<out: out, dynamic_axes: [0]>((x: f32[?]): f32[?] => total(x), (x)) {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] { total(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }
     } else if which == 'sweep' then sync {
-        match export_model<out: out, dynamic_axes: [0]>((x: f32[?]): (int, f32[?]) => sweep(x), (x)) {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (int, f32[?]) { sweep(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }
     } else if which == 'halve' then sync {
-        match export_model<out: out, dynamic_axes: [0]>((x: f32[?]): f32[?] => halve(x), (x)) {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] { halve(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }
     } else sync {
-        match export_model<out: out, dynamic_axes: [0]>((x: f32[?]): (f32[?], int) => bounded(x), (x)) {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (f32[?], int) { bounded(x) }, (x)) {
             case error e => { return e }
             case v => '1'
         }

@@ -10,7 +10,7 @@ func bump(var x: int) {
 
 func main(): int sync {
     let k = 0
-    let f = (): int => sync {
+    let f = func () => int sync {
         bump(k)
         return k
     }

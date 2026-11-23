@@ -54,7 +54,7 @@ func main(): int sync {
     clear(d);
     println(d);
     var e = 0;
-    let h = (var y: int): int => { y = 5; return 0 };
+    let h = func (var y: int) => int { y = 5; return 0 };
     let rh = h(e);
     println(rh, e);
     return 0

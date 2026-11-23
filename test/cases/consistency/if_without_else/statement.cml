@@ -40,6 +40,6 @@ func main(): int sync {
     empty_else(true)
     empty_else(false)
     println(older(true), older(false))
-    [1, 5, 9]->foreach<(x: int) => sync { if x > 2 then println(x) }>
+    [1, 5, 9]->foreach<func (x: int) sync { if x > 2 then println(x) }>
     return 0
 }

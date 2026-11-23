@@ -21,7 +21,7 @@ func main(): int sync {
     println(m == ([('a', 1), ('b', 2)] as Map<string, int>), m == m2, m != m2)
     println(string(m))
     println(format<m, len(m)>('m = {}, {} entries'))
-    let ks = keys(m2)->map<(k: string): string => k + '!'>
+    let ks = keys(m2)->map<func (k: string) => string { k + '!' }>
     println(ks)
     return 0
 }

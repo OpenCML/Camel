@@ -22,7 +22,7 @@ func depth(n: int): int {
 }
 
 func bottom(b: int): int {
-    let ys = [b]->map<(x: int): int => 0 + depth(x)>
+    let ys = [b]->map<func (x: int) => int { 0 + depth(x) }>
     return ys[0]
 }
 

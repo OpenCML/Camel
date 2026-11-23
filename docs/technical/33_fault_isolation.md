@@ -25,7 +25,7 @@ whose parameters are that function's and whose result is that function's result 
 
 ```camel
 let b = attempt(risky)(0) !! -1                 // a named function and its argument
-let ys = attempt(() => xs->map<risky>)() !! [-1] // a closure: any expression can be isolated
+let ys = attempt(func () { xs->map<risky> })() !! [-1] // a closure: any expression can be isolated
 let g = attempt(risky)                          // (d: int) => int!: a value like any other
 ```
 

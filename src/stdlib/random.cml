@@ -106,7 +106,7 @@ func normal_array_kernel::<T>(k: Key): T[...] when is_float::<T>()
 #impl(uniform_array_kernel)
 with <shape: int[]>
 export func uniform::<T>(k: Key): T[...] when is_float::<T>() {
-    let n = shape->reduce<(a: int, b: int): int => a * b, 1>
+    let n = shape->reduce<func (a: int, b: int) => int { a * b }, 1>
     return reshape<shape>([uniform::<T>(fold(k, i)) for i in 0..n])
 }
 
@@ -137,7 +137,7 @@ func below(k: Key, span: int): int {
 #impl(normal_array_kernel)
 with <shape: int[]>
 export func normal::<T>(k: Key): T[...] when is_float::<T>() {
-    let n = shape->reduce<(a: int, b: int): int => a * b, 1>
+    let n = shape->reduce<func (a: int, b: int) => int { a * b }, 1>
     return reshape<shape>([normal::<T>(fold(k, i)) for i in 0..n])
 }
 
@@ -199,7 +199,7 @@ export func choice::<T>(xs: T[]): T {
 with <k: Key, n: int>
 export func sample::<T>(xs: T[]): T[] {
     let mixed = xs->shuffle<k>
-    return mixed[:n]
+    return mixed[..n]
 }
 
 // ---- the global stream ----

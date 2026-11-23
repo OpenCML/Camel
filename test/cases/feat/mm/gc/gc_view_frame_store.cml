@@ -23,12 +23,12 @@ func main(): int sync {
     // is a view into the block.
     let m = ([(0, 0), (1, 2), (2, 4), (3, 6)] as Map<int, int>)
 
-    let leaf = items(m)->map<(kv: (int, int)): int => kv.0 * 2 + kv.1>->reduce<(acc: int, x: int): int => acc + x, 0>
+    let leaf = items(m)->map<func (kv: (int, int)) => int { kv.0 * 2 + kv.1 }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 
-    let nested = items(m)->map<(kv: (int, int)): int => pair_sum(kv)>->reduce<(acc: int, x: int): int => acc + x, 0>
+    let nested = items(m)->map<func (kv: (int, int)) => int { pair_sum(kv) }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 
     let points = ([{x: 1, y: 2}, {x: 3, y: 4}] as {x: int, y: int}[])
-    let structs = points->map<(p: {x: int, y: int}): int => point_sum(p)>->reduce<(acc: int, x: int): int => acc + x, 0>
+    let structs = points->map<func (p: {x: int, y: int}) => int { point_sum(p) }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 
     println(leaf, nested, structs)
     return 0

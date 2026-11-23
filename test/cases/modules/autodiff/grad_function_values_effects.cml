@@ -10,7 +10,7 @@ import { grad } from autodiff
 
 func make(s: float): (t: f32[...]) => f32[...] sync {
     println('make')
-    return (t: f32[...]): f32[...] => tanh(t * f32(s))
+    return func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
 }
 
 func apply(f: (t: f32[...]) => f32[...], p: f32[...]): f32[...] sync {
@@ -25,7 +25,7 @@ with <p: f32[...]>
 func loss1(): float sync {
     println('loss1')
     let s = float(sum(p))
-    let r = apply((t: f32[...]): f32[...] => tanh(t * f32(s)), p)
+    let r = apply(func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }, p)
     println('loss1: applied')
     return float(sum(r))
 }
@@ -43,9 +43,9 @@ func loss2(): float sync {
 with <p: f32[...]>
 func loss3(): float sync {
     let s = float(sum(p))
-    let g = (t: f32[...]): f32[...] => tanh(t * f32(s))
+    let g = func (t: f32[...]) => f32[...] { tanh(t * f32(s)) }
     println('loss3')
-    let h = (t: f32[...]): f32[...] => g(t) * 2.0 + g(t * 0.5)
+    let h = func (t: f32[...]) => f32[...] { g(t) * 2.0 + g(t * 0.5) }
     println('loss3: built')
     return float(sum(h(p)))
 }

@@ -1557,14 +1557,14 @@ class ProgramHold {
 /// wait and answers nothing about the value a gate passes on.
 ///
 /// It is a template over the reader rather than a function of `GCGraph` because a draft hands out
-/// its own reader while it is being written, and the compile front end reads a graph through
-/// `GraphRead`: the methods asked for here -- `node`, `nodeCount`, `normInputsOf`, `withInputsOf` --
-/// are the ones every reader of a graph has. Input lists are taken by `const auto`, because a
-/// reader may answer with a span over its own storage or with a vector it built.
+/// its own reader while it is being written: the methods asked for here -- `node`, `nodeCount`,
+/// `normInputsOf`, `withInputsOf` -- are the ones both representations answer. Input lists are
+/// taken by `const auto`, because a reader may answer with a span over its own storage or with a
+/// vector it built.
 ///
 /// The walk needs no step bound: a graph is acyclic, and a debug build asserts the step it took.
-template <class GraphReader>
-inline gc_node_ref_t forwardedInputOf(const GraphReader &graph, gc_node_ref_t ref) {
+template <class Reader>
+inline gc_node_ref_t forwardedInputOf(const Reader &graph, gc_node_ref_t ref) {
     if (ref == kInvalidNodeRef || ref >= graph.nodeCount()) {
         return kInvalidNodeRef;
     }
@@ -1583,8 +1583,8 @@ inline gc_node_ref_t forwardedInputOf(const GraphReader &graph, gc_node_ref_t re
 
 /// The value behind a chain of gates: `forwardedInputOf` followed to the first node that is not a
 /// gate. A ref that is not a gate answers itself.
-template <class GraphReader>
-inline gc_node_ref_t valueBehindGates(const GraphReader &graph, gc_node_ref_t ref) {
+template <class Reader>
+inline gc_node_ref_t valueBehindGates(const Reader &graph, gc_node_ref_t ref) {
     while (ref != kInvalidNodeRef && ref < graph.nodeCount()) {
         const auto *node = graph.node(ref);
         if (node == nullptr || node->kind != GCNodeKind::Gate) {
@@ -1604,8 +1604,8 @@ inline gc_node_ref_t valueBehindGates(const GraphReader &graph, gc_node_ref_t re
 ///
 /// It answers with a vector rather than a view: a reader may hand out a span over its own storage
 /// or a vector it built, and a view over the second would outlive nothing.
-template <class GraphReader>
-inline std::vector<gc_node_ref_t> gateWaitsOf(const GraphReader &graph, gc_node_ref_t ref) {
+template <class Reader>
+inline std::vector<gc_node_ref_t> gateWaitsOf(const Reader &graph, gc_node_ref_t ref) {
     if (ref == kInvalidNodeRef || ref >= graph.nodeCount()) {
         return {};
     }

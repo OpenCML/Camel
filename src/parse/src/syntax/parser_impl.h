@@ -61,6 +61,10 @@ class ParserImpl {
     // principles 5.9). A function declaration's or a function type's parameters always write
     // their types.
     bool lambdaParams_ = false;
+    // The expression being parsed is one dimension of a subscript, where `..` is the slice's
+    // separator and not the range operator: `t[a..b]` is a slice, not an index by a range value
+    // (design principles 4.2).
+    bool noRange_      = false;
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
     uint32_t depth_ = 0;     // nesting of expressions, types and blocks
@@ -83,6 +87,14 @@ class ParserImpl {
             p.angle_    = angle;
             p.spacedGt_ = spacedGt;
         }
+    };
+    /// Sets `noRange_` for one dimension of a subscript, where `..` separates the two ends of a
+    /// slice instead of building a range value; restores it at the end.
+    struct NoRangeScope {
+        ParserImpl &p;
+        bool old;
+        NoRangeScope(ParserImpl &parser) : p(parser), old(parser.noRange_) { p.noRange_ = true; }
+        ~NoRangeScope() { p.noRange_ = old; }
     };
     /// Sets `constData_` for the expression of a `const` type argument, where `constas` may
     /// appear; restores it at the end.
@@ -382,7 +394,6 @@ class ParserImpl {
     void parseArguments(TK closer);
     void parseIndices();
     void parseSliceIndices();
-    void parseSlicePart();
     void parseParentArgues();
     void parseAngledValues();
     void parseTypeArguments();
@@ -396,7 +407,6 @@ class ParserImpl {
     bool pairStartsAt(uint32_t n) const {
         return peek(n) == TK::Identifier && peek(n + 1) == TK::Colon;
     }
-    bool lambdaAhead() const;
     /// A shape comprehension is ahead: a name path, `{`, and the `static for` that fills it.
     bool shapeCompAhead() const;
 

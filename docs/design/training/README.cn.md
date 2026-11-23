@@ -139,18 +139,18 @@ func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h
 }
 
 export func adam::<P>(p: P, g: P, m: P, v: P, h: Hyper): (P, P, P) {
-    let r = tree_map<(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>, d: Tensor<f32>) => adam_leaf(a, b, c, d, h)>(p, g, m, v)
+    let r = tree_map<func (a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>, d: Tensor<f32>) { adam_leaf(a, b, c, d, h) }>(p, g, m, v)
     return tree_unzip(r, p)       // 按 p 的叶子边界拆成 (新参数, 新 m, 新 v)
 }
 export func ema::<P>(avg: P, p: P): P {
-    return tree_map<(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> => a * 0.999 + b * 0.001>(avg, p)
+    return tree_map<func (a: Tensor<f32>, b: Tensor<f32>) => Tensor<f32> { a * 0.999 + b * 0.001 }>(avg, p)
 }
 export func sq_distance::<P>(p: P, q: P): float {
-    return tree_map<(a: Tensor<f32>, b: Tensor<f32>): float => sum((a - b) * (a - b))>(p, q)
-        ->tree_reduce<(acc: float, x: float): float => acc + x>(0.0)
+    return tree_map<func (a: Tensor<f32>, b: Tensor<f32>) => float { sum((a - b) * (a - b)) }>(p, q)
+        ->tree_reduce<func (acc: float, x: float) => float { acc + x }>(0.0)
 }
 export func sq_norm::<P>(p: P): float {
-    return p->tree_reduce<(acc: float, x: Tensor<f32>): float => acc + sum(x * x)>(0.0)
+    return p->tree_reduce<func (acc: float, x: Tensor<f32>) => float { acc + sum(x * x) }>(0.0)
 }
 ```
 
@@ -284,7 +284,7 @@ func main(): int sync {
 主权重与优化器状态保持 f32，前向用 bf16：
 
 ```cml
-let half = s.params->tree_map<(x: Tensor<f32>): Tensor<bf16> => x as Tensor<bf16>>
+let half = s.params->tree_map<func (x: Tensor<f32>) => Tensor<bf16> { x as Tensor<bf16> }>
 ```
 
 自动微分中转换的反向是反向转换。f16 需要的损失缩放以后再做（bf16 不需要）。

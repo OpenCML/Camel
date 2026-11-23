@@ -3,8 +3,8 @@
  * form `x[i]` is the core's own take. The graph is what this case asserts: `std::gir` prints the
  * operator of each node, and the case is written so that the print names them.
  *
- *   x[1:4]           the subscript, sliced
- *   x[2:]            the same node with the end not written
+ *   x[1..4]           the subscript, sliced
+ *   x[2..]            the same node with the end not written
  *   slice(x, 0, 1, 4) the function form of the same node
  *   x[[0, 2]]        `t[idx]`, the rows the indices name
  *
@@ -16,8 +16,8 @@ import { reshape } from tensor
 
 func main(): int sync {
     let x = reshape<[4]>([1.0, 2.0, 3.0, 4.0] as f32[])
-    let a = x[1:4]
-    let b = x[2:]
+    let a = x[1..4]
+    let b = x[2..]
     let c = slice(x, 0, 1, 4)
     let rows = [0, 2] as int[]
     let d = x[rows]

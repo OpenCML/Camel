@@ -12,6 +12,6 @@ func f1(a: int): int {
 
 func main(): int sync {
     let g = f1
-    println([1]->map<(x: int): int => g(x)>)
+    println([1]->map<func (x: int) => int { g(x) }>)
     return 0
 }

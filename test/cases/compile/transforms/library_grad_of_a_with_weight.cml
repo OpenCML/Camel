@@ -65,7 +65,7 @@ func main(): int sync {
     'both value={} pullback={}'->format<both, bothPullback(1.0)>->println
 
     // A call of a two-parameter function inside a lifted body.
-    let (twoValue, twoPullback) = vjp((rr: float, ss: float): float => mulxy(rr, ss))(3.0, 2.0)
+    let (twoValue, twoPullback) = vjp(func (rr: float, ss: float) => float { mulxy(rr, ss) })(3.0, 2.0)
     'twoparam value={} pullback={}'->format<twoValue, twoPullback(1.0)>->println
     return 0
 }

@@ -27,11 +27,11 @@ import rulesets.transpose
 import { transpose } from transforms
 
 func mk(x: float): (y: float) => float {
-    return (y: float) => x * y
+    return func (y: float) { x * y }
 }
 
 func f(x: float): float {
-    let h = (a: (y: float) => float, b: float) => a(b) * x
+    let h = func (a: (y: float) => float, b: float) { a(b) * x }
     return h(mk(x), 2.0)
 }
 

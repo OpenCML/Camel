@@ -74,9 +74,9 @@ func main(): int sync {
     let vg = with_grad(weighted)<3.0>(2.0)
 
     // Differentiating the data: reorder it to the first `with` parameter with a lambda.
-    let gy = grad(<y: float> (x: float): float => x * y + x)<2.0>(3.0)
+    let gy = grad(func <y: float> (x: float) => float { x * y + x })<2.0>(3.0)
     // A lambda is a function of its own; its first `with` parameter is differentiated.
-    let gl = grad(<z: float> (x: float): float => weighted<z>(x))<3.0>(2.0)
+    let gl = grad(func <z: float> (x: float) => float { weighted<z>(x) })<3.0>(2.0)
 
     let p = { a: 2.0, b: 3.0 }
     let pg = grad(point_loss)<p>(4.0)
@@ -89,7 +89,7 @@ func main(): int sync {
 
     // `x` is the second `with` parameter: reorder it with a lambda to differentiate it.
     let sk = grad(scaled)<2.0, 3.0>()
-    let sx = grad(<x: float> (k: float): float => scaled<k, x>())<3.0>(2.0)
+    let sx = grad(func <x: float> (k: float) => float { scaled<k, x>() })<3.0>(2.0)
 
     'grad_first_with_parameter gx={} vg={} gy={} gl={}'->format<gx, vg, gy, gl>->println
     'grad_first_with_parameter pg={} pvg={}'->format<pg, pvg>->println

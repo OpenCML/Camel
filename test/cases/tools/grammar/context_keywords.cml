@@ -60,9 +60,9 @@ type Kind<T> = match type T {
     case #leaf => 'leaf'
 }
 
-static for n, F in fields Shape {
+static for n, F in fields Shape do {
 }
-static for j in indices (1, 2) {
+static for j in indices (1, 2) do {
 }
 
 // The same words as ordinary names: only the positions above make them keywords.

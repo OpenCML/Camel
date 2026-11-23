@@ -9,8 +9,8 @@
  */
 
 func main(): int sync {
-    println([1, 2, 3]->reduce<(a, b) => a + b, 0>)
-    println([1.5, 2.5]->reduce<(a, b) => a + b, 0.0>)
-    println([(1, 10), (2, 20)]->map<((a, b)) => a + b>)
+    println([1, 2, 3]->reduce<func (a, b) { a + b }, 0>)
+    println([1.5, 2.5]->reduce<func (a, b) { a + b }, 0.0>)
+    println([(1, 10), (2, 20)]->map<func ((a, b)) { a + b }>)
     return 0
 }

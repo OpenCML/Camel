@@ -19,7 +19,7 @@ func apply(f: (x: int) => void, v: int) {
 func main(): int sync {
     let counter = state::ref(0)
     println(state::get(counter))
-    apply((x: int) => { state::set(counter, x) }, 41)
+    apply(func (x: int) { state::set(counter, x) }, 41)
     println(state::get(counter))
     return 0
 }

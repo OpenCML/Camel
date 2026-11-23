@@ -1377,8 +1377,9 @@ class CmlPrinter {
             return false;
         }
         case camel::runtime::GCNodeKind::Loop: {
-            const camel::runtime::LoopView view(program_, *graph_, ref);
-            return !view.bodyEffects().pure() || !view.condEffects().pure();
+            const camel::runtime::LoopView view(*graph_, ref);
+            return !camel::runtime::effectSummaryOfRegion(program_, graph_, view.bodyRegion()).pure() ||
+                   !camel::runtime::effectSummaryOfRegion(program_, graph_, view.condRegion()).pure();
         }
         default:
             return false;
@@ -3431,7 +3432,7 @@ class CmlPrinter {
     // ---- loops ---------------------------------------------------------------------------
 
     Expr loopExpression(gc_node_ref_t ref) {
-        const camel::runtime::LoopView view(program_, *graph_, ref);
+        const camel::runtime::LoopView view(*graph_, ref);
         if (view.collectionCount() != 0) {
             fail(ref, "a loop that collects values into arrays");
         }
@@ -3456,9 +3457,9 @@ class CmlPrinter {
             // array exists (design principles 4.2: a `for` over an interval is fused): the source
             // form is the interval itself, not the pair of bounds, so the printed program compiles
             // back to the same graph.
-            const bool interval = view.graph().loopIterableFormOf(view.node()) ==
+            const bool interval = graph_->loopIterableFormOf(view.node()) ==
                                   camel::core::LoopIterableForm::Interval;
-            const auto bounds   = interval ? view.graph().intervalBoundsOf(sequence) : std::nullopt;
+            const auto bounds   = interval ? graph_->intervalBoundsOf(sequence) : std::nullopt;
             if (bounds.has_value()) {
                 iterable = std::format(
                     "{}..{}",
@@ -3468,7 +3469,7 @@ class CmlPrinter {
                 // The pair of bounds is a value: a pass may have written it as the constant
                 // holding the same two integers, and the source form is still the interval
                 // (GCGraph::intervalPairValuesOf).
-                const auto values = view.graph().intervalPairValuesOf(sequence);
+                const auto values = graph_->intervalPairValuesOf(sequence);
                 iterable = values.has_value() ? std::format(
                                                     "{}..{}",
                                                     intervalConstantOperand(values->first),

@@ -15,7 +15,7 @@ func main(): int sync {
     let delay_ms = 200
 
     let start = now()
-    unordered_foreach<(i: int) => sync {
+    unordered_foreach<func (i: int) sync {
         sleep(float(delay_ms) / 1000.0)
     }>(jobs)
     let duration = now() - start

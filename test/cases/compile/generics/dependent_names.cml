@@ -40,7 +40,7 @@ func only_int::<T>(x: T): T when is_integer::<T>() {
 
 /// The lambda's parameter is written as a tuple pattern: `a` and `b` are its names.
 func add_pairs::<T>(p: (T, T)): T {
-    let f: (x: (T, T)) => T = ((a, b)) => a + b
+    let f: (x: (T, T)) => T = func ((a, b)) { a + b }
     return f(p)
 }
 

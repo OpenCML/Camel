@@ -1,23 +1,23 @@
 /**
- * The core's own slice exported to ONNX: `t[a:b:s]` is `:op/slice_sub`, the node the `[]` forms
+ * The core's own slice exported to ONNX: `t[range(a, b, s)]` is `:op/slice_sub`, the node the `[]` forms
  * build for any rank and any axis (design principles 5.4).
  *
  * The mask word of the node says which bounds the source wrote; the exporter reads it and never
  * writes it to the graph, and the step and the axis are words of the node too.
  *
- *   MODE=both    m[1:3]     both bounds constant on an axis whose extent is only known at run
+ *   MODE=both    m[1..3]     both bounds constant on an axis whose extent is only known at run
  *                           time (a reshape to a data-dependent shape): the write site cannot
  *                           prove them, so the bounds are guarded and a run whose axis is
  *                           shorter than 3 fails where Camel faults.
- *   MODE=open    m[2:]      the end is not written: the mask says so and the end is the axis' own
+ *   MODE=open    m[2..]      the end is not written: the mask says so and the end is the axis' own
  *                           extent, which ONNX reads from the value's shape.
- *   MODE=start   x[int(sum(x)) :]   the start depends on the model input: a position the axis has
+ *   MODE=start   x[int(sum(x))..]   the start depends on the model input: a position the axis has
  *                           or the axis' own extent, and the negative side is where ONNX would
  *                           read a position from the end where Camel faults.
- *   MODE=rank2   reshape(x, [2, 2])[1:2]   the sliced axis is not the only axis.
- *   MODE=known   reshape(x, [4])[1:3]      both bounds and the extent are constants: the raw
+ *   MODE=rank2   reshape(x, [2, 2])[1..2]   the sliced axis is not the only axis.
+ *   MODE=known   reshape(x, [4])[1..3]      both bounds and the extent are constants: the raw
  *                           bounds go to the ONNX Slice with no guard.
- *   MODE=step    reshape(x, [4])[0:4:2]    a step of its own, still a subscript.
+ *   MODE=step    reshape(x, [4])[range(0, 4, 2)]    a step of its own, still a subscript.
  *
  * The sign of the step is one node and one encoding, so every backward slice of the family below
  * is paired with the forward slice that writes the same bounds and the two are read side by side:
@@ -43,82 +43,82 @@ func rows(x: f32[...]): f32[...] {
 }
 
 func both(x: f32[...]): f32[...] {
-    return rows(x)[1:3]
+    return rows(x)[1..3]
 }
 
 func openEnd(x: f32[...]): f32[...] {
-    return rows(x)[2:]
+    return rows(x)[2..]
 }
 
 func runtimeStart(x: f32[...]): f32[...] {
-    return x[int(sum(x)):]
+    return x[int(sum(x))..]
 }
 
 func rank2(x: f32[...]): f32[...] {
-    return reshape<[2, 2]>(x)[1:2]
+    return reshape<[2, 2]>(x)[1..2]
 }
 
 func known(x: f32[...]): f32[...] {
-    return reshape<[4]>(x)[1:3]
+    return reshape<[4]>(x)[1..3]
 }
 
 func stepped(x: f32[...]): f32[...] {
-    return reshape<[4]>(x)[0:4:2]
+    return reshape<[4]>(x)[range(0, 4, 2)]
 }
 
 /// Backward, both bounds written.
 func negBoth(x: f32[...]): f32[...] {
-    return reshape<[6]>(x)[5:1:-2]
+    return reshape<[6]>(x)[range(5, 1, -2)]
 }
 
 /// Forward, the same two bounds and the same positions read backwards.
 func posBoth(x: f32[...]): f32[...] {
-    return reshape<[6]>(x)[1:5:2]
+    return reshape<[6]>(x)[range(1, 5, 2)]
 }
 
 /// Backward, the end not written.
 func negEnd(x: f32[...]): f32[...] {
-    return reshape<[4]>(x)[3::-2]
+    return reshape<[4]>(x)[range(3, -1, -2)]
 }
 
 /// Forward, the end not written.
 func posEnd(x: f32[...]): f32[...] {
-    return reshape<[4]>(x)[3::2]
+    return reshape<[4]>(x)[range(3, len(reshape<[4]>(x)), 2)]
 }
 
 /// Backward, neither bound written.
 func negAll(x: f32[...]): f32[...] {
-    return reshape<[6]>(x)[::-2]
+    return reshape<[6]>(x)[range(len(reshape<[6]>(x)) - 1, -1, -2)]
 }
 
 /// Forward, neither bound written.
 func posAll(x: f32[...]): f32[...] {
-    return reshape<[6]>(x)[::2]
+    return reshape<[6]>(x)[range(0, len(reshape<[6]>(x)), 2)]
 }
 
 /// Backward along the second axis of a rank-2 value, neither bound written.
 func negRank2(x: f32[...]): f32[...] {
-    return reshape<[2, 4]>(x)[:, ::-2]
+    return reshape<[2, 4]>(x)[.., range(3, -1, -2)]
 }
 
 /// Forward along that same axis.
 func posRank2(x: f32[...]): f32[...] {
-    return reshape<[2, 4]>(x)[:, ::2]
+    return reshape<[2, 4]>(x)[.., range(0, 4, 2)]
 }
 
 /// Backward along an axis whose extent only the run knows.
 func sweep(x: f32[...]): f32[...] {
-    return rows(x)[::-2]
+    return rows(x)[range(len(rows(x)) - 1, -1, -2)]
 }
 
 /// Backward by one: the reverse the library's `reverse` writes.
 func negOne(x: f32[...]): f32[...] {
-    return reshape<[6]>(x)[::-1]
+    return reshape<[6]>(x)[range(len(reshape<[6]>(x)) - 1, -1, -1)]
 }
 
 /// Forward by one, the same two unwritten bounds.
 func posOne(x: f32[...]): f32[...] {
-    return reshape<[6]>(x)[:]
+    return reshape<[6]>(x)[..]
 }
 
 func main(): string! sync {
@@ -128,87 +128,87 @@ func main(): string! sync {
     let out = get_env('ONNX_OUT') ?? ''
     let mode = get_env('MODE') ?? ''
     if mode == 'open' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => openEnd(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { openEnd(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'start' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => runtimeStart(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { runtimeStart(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'rank2' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => rank2(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { rank2(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'known' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => known(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { known(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'step' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => stepped(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { stepped(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negBoth' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negBoth(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negBoth(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posBoth' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posBoth(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posBoth(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negEnd' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negEnd(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negEnd(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posEnd' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posEnd(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posEnd(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negAll' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negAll(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negAll(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posAll' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posAll(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posAll(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negRank2' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negRank2(x), eight) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negRank2(x) }, eight) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posRank2' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posRank2(x), eight) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posRank2(x) }, eight) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'sweep' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => sweep(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { sweep(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'negOne' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => negOne(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { negOne(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else if mode == 'posOne' then {
-        return match export_model<out: out>((x: f32[...]): f32[...] => posOne(x), six) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { posOne(x) }, six) {
             case error e => { return e }
             case v => 'exported'
         }
     } else {
-        return match export_model<out: out>((x: f32[...]): f32[...] => both(x), four) {
+        return match export_model<out: out>(func (x: f32[...]) => f32[...] { both(x) }, four) {
             case error e => { return e }
             case v => 'exported'
         }

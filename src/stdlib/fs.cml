@@ -40,8 +40,9 @@ export func read_bytes(path: string): Bytes!
 /// @fails fault `InvalidArgument` when offset or size is negative; error value `NotFound`, `PermissionDenied` or `IOError` as for `read_bytes`
 /// @example-fragment the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example 'notes.txt'->read_chunk<0, 16> !! encode('')    // the first 16 bytes
+#op('fs:read_chunk')
 with <offset: int, size: int>
-export func read_chunk(path: string): Bytes!
+export func read_chunk(path: string): Bytes! panic
 
 // ---- writing ----
 

@@ -33,8 +33,8 @@ func opText(n: Node): string {
 }
 
 func addsOf::<F>(p: F, function: string): int spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
-    let adds = nodes(found[0])->filter<(n: Node): bool => opText(n) == ':op/add_l'>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+    let adds = nodes(found[0])->filter<func (n: Node) => bool { opText(n) == ':op/add_l' }>
     // A node read out of a graph states no value type, so the query writes the type argument.
     return loop total = 0 for n in adds do total + depth::<int>(n)
 }

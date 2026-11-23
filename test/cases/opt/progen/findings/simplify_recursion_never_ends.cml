@@ -14,7 +14,7 @@ import { get_env } from env
 type P = { x: int, y: int }
 
 func r6(a7: int, a8: int, a9: int): int {
-    return if (a7 <= 0) then 0 else r10(0 - 1, ['']->reduce<(p11: int, p12: string): int => {
+    return if (a7 <= 0) then 0 else r10(0 - 1, ['']->reduce<func (p11: int, p12: string) => int {
         return -1;
     }, 0>, a9);
 }

@@ -1,5 +1,5 @@
 func make_adder(k: int): (v: int) => int {
-    return (v: int): int => v + k    // mark:lambda
+    return func (v: int) => int { v + k }    // mark:lambda
 }
 
 func classify(n: int): string {
@@ -9,7 +9,7 @@ func classify(n: int): string {
 func main(): int sync {
     let base = 10
     let add = make_adder(base)       // mark:make
-    let ys = [1, 2, 3]->map<(x: int): int => {
+    let ys = [1, 2, 3]->map<func (x: int) => int {
         let scaled = x * base        // mark:element
         return scaled + 1
     }>

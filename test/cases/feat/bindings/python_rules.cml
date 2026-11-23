@@ -20,7 +20,7 @@ export func identity(xs: f32[]): f32[] {
 
 /// A new array: every element multiplied by `k`. A block of its own.
 export func scale(xs: f32[], k: f32): f32[] {
-    return xs->map<(v: f32): f32 => v * k>
+    return xs->map<func (v: f32) => f32 { v * k }>
 }
 
 /// A number rather than an array: the sum of the squares, accumulated in f64.
@@ -34,6 +34,6 @@ export func checked_scale(xs: f32[], k: f32): f32[]! {
     return if k < 0.0 then {
         return error('RangeError', 'the factor must not be negative')
     } else {
-        return xs->map<(v: f32): f32 => v * k>
+        return xs->map<func (v: f32) => f32 { v * k }>
     }
 }

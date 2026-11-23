@@ -11,7 +11,7 @@
 
 func main(): int sync {
     var xs = [1, 2, 3]
-    let f = () => sync {
+    let f = func () sync {
         len(xs)
         len(xs)
     }

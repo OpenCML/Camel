@@ -44,7 +44,7 @@ func main(): int sync {
     let (p, q) = pair()
     println("2 after")
     println(p + q)
-    let f = (x: int): int => sync {
+    let f = func (x: int) => int sync {
         println("L1")
         x + 1
     }

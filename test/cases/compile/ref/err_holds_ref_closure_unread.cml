@@ -9,7 +9,7 @@
 import state
 
 func make(f: () => int): int sync {
-    let g = (): int => f()
+    let g = func () => int { f() }
     let box = state::ref(g)
     let call = state::get(box)
     return call()
@@ -17,5 +17,5 @@ func make(f: () => int): int sync {
 
 func main(): int sync {
     let k = 42
-    return make((): int => k)
+    return make(func () => int { k })
 }

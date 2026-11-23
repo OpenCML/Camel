@@ -420,7 +420,7 @@ blockExpr  : stmtBlock | dataExpr ;
 any Formatter::visitBlockExpr(syn::Node context) { return visit(context); }
 
 /*
-funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
+funcData   : 'func' angledParams? parentParams ('=>' typeExpr)? blockExpr ;
 */
 any Formatter::visitFuncData(cst::FuncData context) {
     string result;
@@ -428,6 +428,8 @@ any Formatter::visitFuncData(cst::FuncData context) {
     const auto &angledParams = context->get<cst::AngledParams>();
     const auto &parentParams = context->get<cst::ParentParams>();
     const auto &blockExpr    = context->lastChild().node();
+
+    result += "func ";
 
     if (modifiers) {
         result += any_cast<string>(visitModifiers(modifiers)) + " ";
@@ -440,10 +442,10 @@ any Formatter::visitFuncData(cst::FuncData context) {
 
     const auto &typeExpr = context->type();
     if (typeExpr) {
-        result += ": " + any_cast<string>(visitType(typeExpr));
+        result += " => " + any_cast<string>(visitType(typeExpr));
     }
 
-    result += " => ";
+    result += " ";
 
     return result + any_cast<string>(visitBlockExpr(blockExpr));
 }
@@ -1234,20 +1236,36 @@ any Formatter::visitIndices(cst::Indices context) {
 }
 
 /*
-sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left out ;
+sliceIndices : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | rangeCall, a part not written
+               left out ;
 */
 any Formatter::visitSliceIndices(cst::SliceIndices context) {
-    // The tree keeps the colons it consumed, so the text is the parts and the colons in the
-    // order they were written. Nothing separates a colon from the part that follows it: a
-    // slice is written `xs[a:b:s]`, `xs[:n]`, `xs[n:]` and `xs[::-1]`.
+    // The tree keeps the `..` tokens it consumed, so the text is the parts and the separators in
+    // the order they were written: `xs[a..b]`, `xs[..n]`, `xs[n..]`. A stepped slice writes
+    // `range(a, b, s)`, whose parts are the three children that follow the `range` token.
     string result;
+    bool stepped = false;
+    bool first   = true;
     for (size_t i = 0; i < context->childCount(); ++i) {
         const auto child = context->child(i);
         if (child.isToken()) {
-            result += child.token().kind() == TK::ColonColon ? "::" : ":";
+            if (child.token().kind() == TK::DotDot) {
+                result += "..";
+            } else if (child.token().kind() == TK::Identifier &&
+                       child.token().text() == "range") {
+                stepped = true;
+                result += "range(";
+            }
             continue;
         }
+        if (stepped && !first) {
+            result += ", ";
+        }
+        first = false;
         result += any_cast<string>(visitExpr(child.node()));
+    }
+    if (stepped) {
+        result += ")";
     }
     return result;
 }
@@ -1434,7 +1452,7 @@ any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) { return conte
 
 /*
 staticForExpr
-    : STATIC staticForHeader '=>' blockExpr
+    : STATIC staticForHeader DO blockExpr
     ;
 staticForHeader
     : FOR (identDef | '_') (',' (identDef | '_'))* IN
@@ -1448,11 +1466,11 @@ any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
     const auto mode = context->tok(TK::Identifier);
     if (mode && mode.text() == "indices") {
         return "static for " + formatStaticHeadNames(context) + " in indices " +
-               any_cast<string>(visit(context->expr())) + " => " +
+               any_cast<string>(visit(context->expr())) + " do " +
                any_cast<string>(visitBlockExpr(context->lastChild().node()));
     }
     return "static for " + formatStaticHeadNames(context) + " in fields " +
-           formatTypeInTypePosition(context->type()) + " => " +
+           formatTypeInTypePosition(context->type()) + " do " +
            any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
 

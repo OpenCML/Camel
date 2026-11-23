@@ -23,9 +23,9 @@ type GradOf<F> = <...WithOf<F>> (...ParamsOf<F>) => float
 
 func main(): int sync {
     // One member: the pack is the single `with` parameter, and the call gives one value.
-    let one: GradOf<<x: float> () => float> = <w> () => w * w
+    let one: GradOf<<x: float> () => float> = func <w> () { w * w }
     // No member: the pack is nothing, so the type has no `with` parameter and the call gives none.
-    let none: GradOf<() => float> = () => 5.0
+    let none: GradOf<() => float> = func () { 5.0 }
     let a = one<3.0>()
     let b = none()
     println('with_pack_lambda one={} none={}'->format<a, b>)

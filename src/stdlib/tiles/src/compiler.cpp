@@ -408,9 +408,9 @@ class Compiler {
             .dtype      = DType::F64};
     }
     Value loop(Frame &frame, rt::gc_node_ref_t id) {
-        const rt::LoopView view(*runtimeProgram, *frame.graph, id);
+        const rt::LoopView view(*frame.graph, id);
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
-            !view.bodyEffects().pure())
+            !rt::effectSummaryOfRegion(*runtimeProgram, frame.graph, view.bodyRegion()).pure())
             throw UnsupportedComputation("tiles requires a pure static For loop");
         // The body is a region of the graph that has the node.
         auto *body = frame.graph;
@@ -1324,7 +1324,7 @@ std::string loopEligibility(
     try {
         Compiler compiler(facts, &program);
         Frame frame{.graph = const_cast<rt::GCGraph *>(&graph)};
-        const rt::LoopView view(program, graph, id);
+        const rt::LoopView view(graph, id);
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0)
             return "unsupported_loop_form";
         for (size_t i = 0; i < view.stateCount(); ++i) {

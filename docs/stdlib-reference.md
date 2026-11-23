@@ -752,7 +752,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[] panic
 
 The part of x from start up to, not including, end along one axis, taking every step-th
 position (a step of 1 by default, any non-zero value allowed). x is an array of any rank, a
-string (by code point) or a `Bytes`; this is the same node the subscript `x[a:b:s]` builds, so
+string (by code point) or a `Bytes`; this is the same node the subscript `x[range(a, b, s)]` builds, so
 a pipeline can write it: `xs->slice<0, 1, 3>`. A bound outside the value (a negative one
 included) is a fault, as an index out of range is; a start after the end gives the empty
 value. The last element is `last(x)` and the length of an axis `dim(x, axis)`.
@@ -778,7 +778,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes pani
 ```
 
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
-`b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
+`b[1..3]` and `b->slice<0, 1, 3>` are the same bytes.
 
 - Example (a fragment, not compiled): `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
 - Why it is not compiled: the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
@@ -1157,7 +1157,7 @@ The code points of s, as numbers.
 #### `from_codepoints`
 
 ```camel
-from_codepoints: (xs: int[]) => string!
+from_codepoints: (xs: int[]) => string! panic
 ```
 
 The string made of the given code points.
@@ -3753,7 +3753,7 @@ The number of elements of an array: the product of its extents.
 #### `dim`
 
 ```camel
-dim: <axis: int> (xs: T[...]) => int
+dim: <axis: int> (xs: T[...]) => int panic
 ```
 
 The extent of one axis; a negative axis counts from the last one.
@@ -3767,7 +3767,7 @@ The extent of one axis; a negative axis counts from the last one.
 #### `to_bytes`
 
 ```camel
-to_bytes: (xs: T[...]) => Bytes when is_plain::<T>()
+to_bytes: (xs: T[...]) => Bytes panic when is_plain::<T>()
 ```
 
 The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
@@ -4924,7 +4924,7 @@ The current time, in seconds since the epoch.
 #### `strftime`
 
 ```camel
-strftime: <format: string> (timestamp: float) => string
+strftime: <format: string> (timestamp: float) => string panic
 ```
 
 The moment written with a strftime format, in UTC.
@@ -4991,7 +4991,7 @@ The whole content of a file, every byte preserved.
 #### `read_chunk`
 
 ```camel
-read_chunk: <offset: int, size: int> (path: string) => Bytes!
+read_chunk: <offset: int, size: int> (path: string) => Bytes! panic
 ```
 
 Up to size bytes of a file from byte offset on; fewer at the end of the file, none at or past
@@ -5218,7 +5218,7 @@ Whether a key press is waiting to be read.
 #### `get_chars`
 
 ```camel
-get_chars: (max: int) => string
+get_chars: (max: int) => string panic
 ```
 
 Up to max characters of the input that is waiting, as text; the empty text when none is. A
@@ -5260,7 +5260,7 @@ environment `env`'s.
 #### `sleep`
 
 ```camel
-sleep: (seconds: float) => void
+sleep: (seconds: float) => void panic
 ```
 
 Suspends the program for the given number of seconds. The wait is on the clock, so a call is
@@ -5507,7 +5507,7 @@ The members of a JSON object, by name; null for any other kind.
 #### `encode`
 
 ```camel
-encode: <indent: int? = null> (value: T) => string when has_json_form::<T>()
+encode: <indent: int? = null> (value: T) => string panic when has_json_form::<T>()
 ```
 
 The JSON text of a value, on one line, or indented by `indent` spaces per level when an indent
@@ -5606,7 +5606,7 @@ is the value `v` gives, not the cell of a `var` the program handed in.
 #### `get`
 
 ```camel
-get: (r: Ref<T>) => T uses r
+get: (r: Ref<T>) => T panic uses r
 ```
 
 The content of the box `r` points at: a read of the reference, and nothing else.
@@ -5616,7 +5616,7 @@ The content of the box `r` points at: a read of the reference, and nothing else.
 #### `set`
 
 ```camel
-set: (r: Ref<T>, v: T) => T uses var r
+set: (r: Ref<T>, v: T) => T panic uses var r
 ```
 
 Writes `v` into the box `r` points at, and answers `v`. A write of the box: the handle itself is
@@ -5628,7 +5628,7 @@ not replaced.
 #### `update`
 
 ```camel
-update: (r: Ref<T>, f: (x: T) => T pure) => T uses var r
+update: (r: Ref<T>, f: (x: T) => T pure) => T panic uses var r
 ```
 
 Writes `f` of the content into the box `r` points at, and answers the new content. `f` is
@@ -5780,7 +5780,7 @@ scheduler visible.
 #### `rendezvous`
 
 ```camel
-rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
+rendezvous: (parties: int, timeout: float) => int panic uses var rendezvous_point
 ```
 
 Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
@@ -5796,7 +5796,7 @@ scheduler, never for a program's result.
 #### `thread_count`
 
 ```camel
-thread_count: () => int uses process
+thread_count: () => int panic uses process
 ```
 
 The number of threads this process has, the caller included: the count the operating system
@@ -6672,7 +6672,7 @@ Recording is off unless it is asked for, so a plain application pays nothing for
 #### `check`
 
 ```camel
-check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
+check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport panic
 ```
 
 Checks `rules` on random instances drawn with `seed`: each row of the report carries the
@@ -6979,14 +6979,14 @@ parameter `filename?: string` either, which is why the two arities are separate.
 #### `plot`
 
 ```camel
-plot: (data: i32[]) => void
-plot: (data: int[]) => void
-plot: (data: f32[]) => void
-plot: (data: float[]) => void
-plot: (data: i32[], filename: string) => void
-plot: (data: int[], filename: string) => void
-plot: (data: f32[], filename: string) => void
-plot: (data: float[], filename: string) => void
+plot: (data: i32[]) => void panic
+plot: (data: int[]) => void panic
+plot: (data: f32[]) => void panic
+plot: (data: float[]) => void panic
+plot: (data: i32[], filename: string) => void panic
+plot: (data: int[], filename: string) => void panic
+plot: (data: f32[], filename: string) => void panic
+plot: (data: float[], filename: string) => void panic
 ```
 
 Draws the values of `data` and writes the image to `filename` (`plot.png` when it is omitted).
@@ -7030,7 +7030,7 @@ The other direction, Python calling Camel, is the package `camel` (`pip install 
 #### `exec`
 
 ```camel
-exec: (code: string) => void!
+exec: (code: string) => void! panic
 ```
 
 Runs Python statements in the interpreter. Definitions and assignments stay visible to later
@@ -7042,7 +7042,7 @@ calls, as in a Python session.
 #### `eval`
 
 ```camel
-eval: (expression: string) => PyObject!
+eval: (expression: string) => PyObject! panic
 ```
 
 Evaluates a Python expression and gives its value.
@@ -7053,7 +7053,7 @@ Evaluates a Python expression and gives its value.
 #### `run_file`
 
 ```camel
-run_file: (path: string) => void!
+run_file: (path: string) => void! panic
 ```
 
 Runs the Python script at the path.
@@ -7064,7 +7064,7 @@ Runs the Python script at the path.
 #### `import_module`
 
 ```camel
-import_module: (name: string) => PyObject!
+import_module: (name: string) => PyObject! panic
 ```
 
 Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs
@@ -7076,7 +7076,7 @@ the body of the module and records it in `sys.modules`.
 #### `attr`
 
 ```camel
-attr: <name: string> (obj: PyObject) => PyObject!
+attr: <name: string> (obj: PyObject) => PyObject! panic
 ```
 
 The attribute of a Python object; a dotted name walks the chain. Asking may run a property or
@@ -7088,7 +7088,7 @@ a descriptor, so it can raise.
 #### `call`
 
 ```camel
-call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
+call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject! panic
 ```
 
 Calls a Python callable with the arguments the array holds, in order, and the keyword arguments
@@ -7102,7 +7102,7 @@ it can be bound once and applied again.
 #### `to_string`
 
 ```camel
-to_string: (obj: PyObject) => string!
+to_string: (obj: PyObject) => string! panic
 ```
 
 The `str()` of a Python object, as text.
@@ -7113,7 +7113,7 @@ The `str()` of a Python object, as text.
 #### `to_py`
 
 ```camel
-to_py: (x: T) => PyObject! when has_python_form::<T>()
+to_py: (x: T) => PyObject! panic when has_python_form::<T>()
 ```
 
 The Python object that stands for a Camel value, in the Python form of its type.
@@ -7124,7 +7124,7 @@ The Python object that stands for a Camel value, in the Python form of its type.
 #### `from_py`
 
 ```camel
-from_py: (obj: PyObject) => T! when has_python_form::<T>()
+from_py: (obj: PyObject) => T! panic when has_python_form::<T>()
 ```
 
 The Camel value of type T that a Python object holds. T is written at the call
@@ -8705,7 +8705,7 @@ are pure.
 #### `pi_hits`
 
 ```camel
-pi_hits: (samples: int, seed: int) => int
+pi_hits: (samples: int, seed: int) => int panic
 ```
 
 Draws `samples` points uniformly from the square [-1, 1]^2 with a generator seeded by `seed`
@@ -8719,7 +8719,7 @@ a negative sample count is a fault.
 #### `asian_call_price`
 
 ```camel
-asian_call_price: (paths: int, steps: int, seed: int) => float
+asian_call_price: (paths: int, steps: int, seed: int) => float panic
 ```
 
 Prices a one-year Asian call on a geometric random walk with `paths` simulated paths of

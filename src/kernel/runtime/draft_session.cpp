@@ -1990,13 +1990,27 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     // around them (`commitViolation`), because an owner node stands for what is under it and a
     // splice deep inside a branch changes what the branch carries outside.
     for (const auto &[graph, copy] : fresh) {
-        if (!edited_.contains(graph)) {
+        // A graph this commit made has no version in the program it started from and no draft that
+        // recorded an edit of it: every node in it is one this commit put there, so the whole graph
+        // is what the checks answer for. `owned` is that reading. Leaving these graphs out asked
+        // nothing about the one shape nobody had vouched for yet, and a new graph is exactly where
+        // two conflicting writes can stand in one region with nothing explaining their order.
+        const bool owned = !heldBefore(graph);
+        if (!owned && !edited_.contains(graph)) {
             continue;
         }
         std::vector<gc_node_ref_t> made;
-        for (gc_node_ref_t ref = 0; ref < copy->nodeCount(); ++ref) {
-            if (graph == nullptr || ref >= graph->nodeCount() || graph->node(ref) == nullptr) {
-                made.push_back(ref);
+        if (owned) {
+            for (gc_node_ref_t ref = 0; ref < copy->nodeCount(); ++ref) {
+                if (copy->node(ref) != nullptr) {
+                    made.push_back(ref);
+                }
+            }
+        } else {
+            for (gc_node_ref_t ref = 0; ref < copy->nodeCount(); ++ref) {
+                if (graph == nullptr || ref >= graph->nodeCount() || graph->node(ref) == nullptr) {
+                    made.push_back(ref);
+                }
             }
         }
         // The other half of the tier (docs/design/graph-editing/README.cn.md 8.1): the existing
@@ -2013,11 +2027,14 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // made. A draft this commit cannot read the record of owes both, as every commit did before
         // the record existed: no record is no promise.
         EditTier tier{.effects = true, .order = true};
-        if (const auto at = drafts_.find(graph); at != drafts_.end() && at->second->transaction) {
-            tier = at->second->transaction->edit().editTier();
-            const std::span<const gc_node_ref_t> edits =
-                at->second->transaction->edit().lowLevelEdits();
-            changed.assign(edits.begin(), edits.end());
+        if (!owned) {
+            if (const auto at = drafts_.find(graph);
+                at != drafts_.end() && at->second->transaction) {
+                tier = at->second->transaction->edit().editTier();
+                const std::span<const gc_node_ref_t> edits =
+                    at->second->transaction->edit().lowLevelEdits();
+                changed.assign(edits.begin(), edits.end());
+            }
         }
         // `graph` is the version this session started from, and `program_` is the program that holds
         // it: the reading of what the commit started from is taken there and not in `*committed`
@@ -2028,7 +2045,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
                 *copy,
                 made,
                 changed,
-                graph,
+                owned ? nullptr : graph,
                 program_,
                 tier.effects,
                 tier.order)) {

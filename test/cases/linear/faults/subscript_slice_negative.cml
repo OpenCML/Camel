@@ -4,7 +4,7 @@
  */
 
 func part(xs: int[], a: int, b: int): int[] {
-    return xs[a:b]
+    return xs[a..b]
 }
 
 func main(): int sync {

@@ -5,7 +5,7 @@ import { encode } from bytes
 func main(): int sync {
     let b = encode('hello')
     let n = len(b) + 4
-    println(len(b[1:n]))
+    println(len(b[1..n]))
     println('not reached')
     return 0
 }

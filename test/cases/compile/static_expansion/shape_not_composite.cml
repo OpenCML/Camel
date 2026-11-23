@@ -3,7 +3,7 @@
 type N = int
 
 func build(t: int) {
-    return N { static for n, F in fields N => t }
+    return N { static for n, F in fields N do t }
 }
 
 func main(): int sync {

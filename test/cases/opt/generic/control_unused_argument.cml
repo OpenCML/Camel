@@ -10,6 +10,6 @@ func consume(ignored: bool): int sync {
 
 func main(): int sync {
     println('before')
-    consume([1.0]->reduce<(a: bool, b: float): bool => false, true>)
+    consume([1.0]->reduce<func (a: bool, b: float) => bool { false }, true>)
     return 0
 }

@@ -14,10 +14,10 @@ func nul(n: int): int? {
 }
 
 func main(): int sync {
-    let a = 5 -> (y) => y + 1
-    let q = (mk(3) -> (x) => x.n) !! 0
-    let s = (nul(4) -> (v) => v * 2) ?? 0
-    let none = (nul(0) -> (v) => v * 2) ?? -1
+    let a = 5 -> func (y) { y + 1 }
+    let q = (mk(3) -> func (x) { x.n }) !! 0
+    let s = (nul(4) -> func (v) { v * 2 }) ?? 0
+    let none = (nul(0) -> func (v) { v * 2 }) ?? -1
     println(a, q, s, none)
     return 0
 }

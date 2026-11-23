@@ -12,7 +12,7 @@
 func fill(var out: ((x: int) => int)[]) {
     var acc = 0
     sync {
-        out[0] = (x: int): int => sync {
+        out[0] = func (x: int) => int sync {
             acc = acc + x
             acc
         }
@@ -20,7 +20,7 @@ func fill(var out: ((x: int) => int)[]) {
 }
 
 func main(): int sync {
-    var fs: ((x: int) => int)[] = [(x: int): int => x]
+    var fs: ((x: int) => int)[] = [func (x: int) => int { x }]
     fill(fs)
     println(fs[0](1))
     return 0

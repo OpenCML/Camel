@@ -17,7 +17,7 @@ func use_top(a: int): int {
 func main(): int sync {
     let g = inc
     println(g(1))
-    println([1]->map<(x: int): int => g(x)>)
+    println([1]->map<func (x: int) => int { g(x) }>)
     println([1, 2]->map<g>)
     println(use_top(4))
     let h = g

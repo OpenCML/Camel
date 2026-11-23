@@ -8,15 +8,15 @@
  */
 
 func f1(a2: (a0: string) => float, a3: float, a4: bool): string {
-    return ([false]->map<(p7: bool): int => 1>)->reduce<(p5: string, p6: int): string => '', match a4 {
+    return ([false]->map<func (p7: bool) => int { 1 }>)->reduce<func (p5: string, p6: int) => string { '' }, match a4 {
         case true => 'pq'
         case false => ''
     }>;
 }
 
 func r8(a9: int, a10: string): string {
-    return if (0 <= 0) then f1((p11: string): float => {
-        return [a10, 'ab', 'cd']->reduce<(p13: float, p14: string): float => 1.0, 1.0>;
+    return if (0 <= 0) then f1(func (p11: string) => float {
+        return [a10, 'ab', 'cd']->reduce<func (p13: float, p14: string) => float { 1.0 }, 1.0>;
     }, 3.0, true) else r8(0, '');
 }
 

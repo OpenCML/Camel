@@ -4,7 +4,7 @@ func run(f: (...A) => int): int {
 }
 
 func main(): int sync {
-    println(run((x: int, y: int): int => x + y))
-    println(run((): int => 7))
+    println(run(func (x: int, y: int) => int { x + y }))
+    println(run(func () => int { 7 }))
     return 0
 }

@@ -7,7 +7,7 @@ import { find, index_of } from array
 type Product = { id: int, name: string, price: float }
 
 func by_id(items: Product[], id: int): Product? {
-    return items->find<(p: Product): bool => p.id == id>
+    return items->find<func (p: Product) => bool { p.id == id }>
 }
 
 func label(p: Product?): string {
@@ -26,7 +26,7 @@ func main(): int sync {
     println(label(by_id(catalog, 20)))
     println(label(by_id(catalog, 99)))
 
-    let names = catalog->map<(p: Product): string => p.name>
+    let names = catalog->map<func (p: Product) => string { p.name }>
     println('desk is at', names->index_of<'desk'> ?? -1, 'and sofa at', names->index_of<'sofa'> ?? -1)
 
     // A Map lookup is nullable as well.

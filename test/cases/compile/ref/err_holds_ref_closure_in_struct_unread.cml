@@ -10,7 +10,7 @@ import state
 type Holder = { cb: () => int }
 
 func make(f: () => int): int sync {
-    let h = (): int => f()
+    let h = func () => int { f() }
     let holder: Holder = { cb: h }
     let box = state::ref(holder)
     let call = state::get(box)
@@ -19,5 +19,5 @@ func make(f: () => int): int sync {
 
 func main(): int sync {
     let k = 42
-    return make((): int => k)
+    return make(func () => int { k })
 }

@@ -40,3 +40,9 @@
 
 - 迁移那一笔**不合 `develop`**（它带着这 4 条红，而这 4 条红无法在本轮修好 —— 判据方向未定，任何修法都是在猜）。
 - 其余 6 条红已有归属（诊断文案、`U` 推断回归、`perf.cml` 的空数组、被 audit 作废的前提、`TILES_OUTLINED` 的 10→12），不含这一条。
+## 决策者答（2026-11-23 04:25）
+
+1. **`ast_hashes.txt` 是期望值，不是缓存。** 它是 AST 的基准：被测程序算出哈希与它比，不等即红；重录只在"有意改变期望"时做，并写明为什么变（`scripts/check-ast-hashes.mjs` 头注释就是这个读法）。
+2. **但这四个用例读的不是同一份文件**，前提要先更正：`inspect.tok_snapshot`、`inspect.cst_snapshot`、`inspect.ast_snapshot` 比的是 `test/plans/smoke/golden/{tok,cst,ast}.txt`（`test/plans/feat/parse/core.plan.toml` 第 15、28、41 行），只有 `frontend.ast_snapshot` 读 `ast_hashes.txt`。它们共同的东西是用例 `fib10_pipeline.cml`，不是记录文件。
+3. **"写记录后绿、再跑就红"最常见的原因是两次跑用的不是同一个构建**（重录时的二进制与检查时的二进制不同，比如重录时还是迁移前的解析器），或者重录写的东西本身不确定。请量三样再定修法：两次跑的构建哈希；`-UpdateGolden` 之后与普通再跑之后，那四份记录各自的 `git diff`；同一构建上连跑两次普通检查是否稳定。
+4. 在量清之前，迁移那一笔不合 develop，这个默认对。量出来是哪一边读错，就修哪一边；任何一边都不许用重录盖住。

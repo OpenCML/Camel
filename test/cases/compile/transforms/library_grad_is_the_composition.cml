@@ -42,7 +42,7 @@ func main(): int sync {
     // The engine's leg: `with_grad` gives the value and the first `with` parameter's gradient, and
     // the bias is moved to the front by a lambda to be differentiated in its turn.
     let (engine_value, engine_w) = with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)
-    let engine_b = grad(<bb: float> (ww: float): float => loss_with<ww, bb>(1.5, 2.0))<0.75>(0.5)
+    let engine_b = grad(func <bb: float> (ww: float) => float { loss_with<ww, bb>(1.5, 2.0) })<0.75>(0.5)
 
     println(`library value={:.17f} w={:.17f} b={:.17f}`->format<library_value, library_w, library_b>)
     println(`engine  value={:.17f} w={:.17f} b={:.17f}`->format<engine_value, engine_w, engine_b>)

@@ -49,7 +49,7 @@ struct OperatorCallSite {
 /// is. A slot no operator makes answers `kInvalidNodeRef`, which is a position with no rows.
 inline OperatorCallSite
 siteOfSlot(camel::core::context::Frame &frame, camel::runtime::gc_data_idx_t result) {
-    const camel::runtime::GCGraph *graph = frame.graph();
+    const auto *graph = frame.graph();
     GUARD(graph != nullptr, "an operator ran in a frame that has no runtime graph");
     const camel::runtime::ExecPlan &plan = graph->execPlan();
     return OperatorCallSite{plan, frame, plan.refNodeOfSlot(result)};

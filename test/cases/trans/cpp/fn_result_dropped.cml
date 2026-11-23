@@ -10,7 +10,7 @@ func apply(f: (x: int) => void) sync {
 }
 
 func main(): int sync {
-    apply((x: int) => x * 10)
+    apply(func (x: int) { x * 10 })
     println('done')
     return 0
 }

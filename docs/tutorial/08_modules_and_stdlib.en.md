@@ -94,11 +94,11 @@ import { split, to_lower, trim } from str
 import { encode } from json
 
 func words_of(text: string): string[] {
-    return text->split<' '>->map<(w) => to_lower(trim(w))>->filter<(w) => w != ''>
+    return text->split<' '>->map<func (w) { to_lower(trim(w)) }>->filter<func (w) { w != '' }>
 }
 
 func tally(words: string[]): Map<string, int> {
-    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+    return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
 func main(path: string): int sync {
@@ -153,12 +153,12 @@ import { split, to_lower, trim } from str
 import { encode } from json
 
 func words_of(text: string): string[] {
-    return text->split<' '>->map<(w) => to_lower(trim(w))>->filter<(w) => w != ''>
+    return text->split<' '>->map<func (w) { to_lower(trim(w)) }>->filter<func (w) { w != '' }>
 }
 
 func tally(path: string): Map<string, int> {
     let words = words_of(path->read_text !! '')
-    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+    return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
 func main(path: string): int sync {

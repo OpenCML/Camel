@@ -53,7 +53,7 @@
 
 1. `match type T { case struct => …; case tuple => …; case _ => … }`：按类型的**形状**在实例化时选一条分支，**没被选中的分支不建图、不做类型检查**（相当于 C++ 的 `if constexpr`）。`struct`、`tuple` 只匹配 R3 定义的内部节点，所以 `T?`、`T!`、单元格落在 `case _`。一个 case 也可以写类型名（`case int`、`case MyStruct`、`case T`），按类型的**身份**精确选一条分支（语言文档 6.8.3）。
 2. `static for n, F in fields T`：把字段表展开，每个字段一份函数体。`n` 是编译期常量（结构体是字段名，元组是下标的十进制字面，两者都能直接当路径的一段），`F` 是字段类型。`n`、`F` 的绑定写法就是位置本身（5.4、5.5），不引入新的绑定机制。
-3. 编译期字段访问 `x.[n]`，以及"推导式"构造 `{ static for … => n: e }`（结构体）与 `( static for … => e )`（元组）：生成同形的新值，字段类型由 `e` 的类型得到。
+3. 编译期字段访问 `x.[n]`，以及"推导式"构造 `{ static for … do n: e }`（结构体）与 `( static for … do e )`（元组）：生成同形的新值，字段类型由 `e` 的类型得到。
 4. 变长参数 `...ts` 与展开调用 `f(t, ...ts)`：`ts` 是元数在编译期已知的元组，`static for j in indices ts` 遍历它。解决 R6。
 
 另外，带 `static` 构造的泛型函数**可以省略返回类型**，由实例化后的函数体推出（见 3.1.4）。
@@ -64,9 +64,9 @@
 // 回调 f 作为 with 参数；t 决定叶子边界；ts 是其余同形的树（元数可以是 0）
 export func tree_map::<T>(t: T, ...ts) {
     return match type T {
-        case struct => { static for n, F in fields T =>
+        case struct => { static for n, F in fields T do
                              n: tree_map(t.[n], ...column(n, ts)) }
-        case tuple  => ( static for n, F in fields T =>
+        case tuple  => ( static for n, F in fields T do
                              tree_map(t.[n], ...column(n, ts)) )
         case _      => f(t, ...ts)
     }
@@ -74,7 +74,7 @@ export func tree_map::<T>(t: T, ...ts) {
 
 // 取各棵树在字段 n 处的子树。找不到字段就是普通的"无此字段"错误
 func column(constas n, ts) {
-    return ( static for j in indices ts => ts.[j].[n] )
+    return ( static for j in indices ts do ts.[j].[n] )
 }
 ```
 
@@ -91,9 +91,9 @@ export func tree_paths::<T>(t: T) { return paths_at(t, "") }
 
 func paths_at::<T>(t: T, here: string) {
     return match type T {
-        case struct => { static for n, F in fields T =>
+        case struct => { static for n, F in fields T do
                              n: paths_at(t.[n], join(here, n)) }
-        case tuple  => ( static for n, F in fields T =>
+        case tuple  => ( static for n, F in fields T do
                              paths_at(t.[n], join(here, n)) )
         case _      => here
     }
@@ -133,8 +133,8 @@ export func load_tree::<T>(dir: string): T! {
 }
 func load_at::<T>(h: Ckpt, here: string): T {
     return match type T {
-        case struct => { static for n, F in fields T => n: load_at::<F>(h, join(here, n)) }
-        case tuple  => ( static for n, F in fields T => load_at::<F>(h, join(here, n)) )
+        case struct => { static for n, F in fields T do n: load_at::<F>(h, join(here, n)) }
+        case tuple  => ( static for n, F in fields T do load_at::<F>(h, join(here, n)) )
         case _      => ckpt_get::<T>(h, here)
     }
 }
@@ -240,8 +240,8 @@ derive Tree for struct, tuple                       // 谁来实现 derive？
 
 ```camel
 type Device<T> = match type T {
-    case struct => { static for n, F in fields T => n: Device<F> }
-    case tuple  => ( static for n, F in fields T => Device<F> )
+    case struct => { static for n, F in fields T do n: Device<F> }
+    case tuple  => ( static for n, F in fields T do Device<F> )
     case _      => DeviceLeaf<T>            // 叶子必须是 Device 支持的类型，否则 static error
 }
 ```
@@ -301,7 +301,7 @@ type Device<T> = match type T {
 例：`tree_map<adam_leaf>(p, g, m, v)`。建议：变长，`...` 绑定一个元数在编译期已知的元组，元数 0 合法；不引入运行时变长。
 
 **4. 静态构造的拼写。**
-候选：`match type T { case struct => … }`；`static for n, F in fields T => …`；`static loop acc = init for (…) in fields T do …`；`t.[n]`；`{ … => n: e }`。
+候选：`match type T { case struct => … }`；`static for n, F in fields T do …`；`static loop acc = init for (…) in fields T do …`；`t.[n]`；`{ … => n: e }`。
 问：(a) `match type` 与 5.3 的值的 `match` 共用 `match` 再加 `type`，是否可接受；(b) 字段访问写 `t.[n]`、`t.(n)` 还是 `field(t, n)`；(c) 构造结构体时 `n: e` 的 `n` 是编译期名字，而平时 `n: e` 的 `n` 是字面的字段名，是否需要标记（如 `[n]: e`）。建议：沿用上面的写法，(c) 加方括号 `[n]: e` 更不易混淆。
 
 **5. 叶子怎么定义，用户能不能把自己的结构体声明成叶子？**

@@ -15,7 +15,7 @@ import state
 // put where a gate reads it, so the red is named by a plan instead of by a probe nobody runs.
 func main(): int sync {
     let box = state::ref(5)
-    let read = (): int => state::get(box)
+    let read = func () => int { state::get(box) }
     println(read(), read())
     return 0
 }

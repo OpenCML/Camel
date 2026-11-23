@@ -29,7 +29,7 @@ func extended(): float {
 with <w: float>
 func sliced(): float {
     let xs = [10.0, 20.0, 30.0]
-    let s = xs[0:int(w)]
+    let s = xs[0..int(w)]
     return s[0] * 5.0
 }
 
