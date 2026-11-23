@@ -38,7 +38,7 @@ namespace err  = camel::core::error;
 namespace fact = camel::runtime::fact;
 
 Anchor anchorOf(const Handle *handle, const char *site, bool node) {
-    const GCGraph *graph =
+    const auto *graph =
         handle->program() != nullptr ? handle->program()->graph(handle->graph()) : nullptr;
     if (graph == nullptr ||
         (node && (!graph->containsNodeRef(handle->index()) ||

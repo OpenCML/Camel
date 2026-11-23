@@ -407,7 +407,7 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
 }
 
 bool hasWritings(const Program &program) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (!graph->executable()) {
             return true;
         }
@@ -431,11 +431,11 @@ const Program *extractWritings(
     if (root != nullptr) {
         graphs = collectReachableGraphs(*program, root);
     } else {
-        for (GCGraph *graph : program->graphs()) {
+        for (auto *graph : program->graphs()) {
             graphs.push_back(graph);
         }
     }
-    for (GCGraph *graph : graphs) {
+    for (auto *graph : graphs) {
         if (graph->executable()) {
             continue;
         }

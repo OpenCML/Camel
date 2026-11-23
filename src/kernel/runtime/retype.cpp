@@ -361,7 +361,7 @@ const Program *retypeProgram(
     ProgramRetypeReport mine;
     const std::vector<GCGraph *> graphs = session.collectReachableRuntimeGraphs();
     mine.graphs                         = graphs.size();
-    for (GCGraph *graph : graphs) {
+    for (auto *graph : graphs) {
         const GraphRetypeReport one = retypeDraft(session.edit(graph), types, options);
         mine.retypedNodes += one.retypedNodes;
         mine.retypedStatic += one.retypedStaticSlots;

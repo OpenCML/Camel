@@ -659,7 +659,7 @@ template <class Draft> GCGraph *writeWrapperGraph(
         draft, from, arguments, std::span<const gc_node_ref_t>{}, value,
         signature->exitType(), 0, kInvalidNodeRef);
     draft.setExitNode(result);
-    GCGraph *encoded = draft.encode(name, name);
+    auto *encoded = draft.encode(name, name);
     session.adoptGraph(encoded);
     return encoded;
 }
@@ -678,7 +678,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // (1) The static values a closure is built on, so they are not taken for values of their own.
     // ---------------------------------------------------------------------------------------
     std::map<uint64_t, std::set<gc_node_ref_t>> closureSources; // graph id -> the value under one
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const GCNode &node = **it;
             // A construction is asked by its shape, not by the node kind that still spells it
@@ -707,7 +707,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     std::map<uint64_t, std::set<gc_node_ref_t>> fillRefs;   // graph id -> the closures built there
     std::map<uint64_t, std::vector<CallSite>> callsites;    // graph id -> its calls through a value
 
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         const auto &sources = closureSources[toValue(graph->id())];
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const GCNode &node = **it;
@@ -736,7 +736,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                         plan, "a value holds something that is not a function of the program");
                     continue;
                 }
-                const GCGraph *target = function->graph();
+                const auto *target = function->graph();
                 const auto withs      = graph->withInputsOf(it.ref());
                 if (fill->slots().size() != withs.size() ||
                     target->closureNodes().size() != withs.size()) {
@@ -760,7 +760,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                         plan, "a value holds something that is not a function of the program");
                     continue;
                 }
-                const GCGraph *target = function->graph();
+                const auto *target = function->graph();
                 if (!target->closureNodes().empty()) {
                     refuseIfUnsaid(
                         plan, "the value does not carry the values the function captures");
@@ -776,7 +776,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             // with captures there is nothing here to carry them, and that is another shape (a
             // closure written as a direct reference), not this pass's to guess at.
             if (node.kind == GCNodeKind::Func) {
-                const GCGraph *target = program->calleeOf(*graph, it.ref());
+                const auto *target = program->calleeOf(*graph, it.ref());
                 if (target == nullptr) {
                     refuseIfUnsaid(
                         plan, "a value holds a function the program does not have");
@@ -819,7 +819,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     std::map<TypeId, std::set<TypeId>> wrapsInto;
     // The edges that carry such a value, per graph, to be wrapped once the enums exist.
     std::map<uint64_t, std::vector<WrapEdge>> wrapEdges;
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         // The static function a closure is built on is not a value: the closure packs it into a
         // tag, and the node is dropped with the closure.
         const auto &sources = closureSources[toValue(graph->id())];
@@ -1015,7 +1015,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // A function whose captures become parameters cannot also be called directly: that call does
     // not pass them.
     std::set<GraphId> directlyCalled;
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             if ((**it).kind != GCNodeKind::Func) {
                 continue;
@@ -1354,7 +1354,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             }
         }
     };
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             noteType((**it).dataType());
         }
@@ -1507,7 +1507,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             ty::FunctionType *signature = factory.build();
             auto transaction = GraphTransaction::open(
                 session.context()->graphIds().allocate(), signature);
-            GCGraph *made = writeWrapperGraph(
+            auto *made = writeWrapperGraph(
                 transaction->edit(), session, *wrapper.from, signature,
                 std::format("{}$wrap", wrapper.into->variants.front().name));
             wrapper.graph = made->id();
@@ -1519,7 +1519,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 }
             }
         }
-        for (GCGraph *graph : session.program()->graphs()) {
+        for (auto *graph : session.program()->graphs()) {
             // A graph the pass wrote is already in the form the program is being lowered to.
             if (wrappedGraphs.contains(graph->id())) {
                 continue;
@@ -1621,7 +1621,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                     // A function the program names as a value: the node *is* the value, and its
                     // graph is the variant. It has no captures, so nothing is taken from the node.
                     if (plain != nullptr && plain->kind == GCNodeKind::Func) {
-                        const GCGraph *named = program->calleeOf(*graph, ref);
+                        const auto *named = program->calleeOf(*graph, ref);
                         if (named == nullptr) {
                             continue;
                         }

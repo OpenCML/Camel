@@ -227,7 +227,7 @@ Rule compileDirection(
 
 std::vector<Rule> compileRule(camel::core::context::Context &context, const RuleSource &source) {
     const GCGraph *left  = source.program != nullptr ? source.program->graph(source.lhs) : nullptr;
-    const GCGraph *right = source.program != nullptr ? source.program->graph(source.rhs) : nullptr;
+    const auto *right = source.program != nullptr ? source.program->graph(source.rhs) : nullptr;
     if (left == nullptr || right == nullptr) {
         throw RuleCompileError(std::format("Rule '{}': its two sides are not in the program.", source.name));
     }

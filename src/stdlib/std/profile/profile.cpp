@@ -149,7 +149,7 @@ void ProfilePass::noteLoopsOf(const Program &program) {
         return;
     }
     const camel::source::source_context_ptr_t sources = context_->sourceContext();
-    for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, program.root())) {
+    for (auto *graph : camel::runtime::collectReachableGraphs(program, program.root())) {
         if (graph == nullptr) {
             continue;
         }

@@ -220,7 +220,7 @@ qualifiedNames(const std::vector<GCGraph *> &graphs) {
     });
     std::unordered_map<std::string, size_t> seen;
     std::unordered_map<const GCGraph *, std::string> names;
-    for (const GCGraph *graph : ordered) {
+    for (const auto *graph : ordered) {
         const size_t ordinal = ++seen[graph->name()];
         names.emplace(
             graph,
@@ -248,7 +248,7 @@ uint64_t portableGraphHash(const Program &program, const GCGraph *graph) {
     work.push(graph);
     seen.insert(graph);
     while (!work.empty()) {
-        const GCGraph *next = work.front();
+        const auto *next = work.front();
         work.pop();
         h.u64(ownContentHash(program, *next));
         program.traceGraphs(*next, [&](GCGraph *ref) {
@@ -316,7 +316,7 @@ std::optional<PortableFact> parsePortableFact(std::string_view line) {
 std::vector<PortableFact> exportFacts(FactStore &store, const Program &program) {
     const std::vector<GCGraph *> graphs = collectReachableGraphs(program);
     std::unordered_map<GraphId, const GCGraph *> byId;
-    for (const GCGraph *graph : graphs) {
+    for (const auto *graph : graphs) {
         byId.emplace(graph->id(), graph);
     }
     const auto names = qualifiedNames(graphs);
@@ -364,7 +364,7 @@ std::vector<PortableFact> exportFacts(FactStore &store, const Program &program) 
         if (kind.cls != FactClass::GraphContent || !kind.encode) {
             continue;
         }
-        for (const GCGraph *graph : graphs) {
+        for (const auto *graph : graphs) {
             const auto all = kind.anchorsIn ? kind.anchorsIn(program, *graph) : [&] {
                 std::vector<std::vector<Anchor>> each;
                 if (kind.scope == Scope::Graph) {
@@ -420,7 +420,7 @@ ImportResult importFact(FactStore &store, const Program &program, const Portable
     const std::vector<GCGraph *> programGraphs = collectReachableGraphs(program);
     const auto names                           = qualifiedNames(programGraphs);
     std::unordered_map<std::string_view, const GCGraph *> byName;
-    for (const GCGraph *graph : programGraphs) {
+    for (const auto *graph : programGraphs) {
         byName.emplace(names.at(graph), graph);
     }
     std::vector<Anchor> anchors;
