@@ -63,11 +63,11 @@
 | D-1123-34 | 作者 fsh-dev | 内核 include 标准库：`shaped_operators` 16→0，stdlib 头 12→4 行 | `lane/operator-uri` | done | 2026-11-23 22:02 | `3bc124bfdb` |
 | D-1123-36 | 作者 fsh-dev | 注释里的过程痕迹 + 检查脚本；旧认领残留可弃 | `lane/comment-traces` | doing | 2026-11-23 23:00 | |
 | D-1123-48 | 作者 fsh-dev | `moduleNamed` 到不了 prelude：判据 0→1 | `lane/range-ri` | done | 2026-11-23 22:30 | `558819d0fa` |
-| D-1123-49 | 作者 fsh-dev | `__iter__` 改 `func operator for(r: Range): int..`；7.4.5 加 `for`；两条用例 | `lane/range-ri` | todo | 2026-11-23 22:40 | |
+| D-1123-49 | 作者 fsh-dev | `__iter__` 改 `func operator for(r: Range): int..`；7.4.5 加 `for`；两条用例 | `lane/range-ri` | done | 2026-11-23 23:40 | `4d806f4776` |
 | D-1123-41(b)(c) | 作者 fsh-dev | (b) `a..b` 产生 `Range`；(c) 下标按类型分派，删掉解析器切片特例 | `lane/parser-old-spelling` | doing | 2026-11-23 23:00 | |
 | D-1123-50 | 作者 fsh-dev | 协作机制 ①②③：装 0.2、删定时任务与 camel-lanes、skill 合成 `internal/collab` | — | done | 2026-11-23 22:15 | `ae0e9501b8` |
 | D-1123-50④ | 作者 fsh-dev | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感独占、pre-push 限合并位 | `lane/host-locks` | doing | 2026-11-23 23:00 | |
-| D-1123-52② | 作者 fsh-dev | `moduleNamed` 撤名字搜索，改用类型记的声明模块引用（5.2）；`declaredName_` 删干净 | `lane/range-ri` | doing | 2026-11-23 22:40 | |
+| D-1123-52② | 作者 fsh-dev | `moduleNamed` 撤名字搜索，改用类型记的声明模块引用（5.2）；`declaredName_` 删干净 | `lane/range-ri` | done | 2026-11-23 23:15 | `ff4639e261` |
 | D-1123-53① | 作者 fsh-dev | 节点效应 = 声明访问 ∪ 操作数访问（3.3）；删参数；粗标的高阶算子改声明 | `lane/effects-declarations` | doing | 2026-11-23 22:40 | |
 | D-1123-53② | 作者 fsh-dev | `.isPure(`/`hasExternalEffect(` 读者 19→0；两个公开接口删掉 | `lane/effects-declarations` | todo | 2026-11-23 22:40 | |
 | D-1123-54 | 作者 fsh-dev | 规矩：删就删干净，历史只进提交说明 | — | done | 2026-11-23 22:40 | |
