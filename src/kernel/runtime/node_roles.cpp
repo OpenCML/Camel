@@ -57,10 +57,12 @@ NodeRoleRegistry::NodeRoleRegistry() {
              if (table.effectOf(*oper) == core::sem::Effect::Pure) {
                  return std::nullopt;
              }
-             // A higher-order operator is no effect of its own: what it touches is the function
-             // the program hands it (design principles 3.3), read through
-             // `functionValueClause` the way a call through a value is. A type that writes no
-             // clause keeps the conservative answer: ordered, never folded away.
+             // A higher-order operator's accesses are the function the program hands it (design
+             // principles 3.3), read through `functionValueClause` the way a call through a value
+             // is; what the operator declares for itself is the other half of the same node's
+             // effect, and the two are united -- an operator that touches a driver itself is an
+             // effect even when the function it runs is `pure`. A type that writes no clause keeps
+             // the conservative answer: ordered, never folded away.
              if (const auto *facts = table.semantics(*oper);
                  facts != nullptr && facts->resources && facts->resources->functionOperand) {
                  const auto &where = *facts->resources->functionOperand;
@@ -78,7 +80,12 @@ NodeRoleRegistry::NodeRoleRegistry() {
                          }
                      }
                      if (const auto clause = core::functionValueClause(value)) {
-                         if (clause->pure()) {
+                         const auto &spec = *facts->resources;
+                         // The union of the two halves. Only a node that touches nothing at all --
+                         // no clause, no access of its own, nothing allocated, no external effect
+                         // -- is no effect (design principles 3.3).
+                         if (clause->pure() && spec.accesses.empty() && !spec.allocates &&
+                             !spec.externalEffect) {
                              return std::nullopt;
                          }
                          return std::string(table.uri(*oper));

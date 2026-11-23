@@ -10,7 +10,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "core"
-desc = "test::resources (test-only): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a handle a closure captures and writes and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is *not* an object read and written -- the `rmw object (any)` the footprint used to carry was the front-end in-place rewrite's own detail, and in-place is unobservable (design principles 10.5), so a program written by value has no access to an array object in its footprint -- the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged. The closure's footprint is found by what it says rather than by its graph number, which counts the graphs every compiled module created before it."
+desc = "test::resources (test-only): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation, an access bound to the operand that carries a function operand), the two sources of a node's effect accepted together (an operator's own accesses and its function operand's, design principles 3.3), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a handle a closure captures and writes and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is *not* an object read and written -- the `rmw object (any)` the footprint used to carry was the front-end in-place rewrite's own detail, and in-place is unobservable (design principles 10.5), so a program written by value has no access to an array object in its footprint -- the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged. The closure's footprint is found by what it says rather than by its graph number, which counts the graphs every compiled module created before it."
 kind = "behavior"
 case = "../../../cases/resources/effects.cml"
 args = ["${case}", "test::resources"]
@@ -47,6 +47,7 @@ for (const [check, reason] of [
   ['var_param_not_written', 'the signature has a var ordinary parameter 0 that the declaration does not write'],
   ['written_without_var', 'the declaration writes a variable through ordinary parameter 0, which is not a var parameter'],
   ['late_resolver', 'the signature has a var ordinary parameter 0 that the declaration does not write'],
+  ['access_on_the_function_operand', 'an access is bound to the ordinary operand 0 that carries the function, and a function value is not a resource'],
 ]) {
   const m = out.match(new RegExp(`RESOURCES ${check} (.*)`))
   assert(m && m[1].startsWith('rejected:') && m[1].includes(reason), `${check}: ${m ? m[1] : 'missing'}`)
@@ -54,6 +55,7 @@ for (const [check, reason] of [
 for (const l of [
   'RESOURCES valid accepted', 'RESOURCES refines_external accepted', 'RESOURCES pure_touches_none accepted',
   'RESOURCES unnamed_effect_declared accepted',
+  'RESOURCES union_of_accesses_and_function_operand accepted',
   'RESOURCES var_param_written accepted', 'RESOURCES late_declared accepted',
   'RESOURCES writes var_op 1 plain_op 1 late_op 0',
   'RESOURCES version semtest:pure@1.5 semtest:cell_write@1.0',
