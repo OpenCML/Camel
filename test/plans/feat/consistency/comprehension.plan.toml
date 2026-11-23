@@ -125,7 +125,11 @@ expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_element_
 
 [[tests]]
 name = "comprehension.shadowed"
-desc = "A module that defines its own `map` and `filter`: a comprehension still means the built-in operators (it named them, and the functions of the module answered), while a call written with the names means the module's functions."
-kind = "behavior"
+desc = "A module that defines its own `map` and `filter`: a call written with one of the names is ambiguous -- the module's function and the built-in operator both take these arguments, and no declaration order chooses between them -- while a comprehension still means the built-in operators."
+kind = "negative"
 case = "../../../cases/consistency/comprehension/shadowed.cml"
-expect_stdout_starts_with = "[4, 16] [2, 3, 4, 5]\nmy map my filter\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
+expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "shadowed.cml:12:20", "The call to 'map' with (int[]) fits more than one overload", "map: <f: (x: int) => int> (xs: int[]) => string pure (this module)", "the built-in or module operator <:mark/map_arr>: <f: (item: T) => U> (xs: T[]) => U[]"]
