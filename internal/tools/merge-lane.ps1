@@ -16,6 +16,17 @@
     The branch head goes into the commit message as a trailer, so a later reader can check the claim
     against the history rather than against a sentence in it.
 
+    None of that helps if the branch is not where the merge thinks it is. So the start point is
+    asserted first: `git fetch`, then local `develop` must be `origin/develop`. When it is not, the
+    commits only local `develop` holds are printed. They are, in the case that made this necessary,
+    the merge commits a previous run made and could not push -- which is why that merge's first parent
+    was not the commit on origin, why the push was refused with a message about something else, and
+    why local `develop` kept drifting one more merge per run. When the commits on its first-parent chain
+    are only such merges (a merge commit, no gate record for it, and a tree that is exactly what a
+    plain merge of its two parents produces), they are kept under a tag and local `develop` is moved
+    back to `origin/develop` before this merge starts. Any other shape stops with nothing merged and
+    nothing reset.
+
     Once the merge commit exists, four stages run in order and the push is last: the header check,
     the clang syntax check, the row readings, then the push. Every stage uses the same three-way
     convention -- 0 means it measured and the tree is fine, 1 means it measured and the tree is not,
@@ -33,6 +44,11 @@
     with `--accept` under that sha. Two runs, two trees, and both shas are printed. The comparer
     refuses a baseline whose recorded tree is the tree it is comparing, so the mis-ordering cannot
     pass quietly; and the seeding step can fail, which is exit 2 and an empty baseline is never one.
+
+    Every stop after the merge says what git holds at that moment -- local `develop`, `origin/develop`
+    and the commits only local `develop` holds -- instead of the constant sentence it used to print,
+    which claimed nothing had been committed while a merge commit sat on the branch that origin did
+    not have.
 
 .PARAMETER Branch
     The lane branch to merge, e.g. lane/range-ri.
@@ -73,13 +89,73 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# What git holds at the moment this is called, in the sentence that used to be a constant.
+#
+# The constant was `Nothing was committed and nothing was pushed`, and it was false six times in one
+# day: each of those runs left the merge commit on local `develop` (952048856a, fa7d722407, 6d0af87f89,
+# 0be4786c48, 542f52470a, 66041d0581 were left that way). A reader who believed the sentence went
+# looking somewhere else, and four of those six cost twenty minutes before the local branch was read.
+# A sentence about the repository is a reading, so it is read: local `develop`, `origin/develop`, the
+# commits only local `develop` holds, and where this checkout stands.
+#
+# `-MergeCommit` is the merge commit this run made, passed by the callers that are past the merge in
+# their own control flow -- not guessed here. Empty means the merge has not happened.
+function Write-GitState {
+    param([string] $MergeCommit = '')
+
+    $branch = "$(& git symbolic-ref -q --short HEAD 2>$null)".Trim()
+    $headHere = "$(& git rev-parse --verify HEAD 2>$null)".Trim()
+    $local = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
+    $origin = "$(& git rev-parse --verify 'refs/remotes/origin/develop^{commit}' 2>$null)".Trim()
+    $where = if ($branch) { "the branch $branch" } else { 'a detached HEAD' }
+
+    if (-not $local -or -not $origin) {
+        # One of the two ends is missing, so "same" cannot be answered at all. That is said plainly
+        # rather than defaulted: a default here would be the same class of mistake as the constant.
+        $localText = if ($local) { $local } else { 'unreadable' }
+        $originText = if ($origin) { $origin } else { 'unreadable' }
+        Write-Host "  Nothing was pushed. Local develop reads $localText and origin/develop reads $originText; with one end unreadable, whether they are the same commit cannot be stated."
+        return
+    }
+
+    $only = @(& git rev-list 'origin/develop..develop' 2>$null) |
+        ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+    $held = if ($only.Count -eq 0) {
+        'Local develop holds no commit that origin/develop does not have, so it is behind rather than ahead.'
+    } elseif ($only.Count -eq 1) {
+        "The commit only local develop holds is $($only[0])."
+    } else {
+        "The commits only local develop holds are $($only -join ', ')."
+    }
+
+    if (-not $MergeCommit) {
+        if ($local -eq $origin) {
+            Write-Host "  Nothing was committed and nothing was pushed: local develop is still $local, which is origin/develop."
+        } else {
+            Write-Host "  Nothing was committed and nothing was pushed by this run: local develop is $local and origin/develop is $origin. $held"
+        }
+        return
+    }
+    if ($local -eq $origin -and $MergeCommit -ne $local) {
+        # A trial on a scratch branch: the merge commit is real but it is not on develop, so develop
+        # still reads what origin has and the push would publish nothing of it.
+        Write-Host "  The merge was committed locally and not pushed: the merge commit is $MergeCommit on $where, and local develop is still $local, which is origin/develop."
+        return
+    }
+    if ($local -eq $MergeCommit) {
+        Write-Host "  The merge was committed locally and not pushed: local develop is $local, and origin/develop is $origin. $held Run this again after restoring local develop (see the message above)."
+        return
+    }
+    Write-Host "  The merge was committed locally and not pushed: the merge commit is $MergeCommit on $where; local develop is $local, and origin/develop is $origin. $held"
+}
+
 function Stop-With {
-    param([string] $Why, [string] $How)
+    param([string] $Why, [string] $How, [string] $MergeCommit = '')
     Write-Host ''
     Write-Host "STOPPED: $Why" -ForegroundColor Red
     Write-Host "  $How"
     Write-Host ''
-    Write-Host 'Nothing was committed and nothing was pushed.'
+    Write-GitState -MergeCommit $MergeCommit
     exit 1
 }
 
@@ -212,7 +288,7 @@ try {
             Write-Host '  worse than a refused merge. Find which of these is a reader that refreshes the index'
             Write-Host '  (a status call is enough) and let it finish, or stop it yourself.'
             Write-Host ''
-            Write-Host 'Nothing was committed and nothing was pushed.'
+            Write-GitState
             exit 1
         }
 
@@ -222,7 +298,7 @@ try {
             Write-Host '  A lock younger than two minutes with no holder is most likely a git that has just'
             Write-Host '  exited; two minutes is longer than any single git command takes. Wait and retry.'
             Write-Host ''
-            Write-Host 'Nothing was committed and nothing was pushed.'
+            Write-GitState
             exit 1
         }
 
@@ -230,16 +306,186 @@ try {
         Write-Host "  cleared an index.lock that was $([int]$ageSeconds) s old with no git process running"
     }
 
+    # --- the start point: local develop has to be origin/develop ------------------
+    #
+    # This merges into the local branch and then pushes it. If local `develop` is not `origin/develop`,
+    # the merge commit's first parent is not the commit that is on origin: the push is refused, and the
+    # refusal names something else -- the pre-push hook's records, or a non-fast-forward -- so the reader
+    # goes looking in the wrong place. The expensive half is what comes next: the merge commit stays on
+    # local `develop`, so the following run starts one more merge wrong. Six of those were left in one
+    # day (952048856a, fa7d722407, 6d0af87f89, 0be4786c48, 542f52470a, 66041d0581), every one of them
+    # under a message that said nothing had been committed.
+    #
+    # So the start point is asserted before anything is merged, and there is exactly one repair: when
+    # every commit on local `develop`'s first-parent chain that origin does not have is a merge this
+    # tool made and did not push, those merges have to be re-made from the right parent anyway. They
+    # are kept under a tag (rule 12: nothing is dropped without a record of where it went) and local
+    # `develop` is moved back. Any other commit -- a report, a fix, anything a person wrote -- stops
+    # the run with nothing merged and nothing reset: which of those to keep is not a decision a merge
+    # tool makes.
+    & git fetch origin --prune 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Stop-With 'git fetch failed' 'A merge against a stale origin is a merge against what you think is there.'
+    }
+
+    $originDevelop = "$(& git rev-parse --verify 'refs/remotes/origin/develop^{commit}' 2>$null)".Trim()
+    $localDevelop = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
+    if (-not $originDevelop -or -not $localDevelop) {
+        Write-Host ''
+        Write-Host 'STOPPED: the start point could not be read (exit 2, no reading taken)' -ForegroundColor Yellow
+        Write-Host "  local develop reads '$(if ($localDevelop) { $localDevelop } else { 'nothing' })' and origin/develop reads '$(if ($originDevelop) { $originDevelop } else { 'nothing' })'."
+        Write-Host '  This is not a defect in the lane: the assertion this merge begins with cannot be made, so nothing was merged and nothing was pushed.'
+        Write-Host '  What repairs it: `git rev-parse develop` and `git rev-parse origin/develop` in this checkout. origin/develop missing after a successful fetch means the branch lives on another remote, or does not exist.'
+        Write-Host ''
+        exit 2
+    }
+
+    if ($localDevelop -ne $originDevelop) {
+        # What the branch holds and origin does not: every commit, so the reader sees what a merge
+        # brought with it as well. The judgement, though, is about develop's FIRST-PARENT chain only:
+        # the commits a merge pulls in from a lane are not on that chain, were never merges this tool
+        # made on develop, and print-and-refuse over them would refuse every real case (a lane commit
+        # is not a merge commit, so it would always be "a person made it").
+        $onlyLocal = @(& git rev-list --reverse 'origin/develop..develop' 2>$null |
+            ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        $chain = @(& git rev-list --reverse --first-parent 'origin/develop..develop' 2>$null |
+            ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        Write-Host ''
+        Write-Host "local develop is not origin/develop: local develop is $($localDevelop.Substring(0,9)), origin/develop is $($originDevelop.Substring(0,9))" -ForegroundColor Red
+        Write-Host "  $($onlyLocal.Count) commit(s) exist only on local develop (git log --oneline origin/develop..develop), $($chain.Count) of them on develop's first-parent chain:"
+        foreach ($sha in $onlyLocal) {
+            $fromLane = if ($chain -notcontains $sha) { '   (came in through a merge; not on the first-parent chain)' } else { '' }
+            Write-Host "    $(& git log --oneline -n 1 $sha 2>$null)$fromLane"
+        }
+
+        # Three mechanical tests, all three required, and no reading that is a guess:
+        #   1. it is a merge commit (`git rev-list --parents -n 1` gives three or more fields);
+        #   2. no gate record exists for it (`.git/camel-passed/<sha>.json`), so no run passed it;
+        #   3. the tree it holds is exactly the tree a plain merge of its two parents produces
+        #      (`git merge-tree --write-tree <first parent> <second parent>`). This is what "it merged
+        #      that lane onto that develop, and nothing else" means as a comparison of trees. It is
+        #      NOT `git diff <first parent> <second parent>`: a lane that is behind develop differs
+        #      from it in develop's own later changes, so that comparison calls every honest merge a
+        #      stranger. A merge with a hand resolution, or with anything amended into it, is a tree
+        #      merge-tree does not produce, and it does not qualify -- it carries a decision nobody
+        #      recorded.
+        # The subject is checked as well (`merge ...`), because a commit not written as a merge was
+        # not made by this tool whatever its tree looks like.
+        $strangers = @()
+        foreach ($sha in $chain) {
+            $short = $sha.Substring(0, 9)
+            $parents = @("$(& git rev-list --parents -n 1 $sha 2>$null)".Trim() -split '\s+' | Where-Object { $_ })
+            if ($parents.Count -lt 3) {
+                $strangers += "$short is not a merge commit ($($parents.Count - 1) parent(s)); a person made it, and nothing here may drop it"
+                continue
+            }
+            $firstParent = $parents[1]
+            $secondParent = $parents[2]
+            $record = Join-Path $commonDir "camel-passed\$sha.json"
+            if (Test-Path -LiteralPath $record) {
+                $strangers += "$short has a gate record ($record), so a gate read it; it is work, not a leftover"
+                continue
+            }
+            $subject = "$(& git log -1 --format=%s $sha 2>$null)".Trim()
+            if ($subject -notmatch '^merge\s') {
+                $strangers += "$short does not describe itself as a merge (`"$subject`")"
+                continue
+            }
+            $commitTree = "$(& git rev-parse --verify "$sha^{tree}" 2>$null)".Trim()
+            $wouldBe = @(& git merge-tree --write-tree $firstParent $secondParent 2>$null)
+            $wouldBeExit = $LASTEXITCODE
+            $wouldBeTree = "$($wouldBe | Select-Object -First 1)".Trim()
+            # An older git without `merge-tree --write-tree` answers with an error here, and an error
+            # is not a clean merge: the commit is kept (the run stops) rather than guessed about.
+            if ($wouldBeExit -ne 0 -or -not $wouldBeTree -or $wouldBeTree -ne $commitTree) {
+                $strangers += "$short is not the tree a plain merge of $($secondParent.Substring(0,9)) into $($firstParent.Substring(0,9)) produces (merge-tree exit $wouldBeExit), so it carries a resolution nobody recorded"
+            }
+        }
+
+        if ($strangers.Count -gt 0) {
+            Write-Host ''
+            Write-Host 'STOPPED: local develop is not origin/develop, and what it holds on its first-parent chain is not all merges this tool made and did not push (exit 2)' -ForegroundColor Red
+            foreach ($why in $strangers) { Write-Host "  $why" }
+            Write-Host ''
+            Write-Host '  Not restoring local develop: which of those commits to keep is not a decision a merge tool makes.'
+            Write-Host '  Move local develop to origin/develop yourself (after reading the commits above), or merge from a checkout whose develop is origin/develop.'
+            Write-Host ''
+            Write-GitState
+            exit 2
+        }
+
+        # The one repair. It needs a checkout that may be moved: this one is on develop, at that
+        # branch's tip, with no uncommitted change. Moving a branch under somebody else's checkout, or
+        # resetting over work that is not committed, would be the repair losing the thing it repairs.
+        $onBranch = "$(& git symbolic-ref -q --short HEAD 2>$null)".Trim()
+        $headHere = "$(& git rev-parse --verify HEAD 2>$null)".Trim()
+        $dirty = @(& git status --porcelain --untracked-files=no 2>$null)
+        if ($onBranch -ne 'develop' -or $headHere -ne $localDevelop -or $dirty.Count -gt 0) {
+            $why = if ($onBranch -ne 'develop') {
+                "this checkout is on $(if ($onBranch) { "the branch $onBranch" } else { 'a detached HEAD' }), not on develop, so moving develop here would leave a checkout that disagrees with its own branch"
+            } elseif ($headHere -ne $localDevelop) {
+                "this checkout's HEAD ($headHere) is not local develop's tip ($localDevelop)"
+            } else {
+                "this checkout has $($dirty.Count) uncommitted change(s), and the repair would discard them"
+            }
+            Write-Host ''
+            Write-Host 'STOPPED: local develop is not origin/develop, and this checkout is not one the repair may move it in (exit 2)' -ForegroundColor Red
+            Write-Host "  $why."
+            Write-Host "  What it holds are merges this tool made and did not push, so the repair would lose nothing: local develop $localDevelop, origin/develop $originDevelop."
+            Write-Host '  Not restoring, and nothing was merged or pushed.'
+            Write-Host ''
+            Write-GitState
+            exit 2
+        }
+
+
+        # Kept under a tag with the name a person doing this by hand already uses (`backup/orphan-<sha>`,
+        # which is what the merge seat writes before it moves develop back): one name for one thing, so a
+        # later reader finds both kinds of record in one place. A tag that is already there for this
+        # same commit is the record already written -- it is not rewritten, and a tag of that name
+        # pointing somewhere else is not overwritten either (that tag is somebody else's record).
+        $strandedRef = "backup/orphan-$($localDevelop.Substring(0,10))"
+        $tagRef = "refs/tags/$strandedRef^{commit}"
+        $tagged = "$(& git rev-parse --verify $tagRef 2>$null)".Trim()
+        if ($tagged -and $tagged -ne $localDevelop) {
+            $strandedRef = "$strandedRef-$([string](Get-Date -Format 'yyyyMMdd-HHmmss'))"
+            $tagRef = "refs/tags/$strandedRef^{commit}"
+            $tagged = "$(& git rev-parse --verify $tagRef 2>$null)".Trim()
+        }
+        if ($tagged -ne $localDevelop) {
+            & git tag $strandedRef $localDevelop 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Stop-With 'the commits local develop holds could not be kept under a tag' "git tag $strandedRef $localDevelop failed. Nothing is dropped without a record of where it went, so local develop was left where it is."
+            }
+        }
+        & git reset --hard $originDevelop 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Stop-With 'local develop could not be restored to origin/develop' "git reset --hard $originDevelop failed after those commits were saved under $strandedRef. Local develop is where it was; the ref is the record of what it holds."
+        }
+        $restored = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
+        if ($restored -ne $originDevelop) {
+            Stop-With 'local develop was not restored to origin/develop' "after git reset --hard $originDevelop, local develop reads $restored. The commits it held are under $strandedRef."
+        }
+        Write-Host ''
+        # The sentence the author asked for, with the one case that would make it false spelled out
+        # instead of glossed: a branch that is behind origin holds no commit origin does not have.
+        $heldText = if ($onlyLocal.Count -eq 0) {
+            "it was behind origin/develop rather than ahead, so no commit is lost from it"
+        } else {
+            "the commits only it held are under $strandedRef"
+        }
+        Write-Host "  restored local develop from $localDevelop to $originDevelop, $heldText" -ForegroundColor Yellow
+        Write-Host "  (nothing was dropped: $strandedRef still points at $localDevelop, and git log --oneline origin/develop..$strandedRef lists what it holds)"
+        $localDevelop = $originDevelop
+    }
+
+    Write-Host "start point: local develop is $($localDevelop.Substring(0,9)), which is origin/develop"
+
     $head = (& git rev-parse --verify "$Branch^{commit}" 2>$null)
     if ($LASTEXITCODE -ne 0) {
         Stop-With "branch $Branch does not resolve to a commit" 'Check the name, and that the branch has commits.'
     }
     $head = "$head".Trim()
-
-    & git fetch origin --prune 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Stop-With 'git fetch failed' 'A merge against a stale origin is a merge against what you think is there.'
-    }
 
     Write-Host "merging $Branch at $head"
 
@@ -279,13 +525,18 @@ try {
         }
     }
 
+    # The merge commit this run made, read once. Every stop from here on is past the merge in this
+    # script's own control flow, and this is the sha those sentences have to account for: whether it is
+    # only here, whether origin has it, and what else local develop holds.
+    $mergeCommit = "$(& git rev-parse HEAD 2>$null)".Trim()
+
     # A file without a header has already stopped one CI run before it built anything. The check is
     # cheap and local, so it runs here, before the push.
     $headers = & node (Join-Path $MainCheckout 'scripts\headers.mjs') --check 2>&1
     $headersExit = $LASTEXITCODE
     $headers | Select-Object -Last 2 | ForEach-Object { "  $_" }
     if ($headersExit -ne 0) {
-        Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.'
+        Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.' $mergeCommit
     }
 
     # The local gate compiles with this workstation's toolchain; CI's Linux and macOS legs compile
@@ -325,7 +576,7 @@ try {
         Write-Host '  This is not a defect in your tree: the check itself could not measure it, so nothing was pushed and nothing was learned about this change.'
         Write-Host '  The commonest cause is that the gate checkout has no compile database (build/compile_commands.json), which only a build writes: run one on it -- internal/tools/camel-remote.ps1 -Path <that worktree>, without -NoBuild -- and merge again. The checker names the actual cause on the line above it printed; the others are a clang 19 image the host does not hold, a toolchain its compile lines cannot reach, and a commit whose first parent is the same tree (`the base and this tree are the same commit`: there is then no change to read).'
         Write-Host ''
-        Write-Host 'Nothing was committed and nothing was pushed.'
+        Write-GitState -MergeCommit $mergeCommit
         exit 2
     }
 
@@ -412,7 +663,7 @@ try {
             Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; the line above is its own refusal, and the usual cause is a base branch that does not resolve in this checkout.'
         }
         Write-Host ''
-        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        Write-GitState -MergeCommit $mergeCommit
         exit 2
     }
 
@@ -432,7 +683,7 @@ try {
         Write-Host '  This is not a defect in your tree: git did not answer for HEAD or HEAD^1, so which tree to compare with which is unknown and nothing was measured about this change.'
         Write-Host '  What repairs it: the merge commit is what makes HEAD^1 the tree to land on; this stop means HEAD is not in that shape. Nothing was pushed.'
         Write-Host ''
-        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        Write-GitState -MergeCommit $mergeCommit
         exit 2
     }
     if ($developTip -eq $comparedTree) {
@@ -441,7 +692,7 @@ try {
         Write-Host '  This is not a defect in your tree: the baseline would be measured on the very tree it is compared with, which is 0 fixed, 0 new and 0 changed by construction -- a green that measured one tree twice.'
         Write-Host '  What repairs it: a merge commit whose first parent is develop. Nothing was pushed.'
         Write-Host ''
-        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        Write-GitState -MergeCommit $mergeCommit
         exit 2
     }
     $compareDir = Join-Path $commonDir 'camel-readings'
@@ -514,7 +765,7 @@ try {
             Write-Host "  $worktreeProblem"
             Write-Host "  What repairs it: the baseline is measured in a worktree held at the first parent ($($developTip.Substring(0, 9))). Name one with -BaselineWorktree, or let this script create it; a path that holds somebody else's checkout is refused rather than checked out over."
             Write-Host ''
-            Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+            Write-GitState -MergeCommit $mergeCommit
             exit 2
         }
         if ($seedRows -eq 0) {
@@ -523,7 +774,7 @@ try {
             Write-Host "  This is not a defect in your tree: the baseline run on develop $($developTip.Substring(0, 9)) recorded no row, so nothing was learned about this change and nothing was pushed."
             Write-Host "  What repairs it: the row block must arrive with rows inside it. Re-run internal/tools/camel-remote.ps1 -Path $baselinePath -Changed -ChangedBase $head -ListKnown -NoGpuWatch and read what it prints; a build that failed or a plan set that starts no case writes no block. An empty baseline is never stored -- it would call every case fixed."
             Write-Host ''
-            Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+            Write-GitState -MergeCommit $mergeCommit
             exit 2
         }
         # The seconds and the case count are the reading this step owes: "it measured" is only worth
@@ -540,7 +791,7 @@ try {
             Write-Host "  This is not a defect in your tree: $seedRows row(s) came back from develop $($developTip.Substring(0, 9)) in $([int]$seedSeconds) s and the store refused them, so nothing was pushed and nothing was learned about this change."
             Write-Host "  What repairs it: the comparer's own refusal is above; it names what about the rows or the cache it could not use."
             Write-Host ''
-            Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+            Write-GitState -MergeCommit $mergeCommit
             exit 2
         }
         $accept | ForEach-Object { "  $_" }
@@ -554,7 +805,7 @@ try {
         Write-Host '  This is not a defect in your tree: the cache was not read, so nothing was compared and nothing was pushed.'
         Write-Host '  What repairs it: the comparer''s own line is above; `--probe` reads one key and needs no rows, so a refusal here is about the cache directory or the plan set file, not about the tree.'
         Write-Host ''
-        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        Write-GitState -MergeCommit $mergeCommit
         exit 2
     } else {
         $probe | ForEach-Object { "  $_" }
@@ -596,7 +847,7 @@ try {
         Write-Host "  The baseline is the tree this merge lands on (develop $($developTip.Substring(0, 9))) and this merge is the only thing that moved. `newly red` was green there and is red now; `still red, failing differently` was red both times and reads differently now, which is the move a count cannot see."
         Write-Host '  If the change makes a case fail on purpose, the merge that makes it fail that way is the one that carries the expectation with it; this one is refused until the two agree.'
         Write-Host ''
-        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        Write-GitState -MergeCommit $mergeCommit
         exit 1
     }
     if ($compareExit -ne 0) {
@@ -606,7 +857,7 @@ try {
         Write-Host "  This is not a defect in your tree: there were no rows to compare, so nothing was learned about this change. The run that should have recorded them exited $rowsExit; the comparer's own refusal is above."
         Write-Host "  What repairs it: the block must arrive with rows inside it. A run that selected no plan writes no block, and a plan set whose cases all start nothing writes an empty one. This script measures the baseline itself (tree $($developTip.Substring(0, 9)) against tree $($comparedTree.Substring(0, 9))) and there is no command to run by hand for it; if the refusal above is the baseline being this very tree, the two shas are the reading to look at."
         Write-Host ''
-        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        Write-GitState -MergeCommit $mergeCommit
         exit 2
     }
     # The two shas on the one line that says "measured": a reader who trusts this line has to be able
@@ -622,8 +873,13 @@ try {
 
     if ($NoPush) {
         Write-Host ''
-        Write-Host "would push: every reading was taken and neither tree refused it. develop is still $($developTip.Substring(0,9)) and this merge commit ($($comparedTree.Substring(0,9))) is only in this checkout." -ForegroundColor Yellow
-        Write-Host "  The baseline this merge would store for its own tree is not written: a key for a commit origin cannot see is a key nobody asks for. Nothing was pushed."
+        Write-Host 'would push: every reading was taken and neither tree refused it. Nothing was pushed (-NoPush).' -ForegroundColor Yellow
+        Write-Host '  The baseline this merge would store for its own tree is not written: a key for a commit origin cannot see is a key nobody asks for.'
+        # The trial is exactly the shape the fixed sentence used to describe wrongly: a real merge commit
+        # on local develop, origin untouched. Said out of git, it is the same words a refused merge would
+        # get -- which is the point: the state is the state, and whether it was this run's choice is the
+        # line above ("-NoPush"), not a different sentence about the repository.
+        Write-GitState -MergeCommit $comparedTree
         Write-Host ''
         Write-Host "tried $Branch at $head; nothing was pushed (-NoPush)"
         exit 0
@@ -634,12 +890,12 @@ try {
         if ($LASTEXITCODE -eq 0) { break }
         Start-Sleep -Seconds 4
     }
-    if ($LASTEXITCODE -ne 0) { Stop-With 'git push failed after 3 attempts' 'The merge is committed locally and not on origin.' }
+    if ($LASTEXITCODE -ne 0) { Stop-With 'git push failed after 3 attempts' 'The merge is committed locally and not on origin.' $mergeCommit }
 
     $remote = ((& git ls-remote origin refs/heads/develop) -split "`t") | Select-Object -First 1
     $local = "$(& git rev-parse HEAD)".Trim()
     if ($remote -ne $local) {
-        Stop-With 'origin/develop is not the commit just made' "local $local, remote $remote"
+        Stop-With 'origin/develop is not the commit just made' "local $local, remote $remote" $mergeCommit
     }
 
     # The commit this merge just created is the tree those rows were measured on, so they are that
@@ -662,6 +918,16 @@ try {
 
     Write-Host ''
     Write-Host "merged $Branch at $head; develop is $($local.Substring(0,9))" -ForegroundColor Green
+    # The closing claim read back rather than asserted: after the push both ends are one sha, and the
+    # line says which. A push that reported success and a ref that did not move is a reading worth
+    # seeing, so the two are compared here instead of being implied by the word "merged".
+    $localNow = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
+    $originNow = "$(& git rev-parse --verify 'refs/remotes/origin/develop^{commit}' 2>$null)".Trim()
+    if ($localNow -and $localNow -eq $originNow -and $localNow -eq $local) {
+        Write-Host "  local develop is $localNow, which is origin/develop."
+    } else {
+        Write-Host "  local develop is $localNow and origin/develop is $originNow; this push reported success, so these should be the one commit $local and are not -- read them before trusting this merge." -ForegroundColor Yellow
+    }
 }
 finally {
     if ($transcript) { Remove-Item -LiteralPath $transcript -Force -ErrorAction SilentlyContinue }
