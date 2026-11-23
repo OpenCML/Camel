@@ -1268,10 +1268,11 @@ any Formatter::visitSliceIndices(cst::SliceIndices context) {
         if (child.isToken()) {
             if (child.token().kind() == TK::DotDot) {
                 result += "..";
-            } else if (child.token().kind() == TK::Identifier &&
-                       child.token().text() == "range") {
+            } else if (child.token().kind() == TK::Identifier) {
+                // The stepped form's parts are written in order after the name the parser kept, so
+                // the text echoed is the name that is there and nothing is decided by what it is.
                 stepped = true;
-                result += "range(";
+                result += child.token().text() + "(";
             }
             continue;
         }

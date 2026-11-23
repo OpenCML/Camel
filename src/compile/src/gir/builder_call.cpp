@@ -1848,9 +1848,11 @@ node_handle_t Builder::visitLinkNode(
             // run, and the refusal here when it is a constant, where the step is written. A
             // constant step that is not 0 is left to the call: the array it builds is the value
             // of the program, and building a constant one here would be folding, not checking.
+            // The operator is known by its URI, not by the name the call reached it by: an
+            // imported name and an alias reach the same one, and a step of 0 is the same fault
+            // however it was spelled.
             if (targetOperator->uri() == ":struct/range" && normInputs.size() == 3 &&
-                withInputs.empty() && gct->size() >= 1 &&
-                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "range") {
+                withInputs.empty()) {
                 const auto stepIsZero = [](const data_ptr_t &data) {
                     if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
                         integer != nullptr) {
