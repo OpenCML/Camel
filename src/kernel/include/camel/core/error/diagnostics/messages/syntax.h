@@ -33,8 +33,9 @@ enum class SyntaxDiag : uint32_t {
     LineStartsWithOperator    = 0x00000E,
     EmptyInterpolation        = 0x00000F,
     // A declaration's applicability condition belongs before the body it guards (design principles
-    //  4.4). A condition in the trailing position is not read as one, and saying so by name is what
-    // keeps the program from being told only that a token did not fit.
+    //  4.4). The trailing position a rule used to accept is not read as a
+    // condition, and saying so by name is what keeps the program from being told only that a token
+    // did not fit.
     AsRightSideIsType  = 0x000011,
     FuncTypeNeedsNames = 0x000014,
     WhenAfterBody      = 0x000010,

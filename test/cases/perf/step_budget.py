@@ -541,7 +541,7 @@ import {{ now }} from time
 // The same call Camel's step makes: two dense f32 tensors of one shape, one operator, one output.
 // The clock is inside the process and brackets the loop only, so the start-up is not in the number
 // and the same protocol can be used on the torch side.
-func main(reps: int): int sync {{
+func main(reps: int) => int sync {{
     set_num_threads(1)
     seed(7)
     let x = zeros::<f32>([{rows}, {cols}]) + 0.5
@@ -735,7 +735,7 @@ import {{ Tensor, gelu, neg, seed, set_num_threads, sum, zeros }} from tensor
 // row's call count is what the probe reads back.  The two-call body adds the two results, and that
 // add is charged to `tensor:add` rather than to the operator under test -- so when the operator
 // under test is `add` the body is three of them, and the row says three.
-func main(bench: bool, init_dir: string, final_dir: string): int sync {{
+func main(bench: bool, init_dir: string, final_dir: string) => int sync {{
     set_num_threads(1)
     seed(7)
     let x = zeros::<f32>([{dims}]) + 0.5
@@ -813,9 +813,9 @@ import {{ Tensor, random, seed, sum, gelu }} from tensor
 import {{ grad }} from autodiff
 
 with <x: f32[...]>
-func loss(): float {{ return sum(gelu(x)) }}
+func loss() => float {{ return sum(gelu(x)) }}
 
-func main(bench: bool, init_dir: string, final_dir: string): int sync {{
+func main(bench: bool, init_dir: string, final_dir: string) => int sync {{
     seed(17)
     let x = random([{dims}], -8.0, 8.0)
     let d = grad(loss)

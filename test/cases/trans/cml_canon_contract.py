@@ -231,7 +231,7 @@ NAMED = write(
     "named_decl.cml",
     "type P = { a: int, b: int }\n"
     "\n"
-    "func main(p: P): int sync {\n"
+    "func main(p: P) => int sync {\n"
     "    return p.a + p.b\n"
     "}\n",
 )
@@ -248,7 +248,7 @@ compare(write("named.json", named), write("named2.json", json.loads(canonical(NA
 # the sync block are a chain (a `sync` edge). Both are in the graph before any pass runs.
 ORDERED = write(
     "ordering_order.cml",
-    "func main(): int sync {\n"
+    "func main() => int sync {\n"
     "    var x = 1\n"
     "    let y: int = x\n"
     "    x = 5\n"
@@ -267,7 +267,7 @@ ordered = canonical(ORDERED)[1]
 # and a same-resource `order` edge would join the same pair without changing this.
 DOUBLE = write(
     "ordering_effects.cml",
-    "func main(): int sync {\n" "    println(9)\n" "    println(0)\n" "    return 0\n" "}\n",
+    "func main() => int sync {\n" "    println(9)\n" "    println(0)\n" "    return 0\n" "}\n",
 )
 double = canonical(DOUBLE)[1]
 

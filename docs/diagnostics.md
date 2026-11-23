@@ -1352,7 +1352,7 @@ Identifiers starting and ending with double underscores are reserved for interna
 **Help**
 
 ```text
-Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V): V'.
+Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V) => V'.
 ```
 
 **Example** (`test/cases/compile/surface/reserved_function_name.cml`, run as `camel -E short test/cases/compile/surface/reserved_function_name.cml`)
@@ -2311,7 +2311,7 @@ The type parameter '{0}' is declared twice at the head of this declaration.
 **Help**
 
 ```text
-A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T: int>').
+A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]) => T'. A call names them by position or by name ('f::<T: int>').
 ```
 
 **Example** (`test/cases/compile/generic_head/err_duplicate_head_param.cml`, run as `camel test/cases/compile/generic_head/err_duplicate_head_param.cml`)
@@ -7163,7 +7163,7 @@ The '#impl' tag of '{0}' names '{1}', which is no body-less declaration.
 **Help**
 
 ```text
-The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...): T'). Declare the operator, and write its name in the tag.
+The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...) => T'). Declare the operator, and write its name in the tag.
 ```
 
 **Example** (`test/cases/compile/native/impl_unknown.cml`, run as `camel test/cases/compile/native/impl_unknown.cml`)
@@ -8849,7 +8849,7 @@ A function whose body writes 'yield' hands out a stream, and this function's hea
 **Help**
 
 ```text
-A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.
+A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T) => U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.
 ```
 
 **Example** (`test/cases/compile/stream/yield_head_no_stream.cml`, run as `camel test/cases/compile/stream/yield_head_no_stream.cml`)
@@ -9414,7 +9414,7 @@ None: choice: a value that has to be taken has no single spelling - bind it, ret
 **Help**
 
 ```text
-Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).
+Put it in a sync block ('sync { ... }', or a function body 'func f() => T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).
 ```
 
 **Example** (`test/cases/effects/callback_write_ignored.cml`, run as `camel test/cases/effects/callback_write_ignored.cml std::nvm`)
@@ -9855,7 +9855,7 @@ This 'fail' is not executed: {0}.
 **Help**
 
 ```text
-A 'fail' raises its fault where its value is wanted, and it is no effect of its own: nothing else runs it. Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or write it where the data passes, so that the value it gives is the one that is needed.
+A 'fail' raises its fault where its value is wanted, and it is no effect of its own: nothing else runs it. Put it in a sync block ('sync { ... }', or a function body 'func f() => T sync { ... }'), or write it where the data passes, so that the value it gives is the one that is needed.
 ```
 
 **Example** (`test/cases/consistency/fail_never/fail_not_executed.cml`, run as `camel test/cases/consistency/fail_never/fail_not_executed.cml std::nvm`)

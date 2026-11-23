@@ -6,9 +6,9 @@ import { withServer, check, checkEq, fmtRange } from '../../../tools/lsp/client.
 
 // A missing ',' between two parameters: the compiler knows the text to write, so the diagnostic
 // carries a fix, and the file is repaired by applying it.
-const MISSING_COMMA = `func add(a: int b: int): int { return a + b }
+const MISSING_COMMA = `func add(a: int b: int) => int { return a + b }
 
-func main(): int sync {
+func main() => int sync {
     return add(1, 2)
 }
 `
@@ -16,7 +16,7 @@ func main(): int sync {
 // A name that resolves to nothing is the one thing the compiler repairs by itself, by looking for
 // the name that was meant among the names in scope: that candidate search is a code action too,
 // and it is not a fix the compiler attached (`data.fixes` is absent).
-const TYPO = `func main(): int sync {
+const TYPO = `func main() => int sync {
     let counter = 1
     return countr
 }

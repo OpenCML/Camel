@@ -513,7 +513,7 @@ class Gen:
 
     # -- `&&` / `||` with effects on the right side (design principles 4.2) -----------------
     def logic_probe(self):
-        """`func qN(a: int, b: bool): bool sync { println(...); b }`: an effect whose value is a
+        """`func qN(a: int, b: bool) => bool sync { println(...); b }`: an effect whose value is a
         bool, to stand on the right side of `&&` and `||`."""
         name = self.fresh("q")
         params = [(self.fresh("a"), INT, False), (self.fresh("a"), BOOL, False)]
@@ -538,8 +538,8 @@ class Gen:
         return N("let", [e], name=s.name)
 
     def nullable_functions(self):
-        """`func m(a: T, c: bool): T? { return if c then .. else null }` and
-        `func u(x: T?, d: T): T { return x ?? .. }`: results and parameters of type `T?`."""
+        """`func m(a: T, c: bool) => T? { return if c then .. else null }` and
+        `func u(x: T?, d: T) => T { return x ?? .. }`: results and parameters of type `T?`."""
         t = self.r.choice(self.scalars())
         name = self.fresh("m")
         params = [(self.fresh("a"), t, False), (self.fresh("a"), BOOL, False)]
@@ -1129,7 +1129,7 @@ class Gen:
         return N("let", [call], name=r.name)
 
     def effect_lambda(self, d):
-        """(x: int): int => sync { ...; return e }"""
+        """func (x: int) => int sync { ...; return e }"""
         mark = len(self.scope)
         x = Sym(self.fresh("p"), INT, "let")
         self.scope.append(x)
@@ -1368,7 +1368,7 @@ class Gen:
         return N("let", [N("reduce", [arr, lam, init], t=t, eff=True)], name=s.name)
 
     def writer_closure(self, d):
-        """let f = (x: int): int => sync { c += ...; return ... }, called later."""
+        """let f = func (x: int) => int sync { c += ...; return ... }, called later."""
         lam = self.effect_lambda(max(d, 1))
         s = Sym(self.fresh("h"), FN([INT], INT), "let", eff=True)
         self.scope.append(s)
@@ -1397,7 +1397,7 @@ class Gen:
     # -- the program ------------------------------------------------------------------------
     # -- operator overloads of the program (design principles 4.3) ----------------------------
     def operator_overloads(self):
-        """`func operator +(a: P, b: P): P` and the others on the struct P. Their bodies are fixed;
+        """`func operator +(a: P, b: P) => P` and the others on the struct P. Their bodies are fixed;
         what varies is where the operators are used (operator_options)."""
         P = REC("P")
         a, b = N("ref", t=P, name="a"), N("ref", t=P, name="b")

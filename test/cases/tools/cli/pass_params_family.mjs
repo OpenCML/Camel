@@ -73,8 +73,8 @@ compare(
     'unknown parameter',
     program(
         'unknown.cml',
-        'func f(a: int, b: int = 0): int {\n    return a + b\n}\n\n' +
-            'func main(): int sync {\n    return f(1, z: 2)\n}'
+        'func f(a: int, b: int = 0) => int {\n    return a + b\n}\n\n' +
+            'func main() => int sync {\n    return f(1, z: 2)\n}'
     ),
     ['std::opt z=2'],
     'ParamArgumentUnknown',
@@ -86,8 +86,8 @@ compare(
     'duplicate parameter',
     program(
         'duplicate.cml',
-        'func f(a: int, b: int = 0): int {\n    return a + b\n}\n\n' +
-            'func main(): int sync {\n    return f(1, a: 2)\n}'
+        'func f(a: int, b: int = 0) => int {\n    return a + b\n}\n\n' +
+            'func main() => int sync {\n    return f(1, a: 2)\n}'
     ),
     ['std::opt safe_fp=true safe_fp=false'],
     'ParamArgumentDuplicate',
@@ -99,8 +99,8 @@ compare(
     'missing parameter',
     program(
         'missing.cml',
-        'func g(a: int, b: int): int {\n    return a + b\n}\n\n' +
-            'func main(): int sync {\n    return g(a: 1)\n}'
+        'func g(a: int, b: int) => int {\n    return a + b\n}\n\n' +
+            'func main() => int sync {\n    return g(a: 1)\n}'
     ),
     ['test::params n=1'],
     'ParamArgumentMissing',

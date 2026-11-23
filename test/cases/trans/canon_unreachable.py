@@ -59,28 +59,28 @@ TOOL = ROOT / "test" / "tools" / "same_graph.py"
 # loop's condition, the other its body -- so a canonical form that kept them in the order they were
 # written would be a form that sees the writing.
 WRITING_A = """\
-func target(n: int): int {
+func target(n: int) => int {
     let first = n * 3
     let second = n * 2
     let pair = loop total = 0, step = 0 while step < first do (total + second, step + 1)
     return pair.0
 }
 
-func main(): int {
+func main() => int {
     println(target(5))
     return 0
 }
 """
 
 WRITING_B = """\
-func target(n: int): int {
+func target(n: int) => int {
     let twice = n * 2
     let scale = n * 3
     let walked = loop acc = 0, at = 0 while at < scale do (acc + twice, at + 1)
     return walked.0
 }
 
-func main(): int {
+func main() => int {
     println(target(5))
     return 0
 }

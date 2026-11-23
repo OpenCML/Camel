@@ -48,7 +48,7 @@ PASS_MODULE = HERE / "greedy.cml"
 # that is what the two writings differ in: `A` makes `first` and `again` with `scaled` between them,
 # `B` makes the two equal products one after the other.
 WRITING_A = """\
-func target(x: int, y: int): int {
+func target(x: int, y: int) => int {
     let first = x * 2
     let scaled = y * 3
     let again = x * 2
@@ -56,13 +56,13 @@ func target(x: int, y: int): int {
     return (first + again) + scaled + product
 }
 
-func main(): int {
+func main() => int {
     return target(3, 5)
 }
 """
 
 WRITING_B = """\
-func target(x: int, y: int): int {
+func target(x: int, y: int) => int {
     let scaled = y * 3
     let base = x * 2
     let same = x * 2
@@ -70,7 +70,7 @@ func target(x: int, y: int): int {
     return (base + same) + scaled + product
 }
 
-func main(): int {
+func main() => int {
     return target(3, 5)
 }
 """
@@ -80,11 +80,11 @@ func main(): int {
 DECLARED = """\
 import { Graph, graph_of, name } from graph
 
-func isTarget(g: Graph): bool spelling {
+func isTarget(g: Graph) => bool spelling {
     return name(g) == 'main'
 }
 
-func main(): int spelling {
+func main() => int spelling {
     return if isTarget(graph_of(main)) then 0 else 1
 }
 """
@@ -94,11 +94,11 @@ func main(): int spelling {
 UNDECLARED = """\
 import { Graph, graph_of, name } from graph
 
-func entry_name(g: Graph): string {
+func entry_name(g: Graph) => string {
     return name(g)
 }
 
-func main(): int {
+func main() => int {
     let text = entry_name(graph_of(main))
     return len(text)
 }

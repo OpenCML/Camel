@@ -6,22 +6,22 @@ import { withServer, check, checkEq, marked } from '../../../tools/lsp/client.mj
 
 const MAIN = `namespace Tools {
     /// One more.
-    export func inc(x: int): int { return x + 1 }
+    export func inc(x: int) => int { return x + 1 }
     export type Pair = (int, int)
     export let limit = 10
 
     namespace Deep {
-        export func twice(x: int): int { return x * 2 }
+        export func twice(x: int) => int { return x * 2 }
     }
 
-    func use(): int { return inc(1) }
+    func use() => int { return inc(1) }
 }
 
 namespace A::B {
-    export func f(): int { return 1 }
+    export func f() => int { return 1 }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(Tools::inc(1), Tools::Deep::twice(2), A::B::f(), Tools::limit)
     return 0
 }
@@ -44,7 +44,7 @@ await withServer(async (ls) => {
         return h ? h.contents.value : null
     }
     let h = await hover('Tools::inc(1)', 1, 8)
-    check(h !== null && h.includes('func Tools::inc(x: int): int'), 'a namespace function by its full name', h)
+    check(h !== null && h.includes('func Tools::inc(x: int) => int'), 'a namespace function by its full name', h)
     h = await hover('Tools::Deep::twice', 1, 14)
     check(h !== null && h.includes('func Tools::Deep::twice('), 'a nested namespace too', h)
     h = await hover('A::B::f', 1, 6)

@@ -40,7 +40,7 @@ const realDeclaration = fs.readFileSync(path.join(HOME, 'stdlib', 'math.cml'), '
 const brokenDeclaration = `${realDeclaration.trimEnd()}
 
 // Added by the case: this names an operator the module does not register.
-export func no_such_operator(x: i32): i32
+export func no_such_operator(x: i32) => i32
 `
 fs.writeFileSync(path.join(STDLIB, 'math.cml'), brokenDeclaration)
 
@@ -50,11 +50,11 @@ const file = (name, text) => {
     return target
 }
 
-const semantic = file('semantic.cml', 'func main(): int {\n    let x = undefined_name + 1\n    return x\n}\n')
-const missingImport = file('missing_import.cml', 'import no_such_module\n\nfunc main(): int {\n    return 0\n}\n')
-const brokenModule = file('brokenlib.cml', 'export func broken(p: int): int sync {\n    println(\n    return p\n}\n')
-const brokenImport = file('broken_import.cml', 'import brokenlib\n\nfunc main(): int {\n    return 0\n}\n')
-const healthy = file('healthy.cml', 'import math\n\nfunc main(): int {\n    return 0\n}\n')
+const semantic = file('semantic.cml', 'func main() => int {\n    let x = undefined_name + 1\n    return x\n}\n')
+const missingImport = file('missing_import.cml', 'import no_such_module\n\nfunc main() => int {\n    return 0\n}\n')
+const brokenModule = file('brokenlib.cml', 'export func broken(p: int) => int sync {\n    println(\n    return p\n}\n')
+const brokenImport = file('broken_import.cml', 'import brokenlib\n\nfunc main() => int {\n    return 0\n}\n')
+const healthy = file('healthy.cml', 'import math\n\nfunc main() => int {\n    return 0\n}\n')
 
 function camel(args, stdlib) {
     const env = { ...process.env, CAMEL_HOME: HOME }

@@ -6,15 +6,15 @@ import { withServer, check, checkEq, fmtRange, marked } from '../../../tools/lsp
 const MAIN = `type Vec = { x: float, y: float }
 
 /// Adds two vectors.
-func operator +(a: Vec, b: Vec): Vec {
+func operator +(a: Vec, b: Vec) => Vec {
     return { x: a.x + b.x, y: a.y + b.y }
 }
 
-func operator -(a: Vec): Vec {
+func operator -(a: Vec) => Vec {
     return { x: 0.0 - a.x, y: 0.0 - a.y }
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: Vec = { x: 1.0, y: 2.0 }
     let w = v + v
     let n = -w
@@ -71,6 +71,6 @@ await withServer(async (ls) => {
         options: { tabSize: 4, insertSpaces: true },
     })
     const formatted = edits.length === 0 ? MAIN : edits[0].newText
-    check(formatted.includes('func operator +(a: Vec, b: Vec): Vec'), 'the formatter keeps the form',
+    check(formatted.includes('func operator +(a: Vec, b: Vec) => Vec'), 'the formatter keeps the form',
         formatted)
 })

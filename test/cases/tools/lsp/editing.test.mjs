@@ -57,7 +57,7 @@ await withServer(async (ls) => {
     checkEq(names.filter((n) => n === 'add').length, 1, 'overloads are one entry')
     const item = (label) => items.find((i) => i.label === label)
     checkEq(item('total').detail, 'int', 'a variable carries its type')
-    checkEq(item('identity').detail, 'func identity::<T>(x: T): T', 'a function its header')
+    checkEq(item('identity').detail, 'func identity::<T>(x: T) => T', 'a function its header')
     checkEq(item('identity').documentation, 'Returns its argument.', 'and its documentation')
     check(item('norm2').detail.includes('(p: Point) => int'),
         'an imported function its signature', item('norm2'))
@@ -127,12 +127,12 @@ await withServer(async (ls) => {
         })
         return r ? r.contents.value : null
     }
-    let h = await hoverMember('import graph', 'graph::graph_of((x: float): float => x + 1.0)', 'graph::graph_of', 7)
+    let h = await hoverMember('import graph', 'graph::graph_of(func (x: float) => float x + 1.0)', 'graph::graph_of', 7)
     check(h !== null && h.includes('graph_of: (f: F) => Graph'),
         'hover on a member of a migrated module over a type variable', h)
     check(h.includes('Function of module `graph`'), 'naming the module it comes from', h)
     h = await hoverMember('import re', 're::has_match<"a">("b")', 're::has_match', 5)
-    check(h !== null && h.includes('func has_match(text: string): bool'),
+    check(h !== null && h.includes('func has_match(text: string) => bool'),
         'hover on a declared member of a migrated module', h)
 
     // ---- completion: the variants of an enum after `Type::` ----
@@ -184,7 +184,7 @@ ${body}
     m = edit(MAIN.replace('    let sum = add(1, 2)', '    let sum = add(/*a*/1, /*b*/2)\n    let more = scale(p, /*s*/'))
     let sh = await help(m, 'a')
     checkEq(sh.signatures.map((s) => s.label),
-        ['func add(a: int, b: int): int', 'func add(a: float, b: float): float'],
+        ['func add(a: int, b: int) => int', 'func add(a: float, b: float) => float'],
         'every overload is a signature')
     checkEq(sh.activeParameter, 0, 'the first argument is active')
     checkEq(sh.signatures[0].parameters.map((p) => sh.signatures[0].label.slice(...p.label)),
@@ -203,7 +203,7 @@ ${body}
     checkEq(await help(m, 't'), null, 'no signature help inside a tuple')
     // A member of a migrated module: one over a type variable and one over plain types.
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport graph')
-        .replace('    return 0\n}', '    let r = graph::graph_of(/*m*/(x: float): float => x + 1.0)\n    return 0\n}'))
+        .replace('    return 0\n}', '    let r = graph::graph_of(/*m*/func (x: float) => float x + 1.0)\n    return 0\n}'))
     sh = await help(m, 'm')
     check(sh !== null && sh.signatures[0].label.includes('graph_of: (f: F)'),
         'signature help on a member of a migrated module over a type variable', sh)
@@ -221,8 +221,10 @@ ${body}
     let prep = await ls.request('textDocument/prepareRename', pos('let sum', 1, 4))
     checkEq([fmtRange(prep.range), prep.placeholder], ['32:8-32:11', 'sum'], 'prepareRename gives the name')
     let we = await ls.request('textDocument/rename', { ...pos('let sum', 1, 4), newName: 'result' })
+    // `double(sum)` is on the fortieth line (0-based 39): the lambda above it
+    // takes three lines.
     checkEq(we.changes[uri].map((e) => `${fmtRange(e.range)} ${e.newText}`),
-        ['32:8-32:11 result', '37:19-37:22 result'], 'a local: its declaration and its uses')
+        ['32:8-32:11 result', '39:19-39:22 result'], 'a local: its declaration and its uses')
     // From a use, and for a parameter.
     we = await ls.request('textDocument/rename', { ...pos('counter += by'), newName: 'cell' })
     checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['19:14-19:21', '20:4-20:11', '21:11-21:18'],
@@ -232,8 +234,8 @@ ${body}
     checkEq(we.changes[uri].map((e) => fmtRange(e.range)),
         ['11:5-11:8', '15:5-15:8', '32:14-32:17', '33:15-33:18'],
         'overloads share their name: all are renamed, with the calls of each')
-    we = await ls.request('textDocument/rename', { ...pos('): T', 1, 3), newName: 'U' })
-    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['6:16-6:17', '6:22-6:23', '6:26-6:27'],
+    we = await ls.request('textDocument/rename', { ...pos(') => T', 1, 5), newName: 'U' })
+    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['6:16-6:17', '6:22-6:23', '6:28-6:29'],
         'a type parameter: its head declaration and its uses')
     we = await ls.request('textDocument/rename', { ...pos('type Pair', 1, 5), newName: 'Entry' })
     checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['3:5-3:9', '34:14-34:18'], 'a type alias')
@@ -253,7 +255,7 @@ ${body}
     check(r.error && r.error.message.includes('nothing here'), 'prepareRename on a keyword is refused', r)
 
     // A generic function that is never called: the compiler has not seen the uses in it.
-    m = edit(`func unused::<T>(x: T): T {
+    m = edit(`func unused::<T>(x: T) => T {
     let /*y*/y = x
     return y
 }
@@ -265,10 +267,12 @@ func main() sync {
     await refused({ textDocument: { uri }, position: m.at('y'), newName: 'z' },
         'cannot be confirmed', 'a name used only in code the compiler did not build is refused')
     // Exported functions are now renamed across the workspace after validation.
-    m = edit('export func /*f*/twice(x: int): int {\n    return x * 2\n}\n\nfunc main() sync {\n    return twice(1)\n}\n')
+    m = edit('export func /*f*/twice(x: int) => int {\n    return x * 2\n}\n\nfunc main() sync {\n    return twice(1)\n}\n')
     we = await ls.request('textDocument/rename', {
         textDocument: { uri }, position: m.at('f'), newName: 'double',
     })
+    // `double(sum)` is on the fortieth line (0-based 39): the lambda above it
+    // takes three lines.
     checkEq(we.changes[uri].map((e) => `${fmtRange(e.range)} ${e.newText}`),
         ['5:11-5:16 double', '0:12-0:17 double'],
         'an exported function: its declaration and call are renamed together')
@@ -313,8 +317,8 @@ func main() sync {
     checkEq(tok(34, 'Pair'), 'type', 'its use')
     checkEq(tok(3, 'int'), 'type defaultLibrary', 'a built-in type')
     checkEq(tok(6, 'T'), 'typeParameter declaration', 'a type variable')
-    checkEq(tok(38, 'println'), 'function defaultLibrary', 'a library function')
-    checkEq(tok(38, 'i'), 'variable readonly', 'a with-argument')
+    checkEq(tok(40, 'println'), 'function defaultLibrary', 'a library function')
+    checkEq(tok(40, 'i'), 'variable readonly', 'a with-argument')
     checkEq(tok(25, '3'), 'number', 'a number')
     checkEq(tok(31, "'text'"), 'string', 'a string')
     checkEq(tok(24, 'main'), 'function declaration', 'main')

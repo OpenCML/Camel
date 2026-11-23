@@ -96,14 +96,14 @@ FX_CONTROL = ROOT / "test" / "cases" / "opt" / "writings" / "fx_greedy_fusion.py
 # The program of plan 丙's item (a): one function that computes `x*2 + y*3 + x*y`, and an entry that
 # calls it. The multiplications are written as three statements so that swapping two of them swaps
 # two lines and nothing else, and so that the order they are built in is the order they are read.
-BASE = """func combine(x: int, y: int): int {
+BASE = """func combine(x: int, y: int) => int {
     let a = x * 2
     let b = y * 3
     let c = x * y
     return a + b + c
 }
 
-func main(): int {
+func main() => int {
     return combine(3, 5)
 }
 """

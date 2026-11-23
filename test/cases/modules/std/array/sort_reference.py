@@ -77,13 +77,13 @@ def main() -> int:
                      f"    println('#', a{k})", f"    v{k} = v{k}->{op}", f"    println('#', v{k})"]
             expected += [ref, xs, ref, xs, ref]
     names = ", ".join(COPYING)
-    small = f"import {{ {names} }} from array\n\nfunc main(): int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
+    small = f"import {{ {names} }} from array\n\nfunc main() => int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
     n = 200000
     large = f"""import {{ sort }} from array
 
-func main(): int sync {{
+func main() => int sync {{
     let up = 0..{n}
-    let down = up->map<(i: int): int => {n} - 1 - i>
+    let down = up->map<func (i: int) => int {n} - 1 - i>
     let a = sort(up)
     var b = down
     b = b->sort

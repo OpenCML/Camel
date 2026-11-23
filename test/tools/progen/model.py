@@ -264,14 +264,23 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         # A lambda carries no `sync` prefix: order comes from the `sync { }` of its body, which
         # `block` writes (design principles 3.3). The prefix was retired with the one on a
         # declaration, and the parser no longer knows either spelling.
-        ret = "" if n.a["ret"] is None else ": " + type_src(n.a["ret"])
-        return wrap(f"({params_src(n.a['params'])}){ret} => {arm(n.c[0], ind)}")
+        #
+        # The body is a block even when the model draws one expression: a lambda stands as an
+        # angled argument (`filter<func (x) => bool ...>`), and inside an angle-bracket list a
+        # body that ends in a postfix call (`[..]->contains<T>`) leaves the list's `>` and the
+        # call's `>` in one token run. A block ends the body at its `}`, so the list's `>` is the
+        # only one left.
+        ret = "" if n.a["ret"] is None else " => " + type_src(n.a["ret"])
+        body = arm(n.c[0], ind + 1)
+        if not body.lstrip().startswith(("{", "sync {")):
+            body = "{\n" + IND * (ind + 1) + "return " + body + ";\n" + IND * ind + "}"
+        return wrap(f"func ({params_src(n.a['params'])}){ret} {body}")
     if k in ("map", "filter", "foreach"):
         return wrap(f"{post(n.c[0])}->{k}<{arg(n.c[1])}>")
     if k == "reduce":
         return wrap(f"{post(n.c[0])}->reduce<{arg(n.c[1])}, {arg(n.c[2])}>")
     if k == "slice":
-        return wrap(f"{post(n.c[0])}[{arg(n.c[1])}:{arg(n.c[2])}]")
+        return wrap(f"{post(n.c[0])}[{arg(n.c[1])}..{arg(n.c[2])}]")
     if k == "contains":
         return wrap(f"{post(n.c[0])}->contains<{arg(n.c[1])}>")
     if k == "append":
@@ -346,15 +355,15 @@ def st(n: N, ind: int) -> list:
 
 def func_src(n: N, ind: int) -> list:
     pad = IND * ind
-    # The `sync` marker is the body's (`func f(): T sync { ... }`), never a prefix before `func`:
-    # the prefix form `sync func` is retired (design-principles-log 2.24, which 2.3 withdrew) and
-    # the front end refuses it as a token that fits nothing. Every function this generator marks
-    # `syncfn` has a sync body (generate.py), which is what carries the marker now.
+    # The `sync` marker is the body's (`func f() => T sync { ... }`), never a prefix before
+    # `func`: the prefix form `sync func` is retired (design-principles-log 2.24, which 2.3
+    # withdrew) and the front end refuses it as a token that fits nothing. Every function this
+    # generator marks `syncfn` has a sync body (generate.py), which is what carries the marker now.
     body = n.c[0]
     assert not n.a.get("syncfn") or (body.k == "blk" and body.a.get("sync")), \
         "a function the model calls sync has a sync body"
     mods = "#macro " if n.a.get("macro") else ""
-    head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
+    head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}) => {type_src(n.a['ret'])} "
     lines = [head + block(body, ind)]
     if n.a.get("with"):
         # Context parameters: `with <k: int>` on the line before the function.

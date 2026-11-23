@@ -34,7 +34,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ReservedIdentifier",
                 "Identifiers starting and ending with double underscores are reserved for internal use.",
-                "Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V): V'.",
+                "Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V) => V'.",
             },
         },
         {
@@ -274,7 +274,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeVariableRedeclared",
                 "The type parameter '{0}' is declared twice at the head of this declaration.",
-                "A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T: int>').",
+                "A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]) => T'. A call names them by position or by name ('f::<T: int>').",
             },
         },
         {
@@ -1594,7 +1594,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ImplKernelUnknown",
                 "The '#impl' tag of '{0}' names '{1}', which is no body-less declaration.",
-                "The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...): T'). Declare the operator, and write its name in the tag.",
+                "The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...) => T'). Declare the operator, and write its name in the tag.",
             },
         },
         {
@@ -1794,7 +1794,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "YieldRequiresStreamHead",
                 "A function whose body writes 'yield' hands out a stream, and this function's head does not write one.",
-                "A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.",
+                "A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T) => U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.",
             },
         },
         {
@@ -1898,7 +1898,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "IgnoredSideEffect",
                 "{0} is not in a sync block, and {1}.",
-                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f() => T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).",
             },
         },
         {
@@ -1994,7 +1994,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "FailNotExecuted",
                 "This 'fail' is not executed: {0}.",
-                "A 'fail' raises its fault where its value is wanted, and it is no effect of its own: nothing else runs it. Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'), or write it where the data passes, so that the value it gives is the one that is needed.",
+                "A 'fail' raises its fault where its value is wanted, and it is no effect of its own: nothing else runs it. Put it in a sync block ('sync {{ ... }}', or a function body 'func f() => T sync {{ ... }}'), or write it where the data passes, so that the value it gives is the one that is needed.",
             },
         },
         {

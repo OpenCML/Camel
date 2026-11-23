@@ -31,7 +31,7 @@ fs.mkdirSync(STDLIB, { recursive: true })
 const declaration = path.join(STDLIB, 'std.cml')
 fs.writeFileSync(declaration, '// no pass declarations\n')
 const program = path.join(SCRATCH, 'program.cml')
-fs.writeFileSync(program, 'func main(): int sync {\n    return 0\n}\n')
+fs.writeFileSync(program, 'func main() => int sync {\n    return 0\n}\n')
 
 function camel(args) {
     const env = { ...process.env, CAMEL_HOME: HOME, CAMEL_STD_LIB: STDLIB }

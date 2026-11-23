@@ -9,7 +9,7 @@ import { withServer, checkEq, REPO_ROOT } from '../../../tools/lsp/client.mjs'
 
 await withServer(async (ls) => {
     // Naming the entry "main" breaks both the self-qualified reference and native lookup.
-    const uri = ls.open('identity.cml', 'func value(): int { return 7 }\nfunc main(): int { return identity::value() }\n')
+    const uri = ls.open('identity.cml', 'func value() => int { return 7 }\nfunc main() => int { return identity::value() }\n')
     const errors = async (uri) => (await ls.request('textDocument/diagnostic', {
         textDocument: { uri },
     })).items.filter(d => d.severity === 1)

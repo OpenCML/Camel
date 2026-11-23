@@ -25,7 +25,7 @@ await withServer(async (ls) => {
     let h = await hover('${n}', 2)
     check(h !== null && h.includes('n: int'), 'a local inside an interpolation has a hover', h)
     h = await hover('${add(', 2)
-    check(h !== null && h.includes('func add(a: int, b: int): int'),
+    check(h !== null && h.includes('func add(a: int, b: int) => int'),
         'a function called inside an interpolation has its signature as a hover', h)
 
     // ---- hover: a member after a dot in `${...}` ----
@@ -39,7 +39,8 @@ await withServer(async (ls) => {
     })
     check(Array.isArray(d) && d.length === 1 && d[0].uri === uri,
         'the definition of a name inside an interpolation is in the same file', d)
-    checkEq(d[0].range.start.line, 2, 'at its declaration')
+    // `let n = 2` is the fifth line, 0-based four: `add` takes three lines at the top.
+    checkEq(d[0].range.start.line, 4, 'at its declaration')
 
     // Semantic string tokens must leave room for the names the index resolved inside them.
     const semantic = await ls.request('textDocument/semanticTokens/full', { textDocument: { uri } })

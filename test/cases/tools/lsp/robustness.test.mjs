@@ -98,22 +98,22 @@ await withServer(async (ls) => {
     // is reported once, where it is, and nothing else is; the outline still has every
     // declaration, and navigation works in the functions around the errors.
     {
-        const broken = `func first(a: int): int {
+        const broken = `func first(a: int) => int {
     let x = (a + 1
     return x
 }
 
-func second(n: int): int {
+func second(n: int) => int {
     let y = if n > 0 n else 0
     return y
 }
 
-func third(k: int): int {
+func third(k: int) => int {
     let local = k * 2
     return local + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(third(1))
     return 0
 }
@@ -219,7 +219,7 @@ func main(): int sync {
     // ---- a very large document ----
     let big = ''
     for (let i = 0; i < 4000; i++) {
-        big += `func f${i}(x: int): int {\n    let y = x + ${i}\n    return y * 2\n}\n\n`
+        big += `func f${i}(x: int) => int {\n    let y = x + ${i}\n    return y * 2\n}\n\n`
     }
     big += 'func main() sync {\n    return f0(1) + f3999(2)\n}\n'
     const bigLines = big.split('\n').length
