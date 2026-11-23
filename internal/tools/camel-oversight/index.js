@@ -2,9 +2,9 @@
 // this DSH process is doing and leaves it messages.
 //
 // Four HTTP routes on the web server the GUI already has, and one tool for the model:
-//   GET  /oversee/state  the target session's status (idle or running, and since when), every live
-//                        agent's status, a one-line summary of each recent turn, the messages sent
-//                        through this channel that are not yet acknowledged, and the build host's load;
+//   GET  /oversee/state  the target session's status (idle or running, and since when), its live lanes
+//                        (subagents, running or inactive), every root session, a summary of each recent
+//                        turn, the messages not yet acknowledged, and the build host's load;
 //   GET  /oversee/tail   the last n events of a session, each reduced to one line;
 //   POST /oversee/say    {id, text, mode} queues a user message into the target session;
 //   GET  /oversee/acks   what the model said about each message (taken, declined, done), and what it
@@ -267,13 +267,40 @@ export function apply(ctx, rawConfig) {
         }),
     )
 
-    route('/oversee/state', 'GET', (req, res) => {
+    // The lanes are the target session's live subagents, read from the subagent catalog every time
+    // they are asked for, so the count cannot go stale the way a hand-kept table does. A lane run by
+    // another process is not in this catalog and is not counted.
+    const lanesOf = async (id) => {
+        const subagents = ctx.get('subagents')
+        if (!id || !subagents || typeof subagents.listDescendants !== 'function') return { unreadable: 'no subagent service' }
+        try {
+            const rows = await subagents.listDescendants(id, AbortSignal.timeout(5_000))
+            const children = rows.filter((row) => row.kind === 'child')
+            return {
+                running: children.filter((row) => row.activity === 'running').length,
+                total: children.length,
+                lanes: children.map((row) => ({
+                    id: String(row.id),
+                    path: row.path ?? null,
+                    name: row.name ?? row.label ?? null,
+                    mode: row.mode,
+                    activity: row.activity,
+                    depth: row.depth,
+                })),
+            }
+        } catch (error) {
+            return { unreadable: clip(error && error.message ? error.message : error, 200) }
+        }
+    }
+
+    route('/oversee/state', 'GET', async (req, res) => {
         probeBuild()
         const agent = target()
         const id = agent ? String(agent.id) : null
         answer(res, 200, {
             at: Date.now(),
             target: agent ? { id, cwd: headerOf(agent).cwd ?? null, status: agent.status, since: since.get(id) ?? null } : null,
+            lanes: await lanesOf(id),
             sessions: sessionsNow(),
             recentTurns: id ? recentTurns(id, config.turnsInState) : [],
             unacknowledged: pending(),
@@ -423,7 +450,7 @@ export function apply(ctx, rawConfig) {
                 const waiting = pending()
                 const head =
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +
-                    'Treat each as an inbox item: act on it as you would on one in internal/inbox.md, and acknowledge it with oversight_ack (taken, declined with a reason, or done).'
+                    'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit).'
                 return waiting.length === 0 ? head : `${head} Not yet acknowledged: ${waiting.join(', ')}.`
             },
         }),
