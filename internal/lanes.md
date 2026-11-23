@@ -9,7 +9,8 @@
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
 | lane/fact-slots | 事实的读路径按槽位:`GCGraph` 自己一张固定槽表(登记时给的 `KindId` 作下标,存裸指针),节点级事实放一张按节点号稠密的数组,框架仍是唯一主人(登记、过期、随图销毁都不出 `camel/facts`) | `feat/modules/graph_facts` **9/9**(新增 `slots`,15 条检查全 ok:发布、单条失效清槽、`invalidateGraph`(= `~GCGraph` 走的那条)清两张槽、清后再发布);`smoke` 10/10/0;`feat/parse` **125/126**;`feat/compile` 2666/2672/1红/5known/1信号;三计划合计 2808/2801/2/5/1信号。那 2 红都不是本笔:1 条既有 `vmap_batches_the_element_of_a_row.prl` SIGSEGV;1 条 `frontend.ast_snapshot` 对 `test/cases/modules/nn/conv2d_shape_error.cml` —— `32a4a4f968` 记 `6692c1c6ea1a5a1b`,合并 `1e7d0dc2a3` 改了这个 case 却只留 `a41f58173fb1bc0b`,文件今天算 `2e4b0e5e1ae57d83`,基准树上就红 | 无(未合入) | 合入 `develop`;性能读数等一条在安静主机上的车道(作者 `515b0c7a0f` 撤回了本笔的基线) | 20:20 |
-| lane/nn-kernels | ① conv/池化/BN 及三个梯度的内核按元素类型实例化（f64 能算）；② 导出侧的元素类型；③ 两条 f64 用例 | 读数待本轮闸门 | — | ② 的声明式路径与闸门读数 | 11-23 20:40 |
+| lane/nn-kernels | ① conv/池化/BN 与它们的三个梯度按元素类型模板化:f32 仍走 sgemm(逐位不变)、f64 走新公开的 dgemm;② 导出侧 nn 家族改读调用方的元素类型,Conv/AveragePool 按目标表 
+o_kernel.float64 留成 f32 岛并在边界回铸;③ 两条 f64 用例 | eat/modules **2082/1935/136红 → 2085/1941/133红**;eat/parse **126/126/0**(rontend.ast_snapshot 本笔转绿);smoke 10/10/0;整层 9861/9234/565/25/37/4信号(基线 6b844be42 是 9858/9226/570/25/37/5),逐名比 **只减不增**;xport_train_step_bn 由红转绿,导出图过 onnx.checker full_check 243 节点 | 未合入 | ② 在语言层被形状挡住(strided conv 的 extents 只许维名/constas,而 native 声明不许带 constas),要作者定;导出侧还剩 gelu/rf 与 Adam 那条 f32 账 | 11-23 21:05 |
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |
