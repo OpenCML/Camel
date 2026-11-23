@@ -6688,7 +6688,7 @@ remain searchable, and an explicit commutativity rule may still add exchanged wr
 #### `extract`
 
 ```camel
-extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
+extract: <cost: (n: Node, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
 ```
 
 Chooses one writing of every value that has several, the one of least total cost. The cost of

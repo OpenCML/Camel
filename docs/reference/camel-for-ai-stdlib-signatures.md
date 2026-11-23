@@ -706,7 +706,7 @@ check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 ```text
 rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! panic when is_function::<F>()
 saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! panic when is_function::<F>()
-extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
+extract: <cost: (n: Node, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
 run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! panic when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport panic
 check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic when is_function::<F>()

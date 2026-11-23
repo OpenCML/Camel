@@ -532,8 +532,8 @@ a82098797df46210 ok src/stdlib/perf.cml
 692ab627c3592a87 ok src/stdlib/python.cml
 96c238e799b75f4a ok src/stdlib/random.cml
 5a4ff6e8ce76543a ok src/stdlib/re.cml
-00bb6a34509ce857 ok src/stdlib/rewrite.cml
-df65484d5873dc7c ok src/stdlib/rules.cml
+59f8a7b6bec9a1b9 ok src/stdlib/rewrite.cml
+cfa361b55c454c90 ok src/stdlib/rules.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 b4a9f226ac6e68db ok src/stdlib/state.cml
 cb7539a8da81e513 ok src/stdlib/statistics.cml
@@ -1373,7 +1373,7 @@ f955bf045308dbc3 ok test/cases/compile/native/retired_str_bytes.cml
 1c668ffa80f9acd5 ok test/cases/compile/native/retired_str_from_bytes.cml
 1e99986c7e0930af ok test/cases/compile/native/rewrite_arity.cml
 4feb1dfe3bf7f5f4 ok test/cases/compile/native/rewrite_declaration_import.cml
-04b22a48d077bd9d ok test/cases/compile/native/rewrite_type.cml
+4fa30083e7b0bb32 ok test/cases/compile/native/rewrite_type.cml
 22c2a4964eeb8193 ok test/cases/compile/native/rule_reader_arity.cml
 c238b237d2bd3e40 ok test/cases/compile/native/rule_reader_declaration_import.cml
 eb0bb13812db953a ok test/cases/compile/native/rule_reader_type.cml
@@ -1447,6 +1447,8 @@ ea23526b40cd9c2f ok test/cases/compile/overloads/exact_over_entering.cml
 124afd53f3ad5e36 ok test/cases/compile/overloads/generic_overloads_same_param_name.cml
 be8e653d5a41c44f ok test/cases/compile/overloads/generic_same_signature.cml
 8893955090258bdd ok test/cases/compile/overloads/no_match.cml
+e10695a7925307bc ok test/cases/compile/overloads/op_body_no_match.cml
+f10b31d7dac256ee ok test/cases/compile/overloads/op_body_overloads.cml
 f46ca9cf8e4d2f79 ok test/cases/compile/overloads/overloaded_name_as_value.cml
 af2910f182631de1 ok test/cases/compile/overloads/overloads.cml
 45c8a99514d3e160 ok test/cases/compile/overloads/same_signature.cml
@@ -3371,8 +3373,8 @@ e0189168defc3713 ok test/cases/modules/rename/hash_old.cml
 1e0bdfb7a9f2747e ok test/cases/modules/rename/process_identity.cml
 86a58aa083a64457 ok test/cases/modules/rename/process_new.cml
 fddddc370da3c496 ok test/cases/modules/rename/process_old.cml
-9bcfca4c2896c769 ok test/cases/modules/rewrite_function/apply.cml
-7f0792b6019f0d6e ok test/cases/modules/rewrite_function/ordered.cml
+2330c38bc0f0beed ok test/cases/modules/rewrite_function/apply.cml
+c1f2becbbf89aaaf ok test/cases/modules/rewrite_function/ordered.cml
 19c8ea3d533f0fd5 ok test/cases/modules/rewrite_function/ordered_explain.cml
 7b917565e7a6d0f8 ok test/cases/modules/rewrite_function/ordered_type_error.cml
 700972f16646ce9e ok test/cases/modules/rewrite_function/simp_target.cml

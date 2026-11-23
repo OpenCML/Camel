@@ -134,7 +134,7 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 |---|---|
 | `f->rewrite<rules>` | the rules one way, in place, to a fixpoint (`DraftWritings::rewrite`); a `<=>` rule is the error value `RuleTwoWay` |
 | `f->saturate<rules, rounds>` | both ways on the writings of every value; the result has values with several writings |
-| `f->extract<cost>` | one writing per value by the cost function `cost`, a Camel function `(o: Op, inputs: float[]) => float` |
+| `f->extract<cost>` | one writing per value by the cost function `cost`, a Camel function `(n: Node, inputs: float[]) => float`, given the node of the graph |
 | `rules->check<samples, seed>` | the check of section 4 |
 | `p->run<rules>` | `rewrite` with the round budget explicit, as a `Run` with its cost (section 3.1); `rounds` (16), `strict` (false) and `explain` (false) have defaults |
 | `p->run<rules, explain: true>` | the same, with the attribution record open; `r->explain<a, b>` reads the chain between two values and `explain_all(r)` the whole log (section 3.2) |

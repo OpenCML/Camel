@@ -38,7 +38,7 @@
  * is no rule per operand order and no rule for commutation or association (rewrite design 6).
  */
 
-import { Op } from graph
+import { Node } from graph
 import { abs, exp, expm1, log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { exp as exp_array, log as log_array, log_softmax, sigmoid, softmax } from tensor
@@ -424,11 +424,11 @@ export func fusion::<F>(f: F) => F! when is_function::<F>() {
 
 // ---- cost functions for `extract` ----
 
-/// The cost of a writing is the number of nodes in it: one for the operator and the costs of its
-/// inputs.
+/// The cost of a writing is the number of nodes in it: one for the node and the costs of its
+/// inputs. The node is not read by name: every node costs one, whatever operator it carries.
 /// @example-fragment used as the cost of an extraction
 /// @example f->extract<nodes>
-export func nodes(o: Op, inputs: float[]) => float {
+export func nodes(n: Node, inputs: float[]) => float {
     return 1.0 + inputs->reduce<func (a, b) {
         a + b
     }, 0.0>

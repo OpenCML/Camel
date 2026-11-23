@@ -1,4 +1,4 @@
-import { Node, Op } from graph
+import { Node } from graph
 import { Rule, rewrite, run, saturate, extract, check, check_text } from rewrite
 
 rule bump_one(x: int) { x + 0 => x + 1 }
@@ -7,7 +7,7 @@ func target(x: int) => int {
     return (x + 0) * 2
 }
 
-func unit_cost(o: Op, inputs: float[]) => float {
+func unit_cost(n: Node, inputs: float[]) => float {
     return 1.0 + inputs->reduce<func (acc: float, c: float) {
         acc + c
     }, 0.0>
