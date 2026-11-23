@@ -1,5 +1,6 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
+
 /**
  * Two runs of the same set of plans, compared case by case.
  *

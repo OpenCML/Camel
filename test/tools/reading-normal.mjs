@@ -1,5 +1,6 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
+
 /**
  * How one reading of a test's failure is compared with another.
  *

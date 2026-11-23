@@ -1,5 +1,6 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
+
 /**
  * Both directions of `normalizeReading`, because both are defects and only one of them is loud.
  *
