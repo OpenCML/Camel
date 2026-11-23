@@ -4,7 +4,7 @@
 
 `camel-db` 是 Camel 的调试器。本文讲源码级调试：源码行断点与函数断点、单步、调用栈、变量。在编辑器里走
 [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/)（DAP）：任何带 DAP
-客户端的编辑器都能用，[`editors/vscode`](../editors/vscode) 里的 VS Code 扩展已经配置好。在终端里，
+客户端的编辑器都能用，VS Code 扩展（源码在它自己的仓库里，不在本仓库）已经配置好。在终端里，
 `camel-db` 的 REPL 有同样的命令（[第 2 节](#2-在命令行里)）。
 
 Camel 的程序是一张图，调试器不把它伪装成别的东西。"下一行""调用栈""变量"在 Camel 里各是什么意思，见

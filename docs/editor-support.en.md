@@ -5,7 +5,7 @@
 Camel's editor support has two parts:
 
 - **`camel-ls`**, a language server speaking the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) over standard input and output. It is built with the rest of the repository and works with any editor that has an LSP client.
-- **The VS Code extension** in [`editors/vscode`](../editors/vscode): a TextMate grammar and a language configuration for `.cml` files, a thin client that starts `camel-ls`, and two commands that have no counterpart in the protocol (show the graph of a function, run the file through a pass sequence).
+- **The VS Code extension**, whose sources live in their own repository ([OpenCML/OpenCML-Ext](https://github.com/OpenCML/OpenCML-Ext)) and not in this one: a TextMate grammar and a language configuration for `.cml` files, a thin client that starts `camel-ls`, and two commands that have no counterpart in the protocol (show the graph of a function, run the file through a pass sequence).
 
 Debugging is a third part with a guide of its own: [Debugging Camel Programs](debugging.en.md). The extension contributes the debugger type `camel`, which starts `camel-db --dap`.
 
@@ -37,16 +37,17 @@ The server is started as `camel-ls --stdio` and needs no other argument. Like `c
 
 ### 1.2 The VS Code extension
 
+The extension's sources are in their own repository ([OpenCML/OpenCML-Ext](https://github.com/OpenCML/OpenCML-Ext)); the commands below are run in a checkout of that repository, not in this one.
+
 Requirements: Node.js 20 or later and VS Code 1.82 or later.
 
 ```bash
-cd editors/vscode
 npm ci
 npm run package
 code --install-extension camel-lang-0.1.0.vsix
 ```
 
-`npm ci` installs exactly what `package-lock.json` records, and the two packages that decide what a token's scope is (`vscode-textmate`, `vscode-oniguruma`) are pinned to an exact version in `package.json` as well, so no install can drift away from the recorded scopes. `npm run package` checks the grammar against the lexer, compiles the TypeScript source and writes `camel-lang-<version>.vsix`. To try the extension without installing it, open `editors/vscode` in VS Code after `npm ci` and `npm run compile`, and press F5.
+`npm ci` installs exactly what `package-lock.json` records, and the two packages that decide what a token's scope is (`vscode-textmate`, `vscode-oniguruma`) are pinned to an exact version in `package.json` as well, so no install can drift away from the recorded scopes. `npm run package` checks the grammar against the lexer, compiles the TypeScript source and writes `camel-lang-<version>.vsix`. To try the extension without installing it, open that checkout in VS Code after `npm ci` and `npm run compile`, and press F5.
 
 The extension looks for `camel-ls` in this order: the setting `camel.server.path`, then `$CAMEL_HOME/bin`, then `PATH`. `camel` (for the run command) is found the same way, with the setting `camel.path`. When `camel-ls` is not found the extension reports where it looked and points at the setting; syntax highlighting does not depend on the server.
 
@@ -296,14 +297,16 @@ Helix highlights with tree-sitter grammars, and there is none for Camel: a file 
 
 ## 5. Working on the grammar
 
-The TextMate grammar (`editors/vscode/syntaxes/camel.tmLanguage.json`) is kept in step with the lexer's own token table (`parse/include/camel/parse/syntax/token_kinds.def`). Two kinds of tests keep it that way; both run with the default test set (`npm run test`):
+The TextMate grammar (`syntaxes/camel.tmLanguage.json` in the extension's own repository) is kept in step with the lexer's own token table (`parse/include/camel/parse/syntax/token_kinds.def`). Two kinds of tests keep it that way; both run with the default test set (`npm run test`):
 
 ```bash
 node scripts/test.js test/plans/feat/tools/grammar.plan.toml
 ```
 
-- `grammar.tables` and `grammar.files` need nothing installed. The first fails when the lexer gains or loses a keyword, the parser a literal token, or the compiler a built-in type name that the grammar does not follow.
-- `grammar.scopes.*` tokenise a set of programs with the libraries VS Code itself uses and compare the scopes of every token with golden files under `test/plans/feat/tools/golden/grammar/`. They are **skipped** until `npm ci` has been run in `editors/vscode`: only a checkout with those packages installed runs them in the gate. A golden records the **text of its case file**, so a case that changed (a new spelling, a retired keyword) with no golden regenerated turns these red; `node test/tools/run-tests.mjs --update-golden` is the command that records them again.
+The plan names the extension's scripts as `editors/vscode/scripts/…`: that is a checkout of the extension's repository placed at `editors/` inside this tree, which a checkout of this repository alone does not have.
+
+- `grammar.tables` and `grammar.files` run the extension's own `scripts/check-grammar.mjs` and `scripts/check-manifest.mjs` and install nothing. They need the checkout above; without it they report a missing case file, so in a checkout of this repository alone both are red. The first fails when the lexer gains or loses a keyword, the parser a literal token, or the compiler a built-in type name that the grammar does not follow.
+- `grammar.scopes.*` (eleven cases) tokenise a set of programs with the libraries VS Code itself uses and compare the scopes of every token with golden files under `test/plans/feat/tools/golden/grammar/`. They are **skipped** unless that checkout is in place and its devDependencies are installed in it: the precondition is `editors/vscode/scripts/have-deps.mjs`, so a checkout of this repository alone skips them in every run, and no `npm ci` run anywhere else brings them back. A golden records the **text of its case file**, so a case that changed (a new spelling, a retired keyword) with no golden regenerated turns these red; `node test/tools/run-tests.mjs --update-golden` is the command that records them again.
 
 After a deliberate change to the grammar, look at the new scopes, then record them:
 
@@ -311,3 +314,5 @@ After a deliberate change to the grammar, look at the new scopes, then record th
 node editors/vscode/scripts/tokenize.mjs test/cases/tools/grammar/functions.cml
 node test/tools/run-tests.mjs --update-golden test/plans/feat/tools/grammar.plan.toml
 ```
+
+The tokeniser is `scripts/tokenize.mjs` in that checkout, so the first command is run from this repository's root with `editors/vscode` in place; the case file it is given is this repository's.

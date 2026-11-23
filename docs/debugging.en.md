@@ -5,8 +5,8 @@
 `camel-db` is Camel's debugger. This guide is about source-level debugging: breakpoints on
 source lines and on functions, stepping, the call stack, variables. In an editor it goes through
 the [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/) (DAP): any
-editor with a DAP client can use it, and the VS Code extension in
-[`editors/vscode`](../editors/vscode) is set up for it. In a terminal, the REPL of `camel-db`
+editor with a DAP client can use it, and the VS Code extension, whose sources live in their own
+repository, is set up for it. In a terminal, the REPL of `camel-db`
 has the same commands ([section 2](#2-from-the-command-line)).
 
 A Camel program is a graph, and the debugger does not pretend otherwise. What "the next line",

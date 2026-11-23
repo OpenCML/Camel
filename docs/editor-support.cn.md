@@ -5,7 +5,7 @@
 Camel 的编辑器支持由两部分组成：
 
 - **`camel-ls`**：语言服务器，通过标准输入输出使用[语言服务器协议（LSP）](https://microsoft.github.io/language-server-protocol/)。它随仓库的其余部分一起构建，任何带 LSP 客户端的编辑器都能使用。
-- **VS Code 扩展**，位于 [`editors/vscode`](../editors/vscode)：`.cml` 文件的 TextMate 语法与语言配置、一个启动 `camel-ls` 的薄客户端，以及协议中没有对应物的两条命令（显示函数的图、让文件经过一个遍序列运行）。
+- **VS Code 扩展**，源码在它自己的仓库里（[OpenCML/OpenCML-Ext](https://github.com/OpenCML/OpenCML-Ext)），不在本仓库：`.cml` 文件的 TextMate 语法与语言配置、一个启动 `camel-ls` 的薄客户端，以及协议中没有对应物的两条命令（显示函数的图、让文件经过一个遍序列运行）。
 
 调试是第三部分，另有专文：[调试 Camel 程序](debugging.cn.md)。扩展贡献了调试器类型 `camel`，它启动 `camel-db --dap`。
 
@@ -37,16 +37,17 @@ export PATH="$CAMEL_HOME/bin:$PATH"
 
 ### 1.2 VS Code 扩展
 
+扩展的源码在它自己的仓库里（[OpenCML/OpenCML-Ext](https://github.com/OpenCML/OpenCML-Ext)），下面这些命令都在那个仓库的检出目录里执行，不在本仓库里执行。
+
 要求：Node.js 20 或更高版本，VS Code 1.82 或更高版本。
 
 ```bash
-cd editors/vscode
 npm ci
 npm run package
 code --install-extension camel-lang-0.1.0.vsix
 ```
 
-`npm ci` 严格按 `package-lock.json` 安装；决定取词结果的两个包（`vscode-textmate`、`vscode-oniguruma`）在 `package.json` 里另外钉成精确版本，任何一次安装都不会偏离已记录的基准作用域。`npm run package` 对照词法文法检查语法文件、编译 TypeScript 源码，并写出 `camel-lang-<版本>.vsix`。不安装而试用扩展：执行 `npm ci` 与 `npm run compile` 后在 VS Code 中打开 `editors/vscode`，按 F5。
+`npm ci` 严格按 `package-lock.json` 安装；决定取词结果的两个包（`vscode-textmate`、`vscode-oniguruma`）在 `package.json` 里另外钉成精确版本，任何一次安装都不会偏离已记录的基准作用域。`npm run package` 对照词法文法检查语法文件、编译 TypeScript 源码，并写出 `camel-lang-<版本>.vsix`。不安装而试用扩展：执行 `npm ci` 与 `npm run compile` 后，在 VS Code 中打开那个检出目录，按 F5。
 
 扩展按以下顺序查找 `camel-ls`：设置项 `camel.server.path`，然后是 `$CAMEL_HOME/bin`，最后是 `PATH`。`camel`（用于运行命令）以同样的方式查找，设置项为 `camel.path`。找不到 `camel-ls` 时，扩展会报告它查找过的位置并指向该设置项；语法高亮不依赖服务器。
 
@@ -278,14 +279,16 @@ Helix 用 tree-sitter 语法做高亮，而 Camel 还没有 tree-sitter 语法�
 
 ## 5. 修改语法文件
 
-TextMate 语法（`editors/vscode/syntaxes/camel.tmLanguage.json`）与词法分析器自己的记号表（`parse/include/camel/parse/syntax/token_kinds.def`）保持一致。两类测试保证这一点，它们都随默认测试集（`npm run test`）运行：
+TextMate 语法（扩展自己仓库里的 `syntaxes/camel.tmLanguage.json`）与词法分析器自己的记号表（`parse/include/camel/parse/syntax/token_kinds.def`）保持一致。两类测试保证这一点，它们都随默认测试集（`npm run test`）运行：
 
 ```bash
 node scripts/test.js test/plans/feat/tools/grammar.plan.toml
 ```
 
-- `grammar.tables` 与 `grammar.files` 不需要安装任何东西。当词法文法增删了关键字、语法文法增删了字面记号、或编译器增删了内建类型名而语法文件没有跟上时，前者会失败。
-- `grammar.scopes.*` 用 VS Code 自己使用的库对一组程序分词，并把每个记号的作用域与 `test/plans/feat/tools/golden/grammar/` 下的基准文件比较。在 `editors/vscode` 中执行 `npm ci` 之前，这些测试会被**跳过**：只有这个目录装好了依赖，闸门才会跑它们。基准文件记的是**用例文件的文本**，所以用例改了（新增一条语法、把一个关键字退役）而基准没重出时，这六条会红；`test/tools/run-tests.mjs --update-golden` 就是重出它们的命令。
+这个计划把扩展的脚本写成 `editors/vscode/scripts/…`：那是把扩展仓库检出在本仓库的 `editors/` 下才有的目录，只检出本仓库的树里没有它。
+
+- `grammar.tables` 与 `grammar.files` 跑的是扩展仓库自己的 `scripts/check-grammar.mjs` 与 `scripts/check-manifest.mjs`，不需要安装任何东西，但需要上面那个检出：没有它，这两条报的是找不到用例文件，所以只检出本仓库时两条都是红的。当词法文法增删了关键字、语法文法增删了字面记号、或编译器增删了内建类型名而语法文件没有跟上时，前者会失败。
+- `grammar.scopes.*`（十一条）用 VS Code 自己使用的库对一组程序分词，并把每个记号的作用域与 `test/plans/feat/tools/golden/grammar/` 下的基准文件比较。只有上面那个检出就位、并且依赖已经在它里面装好，这些测试才会跑：前置条件是 `editors/vscode/scripts/have-deps.mjs`，所以只检出本仓库时它们每次都被**跳过**，在别处执行 `npm ci` 也不会让它们跑起来。基准文件记的是**用例文件的文本**，所以用例改了（新增一条语法、把一个关键字退役）而基准没重出时，这十一条会红；`test/tools/run-tests.mjs --update-golden` 就是重出它们的命令。
 
 有意修改语法文件之后，先查看新的作用域，再记录它们：
 
@@ -293,3 +296,5 @@ node scripts/test.js test/plans/feat/tools/grammar.plan.toml
 node editors/vscode/scripts/tokenize.mjs test/cases/tools/grammar/functions.cml
 node test/tools/run-tests.mjs --update-golden test/plans/feat/tools/grammar.plan.toml
 ```
+
+分词器是那个检出里的 `scripts/tokenize.mjs`，所以第一条命令在本仓库根目录执行、且 `editors/vscode` 就位；它拿到的用例文件是本仓库的。
