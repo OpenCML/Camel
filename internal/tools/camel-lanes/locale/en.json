@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Camel Lane State",
+    "description": "Reads a Camel checkout's lane state on a timer and puts origin/develop, unmerged lane branches, worktrees and stalled lane rows in front of the agent."
+  }
+}

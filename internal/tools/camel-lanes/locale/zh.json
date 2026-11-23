@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Camel 车道状态",
+    "description": "按定时器读取 Camel 检出仓的车道状态,把 origin/develop、未合入的车道分支、工作树数与停滞的车道行放到 agent 面前。"
+  }
+}

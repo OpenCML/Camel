@@ -1,0 +1,7 @@
+- insert:
+    - id: camel-lanes
+      name: '@local/camel-lanes'
+      config:
+        repo: 'D:\Projects\Camel'
+        intervalSeconds: 300
+        staleMinutes: 120
