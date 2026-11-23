@@ -288,7 +288,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CompOperandGenericWithoutType"
 expect_diagnostic_code = "0x030001E4"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 13
 expect_diagnostic_column = 20
 expect_output_contains = ["and its right operand, the generic function 'ident', has no instance here"]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "'void'"]
@@ -348,7 +348,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 10
 expect_diagnostic_column = 20
 expect_output_contains = ["'..' takes two integers and '<>' takes two functions; the left operand is '(x: int) => int pure' and the right one 'int'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]

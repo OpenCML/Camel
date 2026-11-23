@@ -1710,7 +1710,7 @@ dd39c562acc6c788 ok test/cases/compile/stream/comp_chain.cml
 90e6ae3660560aed ok test/cases/compile/stream/comp_lambda_equivalence.cml
 335e111ff8974f54 ok test/cases/compile/stream/comp_operand_function_integer.cml
 33c6552df523fa5b ok test/cases/compile/stream/comp_operand_generic.cml
-591f3c7d13b246ba ok test/cases/compile/stream/comp_operand_generic_mixed.cml
+ed12d625c8ec576e ok test/cases/compile/stream/comp_operand_generic_mixed.cml
 4566e9b7b255bf36 ok test/cases/compile/stream/comp_operand_mismatch.cml
 05143987c46e4175 ok test/cases/compile/stream/comp_operand_not_unary.cml
 bcab112b1be3fd31 ok test/cases/compile/stream/composition.cml

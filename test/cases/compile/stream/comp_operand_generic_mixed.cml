@@ -2,14 +2,15 @@
 // is the function `ident::<int>`, while the bare `ident` on the right still says no instance, and
 // nothing in the position does either. The refusal names the operand that is generic - the right
 // one here (design principles 5.5: the refusal names the operand whose instance no
-// position fixes).
+// position fixes). `<>` is the composition, and `..` has no such refusal: it is the interval of
+// two integers, and anything else is the operand mismatch.
 
 func ident::<T>(x: T) => T {
     return x
 }
 
 func main() => int sync {
-    let composed = ident::<int> .. ident
+    let composed = ident::<int> <> ident
     println(composed(4))
     return 0
 }
