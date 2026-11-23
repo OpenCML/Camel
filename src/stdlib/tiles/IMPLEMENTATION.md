@@ -49,7 +49,8 @@ follow [the design principles](../../../docs/design-principles.cn.md).
   their owners remain outside the source key. Validation rejects unsupported
   nested loop bodies before recursively validating their dependencies.
 - `src/row_kernel.cpp` and `row_body.cpp` plan shared row intermediates. Maximum is
-  order-independent under the canonical NaN/zero policy. Sum uses an exactness proof
+  order-independent: today's implementation answers any NaN with the canonical NaN
+  and orders -0 below +0. Sum uses an exactness proof
   for a parallel f64 sum and falls back to the canonical ordered chain when needed.
 - `src/cuda_backend.cpp`, `cuda_pool.cpp`, `cuda_resources.cpp`,
   `cuda_submission.cpp` and `device.cpp` manage driver/NVRTC

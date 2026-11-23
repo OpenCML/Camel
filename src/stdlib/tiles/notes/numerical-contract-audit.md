@@ -97,11 +97,14 @@ of 1 by 10, square root of 2, and the distinction between ordinary multiply/add
 and explicit FMA. It compares raw binary32 output words to exact expected values;
 these targeted cases do not establish exhaustive correct-rounding or ULP bounds.
 
-Extrema and relu return the fixed quiet NaN f32 `0x7fc00000` / f64
-`0x7ff8000000000000`, independent of input sign or payload. Tiles implements
-the f32 case; the merged CPU extrema implementation uses the same representation
-on the tested platforms. This resolves the previously pending payload question
-without extending that rule to unrelated arithmetic operations.
+Today's implementation produces the canonical quiet NaN for extrema and relu,
+f32 `0x7fc00000` / f64 `0x7ff8000000000000`, whatever the input's sign or
+payload. Tiles implements the f32 case; the merged CPU extrema implementation
+answers the same way on the tested platforms. A NaN's payload and signalling bit
+are not part of the value (design principles, floating point; the author's ruling
+of 2026-11-23), so no promise is made to carry either through: a check compares
+whether a value is a NaN, and the canonical pattern a test writes says only which
+cells are NaNs. This does not extend to unrelated arithmetic operations.
 
 Complete the reference contract for each composite operation, including input and accumulator
 types, rounding boundaries, subnormal handling, exceptional values, and permitted
