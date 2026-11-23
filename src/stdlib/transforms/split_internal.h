@@ -555,15 +555,32 @@ struct Half {
             return true;
         }
         case NodeCase::Fill: {
-            const auto *body       = fillBodyOf(*source, ref);
-            const std::byte *begin = reinterpret_cast<const std::byte *>(body);
-            const std::vector<std::byte> payload(
-                begin,
-                begin + sizeof(rt::GCFillBody) + body->slots().size_bytes());
+            // The copy keeps the construction's own payload: the slot list is what says which
+            // member each value fills, and a call's operands already are that list
+            // (`fillPayloadOf`).
+            const auto body = fillPayloadOf(*source, ref);
+            if (!body) {
+                return refuseAt(
+                    refusal,
+                    source,
+                    ref,
+                    "a construction",
+                    "the node builds a value and its payload says neither which slots its values "
+                    "fill nor what it hands the template");
+            }
+            std::vector<size_t> slots;
+            slots.reserve(body->slots.size());
+            for (const rt::gc_slot_idx_t slot : body->slots) {
+                slots.push_back(static_cast<size_t>(slot));
+            }
+            const std::vector<std::byte> payload = rt::makeFillPayload(body->fillKind, slots);
             const gc_node_ref_t made = draft.addFillNode(node->dataType(), payload);
-            // A fill's data ports are its template (the ordinary one) and the values it carries
-            // (the context ones); `inputs` is both, in the source's port order.
-            const size_t normCount = source->normInputsOf(ref).size();
+            // A fill's data ports are its template (the ordinary one) and the values it
+            // carries (the context ones); `inputs` is both, in the source's port order. A
+            // construction the source wrote as a call states the same two things in its own
+            // operands, template first, so the copy splits at the same place either way: one
+            // template, every value after it.
+            const size_t normCount = inputs.empty() ? 0 : 1;
             if (normCount > 0) {
                 draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs.data(), normCount));
             }
@@ -769,9 +786,9 @@ struct Half {
             // half a read of component 1 is **the call of that linear half**: one indirect call, on
             // the tangents the source call passed, and the call site never sees what the callee's
             // body reads.
-            const auto *body                       = accsBodyOf(*source, ref);
+            const auto body                        = accsPayloadOf(*source, ref);
             const std::vector<gc_node_ref_t> reads = dataInputsOf(source, ref);
-            if (body == nullptr || reads.empty()) {
+            if (!body || reads.empty()) {
                 return refuseAt(
                     refusal,
                     source,
@@ -884,7 +901,9 @@ struct Half {
             const gc_node_ref_t made = body->accsKind == rt::GCAccsKind::StructKey
                                            ? draft.addAccsNode(node->dataType(), body->key())
                                            : draft.addAccsNode(node->dataType(), body->value);
-            draft.setNormInputs(made, inputs);
+            // An ACCS node reads one value. A source read written as a call states the place as
+            // its own first operand, and that operand is the payload, not a port of the copy.
+            draft.setNormInputs(made, std::span<const gc_node_ref_t>(&inputs.back(), 1));
             copyOf[ref] = made;
             return true;
         }

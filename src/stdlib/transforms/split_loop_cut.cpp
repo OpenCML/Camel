@@ -176,10 +176,9 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
             continue;
         }
         const rt::GCNode *node                     = function->node(ref);
-        const auto *body                           = accsBodyOf(*function, ref);
+        const auto body                            = accsPayloadOf(*function, ref);
         const std::span<const gc_node_ref_t> reads = function->normInputsOf(ref);
-        if (node == nullptr || nodeOperatorOf(*function, ref) != NodeOperator::Accs ||
-            body == nullptr ||
+        if (node == nullptr || nodeOperatorOf(*function, ref) != NodeOperator::Accs || !body ||
             body->accsKind != rt::GCAccsKind::TupleIndex || reads.size() != 1 ||
             reads.front() != cut.statePort) {
             continue;

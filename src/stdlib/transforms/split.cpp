@@ -438,15 +438,17 @@ pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_
     if (nodeOperatorOf(graph, ref) != NodeOperator::Accs) {
         return rt::kInvalidNodeRef;
     }
-    const auto *body = accsBodyOf(graph, ref);
-    if (body == nullptr || body->accsKind != rt::GCAccsKind::TupleIndex || body->value != 1) {
+    const auto body = accsPayloadOf(graph, ref);
+    if (!body || body->accsKind != rt::GCAccsKind::TupleIndex || body->value != 1) {
         return rt::kInvalidNodeRef;
     }
     const std::vector<gc_node_ref_t> reads = dataInputsOf(&graph, ref);
-    if (reads.empty() || !answersAPairAt(graph, program, reads.front())) {
+    // The value read is the node's last data port: a read written as a call states the place
+    // first (`access: (Int64, T) => ...`), and a node of the ACCS kind has no other port.
+    if (reads.empty() || !answersAPairAt(graph, program, reads.back())) {
         return rt::kInvalidNodeRef;
     }
-    return reads.front();
+    return reads.back();
 }
 
 
@@ -1703,8 +1705,8 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
                 readsTheCell || (source != nullptr && source->kind == rt::GCNodeKind::Loop);
         }
         if (readsTheCell) {
-            const auto *body = accsBodyOf(*function, ref);
-            if (nodeOperatorOf(*function, ref) != NodeOperator::Accs || body == nullptr ||
+            const auto body = accsPayloadOf(*function, ref);
+            if (nodeOperatorOf(*function, ref) != NodeOperator::Accs || !body ||
                 body->accsKind != rt::GCAccsKind::TupleIndex || body->value > 1) {
                 return LoopReach{};
             }
@@ -1735,9 +1737,8 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
         return ExitShape::NotAPair;
     }
     if (nodeOperatorOf(*function, exit) == NodeOperator::Fill) {
-        const auto *fill = fillBodyOf(*function, exit);
-        if (fill != nullptr && fill->fillKind == rt::GCFillKind::Tuple &&
-            function->withInputsOf(exit).size() == 2) {
+        const auto fill = fillPayloadOf(*function, exit);
+        if (fill && fill->fillKind == rt::GCFillKind::Tuple && fill->size() == 2) {
             // The pair may be the loop cell itself pair of components, read through a chain above
             // the cell: `jvp` gives a loop the pair type, and a program that reads *into* the
             // loop's value

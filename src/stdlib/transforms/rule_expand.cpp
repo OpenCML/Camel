@@ -497,11 +497,11 @@ bool findRuleRightSide(
     // "if (hasClosure)"), a Data node over a static function slot. Same graph, no wrapper.
     gc_node_ref_t functionNode = rt::kInvalidNodeRef;
     if (nodeOperatorOf(*rhs, exitRef) == NodeOperator::Fill) {
-        const auto *fillBody = fillBodyOf(*rhs, exitRef);
-        if (fillBody == nullptr || fillBody->fillKind != rt::GCFillKind::FunctionClosure) {
+        const auto fillBody = fillPayloadOf(*rhs, exitRef);
+        if (!fillBody || fillBody->fillKind != rt::GCFillKind::FunctionClosure) {
             why = std::string("the rule's right side ends in a fill of kind ") +
-                  (fillBody == nullptr ? std::string("?")
-                                       : std::to_string(static_cast<int>(fillBody->fillKind))) +
+                  (!fillBody ? std::string("?")
+                             : std::to_string(static_cast<int>(fillBody->fillKind))) +
                   ", not a function of the tangents";
             return false;
         }
@@ -739,9 +739,9 @@ gc_node_ref_t expandRuleRightSide(
             return rt::kInvalidNodeRef;
         }
         if (nodeOperatorOf(*body, answerRef) == NodeOperator::Fill) {
-            const auto *fillBody = fillBodyOf(*body, answerRef);
-            if (fillBody != nullptr && fillBody->fillKind == rt::GCFillKind::Tuple) {
-                const auto components = body->withInputsOf(answerRef);
+            const auto fillBody = fillPayloadOf(*body, answerRef);
+            if (fillBody && fillBody->fillKind == rt::GCFillKind::Tuple) {
+                const std::vector<gc_node_ref_t> &components = fillBody->values;
                 if (position >= components.size()) {
                     why = "the rule's right side answers " + std::to_string(components.size()) +
                           " name(s), and the position asked for is " + std::to_string(position);

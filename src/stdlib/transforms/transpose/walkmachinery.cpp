@@ -352,7 +352,12 @@ size_t aggregateSlotCount(const WalkContext &ctx, gc_node_ref_t ref) {
         return 0;
     }
     if (nodeOperatorOf(*ctx.function, ref) == NodeOperator::Fill) {
-        return ctx.function->withInputsOf(ref).size();
+        // Which values the construction writes, whichever form it is written in: a FILL node's
+        // with-inputs are empty when the front end wrote the construction as a `fill` call, and a
+        // count of 0 there is not "a construction with no members" but the same number a wrong
+        // reader gets -- a slot the walk then finds out of range and drops.
+        const auto fill = fillPayloadOf(*ctx.function, ref);
+        return fill ? fill->values.size() : 0;
     }
     const Type *type = node->dataType();
     return type != nullptr && (type->code() == camel::core::type::TypeCode::Tuple ||
@@ -818,13 +823,15 @@ void deliverCotangent(
     if (const camel::runtime::GCNode *targetNode = ctx.function->node(target);
         targetNode != nullptr && nodeOperatorOf(*ctx.function, target) == NodeOperator::Accs) {
         const auto readFrom = ctx.function->normInputsOf(target);
-        const auto *body    = accsBodyOf(*ctx.function, target);
+        const auto body     = accsPayloadOf(*ctx.function, target);
+        // The value read is the last port in both forms (`access: (Int64, T) => ...`): a read
+        // written as a call states its place first, and that operand is no port of the arm.
         const bool onAResidualPort =
             !readFrom.empty() && std::any_of(
                                      stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
-                                         return stopRef == readFrom.front();
+                                         return stopRef == readFrom.back();
                                      });
-        if (body != nullptr && onAResidualPort) {
+        if (body && onAResidualPort) {
             auto &slot = (*arm.residualBack)[body->value];
             slot       = sumOfCotangents(ctx, ctSpace, slot, node);
             ctx.os << "TRANSPOSE function=" << ctx.function->name()
