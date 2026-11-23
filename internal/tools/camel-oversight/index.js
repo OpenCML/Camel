@@ -170,6 +170,17 @@ export function apply(ctx, rawConfig) {
     )
 
     const headerOf = (agent) => (agent && agent.session && agent.session.header) || {}
+    // A root session is one no other session spawned: the coordinator's own, never a lane.
+    const isRoot = (agent) => {
+        if (!agent) return false
+        const subagents = ctx.get('subagents')
+        try {
+            if (subagents && typeof subagents.rootOf === 'function') return subagents.rootOf(agent) === agent
+        } catch {
+            // fall through to the session header
+        }
+        return !headerOf(agent).parentSession
+    }
     const lastEventAt = (id) => {
         const tail = tails.get(id)
         return tail && tail.length ? tail[tail.length - 1].time : null
@@ -177,7 +188,7 @@ export function apply(ctx, rawConfig) {
 
     // A root session is one that no other session spawned. Every one is listed in the state, with
     // its directory, so the reader can see which sessions exist and which one is the target.
-    const roots = () => ctx.agents.list().filter((agent) => !headerOf(agent).parentSession)
+    const roots = () => ctx.agents.list().filter(isRoot)
     const sessionsNow = () =>
         roots().map((agent) => {
             const id = String(agent.id)
@@ -732,6 +743,11 @@ export function apply(ctx, rawConfig) {
             async execute() {
                 const agent = ctx.agents.currentInitiator()
                 if (!agent) return { result: 'no initiating session; nothing claimed' }
+                // Only a root session can be the coordinator. A lane is a subagent of it, and a lane
+                // that claimed would take the channel, the reminders and the rules away from it.
+                if (!isRoot(agent)) {
+                    return { result: 'refused: this session is a subagent; only the coordinator\'s own (root) session claims the channel' }
+                }
                 claimed = String(agent.id)
                 pendingCalls.clear()
                 void refreshRules(Date.now(), true)
@@ -815,7 +831,10 @@ export function apply(ctx, rawConfig) {
                 if (!aimed) {
                     const cwd = String((headerOf(initiator) || {}).cwd || '').toLowerCase().replace(/\//g, '\\')
                     const repo = String(config.repo || '').toLowerCase().replace(/\//g, '\\')
-                    return initiator && repo && cwd.startsWith(repo)
+                    // A root session working in the repository itself; a lane's worktree beside it
+                    // (`Camel-wt\…`) shares the prefix but is not "in" the repository, and a subagent
+                    // is never the coordinator.
+                    return initiator && repo && isRoot(initiator) && (cwd === repo || cwd.startsWith(repo.replace(/\\+$/, '') + '\\'))
                         ? '没有会话认领 camel-oversight 通道。若你是 Camel 的协调者，第一件事调 oversight_claim，然后按 internal/collab/SKILL.md 与 coordinator.md 工作。'
                         : ''
                 }

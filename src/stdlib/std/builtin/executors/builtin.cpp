@@ -767,6 +767,9 @@ void registerBuiltinOperatorTraits() {
     // `kAccessFree` and outside `kConversions`, so its three answers are written here with the
     // kernel they belong to.
     registry.set(":op/copy", {.pure = true, .elementwise = false, .mayFault = false});
+    // The shape of it, which is a copy: the four statements below say what that fact is and why it
+    // is written where the operator is registered.
+    registry.declareShape(":op/copy", camel::ops::OperShape::Clone);
     // The record's `panic` for `:op/copy` is one entry of the same list
     // (`src/stdlib/std/builtin/executors/builtin_semantics.cpp#declareBuiltinOperatorFaults`), where
     // the fault table and the record are stated from one list.
@@ -783,6 +786,13 @@ void registerBuiltinOperatorTraits() {
     registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = true});
+    // Which of the four each of them is: the one fact a reader of a graph asks instead of comparing
+    // the letters of the URI (`camel/runtime/oper_shape.h`). Written here, where the operator is
+    // registered with the kernel that runs it, and at no second place (D-1123-34).
+    registry.declareShape(":op/cast", camel::ops::OperShape::Conversion);
+    registry.declareShape(":op/fill", camel::ops::OperShape::Construction);
+    registry.declareShape(":op/access", camel::ops::OperShape::Access);
+    registry.declareShape(":op/access_key", camel::ops::OperShape::Access);
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.
