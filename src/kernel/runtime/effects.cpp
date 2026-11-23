@@ -60,10 +60,11 @@ OperandClause clauseReach(const std::optional<core::sem::ResourceSignature> &cla
 }
 
 /// The half of its answer the operator states itself: an `externalEffect`, and an access whose
-/// resource is outside the program. What it leaves out is the "may reach outside" an operator
-/// answers when its accesses are a function operand's (`OperatorSemantics::external`,
-/// `Record::external`): that half is not the operator's to state -- it is the value's that arrives
-/// in the operand, and it is read at the node.
+/// resource is outside the program (`sem::declaresOutside`). What it leaves out is the "may reach
+/// outside" an operator answers when its accesses are a function operand's (`OperatorSemantics::
+/// external`, `Record::external`): that half is the value's that arrives in the operand, and it is
+/// read at the node. A node's effect is the union of the two halves (design principles 3.3), which
+/// is what `effectSummaryOfOperator` below states.
 ///
 /// The access list is asked where the operator states one; an operator that states only a word
 /// (`OperatorTable::set`, which is how most of the standard library says `pure`) is read through
@@ -76,15 +77,7 @@ bool declaresExternalAccess(
     if (facts == nullptr || !facts->resources) {
         return !traits || (!traits->pure && !traits->stateOnly);
     }
-    if (facts->resources->externalEffect) {
-        return true;
-    }
-    for (const core::sem::ResourceAccess &access : facts->resources->accesses) {
-        if (core::sem::reachesOutside(access.resource.cls)) {
-            return true;
-        }
-    }
-    return false;
+    return core::sem::declaresOutside(*facts->resources);
 }
 
 OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
