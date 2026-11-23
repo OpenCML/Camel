@@ -50,13 +50,46 @@ function Stop-With {
 
 Push-Location $MainCheckout
 try {
-    # A reader that refreshes the index takes the lock and a merge then refuses. Clear a stale one; if
-    # something still holds it, say so rather than wait, because waiting hides who held it.
+    # A reader that refreshes the index takes the lock and a merge then refuses. Clearing it is only
+    # safe when nothing is writing: deleting the lock under a git that is mid-write corrupts the index,
+    # which is worse than a refused merge. So the lock is cleared only when it is older than two
+    # minutes AND no git process is running at all. Otherwise this stops and prints the command lines,
+    # because the answer to "who holds it" is something a person has to see, not something to guess at.
     $lock = Join-Path $MainCheckout '.git\index.lock'
     if (Test-Path $lock) {
-        Get-Process git -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        if (Test-Path $lock) { Remove-Item $lock -Force; Write-Host '  cleared a stale index.lock' }
+        $ageSeconds = ((Get-Date) - (Get-Item $lock).LastWriteTime).TotalSeconds
+        $gitProcs = @(Get-CimInstance Win32_Process -Filter "Name='git.exe'" -ErrorAction SilentlyContinue)
+
+        if ($gitProcs.Count -gt 0) {
+            Write-Host ''
+            Write-Host "STOPPED: .git\index.lock exists and $($gitProcs.Count) git process(es) are running" -ForegroundColor Red
+            foreach ($proc in $gitProcs) {
+                $cmd = "$($proc.CommandLine)".Trim()
+                if ($cmd -eq "") { $cmd = "(the command line is not readable for this process; the pid and the start time are below)" }
+                $started = try { $proc.CreationDate } catch { "" }
+                Write-Host "  pid=$($proc.ProcessId)  started=$started  $cmd"
+            }
+            Write-Host ''
+            Write-Host '  Not deleting the lock: a git that is mid-write would corrupt the index, which is'
+            Write-Host '  worse than a refused merge. Find which of these is a reader that refreshes the index'
+            Write-Host '  (a status call is enough) and let it finish, or stop it yourself.'
+            Write-Host ''
+            Write-Host 'Nothing was committed and nothing was pushed.'
+            exit 1
+        }
+
+        if ($ageSeconds -lt 120) {
+            Write-Host ''
+            Write-Host "STOPPED: .git\index.lock is $([int]$ageSeconds) s old and no git process is running" -ForegroundColor Red
+            Write-Host '  A lock younger than two minutes with no holder is most likely a git that has just'
+            Write-Host '  exited; two minutes is longer than any single git command takes. Wait and retry.'
+            Write-Host ''
+            Write-Host 'Nothing was committed and nothing was pushed.'
+            exit 1
+        }
+
+        Remove-Item $lock -Force
+        Write-Host "  cleared an index.lock that was $([int]$ageSeconds) s old with no git process running"
     }
 
     $head = (& git rev-parse --verify "$Branch^{commit}" 2>$null)
