@@ -29,11 +29,19 @@
  * Four readings differ from today's graph, and every reader still using the old reading is what the
  * first migration deletes:
  *  - CAST, COPY, FILL and ACCS are not kinds: they are operators, declared in `lib/std` like any
- *    other (plan 2.3). Until 2.3 declares those operators an adapter **refuses** to answer
- *    `operatorOf` for one of them rather than answering `kNoOper`: a reader handed `kNoOper` would
- *    take the "this operator is not known" path and the semantics would change silently, where a
- *    refusal stops in the one place that has to be finished. This is the single place the
- *    transition is visible, on purpose -- a tenth kind for the gap would put it in every reader.
+ *    other (plan 2.3). Until the front end and the passes stop building those four node kinds, an
+ *    adapter folds each of them into `NodeKind::Oper` -- the graph's shape is already the target's
+ *    -- and `operatorOf` answers `kNoOper` for one of them. That answer is the literal one and it
+ *    is not the same statement as "this node is not an operator": a CAST and a COPY carry no
+ *    payload at all, and a FILL or an ACCS carries its own kind and a place, so no operator
+ *    identity sits on the node to hand out, and this face answers what the graph stores and never
+ *    a name for what it does not (the file comment above). Answering the operator that replaces
+ *    one of them instead -- `:op/cast` and its siblings, which `lib/std` does declare -- would also
+ *    invite reading the kind's body as that operator's record, which `runtime/oper_shape.h` records
+ *    as a real misread. So the two-step reading is the one a caller writes: `NodeKind::Oper` with
+ *    a `kNoOper` is one of the four. What a node *does* is `runtime::shapeOfOperation`, which
+ *    answers for both forms; this face has no counterpart yet, so a reader on it takes the two
+ *    steps itself.
  *  - JOIN does not appear: a BRCH owns one region per arm and its value is the selected arm's
  *    result, so the two paired payloads (`GCBrchBody::join`, `GCJoinBody::brch`) and the arm count
  *    each of them repeats are gone.
@@ -309,6 +317,18 @@ class GraphView {
     virtual std::uint32_t nodeSlotCount() const = 0;
     /// True when `ref` is a node of this view. Replaces `alive()` plus `containsNodeRef()`/
     /// `containsNode()`; a tombstone and a placeholder are both false here.
+    ///
+    /// This is **not** the question "can this ref be asked about at all", and the difference is
+    /// deliberate: a JOIN, a DREF and a dead place hold a node record and answer their ports
+    /// (`inputs`, `users`, `predecessors`) while answering false here and no kind at all. A port
+    /// list is a fact about the graph's edges; a kind is one of the nine, and there is no tenth for
+    /// a place this vocabulary does not carry.
+    ///
+    /// Do not "fix" that by letting a JOIN into `nodes()`: `nodes()` answers what nodes the graph
+    /// has, and whether a JOIN -- the merge point of a branch, not a value the graph computes -- is
+    /// one of them is a question about what the view is for, not about whether its ports can be
+    /// counted. `test::view_ports` pins the port answer node by node against the graph's own; that
+    /// is the property the readers of this stage need, and it holds without a tenth kind.
     virtual bool contains(NodeRef ref) const = 0;
 
     virtual NodeKind kindOf(NodeRef ref) const = 0;

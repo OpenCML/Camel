@@ -17,8 +17,9 @@
  *    `regionNodes` walks the column (a graph stores the region *of* a node, not the nodes of a
  *    region: the view answers a vector for that reason, and says so).
  *
- * The four kinds that are operators once plan 2.3 declares them answer `NodeKind::Oper` and refuse
- * `operatorOf` (the header's refusal), and the three kinds the view does not have -- a JOIN, a
+ * The four kinds that are operators once plan 2.3 has finished removing them answer
+ * `NodeKind::Oper` and `kNoOper` from `operatorOf` -- they carry no operator identity, which
+ * `graph_view.h` says at length -- and the three kinds the view does not have -- a JOIN, a
  * draft's placeholder, a removed node -- are not nodes here at all: `contains` is false and the id
  * is a gap between two numbers.
  */
@@ -45,9 +46,9 @@ const camel::graph::GraphView &camel::runtime::GCGraph::view() const {
 namespace camel::graph {
 namespace {
 
+using camel::runtime::GCGraph;
 using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
-using camel::runtime::GCGraph;
 
 /// A node of the frozen graph that the view has: the four kinds that become operators, the JOIN,
 /// the draft's placeholder and a removed place are not nodes of the view (the file comment).
@@ -63,6 +64,15 @@ bool viewHasNode(const GCNode *node) {
     default:
         return true;
     }
+}
+
+/// Whether the graph holds a node record at `ref`: the question `inputs`, `users` and
+/// `predecessors` ask. It is **not** `contains` (see graph_view.h): a JOIN, a DREF and a dead place
+/// hold a record and no kind, and their ports are a fact about the graph's edges that a reader
+/// standing on the numbering still needs -- a cut has to carry what a join's arms hand out.
+bool holdsRecord(const GCGraph &graph, NodeRef ref) {
+    return ref < static_cast<NodeRef>(graph.nodeCount()) &&
+           graph.node(static_cast<camel::runtime::gc_node_ref_t>(ref)) != nullptr;
 }
 
 /// The payload body of `ref` copied out of its bytes; false when the node has none or the payload
@@ -171,8 +181,8 @@ std::optional<::slot_t> FrozenGraphAdapter::constantOf(NodeRef ref) const {
     if (node == nullptr || node->kind != GCNodeKind::Data || node->dataIndex >= 0) {
         return std::nullopt;
     }
-    const auto index   = static_cast<std::size_t>(-node->dataIndex);
-    const auto &slots  = graph_.staticSlots();
+    const auto index  = static_cast<std::size_t>(-node->dataIndex);
+    const auto &slots = graph_.staticSlots();
     if (index >= slots.size()) {
         return std::nullopt;
     }
@@ -185,7 +195,7 @@ std::uint64_t FrozenGraphAdapter::originOf(NodeRef ref) const {
 
 std::span<const NodeRef> FrozenGraphAdapter::inputs(NodeRef ref, PortGroup group) const {
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
-    if (!contains(ref)) {
+    if (!holdsRecord(graph_, ref)) {
         return {};
     }
     switch (group) {
@@ -202,7 +212,7 @@ std::span<const NodeRef> FrozenGraphAdapter::inputs(NodeRef ref, PortGroup group
 
 std::span<const NodeRef> FrozenGraphAdapter::users(NodeRef ref, PortGroup group) const {
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
-    if (!contains(ref)) {
+    if (!holdsRecord(graph_, ref)) {
         return {};
     }
     switch (group) {
@@ -218,7 +228,7 @@ std::span<const NodeRef> FrozenGraphAdapter::users(NodeRef ref, PortGroup group)
 std::vector<NodeRef> FrozenGraphAdapter::predecessors(NodeRef ref, EdgeKind kind) const {
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
     std::vector<NodeRef> preds;
-    if (!contains(ref)) {
+    if (!holdsRecord(graph_, ref)) {
         return preds;
     }
     switch (kind) {
@@ -283,9 +293,9 @@ RegionRecord FrozenGraphAdapter::region(RegionId id) const {
         record.kind = RegionKind::Root;
         break;
     }
-    record.owner  = stored->owner == camel::runtime::kInvalidNodeRef
-                        ? kNoNode
-                        : static_cast<NodeRef>(stored->owner);
+    record.owner = stored->owner == camel::runtime::kInvalidNodeRef
+                       ? kNoNode
+                       : static_cast<NodeRef>(stored->owner);
     record.index = stored->index;
     // The body is in nothing; every other region is in at least the body, so the representation's
     // "0" is a real parent for everything but region 0 itself.
@@ -359,8 +369,7 @@ std::vector<RegionId> FrozenGraphAdapter::regionsOwnedBy(NodeRef ref) const {
         break;
     }
     case GCNodeKind::Loop: {
-        const camel::runtime::gc_node_ref_t loop =
-            static_cast<camel::runtime::gc_node_ref_t>(ref);
+        const camel::runtime::gc_node_ref_t loop = static_cast<camel::runtime::gc_node_ref_t>(ref);
         const std::uint32_t cond =
             graph_.loopRegionOf(loop, camel::runtime::GCRegionKind::LoopCond);
         const std::uint32_t body =
@@ -411,13 +420,12 @@ CalleeRef FrozenGraphAdapter::calleeOf(NodeRef ref) const {
 
 camel::core::OperId FrozenGraphAdapter::operatorOf(NodeRef ref) const {
     const GCNode *node = graph_.node(static_cast<camel::runtime::gc_node_ref_t>(ref));
-    // `kNoOper` for a kind that has no operator record. That is every non-OPER node, and the four
-    // kinds this view folds into `NodeKind::Oper` -- a CAST, a COPY, a FILL and an ACCS keep their
-    // own payload (a kind and a place), not an operator, in both representations today, and the old
-    // face answered an empty URI for them for the same reason (`operUriOf` asks only an OPER). Plan
-    // 2.3 declares those four as operators and gives them records; when it does, this is the one
-    // place that changes, and until then a reader asking one of the four gets `kNoOper` -- "no
-    // operator record" -- rather than a guess.
+    // `kNoOper` for a kind that names no operator record: every non-OPER node, and the four kinds
+    // this view folds into `NodeKind::Oper`. A CAST and a COPY keep no payload at all and a FILL
+    // and an ACCS keep their own kind and a place, in both representations, so there is no operator
+    // on one of them to answer -- and answering the operator that replaces it would be the guess
+    // the face is not allowed to make (graph_view.h says why, and what a caller asks instead). The
+    // old face answered an empty URI for them for the same reason (`operUriOf` asks a stored OPER).
     if (node == nullptr || node->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
     }
@@ -431,7 +439,7 @@ camel::core::OperId FrozenGraphAdapter::operatorOf(NodeRef ref) const {
 LoopForm FrozenGraphAdapter::loopFormOf(NodeRef ref) const {
     LoopForm form;
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
-    const GCNode *stored                      = graph_.node(node);
+    const GCNode *stored                     = graph_.node(node);
     if (stored == nullptr || stored->kind != GCNodeKind::Loop) {
         return form;
     }

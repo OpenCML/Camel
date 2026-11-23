@@ -77,7 +77,7 @@ bool refuseAt(
     std::string why);
 
 /// The node's data inputs: its norm inputs followed by its with inputs, in order.
-std::vector<gc_node_ref_t> dataInputsOf(const rt::GCGraph *graph, gc_node_ref_t ref);
+std::vector<gc_node_ref_t> dataInputsOf(const camel::graph::GraphView &view, gc_node_ref_t ref);
 
 /// A `Tuple` fill of `members`, with the empty tuple as the static operand the fill reads.
 gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_node_ref_t> members);
