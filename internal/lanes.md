@@ -8,6 +8,7 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
+| `lane/range-rx` | `D-1123-41` 2(c) 与 `D-1123-35`：切片规则收成一个函数、删掉按 `range` 名字的判断、下标逐维按类型分派 | 规则算术 **5 处 → 1 处**（`src/kernel/include/camel/core/slice.h:60` `slicePositions`，默认端由 `sliceUnwrittenBound` 答；唯一留下的是 `std/standalone/array.h` 两处，导出程序自带、不能依赖内核）；名字判断删 **3 处**（`parse/src/ast/builder_func.cpp`、`compile/src/gir/builder_call.cpp`、`tools/format/fmt.cpp`），`"range"` 在 `src/parse`+`src/compile` 由 5 文件降到 3 文件；`feat/compile` **2672/2666/1红/5known/1信号**（那 1 红 = 既有 SIGSEGV；加上 `feat/parse` 126 与 `smoke` 10 就是派工里的 2808/2802） | 与基线 `6b844be42` 同一命令跑四计划逐项相同：2920/2894/21/5/1，21 条红名逐条相同 | 下一笔：`lane/range-ri` 把 `a..b` 落成 `Range` 之后，才删得掉解析器的 `sliceIndices` 路径与 `atWord(0, "range")`、`builder_static.cpp` 的 `callee->name()` —— 今天 `a..b` 还是 `int[]`，删了切片会退化成 `take` | 2026-11-23 21:00 |
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |

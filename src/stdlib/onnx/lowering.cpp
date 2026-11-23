@@ -20,6 +20,7 @@
 #include "../tensor/type.h"
 
 #include "camel/core/rtdata/array.h"
+#include "camel/core/slice.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 
@@ -461,8 +462,8 @@ Value lowerConcat(const LowerContext &ctx) {
  *
  * A bound is a position from the end only in ONNX's own reading of a negative index, which is
  * nothing Camel has. A backward slice's end that the source did not write is the position before
- * the first element, which the kernel reads as -1 (`src/builtin/operators/struct.cpp`,
- * `sliceRange`); in ONNX that same position is named by an end below every extent, because ONNX
+ * the first element, which the one slice rule names (`camel/core/slice.h`); in ONNX that same
+ * position is named by an end below every extent, because ONNX
  * adds the extent to a negative end and then clamps a negative step's end to -1. So the unwritten
  * end of a backward slice is that constant and not -1: ONNX reads a -1 as the last position of the
  * axis and the slice comes out empty (`x[3::-2]` of a four-element axis was `[]` instead of
@@ -534,7 +535,12 @@ Value lowerSliceSub(const LowerContext &ctx) {
     const auto boundOf = [&](size_t index, bool isStart) {
         const bool known    = ctx.arg(index).isConstant();
         const int64_t value = known ? ctx.constInt(index) : 0;
-        if (known && !isStart && step < 0 && value == -1) {
+        // A backward walk's end that the source wrote as the position before the first element is
+        // the value the one slice rule gives an end left out, and ONNX spells that position below
+        // every extent.
+        if (known && !isStart && step < 0 &&
+            camel::core::sliceUnwrittenBound(step, extent, /*isStart=*/false) ==
+                std::optional<int64_t>(value)) {
             return std::string(e.int64s(beforeFirst)); // the same position an end left out names
         }
         const bool legal    = known && extent.has_value() && value >= 0 &&
@@ -568,14 +574,18 @@ Value lowerSliceSub(const LowerContext &ctx) {
     const std::string end = wroteEnd ? boundOf(3, false)
                                      : (step > 0 ? extentVec : e.int64s(beforeFirst));
 
-    // The length of the slice, when the extent and both bounds are known now.
+    // The length of the slice, when the extent and both bounds are known now: the count the one
+    // slice rule gives those positions (`camel/core/slice.h`).
     std::optional<int64_t> length;
     if (extent.has_value() && (wroteStart ? ctx.arg(2).isConstant() : true) &&
         (wroteEnd ? ctx.arg(3).isConstant() : true)) {
-        const int64_t s = wroteStart ? ctx.constInt(2) : (step > 0 ? 0 : *extent - 1);
-        const int64_t n = wroteEnd ? ctx.constInt(3) : (step > 0 ? *extent : -1);
-        length          = step > 0 ? (s < n ? (n - s + step - 1) / step : 0)
-                                   : (s > n ? (s - n - step - 1) / (-step) : 0);
+        if (const auto positions = camel::core::slicePositions(
+                extent,
+                wroteStart ? std::optional<int64_t>(ctx.constInt(2)) : std::nullopt,
+                wroteEnd ? std::optional<int64_t>(ctx.constInt(3)) : std::nullopt,
+                step)) {
+            length = positions->count;
+        }
     }
     const int64_t axis[] = {at}, steps[] = {step};
     auto shape = facts.shape.value_or(tensor::StaticShape{});
@@ -660,11 +670,15 @@ Value lowerScatterSliceArr(const LowerContext &ctx) {
          shape});
 
     // The first position the range takes: the one the source wrote, or, when it wrote none, the
-    // axis' own first position -- its last one for a backward slice.
+    // bound the one slice rule gives that side (`camel/core/slice.h`) -- the axis' own first
+    // position, or its last one for a backward slice, which the extent names at the run.
     std::string start = int64Scalar(e, 0);
     if (wroteStart) {
         start = ctx.input(3, TypeCode::Int64);
-    } else if (step < 0) {
+    } else if (const auto first =
+                   camel::core::sliceUnwrittenBound(step, std::nullopt, /*isStart=*/true)) {
+        start = int64Scalar(e, *first);
+    } else {
         start = e.node(
             "Sub",
             {e.node("Gather", {shape, int64Scalar(e, at)}, {intAttr("axis", 0)}),
