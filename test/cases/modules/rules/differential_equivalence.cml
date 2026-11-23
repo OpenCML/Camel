@@ -24,7 +24,7 @@
  * (design principles 7.5: a permission written on the code, not on the rule), so a rule whose
  * guard or licence changed stops firing here and is reported as such.
  *
- * `test/plans/feat/modules/verify/differential_equivalence.mjs` reads this output together with
+ * `test/cases/modules/rules/verify/differential_equivalence.mjs` reads this output together with
  * the library: it fails on a rule of the library that no line reports, on a rule that fired
  * nothing, on a pair that differs, and on a `rearranged` count that did not fall.
  */
