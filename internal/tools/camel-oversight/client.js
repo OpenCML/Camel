@@ -122,7 +122,13 @@ window.__ModuleLoader__.load({
             const unacked = (s.unacknowledged || []).length
             return h('div', {
                     style: {
-                        margin: '0 0 6px', padding: '6px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+                        // Aligned with the composer card the way DSH's own docks are (QueueDock): the
+                        // same width and max-width expressions over the composer's layout variables,
+                        // centred, so the band follows the input box whatever its width becomes.
+                        boxSizing: 'border-box',
+                        width: 'calc(100% - 2 * var(--dsh-composer-side-clearance, 0px) - 2 * var(--dsh-composer-dock-inset, 0px))',
+                        maxWidth: 'calc(var(--dsh-composer-card-max-width, 952px) - 2 * var(--dsh-composer-dock-inset, 0px))',
+                        margin: '0 auto 6px', padding: '6px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
                         background: 'var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.08))',
                         borderLeft: `3px solid ${color[worst]}`,
                     },

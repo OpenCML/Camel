@@ -212,6 +212,13 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
             }
         }),
         worktrees: await attempt(async () => (await git(['worktree', 'list'])).split('\n').length - 1),
+        // How long the main checkout's index.lock has existed, or null when there is none. A single git
+        // command holds it for seconds; minutes means something left it or keeps taking it, and every
+        // merge in the checkout fails until it goes.
+        indexLock: await stat(path.join(repo, '.git', 'index.lock')).then(
+            (info) => ({ ageSeconds: Math.round((Date.now() - info.mtimeMs) / 1000) }),
+            (error) => (error && error.code === 'ENOENT' ? null : { unreadable: firstLine(error) }),
+        ),
         branches: await attempt(() => branchesOf(git)),
         merged: await attempt(() => mergedOf(git)),
         backlog: await attempt(() => backlogOf(repo)),

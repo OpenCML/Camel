@@ -41,10 +41,11 @@ export const RULES = [
             if (!readable(lanes) || lanes.running >= limits.minLanes) return null
             const b = readable(m.branches) && m.branches
             if (b && (b.unmerged > limits.unmerged || b.maxBehind > limits.maxBehind)) return null
+            // The host's load does not hold lanes back: every run reaches the host through a slot, so a
+            // lane added while the host is busy queues for its slot and reads and edits meanwhile. (The
+            // build host is shared; most of its load can be other people's work.)
             const h = readable(m.host) && m.host
-            const full = h && h.cores > 0 && h.load[0] / h.cores > limits.hostFull
-            if (full) return null
-            const load = h ? `构建主机负载 ${h.load[0]}/${h.cores}，` : ''
+            const load = h ? `构建主机负载 ${h.load[0]}/${h.cores}（上主机都走槽排队，不挡开车道），` : ''
             return {
                 key: String(lanes.running),
                 text: `在跑车道 ${lanes.running} 条（目标 ${limits.minLanes}–${limits.maxLanes}）。${load}当轮从 backlog 补派到 ${limits.minLanes} 条以上。`,
@@ -170,6 +171,20 @@ export const RULES = [
         },
     },
     {
+        id: 'index-lock',
+        level: 'wake',
+        hold: 0,
+        cooldown: 15,
+        check: ({ m }) => {
+            const lock = m.indexLock
+            if (!lock || lock.unreadable || lock.ageSeconds <= 120) return null
+            return {
+                key: String(Math.floor(lock.ageSeconds / 600)),
+                text: `主检出的 .git/index.lock 已存在 ${Math.round(lock.ageSeconds / 60)} 分钟：合并都会失败。用 scripts/check-index-lock.mjs 看是谁持有——先找那个只读的后台程序（git 面板补丁是否被更新覆盖：internal/tools/patches/），别怪合并；确认没有 git 进程在用再删锁文件。`,
+            }
+        },
+    },
+    {
         id: 'fetch-failed',
         level: 'quiet',
         hold: 10,
@@ -180,18 +195,18 @@ export const RULES = [
         },
     },
     {
-        // An idle coordinator with work open is the most expensive state there is: every lane it would
-        // have opened stands still. It is woken after a few minutes, and again every ten while it stays
-        // idle, with the items it could start on named, so the wake-up is a work list and not a nudge.
+        // A coordinator idle while its lanes run is waiting on their reports, which is its job. Idle with
+        // no lane running and work open -- after a restart, or when the last lane has just finished --
+        // nothing moves at all, and nothing else will start it. Only that is woken: after a few
+        // minutes, and again every ten while it lasts, with the items it can start on named. Too few
+        // lanes while some run is the lanes-below rule's business, not this one's.
         id: 'coordinator-idle',
         level: 'wake',
         hold: 3,
         cooldown: 10,
-        check: ({ m, target, backlogOpen, now, lanes, limits }) => {
+        check: ({ m, target, backlogOpen, now, lanes }) => {
             if (!target || target.status !== 'idle' || backlogOpen === 0) return null
-            // Idle while its lanes are full is the coordinator waiting on their reports, which is its
-            // job; only idle with lanes to spare (or unknown) is time lost.
-            if (readable(lanes) && lanes.running >= limits.minLanes) return null
+            if (readable(lanes) && lanes.running > 0) return null
             const minutes = target.since ? Math.round((now - target.since) / 60_000) : null
             const rows = m.backlog instanceof Map ? [...m.backlog.entries()] : []
             const open = rows.filter(([, row]) => !row.done && !row.doing && !row.blocked).map(([id]) => id).slice(0, 8)
@@ -241,7 +256,6 @@ export const DEFAULT_LIMITS = {
     mergedLocal: 20,
     developStallMinutes: 25,
     staleMinutes: 120,
-    hostFull: 0.9,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 45,
     dayEndMinutes: 23 * 60 + 30,
