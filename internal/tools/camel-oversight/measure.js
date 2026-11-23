@@ -171,6 +171,12 @@ async function buildPanelOf(repo, stateDir) {
             worktree: row.worktree ?? null,
             phase: row.phase ?? null,
             slot: row.slot ?? null,
+            // The width the run's slot granted (see camel-remote.ps1): what a reader compares the
+            // host's load against. Absent `jobs` is a run old enough to predate the budget, not a
+            // run at width zero.
+            jobs: row.jobs ?? null,
+            jobsRequested: row.jobsRequested ?? null,
+            buildJobs: row.buildJobs ?? null,
             queuedAt: row.queuedAt ?? null,
             queueSeconds: row.queueSeconds ?? (row.queuedAt && !row.buildStartedAt ? Math.round((Date.now() - Date.parse(row.queuedAt)) / 1000) : null),
             startedAt: row.startedAt ?? null,

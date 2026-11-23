@@ -217,6 +217,30 @@ export const RULES = [
         },
     },
     {
+        id: 'host-over-budget',
+        level: 'quiet',
+        hold: 10,
+        cooldown: 60,
+        check: ({ m, limits }) => {
+            const h = readable(m.host) && m.host
+            if (!h || !h.cores || !h.load) return null
+            // Load above 1.5x the core count is not "someone else is busy": the slots hold at most
+            // 8+8 compile jobs and 16 plan processes, which is the core count, so a host this busy
+            // is running something outside its slot or outside its budget. The reading is the load
+            // ratio and not the process count because a run that overran shows up exactly here.
+            if (h.load[0] / h.cores <= limits.hostOverBudget) return null
+            const p = readable(m.panel) && m.panel
+            const rows = (p && p.running) || []
+            const widths = rows
+                .filter((run) => run.jobs !== null || run.buildJobs !== null)
+                .map((run) => `${run.worktree}(${run.buildJobs ?? '-'}/${run.jobs ?? '-'})`)
+            return {
+                key: `${Math.floor(h.load[0])}/${h.cores}`,
+                text: `构建主机负载 ${h.load[0].toFixed(1)}/${h.cores}，超过核数的 ${limits.hostOverBudget} 倍：槽预算加起来正好是核数（构建 8+8、计划 16），所以超出的部分来自绕过槽或超出预算的运行。看登记里各运行的 jobs（宽/构建宽）：${widths.join('、') || '没有在跑的运行报告宽度'}。`,
+            }
+        },
+    },
+    {
         id: 'day-end',
         level: 'wake',
         hold: 0,
@@ -242,6 +266,9 @@ export const DEFAULT_LIMITS = {
     developStallMinutes: 25,
     staleMinutes: 120,
     hostFull: 0.9,
+    // The slots' budgets add up to the core count, so load above 1.5x the cores is work that is
+    // outside them (see the plan page's process-budget section and camel-remote.ps1).
+    hostOverBudget: 1.5,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 45,
     dayEndMinutes: 23 * 60 + 30,

@@ -1094,7 +1094,14 @@ $run = @{
     buildExit       = $null
     done            = 0
     total           = 0
-    jobs            = $Jobs
+    # `jobs` is the width this run actually got from the slot it holds, reported by the host after
+    # the hold; `jobsRequested` is what the caller wrote on the command line. They are two fields
+    # because they are two facts: a registry whose only `jobs` is the request records an intention,
+    # and an intention of 32 beside a run that started 8 processes is the number that misled every
+    # lane on 2026-11-23. `buildJobs` is the build half, taken from the build slot.
+    jobs            = $null
+    jobsRequested   = $Jobs
+    buildJobs       = $null
     tier            = $Tier
     plan            = @($Plan)
     target          = if ($Plan.Count -gt 0) { $Plan[0] } else { '' }
@@ -1367,20 +1374,24 @@ try {
 $stackTraceArg = if ($StackTrace) { ' -- --stack-trace' } else { '' }
 $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "npm run build$stackTraceArg" }
 
+    # `--jobs "$CAMEL_JOBS"` and never `--jobs $Jobs`: the width the plan runs at is the one the
+    # host script sets from the slot it holds, so a run written with -Jobs 32 is a 16-wide plan in
+    # the plan slot instead of a 32-wide one that oversubscribes a host whose cores are all spoken
+    # for. width `$jobsBudget` (below) sets it, between the slot hold and this line.
     $runPlan = if ($UpdateGolden) {
-        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs $Jobs$tierArg"
+        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs " + "`$CAMEL_JOBS$tierArg"
     } elseif ($Changed) {
         # The list above travels with the patch: the host has the lane's commits but not the base
         # branch, so a selection made there answered "cannot read origin/develop" and the run fell
         # back to the whole fast layer. `CAMEL_TEST_BASE` stays for the sentences the runner prints
         # -- the list is the one taken against that base -- but the list is what it reads.
-        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --changed-files '$remoteScratch/changed.txt' --jobs $Jobs$tierArg"
+        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --changed-files '$remoteScratch/changed.txt' --jobs " + "`$CAMEL_JOBS$tierArg"
     } elseif ($planArgs) {
         # No CAMEL_TEST_EXTRA_LIB_DIRS here any more: the install a 26888783c-or-later build writes
         # carries the toolchain's libstdc++.so.6 in its `libs/` and finds it through its own
         # `$ORIGIN` rpath (2026-11-03 15:35 ruling), so the plan step needs no extra directory --
         # and `-Changed` and `-UpdateGolden`, which never had one, now read exactly like this branch.
-        "cd `$R/ && node scripts/test.js $planArgs --jobs $Jobs$tierArg"
+        "cd `$R/ && node scripts/test.js $planArgs --jobs " + "`$CAMEL_JOBS$tierArg"
     } else {
         ':'
     }
@@ -1418,6 +1429,26 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # Markers delimit the phases for the state writer; they are consumed locally and not printed.
     # The plan marker is only emitted when a plan will actually run.
     $planMarker = if ($planArgs -or $Changed) { "echo '__CAMEL_REMOTE_PLAN_START__'" } else { ':' }
+
+    # The width the plan is started at, decided by the slot the host script holds and not by -Jobs:
+    # the plan slot allows 16, an exclusive run all 32, and -Jobs only narrows either. This is the
+    # number in the plan's command line *and* the number the registry records, so "what was asked
+    # for" and "what ran" cannot be the same field. `-UpdateGolden` rewrites files and runs one test
+    # at a time whatever --jobs says (run-tests.mjs), so that run's width is 1.
+    $jobsBudget = if (-not ($planArgs -or $Changed)) {
+        ':'
+    } elseif ($UpdateGolden) {
+        @'
+export CAMEL_JOBS=1
+echo "HOST_JOBS=$CAMEL_JOBS"
+'@
+    } else {
+        @'
+if [ "$held_all" = 1 ]; then plan_budget="$EXCLUSIVE_JOBS"; else plan_budget="$PLAN_SLOT_JOBS"; fi
+export CAMEL_JOBS="$(budget_jobs "$plan_budget")"
+echo "HOST_JOBS=$CAMEL_JOBS"
+'@
+    }
 
     # The editor grammar's snapshot tests skip without their dev dependencies, and this helper runs
     # `npm run build`, which is not the repo's install step. A fresh checkout would therefore skip
@@ -1616,7 +1647,13 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
     $gpuBlock = ''
     if ($gpuWanted) {
         $gpuReadingFile = "$remoteScratch/$gpuObservationName.out"
-        $shownGpu = "node scripts/test.js test/plans/gpu --jobs $Jobs --tier all"
+        # A second plan run, after the plan slot above was released: it takes the plan slot again
+        # below (fd 5), so its width is that slot's 16 at most and -Jobs can only narrow it. It is
+        # computed here rather than by the host block because this command is executed verbatim and
+        # also printed in the header, and two different widths in those two places is how a reading
+        # starts lying about itself.
+        $gpuJobs = [Math]::Min($Jobs, 16)
+        $shownGpu = "node scripts/test.js test/plans/gpu --jobs $gpuJobs --tier all"
         $gpuBlock = @"
 
 # --- the gpu layer: observed, never gating (see the header) -----------------
@@ -1896,7 +1933,10 @@ export LD_LIBRARY_PATH='$($cfg.hostLibStdCxxDir)'":`$C/lib:`${LD_LIBRARY_PATH:-}
 # (the generated shell runs under `set -u`: an rpath written as a bare dollar-variable here would
 #  abort the run, so this line names the thing and not the syntax).
 echo "[camel-remote] libstdc++: a current build carries libs/libstdc++.so.6 and finds it by its own rpath; this export is for older builds only"
-export CMAKE_BUILD_PARALLEL_LEVEL=24 CAMEL_HOME="`$R/out/latest"
+# CMAKE_BUILD_PARALLEL_LEVEL is not set here any more. It is a slot budget, and the slot number is
+# only known after the lock below is taken: a flat 24 for every run is how two lawful builds filled
+# 48 compile jobs on a 32-core host (2026-11-23, load 88).
+export CAMEL_HOME="`$R/out/latest"
 export CAMEL_TEST_TMP="`$HOME/$($cfg.hostWorkRoot)/$name-test-tmp"
 # A failed test's own output is echoed to the console only under this variable
 # (test/tools/run-tests.mjs: printFailedOutput). Without it a red gate prints nothing but
@@ -1947,6 +1987,28 @@ echo "HOST_OVERLAP_START=`$(others_now)"
 # 0 means "this run held no build slot": a -NoBuild run builds nothing, and the plan slot below is
 # a slot of its own.
 echo 'HOST_BUILD_SLOT=0'
+# --- the process budget of a slot -------------------------------------------
+# A slot says how many runs may be on this host at once; it says nothing about how many processes one
+# run starts. Three lawful occupancies -- two builds and one plan -- were measured at 153 processes
+# with load 88 on this 32-core host (2026-11-23), and every lane read that as "my change is slow".
+# So the budget belongs to the slot number and is decided here, where the slot number is known:
+# build slot 8 each, plan slot 16, the three together 32 -- the core count. The caller's -Jobs may
+# lower a budget and never raise it: a run that writes 32 gets its slot's 8, and one that writes 4
+# gets 4. The number the plan is started with is this one, not the one written on the command line,
+# and it is the number the registry records, so a `jobs` that disagrees with the request is the
+# mechanism working rather than a typo. ("Load is high, lower -Jobs by hand" was the convention this
+# replaces; a convention that is forgotten is indistinguishable from one that was never made.)
+BUILD_SLOT_JOBS=8
+PLAN_SLOT_JOBS=16
+EXCLUSIVE_JOBS=32
+requested_jobs=$Jobs
+budget_jobs() {
+    if [ "`$requested_jobs" -lt "`$1" ]; then printf '%s' "`$requested_jobs"; else printf '%s' "`$1"; fi
+}
+# Every slot branch below overwrites this before anything reads it; the initial value is the request
+# only so that a missed branch cannot abort a run under `set -u`.
+CAMEL_JOBS=`$requested_jobs
+echo "HOST_JOBS_REQUESTED=`$requested_jobs"
 echo '__CAMEL_REMOTE_SYNCED__'
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
@@ -2007,16 +2069,24 @@ if [ '$timeSensitive' = 'True' ]; then
     done
     echo 'HOST_BUILD_SLOT=1&2'
     echo 'HOST_TEST_SLOT=1'
+    # Holding the host means holding its whole process budget too: nothing else is running, so the
+    # plan and the build both get all 32 (still no more than the caller asked for).
+    export CAMEL_JOBS="`$(budget_jobs `$EXCLUSIVE_JOBS)"
+    export CMAKE_BUILD_PARALLEL_LEVEL="`$CAMEL_JOBS"
+    echo "HOST_BUILD_JOBS=`$CAMEL_JOBS"
+    echo "HOST_JOBS=`$CAMEL_JOBS"
     run_note exclusive
 fi
 if [ '$NoBuild' != 'True' ]; then
-    # Two host builds at a time, twelve compile jobs each: one build alone was fine but eight
-    # agents sharing one slot queued for tens of minutes, while three or more at 24 jobs each
-    # thrashed the box (load 98 on 32 cores). Two slots of twelve keep the cores busy without
-    # oversubscribing; the plan run afterwards is unaffected and still uses -Jobs.
+    # Two host builds at a time, 8 compile jobs each: one build alone was fine but eight agents
+    # sharing one slot queued for tens of minutes, while three or more at 24 jobs each thrashed the
+    # box (load 98 on 32 cores). 8 + 8 is the build half of the 32-core budget; the build half and
+    # the plan slot's 16 add up to the core count, which is what the budget block above is for.
     if [ "`$held_all" = 1 ]; then
         # Both build slots are already held by the block above, and re-opening these descriptors
-        # would drop the locks: this branch exists so the hold survives the build it covers.
+        # would drop the locks: this branch exists so the hold survives the build it covers. Its
+        # budget (32) is the one the block above set; recomputing it from a build slot here would
+        # cut an exclusive run down to 8 in the middle of its own build.
         slot='1&2'
     else
     exec 9>/tmp/camel-host-build-1.lock
@@ -2034,6 +2104,12 @@ if [ '$NoBuild' != 'True' ]; then
         done
     fi
     fi
+    if [ "`$held_all" = 0 ]; then
+        # The slot decides the build's width. -Jobs can only narrow it, so a run written with 32
+        # still compiles at 8 here, and one written with 4 compiles at 4.
+        export CMAKE_BUILD_PARALLEL_LEVEL="`$(budget_jobs `$BUILD_SLOT_JOBS)"
+    fi
+    echo "HOST_BUILD_JOBS=`$CMAKE_BUILD_PARALLEL_LEVEL"
     # A build that wedges must not hold a slot forever; the cap is generous.
     echo "HOST_BUILD_SLOT=`$slot"
     run_note "build-`$slot"
@@ -2083,6 +2159,10 @@ else
     echo 'HOST_TEST_SLOT=1'
     run_note plan
 fi
+# The plan's budget belongs to the plan slot it now holds: 16, or the whole 32 when this run holds
+# all three. -UpdateGolden rewrites files and the runner drops to one test at a time whatever
+# --jobs says (run-tests.mjs), so that run's actual width is 1 and the registry says 1.
+$jobsBudget
 $planMarker
 # The plan's stderr is folded into its own stdout here, on the host, before it leaves this script.
 # The runner writes a red run's reason to stderr ("this run selected no test at all", the ENOENT
@@ -2256,6 +2336,28 @@ exit `$code
                 Write-Host $line
                 return
             }
+            # The width the run actually got, from the slot it holds: build slot 8, plan slot 16,
+            # exclusive 32, each narrowed by -Jobs and never widened. Recorded as it arrives rather
+            # than written from `$Jobs` at the start, so a request of 32 is not what the registry
+            # reports as what ran.
+            if ($cleanLine -match '^HOST_JOBS_REQUESTED=(\d+)$') {
+                $run.jobsRequested = [int]$Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_BUILD_JOBS=(\d+)$') {
+                $run.buildJobs = [int]$Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_JOBS=(\d+)$') {
+                $run.jobs = [int]$Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
             if ($cleanLine -match '^HOST_LOAD_START=(\S+)$') {
                 $run.loadAtStart = $Matches[1]
                 Publish-Run
@@ -2340,7 +2442,9 @@ exit `$code
                         plan      = @($Plan)
                         target    = $Plan[0]
                         tier      = $Tier
-                        jobs      = $Jobs
+                        # The width the host granted, never the -Jobs the caller wrote: this is the
+                        # number a reader compares against the load on the host.
+                        jobs      = $run.jobs
                         phase     = 'running'
                         lastLine  = "[camel-remote] running $($Plan -join ', ') on $sshHost"
                         remote    = $remoteName
