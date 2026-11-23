@@ -12,7 +12,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/execute/shaped_operators.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/draft_writes.h"
 
 #include <algorithm>
@@ -149,8 +149,8 @@ std::optional<type::Type *> accsResultType(const GraphDraft &draft, gc_node_ref_
 std::optional<type::Type *> nodeResultType(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     // A copy has the type of the value it copies; asked of its shape rather than its kind
-    // (`camel/execute/shaped_operators.h`, refactor stage 2.3).
-    if (camel::execute::shapeOfKind(h->kind) == camel::execute::OperShape::Clone) {
+    // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+    if (camel::runtime::shapeOfKind(h->kind) == camel::ops::OperShape::Clone) {
         const auto inputs = draft.normInputsOf(id);
         return inputs.empty() ? std::nullopt : std::optional(typeOf(draft, inputs.front()));
     }

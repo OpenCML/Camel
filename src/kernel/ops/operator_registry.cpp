@@ -734,6 +734,28 @@ void Registry::declare(OperId id, const Record &statement) {
     mergeRecord(*record, statement);
 }
 
+void Registry::stateShape(OperId id, OperShape shape) {
+    Store &s = store();
+    std::lock_guard lock(s.mutex);
+    Record *record = mutableRecord(s, id);
+    if (record == nullptr) {
+        throw std::invalid_argument(std::format("operator {}: the registry has no such record", id));
+    }
+    if (record->shape == shape) {
+        return; // a statement of the answer the record already holds is a repetition
+    }
+    if (s.completed[id - 1]) {
+        // A completed record is never changed again, and the shape is read by walks that run while
+        // graphs are already being analysed: a second answer is refused, not taken.
+        throw std::invalid_argument(std::format(
+            "{}: \"shape\" is completed as \"{}\" and this statement says \"{}\"",
+            record->uri(),
+            camel::ops::shapeName(record->shape),
+            camel::ops::shapeName(shape)));
+    }
+    record->shape = shape;
+}
+
 OperId Registry::registerOperator(CppRegistration &registration) {
     const Record &statement = registration.stated();
     if (statement.key.name == 0) {

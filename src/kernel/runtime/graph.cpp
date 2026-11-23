@@ -38,7 +38,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
-#include "camel/execute/shaped_operators.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 
@@ -88,7 +88,7 @@ bool nodeMayFault(
     const camel::core::type::Type *castSource, bool fixedShapes) {
     // The four operators the front end still builds as nodes of their own -- a conversion, a
     // copy, a construction, an access -- are asked by their shape, not by their kind: that is the
-    // one seam for them (`camel/execute/shaped_operators.h`, refactor stage 2.3), and what each of
+    // one seam for them (`camel/runtime/oper_shape.h`, refactor stage 2.3), and what each of
     // them can fail is a property of the operator, not of the record it is stored in today.
     //
     // Design principles 3.9 makes "may fault" one item of the operator record, stated by `panic`,
@@ -97,14 +97,14 @@ bool nodeMayFault(
     // a record keyed by URI cannot carry (`src/stdlib/std/builtin/globals.cpp`, refactor plan 2.3),
     // so they carry `kNoOper` and have no record to ask; this shape answer is theirs until the
     // front end builds them as ordinary OPER nodes.
-    switch (camel::execute::shapeOfKind(kind)) {
-    case camel::execute::OperShape::Conversion:
+    switch (camel::runtime::shapeOfKind(kind)) {
+    case camel::ops::OperShape::Conversion:
         return castMayFault(castTarget, castSource);
-    case camel::execute::OperShape::Clone:
-    case camel::execute::OperShape::Construction:
-    case camel::execute::OperShape::Access: // reads a field of a value whose type has it
+    case camel::ops::OperShape::Clone:
+    case camel::ops::OperShape::Construction:
+    case camel::ops::OperShape::Access: // reads a field of a value whose type has it
         return false;
-    case camel::execute::OperShape::None:
+    case camel::ops::OperShape::None:
         break;
     }
 
@@ -159,7 +159,7 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     if (node == nullptr) {
         return false;
     }
-    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
+    if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return may_be_rearranged(
@@ -180,7 +180,7 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
 bool is_chain_statement(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool standsForRegion) {
-    if (camel::execute::shapeOfKind(kind) == camel::execute::OperShape::Conversion) {
+    if (camel::runtime::shapeOfKind(kind) == camel::ops::OperShape::Conversion) {
         // A conversion is a statement exactly when running it can fail: a value check the model
         // cannot move is one the chain has to reach (design principles 3.4, 3.9).
         return nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource);
@@ -223,7 +223,7 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
         return false;
     }
     const bool standsForRegion = nodeStandsForItsRegion(graph, ref);
-    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
+    if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return is_chain_statement(
@@ -309,7 +309,7 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     if (node == nullptr) {
         return true;
     }
-    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
+    if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return nodeMayFault(
@@ -996,7 +996,7 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
 bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || header->kind == GCNodeKind::Dead ||
-        camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion ||
+        camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion ||
         !nodeIsFreelySchedulable(draft, id)) {
         return false;
     }
@@ -1813,7 +1813,7 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     if (header == nullptr || !draft.alive(id)) {
         return false;
     }
-    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return nodeIsFreelySchedulable(
@@ -1857,7 +1857,7 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             break;
         }
     }
-    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return isChainStatement(
@@ -1957,7 +1957,7 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     if (header == nullptr || !draft.alive(id)) {
         return true;
     }
-    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return nodeMayFault(
@@ -1999,7 +1999,7 @@ bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
                 reinterpret_cast<const GCOperBody *>(payload.data())->oper)) {
             return false;
         }
-    } else if (camel::execute::shapeOfKind(header->kind) != camel::execute::OperShape::Conversion) {
+    } else if (camel::runtime::shapeOfKind(header->kind) != camel::ops::OperShape::Conversion) {
         return false;
     }
     const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };

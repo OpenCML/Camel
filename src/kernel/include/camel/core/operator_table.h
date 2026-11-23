@@ -55,6 +55,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/resolver.h"
+#include "camel/ops/oper_shape.h"
 #include "camel/utils/append_only_table.h"
 
 #include <atomic>
@@ -511,6 +512,19 @@ class OperatorTable {
 
     /// True when the operator is a declared conversion (the question `find("to")` answers).
     bool isConversion(std::string_view uri) const { return conversionTypesOf(uri).has_value(); }
+
+    // ---- The shape of the four operations ------------------------------------------------
+    //
+    // A conversion, a copy, a construction and a member read are four operators the front end
+    // builds (`prelude.cml`) and four node kinds it still builds for the same operations; what a
+    // reader needs to know is "which of the four does this node perform". The answer is the
+    // operator's (`Record::shape`, camel/ops/oper_shape.h), stated here where the operator is
+    // registered with its implementation -- one statement, read by the operator's identity, and no
+    // reader comparing the letters of a URI (design section 3.8, R10; D-1123-34).
+
+    /// Declares which of the four `uri` is (module load time). An operator that is not one of them
+    /// declares nothing, which is what `shapeOfOperator` (camel/runtime/oper_shape.h) reads as None.
+    void declareShape(std::string_view uri, camel::ops::OperShape shape);
 
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------
 
