@@ -23,7 +23,6 @@
 
 | lane/flip-consumers | 五层迁移的栈顶（建图器、C++、autodiff、优化、下游读者） | 32 笔，刷到 17a11804d（已合 91a3fd5cc 的 96 笔），未推未合 | smoke 0、eat/parse 0、eat/compile 11 红 | **卡在:栈上剩 5 条红,根在 72df5049c（成员读写成 ccess）—— 即作者那条裁定的**后半**。**等:位置被搬进 with（oper-identity-write 做完了读者那一半,3 条已绿） | 2026-11-23 11:20 |
 | lane/packed-view-lifetime | 修「一个闭包被当成 cell 塞进 ar int 槽」那族（C-1123-24） | 31 笔，5ae19df7，未推未合 | 旧症状全消失（不再 70.0/1046.0、不再 materializeAggregate、12 次逐字相同）。根因链已交:问题页 2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup.cn.md，**作者已答**（d56dc52ef） | **卡在:整条栈能否落地** —— 它不是独立的一笔（`C-1123-30`）。**等:栈上红降到能当轮修完**（`oper-identity-write` 已 94 → 86、`onnx-lowering` 已把 55 清零）。`D-1123-23` 允许这样写清而不强合 | 2026-11-23 10:30 |
-| lane/facts-b2 | `facts.h` 缺的是**定义**而不是头文件：写注册表、`Store`、`computeAll`、`dump`，附 `camel-facts --self-check`；33 处只数不改 | `camel::facts` 有定义的入口 0 → **25**；`--self-check` **28/28**；`tools.facts` 1/1（本机要 `out/latest/libs` 在 `PATH` 上，与 `op_record` 同一条环境限制，不是这一笔带来的）；33 处仍 33 | 0（未合） | 等作者裁「可自由调度」归谁（`internal/questions/2026-11-23-who-owns-freely-arrangeable.cn.md`），再动 33 处 | 2026-11-23 09:30 |
 
 ## 没开车道的一件
 
