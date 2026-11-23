@@ -43,15 +43,22 @@
  * are declarations of the kind, and the test tool that enumerates rule and fact declarations
  * checks them.
  *
- * The store belongs to nothing that is dumped: facts are process-local, they are not copied into
- * a graph and they change no document a program prints.
+ * The store belongs to the context that makes it, one per context (core abstractions section 2: a
+ * draft's results are dropped with the session, a frozen graph's facts last as long as the program
+ * that holds it). Its key is the graph, as a value: a graph is held by the one store of the
+ * context that made it, so "the graph is gone" and "the entries keyed on it are gone" are one
+ * event -- the graph announces its own end from `~GCGraph` (`forgetGraph`), and a store that is
+ * gone first leaves nothing for the announcement to find. The store belongs to nothing that is
+ * dumped: facts are process-local, they are not copied into a graph and they change no document a
+ * program prints.
  *
- * What is registered today and computed elsewhere: the effect summary, the use index, the
- * execution plan, the control regions and the writing extraction each keep their own cache
- * outside this framework. They are registered here as kinds with the conservative dependence and
- * a compute that calls the code that exists, so that every reader already asks the framework for
- * them and gets one answer from one place; moving the computation itself inside the framework is
- * a separate change, and changes no answer.
+ * What is registered today: `core.arrangeable` (one node) and `core.controlRegions` (one graph).
+ * The effect summary, the use index, the execution plan and the writing extraction are not kinds
+ * yet: each still keeps its own cache where its computation lives, because a kind is a promise
+ * that the computation runs through the store with the store's view, and moving those
+ * computations is a change of its own that no answer depends on yet. A reader of one of them
+ * today asks the code that owns it, not this framework; the sentence that used to stand here said
+ * the five were registered, and the tree never had them.
  *
  * Thread-safety: every member of the registry and of a store may be called from any thread. A
  * kind is registered while modules load; a value is computed at most once per stamp, even when
@@ -360,11 +367,12 @@ struct StoredFact {
 };
 
 /**
- * The facts of one program version, or of one editing session, by kind and anchor.
+ * The facts of the frozen graphs of one context, by kind and anchor.
  *
- * There is one store per program and one per session, and the owner creates it: a fact about a
- * frozen graph is answered for as long as the program exists, and a fact about a session's graph
- * is dropped with the session, because the graph it was computed from does not outlive it. Nobody
+ * The context makes one store and holds it for its life: a fact about a frozen graph is answered
+ * for as long as the context exists, and a graph that dies drops its own entries (see
+ * `forgetGraph`). A session's store is the other lifetime the framework is written for, and it is
+ * dropped with the session, because the graph it was computed from does not outlive it. Nobody
  * else keeps a cache of a fact; a reader that finds its own cache beside this store has it there
  * for a reason that should be a kind of fact instead.
  */
@@ -483,6 +491,38 @@ class Store {
 /// names (`anchorsIn`): what a consumer would obtain one by one. Facts already stored and valid
 /// are kept.
 void computeAll(Store &store, const graph::Graph &root, const graph::GraphView &rootView);
+
+// ---- Which store holds a graph ---------------------------------------------------------------
+
+/**
+ * The access a store of a context reads its graphs through: the frozen adapter the graph answers
+ * `view()` with, and the constant version 0. A frozen graph's content never changes, so a fact
+ * about one cannot be stale for a content reason; what ends it is the graph's lifetime, which is
+ * `forgetGraph`.
+ */
+GraphAccess frozenGraphs();
+
+/**
+ * Tells `store` that `graph` is one of the graphs it holds the facts of. The context does this for
+ * every graph it makes -- the runtime graph manager says it when a program takes a graph in, and
+ * when a rewrite encodes a graph it has not bound yet -- so that a reader holding only the graph
+ * finds the store with `storeHolding`. A graph belongs to one store: the store of the context that
+ * made it.
+ */
+void holdGraph(Store &store, const graph::Graph &graph);
+
+/// The store that holds `graph`, null when no live store was told about it. A reader that finds
+/// none reports a red: the graph is not one any store can answer about.
+Store *storeHolding(const graph::Graph &graph);
+
+/**
+ * Drops every fact anchored on `graph`, and stops this framework from naming the store that held
+ * them: the graph's owner calls this when the graph is freed, which is why "the graph is gone" and
+ * "what was keyed on it is gone" are one event rather than two. A store destroyed before the
+ * graphs it was told about leaves nothing here, so a graph that outlasts its store's owner
+ * announces its end to nobody.
+ */
+void forgetGraph(const graph::Graph *graph);
 
 /**
  * `camel inspect --facts`: one line `FACT {json}` per fact about the graphs reachable from `root`.

@@ -12,6 +12,7 @@
  */
 
 #include "camel/runtime/graph.h"
+#include "camel/facts/facts.h"
 #include "camel/facts/arrangeable.h"
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/draft.h"
@@ -3540,7 +3541,8 @@ const ExecPlan &GCGraph::execPlan() const {
 
 GCGraph::~GCGraph() {
     // The facts anchored on this graph end here: an address is a graph only while the graph is
-    // there, so the store must not answer about this one afterwards (camel/facts/control_regions.h).
+    // there, and the store that was told about this one must not answer about it afterwards
+    // (camel/facts/facts.h). The store itself outlives nothing here: it goes with its context.
     camel::facts::forgetGraph(this);
     // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
     // graph, so it goes before the graph does. `GraphView` is complete in this file

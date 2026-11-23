@@ -69,6 +69,10 @@ namespace camel::core::context {
 class Context;
 }
 
+namespace camel::facts {
+class Store;
+}
+
 namespace camel::runtime {
 
 class Program;
@@ -1459,6 +1463,13 @@ class GCGraphManager {
     /// that was bound before it was built.
     void forget(GCGraph *graph);
 
+    /// The store the facts of this manager's graphs are held in (camel/facts/facts.h): the context
+    /// gives it here when it makes the manager, one store for the whole context, and every graph
+    /// that enters the books is told to it -- a graph bound into a program, or one a rewrite
+    /// encoded and has not bound yet. Null for a manager no context gave a store to, and then a
+    /// graph announces its end (a no-op) to nobody.
+    void setFactsStore(camel::facts::Store *store) { factsStore_ = store; }
+
   private:
     friend class Program;
     void rebuildGcRoots();
@@ -1474,6 +1485,8 @@ class GCGraphManager {
     /// until the pass settles, then they are freed unless a program holds them.
     std::unordered_set<GCGraph *> unbound_;
     const Program *current_ = nullptr;
+    /// The context's fact store (see setFactsStore). Not owned: the context outlives its manager.
+    camel::facts::Store *factsStore_ = nullptr;
     std::vector<const Program *> detached_;
     /// One name per live pin (GCGraphManager::pin): a program held by two ProgramHold handles is
     /// named twice, and unpin() drops one name.

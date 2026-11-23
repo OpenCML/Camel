@@ -26,6 +26,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/facts/facts.h"
 
 #include <algorithm>
 #include <atomic>
@@ -125,12 +126,20 @@ void GCGraphManager::noteGraph(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.insert(graph);
     unbound_.erase(graph);
+    // The context's store is told about every graph it will be asked about, here rather than by
+    // each reader: a graph belongs to the store of the context that made it (facts.h).
+    if (factsStore_ != nullptr && graph != nullptr) {
+        camel::facts::holdGraph(*factsStore_, *graph);
+    }
 }
 
 void GCGraphManager::forget(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.erase(graph);
     unbound_.erase(graph);
+    // The graph leaves the books without being destructed, so its own announcement (~GCGraph)
+    // never comes: it is made here.
+    camel::facts::forgetGraph(graph);
 }
 
 void Program::abandonConstruction(std::span<GCGraph *const> unconstructed) {
@@ -150,6 +159,11 @@ void GCGraphManager::noteUnbound(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.insert(graph);
     unbound_.insert(graph);
+    // A rewrite's encoded graph is read by the passes that follow before any program binds it, so
+    // it is told to the store here, as a bound one is (see noteGraph).
+    if (factsStore_ != nullptr && graph != nullptr) {
+        camel::facts::holdGraph(*factsStore_, *graph);
+    }
 }
 
 void GCGraphManager::release(GCGraph *graph) {
