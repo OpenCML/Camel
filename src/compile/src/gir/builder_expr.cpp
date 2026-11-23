@@ -109,9 +109,9 @@ node_handle_t Builder::literalDataInType(const GCT::node_ptr_t &gct, Type *expec
         node_handle_t result = currGraph_->addStaticDataNode(typed);
         rememberConstant(result, typed);
         if (varied_ && currGraph_->outerGraph().get() != nullptr) {
-            node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
-            linkNodes(LinkType::Norm, result, copyNode);
-            result = copyNode;
+            // A constant read in a varied graph is copied into the round that reads it, and that
+            // copy is a call of `copy` rather than the node kind it used to be (plan 2.3, step 1).
+            result = copyNodeOf(result, typed->type());
         }
         registerNodeOrigin(context_, result, gct, "gir.data.literal");
         return result;
@@ -367,9 +367,8 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     node = currGraph_->addStaticDataNode(data);
     rememberConstant(node, data);
     if (varied_ && currGraph_->outerGraph().get() != nullptr) {
-        node_handle_t copyNode = currGraph_->addCopyNode(data->type());
-        linkNodes(LinkType::Norm, node, copyNode);
-        node = copyNode;
+        // See the composite-literal path above: the copy is a call of `copy`.
+        node = copyNodeOf(node, data->type());
     }
 
     registerNodeOrigin(context_, node, gct, "gir.data");
@@ -1463,9 +1462,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             node_handle_t node = currGraph_->addStaticDataNode(converted);
             rememberConstant(node, converted);
             if (varied_ && currGraph_->outerGraph().get() != nullptr) {
-                node_handle_t copyNode = currGraph_->addCopyNode(converted->type());
-                linkNodes(LinkType::Norm, node, copyNode);
-                node = copyNode;
+                // See the composite-literal path above: the copy is a call of `copy`.
+                node = copyNodeOf(node, converted->type());
             }
             registerNodeOrigin(context_, node, gct, "gir.data");
             LEAVE("CAST");

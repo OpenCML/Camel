@@ -87,6 +87,36 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     return castNode;
 }
 
+node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
+    // `copy::<T>(x: T): T` says a copy is a call of the operator rather than a node kind (plan 2.3,
+    // step 1): the type copied is the call's one written type argument and the value is its one
+    // ordinary operand, and nothing else about a copy configures the call, so the resolution needs
+    // nothing beside them. The kind answered two questions of the value -- whether its type is one
+    // the collector traces, and what its static type is -- and the operator answers them from the
+    // same rule (`lib/std/builtin/operators/copy.cpp`), so the call keeps what the kind did.
+    Type *copied = type != nullptr ? type
+                                   : (nodeTypeOf(value) != nullptr
+                                          ? valueTypeOf(nodeTypeOf(value))
+                                          : nullptr);
+    if (copied != nullptr) {
+        const oper_group_ptr_t group = importedOperatorGroupNamed("copy");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(1);
+            const auto op = group->resolveForCall({copied}, copied, {}, {copied}, statics);
+            if (op.has_value()) {
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::Norm, value, node);
+                return node;
+            }
+        }
+    }
+    // No declaration answered: the COPY node is what the graph gets, and it is the same copy.
+    node_handle_t copyNode = currGraph_->addCopyNode(copied);
+    linkNodes(LinkType::Norm, value, copyNode);
+    return copyNode;
+}
+
 node_handle_t Builder::fillNodeOf(
     node_handle_t tmpl, Type *type, const std::vector<node_handle_t> &values) {
     // `fill::<T, ...F>(template: T, ...fields: ...F): T` says a construction is about the type it
