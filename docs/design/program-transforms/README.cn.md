@@ -29,7 +29,7 @@ type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 type Vjp<F>      = (...ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 type Gradient<F> = (...ParamsOf<F>) => (...Tangent<ParamsOf<F>>)
 
-func zip::<...A>(...xs: ...A): (...ElementOf<A>)[] when ...is_array::<A>()
+func zip::<...A>(...xs: ...A) => (...ElementOf<A>)[] when ...is_array::<A>()
 ```
 
 `zip` 是第一条验收：它今天卡在 C++ 里，正因为结果类型要对参数包逐个取元素类型。
@@ -65,7 +65,7 @@ rule jvp_mul::<T>(x: T, w: T) when is_float::<T>() {
 
 ```camel
 #jvp(my_jvp)
-func my_fn(x: float): float { … }
+func my_fn(x: float) => float { … }
 
 rule my_jvp(x: float) {
     my_fn(x) => (dx: float) => …
@@ -84,7 +84,7 @@ rule my_jvp(x: float) {
 ### 4.1 重新解释 `reinterp`
 
 ```camel
-func reinterp::<F, H>(f: F): Reinterp<F, H> when is_function::<F>() && is_rule_set::<H>()
+func reinterp::<F, H>(f: F) => Reinterp<F, H> when is_function::<F>() && is_rule_set::<H>()
 type Reinterp<F, H> = (...H.Lift<ParamsOf<F>>) => H.Lift<ResultOf<F>>
 ```
 
@@ -120,7 +120,7 @@ type Reinterp<F, H> = (...H.Lift<ParamsOf<F>>) => H.Lift<ResultOf<F>>
 ### 4.2 拆分 `split`
 
 ```camel
-func split::<F>(f: F): Split<F>
+func split::<F>(f: F) => Split<F>
 type Split<F> = ((...ParamsOf<F>)          => (ResultOf<F>, (...Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>),
                  (...Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>)   // 残差是后一半的闭包，不在类型里
 ```
@@ -137,7 +137,7 @@ type Split<F> = ((...ParamsOf<F>)          => (ResultOf<F>, (...Tangent<ParamsOf
 ### 4.3 转置 `transpose`
 
 ```camel
-func transpose::<F>(f: F): Transpose<F>
+func transpose::<F>(f: F) => Transpose<F>
 type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 ```
 
@@ -153,7 +153,7 @@ type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 ### 4.4 求导是库
 
 ```camel
-func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
+func vjp::<F>(f: F) => Vjp<F> when is_function::<F>() {
     let (fwd, lin) = split(reinterp<jvp>(f))
     return func (...xs: ...ParamsOf<F>) {
         let (y, res) = fwd(...xs)

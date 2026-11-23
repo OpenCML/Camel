@@ -17,7 +17,7 @@ The first half of [`examples/06_collections.cml`](examples/06_collections.cml):
 
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     // A struct names its fields; a tuple is positional and carries no names.
     let a: Point = { x: 3, y: 4 }
     println(a, a.x + a.y)
@@ -93,7 +93,7 @@ Two values are equal when what they hold is equal, not when they are the same pl
 
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let a: Point = { x: 3, y: 4 }
     let b: Point = { x: 3, y: 4 }
     println(a == b)
@@ -140,11 +140,11 @@ The answer is [`examples/06_exercise.cml`](examples/06_exercise.cml):
 // The answer to the exercise of chapter 6: counting with a map is a fold over `put`.
 // Run: camel docs/tutorial/examples/06_exercise.cml
 
-func tally(words: string[]): Map<string, int> {
+func tally(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main(): int sync {
+func main() => int sync {
     let counts = tally(['fig', 'pear', 'fig', 'apple', 'fig'])
     println(counts, counts['fig'], counts['cherry'] ?? 0)
     return 0

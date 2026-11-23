@@ -113,11 +113,11 @@ Written by someone who knows Camel, a program looks like this.
 a call with its configuration, and `f<w>` alone is the configured function as a value.
 
 ```camel
-func inc(x: int): int {
+func inc(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let total = (1..6)->map<inc>->reduce<func (a: int, b: int) => int { a + b }, 0>
     println(total)
     return 0
@@ -138,11 +138,11 @@ what makes a model a configured function.
 a loop really is a loop, write the language's own form and let it carry the state.
 
 ```camel
-func sum(xs: int[]): int {
+func sum(xs: int[]) => int {
     return loop acc = 0 for x in xs do acc + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum(1..5), [1, 2, 3]->reduce<func (a: int, b: int) => int { a + b }, 0>)
     return 0
 }
@@ -164,11 +164,11 @@ Weights are `with` parameters, and `grad` reads the first of them.
 import { grad } from autodiff
 
 with <x: float>
-func f(y: float): float {
+func f(y: float) => float {
     return x * x * y + y
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f<3.0>(2.0), grad(f)<3.0>(2.0))
     return 0
 }
@@ -187,11 +187,11 @@ A function that can miss returns `T?` and one that can fail returns `T!`, and bo
 the decision is made.
 
 ```camel
-func half(n: int): int? {
+func half(n: int) => int? {
     return if n % 2 == 0 then n / 2 else null
 }
 
-func main(): int sync {
+func main() => int sync {
     println(half(10) ?? -1, half(7) ?? -1)
     return 0
 }
@@ -209,14 +209,14 @@ can be seen; a sentinel like `-1` travels on and is checked nowhere.
 ```camel
 type Shape = enum { Circle(float), Rect { w: float, h: float } }
 
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => 3.14159 * r * r
         case Shape::Rect { w, h } => w * h
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(area(Shape::Rect { w: 2.0, h: 3.0 }))
     return 0
 }
@@ -268,7 +268,7 @@ that: it is used by the region it is written in, so it runs although nothing rea
 ```camel
 import { get_env } from env
 
-func main(): int {
+func main() => int {
     println('before')
     get_env("CAMEL_AI_REFERENCE_NO_SUCH_VARIABLE")     // no diagnostic, and nothing is printed for it
     return 0
@@ -293,7 +293,7 @@ that: `main`'s body is a region, so a `println('hello')` in a body that is not `
 ```camel
 type Shape = enum { Circle(float), Empty }
 
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => 3.14159 * r * r
     }
@@ -307,7 +307,7 @@ a default really is what is meant.
 ```camel
 type Shape = enum { Circle(float), Empty }
 
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => 3.14159 * r * r
         case Shape::Empty => 0.0
@@ -323,7 +323,7 @@ No value converts implicitly, so `i32` and `int` in one expression are
 <!-- camel-snippet: counter-example: i32 and int are different types and do not mix -->
 
 ```camel
-func add(a: i32, b: int): int {
+func add(a: i32, b: int) => int {
     return a + b
 }
 ```
@@ -332,7 +332,7 @@ A conversion would be a node in the graph that the programmer did not write, and
 types, so the conversion has to be written. **Write instead** — convert explicitly:
 
 ```camel
-func add(a: i32, b: int): int {
+func add(a: i32, b: int) => int {
     return int(a) + b
 }
 ```
@@ -356,7 +356,7 @@ Sources: `diagnostics/registry.tsv`, and the language reference, whose lexical c
 <!-- camel-snippet: counter-example: as does no numeric conversion -->
 
 ```camel
-func n(s: string): int {
+func n(s: string) => int {
     return s as int
 }
 ```

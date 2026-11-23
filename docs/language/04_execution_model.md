@@ -31,7 +31,7 @@ Camel 的程序是一张图。本章说明这张图怎样被求值：按依赖�
 
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2
-func main(name: string, times: int): int sync {
+func main(name: string, times: int) => int sync {
     println(`Hello, ${name}! x${times}`)
     return 0
 }
@@ -50,7 +50,7 @@ Hello, Camel! x2
 **读按需，写按区域。** 一个读——变量的读、外部资源的读——被执行，当且仅当它的结果被需要。而**对外部资源的写由所在的区域用到**（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)）：区域运行时，区域里对外部资源的写都执行，不论结果有没有人用，也不需要写成同步块。`main` 的函数体就是一个区域，所以一个不写 `sync` 的函数体里的裸 `println(x)` 照样执行：
 
 ```cml
-func main(): int {
+func main() => int {
     println('alpha')
     println('beta')
     return 0
@@ -65,7 +65,7 @@ beta
 会写的语句随它所在的区域运行（2026-11-17 的裁定）：循环的值没人要，循环照样运行，循环体里的写照常执行；分支写成语句时，它取的那条臂同样运行。编译器不为"值没人要"这件事报任何诊断——一句没被执行的语句不是一件可报告的事，值没人要是关于值的事实，不是关于效应的：
 
 ```cml
-func main(): int {
+func main() => int {
     loop s = 0 for i in [0, 1] do { println('round'); s + i }   // 值没人用，循环体里的写照常执行
     return 0
 }
@@ -79,12 +79,12 @@ round
 真正不执行的是**没人要的读**：读外部资源的结果没人用时它就不执行，和读一个变量没人用一样，这条语句同样不报任何东西。`sync` 改变的不是"写要不要执行"，而是区域里相邻语句的先后（4.3）。
 
 ```cml
-func greet(): int {
+func greet() => int {
     println('hello from greet')     // 写外部资源：greet 的函数体运行，这行就执行
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     return 0
 }
@@ -111,14 +111,14 @@ hello from greet
 - **同步块不向内继承**（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）：同步块只管它自己直接写着的语句，写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`——一个块的含义不随它写在哪里而变。下面这个 `if` 本身在同步链上，它的臂不是：臂按依赖求值，值没有被用到的 `println(1)` 不执行，`println(2)` 是臂的值、也就是 `if` 的值，所以只有它执行。要两句都打印，写 `if c then sync { ... }`：
 
 ```cml
-func f(c: bool): int sync {
+func f(c: bool) => int sync {
     if c then { println(1); println(2) }   // 臂不是同步块：只有 println(2) 执行
     return 0
 }
 ```
 
 ```cml
-func greet(): int sync {
+func greet() => int sync {
     println('hello from greet')     // 同步块：执行，并且先于 return
     return 1
 }
@@ -129,12 +129,12 @@ func greet(): int sync {
 函数编译成它自己的子图。调用只是把这个子图节点放进更大的图里，不改变它的结构。所以从同步块里调用一个函数体不是同步块的函数，函数体仍然是**一个区域**，里面的写照样执行：
 
 ```cml
-func log(x: int): int {
+func log(x: int) => int {
     println(x)          // 结果没人用，但它是写：函数体这个区域运行它，它就执行
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = log(1)
     let b = log(a)
     println(b)
@@ -155,17 +155,17 @@ func main(): int sync {
 `sync` 是函数唯一的修饰符（[7.4.4](07_statements.md#744-修饰符)），写在**函数体位置**，使这个函数体成为同步块（4.3.1）：块里直接写着的语句按书写顺序执行，函数交出结果时它们都已经完成。它不改变函数的值语义，只增加顺序约束；调用方不需要任何配合（`var` 形参是资源参数，设计原则 3.3，不需要声明）。
 
 ```cml
-func f(): int {
+func f() => int {
     println('f')        // 执行：函数体是一个区域
     return 1
 }
 
-func g(): int sync {
+func g() => int sync {
     println('g')        // 执行，而且与相邻语句有先后
     return 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f() + g())
     return 0
 }
@@ -190,19 +190,19 @@ g
 **顺序来自写它的那个同步块。** 同一个变量在同一同步块里的多次写入，按书写顺序排列。函数体不是同步块时，写入只与读到它的操作按依赖排序：
 
 ```cml
-func bump(var counter: int): int sync {
+func bump(var counter: int) => int sync {
     counter += 1
     return counter
 }
 
-func twice(): int sync {
+func twice() => int sync {
     var c = 0
     bump(c)
     bump(c)
     return c
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice())
     return 0
 }
@@ -223,9 +223,9 @@ func main(): int sync {
 `#macro` 是标准标签（[6.2](../design-principles.cn.md)、[8](../design-principles.cn.md)），写在函数声明前面，不用导入：
 
 ```cml
-#macro func cube(x: int): int { return x * x * x }
+#macro func cube(x: int) => int { return x * x * x }
 
-func main(): int sync {
+func main() => int sync {
     println(cube(3))
     return 0
 }
@@ -247,7 +247,7 @@ func main(): int sync {
 **故障**是程序无法继续的情形：除数为零、下标越界、`match` 没有分支匹配、递归过深、数字文本无法转换等。故障使程序带源码位置终止，退出码为 1；它之前已经产生的输出照常写出。故障不是错误值，`!!` 接不住它。
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     println('before')
     println(xs[5])
@@ -275,15 +275,15 @@ help: Ensure the index is within the valid range of the collection.
 **递归深度。** 尾位置的调用不占用栈帧，尾递归可以任意深。非尾递归同时打开的调用数有上限，默认 1000，超过是故障 `RuntimeDiag::MaxRecursionDepthExceeded`；用 `--max-recursion-depth <n>` 调整。计数包括通过函数值的调用和高阶算子对每个元素的调用。默认值在各执行后端上相同，并行调度器同样计数。
 
 ```cml
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)     // 非尾递归
 }
 
-func count(n: int, acc: int): int {
+func count(n: int, acc: int) => int {
     return if n == 0 then acc else count(n - 1, acc + 1)   // 尾递归
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count(1000000, 0))
     println(depth(200))
     println(depth(1200))

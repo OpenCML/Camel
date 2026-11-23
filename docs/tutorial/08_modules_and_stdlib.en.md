@@ -21,11 +21,11 @@ import { sqrt } from math
 
 export type Vec = { x: float, y: float }
 
-export func hypot(v: Vec): float {
+export func hypot(v: Vec) => float {
     return sqrt(v.x * v.x + v.y * v.y)
 }
 
-export func area(w: float, h: float): float {
+export func area(w: float, h: float) => float {
     return w * h
 }
 ```
@@ -41,7 +41,7 @@ import { sqrt } from math
 import { hypot, Vec } from geometry
 import geometry
 
-func main(): int sync {
+func main() => int sync {
     println(sqrt(2.0))
     let v: Vec = { x: 3.0, y: 4.0 }
     println(hypot(v))
@@ -93,15 +93,15 @@ import { read_text } from fs
 import { split, to_lower, trim } from str
 import { encode } from json
 
-func words_of(text: string): string[] {
+func words_of(text: string) => string[] {
     return text->split<' '>->map<func (w) { to_lower(trim(w)) }>->filter<func (w) { w != '' }>
 }
 
-func tally(words: string[]): Map<string, int> {
+func tally(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main(path: string): int sync {
+func main(path: string) => int sync {
     let words = words_of(path->read_text !! '')
     let counts = tally(words)
     println(len(words))
@@ -152,16 +152,16 @@ import { read_text } from fs
 import { split, to_lower, trim } from str
 import { encode } from json
 
-func words_of(text: string): string[] {
+func words_of(text: string) => string[] {
     return text->split<' '>->map<func (w) { to_lower(trim(w)) }>->filter<func (w) { w != '' }>
 }
 
-func tally(path: string): Map<string, int> {
+func tally(path: string) => Map<string, int> {
     let words = words_of(path->read_text !! '')
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main(path: string): int sync {
+func main(path: string) => int sync {
     let counts = tally(path)
     println(len(keys(counts)), counts['fox'] ?? 0, encode(counts))
     return 0

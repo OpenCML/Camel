@@ -89,7 +89,7 @@ type Pair<T> = (T, T)
 ### 3.3.1 数组
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     let names: string[] = []          // 空数组要写出类型
     let grid = [[1, 2], [3]]          // int[][]
@@ -126,7 +126,7 @@ func main(): int sync {
 ### 3.3.2 元组
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let pair = (1, 'one')
     let (n, s) = pair              // 解构
     println(pair.0, pair.1, n, s)
@@ -152,7 +152,7 @@ func main(): int sync {
 ```cml
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let p: Point = { x: 3, y: 4 }
     let q = { x: p.x + 1, y: p.y }     // “修改”就是造一个新的
     println(p, q.x)
@@ -195,7 +195,7 @@ func main(): int sync {
 ```cml
 import { split, trim, to_upper } from str
 
-func main(): int sync {
+func main() => int sync {
     println('a, b ,c'->split<','>->map<func (w) { trim(w) }>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
@@ -221,15 +221,15 @@ HÉLLO 5 é e
 - **`T!`**：值要么是一个 `T`，要么是一个错误。错误是固定的内建结构 `{ kind: string, message: string, location: string }`（种类名、消息、发生处的 `文件:行:列`），所有可能出错的函数共用这一种。
 
 ```cml
-func positive(x: int): int? {
+func positive(x: int) => int? {
     return if x > 0 then x else null
 }
 
-func safe_div(a: int, b: int): int! {
+func safe_div(a: int, b: int) => int! {
     return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(positive(4) ?? 0, positive(-4) ?? 0)
     println(safe_div(9, 3) !! -1, safe_div(9, 0) !! -1)
     println(safe_div(9, 0))
@@ -293,7 +293,7 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 <!-- camel-snippet: fragment: continues the Shape enum declared in the example above -->
 
 ```cml
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => 3.14159 * r * r
         case Shape::Rect { w, h } => w * h
@@ -320,7 +320,7 @@ func area(s: Shape): float {
 `Map<K, V>` 与 `Set<T>` 是内建类型，不需要 `import`。没有专门的字面量，用数组加 `as` 构造：
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
     let more = ages->put<'carol', 45>->remove<'bob'>
     println(ages)
@@ -368,11 +368,11 @@ func main(): int sync {
 遍历先取数组，再用高阶算子：
 
 ```cml
-func count_words(words: string[]): Map<string, int> {
+func count_words(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count_words(['a', 'b', 'a']))
     return 0
 }
@@ -402,7 +402,7 @@ func main(): int sync {
 - **一切值按引用传递。** `var` 形参是引用：函数对它的写入就是对调用方变量的写入。lambda 与分支对变量的捕获也是引用。
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     var count = 0
     count = count + 1
     count += 10

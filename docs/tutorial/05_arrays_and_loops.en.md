@@ -26,7 +26,7 @@ a location (chapter 7).
 // Arrays and the higher-order operators map, filter, reduce and foreach.
 // Run: camel docs/tutorial/examples/05_arrays.cml
 
-func main(): int sync {
+func main() => int sync {
     let xs = 1..11    // [1, ..., 10]
     let squares = xs->map<func (x) { x * x }>
     let evens = squares->filter<func (x) { x % 2 == 0 }>
@@ -38,7 +38,7 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs[0:3], [99])
+    let ys = concat(xs[0..3], [99])
     println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
@@ -79,7 +79,7 @@ the loop is the last state. [`examples/05_loops.cml`](examples/05_loops.cml):
 // `loop` carries its state from one round to the next; the body's value is the next state.
 // Run: camel docs/tutorial/examples/05_loops.cml
 
-func main(): int sync {
+func main() => int sync {
     // One round per element of the sequence.
     let total = loop acc = 0 for x in 1..6 do acc + x * x
     println(total)
@@ -136,7 +136,7 @@ in the element function of a `map` (wrong) and in the accumulating function of a
 
 import { seed, randint, next_key } from random
 
-func main(): int sync {
+func main() => int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
     let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
@@ -144,7 +144,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0:0]>
+    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0..0]>
     println(ordered)
     return 0
 }
@@ -171,7 +171,7 @@ and the same on every run.
 
 import { seed, randint, next_key } from random
 
-func main(): int sync {
+func main() => int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
     let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
@@ -179,7 +179,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0:0]>
+    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0..0]>
     println(ordered)
     return 0
 }
@@ -209,23 +209,23 @@ import { split, trim, to_lower, replace } from str
 import { any, flat_map, sort_by, take } from array
 
 // The words of one line: lower case, punctuation removed, empty pieces dropped.
-func words_of(line: string): string[] {
+func words_of(line: string) => string[] {
     let plain = line->to_lower->replace<',', ' '>->replace<'.', ' '>
     return plain->split<' '>->filter<func (w) { len(w) > 0 }>
 }
 
 // `counts` with one more for `w`, adding `w` when it is new.
-func bump(counts: (string, int)[], w: string): (string, int)[] {
+func bump(counts: (string, int)[], w: string) => (string, int)[] {
     let seen = counts->any<func (e: (string, int)) => bool { e.0 == w }>
     let rows = if seen then counts else concat(counts, [(w, 0)])
     return rows->map<func (e: (string, int)) => (string, int) { if e.0 == w then (e.0, e.1 + 1) else e }>
 }
 
-func show(e: (string, int)): string {
+func show(e: (string, int)) => string {
     return e.0 + ' ' + string(e.1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let text = '
         The quick fox sees the lazy dog.
         The dog sees the fox, and the fox runs.
@@ -292,7 +292,7 @@ Answer [`examples/05_exercise.cml`](examples/05_exercise.cml):
 // The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers.
 // Run: camel docs/tutorial/examples/05_exercise.cml
 
-func main(): int sync {
+func main() => int sync {
     let total = loop acc = 0 for x in 1..11 do if x % 2 == 0 then acc + x * x else acc
     println(total)
     return 0

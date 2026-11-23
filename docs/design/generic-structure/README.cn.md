@@ -98,7 +98,7 @@ func paths_at::<T>(t: T, here: string) {
         case _      => here
     }
 }
-func join(a: string, b: string): string { return if a == "" then b else a + "." + b }
+func join(a: string, b: string) => string { return if a == "" then b else a + "." + b }
 ```
 
 `tree_paths` 的结果是与 `t` 同形、叶子换成路径字符串的树。路径是普通的字符串值：`here` 是实参，`join` 的结果对每个叶子是常量，由常量折叠遍化为字符串常量节点（和现在的 `addStaticDataNode` 一样）。**实例按类型共享**，不因路径不同而多份；折叠不是语义所依赖的。路径是值，不是类型。
@@ -115,11 +115,11 @@ func join(a: string, b: string): string { return if a == "" then b else a + "." 
 //   ckpt_open(dir: string, spec: string): Ckpt!               // 一次校验清单、结构、全部文件
 //   ckpt_get::<L>(h: Ckpt, path: string): L                   // 叶子重载，L 为显式类型实参
 
-export func save_tree::<T>(dir: string, t: T): unit! {
+export func save_tree::<T>(dir: string, t: T) => unit! {
     let h = save_at(ckpt_begin(dir), "", t)       // 沿规范顺序一路传下去，写入次序就是数据依赖
     return ckpt_commit(h, type_spec::<T>(), "")
 }
-func save_at::<T>(h: Ckpt, here: string, t: T): Ckpt {
+func save_at::<T>(h: Ckpt, here: string, t: T) => Ckpt {
     return match type T {
         case struct | tuple =>
             static loop h = h for n, F in fields T do   // 展开的折叠
@@ -128,10 +128,10 @@ func save_at::<T>(h: Ckpt, here: string, t: T): Ckpt {
     }
 }
 
-export func load_tree::<T>(dir: string): T! {
+export func load_tree::<T>(dir: string) => T! {
     return ckpt_open(dir, type_spec::<T>()) -> (h => load_at::<T>(h, ""))
 }
-func load_at::<T>(h: Ckpt, here: string): T {
+func load_at::<T>(h: Ckpt, here: string) => T {
     return match type T {
         case struct => { static for n, F in fields T do n: load_at::<F>(h, join(here, n)) }
         case tuple  => ( static for n, F in fields T do load_at::<F>(h, join(here, n)) )
@@ -139,7 +139,7 @@ func load_at::<T>(h: Ckpt, here: string): T {
     }
 }
 // 结构说明：同样的 match type，返回字符串，如 "{blocks:(…),head:{w:f32[3,4]}}"
-func type_spec::<T>(): string { … }
+func type_spec::<T>() => string { … }
 ```
 
 说明：
@@ -207,7 +207,7 @@ export func tree_map::<T>(t: T, ...ts) {
 
 ```camel
 trait Tree {
-    func tree_map(self, ...others: Self): Self'    // 结果类型随 f 变化，需要关联类型
+    func tree_map(self, ...others: Self) => Self'    // 结果类型随 f 变化，需要关联类型
 }
 impl Tree for Tensor<f32> { … }
 derive Tree for struct, tuple                       // 谁来实现 derive？

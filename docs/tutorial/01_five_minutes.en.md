@@ -35,7 +35,7 @@ follow the main line, the other road is building from source: [setup.en.md](../s
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
 
-func main(): int sync {
+func main() => int sync {
     println('Hello, Camel!')
     return 0
 }
@@ -67,7 +67,7 @@ built (DOT is Graphviz's format; hand it to `dot` and you have a picture). What 
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
 
-func main(): int sync {
+func main() => int sync {
     println('Hello, Camel!')
     return 0
 }
@@ -108,11 +108,11 @@ The second program writes a little more than it needs: the same multiplication t
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
 // Run: camel docs/tutorial/examples/01_rewrite.cml
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2 + x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(3))
     return 0
 }
@@ -134,11 +134,11 @@ optimization pass).
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
 // Run: camel docs/tutorial/examples/01_rewrite.cml
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2 + x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(3))
     return 0
 }
@@ -180,11 +180,11 @@ Answer [`examples/01_exercise.cml`](examples/01_exercise.cml):
 // The answer to the exercise of chapter 1: a function of two parameters, and its value.
 // Run: camel docs/tutorial/examples/01_exercise.cml
 
-func area(w: int, h: int): int {
+func area(w: int, h: int) => int {
     return w * h
 }
 
-func main(): int sync {
+func main() => int sync {
     println(area(3, 4))
     return 0
 }

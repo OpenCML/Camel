@@ -4,7 +4,7 @@ This page is a fixture, not a reader-facing page: the excerpt below is its own p
 the node and cluster numbers written differently, which is a match: an excerpt does not compare numbers, and one one-to-one renaming is enough.
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

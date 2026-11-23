@@ -198,7 +198,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 - It is shorthand for `'...'->format<...>`: the same tree and the same meaning ([6.2](06_expressions.md#62-literals-and-construction)).
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let name = 'Camel'
     let n = 42
     println(`hello, ${name}!`)                    // the same as 'hello, {}!'->format<name>

@@ -14,26 +14,26 @@
 // Functions, recursion, pipelines and `with` parameters.
 // Run: camel docs/tutorial/examples/03_functions.cml
 
-func square(x: int): int {
+func square(x: int) => int {
     return x * x
 }
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
 // A tail-recursive sum: this is how Camel writes a loop.
-func sum_to(n: int, acc: int): int {
+func sum_to(n: int, acc: int) => int {
     return if n == 0 then acc else sum_to(n - 1, acc + n)
 }
 
 // `with` parameters configure a function; ordinary parameters flow through it.
 with <factor: int>
-func scale(x: int): int {
+func scale(x: int) => int {
     return x * factor
 }
 
-func main(): int sync {
+func main() => int sync {
     println(square(7))
     println(fib(20))
     println(sum_to(100000, 0))
@@ -85,7 +85,7 @@ let ys = xs->map<func (x) { x * x }>->filter<func (x) { x % 2 == 0 }>
 // A function with no name is written `(x: int): int => ...`; it can also be kept in a name.
 // Run: camel docs/tutorial/examples/03_lambdas.cml
 
-func main(): int sync {
+func main() => int sync {
     let twice = func (x: int) => int { x * 2 }
     println(twice(21))
 
@@ -133,11 +133,11 @@ camel docs/tutorial/examples/03_lambdas.cml
 // The answer to the exercise of chapter 3: a function of two parameters, used from a pipe.
 // Run: camel docs/tutorial/examples/03_exercise.cml
 
-func max_of(a: int, b: int): int {
+func max_of(a: int, b: int) => int {
     return if a > b then a else b
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [3, 9, 4]
     println(max_of(3, 7))
     println(xs->reduce<func (acc: int, x: int) => int { max_of(acc, x) }, xs[0]>)

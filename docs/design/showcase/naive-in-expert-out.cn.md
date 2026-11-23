@@ -16,7 +16,7 @@
 ## 2. 程序（朴素写法，示意）
 
 ```camel
-func attention(x: f32[t, d], w: Attn): f32[t, d] {
+func attention(x: f32[t, d], w: Attn) => f32[t, d] {
     let q = x @ w.q
     let k = x @ w.k
     let v = x @ w.v
@@ -25,7 +25,7 @@ func attention(x: f32[t, d], w: Attn): f32[t, d] {
     return (p @ v) @ w.o
 }
 
-func loss(logits: f32[t, c], y: int[t]): f32 {
+func loss(logits: f32[t, c], y: int[t]) => f32 {
     let p = exp(logits) / exp(logits)->sum<axis: -1>
     return -(log(p)[range(0, t), y])->mean            // log(softmax)：数值不稳定
 }

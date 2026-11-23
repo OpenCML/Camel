@@ -73,12 +73,12 @@ Fit a line by gradient descent. `grad(loss)` is not a library call evaluated ste
 import { grad } from autodiff
 
 with <w: float>
-func loss(x: float, y: float): float {
+func loss(x: float, y: float) => float {
     let e = w * x - y
     return e * e
 }
 
-func main(): int sync {
+func main() => int sync {
     let fitted = loop w = 0.0 for i in 0..100 do w - 0.01 * grad(loss)<w>(3.0, 6.0)
     println(fitted)                  // close to 2.0
     return 0
@@ -143,7 +143,7 @@ Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest`. CI bui
 ### Hello, Camel
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println('Hello, Camel!')
     return 0
 }

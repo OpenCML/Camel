@@ -16,7 +16,7 @@
 
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let n = 42                      // int (64-bit)
     let ratio = 0.75                // float (64-bit)
     let ok = true                   // bool
@@ -80,11 +80,11 @@ camel docs/tutorial/examples/02_values.cml
 // A literal takes the type its context asks for; a variable keeps its own type.
 // Run: camel docs/tutorial/examples/02_literals.cml
 
-func scale(x: int): float {
+func scale(x: int) => float {
     return float(x) * 1.5
 }
 
-func main(): int sync {
+func main() => int sync {
     let a: float = 1 + 2.0      // the declared type is float, so both literals are read as float
     let b: f32 = 1              // the literal is read as the f32 one
     println(a, b, scale(3), 1.0 + 2)
@@ -107,7 +107,7 @@ camel docs/tutorial/examples/02_literals.cml
 <!-- camel-snippet: counter-example: 反例：一个 int 变量乘一个 float 字面量，编译器拒绝它 -->
 
 ```cml
-func scale(x: int): float {
+func scale(x: int) => float {
     return x * 1.5
 }
 ```
@@ -126,7 +126,7 @@ error[SemanticDiag::NoMatchingFunction]: No matching function found for argument
 <!-- camel-snippet: counter-example: 反例：页面展示编译器给出的诊断，而不是一段能跑的程序 -->
 
 ```cml
-func scale(x: int): float {
+func scale(x: int) => float {
     let n = 3
     let y: float = n        // the declared type is float, the value is int
     return x * y
@@ -181,11 +181,11 @@ Camel 里绝大多数程序用不到 `var`：需要"改过的值"时，直接造
 // The answer to the exercise of chapter 2: a value of one type is not another type.
 // Run: camel docs/tutorial/examples/02_exercise.cml
 
-func to_fahrenheit(c: float): float {
+func to_fahrenheit(c: float) => float {
     return c * 9.0 / 5.0 + 32.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let c = 100.0
     println(to_fahrenheit(c))
     println(`${to_fahrenheit(37.0):.1f}`)

@@ -32,7 +32,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.4.1](02_lexical.md#2541-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let name = 'Camel'
     let n = 42
     println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
@@ -75,9 +75,9 @@ func main(): int sync {
 
 ```cml
 with <factor: int>
-func scale(x: int): int { return x * factor }
+func scale(x: int) => int { return x * factor }
 
-func main(): int sync {
+func main() => int sync {
     println(scale<3>(5))        // with arguments go in angle brackets
     println(5->scale<3>)        // pipe: the value on the left becomes an argument
     return 0
@@ -107,7 +107,7 @@ func main(): int sync {
 `a->f` makes `a` an argument of `f`: `a->f` is `f(a)`, and `a->f<w>` is `f<w>(a)`. It is left-associative and suits writing a data flow as one chain:
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let total = (1..6)
         ->map<func (x) { x * x }>
         ->filter<func (x) { x % 2 == 1 }>
@@ -135,11 +135,11 @@ For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). O
 | `x -> f` | `T?` or `T!` | A function that does not accept the `T?` / `T!` itself | A null `x` gives null and an error is passed on unchanged, otherwise `f` is called with the value; the result is `U?` or `U!` (`f` may return either `U` or a value already of that form) |
 
 ```cml
-func half(x: int): int! {
+func half(x: int) => int! {
     return if x % 2 == 0 then x / 2 else { return error('Odd', 'not even') }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(parse_int('12') -> half -> half !! -1)
     println(parse_int('10') -> half -> half !! -1)
@@ -189,12 +189,12 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 **`&&` and `||` are branches, not operators.** `a && b` is `if a then b else false`, and `a || b` is `if a then true else b`: the right side is an arm, evaluated only when the left side does not decide. Its effects do not happen and its faults are not reached otherwise (`n != 0 && 10 / n > 1` is safe). On the graph each is the `BRCH`/`JOIN` pair of that `if`, with the right side as a subgraph of its own. Both are reserved and cannot be overloaded; an operand that is not a `bool` is `SemanticDiag::LogicalOperandNotBool`. Because `a && b` is that `if`, a test against null on the left narrows the right side ([6.8.1](#681-if)): `x != null && x > 0`.
 
 ```cml
-func noisy(tag: string, v: bool): bool sync {
+func noisy(tag: string, v: bool) => bool sync {
     println(tag)
     return v
 }
 
-func main(): int sync {
+func main() => int sync {
     println(noisy('l1', false) && noisy('r1', true))
     println(noisy('l2', false) & noisy('r2', true))
     return 0
@@ -253,7 +253,7 @@ if condition then arm else arm
 The value of an arm is itself **a position with an expected type** (design principles 5.1): when the whole `if` has one (a declaration written with a type, a function's return position, and so on), a literal in an arm takes that type, so both arms of `let x: float = if c then 1 else 2` are `float`. An arm written as a name is a variable, not converted; a type that does not fit the other arm is still reported as a mismatch of the arms.
 
 ```cml
-func sign(x: int): string {
+func sign(x: int) => string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
 }
 ```
@@ -263,11 +263,11 @@ func sign(x: int): string {
 - **Narrowing.** In `if x != null then A else B`, `x` is a `T` inside `A`; in `if x == null then B else A` likewise. It is the same branch as `match x { case null => B  case v => A }`: the arm that excludes null starts by taking the value out of `x`, and inside that arm the name `x` stands for the value.
 
   ```cml
-  func len_or_zero(s: string?): int {
+  func len_or_zero(s: string?) => int {
       return if s != null then len(s) else 0
   }
 
-  func sum_or_minus(a: int?, b: int?): int {
+  func sum_or_minus(a: int?, b: int?) => int {
       return if a != null && b != null then a + b else -1
   }
   ```
@@ -286,17 +286,17 @@ func sign(x: int): string {
 
 ```cml
 // wrong: the if is a statement whose value nobody uses, and neither return has any effect
-func wrong(x: int): string {
+func wrong(x: int) => string {
     if x < 0 then { return 'negative' } else { return 'not negative' }
     return 'reached the end'
 }
 
 // right: the value of the if is the return value of the function
-func right(x: int): string {
+func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(wrong(-1))
     println(right(-1))
     return 0
@@ -337,7 +337,7 @@ match name {
 - The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`, and takes its type from the position of the arm (see 6.8.1); the value of an arm is such a position too, and takes the expected type of the whole `match`.
 
 ```cml
-func kind(c: string): string {
+func kind(c: string) => string {
     return match c {
         case 'a' | 'e' | 'i' | 'o' | 'u' => 'vowel'
         case ' ' => 'space'
@@ -345,7 +345,7 @@ func kind(c: string): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind('e'), kind(' '), kind('x'))
     return 0
 }
@@ -361,21 +361,21 @@ vowel space other
 - `T!`: `case error e` (which binds the error as `e`, with `e.kind`, `e.message`, `e.location`), plus `case v` or `case _`.
 
 ```cml
-func show(x: int?): string {
+func show(x: int?) => string {
     return match x {
         case null => 'nothing'
         case v => 'value ' + string(v)
     }
 }
 
-func report(r: int!): string {
+func report(r: int!) => string {
     return match r {
         case error e => e.kind + ': ' + e.message
         case v => 'ok ' + string(v)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
     return 0
@@ -472,11 +472,11 @@ func first(t: (int, float)) {
 - The graph is the hand-written expansion: the generator leaves no node of its own. `ts.[j]` over a compile-time tuple is the element node itself, the same field selection `ts.[0]`, `ts.[1]` make; over a runtime tuple value it still builds one `ACCS`.
 
 ```cml
-func sum(t: (int, int, int)): int {
+func sum(t: (int, int, int)) => int {
     return static loop acc = 0 for j in indices t do acc + t.[j]
 }
 
-func positions(t: (int, string)): (int, int) {
+func positions(t: (int, string)) => (int, int) {
     return ( static for j in indices t do j )
 }
 ```
@@ -492,7 +492,7 @@ func positions(t: (int, string)): (int, int) {
 - To fold the rounds' values into one result (rather than pack them back into the same shape), use the `static loop` of [6.8.5](#685-static-loop).
 
 ```cml
-func doubled(t: {a: int, b: int}): {a: int, b: int} {
+func doubled(t: {a: int, b: int}) => {a: int, b: int} {
     return { static for n, F in fields {a: int, b: int} do t.[n] * 2 }
 }
 
@@ -528,36 +528,36 @@ The head is the same one `static for` writes (one thing, one spelling): both are
 - Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
 
 ```cml
-func count::<T>(t: T): int {
+func count::<T>(t: T) => int {
     return static loop n = 0 for name, F in fields T do n + 1
 }
 
-func sum3(t: (int, int, int)): int {
+func sum3(t: (int, int, int)) => int {
     return static loop acc = 0 for i in 0..3 do acc + t.[i]
 }
 
-func total_and_max(t: {a: int, b: int}): (int, int) {
+func total_and_max(t: {a: int, b: int}) => (int, int) {
     return static loop total = 0, best = 0
         for n, F in fields {a: int, b: int} do {
             (total + t.[n], if best < t.[n] then t.[n] else best)
         }
 }
 
-func sum_to(): int {
+func sum_to() => int {
     let n = 4
     return static loop acc = 0 for i in 0..n do acc + i
 }
 
-func stepped(): int {
+func stepped() => int {
     return static loop acc = 0 for i in range(0, 10, 3) do acc + i
 }
 
-func from_array(): int {
+func from_array() => int {
     let xs = [1, 2, 3]
     return static loop acc = 0 for x in xs do acc + x
 }
 
-func sum_args(...ts): int {
+func sum_args(...ts) => int {
     return static loop acc = 0 for x in ts do acc + x
 }
 ```
@@ -619,7 +619,7 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
   ```cml
-  func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
+  func apply_twice(f: (x: int) => int, x: int) => int { return f(f(x)) }
   apply_twice(func (x) { x + 1 }, 3)   // x: int
   ```
 
@@ -636,7 +636,7 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 - A returned result: the result type of the function is a function type.
 
   ```cml
-  func adder(n: int): (x: int) => int {
+  func adder(n: int) => (x: int) => int {
       return func (x) { x + n }              // x: int, and the result is int
   }
   ```
@@ -644,7 +644,7 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 - The lambda after `->`: the parameter is the receiver, so its type is the receiver's, or the value taken out of a `T?` or a `T!` (the pipeline of 3.9):
 
   ```cml
-  func main(): int sync {
+  func main() => int sync {
       let a = 5 -> func (y) { y + 1 }                  // y: int
       println(a)
       return 0
@@ -656,18 +656,18 @@ A parameter that the expected type does not determine is an error (`SemanticDiag
 **Functions are values.** The name of a function can be used wherever a value can be written: as an argument, as a `with` argument, in `let g = f`, in `return f`, as an element of an array or tuple, as the value of a branch arm.
 
 ```cml
-func inc(x: int): int { return x + 1 }
-func dbl(x: int): int { return x * 2 }
+func inc(x: int) => int { return x + 1 }
+func dbl(x: int) => int { return x * 2 }
 
-func apply_twice(f: (x: int) => int, x: int): int {
+func apply_twice(f: (x: int) => int, x: int) => int {
     return f(f(x))
 }
 
-func adder(n: int): (x: int) => int {
+func adder(n: int) => (x: int) => int {
     return func (x: int) => int { x + n }          // captures n
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = inc
     let add5 = adder(5)
     println(g(1), apply_twice(dbl, 3), add5(10))
@@ -699,7 +699,7 @@ func main(): int sync {
 | `xs->foreach<f>` | None; calls `f` for each element | In element order |
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let xs = 1..6
     println(xs->map<func (x) { x * x }>)
     println(xs->filter<func (x) { x % 2 == 0 }>)
@@ -724,9 +724,9 @@ If the element function of `foreach` is to produce side effects, its body must b
 Errors and faults are two different things: only an operation declared to return `T!` produces an error value; division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch one. `attempt` is a **function transform**: `attempt(f)` gives a function whose parameters are those of `f` and whose result type is the result of `f` plus `!`, and calling it is `attempt(f)(a, b)`. There is no `try`/`catch`: the boundary must be one function call and not a stretch of written text — the computation on the graph is evaluated on demand, moved by passes and run in parallel, and only the boundary of a subgraph is stable. A fault in that call (including everything it calls, directly or indirectly) becomes an error value at the boundary, to be handled with `!!`, by carrying it on with `->`, or with `match ... case error e`. Wrap any expression in a closure: `attempt(func () { expr })()`. The value is a function value like any other: it can be passed on and written in angle brackets, `rows->map<attempt(parse_row)>`.
 
 ```cml
-func risky(d: int): int { return 100 / d }
+func risky(d: int) => int { return 100 / d }
 
-func main(): int sync {
+func main() => int sync {
     println(attempt(risky)(4) !! -1)
     println(attempt(risky)(0) !! -1)
     println(attempt(func () { [1, 0, 4]->map<risky> })() !! [-1])
@@ -743,7 +743,7 @@ func main(): int sync {
 25
 -1
 [-1]
-DivisionByZero at main.cml:1:38
+DivisionByZero at main.cml:1:40
 ```
 
 - Type: `f: (A...) => T` gives `(A...) => T!`; when `f` itself returns `U!` the result is `U!` (the error value it returns comes out unchanged). A function with `with` parameters or a `var` parameter cannot be handed in directly — the marked call passes no `with` argument and gives the parameters values — so use a closure.

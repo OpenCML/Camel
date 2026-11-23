@@ -385,7 +385,7 @@ struct IndexedInstance {
 
 ```camel
 import { Tensor } from tensor
-func add_bias(x: Tensor<f32, const [constas m, constas n]>, b: Tensor<f32, const [n]>): Tensor<f32, const [m, n]> {
+func add_bias(x: Tensor<f32, const [constas m, constas n]>, b: Tensor<f32, const [n]>) => Tensor<f32, const [m, n]> {
     return x + b
 }
 ```
@@ -585,11 +585,11 @@ initial  base                                     // 输出从 base 开始；Com
 import { Tensor, sum, matmul } from tensor
 
 @numeric(reassociate)                                    // 示意
-func loss(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>): float {
+func loss(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>) => float {
     return sum(matmul(x, w))      // sum 可以重排；matmul 的内积也是归约，同样可以重排
 }
 
-func caller(x: Tensor<f32, const [8, 3]>, w: Tensor<f32, const [3, 4]>): float {
+func caller(x: Tensor<f32, const [8, 3]>, w: Tensor<f32, const [3, 4]>) => float {
     return loss(x, w) + sum(x)    // 这里的 sum(x) 没有许可：按规范算法
 }
 ```
@@ -803,7 +803,7 @@ struct ResourceSpec {
 ```camel
 // tensor 模块随附的定义（示意；写法依现有张量 API）
 /// tensor:softmax@1.0 的定义
-func softmax_def(x: Tensor<f32>, axis: int): Tensor<f32> {
+func softmax_def(x: Tensor<f32>, axis: int) => Tensor<f32> {
     let m = max(x, axis, true)       // keepdims；NaN 规则见 Q5
     let e = exp(x - m)               // Bounded：ulp 上界见 Q4
     let s = sum(e, axis, true)       // 规范算法：f64 累加、最后舍入为 f32（6.2）
@@ -997,7 +997,7 @@ LoopView loopOf(const GraphView &graph, NodeId node);   // asserts kind == LOOP
 例：
 
 ```camel
-func row_sums(rows: Tensor<f32>[]): (Tensor<f32>, int) {
+func row_sums(rows: Tensor<f32>[]) => (Tensor<f32>, int) {
     return loop acc = zeros([4]), n = 0 for r in rows while n < 100 do (acc + r, n + 1)
 }
 ```

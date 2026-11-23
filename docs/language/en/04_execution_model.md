@@ -31,7 +31,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2
-func main(name: string, times: int): int sync {
+func main(name: string, times: int) => int sync {
     println(`Hello, ${name}! x${times}`)
     return 0
 }
@@ -50,12 +50,12 @@ Evaluation is driven by dependencies, and there is no fixed order of execution: 
 **Reads on demand, writes with their region.** A read -- of a variable or of an outside resource -- executes if and only if its result is needed. A **write to a resource outside the program is used by the region it is written in** (design principles 3.1): when the region runs, its writes to outside resources run, whether or not anything uses their results, and no `sync` is needed. A function body is a region, so a bare `println(x)` in a body that is not `sync` still runs:
 
 ```cml
-func greet(): int {
+func greet() => int {
     println('hello from greet')     // a write in the body region: it runs, used result or not
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     return 0
 }
@@ -84,14 +84,14 @@ A `sync` written before a block marks a sync block: **the statements it writes d
 - **A sync block does not inherit inward** ([design principles 3.4](../../design-principles.en.md#34-sync-blocks)): a sync block orders only the statements it writes directly; the branch arms, loop bodies and nested blocks written inside it follow their own spelling, and to synchronise one of them, write `sync` there — what a block means does not change with where it is written. In the `if` below the `if` itself is on the sync chain but its arm is not: the arm is evaluated by dependency, the `println(1)` whose value nothing uses does not execute, and `println(2)` is the arm's value, which is the `if`'s value, so only it executes. To print both, write `if c then sync { ... }`:
 
 ```cml
-func f(c: bool): int sync {
+func f(c: bool) => int sync {
     if c then { println(1); println(2) }   // the arm is not a sync block: only println(2) executes
     return 0
 }
 ```
 
 ```cml
-func greet(): int sync {
+func greet() => int sync {
     println('hello from greet')     // sync block: executed, and before the return
     return 1
 }
@@ -102,12 +102,12 @@ func greet(): int sync {
 A function is compiled into its own subgraph. A call only places this subgraph node into a larger graph and does not change its structure. So when a function whose body is not a sync block is called from a sync block, the body is still **a region**, and the writes in it run:
 
 ```cml
-func log(x: int): int {
+func log(x: int) => int {
     println(x)          // the result is wanted by nobody, but it is a write: the body region runs it
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = log(1)
     let b = log(a)
     println(b)
@@ -128,17 +128,17 @@ The body of `main` is a sync block, and the two calls of `log` execute in order,
 `sync` is the only modifier of a function ([7.4.4](07_statements.md#744-modifiers)), written in the **function body position**, and it makes that body a sync block (4.3.1): the statements written directly in it execute in the order written, and they have all finished when the function hands out its result. It does not change the function's value semantics, it only adds ordering constraints; the caller needs no cooperation (a `var` parameter is a resource parameter, design principles 3.3, and needs no declaration).
 
 ```cml
-func f(): int {
+func f() => int {
     println('f')        // runs: the body is a region
     return 1
 }
 
-func g(): int sync {
+func g() => int sync {
     println('g')        // runs, and in order with its neighbours
     return 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f() + g())
     return 0
 }
@@ -163,19 +163,19 @@ To make a function body execute in order, write the `sync` in the function body 
 **The order comes from the sync block that writes.** Several writes to one variable in the same sync block are ordered by the order they are written in. When the function body is not a sync block, a write is ordered against the operations that read it only by dependency:
 
 ```cml
-func bump(var counter: int): int sync {
+func bump(var counter: int) => int sync {
     counter += 1
     return counter
 }
 
-func twice(): int sync {
+func twice() => int sync {
     var c = 0
     bump(c)
     bump(c)
     return c
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice())
     return 0
 }
@@ -192,13 +192,13 @@ func main(): int sync {
 ```cml
 var c = 0
 
-func read(): int {
+func read() => int {
     let f = func () => void sync { c = c + 1 }
     f()                 // recorded as a write of `c`
     return c            // this read is what runs that write
 }
 
-func main(): int sync {
+func main() => int sync {
     println(read())
     return 0
 }
@@ -213,7 +213,7 @@ With nothing reading `c` afterwards the call still runs, because it writes: what
 ```cml
 var c = 0
 
-func drop(): int {
+func drop() => int {
     let f = func () => void sync {
         c = c + 1
         println(c)      // would print 1 if the write ran
@@ -222,7 +222,7 @@ func drop(): int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(drop())
     return 0
 }
@@ -240,9 +240,9 @@ The management and tracking of side effects is still under research (the design 
 `#macro` is a standard tag ([6.2](../../design-principles.en.md), [8](../../design-principles.en.md)), written before a function declaration, usable without an import:
 
 ```cml
-#macro func cube(x: int): int { return x * x * x }
+#macro func cube(x: int) => int { return x * x * x }
 
-func main(): int sync {
+func main() => int sync {
     println(cube(3))
     return 0
 }
@@ -264,7 +264,7 @@ func main(): int sync {
 A **fault** is a situation in which the program cannot continue: a zero divisor, an out-of-range subscript, a `match` with no matching case, too deep a recursion, number text that cannot be converted, and so on. A fault terminates the program with a source location and exit code 1; output produced before it is written out as usual. A fault is not an error value, and `!!` cannot catch it.
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     println('before')
     println(xs[5])
@@ -292,15 +292,15 @@ The operator that isolates a fault at a subgraph boundary is `attempt` ([6.10.1]
 **Recursion depth.** A call in tail position does not occupy a stack frame, and tail recursion can be arbitrarily deep. The number of calls open at the same time in non-tail recursion has a limit, 1000 by default; exceeding it is the fault `RuntimeDiag::MaxRecursionDepthExceeded`; adjust it with `--max-recursion-depth <n>`. The count includes calls through function values and the calls a higher-order operator makes for each element. The default is the same on every back end, and the parallel scheduler counts like the others.
 
 ```cml
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)     // non-tail recursion
 }
 
-func count(n: int, acc: int): int {
+func count(n: int, acc: int) => int {
     return if n == 0 then acc else count(n - 1, acc + 1)   // tail recursion
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count(1000000, 0))
     println(depth(200))
     println(depth(1200))

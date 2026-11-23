@@ -20,13 +20,13 @@ DDPM 项目已经能用 Camel 写完整的训练流程：模型、损失、`with
 export type FF = { up: Tensor<f32>, gate_w: Tensor<f32>, down: Tensor<f32> }
 export type DeviceFF = { up: Device<Tensor<f32>>, gate_w: Device<Tensor<f32>>, down: Device<Tensor<f32>> }
 
-export func uploadFF(p: FF): DeviceFF sync {
+export func uploadFF(p: FF) => DeviceFF sync {
     return { up: upload(p.up), gate_w: upload(p.gate_w), down: upload(p.down) }
 }
-export func emaFF(p: FF, q: FF): FF {
+export func emaFF(p: FF, q: FF) => FF {
     return { up: p.up * 0.999 + q.up * 0.001, gate_w: p.gate_w * 0.999 + q.gate_w * 0.001, down: p.down * 0.999 + q.down * 0.001 }
 }
-export func stepFF(p: FF, g: FF, m: FF, v: FF, rate: float, bc1: float, bc2: float): (FF, FF, FF) {
+export func stepFF(p: FF, g: FF, m: FF, v: FF, rate: float, bc1: float, bc2: float) => (FF, FF, FF) {
     let s_up = adam_leaf(p.up, g.up, m.up, v.up, rate, bc1, bc2)
     ...
 }
@@ -132,24 +132,24 @@ Device<{ a: A, b: (B, C) }>  ≡  { a: Device<A>, b: (Device<B>, Device<C>) }
 import { tree_map, tree_unzip, tree_reduce } from tree
 import { Tensor, sum, sqrt } from tensor
 
-func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h: Hyper): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {
+func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h: Hyper) => (Tensor<f32>, Tensor<f32>, Tensor<f32>) {
     let nm = m * 0.9 + g * 0.1
     let nv = v * 0.999 + g * g * 0.001
     return (p - h.rate * (nm / h.bc1) / (sqrt(nv / h.bc2) + 0.00000001), nm, nv)
 }
 
-export func adam::<P>(p: P, g: P, m: P, v: P, h: Hyper): (P, P, P) {
+export func adam::<P>(p: P, g: P, m: P, v: P, h: Hyper) => (P, P, P) {
     let r = tree_map<func (a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>, d: Tensor<f32>) { adam_leaf(a, b, c, d, h) }>(p, g, m, v)
     return tree_unzip(r, p)       // 按 p 的叶子边界拆成 (新参数, 新 m, 新 v)
 }
-export func ema::<P>(avg: P, p: P): P {
+export func ema::<P>(avg: P, p: P) => P {
     return tree_map<func (a: Tensor<f32>, b: Tensor<f32>) => Tensor<f32> { a * 0.999 + b * 0.001 }>(avg, p)
 }
-export func sq_distance::<P>(p: P, q: P): float {
+export func sq_distance::<P>(p: P, q: P) => float {
     return tree_map<func (a: Tensor<f32>, b: Tensor<f32>) => float { sum((a - b) * (a - b)) }>(p, q)
         ->tree_reduce<func (acc: float, x: float) => float { acc + x }>(0.0)
 }
-export func sq_norm::<P>(p: P): float {
+export func sq_norm::<P>(p: P) => float {
     return p->tree_reduce<func (acc: float, x: Tensor<f32>) => float { acc + sum(x * x) }>(0.0)
 }
 ```
@@ -203,7 +203,7 @@ let t     = fold(ks, 1)->randint<0, 1000>                  // 左闭右开
 type State = { params: Params, m: Params, v: Params, ema: Params, key: Key, step: int }
 
 #gpu
-func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config): (Device<State>, Device<float>) {
+func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config) => (Device<State>, Device<float>) {
     let k     = fold(s.key, s.step)
     let idx   = randints(fold(k, 0), 0, cfg.count, [cfg.batch])   // a batch of indices (a whole-array integer draw is not in the module yet)
     let clean = gather(data, idx)
@@ -215,7 +215,7 @@ func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config): (Devi
     return ({ params: p, m: m, v: v, ema: ema(s.ema, p), key: s.key, step: s.step + 1 }, l)
 }
 
-func main(): int sync {
+func main() => int sync {
     ...
     let final = loop s = upload(init_state(cfg)) for i in range(0, cfg.steps) do sync {
         let (next, l) = train_step(s, data, cfg)

@@ -4,7 +4,7 @@ This page is a fixture, not a reader-facing page: the dump below is deliberately
 program prints, so that the check that compares them has something to fail on.
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

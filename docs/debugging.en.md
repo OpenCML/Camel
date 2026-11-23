@@ -210,7 +210,7 @@ A line can hold several nodes, and a line can hold none:
   `unused`.*); or a pass removed it. The second case is Camel's execution model at work. In
 
   ```camel
-  func next(x: int): int {
+  func next(x: int) => int {
       let unused = x + 100     // nothing uses it, the body is not a sync block: never runs
       return x + 1
   }

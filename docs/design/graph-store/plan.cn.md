@@ -380,15 +380,15 @@ camel p9_opt.cml std::opt std::jgir
 
 ```camel
 // p1_regions.cml
-func pick(c: bool, x: int): int { return if c then x else 0 }
-func classify(n: int): int {
+func pick(c: bool, x: int) => int { return if c then x else 0 }
+func classify(n: int) => int {
     return match n {
         case 0 => 10
         case 1 | 2 => 20
         case _ => 30
     }
 }
-func main(): int sync {
+func main() => int sync {
     let a = loop acc = 0 for x in [1, 2, 3] do acc + x
     let b = loop i = 0, s = 0 while i < 100 do (i + 1, s + i)
     println(pick(true, 7), classify(2), a, b)
@@ -398,14 +398,14 @@ func main(): int sync {
 
 ```camel
 // p17_forms.cml（节选）
-func f1(c: bool): int { return if c then 1 else 2 }
-func f2(c: bool): int {
+func f1(c: bool) => int { return if c then 1 else 2 }
+func f2(c: bool) => int {
     return match c {
         case true => 1
         case false => 2
     }
 }
-func f3(x: int?): int { return x ?? 0 }
+func f3(x: int?) => int { return x ?? 0 }
 ```
 
 ```camel
@@ -415,7 +415,7 @@ type Option<T> = enum {
     None,
 }
 
-func unwrapOr(o: Option<int>, fallback: int): int {
+func unwrapOr(o: Option<int>, fallback: int) => int {
     return match o {
         case Option::Some(v) => v
         case Option::None => fallback

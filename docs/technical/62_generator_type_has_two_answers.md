@@ -73,7 +73,7 @@ operator '=' is not defined for these operand types.        (SemanticDiag::NoMat
 ## 4. 最小复现的形状
 
 ```cml
-func reading(): int.. sync {   // 生成器体里造闭包，机器会在同一次拉取之外写这个格子
+func reading() => int.. sync {   // 生成器体里造闭包，机器会在同一次拉取之外写这个格子
     var x    = 0
     let read = func () { x }
     yield 0
@@ -81,7 +81,7 @@ func reading(): int.. sync {   // 生成器体里造闭包，机器会在同一�
     yield read()               // 按引用读 5，按值读 0：两个意思
 }
 
-func unrelated(x: int): int { return id(x) }   // 这一行不是它的事：同名参数被交给了调用
+func unrelated(x: int) => int { return id(x) }   // 这一行不是它的事：同名参数被交给了调用
 ```
 
 只要程序里有别的 `x` 被交给调用，`read()` 就是 5；把那一处改成 `y`，同一个 `reading()` 的 `read()`

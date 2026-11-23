@@ -50,7 +50,7 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 
 ```cml
 
-func main(): int sync {
+func main() => int sync {
     println('Hello, Camel!')
     return 0
 }
@@ -77,7 +77,7 @@ Hello, Camel!
 
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let n = 42                      // int (64-bit)
     let ratio = 0.75                // float (64-bit)
     let ok = true                   // bool
@@ -129,26 +129,26 @@ func main(): int sync {
 
 ```cml
 
-func square(x: int): int {
+func square(x: int) => int {
     return x * x
 }
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
 // A tail-recursive sum: this is how Camel writes a loop.
-func sum_to(n: int, acc: int): int {
+func sum_to(n: int, acc: int) => int {
     return if n == 0 then acc else sum_to(n - 1, acc + n)
 }
 
 // `with` parameters configure a function; ordinary parameters flow through it.
 with <factor: int>
-func scale(x: int): int {
+func scale(x: int) => int {
     return x * factor
 }
 
-func main(): int sync {
+func main() => int sync {
     println(square(7))
     println(fib(20))
     println(sum_to(100000, 0))
@@ -177,11 +177,11 @@ func main(): int sync {
 
 ```cml
 
-func sign(x: int): string {
+func sign(x: int) => string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
 }
 
-func kind(c: string): string {
+func kind(c: string) => string {
     return match c {
         case 'a' | 'e' | 'i' | 'o' | 'u' => 'vowel'
         case ' ' => 'space'
@@ -189,7 +189,7 @@ func kind(c: string): string {
     }
 }
 
-func grade(score: int): string {
+func grade(score: int) => string {
     let band = score / 10
     return match band {
         case 10 | 9 => 'A'
@@ -199,7 +199,7 @@ func grade(score: int): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sign(5), sign(-2), sign(0))
     println(kind('e'), kind(' '), kind('x'))
     println(grade(95), grade(81), grade(42))
@@ -223,17 +223,17 @@ A B D
 ```cml
 
 // The `if` is a statement whose value nobody uses, so the two `return`s have no effect.
-func wrong(x: int): string {
+func wrong(x: int) => string {
     if x < 0 then { return 'negative' } else { return 'not negative' }
     return 'reached the end'
 }
 
 // The value of the `if` is what the function returns.
-func right(x: int): string {
+func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(wrong(-1))
     println(right(-1))
     return 0
@@ -264,7 +264,7 @@ Camel 里没有“提前返回”。让分支成为函数体的最后一个表�
 
 ```cml
 
-func main(): int sync {
+func main() => int sync {
     let xs = 1..11    // [1, ..., 10]
     let squares = xs->map<func (x) { x * x }>
     let evens = squares->filter<func (x) { x % 2 == 0 }>
@@ -276,7 +276,7 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs[0:3], [99])
+    let ys = concat(xs[0..3], [99])
     println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
@@ -308,7 +308,7 @@ item c
 
 import { seed, randint, next_key } from random
 
-func main(): int sync {
+func main() => int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
     let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
@@ -316,7 +316,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0:0]>
+    let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0..0]>
     println(ordered)
     return 0
 }
@@ -350,12 +350,12 @@ func main(): int sync {
 
 ```cml
 
-func greet(): int {
+func greet() => int {
     println('hello from greet')     // 结果没人用，但它是一次写：函数体这个区域运行，它就执行
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     return 0
 }
@@ -381,7 +381,7 @@ hello from greet
 <!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
 
 ```cml
-func greet(): int sync {
+func greet() => int sync {
     println('hello from greet')
     return 1
 }
@@ -397,7 +397,7 @@ hello from greet
 **同步块不向内继承。** 它只管自己直接写着的语句：写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。这和上一节“函数的行为由它自己决定”是同一条规则，只是往内一层：
 
 ```cml
-func f(c: bool): int sync {
+func f(c: bool) => int sync {
     if c then { println(1); println(2) }   // 臂不是同步块，但臂是一个区域：两句都执行
     return 0
 }
@@ -411,12 +411,12 @@ func f(c: bool): int sync {
 
 ```cml
 
-func log(x: int): int {
+func log(x: int) => int {
     println(x)          // 结果没人用，但它在函数体这个区域里：执行
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = log(1)
     let b = log(a)
     println(b)          // 打印 3
@@ -438,17 +438,17 @@ func main(): int sync {
 
 ```cml
 
-func f(): int {
+func f() => int {
     println('f')        // 执行：函数体是一个区域
     return 1
 }
 
-func g(): int sync {
+func g() => int sync {
     println('g')        // 执行，而且与相邻语句有先后
     return 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f() + g())
     return 0
 }
@@ -482,19 +482,19 @@ help: Only a variable declared with 'var' (or a var parameter) can be modified. 
 
 ```cml
 
-func bump(var counter: int): int sync {
+func bump(var counter: int) => int sync {
     counter += 1
     return counter
 }
 
-func twice(): int sync {
+func twice() => int sync {
     var c = 0
     bump(c)
     bump(c)
     return c
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice())
     return 0
 }
@@ -518,18 +518,18 @@ func main(): int sync {
 ```cml
 import state
 
-func inc(x: int): int { return x + 1 }
-func dbl(x: int): int { return x * 2 }
+func inc(x: int) => int { return x + 1 }
+func dbl(x: int) => int { return x * 2 }
 
-func apply_twice(f: (x: int) => int, x: int): int {
+func apply_twice(f: (x: int) => int, x: int) => int {
     return f(f(x))
 }
 
-func adder(n: int): (x: int) => int {
+func adder(n: int) => (x: int) => int {
     return func (x: int) => int { x + n }
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = inc                              // a function name is a value
     println(g(1), apply_twice(dbl, 3))
 
@@ -565,19 +565,19 @@ func main(): int sync {
 
 type Pair<T> = (T, T)
 
-func first::<T>(xs: T[]): T {
+func first::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func swap::<T>(p: Pair<T>): Pair<T> {
+func swap::<T>(p: Pair<T>) => Pair<T> {
     return (p.1, p.0)
 }
 
-func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(swap((1, 2)), swap(('x', 'y')))
@@ -602,18 +602,18 @@ a
 
 ```cml
 
-func is_numeric::<T>(): bool {
+func is_numeric::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 => true
         case _ => false
     }
 }
 
-func double_it::<T>(x: T): T when is_numeric::<T>() {
+func double_it::<T>(x: T) => T when is_numeric::<T>() {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(double_it(21), double_it(1.5))
     return 0
 }
@@ -625,7 +625,7 @@ Camel 没有异常，没有 `try`/`catch`。可能失败的函数把返回类型
 
 ```cml
 
-func safe_div(a: int, b: int): int! {
+func safe_div(a: int, b: int) => int! {
     return if b == 0 then {
         return error('DivByZero', 'the divisor is zero')
     } else {
@@ -633,16 +633,16 @@ func safe_div(a: int, b: int): int! {
     }
 }
 
-func inc(x: int): int { return x + 1 }
+func inc(x: int) => int { return x + 1 }
 
-func describe(r: int!): string {
+func describe(r: int!) => string {
     return match r {
         case error e => e.kind + ': ' + e.message
         case v => 'ok ' + string(v)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
     println(describe(safe_div(8, 2) -> inc))
@@ -687,20 +687,20 @@ help: Ensure the index is within the valid range of the collection.
 
 ```cml
 
-func find(xs: int[], target: int, i: int): int? {
+func find(xs: int[], target: int, i: int) => int? {
     return if i >= len(xs) then null
         else if xs[i] == target then i
         else find(xs, target, i + 1)
 }
 
-func show(x: int?): string {
+func show(x: int?) => string {
     return match x {
         case null => 'not found'
         case v => 'at ' + string(v)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [10, 20, 30]
     println(find(xs, 20, 0) ?? -1)
     println(find(xs, 99, 0) ?? -1)
@@ -727,7 +727,7 @@ null
 
 ```cml
 
-func main(): int sync {
+func main() => int sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
     println(ages)                              // printed in key order
     println(ages['alice'] ?? 0, ages['carol'] ?? 0)
@@ -768,11 +768,11 @@ import { sqrt } from math
 
 export type Vec = { x: float, y: float }
 
-export func hypot(v: Vec): float {
+export func hypot(v: Vec) => float {
     return sqrt(v.x * v.x + v.y * v.y)
 }
 
-export func area(w: float, h: float): float {
+export func area(w: float, h: float) => float {
     return w * h
 }
 ```
@@ -785,7 +785,7 @@ import { sqrt } from math
 import { hypot, Vec } from shapes
 import shapes
 
-func main(): int sync {
+func main() => int sync {
     println(sqrt(2.0))
     let v: Vec = { x: 3.0, y: 4.0 }
     println(hypot(v))
@@ -814,7 +814,7 @@ import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from array
 
-func main(): int sync {
+func main() => int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
     let words = '  pear, fig ,apple, fig '->trim->split<','>->map<func (w) { trim(w) }>
     println(words)
@@ -871,11 +871,11 @@ OPERATOR {"module":"str","name":"split","uri":"str:split","with":1,"norm":1,"pur
 
 ```cml
 
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = add(1, 2)
     println(x)
     return 0
@@ -943,15 +943,15 @@ digraph GraphIR {
 
 ```cml
 
-func square(x: int): int {
+func square(x: int) => int {
     return x * x
 }
 
-func sum_squares(n: int, acc: int): int {
+func sum_squares(n: int, acc: int) => int {
     return if n == 0 then acc else sum_squares(n - 1, acc + square(n))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum_squares(1000, 0))
     return 0
 }
@@ -1005,7 +1005,7 @@ camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::cxx:
 
 import { Tensor, ones, zeros, shape, sum, transpose } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let a = ones::<f32>([2, 3])
     let b = ones::<f32>([3, 1])
     let c = a @ b                    // matrix product: 2x3 @ 3x1
@@ -1030,7 +1030,7 @@ func main(): int sync {
 
 import { Tensor, ones, relu, sum } from tensor
 
-func main(x: f32[2, 3]): f32[...] {
+func main(x: f32[2, 3]) => f32[...] {
     let w = ones::<f32>([3, 1])
     return relu(x @ w)
 }
@@ -1071,11 +1071,11 @@ onnx::export: wrote model.onnx
 import { grad, with_grad } from autodiff
 
 with <x: float>
-func f(y: float): float {
+func f(y: float) => float {
     return x * x * y + y
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f<3.0>(2.0))
     println(grad(f)<3.0>(2.0))                 // df/dx = 2xy = 12
     println(with_grad(f)<3.0>(2.0))            // (值, 梯度) = (20, 12)

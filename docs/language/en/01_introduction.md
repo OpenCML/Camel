@@ -26,7 +26,7 @@ The smallest program:
 
 ```cml
 
-func main(): int sync {
+func main() => int sync {
     println('Hello, Camel!')
     return 0
 }

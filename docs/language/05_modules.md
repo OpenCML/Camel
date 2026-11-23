@@ -33,7 +33,7 @@ import { inc } from lib::Tools       // 引入模块里某个命名空间中的�
 import math
 using namespace math
 
-func main(): int sync {
+func main() => int sync {
     println(math::sqrt(9.0), floor(2.5))
     return 0
 }
@@ -78,11 +78,11 @@ import { sqrt } from math
 
 export type Vec = { x: float, y: float }
 
-export func hypot(v: Vec): float {
+export func hypot(v: Vec) => float {
     return sqrt(v.x * v.x + v.y * v.y)
 }
 
-export func area(w: float, h: float): float {
+export func area(w: float, h: float) => float {
     return w * h
 }
 ```
@@ -92,7 +92,7 @@ export func area(w: float, h: float): float {
 import { hypot, Vec } from shapes
 import shapes
 
-func main(): int sync {
+func main() => int sync {
     let v: Vec = { x: 3.0, y: 4.0 }
     println(hypot(v))
     println(shapes::area(2.0, 5.0))
@@ -114,8 +114,8 @@ func main(): int sync {
 // counter.cml
 var cnt = 0
 let step = 2
-export func bump(): int sync { cnt += step; return cnt }
-export func current(): int { return cnt }
+export func bump() => int sync { cnt += step; return cnt }
+export func current() => int { return cnt }
 ```
 
 ```cml
@@ -123,7 +123,7 @@ export func current(): int { return cnt }
 import counter
 let step = 1000                 // 与 counter 的 step 无关
 
-func main(): int sync {
+func main() => int sync {
     println(counter::bump(), counter::bump(), counter::current())
     return 0
 }
@@ -148,7 +148,7 @@ import { pi } from geometry
 import geometry
 
 let area = pi * 2.0 * 2.0
-func main(): int sync {
+func main() => int sync {
     println(area, geometry::tau)
     return 0
 }
@@ -176,12 +176,12 @@ type Counter = { n: int }
 
 namespace Counter {
     let start = 0
-    func new(): Counter { return { n: start } }
-    func next(c: Counter): Counter { return { n: c.n + 1 } }
-    func twice(c: Counter): Counter { return next(next(c)) }   // 同一块里的名字不必带前缀
+    func new() => Counter { return { n: start } }
+    func next(c: Counter) => Counter { return { n: c.n + 1 } }
+    func twice(c: Counter) => Counter { return next(next(c)) }   // 同一块里的名字不必带前缀
 }
 
-func main(): int sync {
+func main() => int sync {
     let c = Counter::twice(Counter::new())
     println(c.n)
     return 0
@@ -212,7 +212,7 @@ namespace A {
     using namespace Inner           // 只对这个块里的声明生效（Inner 是本模块的 A::Inner）
 }
 
-func f(): int {
+func f() => int {
     using namespace lib             // 只对这个函数生效
     return root()
 }

@@ -14,20 +14,20 @@ Camel 把"可能为空"和"可能出错"写进类型：`T?` 与 `T!`。这一章
 // T? may be null; open it with ?? or with match.
 // Run: camel docs/tutorial/examples/07_nullable.cml
 
-func find(xs: int[], target: int, i: int): int? {
+func find(xs: int[], target: int, i: int) => int? {
     return if i >= len(xs) then null
         else if xs[i] == target then i
         else find(xs, target, i + 1)
 }
 
-func show(x: int?): string {
+func show(x: int?) => string {
     return match x {
         case null => 'not found'
         case v => 'at ' + string(v)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [10, 20, 30]
     println(find(xs, 20, 0) ?? -1)
     println(find(xs, 99, 0) ?? -1)
@@ -65,7 +65,7 @@ null
 // A function that may fail returns T!: an error value is handed out by `return`.
 // Run: camel docs/tutorial/examples/07_errors.cml
 
-func safe_div(a: int, b: int): int! {
+func safe_div(a: int, b: int) => int! {
     return if b == 0 then {
         return error('DivByZero', 'the divisor is zero')
     } else {
@@ -73,16 +73,16 @@ func safe_div(a: int, b: int): int! {
     }
 }
 
-func inc(x: int): int { return x + 1 }
+func inc(x: int) => int { return x + 1 }
 
-func describe(r: int!): string {
+func describe(r: int!) => string {
     return match r {
         case error e => e.kind + ': ' + e.message
         case v => 'ok ' + string(v)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
     println(describe(safe_div(8, 2) -> inc))
@@ -131,7 +131,7 @@ warning[SemanticDiag::UnusedFallibleValue]: This value has type 'int!' and nothi
 // A fault is not an error value: reading past the end ends the program, with a position.
 // Run: camel docs/tutorial/examples/07_fault.cml
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     println('before')
     println(xs[5])
@@ -172,11 +172,11 @@ help: Ensure the index is within the valid range of the collection.
 // The answer to the exercise of chapter 7: the values that are there, and 0 for the ones that are not.
 // Run: camel docs/tutorial/examples/07_exercise.cml
 
-func sum_ints(words: string[]): int {
+func sum_ints(words: string[]) => int {
     return words->map<func (s) { parse_int(s) !! 0 }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum_ints(['12', 'x', '7']))
     return 0
 }

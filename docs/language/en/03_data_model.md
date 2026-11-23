@@ -88,7 +88,7 @@ Faster computation whose results may differ is granted explicitly by the program
 ### 3.3.1 Arrays
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     let names: string[] = []          // an empty array needs its type written out
     let grid = [[1, 2], [3]]          // int[][]
@@ -125,7 +125,7 @@ func main(): int sync {
 ### 3.3.2 Tuples
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let pair = (1, 'one')
     let (n, s) = pair              // destructuring
     println(pair.0, pair.1, n, s)
@@ -144,7 +144,7 @@ A member index is a literal; one beyond the length is a compile-time error (`Sem
 ```cml
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let p: Point = { x: 3, y: 4 }
     let q = { x: p.x + 1, y: p.y }     // "modifying" means building a new one
     println(p, q.x)
@@ -191,7 +191,7 @@ The remaining string functions are in the `str` module ([standard library refere
 ```cml
 import { split, trim, to_upper } from str
 
-func main(): int sync {
+func main() => int sync {
     println('a, b ,c'->split<','>->map<func (w) { trim(w) }>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
@@ -217,15 +217,15 @@ Two dedicated built-in forms, each carrying a one-bit tag:
 - **`T!`**: the value is either a `T` or an error. An error is a fixed built-in struct `{ kind: string, message: string, location: string }` (kind name, message, and the `file:line:column` where it occurred); all fallible functions share this one kind.
 
 ```cml
-func positive(x: int): int? {
+func positive(x: int) => int? {
     return if x > 0 then x else null
 }
 
-func safe_div(a: int, b: int): int! {
+func safe_div(a: int, b: int) => int! {
     return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(positive(4) ?? 0, positive(-4) ?? 0)
     println(safe_div(9, 3) !! -1, safe_div(9, 0) !! -1)
     println(safe_div(9, 0))
@@ -289,7 +289,7 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 <!-- camel-snippet: fragment: continues the Shape enum declared in the example above -->
 
 ```cml
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => 3.14159 * r * r
         case Shape::Rect { w, h } => w * h
@@ -316,7 +316,7 @@ func area(s: Shape): float {
 `Map<K, V>` and `Set<T>` are built-in types and need no `import`. There is no dedicated literal; construct them from an array with `as`:
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
     let more = ages->put<'carol', 45>->remove<'bob'>
     println(ages)
@@ -364,11 +364,11 @@ An operation with `with` arguments has one calling form, the convention of the s
 To iterate, first take an array, then use a higher-order operator:
 
 ```cml
-func count_words(words: string[]): Map<string, int> {
+func count_words(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count_words(['a', 'b', 'a']))
     return 0
 }
@@ -398,7 +398,7 @@ For the implementation and trade-offs see [technical document 31](../../technica
 - **All values are passed by reference.** A `var` parameter is a reference: a write to it by the function is a write to the caller's variable. Captures of variables by lambdas and branches are references too.
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     var count = 0
     count = count + 1
     count += 10

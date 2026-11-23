@@ -20,7 +20,7 @@
 //     command fence chooses the passes and `--arg` values, exactly as the page does.
 //   * Otherwise the snippet only has to compile: parse, GCT and GIR, asserted with
 //     `camel <file> std::gir`. A fence with no entry point is compiled as a module with a
-//     generated `func main(): int sync { return 0 }`; the fence itself is not changed.
+//     generated `func main() => int sync { return 0 }`; the fence itself is not changed.
 //   * Adjacent Camel fences whose first lines name files (`// shapes.cml`, then `// main.cml`)
 //     are one example: the files are written into one directory and the entry is the fence
 //     with `func main`.
@@ -142,21 +142,245 @@ const EXCERPTS = [
 const PENDING = [
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
-        key: '3782129450a658f3',
+        key: '12ee3b07b5c68a43',
         reason:
             'chapter 18: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
             'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
-        key: '3782129450a658f3',
+        key: '12ee3b07b5c68a43',
         reason:
             'chapter 18: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
             'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
     },
+    {
+        file: 'docs/language/03_data_model.md',
+        key: '1160bed5c280bcaa',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/language/en/03_data_model.md',
+        key: '1160bed5c280bcaa',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/language/05_modules.md',
+        key: '262e1b8beb3c5ce2',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/language/en/05_modules.md',
+        key: '262e1b8beb3c5ce2',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/language/06_expressions.md',
+        key: '75ac69f1262f3640',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/language/06_expressions.md',
+        key: '82445c807f7cb320',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/language/en/06_expressions.md',
+        key: '75ac69f1262f3640',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/language/en/06_expressions.md',
+        key: '82445c807f7cb320',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/reference/camel-for-ai.md',
+        key: '2e04c65435a5af5b',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/reference/camel-for-ai.md',
+        key: '4c59e07cb3168df6',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/05_arrays_and_loops.cn.md',
+        key: '35950cb2759fddcc',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/05_arrays_and_loops.cn.md',
+        key: '2232e8099ab54822',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/05_arrays_and_loops.cn.md',
+        key: '0e9cbd1eed1f8681',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/05_arrays_and_loops.en.md',
+        key: '35950cb2759fddcc',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/05_arrays_and_loops.en.md',
+        key: '2232e8099ab54822',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/05_arrays_and_loops.en.md',
+        key: '0e9cbd1eed1f8681',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/08_modules_and_stdlib.cn.md',
+        key: '7c62e03d1c46ada5',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/08_modules_and_stdlib.cn.md',
+        key: 'd212419bb682fccc',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/08_modules_and_stdlib.en.md',
+        key: '7c62e03d1c46ada5',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/08_modules_and_stdlib.en.md',
+        key: 'd212419bb682fccc',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/09_evaluation_by_dependency.cn.md',
+        key: 'adc1676a0405cb50',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/09_evaluation_by_dependency.en.md',
+        key: 'adc1676a0405cb50',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/tutorial.cn.md',
+        key: '3349eaa84b0532ae',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/tutorial.cn.md',
+        key: '49e18a2d16879dcb',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/tutorial.cn.md',
+        key: '2a6c7d995f322bdf',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/tutorial.en.md',
+        key: '3349eaa84b0532ae',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/tutorial.en.md',
+        key: '49e18a2d16879dcb',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
+    {
+        file: 'docs/tutorial/tutorial.en.md',
+        key: '2a6c7d995f322bdf',
+        reason:
+            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
+            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
+            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
+    },
 ]
 
-const PENDING_MAX = 5
+const PENDING_MAX = 30
 
 const OTHER_LANGUAGES = new Set([
     '', 'bash', 'c', 'cpp', 'c++', 'css', 'go', 'html', 'java', 'javascript', 'js', 'json',
@@ -734,7 +958,7 @@ function writeSnippet(snippet, tempDir) {
     if (!entry.entry) {
         // A fence with no entry point is checked as a module: parse, GCT and GIR only need an
         // entry graph to build, and a generated main does not change the fence.
-        fs.appendFileSync(entry.file, '\nfunc main(): int sync { return 0 }\n')
+        fs.appendFileSync(entry.file, '\nfunc main() => int sync { return 0 }\n')
     }
     return { entry, files }
 }

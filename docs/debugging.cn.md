@@ -194,7 +194,7 @@ GIR 调试栏区分真实执行位置与历史快照，选择历史不会继续�
   删掉了。第二种情况正是 Camel 的执行模型。在
 
   ```camel
-  func next(x: int): int {
+  func next(x: int) => int {
       let unused = x + 100     // 没人用它，函数体不是同步块：永远不执行
       return x + 1
   }
