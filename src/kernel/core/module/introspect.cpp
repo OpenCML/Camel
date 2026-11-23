@@ -4,6 +4,7 @@
 #include "camel/core/module/introspect.h"
 
 #include "camel/core/operator_traits.h"
+#include "camel/ops/operator_record.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/log.h"
 
@@ -227,6 +228,20 @@ std::string accessListJson(const std::vector<sem::ResourceAccess> &accesses) {
     return out + "]";
 }
 
+/// Whether the operator reaches outside the program, as the field `--ops` prints (design
+/// principles 3.3): the operator record's own statement of it, and the semantics the operator was
+/// declared with for one that has no record -- an operator nobody declared reaches outside.
+bool reachOf(
+    const std::optional<camel::core::OperId> &id, const camel::core::OperatorTable &traits) {
+    if (!id) {
+        return true;
+    }
+    if (const camel::ops::Record *record = traits.recordOf(*id); record != nullptr) {
+        return record->external();
+    }
+    return traits.hasExternalEffect(*id);
+}
+
 void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
     const auto &traits = OperatorTable::instance();
     for (const auto &module : modules) {
@@ -249,7 +264,7 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
             os << ",\"accesses\":" << accessListJson(accesses)
                << ",\"accesses_declared\":"
                << ((id && traits.declaresAccesses(*id)) ? "true" : "false")
-               << ",\"external\":" << ((id && traits.hasExternalEffect(*id)) ? "true" : "false")
+               << ",\"external\":" << (reachOf(*id, traits) ? "true" : "false")
                << ",\"may_fault\":" << ((!declared || declared->mayFault) ? "true" : "false");
             if (d.isPrivate) {
                 os << ",\"private\":true";

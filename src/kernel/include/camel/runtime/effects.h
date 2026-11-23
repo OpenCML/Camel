@@ -46,5 +46,18 @@ EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph);
 /// regions inside it included) once.
 EffectSummary
 effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region);
+/// The effects of running one node of `graph` of `program` once: what it does besides computing
+/// its value. An operator's answer is its record's (the access clause and the fault fact, the
+/// same reading the graph's summary takes of it), a call's is the graph it names, a call through
+/// a value is the conservative one, and a loop's is that it may fault and may not end. A branch,
+/// and a loop's body, are regions of this graph, so what runs inside them is in the graph's own
+/// summary and not in the node's: this asks one node's own running.
+EffectSummary effectSummaryOfNode(const Program &program, const GCGraph *graph, gc_node_ref_t ref);
+/// The effects of running the operator `oper` itself, without the node that calls it: the clause
+/// its record states and the fault fact, which is the answer a reader of the declaration asks for
+/// -- `graph.is_pure`, a listing -- and the same one a node of it starts from. An operator that
+/// takes its accesses from a function operand is read conservatively here: what the operand is is
+/// the node's to say, and `effectSummaryOfNode` is where it says it.
+EffectSummary effectSummaryOfOperator(camel::core::OperId oper);
 
 } // namespace camel::runtime

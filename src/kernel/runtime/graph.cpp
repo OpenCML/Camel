@@ -12,6 +12,7 @@
  */
 
 #include "camel/runtime/graph.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/exec_plan.h"
@@ -197,25 +198,13 @@ bool is_chain_statement(
         // that value (edges.cn.md 5.3): the chain orders it even though the gate computes nothing.
         return true;
     case GCNodeKind::Oper: {
-        const auto &table = camel::core::OperatorTable::instance();
-        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
-        if (oper == camel::core::kNoOper) {
-            // An operator nobody named is not known never to fault.
-            return true;
-        }
-        if (!table.isPure(oper) || table.hasExternalEffect(oper)) {
-            return true;
-        }
-        // The operator's own statement, from the record: `panic` is the one item it is stated
-        // with, at either entrance, and the built-in module states it for every operator whose
-        // fault table is empty (`src/stdlib/std/builtin/executors/builtin_semantics.cpp`). An
-        // operator nobody registered has no record to read, and the trait derived from its facts
-        // is then the whole statement there is.
-        const camel::ops::Record *record = table.recordOf(oper);
-        if (record != nullptr) {
-            return record->mayFault();
-        }
-        return traits.has_value() && traits->mayFault;
+        // An operator node's statement is whether it is freely arrangeable (design principles
+        // 3.4): pure, with no external effect, unable to fault, and known to terminate -- and an
+        // operator node always terminates, so that last term is the operator's own answer here.
+        // The four-term conjunction is `core.arrangeable` (`camel/facts/arrangeable.h`), which is
+        // also the fact the passes read: a statement that a node is on a chain is the negation of
+        // it, and is asked of that one answer rather than assembled from the atoms here.
+        return !camel::facts::operatorArrangeable(oper).all();
     }
     default:
         // A `Data`, a `Port`, a `Join`, and the three of the four operators that cannot fail:
