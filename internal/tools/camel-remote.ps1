@@ -510,6 +510,19 @@ $checkers = [ordered]@{
     # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
     # going red is what says it went up.
     'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
+    # CI's own compiler on this tree's own compile lines (D-1123-84). The local gate compiles with one
+    # toolchain on one platform, so a diagnostic only another one reports -- `-Wc++11-narrowing` at
+    # `src/stdlib/onnx/lowering_grad.cpp:480` is the one that cost a day -- stayed invisible until a CI
+    # run, and CI runs are the slowest reading in this project. The host's clang is a newer major and
+    # does not report what 19 does (measured on `5f68184983`: clang 23 exit 0, clang 19 red), so the
+    # script runs clang 19 from the image it names. It reads no install -- so `compiler` is false and
+    # the entry is meaningful under `-NoBuild` -- and it reads the flags from
+    # `build/compile_commands.json` rather than carrying a copy of `cmake/Warnings.cmake`, which is the
+    # only way it cannot drift from CI by a flag somebody forgot. `--changed` is the change's units plus
+    # every unit that includes a changed header, from the build's own dependency graph; a file the graph
+    # cannot answer for widens it to every unit rather than narrowing it to "fast but leaky". Not in
+    # `all`: it takes minutes over the whole tree, and the reading a merge needs is the change's.
+    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false }
     # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
     # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
     # tool `frontend.ast_snapshot` itself starts -- with the line

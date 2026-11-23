@@ -150,6 +150,47 @@ try {
         Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.'
     }
 
+    # The local gate compiles with this workstation's toolchain; CI's Linux and macOS legs compile
+    # with clang 19, and a diagnostic only that one reports (`-Wc++11-narrowing` at
+    # `src/stdlib/onnx/lowering_grad.cpp:480`, D-1123-83) stayed invisible until a CI run a day
+    # later. This runs CI's compiler over the merged tree through the gate's own entry, so the
+    # reading is the gate's reading and not a paraphrase of it. It needs no build (`-NoBuild`) and
+    # reads the compile lines CMake wrote, so `-AllowStale` is the honest pairing: the install this
+    # host holds describes an older tree, and this check does not read it.
+    Write-Host ''
+    Write-Host 'clang syntax check (CI''s clang 19, this tree''s compile lines) ...'
+    $syntax = & pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+        -Path $MainCheckout -Check clang-syntax -NoBuild -AllowStale -NoGpuWatch 2>&1
+    $syntaxExit = $LASTEXITCODE
+    $syntax | Where-Object { $_ -match 'clang-syntax:|check |STOPPED|refused|error:' } | Select-Object -Last 8 |
+        ForEach-Object { "  $_" }
+    # Exit 1 and exit 2 are two different facts about two different things, and a gate that reports
+    # them the same way teaches the next person the wrong one. 1 is a reading: the compiler ran and
+    # said no. 2 is the absence of a reading: the check itself did not run (no compile database, no
+    # container, no toolchain), so nothing has been said about this tree -- and that must read as
+    # "the gate is down", never as "your code is wrong". Both refuse the merge: a gate that lets a
+    # merge through while it is blind is the failure mode this whole lane exists to remove.
+    if ($syntaxExit -eq 1) {
+        Stop-With 'the clang syntax check is red (exit 1: the compiler ran and reported a diagnostic)' 'CI builds with clang 19 on linux and macos; a tree that fails its syntax pass is red there however green the local build was. The diagnostic is above: fix it.'
+    }
+    if ($syntaxExit -ne 0) {
+        # Exit 2 rather than 1, and the same three lines Stop-With prints: the exit code is what a
+        # script wrapping this merge branches on, and "the gate is down" must not be read as "the
+        # tree is wrong" by whatever reads the code next.
+        Write-Host ''
+        Write-Host "STOPPED: the clang syntax check did not run (exit $syntaxExit, no reading taken)" -ForegroundColor Yellow
+        # A message that only says "repair the gate" leaves the reader with no move when the thing
+        # being repaired is what refused them: this is the one place the gate's internal state is
+        # visible, so it names the state and the command that changes it. A checkout whose
+        # `build/compile_commands.json` is gone cannot be merged into at all until it is built once,
+        # and that includes a merge whose purpose is to fix the gate itself.
+        Write-Host '  This is not a defect in your tree: the check itself could not measure it, so nothing was pushed and nothing was learned about this change.'
+        Write-Host '  The commonest cause is that the gate checkout has no compile database (build/compile_commands.json), which only a build writes: run one on it -- internal/tools/camel-remote.ps1 -Path <that worktree>, without -NoBuild -- and merge again. The checker names the actual cause on the line above it printed; the others are a clang 19 image the host does not hold and a toolchain its compile lines cannot reach.'
+        Write-Host ''
+        Write-Host 'Nothing was committed and nothing was pushed.'
+        exit 2
+    }
+
     for ($i = 1; $i -le 3; $i++) {
         & git push origin develop 2>&1 | Select-Object -Last 1
         if ($LASTEXITCODE -eq 0) { break }
