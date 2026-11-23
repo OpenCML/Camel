@@ -33,6 +33,7 @@
 | C-1124-5 | 队列页第 4 项 | 3a 工具车道 std/gir（69）、std/macro（38）、src/tools；判据加「三份金标逐字节比」与「同一命令同输出」，且禁用 \--update-golden\ | \lane/3a-tools\ | doing | 2026-11-24 03:30 | |
 | C-1124-6 | extraction-cost 实测 | \docs/stdlib-reference.md\ 生成器对这棵树拒绝：81 declaration(s) carry a body，因此 \
 | D-1123-105 | 作者 fsh-dev | ① 生成器全查的真缺口是判据本身，按三处补：a) 去掉 `check-doc-snippets` 的整页豁免，改在源头查 —— `.cml` 每条 `@example` 由片段编译器编一遍；b) `spelling/check.py` 读 `.cml`，`paren lambda` 认无类型的 `(x) => e`；c) `registry.tsv` 两条与 41 条 `@example` 改现写法，等参考页生成器合了再 `--write`，判据是 a) 改前红、改后绿 ② 23 条已合未删分支按四条判据清：分支已在 develop、`git status` 干净、无未推提交、无活会话 cwd 在它里面 | `lane/doc-example-gates` | doing | 2026-11-24 03:45 | |
+| D-1123-106 | 作者 fsh-dev | 做完的活必须先提交在车道分支并推到远端：「交回 = 已提交且已推车道分支」，『未提交、等点名』不算交回。已落到 `internal/collab/rules.md` 第 13 条。ebase = `08a7424b14`、rn = `7877447db1`；ad 那一项是未跟踪的 `_probe-logs/`（探针日志，非有意改动），未提交 | — | done | 2026-11-24 03:55 | 08a7424b14、7877447db1 |
 | C-1124-7 | 实测 | `docs/stdlib-reference.md` 生成器判据误判：81 条全是无体的 `=> R` / `=> T[]` / 带 `uses` 的声明，模板/inline/真函数体 **0** 条。判据 `bb41465a24`(10-22) 与 81 条被改 `eb20efab7b`(11-23) 相差一个月 ⇒ 这道门加上后从没跑通过；参考页最后一次真生成早于 11-23，最后一次内容改动是 `b4c0cdaf54` 手改两行 | `lane/refgen-body` | done | 2026-11-24 03:45 | 63e6487641 |
 | C-1124-8 | C-1124-7 的边界问题 | `rules` 模块从不在 `MODULES` 里，其 11 个导出函数与 4 个规则集在参考页全无条目 ⇒ `rules::default` 进不了页。这是「参考页覆盖哪些模块」的边界决定，待作者裁 | — | blocked | 2026-11-24 03:45 | |
 elative_cost\、\
