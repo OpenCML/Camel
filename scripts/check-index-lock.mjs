@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
+
 // camel-index-lock: a git process holding the checkout's index lock for longer than a merge takes.
 //
 // The lock is normal for the few seconds a merge or a commit holds it. It is not normal for a reader:
