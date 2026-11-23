@@ -69,8 +69,19 @@ function summarize(event) {
     }
 }
 
+// Values that belong to one machine (the build host's ssh name, where the log goes) live in a file on
+// that machine, not in the repository's patch: two layers that both insert this plugin leave only one
+// of them mounted, and the one that wins need not be the one that carries the values.
+const LOCAL_CONFIG = path.join(os.homedir(), '.camel-oversight', 'config.json')
+
 export function apply(ctx, rawConfig) {
-    const config = { ...DEFAULTS, ...(rawConfig || {}) }
+    let local = {}
+    try {
+        if (existsSync(LOCAL_CONFIG)) local = JSON.parse(readFileSync(LOCAL_CONFIG, 'utf8'))
+    } catch (error) {
+        ctx.logger && ctx.logger.warn(`camel-oversight: ${LOCAL_CONFIG} is not JSON: ${error.message}`)
+    }
+    const config = { ...DEFAULTS, ...(rawConfig || {}), ...local }
 
     // ---- durable log: deliveries and acknowledgements survive a restart ----------------------
     const delivered = new Map() // id -> {id, at, mode, text}
@@ -295,7 +306,7 @@ export function apply(ctx, rawConfig) {
             parameters: { type: 'object', properties: {}, additionalProperties: false },
             output: {
                 schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
-                render: (value) => value.result,
+                render: (_args, value) => value.result,
             },
             async execute() {
                 const agent = ctx.agents.currentInitiator()
@@ -324,7 +335,7 @@ export function apply(ctx, rawConfig) {
             },
             output: {
                 schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
-                render: (value) => value.result,
+                render: (_args, value) => value.result,
             },
             async execute({ id, status, note }) {
                 const entry = { kind: 'ack', id, at: Date.now(), status, note: note || '' }
