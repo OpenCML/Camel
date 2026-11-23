@@ -767,7 +767,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string pa
 ```
 
 The same slice of a string, by code point: a string has the one axis 0, and the result is a
-string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
+string. `'中文字'[1..3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
 
 - Example: `'hello'->slice<0, 1, 4>` gives `'ell'`
 

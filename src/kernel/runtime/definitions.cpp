@@ -107,7 +107,7 @@ std::optional<core::error::DiagLabel> firstErrorLocation(const UserDefinedModule
 std::vector<core::OperId> operatorsUsedBy(const Program &program, GCGraph *graph) {
     std::vector<core::OperId> used;
     std::unordered_set<core::OperId> seen;
-    for (GCGraph *g : collectReachableGraphs(program, graph)) {
+    for (auto *g : collectReachableGraphs(program, graph)) {
         for (gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
             if (g->node(ref)->kind != GCNodeKind::Oper) {
                 continue;
@@ -423,7 +423,7 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     GUARD(definitionLoader != nullptr, "No source module loader is registered to encode a graph.");
     definitionLoader->encodeProgram(function, *module, *program, true);
     context_.pinRuntimeProgram(program);
-    GCGraph *graph = program->root();
+    auto *graph = program->root();
     if (graph == nullptr) {
         return refuse(std::format("'{}::{}' could not be encoded", d.module, d.function));
     }

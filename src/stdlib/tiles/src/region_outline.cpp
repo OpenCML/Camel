@@ -315,18 +315,18 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
         // (`settleDeclarations`), and its callers would go on declaring the clause it no longer
         // carries -- one round behind, at a boundary that judges the program the commit published.
         std::vector<rt::GCGraph *> graphs = session.collectReachableRuntimeGraphs();
-        for (rt::GCGraph *made : session.madeGraphs()) {
+        for (auto *made : session.madeGraphs()) {
             if (std::find(graphs.begin(), graphs.end(), made) == graphs.end()) {
                 graphs.push_back(made);
             }
         }
         std::vector<std::pair<rt::GCGraph *, core::type::FunctionType *>> wider;
-        for (rt::GCGraph *graph : graphs) {
+        for (auto *graph : graphs) {
             // What the commit will carry, read from the copy: a graph this pass made has no draft
             // of its own, and the copy is the one reading that exists for every graph of the
             // closure. The draft is opened below, and only for a graph whose body is past its
             // clause: opening one is part of declaring, not a condition of measuring it.
-            const rt::GCGraph *copy = staged->graph(graph->id());
+            const auto *copy = staged->graph(graph->id());
             if (copy == nullptr) {
                 continue;
             }
@@ -360,8 +360,8 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
         // has no draft, and a loop that skipped the graphs without one would leave that call site
         // declaring a clause its callee no longer carries -- the one thing the pass boundary
         // refuses a published program for. The draft is opened as part of the rewrite.
-        for (rt::GCGraph *graph : graphs) {
-            const rt::GCGraph *copy = staged->graph(graph->id());
+        for (auto *graph : graphs) {
+            const auto *copy = staged->graph(graph->id());
             if (copy == nullptr) {
                 continue;
             }
@@ -1011,7 +1011,7 @@ const runtime::Program *settleDeclarations(
             context.shared_from_this(), program, program->root());
         const std::vector<runtime::GCGraph *> graphs = session.collectReachableRuntimeGraphs();
         std::vector<std::pair<runtime::GCGraph *, core::type::FunctionType *>> wider;
-        for (runtime::GCGraph *graph : graphs) {
+        for (auto *graph : graphs) {
             const auto *type = graph->funcType();
             if (type == nullptr)
                 continue;
@@ -1035,7 +1035,7 @@ const runtime::Program *settleDeclarations(
         // call of the entry is). So every value that names a graph whose clause grew is given the
         // new clause too: a value left at the old one is a call site promising less than the body
         // behind it does.
-        for (runtime::GCGraph *graph : graphs) {
+        for (auto *graph : graphs) {
             for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
                 const auto *node = graph->node(id);
                 if (node == nullptr || node->kind != runtime::GCNodeKind::Data ||

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "fastvm.h"
+#include "version_state.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/core/rtdata/aggregate.h"
@@ -52,7 +53,7 @@ constexpr uintptr_t kFastVmFlagFailureReported = 1u << 1;
 inline std::optional<size_t> fastVmEntryPcOf(camel::runtime::GCGraph *graph) {
     if (!graph)
         return std::nullopt;
-    uintptr_t raw = graph->execPlan().fastVm.entryPc;
+    uintptr_t raw = camel::runtime::fastVmStateOf(*graph).entryPc;
     if (raw == 0)
         return std::nullopt;
     return static_cast<size_t>(raw - 1);
@@ -60,13 +61,13 @@ inline std::optional<size_t> fastVmEntryPcOf(camel::runtime::GCGraph *graph) {
 
 inline void setFastVmEntryPcOf(camel::runtime::GCGraph *graph, size_t pc) {
     if (graph)
-        graph->execPlan().fastVm.entryPc = static_cast<uintptr_t>(pc) + 1;
+        camel::runtime::fastVmStateOf(*graph).entryPc = static_cast<uintptr_t>(pc) + 1;
 }
 
 inline std::optional<size_t> fastVmGraphLengthOf(camel::runtime::GCGraph *graph) {
     if (!graph)
         return std::nullopt;
-    uintptr_t raw = graph->execPlan().fastVm.graphLength;
+    uintptr_t raw = camel::runtime::fastVmStateOf(*graph).graphLength;
     if (raw == 0)
         return std::nullopt;
     return static_cast<size_t>(raw - 1);
@@ -74,22 +75,24 @@ inline std::optional<size_t> fastVmGraphLengthOf(camel::runtime::GCGraph *graph)
 
 inline void setFastVmGraphLengthOf(camel::runtime::GCGraph *graph, size_t length) {
     if (graph)
-        graph->execPlan().fastVm.graphLength = static_cast<uintptr_t>(length) + 1;
+        camel::runtime::fastVmStateOf(*graph).graphLength = static_cast<uintptr_t>(length) + 1;
 }
 
 #if ENABLE_FASTVM_JIT
 inline jit::JitEntryFn fastVmJitEntryOf(camel::runtime::GCGraph *graph) {
-    return graph ? reinterpret_cast<jit::JitEntryFn>(graph->execPlan().fastVm.jitEntry) : nullptr;
+    return graph
+               ? reinterpret_cast<jit::JitEntryFn>(camel::runtime::fastVmStateOf(*graph).jitEntry)
+               : nullptr;
 }
 
 inline void setFastVmJitEntryOf(camel::runtime::GCGraph *graph, jit::JitEntryFn fn) {
     if (graph)
-        graph->execPlan().fastVm.jitEntry = reinterpret_cast<uintptr_t>(fn);
+        camel::runtime::fastVmStateOf(*graph).jitEntry = reinterpret_cast<uintptr_t>(fn);
 }
 #endif
 
 inline uintptr_t fastVmFlagsOf(camel::runtime::GCGraph *graph) {
-    return graph ? graph->execPlan().fastVm.flags : 0;
+    return graph ? camel::runtime::fastVmStateOf(*graph).flags : 0;
 }
 
 inline bool fastVmJitCompileFailedOf(camel::runtime::GCGraph *graph) {
@@ -101,7 +104,7 @@ inline void setFastVmJitCompileFailedOf(camel::runtime::GCGraph *graph, bool fai
         return;
     uintptr_t flags = fastVmFlagsOf(graph);
     flags = failed ? (flags | kFastVmFlagCompileFailed) : (flags & ~kFastVmFlagCompileFailed);
-    graph->execPlan().fastVm.flags = flags;
+    camel::runtime::fastVmStateOf(*graph).flags = flags;
 }
 
 inline bool fastVmJitFailureReportedOf(camel::runtime::GCGraph *graph) {
@@ -113,7 +116,7 @@ inline void setFastVmJitFailureReportedOf(camel::runtime::GCGraph *graph, bool r
         return;
     uintptr_t flags = fastVmFlagsOf(graph);
     flags = reported ? (flags | kFastVmFlagFailureReported) : (flags & ~kFastVmFlagFailureReported);
-    graph->execPlan().fastVm.flags = flags;
+    camel::runtime::fastVmStateOf(*graph).flags = flags;
 }
 
 #if ENABLE_FASTVM_JIT
@@ -128,7 +131,7 @@ inline void setFastVmJitFramedOf(camel::runtime::GCGraph *graph, bool framed) {
         return;
     uintptr_t flags = fastVmFlagsOf(graph);
     flags           = framed ? (flags | kFastVmFlagJitFramed) : (flags & ~kFastVmFlagJitFramed);
-    graph->execPlan().fastVm.flags = flags;
+    camel::runtime::fastVmStateOf(*graph).flags = flags;
 }
 
 /// Whether the graph runs a loop of regions (`39_loops.md`, section 4; ExecPlan::loops). Such a
@@ -144,11 +147,11 @@ inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
     if (!graph) {
         return 0;
     }
-    const uintptr_t raw = graph->execPlan().fastVm.indirectCallCount;
+    const uintptr_t raw = camel::runtime::fastVmStateOf(*graph).indirectCallCount;
     const uint32_t next = raw >= static_cast<uintptr_t>(std::numeric_limits<uint32_t>::max())
                               ? std::numeric_limits<uint32_t>::max()
                               : static_cast<uint32_t>(raw) + 1;
-    graph->execPlan().fastVm.indirectCallCount = static_cast<uintptr_t>(next);
+    camel::runtime::fastVmStateOf(*graph).indirectCallCount = static_cast<uintptr_t>(next);
     return next;
 }
 
@@ -361,7 +364,8 @@ void FastVMSchedPass::leaseCode(camel::runtime::GCGraph *graph, size_t start, si
     if (&bytecodes_ != &ownBytecodes_) {
         return; // a host's image
     }
-    graph->execPlan().fastVm.codeLease = std::make_shared<CodeLease>(codeSpace_, start, length);
+    camel::runtime::fastVmStateOf(*graph).codeLease =
+        std::make_shared<CodeLease>(codeSpace_, start, length);
 #if ENABLE_FASTVM_JIT
     // A version that already has its JIT entry (a second lease of the same graph) keeps the entry
     // cleared with the new lease.
@@ -1213,7 +1217,8 @@ void FastVMSchedPass::attachJitEntry(camel::runtime::GCGraph *graph, JitEntryFn 
     // The entry names the version: the lease of its bytecode range clears the entry when the
     // collector frees the version. The hook holds the cache weakly, as the version may outlive
     // the pass (and, with it, the cache it names).
-    auto *lease = static_cast<CodeLease *>(graph->execPlan().fastVm.codeLease.get());
+    auto *lease =
+        static_cast<CodeLease *>(camel::runtime::fastVmStateOf(*graph).codeLease.get());
     if (lease == nullptr) {
         return;
     }

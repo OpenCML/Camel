@@ -365,7 +365,7 @@ calleeGraphOf(const camel::runtime::Program &program, const GCGraph *g, gc_node_
 /// A source-level name of the function a call node of `g` calls, when it is statically known.
 std::string
 calleeNameOf(const camel::runtime::Program &program, const GCGraph *g, gc_node_ref_t ref) {
-    const GCGraph *callee = calleeGraphOf(program, g, ref);
+    const auto *callee = calleeGraphOf(program, g, ref);
     if (!callee || callee->name().empty() || callee->name().starts_with("__")) {
         return {};
     }
@@ -435,7 +435,7 @@ bool holdsRequest(const GCGraph *g) {
 /// Whether an export request is written somewhere in the program (in a function the entry
 /// graph reaches), though none is visible in the entry graph itself.
 bool requestIsReachable(const camel::runtime::Program &program, GCGraph *root) {
-    for (GCGraph *g : camel::runtime::collectReachableGraphs(program, root)) {
+    for (auto *g : camel::runtime::collectReachableGraphs(program, root)) {
         if (g != nullptr && g != root && holdsRequest(g)) {
             return true;
         }
@@ -493,7 +493,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
                "uses macros such as grad)";
     }
     const auto &program      = programOfGraph(ctx, root);
-    const GCGraph *callee    = calleeGraphOf(program, root, call);
+    const auto *callee    = calleeGraphOf(program, root, call);
     const std::string shown  = calleeNameOf(program, root, call);
     const std::string name   = shown.empty() ? "the called function" : "'" + shown + "'";
     const InlineDeclined *no = callee ? report->find(root->name(), callee->name()) : nullptr;
@@ -682,7 +682,7 @@ Model translate(core::context::Context &ctx, const Request &request) {
 void exportEntry(
     core::context::Context &ctx, const camel::runtime::Program *program, std::ostream &os,
     const std::string &out, const ExportOptions &options) {
-    GCGraph *root = program->root();
+    auto *root = program->root();
     if (out.empty()) {
         throw Refusal{
             camel::source::kInvalidOriginId,
@@ -691,7 +691,7 @@ void exportEntry(
                 "onnx::export translates 'main' itself, and the model file is not named: give "
                 "it as the parameter out, onnx::export out=\"model.onnx\"")};
     }
-    for (GCGraph *g : camel::runtime::collectReachableGraphs(*program, root)) {
+    for (auto *g : camel::runtime::collectReachableGraphs(*program, root)) {
         if (g != nullptr) {
             refuseUnexpandedMacros(g);
         }
@@ -726,7 +726,7 @@ void exportEntry(
 
 const camel::runtime::Program *
 OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
     try {
         // What the pass prints is what its parameters asked for, on every request it translates.
         const auto asked = [&](ExportOptions options) {

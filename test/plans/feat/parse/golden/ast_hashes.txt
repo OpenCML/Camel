@@ -508,7 +508,7 @@ e52b16ee68c242ea ok showcase/d4-mcts/selfplay.cml
 64bd172d73275346 ok showcase/i2-diffusion-step/step.cml
 cb61054139066eda ok showcase/i2-diffusion-step/step_gpu.cml
 8e81248d84b0e5a4 ok showcase/s1-stream-fib/fib.cml
-f4f7de82ac10c483 ok src/stdlib/array.cml
+a3cb320677915d37 ok src/stdlib/array.cml
 9485cab77cc60238 ok src/stdlib/autodiff.cml
 b7c501988b03d43e ok src/stdlib/bytes.cml
 4fc670ca235f4d35 ok src/stdlib/ckpt.cml
@@ -525,7 +525,7 @@ a39827f24191d8d3 ok src/stdlib/opt.cml
 da1b41f825462dd5 ok src/stdlib/optim.cml
 9b35942b550de4e6 ok src/stdlib/para.cml
 72187cc45b3ae505 ok src/stdlib/perf.cml
-ee6fb6271683249a ok src/stdlib/prelude.cml
+b4a2fa0080a08283 ok src/stdlib/prelude.cml
 ff2ad9cfe5e97c39 ok src/stdlib/process.cml
 833c58f7091af08e ok src/stdlib/pyplot.cml
 b36e6c4deb719e4b ok src/stdlib/python.cml
@@ -2851,7 +2851,7 @@ f8817ea7df792ab0 ok test/cases/linear/runtime/sync_block_order.cml
 c3090bba2c255256 ok test/cases/linear/runtime/var_read_before_write.cml
 461c69c10a8b42f1 ok test/cases/linear/subscript/bytes_slice.cml
 c6664e911aa15a2b ok test/cases/linear/subscript/slice_positions.cml
-bb41eae8173763fd no test/cases/linear/subscript/string_slice.cml
+97340e0352b3f7ba ok test/cases/linear/subscript/string_slice.cml
 a059a4e66b94163a ok test/cases/linear/subscript/take_rows.cml
 a4bd4e20aa785ff5 ok test/cases/linear/toplevel_var/argument_order.cml
 cc1571977471264b ok test/cases/linear/toplevel_var/counter.cml
@@ -3281,8 +3281,8 @@ a02856f3d7575e2a ok test/cases/modules/onnx/export_var_append.cml
 bcc3c3597fa15127 ok test/cases/modules/onnx/export_with_after_norm.cml
 8c0d085811701b1a ok test/cases/modules/onnx/ort_argmax.cml
 4ef4941eea8b185d ok test/cases/modules/onnx/ort_const_under_as.cml
-d84e2f1cad2326f8 ok test/cases/modules/onnx/ort_core_slice.cml
-b4d4acf3540f6575 ok test/cases/modules/onnx/ort_core_slice_grad.cml
+8860d023544ca14f ok test/cases/modules/onnx/ort_core_slice.cml
+0e39cb4fa0648646 ok test/cases/modules/onnx/ort_core_slice_grad.cml
 c98a9dfc58e3e7b3 ok test/cases/modules/onnx/ort_duplicate_outputs.cml
 9e775d39e8961131 ok test/cases/modules/onnx/ort_dynamic_params.cml
 46558303854db359 ok test/cases/modules/onnx/ort_gated_gru_step.cml
@@ -3293,7 +3293,7 @@ e9bf69e459ff40fe ok test/cases/modules/onnx/ort_grad_loop_values.cml
 ad57958436f98f9e ok test/cases/modules/onnx/ort_loop_values_dynamic.cml
 0fcb5e7402a07383 ok test/cases/modules/onnx/ort_models.cml
 6dfa3370d212dcc4 ok test/cases/modules/onnx/ort_slice_bounds.cml
-6265bfff494964ff ok test/cases/modules/onnx/ort_slice_grad_stride.cml
+58327b2ff6cca2e7 ok test/cases/modules/onnx/ort_slice_grad_stride.cml
 776aaa0348276f05 ok test/cases/modules/onnx/ort_slice_start.cml
 387ab63c4cb08e7e ok test/cases/modules/onnx/ort_struct_casts.cml
 55a5a813d42256da ok test/cases/modules/onnx/ort_struct_loop.cml
@@ -3615,8 +3615,8 @@ c7de73180e1b7eda ok test/cases/modules/stdlib/reduced_subtraction.cml
 b537b9f8b19e5df8 ok test/cases/modules/stdlib/registry_all.cml
 0423981438fd9eee ok test/cases/modules/stdlib/registry_tensor.cml
 1102c664c00e132d ok test/cases/modules/stdlib/stats_quantiles.cml
-a051fae9981e284f no test/cases/modules/stdlib/str_chars.cml
-e9e1889a6137ef77 no test/cases/modules/stdlib/str_unicode.cml
+cd1f0e7e500feb88 ok test/cases/modules/stdlib/str_chars.cml
+5885c7d8a6c5b3cd ok test/cases/modules/stdlib/str_unicode.cml
 4c124cf15016fec7 ok test/cases/modules/stdlib/utf8_string.cml
 a94fe3a0ff8cb591 ok test/cases/modules/stream/library.cml
 8a700395e5d4d4c0 ok test/cases/modules/tensor/argmax_ieee.cml

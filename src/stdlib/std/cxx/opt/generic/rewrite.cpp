@@ -752,7 +752,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
     RewriteMemo *memo, bool (*mayRewrite)(const GCGraph &), bool checkScreens) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
     size_t total = 0;
-    for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
+    for (auto *g : session.collectReachableRuntimeGraphs()) {
         if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {
             if (checkScreens && rewrite(session.edit(g)) != 0) {
                 throw std::runtime_error(

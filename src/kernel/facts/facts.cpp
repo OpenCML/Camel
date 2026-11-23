@@ -38,6 +38,7 @@
 #include "camel/core/loop_kind.h"
 #include "camel/core/operator_table.h"
 
+#include "camel/graph/graph.h"
 #include "graph/graph_view.h"
 
 #include <algorithm>
@@ -377,6 +378,72 @@ Reads ReadLog::take() {
     return taken;
 }
 
+// ---- Which store holds a graph ---------------------------------------------------------------
+
+namespace {
+
+/// The graphs the process's stores were told about, by address, with the store that was told. A
+/// process makes one store per context, so a graph names one of them; this table is what lets a
+/// reader that holds only a graph -- the control-region reader, the graph's own destructor --
+/// reach the store of the context that made it, without the graph carrying a member and without
+/// the framework reaching for a context the graph does not know.
+///
+/// Allocated once and never freed, for the reason the store used to be: a graph can be freed after
+/// the last context's teardown, and a table that is gone by then would turn a graph's last act
+/// into a use of a dead object. A store that is destroyed takes its rows out, so a graph whose
+/// store is gone names nothing rather than a dead store.
+struct GraphHolds {
+    std::mutex mutex;
+    std::unordered_map<const graph::Graph *, Store *> stores;
+};
+
+GraphHolds &graphHolds() {
+    static GraphHolds *holds = new GraphHolds();
+    return *holds;
+}
+
+} // namespace
+
+GraphAccess frozenGraphs() {
+    return GraphAccess{
+        .view    = [](const graph::Graph &graph) { return &graph.view(); },
+        .version = [](const graph::Graph &) { return std::uint64_t(0); },
+    };
+}
+
+void holdGraph(Store &store, const graph::Graph &graph) {
+    GraphHolds &holds = graphHolds();
+    std::lock_guard lock(holds.mutex);
+    holds.stores[&graph] = &store;
+}
+
+Store *storeHolding(const graph::Graph &graph) {
+    GraphHolds &holds = graphHolds();
+    std::lock_guard lock(holds.mutex);
+    const auto it = holds.stores.find(&graph);
+    return it == holds.stores.end() ? nullptr : it->second;
+}
+
+void forgetGraph(const graph::Graph *graph) {
+    if (graph == nullptr) {
+        return;
+    }
+    Store *store = nullptr;
+    {
+        GraphHolds &holds = graphHolds();
+        std::lock_guard lock(holds.mutex);
+        const auto it = holds.stores.find(graph);
+        if (it != holds.stores.end()) {
+            store = it->second;
+            holds.stores.erase(it);
+        }
+    }
+    // Outside the holds' lock: the store takes its own.
+    if (store != nullptr) {
+        store->invalidateGraph(graph);
+    }
+}
+
 // ---- Store -----------------------------------------------------------------------------------
 
 size_t Store::KeyHash::operator()(const Key &key) const {
@@ -389,7 +456,13 @@ size_t Store::KeyHash::operator()(const Key &key) const {
 Store::Store(GraphAccess graphs, bool persistent)
     : graphs_(std::move(graphs)), persistent_(persistent) {}
 
-Store::~Store() = default;
+Store::~Store() {
+    // A store that goes before the graphs it was told about stops being their answer: the graph's
+    // end (`forgetGraph`) then names no store rather than a dead one.
+    GraphHolds &holds = graphHolds();
+    std::lock_guard lock(holds.mutex);
+    std::erase_if(holds.stores, [this](const auto &item) { return item.second == this; });
+}
 
 void Store::checkType(KindId kind, const std::type_info &type) {
     const KindInfo &info = kindInfo(kind);

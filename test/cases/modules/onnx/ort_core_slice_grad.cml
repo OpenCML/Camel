@@ -5,7 +5,7 @@
  * values, so the backward pass is exported with them: the loss is `sum(m.w[1..3] * m.x[1..3])`, and
  * both of its gradients are scatters -- `d loss / d x` is `m.w` at the two positions the slice
  * took and zero everywhere else, and `d loss / d w` is `m.x` there -- which is exactly what the
- * reverse of `[1:3]` writes.
+ * reverse of `[1..3]` writes.
  *
  * The gradient Camel prints is checked against ONNX Runtime by ort_core_slice_grad.py.
  */

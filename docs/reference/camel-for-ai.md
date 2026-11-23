@@ -396,7 +396,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 | Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |
 
-**Operators and separators** (53): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `=>` `_`
+**Operators and separators** (54): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `=>` `_`
 <!-- camel-for-ai end: lexical -->
 
 ### Precedence (generated)
@@ -412,7 +412,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
  7  andExpr             &                                  repeat, left
  8  equalityExpr        === !== == !=                      repeat, left
  9  relationalExpr      < > <= >=                          repeat, left
-10  rangeExpr           ..                                 repeat, left
+10  rangeExpr           .. <>                              repeat, left
 11  additiveExpr        + -                                repeat, left
 12  multiplicativeExpr  * / @ %                            repeat, left
 13  powerExpr           ^                                  right, one
@@ -437,7 +437,7 @@ orExpr             : andExpr ('|' andExpr)*
 andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
-rangeExpr          : additiveExpr ('..' additiveExpr)*
+rangeExpr          : additiveExpr (('..' | '<>') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?

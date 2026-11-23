@@ -588,7 +588,7 @@ void refuseEffectsOf(
     std::unordered_set<const GCGraph *> seenGraphs{root};
     std::vector<const GCGraph *> graphs{root};
     while (!graphs.empty()) {
-        const GCGraph *g = graphs.back();
+        const auto *g = graphs.back();
         graphs.pop_back();
         const gc_node_ref_t exit = g->exitNodeRef();
         if (!g->hasNodePayload() || exit == camel::runtime::kInvalidNodeRef) {
@@ -846,7 +846,7 @@ void Evaluator::recordFates(GCGraph *g, gc_node_ref_t ref) {
 }
 
 Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g    = act.graph;
+    auto *g    = act.graph;
     const auto *n = g->node(ref);
     // Bound from outside: parameters, and the captured values of a closure being called.
     if (auto bound = act.ports.find(ref); bound != act.ports.end()) {
@@ -919,7 +919,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
 }
 
 Value Evaluator::evalCast(Activation &act, gc_node_ref_t ref, Value src) {
-    GCGraph *g                 = act.graph;
+    auto *g                 = act.graph;
     type::Type *const target   = g->node(ref)->dataType();
     const gc_node_ref_t source = g->normInputsOf(ref).front();
     // `e as T` is a checked conversion. Of a constant it is performed now. Of a tensor that
@@ -1042,7 +1042,7 @@ bool callReaches(const camel::runtime::Program &program, const GCGraph *from, co
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{from};
     while (!work.empty()) {
-        const GCGraph *g = work.back();
+        const auto *g = work.back();
         work.pop_back();
         if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
             continue;
@@ -1051,7 +1051,7 @@ bool callReaches(const camel::runtime::Program &program, const GCGraph *from, co
             if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = program.calleeOf(*g, it.ref());
+            const auto *callee = program.calleeOf(*g, it.ref());
             if (callee == to) {
                 return true;
             }
@@ -1069,7 +1069,7 @@ findTreeRecursion(const camel::runtime::Program &program, const GCGraph *root) {
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{root};
     while (!work.empty()) {
-        const GCGraph *g = work.back();
+        const auto *g = work.back();
         work.pop_back();
         if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
             continue;
@@ -1087,7 +1087,7 @@ findTreeRecursion(const camel::runtime::Program &program, const GCGraph *root) {
             if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = program.calleeOf(*g, it.ref());
+            const auto *callee = program.calleeOf(*g, it.ref());
             work.push_back(callee);
             if (arms.contains(it.ref())) {
                 continue;
@@ -1107,7 +1107,7 @@ findRecursiveCall(const camel::runtime::Program &program, const GCGraph *root) {
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{root};
     while (!work.empty()) {
-        const GCGraph *g = work.back();
+        const auto *g = work.back();
         work.pop_back();
         if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
             continue;
@@ -1116,7 +1116,7 @@ findRecursiveCall(const camel::runtime::Program &program, const GCGraph *root) {
             if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = program.calleeOf(*g, it.ref());
+            const auto *callee = program.calleeOf(*g, it.ref());
             if (callee == g || callReaches(program, callee, g)) {
                 return std::pair{g, it.ref()};
             }
@@ -1133,7 +1133,7 @@ std::string reachableStats(const camel::runtime::Program &program, const GCGraph
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{root};
     while (!work.empty()) {
-        const GCGraph *g = work.back();
+        const auto *g = work.back();
         work.pop_back();
         if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
             continue;
@@ -1591,7 +1591,7 @@ bool Evaluator::nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGra
         const gc_node_ref_t node = work.back();
         work.pop_back();
         if (g->node(node)->kind == GCNodeKind::Func) {
-            const GCGraph *callee = programOf(g).calleeOf(*g, node);
+            const auto *callee = programOf(g).calleeOf(*g, node);
             if (callee == target || callReaches(programOf(g), callee, target)) {
                 return true;
             }
@@ -1608,7 +1608,7 @@ bool Evaluator::nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGra
 }
 
 std::vector<Value> Evaluator::callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee) {
-    GCGraph *g      = act.graph;
+    auto *g      = act.graph;
     const auto with = g->withInputsOf(site);
     const auto norm = g->normInputsOf(site);
     if (with.size() != callee->withPorts().size() || norm.size() != callee->normPorts().size()) {
@@ -1634,7 +1634,7 @@ Evaluator::Activation Evaluator::activationOf(GCGraph *callee, std::span<const V
 }
 
 Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
-    GCGraph *callee = programOf(act.graph).calleeOf(*act.graph, site);
+    auto *callee = programOf(act.graph).calleeOf(*act.graph, site);
     const std::string name =
         isSourceName(callee->name())
             ? std::format(" to '{}'", callee->name().substr(0, callee->name().find('$')))
@@ -1949,7 +1949,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
 
 Evaluator::BodyOutcome
 Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
-    GCGraph *g    = act.graph;
+    auto *g    = act.graph;
     const auto *n = g->node(ref);
     // A conversion and a copy are not decisions: the branch under them decides whether the
     // recursion goes on, and the conversion is applied to the value the path returns. (A struct
@@ -1975,7 +1975,7 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
         return evalLoopBody(act, camel::runtime::forwardedInputOf(*g, ref), loop);
     }
     case GCNodeKind::Func: {
-        GCGraph *callee = programOf(g).calleeOf(*g, ref);
+        auto *callee = programOf(g).calleeOf(*g, ref);
         if (callee == loop.fn) {
             // The recursive call in tail position: the next state. One argument at a time, so that
             // the one the model cannot compute can be answered for: a body that appends to the
@@ -2507,7 +2507,7 @@ std::string int64ScalarOperand(Emitter &emitter, int64_t value) {
 }
 
 Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g                          = act.graph;
+    auto *g                          = act.graph;
     const camel::runtime::LoopView loop = camel::runtime::loopOf(*g, ref);
     if (loop.collectionCount() != 0) {
         unsupported(
@@ -2758,7 +2758,7 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
         if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
             continue;
         }
-        const GCGraph *callee = programOf(fn).calleeOf(*fn, it.ref());
+        const auto *callee = programOf(fn).calleeOf(*fn, it.ref());
         if (callee == fn) {
             f.site = it.ref();
             ++calls;
@@ -3098,7 +3098,7 @@ std::optional<Value> Evaluator::probeSpecialClosure(Activation &act, gc_node_ref
 /// stays a marker: it is only ever reached where the export would have failed anyway.
 std::optional<Value> Evaluator::deferredElement(
     Activation &act, gc_node_ref_t aggregate, size_t index) {
-    GCGraph *g           = act.graph;
+    auto *g           = act.graph;
     gc_node_ref_t source = aggregate;
     for (size_t steps = 0; steps < 8; ++steps) {
         const auto *header = g->node(source);
@@ -3266,7 +3266,7 @@ Value Evaluator::evalEagerBranch(
 }
 
 Value Evaluator::evalIndirectCall(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g      = act.graph;
+    auto *g      = act.graph;
     const auto with = g->withInputsOf(ref);
     Value callee;
     if (!with.empty()) {
@@ -3407,7 +3407,7 @@ Value Evaluator::callClosure(
         break;
     }
     auto *function = rtdata::fromSlot<::Function *>(fn.slot);
-    GCGraph *graph = function ? function->graph() : nullptr;
+    auto *graph = function ? function->graph() : nullptr;
     if (graph == nullptr) {
         unsupported(act, "a call of a function without a body cannot be exported");
     }
@@ -3682,7 +3682,7 @@ std::optional<Value> Evaluator::foldConstantOper(
 // variable that comes from outside the function (its content is state outside the model), one
 // that a call, a branch arm or a closure receives, an assignment not ordered with the read.
 Value Evaluator::evalVariableRead(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g        = act.graph;
+    auto *g        = act.graph;
     const auto inputs = g->normInputsOf(ref);
     // What a read names is the version its last writer produced; the cell that version stores
     // into is what the assignments reaching this read are enumerated from.
@@ -3698,7 +3698,7 @@ Value Evaluator::evalVariableRead(Activation &act, gc_node_ref_t ref) {
 /// last assignment that must run before `at`. A compound assignment (`+=`) writes the content it
 /// finds combined with its operand.
 Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_ref_t at) {
-    GCGraph *g = act.graph;
+    auto *g = act.graph;
     std::vector<gc_node_ref_t> before;
     for (const auto users : {g->normOutputsOf(cell), g->withOutputsOf(cell)}) {
         for (gc_node_ref_t user : users) {
@@ -3798,7 +3798,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
 }
 
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g       = act.graph;
+    auto *g       = act.graph;
     const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
     if (core::oper::isVariableRead(body->oper)) {
         return evalVariableRead(act, ref);
@@ -3993,7 +3993,7 @@ Value Evaluator::applyOper(
 }
 
 Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
-    GCGraph *g               = act.graph;
+    auto *g               = act.graph;
     const gc_node_ref_t brch = g->normInputsOf(join).front();
     const auto arms          = g->withInputsOf(join);
     if (act.linear != nullptr && g == act.linear->frame->fn && join == act.linear->frame->join) {
@@ -4511,6 +4511,7 @@ Value Evaluator::evalAccs(
         }
     }
     const Value source = eval(act, from);
+
     // The read-back a deferred closure waits for (see deferredElement): the element is wanted
     // here, so it is evaluated instead of being passed on as the marker evalFill left.
     const auto element = [&](size_t index) -> Value {
@@ -4609,7 +4610,7 @@ void collectProgramNames(
             }
         }
     };
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         const ::Tuple *area              = graph->staticArea();
         const type::TupleType *slotTypes = graph->staticDataType();
         if (area == nullptr || slotTypes == nullptr) {
@@ -5098,7 +5099,7 @@ Model exportBound(
     if (!fn || !fn->graph()) {
         throw ExportError("expected a function value");
     }
-    GCGraph *graph = fn->graph();
+    auto *graph = fn->graph();
     checkArity(graph, examples.size());
 
     Emitter emitter(options.opset, capabilitiesFor(options), options.target);
@@ -5195,7 +5196,7 @@ void refuseUnendedUnrolling(
         std::unordered_set<const GCGraph *> seen;
         std::vector<const GCGraph *> work{received};
         while (!work.empty()) {
-            const GCGraph *g = work.back();
+            const auto *g = work.back();
             work.pop_back();
             if (g == nullptr || !seen.insert(g).second || !g->hasNodePayload()) {
                 continue;
@@ -5239,7 +5240,7 @@ Model translatePrepared(
     std::span<const Value> inputs, std::unordered_map<slot_t, std::string> names,
     const ExportOptions &options, Preparation preparation) {
     const auto context = ctx.shared_from_this();
-    GCGraph *root      = program->root();
+    auto *root      = program->root();
     std::ostringstream log;
     // The pass entry (ShapesOnly): the preceding passes simplified the program without two
     // things only the export knows: the shapes of the examples (binding their types above
@@ -5249,7 +5250,7 @@ Model translatePrepared(
     // simplification as onnx.export_model finishes the job with them, so that the two entries
     // accept the same functions. Macros are not expanded here: that stays the business of
     // std::macro before this pass.
-    const GCGraph *beforeSimplify                        = root;
+    const auto *beforeSimplify                        = root;
     const camel::runtime::Program *programBeforeSimplify = program;
     // Measurement aid: what the bound function looks like when the export receives it and
     // after the export's own simplification (one line each on stderr).
@@ -5456,7 +5457,7 @@ class DeclaredInputBinder {
 Model translateEntryGraph(
     core::context::Context &ctx, const camel::runtime::Program *program,
     const ExportOptions &options) {
-    GCGraph *root = program->root();
+    auto *root = program->root();
     Emitter emitter(options.opset, capabilitiesFor(options), options.target);
     emitter.graph().name = options.graphName;
 

@@ -147,7 +147,7 @@ class CanonicalDocument {
         // The graphs first: writing them is what settles the type and declaration tables, so
         // the tables that are copied into the document below are final.
         json graphs = json::array();
-        for (GCGraph *graph : graphs_)
+        for (auto *graph : graphs_)
             graphs.push_back(graphJson(graph));
         json decls = json::array();
         for (const auto &decl : declEntries_)
@@ -201,7 +201,7 @@ class CanonicalDocument {
     // ---- nodes and regions ----------------------------------------------------------------
 
     void indexNodes() {
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             auto &ids                               = nodeIds_[graph];
             std::vector<gc_node_ref_t> &order       = nodeOrder_[graph];
             size_t next                             = 0;
@@ -362,7 +362,7 @@ class CanonicalDocument {
     }
 
     void collectTags() {
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it)
                 noteTags(graph->nodeAttrs(it.ref()));
             for (uint32_t r = 1; r < graph->regionCount(); ++r) {
@@ -695,7 +695,7 @@ class CanonicalDocument {
     }
 
     void collectTypes() {
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             addType(graph->funcType());
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it)
                 addType(camel::passes::gir::nodeStaticSlotType(graph, **it));
@@ -885,7 +885,7 @@ class CanonicalDocument {
             const auto *function = camel::core::rtdata::fromSlot<const ::Function *>(slot);
             if (function == nullptr)
                 return json{{"k", "null"}};
-            const GCGraph *graph = function->graph();
+            const auto *graph = function->graph();
             auto found           = graphIds_.find(graph);
             return json{
                 {"k", "func"},
@@ -1081,7 +1081,7 @@ class CanonicalDocument {
             break;
         }
         case GCNodeKind::Func: {
-            const GCGraph *callee = program_.calleeOf(*graph, ref);
+            const auto *callee = program_.calleeOf(*graph, ref);
             value["callee"]       = callee == nullptr ? json(nullptr) : json(graphIds_.at(callee));
             break;
         }
@@ -1099,7 +1099,7 @@ class CanonicalDocument {
                     const auto *function =
                         camel::core::rtdata::fromSlot<const ::Function *>(slots[index]);
                     if (function != nullptr) {
-                        const GCGraph *callee = function->graph();
+                        const auto *callee = function->graph();
                         auto found            = graphIds_.find(callee);
                         if (found != graphIds_.end())
                             value["callee"] = found->second;

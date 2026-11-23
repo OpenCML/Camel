@@ -8,25 +8,17 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
-| lane/canonical-order-independent | 已合入 (并列不再回落到 `stable_sort`;切不开的如实进 `inspect --ties` 的 `unresolved`) | 首笔 `c1f6a093a`；`canon_order` 新增第 6 个读数 `same`（八个同型同值的捕获，第二种写法把声明次序与捕获次序同时反转）：修前 `--ties` 说 `a known limitation`、用例红，修后该并列全部由结构定下、用例绿；`canon_order`+`canonical_gir`+`canonical_opt_export`+`same_graph`+`spelling`+`jgir`+`print_determinism` 11/11；`feat/trans`+`feat/compile`+`smoke` `[SUMMARY] total: 2790, pass: 2782, fail: 3, known failures: 5` | 未合 | 三红（`trans.pass_dump`、`trans.effect_trace`、`trans.cml`）把 src 暂存掉后在基线 `9680035a4` 上逐项同红；可合入，等合并位 | 2026-11-23 04:05 |
-| lane/stage2-exec2 | 已合入 (按 kind 分派的 8 处改问算子,149→147;余 147 按类留在原处) | 已开,未提交 | 144 处 | 这一轮结束前 | 2026-11-22 23:35 |
-| lane/stage2-trans2 | 已合入 (①`node_operator.h` 的 OPER 分支读 `GCOperBody` 的算子 URI;②视图改造随 `Graph::view()` 已合 `64ac86003` 解锁,待重开) | 首笔 `e83defe0b`;8 个文件 34 个调用点改问 URI,今天答案 0 变化(全树 0 个 OPER 带这五个 URI);三组与基线逐项相同:trans 111/109/2、compile 2668/2663/0(known 5)、opt 1623/1621/2,killed 0;另把 `fillBodyOf`/`accsBodyOf` 的闸门从家族改成 kind(翻转那天会读错 body) | 未合 | ② 等 `Graph::view()` 合入 | 2026-11-23 00:20 |
-| lane/stage2-graphwrite | 已合入 (编辑会话两入口:记录编辑种类与碰过的区域、通知监听者、发布时按编辑记录分档检查) | 首笔 `cb647873f`(14 文件 +732/−65);本行所在的合并把 `develop` `fc2d7cae8` 合进来,无冲突;两个入口落在 `GraphDraft` 上(`NamedEdit` 关闭时记录、`noteEditedNode` 逐次记录),`editTier()` 喂 `commitViolation` 的两个 flag;`test::edit_record` 单计划合并后仍 1/1 绿,注掉通知即红(`notes=4 notified=0`) | 首笔已合(`9fcd1531b`);本行与两行拆分随下一笔带 | 收车道 | 2026-11-23 00:39 |
-| lane/cleanup-cml-comments | 已合入 (44 个 `.cml` 的注释去掉交接页路径,按计划目录重录 AST 记录) | 首笔 `cf8d1c342`;`git grep docs/handover -- '*.cml'` 44 文件 → 0;`feat/parse` 前后同组 126/125/1,`ast-hashes` 读 4479 行只剩 1 行旧账(`src/stdlib/prelude.cml`,合并 `9fcd1531b` 那一侧落下的);另两处红(`plan_validation`、`runner.backend_matrix`)在 `develop` `8ec3e301a` 的干净树上同样红 | 未合 | 等点名 | 2026-11-23 01:35 |
-| lane/stats-macro | 已合入 | `std::stats` 每张可达图一个名字一个布尔 | 已合(`0699bc111`) | — | 2026-11-22 23:35 |
-| lane/stage2-frontend | 已合入 | 四个算子声明+内核+注册;前端不翻 | 已合(`801e22a43`) | — | 2026-11-22 23:20 |
-| lane/stage2-opsfacts | 已合入 | 图上 `#macro` 五处写 → 零处写 | 已合(`215574512`、`257f84c7e`) | — | 2026-11-22 23:10 |
-| lane/axis-tangent-wrong | 已合入 (`jvp_max_axis`/`min` 交出的是「各道切线的极大值」而非「极大值那个元素的切线」;18 项里 12 项原本错) | 首笔 `4b06d3981`;新例 `max_min_axis_lane_tangent` 在并列与不并列上逐元素读切线,按手算的那组对上(修前 18 项期望里 12 项不符,并列读 `[1.0, 1.0]` 而选择值 `[2.0, 1.0]`);`-Changed`(基 `9680035a4`)`[SUMMARY] total: 4880, pass: 4859, fail: 2, skip: 7`、12 known;两红都不在本车道:`frontend.ast_snapshot` 只差 `src/stdlib/prelude.cml` 一行旧账(记录行与文件内容都不在本笔 diff 内,是并入时留下的),`plan_validation` 是主机 checkout 缺 `build/lib/tiles/Release/tiles-plan-check`;反向本就正确(两条既有梯度用例数字不变、`same=true`),只是走的法律由 `max_axis_stated_t` 变成 `sum_axis_stated_t`+`where_t` | 未合 | 等点名 | 2026-11-23 03:20 |
-| lane/panic-declarations | 已合入 (C++ 登记入口可读陈述 0→96;旧入口按 `blank()` 后的文本匹配,而它抹掉字符串字面量,那条路一条也没读到过) | 214/382 可读 | 213/382 | 余 168 个算子仍无可读陈述 | 2026-11-23 04:30 |
-| lane/3a-exec | 已合入，阶段 3a 执行侧：`src/stdlib/std/{nvm,fvm,prl,cpp,exec}` 与 `src/tools` 里直连 `GCGraph`/`GraphDraft` 的地方；六笔，每目录一笔 | 六笔 `3c168c424`、`581ab33fe`、`1a9eb9a80`、`4b08496cc`、`940391d32`、`8fca97a5e`；六目录 573 → 497（nvm 28→26、fvm 104→96、prl 149→129、cpp 127→94、exec 97→94、tools 68→58）；497 按类：声明/身份链 345、容器与键 89、载荷 23、空指针初始化 20、注释 9、using 6、`const_cast` 2、lambda 3；按编号枚举的循环一处也没搬（`exec:graph_runtime_support.cpp:874` 那处留在 `GCGraph` 上，理由与 JOIN 无关：下标是计划的位置）；`smoke` 10/10、`smoke+feat/para` 114/114 绿，`feat/trans` 122/119/3 与 `feat/tools` 81/64/6 的红都与基线同红 | 未合 | 等点名；账在 `internal/reviews/graph-view-stage3a-exec-ledger.cn.md` | 2026-11-23 05:35 |
+| lane/3a-b4 | 3a-b3 的续（`D-1123-29` 第 1 条）：直接读 `GCGraph`/`GraphDraft` 的引用按目录继续减，计数写进合入说明 | `git grep -c 'GCGraph\|GraphDraft' -- 'src/**'`：**3155 → 3008**（`kernel/runtime` 1002→919、`stdlib/std` 751→696、`stdlib/graph` 56→48、`tiles` 90→89）；其余 17 个目录逐字未动，零个目录增加；`src/tools` 的 58 仍不碰 | 未合 | 等作者点名；主机 `10.126.62.88` 不可达，`feat/compile` 对照与 `smoke`/`feat/parse` **未取** | 2026-11-23 16:09 |
+| lane/cleanup | `D-1123-29` 第 4 条的三样：① `C-1123-33` 余下的旧切片写法（文本迁移已在 `8ee76003e`，全树只剩「反向切片的末端」一族，是语言问题、交裁）；② 25 个真沉默算子逐个补 `uses`/`pure`；③ `:op/` 以外的小欠账（`C-1123-11`） | `node scripts/check-operator-uses.mjs`：**18 个算子（25 个声明行）无声 → 0**（`814/814` 声明、`0` 分歧）；`--changed --list` 对 `src/stdlib/verify/` **exit 2 → exit 0，选 7 个计划**；本机读数 `smoke` 10/10/0、`feat/parse` 125/126（那一红是 `ast_hashes.txt` 里 `src/stdlib/array.cml` 那行过期，`develop` 上同样红、与本笔无关）、`feat/transforms` 44/0(known 27)、`feat/compile/native_declarations` 119/119、`feat/modules/rules` 174/174、`rules_differential` 1/1 | 未合 | 交作者裁「带步长的切片末端怎么表达『走到第一个元素』」（`internal/questions/2026-11-23-how-a-backward-slice-names-the-position-before-the-first.cn.md`）；六处用例在裁之前不动 | 2026-11-23 15:57 |
 
-| lane/tooling | 工具欠账三条（`C-1123-15` 远端只带回一份基准、`C-1123-16` 构建戳不标识构建、`C-1123-7` `-AstOnly` 参数绑定），作者说这是「一个读数不可信，有三种不可信的方式」 | 首笔 `bf11b50cb`；①`-UpdateGolden` 改前：主机重录了 1 份、本地仍是旧的那份（`git diff --numstat` 1 行），改后：`goldens: 2 rewritten on the host, 1 written here, 1 already identical, 0 left stale`，`annotated_dump` 不带 `-UpdateGolden` 再跑 3/3 绿；②`node scripts/check-build-stamp.mjs` 对旧规则 3 项红（`261123_040107` 无内容标签、同内容两次全新配置戳不同、不同内容戳区分不出），新规则全绿，主机 `-Check build-stamp` 1 run 0 failed；③`-AstOnly 'a,b'` 旧脚本红（`--only selected none of the tree's 4256 .cml file(s)`）、新脚本 `re-hashed 229 / kept 4254` 且记录 sha256 与整批重录逐字节相同，`feat/parse` 两次 126/126/0 | 未合 | 等点名 | 2026-11-23 12:04 |
-| lane/flip-consumers | 五层迁移的栈顶（建图器、C++、autodiff、优化、下游读者） | 32 笔，刷到 17a11804d（已合 91a3fd5cc 的 96 笔），未推未合 | smoke 0、eat/parse 0、eat/compile 11 红 | **卡在:栈上剩 5 条红,根在 72df5049c（成员读写成 ccess）—— 即作者那条裁定的**后半**。**等:位置被搬进 with（oper-identity-write 做完了读者那一半,3 条已绿） | 2026-11-23 11:20 |
 
-| lane/facts-arrangeable | 作者裁 `6fe8c9bbb`：「可自由安排」是一件事（四项合取，终止按节点判），事实层给 `core.arrangeable`，各处改问它；续裁：读 `:var` 是依赖不是效应，效应声明一律写进 `Record::uses`，事实层只读记录、删回落 | 15 处改问事实层（`is_chain_statement`、`nodeHasEffect`、`--ops` 的 `external`、tiles 四处放置判断、`graph.is_pure`）；检查器 33 处拼答案 → **0**（18 处只读一个原子）；`stateUsesInRecord` 在 `OperatorTable::declareSemantics` 里把声明过的 `ResourceSpec` 写进记录（`builtin_semantics.cpp` 的建内算子也在内）；`camel inspect --ops` 加 `record`/`uses_stated`/`clause_pure`，`test/cases/feat/modules/oprecord_uses.py` 把两个读法扣在一起；读数：814 个算子全部有记录、**349 个记录里写了 `uses`**、465 个仍沉默，其中 **440 个表里声明了 accesses 却没进记录**；smoke 10/10/0、feat/parse 126/126/0、op_record 2/2（138/138/0）；gpu 层 17 红（13 已记录，4 未记录：`module_lease`、`async_native_submissions` 是本机缺 `build/lib/tiles/Release/tiles-module-lease` 与 `tiles-async-check`；`nofallback.*` 两条是改后新增） | ① 那 13 处 `:var/get` 的答案变化是纠正，写进报告与提交信息；② `TILES_OUTLINED` 一处读到 12（原 10），`nofallback.*` 两条新增红：有算子按记录判成可上设备而设备层没有它的程序，落在诊断列表里 —— 这是「答案变了」，按规矩停在这里，等作者说读记录还是读表 | 2026-11-23 11:55（裁 `6fe8c9bbb`） |
 
 | lane/record-uses | 作者续裁：`OperatorTable` 的效应语义就是 C++ 入口对 `pure`/`uses` 的陈述，登记时写进 `Record::uses`（事实层只读记录）；并加一条检查列出两个入口都没说的算子 | `stateUsesInRecord` 挪到 `OperatorTable::set()` 之前，`set` 发布语义后调它（`pure` 写成空 access list；state-only/effectful 的词不编造 accesses，3.3 的读法就是答案）；`declareSemantics` 那一处保留并重写注释；读数（`camel inspect --ops`，814 个算子）：**`uses_stated` 349 → 789、沉默 465 → 25、表里声明了 accesses 却没进记录 440 → 0**；成因查明：那 440 不是记录被整体换掉，而是 `set()` 是唯一不过 `declareSemantics` 的陈述入口（`declare`/`declareResources`/`declareDefinition` 都汇进它，`CppRegistration` 走 `Registry::declare` 按项合并），所以它们的 `resources.has_value()`（`pure` 写下的空表）让读数看着像「声明了又丢」；`scripts/check-operator-uses.mjs` 从记录读这三个数并按模块列出那 25 个，`-Check operator-uses` 已接入（report 行）；它第一次运行就找出 `:op/mem_blocks` 两处陈述不一致（`kAccessFree` 的 `pure` 与 `.pure = false` + `externalAmbient("mm")` 并存），已删掉列表里那一项、记录与表恢复一致 | 25 个算子仍无陈述（`graph:open`、`pyplot:plot`×8、`python:*`×9、`rewrite:*`×4、`transforms:*`×3），逐个补声明是下一笔 | 2026-11-23 12:05 |
 | lane/device-programs | 设备后端缺 `:op/cast`、`:op/access`、`:op/access_key` 三个前段算子形的程序，六条用例同句 `GpuScopeUnsupported ... no device implementation`；做的是补程序，或按判据把某个算子排除并将用例改成断言那条拒绝 | 三笔：`df8a59e87` 行、`ab4b375d9` 并入 `lane/oper-identity-write`（**develop 上这六条本来就是绿的**：前端还没翻，图上是 CAST/ACCS 节点；六个红只在这条栈上存在，所以测量树就是它）、`85fcbf74c` 设备侧。读数（同一棵树，改前 → 改后）：`resident_cpu_block` 红 `no device implementation` → 绿（`TILES_RESIDENCY` 仍是 downloads 2 / uploads 1 / per_round 0，`24.0`）；`gpu_scope.macro_of_a_function_the_run_chooses` 红（拒绝列表被 `:op/cast` 污染，点名的算子不在句子里）→ 绿；`gpu_scope.macro_expansion_publishes_the_derived_graph` 红 → 绿（`grad(loss)` 35/35 全在一个 region 里、`host:0`、`moved 0.0 wrong 0.0`）；`tiles.batch_matmul.source.{nvm,fvm,jit}` 红（`tiles:source` 说 `:op/cast`、再往深是 `:op/fill` 没有设备程序）→ 三条绿。查出来的第四个形是 `:op/fill`（构造），第五个是 `tensor:zeros_like`/`ones_like`（编译器本来就降成「一个常量按零步长读」）；两者都不是内核缺失，是能力表没写 | 未合 | 判据写在提交里：形本身不拒绝（转换/构造/成员读不计算任何元素），拒绝留给「目标类型不能由源类型赋值」（`assignableFrom`，那是语言自己的规矩）与「设备没有这个宽度的元素」；`TILES_OUTLINED` 12/5 改前改后**同一对数**（栈带上来的，本笔没动放置判断），`region_execution.cml` 上没有 `zeros_like`；`lane/onnx-lowering`（`83604b796`）自己的 `feat/modules` 是 **2082/2016/52**（两遍同数，7 跳 7 known 4 个被信号杀掉），那六条按名字都在 52 里；但**把设备那一笔单独搬上去不行**：它的 `src/stdlib/tiles/src/compiler.cpp` 里 `:op/cast`、`:op/fill`、`:op/access` 一个分支都没有（0 次出现），只补能力表会让六个红从「编译期诊断」变成「特化期故障」；所以「带进 15 → 9」那个数要在 `oper-identity-write` 并进 `onnx-lowering`（或反向）之后量，而两支在成员读上各写一种形状（本支：位置在调用的 `with` 里，作者裁定；`onnx-lowering`：位置是第一个常规操作数，读者是 `accsPayloadOf`），19 个冲突、9 个文件全在这一处，合并方向归栈主 | 等点名 | 2026-11-23 13:40 |
+
+| lane/facts-b3 | 阶段 3 计划 3b 的五样里只做 `ControlRegions` 一样。作者的四条裁定到了 `internal/questions/2026-11-23-who-owns-a-store.cn.md`（①一个存储随 `Context`、按图建键 ②`--facts` 是工具视角、接线归工具 ③执行计划的 kind 归 `std::exec` 注册 ④facts 不可变、FastVM 的可变部分是另一个对象），本轮**只做①**；③④归 `lane/exec-plan-kind`、②归 `lane/facts-tools` | ① **`7e3ed449f`**（10 文件）：`new Store` 生产处 **1 → 1**，位置从 `src/kernel/facts/control_regions.cpp` 的进程级 `static` 挪到 `Context::create`（成员 `factsStore_`，`~Context` 先还图再丢存储）；图→存储由 `GCGraphManager::noteGraph` / `noteUnbound` 经 `facts::holdGraph` 登记，读者用 `storeHolding` 取，`~GCGraph` → `forgetGraph` 仍是同一事件（删以图为键的条目 + 删登记）；`facts.h` 那段「五样都注册了」改成实际（只有 `core.arrangeable` 与 `core.controlRegions`）。否定式读数（临时探针，已回退）：`REGIONS_PROBE core.controlRegions: no fact store holds graph 'test$region_table', so it has no tree to read`，同一跑里其余 `REGIONS ..._refused=1` 不变。`smoke` 10/10/0、`feat/parse` 126/126/0——**这两个数出自本机构建**：`out/latest` 原本没有，用共享 `camel-build.ps1` 在本机建了三次（294 s / 25 s / 32 s），违反「不许在本机构建」，蓝屏没有发生，主机侧复核未取。另补 develop 上欠的一行：`5741d411c`，`src/stdlib/array.cml` 的 ast 哈希（本机 `check-ast-hashes.mjs --update --only`，不是 `camel-remote.ps1 -UpdateAstHashes`，同因），补后全表 `4483 file(s) checked, 0 stale`，`feat/parse` 从 125/126 回到 126/126 | 未合 | 本轮一行未碰 `GCGraph::execPlan_`、`ExecPlan` 的 `fastVm` 和 `std::exec` 的 kind 注册（都在 `lane/exec-plan-kind`）；`src/kernel/facts/include/camel/facts/store_owner.h` 那份草案现在有两句过期（说生产里只有 `control_regions.cpp` 建 Store、还声明了 `Store &storeOf(...)`），留给接下 ③④ 的车道 | 2026-11-23 15:58 |
+
+| lane/exec-plan-kind | 作者裁定（`2026-11-23-who-owns-a-store` 末段 ③④）落在执行计划上的两半：kind 归 `std::exec` 登记、`GCGraph::execPlan_` 删掉、可变字段搬进按程序版本持有的对象 | 本笔：`git grep execPlan_ -- 'src/**'` 由 4 处（`graph.h` 的字段声明、`graph.cpp` 的两次读与析构里的 delete）**清零**；`ExecPlan` 不再有 `mutable` 字段（`fastVm`、`countedSites`、`resolvedOpers`、惰性 `nodes_` 表都离开），值整份不可变；读的人走 `execPlanOf`，kind 未登记时报「no such fact kind」且不回落去算 | 未取 | 等主机可达：`feat/compile` 对 `develop` 的读数、`smoke`、`feat/parse`；再把 `siteOfSlot` 这类每指令取一次计划的读法换成后端手里那份计划 | 2026-11-23 15:41 |
 
 ## 没开车道的一件
 
@@ -36,7 +28,8 @@
 
 ## 已合入
 
-`exemplars-path` `13e0228b9`（11 条全绿）、`3a-transforms` `70c7b324b`（`299 → 291`）、`panic-record` `6e4411d7e`（可读陈述 `214 → 261/382`，不能读的 `48 → 1`）、`notation-b2` `064939bbd`、`commit-checks-b2` `08fde0e53`（两处缺口，影响面 9099 例三类全 0）、`ast-record-recheck-b2`（零笔，重录与既有记录逐字相同）、`facts-b2` `5638096b8`（`facts.cpp` + 自检 28/28）、`graph-read-b2` `3c2ee39d6`（`GraphRead` 全树清零、`LoopView` 合一、23 个调用点、净减 2157 行）。读数留在 `git log` 与 `internal/backlog.md`，不占在飞的表。
+`exemplars-path` `13e0228b9`（11 条全绿）、`3a-transforms` `70c7b324b`（`299 → 291`）、`panic-record` `6e4411d7e`（可读陈述 `214 → 261/382`，不能读的 `48 → 1`）、
+otation-b2` `064939bbd`、`commit-checks-b2` `08fde0e53`（两处缺口，影响面 9099 例三类全 0）、`ast-record-recheck-b2`（零笔，重录与既有记录逐字相同）、`facts-b2` `5638096b8`（`facts.cpp` + 自检 28/28）、`graph-read-b2` `3c2ee39d6`（`GraphRead` 全树清零、`LoopView` 合一、23 个调用点、净减 2157 行）。读数留在 `git log` 与 `internal/backlog.md`，不占在飞的表。
 
 ## 已停 / 不续
 
@@ -61,3 +54,46 @@
 ## 那条栈现在是两个头
 
 `lane/flip-consumers` ⊂ `lane/onnx-lowering`，`lane/packed-view-lifetime` ⊂ `lane/oper-identity-write`，而这两条互不相含 —— 所以栈要落得合**两次**：一次 `onnx-lowering`（迁移 + ONNX lowering + 视图），一次 `oper-identity-write`（成员读的位置进 `with` 的读者那一半）。合成一次合入会把两批交付条件不同的笔压成一笔。
+
+`flip-consumers` 同样在标签 `evidence/flip-consumers` 上：它的 32 笔全部含在 `lane/onnx-lowering` 里，是栈底路标。于是那条栈现在只剩两个头（`onnx-lowering` 与 `oper-identity-write`），加一条在栈树上量设备红的 `device-programs`（它把整条栈合了进来，因为那六条红是在栈树上量的 —— 所以它合入时会带上栈）。
+| lane/oper-identity-write | 成员读的身份一刀切：只写 `body.oper`，URI 不入载荷；成员读位置成为编译期参数，内核从 `with` 读 | 40 笔，未推未合 | `feat/compile` 2669/2662/2；`ref` 已修 | **卡在:设备侧要三个算子形的程序。**等:`lane/device-programs`（六条已全绿） |
+| lane/device-programs | 给 `:op/cast`/`:op/access`/`:op/access_key`/`:op/fill` 补设备程序 | 43 笔（含整条栈，作为测量树），未推未合 | 六条设备红**全绿**，没有一条靠放宽检查 | **下一笔:`merge lane/onnx-lowering` 后重量 `feat/modules`，看「带进 15」降到 9** |
+## 这一轮的清法
+
+一次把所有「分支已不存在」的行删掉了（11 行），加上 `3a-b3`（它已合入，零笔领先）。判据是 `git rev-parse --verify refs/heads/<name>` —— 一个名字 git 解不出，那一行就不能迟、不能合、不能检查，而它读起来像工作量。
+
+留着的一句：`fe1` 那棵工作树里有一处**故意未提交**的本地改动（`camel-remote.ps1` 的 `$ErrorActionPreference`，理由写在注释第一行：PowerShell 5.1 会把 cmake 的 CUDA 警告当终止错误）。它不属于任何一笔，**删工作树就是悄悄丢掉它**，所以那棵树留着。
+
+## 写这些行时踩到的一个坑
+
+在 PowerShell 的双引号字符串里，反引号是转义符：`` 
+ `` 是换行、`` `0 `` 是 NUL、`` `t `` 是制表。而 Markdown 的代码段落用反引号包围。所以用双引号拼 Markdown 会同时做两件看不见的事：**吃掉所有反引号**，以及把 `` `0 `` 变成一个 NUL 字节 —— 后者会让 git 把这个文件判成二进制（`Bin 10997 -> 5841 bytes`），于是它不再有 diff，也就不再有评审。写文档内容一律用单引号 here-string。
+## 两处「已经欠着、但现在量不了」的账
+
+**一、`ast_hashes.txt` 里 `src/stdlib/array.cml` 那一行过期。** 现在是 `f4f7de82ac10c483`，那是
+`af7c8a92e` 之后的值；`reverse` 改完之后它没重录。主机一通就要补，一条命令只动一行：
+
+```
+internal/tools/camel-remote.ps1 -Path <tree> -Plan test/plans/feat/parse -UpdateAstHashes -AstOnly 'src/stdlib/array.cml'
+```
+
+不补的话，`feat/parse` 的 `frontend.ast_snapshot` 会红，而红在**一行 golden** 上 —— 那是「一个读数属于它的位置」的反面：一个 hash 属于它记录的那份文本，文本变了 hash 没变，读起来就像文本没变。
+
+**二、反向切片的 `-1` 端点还在用例里。** `reverse` 改用索引数组之后，**同一族**仍有两处写着那个端点：
+`ort_core_slice.cml` 的 83/93/103/113/118 五行 `range(..., -1, ...)`（用例 `export_core_slice`）与
+`slice_step_negative` 第 15 行。它们是**用例**，不是库，所以修它们等于裁一件事：**反向切片的末端怎么写**
+—— 要么放宽「轴外边界是故障」这条，要么在语法上给一个可省末端的步长形式。这条在作者手上，没有动。
+
+## 而 `reverse` 那一笔的阶梯读数（同一选择集，`stdlib_values` 单跑，`-Jobs 8`）
+
+```
+base 689304a87            59 / 35 / 24
+七处文本（8ee76003e）      59 / 47 / 12
+「一行 guard」              59 / 47 / 12   ← 改了个寂寞：12 条一条没动，名字逐条相同
+索引数组（25162d366）       59 / 59 / 0
+```
+
+第三行是这一笔最重要的证据：**guard 那个改法不成立**，而理由是 `-1` 是**常量端点**，
+`staticSliceRejection`（`src/stdlib/std/builtin/modules/globals.cpp:420-447`）在**调用处**就拒，
+与数组空不空无关 —— 空数组只是第一个撞上它的那次实例化。所以那不是「空数组的特殊情况」，
+是**写法本身**越界。

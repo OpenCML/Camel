@@ -459,7 +459,7 @@ bool parameterIsDevice(const rt::GCGraph &graph, rt::gc_node_ref_t port) {
 /// callee only the run knows reaches no declaration, and is a host boundary too.
 bool passesOrdinaryArgument(
     const rt::Program &program, const rt::GCGraph &caller, rt::gc_node_ref_t call) {
-    const rt::GCGraph *callee = calleeGraphOf(program, caller, call);
+    const auto *callee = calleeGraphOf(program, caller, call);
     if (callee == nullptr)
         return true;
     for (auto port : callee->normPorts())

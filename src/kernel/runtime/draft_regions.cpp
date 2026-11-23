@@ -418,7 +418,7 @@ bool GraphDraft::inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const {
         if (inlineOf == callee->id()) {
             return true;
         }
-        const GCGraph *source = program_ != nullptr ? program_->graph(inlineOf) : nullptr;
+        const auto *source = program_ != nullptr ? program_->graph(inlineOf) : nullptr;
         if (functionOf(source, inlineOf) == calleeFunction) {
             return true;
         }

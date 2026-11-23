@@ -51,7 +51,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `AsRightSideIsType` | The right side of '{0}' is a type; write the interval as '(a..b)'. |
 | `FuncTypeNeedsNames` | A function type names its parameters: write '(x: float, y: float) => float', not a list of types. |
 | `WhenAfterBody` | A 'when' condition comes before what it guards, so {0} cannot follow it. |
-| `LambdaParametersNeedParentheses` | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
+| `LambdaParametersNeedParentheses` | A lambda is written 'func (x) { … }': a name standing before a '=>' that fits nothing is not one. |
 | `IntervalHasNoOpenForm` | An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side. |
 
 **Syntax — warnings** (`SyntaxDiag`) — 1
@@ -250,11 +250,11 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ParamDefaultWrongType` | The default of the parameter '{0}' has type '{1}', not '{2}'. |
 | `ParamAfterDefault` | The parameter '{0}' has no default and follows '{1}', which has one. |
 | `ParamArgumentWrongType` | The argument '{0}' of '{1}' has type '{2}', not '{3}'. |
-| `CompOperandMismatch` | '..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'. |
-| `CompOperandNotUnary` | '..' composes a unary function on the left; '{0}' takes {1} parameters. |
-| `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
+| `CompOperandMismatch` | '..' takes two functions or two integers, and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'. |
+| `CompOperandNotUnary` | '..' and '<>' compose a unary function on the left; '{0}' takes {1} parameters. |
+| `CompOperandGenericWithoutType` | '{0}' composes two functions, and its {1} operand, the generic function '{2}', has no instance here: write its type arguments ('{2}::<int>'), or give the whole expression an expected function type. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
-| `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
+| `SliceStepZero` | The slice 't[range(a, b, s)]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `CalledFallibleValue` | This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
@@ -275,7 +275,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `SpellingNotDeclared` | This body reads the spelling of the program, and its type does not declare it. |
 | `TypeAliasRecursionUnrepresented` | The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation. |
 | `EnumWrittenWhereATypeIsExpected` | An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else. |
-| `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'. |
+| `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... do ... )', or walk 'fields T'. |
 | `IdentifierPatternNeedsNullableOrErrorType` | The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'. |
 | `FactJoinRequired` | The fact '{0}' writes no 'join'. |
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |

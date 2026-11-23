@@ -25,6 +25,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
+#include "camel/facts/facts.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/facts.h"
@@ -362,6 +363,8 @@ camel::runtime::fact::FactStore &Context::facts() {
     return *facts_;
 }
 
+camel::facts::Store &Context::factsStore() { return *factsStore_; }
+
 std::string EntryConfig::toString() const {
     std::ostringstream os;
     os << "{\n";
@@ -427,6 +430,12 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
     ctx->runtimeGraphMgr_ = std::make_unique<camel::runtime::GCGraphManager>();
+    // The facts of this context's frozen graphs: one store for the context, made here so that the
+    // graph manager can tell it about every graph the context makes (facts.h, "Which store holds
+    // a graph"). ~Context gives the graphs back before it drops the store, so each graph's end is
+    // announced to a store that is still there.
+    ctx->factsStore_ = std::make_unique<camel::facts::Store>(camel::facts::frozenGraphs(), true);
+    ctx->runtimeGraphMgr_->setFactsStore(ctx->factsStore_.get());
     // Registered under this context's address, so a second context beside this one (a language
     // server, a tool's second context, the Python binding) adds its roots instead of replacing
     // them, and destroying either one gives back only its own.

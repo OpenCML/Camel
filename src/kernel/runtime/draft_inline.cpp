@@ -542,7 +542,7 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
 /// The graph of `function`, which the session reads from now on (the function may have been
 /// made in another program).
 GCGraph *functionGraph(RuntimeGraphDraftSession &session, const ::Function *function) {
-    GCGraph *graph = function ? function->graph() : nullptr;
+    auto *graph = function ? function->graph() : nullptr;
     if (graph != nullptr) {
         session.adoptProgram(*function->program());
     }
@@ -554,10 +554,10 @@ bool onCallCycle(const Program &program, const GCGraph *graph) {
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{graph};
     while (!work.empty()) {
-        const GCGraph *g = work.back();
+        const auto *g = work.back();
         work.pop_back();
         for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
-            const GCGraph *callee = program.calleeOf(*g, it.ref());
+            const auto *callee = program.calleeOf(*g, it.ref());
             if (!callee) {
                 continue;
             }
@@ -762,7 +762,7 @@ GCGraph *encodeSpecializedGraph(
     if (tag == kTypeSpecializationTag && !isValid(draft.typeSpecializationRoot())) {
         draft.setTypeSpecializationRoot(baseGraph->id());
     }
-    GCGraph *encoded = draft.encode(mangledName, name);
+    auto *encoded = draft.encode(mangledName, name);
     session.adoptGraph(encoded);
     return encoded;
 }
@@ -1024,7 +1024,7 @@ GCGraph *specializeGraphWithBindings(
                 baseGraph->closureNodes().size(),
                 bindings));
     }
-    GCGraph *specialized = encodeSpecializedGraph(session, *draft, baseGraph, tag, nonce);
+    auto *specialized = encodeSpecializedGraph(session, *draft, baseGraph, tag, nonce);
     session.rememberSpecialization(std::move(cacheKey), specialized);
     return specialized;
 }
@@ -1069,7 +1069,7 @@ namespace {
 
 GCGraph *specializeClosureBoundGraph(
     RuntimeGraphDraftSession &session, const Function *function, size_t nonce) {
-    GCGraph *targetGraph = functionGraph(session, function);
+    auto *targetGraph = functionGraph(session, function);
     if (targetGraph == nullptr) {
         return nullptr;
     }
@@ -1311,7 +1311,7 @@ bool specializeDirectFuncInDraft(
         session.noteTypeSpecialization(root);
     }
 
-    GCGraph *specializedGraph = specializeGraphWithBindings(
+    auto *specializedGraph = specializeGraphWithBindings(
         session,
         calleeGraph,
         bindings,
@@ -1489,7 +1489,7 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
     draft->setFuncType(
         camel::core::type::FunctionType::create(withTypes, normTypes, type->exitType()));
     draft->setClosureType(nullptr);
-    GCGraph *lifted = encodeSpecializedGraph(session, *draft, base, "lift", nonce);
+    auto *lifted = encodeSpecializedGraph(session, *draft, base, "lift", nonce);
     session.rememberSpecialization(std::move(key), lifted);
     return lifted;
 }
@@ -1537,7 +1537,7 @@ bool devirtualizeClosureCallInDraft(
     if (base->withPorts().size() != withInputs.size() - 1) {
         return false;
     }
-    GCGraph *lifted = liftClosureGraph(session, base, session.nextLiftNonce());
+    auto *lifted = liftClosureGraph(session, base, session.nextLiftNonce());
     if (!lifted) {
         return false;
     }
@@ -1747,7 +1747,7 @@ bool devirtualizeStaticCallInDraft(
         return false;
     }
 
-    GCGraph *targetGraph =
+    auto *targetGraph =
         specializeClosureBoundGraph(session, function, session.nextSpecializationNonce());
     if (!targetGraph) {
         return false;

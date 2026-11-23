@@ -14,6 +14,7 @@
 #include "camel/core/type/ref.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/shaped_operators.h"
+#include "camel/facts/control_regions.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/control_regions.h"
 
@@ -79,33 +80,29 @@ intervalBoundsOf(const GCGraph &graph, gc_node_ref_t ref) {
 
 } // namespace
 
-const std::vector<ExecNode> &ExecPlan::buildNodes() const {
-    std::lock_guard lock(nodesMutex_);
-    if (!nodesReady_.load(std::memory_order_relaxed)) {
-        const size_t count = topo.size();
-        nodes_.resize(count);
-        for (size_t idx = 0; idx < count; ++idx) {
-            const gc_node_ref_t ref = topo[idx];
-            ExecNode &en            = nodes_[idx];
-            en.ref                  = ref;
-            en.node                 = graph->node(ref);
-            ASSERT(en.node != nullptr, "Execution plan node lookup resolved to null.");
-            const auto norm = graph->normInputsOf(ref);
-            const auto with = graph->withInputsOf(ref);
-            en.norm         = norm.data();
-            en.normCount    = static_cast<uint32_t>(norm.size());
-            en.with         = with.data();
-            en.withCount    = static_cast<uint32_t>(with.size());
-            if (en.node->hasPayload()) {
-                en.body = graph->nodePayloadBytes(ref).data();
-            }
-            if (en.node->kind == GCNodeKind::Brch) {
-                en.armCount = graph->armCountOf(ref);
-            }
+std::vector<ExecNode> ExecPlan::nodesOfTopo() const {
+    const size_t count = topo.size();
+    std::vector<ExecNode> nodes(count);
+    for (size_t idx = 0; idx < count; ++idx) {
+        const gc_node_ref_t ref = topo[idx];
+        ExecNode &en            = nodes[idx];
+        en.ref                  = ref;
+        en.node                 = graph->node(ref);
+        ASSERT(en.node != nullptr, "Execution plan node lookup resolved to null.");
+        const auto norm = graph->normInputsOf(ref);
+        const auto with = graph->withInputsOf(ref);
+        en.norm         = norm.data();
+        en.normCount    = static_cast<uint32_t>(norm.size());
+        en.with         = with.data();
+        en.withCount    = static_cast<uint32_t>(with.size());
+        if (en.node->hasPayload()) {
+            en.body = graph->nodePayloadBytes(ref).data();
         }
-        nodesReady_.store(true, std::memory_order_release);
+        if (en.node->kind == GCNodeKind::Brch) {
+            en.armCount = graph->armCountOf(ref);
+        }
     }
-    return nodes_;
+    return nodes;
 }
 
 namespace {
@@ -2057,7 +2054,6 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     plan->directCallArgOffsets.resize(count + 1, 0);
     plan->branchArmEntryOffsets.resize(count + 1, 0);
     plan->dataIndexByRef.resize(graph.nodeCount(), 0);
-    plan->resolvedOpers = std::make_unique<std::atomic<operator_t>[]>(graph.nodeCount());
     plan->topoIndexByRef.assign(graph.nodeCount(), ExecPlan::kNotInPlan);
     for (size_t idx = 0; idx < count; ++idx) {
         plan->topoIndexByRef[plan->topo[idx]] = static_cast<uint32_t>(idx);
@@ -2164,6 +2160,96 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     return plan;
 }
 
+namespace {
+
+/// The key of the kind. The store's rule is `owner.name` and the owner before the first dot; the
+/// execution plan serves one module, so the module is the owner and the core does not name it
+/// (facts.h, "The store belongs to nothing that is dumped"; the ruling that the plan is `std::exec`'s
+/// kind and not `core.execPlan`).
+constexpr std::string_view kExecPlanKey = "std.execPlan";
+
+/// The registration, made while the program loads -- the moment and the way a pass's C++
+/// implementation is registered from the file that implements it (execute/pass/registration.h).
+/// `execPlanKind` below looks the kind up and never registers it, so a tree in which this object is
+/// gone is a tree with no such kind, and a reader there says so instead of computing a plan.
+/// Nothing names the id: it is kept for what registering it does.
+[[maybe_unused]] const facts::KindId kExecPlanKind = facts::registerKind(facts::KindInfo{
+    .key        = std::string(kExecPlanKey),
+    .owner      = "std",
+    .version    = 1,
+    .payload    = typeid(ExecPlan),
+    .cls        = facts::Class::Derived,
+    .scope      = facts::Scope::Graph,
+    .dependence = facts::Dependence::Anchors,
+    .merges     = false,
+    .monotone   = false,
+    .compute =
+        [](std::span<const facts::Anchor> anchors, const facts::GraphAccess &, facts::ReadLog &)
+        -> std::shared_ptr<const void> {
+        if (anchors.size() != 1 || anchors[0].graph == nullptr ||
+            anchors[0].node != facts::kWholeGraph) {
+            return nullptr;
+        }
+        // A plan is about a frozen graph version. An editing session's draft has none, and the
+        // answer there is that there is no fact -- not a plan built from something else.
+        const auto *frozen = dynamic_cast<const GCGraph *>(anchors[0].graph);
+        if (frozen == nullptr) {
+            return nullptr;
+        }
+        if (!frozen->executable()) [[unlikely]] {
+            throw std::logic_error(
+                "Graph '" + frozen->name() +
+                "' has values with several writings: it has no execution plan "
+                "until they are extracted.");
+        }
+        std::unique_ptr<ExecPlan> built = buildExecPlan(*frozen);
+        return std::shared_ptr<const void>(std::move(built));
+    },
+    .merge = {},
+    .equal =
+        [](const void *left, const void *right) {
+            return samePlanAs(
+                *static_cast<const ExecPlan *>(left),
+                *static_cast<const ExecPlan *>(right));
+        },
+    .print =
+        [](const void *value) {
+            const auto &plan = *static_cast<const ExecPlan *>(value);
+            return std::format(
+                "{} step(s), {} loop(s)",
+                plan.topo.size(),
+                plan.loops.size());
+        },
+});
+
+} // namespace
+
+facts::KindId execPlanKind() {
+    return facts::findKind(kExecPlanKey);
+}
+
+std::shared_ptr<const ExecPlan> execPlanOf(const GCGraph &graph) {
+    const facts::KindId kind = execPlanKind();
+    if (kind == facts::kNoKind) {
+        throw std::logic_error(
+            "no such fact kind 'std.execPlan': the module that registers the execution plan "
+            "(std::exec) is not loaded, so there is no plan to read and none is computed here");
+    }
+    facts::Store *store = facts::storeHolding(graph);
+    if (store == nullptr) [[unlikely]] {
+        throw std::logic_error(
+            "no fact store holds graph '" + graph.name() +
+            "': nothing recorded its execution plan, and none is computed here");
+    }
+    const facts::Anchor anchor{&graph, facts::kWholeGraph};
+    std::shared_ptr<const void> plan =
+        store->obtainValue(kind, std::span<const facts::Anchor>(&anchor, 1));
+    if (!plan) [[unlikely]] {
+        throw std::logic_error("Graph '" + graph.name() + "' has no execution plan.");
+    }
+    return std::static_pointer_cast<const ExecPlan>(plan);
+}
+
 void rebuildLoopTablesForTests(const GCGraph &graph, ExecPlan &plan) {
     // What buildLoopTables appends to, given back first: the tables are a function of the order, so
     // a second call on a reordered plan must not find the first call's rows beside its own.
@@ -2189,19 +2275,8 @@ void noteCountedCreationForNode(const void *graph, gc_node_ref_t node, uint64_t 
     camel::core::rtdata::recordCountedCreation(named, boxes);
 }
 
-void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcept {
-    if (graph == nullptr || boxes == 0) {
-        return;
-    }
-    const ExecPlan &plan = static_cast<const GCGraph *>(graph)->execPlan();
-    gc_node_ref_t node   = kInvalidNodeRef;
-    if (pc >= plan.countedSites.entryPc) {
-        const auto row = plan.countedSites.nodeAtPc.find(pc - plan.countedSites.entryPc);
-        if (row != plan.countedSites.nodeAtPc.end()) {
-            node = row->second;
-        }
-    }
-    noteCountedCreationForNode(graph, node, boxes);
-}
+// `noteCountedCreationAt` -- the same question for a back end that holds a pc rather than a node --
+// is defined by the bytecode engine that keeps the pc table beside the plan (fvm/version_state.cpp):
+// the table is the engine's own state, so the reader that finds a node through it is there too.
 
 } // namespace camel::runtime

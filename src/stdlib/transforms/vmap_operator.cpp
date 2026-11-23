@@ -187,13 +187,17 @@ std::unordered_map<std::string, operator_t> vmapOperatorKernels() {
 }
 
 void registerVmapOperatorMetadata() {
-    camel::core::OperatorTable::instance().declare("transforms", {{"vmap", false}});
-    camel::core::OperatorTable::instance().set(
-        "transforms:vmap", {.pure = false, .readsGraphs = true});
     // It builds the batched graph out of the graph of the function value it is handed, and out of the
     // value's closure: what the function captured is handed to the build as the constants the
     // batched body reads. The batch element must not take the capture's place: dropping the
     // capture would make `x + c` answer `2x` in silence.
+    //
+    // It touches no resource: the graph it reads is a value's, and the batched graph it answers is
+    // a value too, so `pure` is the whole statement (design principles 3.3: reading is a
+    // dependency, not an effect). Pure is not foldable -- the call does something the compiler
+    // cannot see from the arguments alone -- which is the pair `jvp` states above.
+    camel::core::OperatorTable::instance().set(
+        "transforms:vmap", {.pure = true, .readsGraphs = true, .foldable = false});
 }
 
 } // namespace camel::transforms

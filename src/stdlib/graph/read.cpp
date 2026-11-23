@@ -87,7 +87,7 @@ namespace err = camel::core::error;
 
 /// The graph a Graph or Node handle names; a fault when the Program holds no such graph.
 const GCGraph &graphOf(const Handle *handle, const char *site) {
-    const GCGraph *graph =
+    const auto *graph =
         handle->program() != nullptr ? handle->program()->graph(handle->graph()) : nullptr;
     if (graph == nullptr) {
         err::throwRuntimeFault(
@@ -219,7 +219,7 @@ slot_t graphsOfKernel(ArgsView &, ArgsView &norm, Context &) {
         return toValue(a->id()) < toValue(b->id());
     });
     std::vector<Handle *> items;
-    for (const GCGraph *graph : graphs) {
+    for (const auto *graph : graphs) {
         items.push_back(graphHandle(program, graph->id()));
     }
     return handleArray(HandleKind::Graph, items);

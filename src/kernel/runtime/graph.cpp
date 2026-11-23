@@ -12,7 +12,9 @@
  */
 
 #include "camel/runtime/graph.h"
+#include "camel/facts/facts.h"
 #include "camel/facts/arrangeable.h"
+#include "camel/facts/control_regions.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/exec_plan.h"
@@ -2924,7 +2926,7 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
         if (!node || node->kind != GCNodeKind::Func) {
             continue;
         }
-        const GCGraph *callee = program.calleeOf(*graph, it.ref());
+        const auto *callee = program.calleeOf(*graph, it.ref());
         if (!callee || !callee->hasNodePayload()) {
             throw std::runtime_error(
                 std::format(
@@ -2974,7 +2976,7 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
         const auto refs = graph->refs();
         for (GraphId ref : referenced) {
             if (std::find(refs.begin(), refs.end(), ref) == refs.end()) {
-                const GCGraph *named = program.graph(ref);
+                const auto *named = program.graph(ref);
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has a function constant of graph '{}', which is not in "
@@ -3377,7 +3379,7 @@ GCStaticFunctionAnswer GCGraph::staticFunctionGraphOf(gc_node_ref_t ref) const {
     if (value == nullptr) {
         return {.reason = "no-function-value"};
     }
-    const GCGraph *callee = value->graph();
+    const auto *callee = value->graph();
     if (callee == nullptr) {
         return {.reason = "function-names-no-graph"};
     }
@@ -3515,36 +3517,23 @@ const GCUseIndex &GCGraph::uses() const {
 }
 
 const ExecPlan &GCGraph::execPlan() const {
-    if (ExecPlan *known = execPlan_.load(std::memory_order_acquire)) {
-        return *known;
-    }
-    if (!executable()) [[unlikely]] {
-        throw std::logic_error(
-            "Graph '" + name() +
-            "' has values with several writings: it has no execution plan "
-            "until they are extracted.");
-    }
-    ExecPlan *built    = buildExecPlan(*this).release();
-    ExecPlan *expected = nullptr;
-    if (!execPlan_.compare_exchange_strong(
-            expected,
-            built,
-            std::memory_order_acq_rel,
-            std::memory_order_acquire)) {
-        delete built; // another thread was first
-        return *expected;
-    }
-    return *built;
+    // The plan is the fact `std.execPlan` of the module that reads it: the store answers, and a
+    // kind that is not registered is an error about the kind rather than a plan computed here
+    // (camel/runtime/exec_plan.h, `execPlanOf`).
+    return *execPlanOf(*this);
 }
 
 GCGraph::~GCGraph() {
+    // The facts anchored on this graph end here: an address is a graph only while the graph is
+    // there, and the store that was told about this one must not answer about it afterwards
+    // (camel/facts/facts.h). The store itself outlives nothing here: it goes with its context.
+    camel::facts::forgetGraph(this);
     // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
     // graph, so it goes before the graph does. `GraphView` is complete in this file
     // (graph/gc_graph_view.h), which is why the deleting is here rather than in the header.
     delete static_cast<const camel::graph::GraphView *>(viewCache_);
     viewCache_ = nullptr;
     delete uses_.load(std::memory_order_acquire);
-    delete execPlan_.load(std::memory_order_acquire);
 }
 
 void GCGraph::releaseNodeChunks() {

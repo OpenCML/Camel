@@ -183,7 +183,7 @@ std::string residencyReport(const rt::Program &program) {
         return {};
     }
     std::ostringstream out;
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -232,7 +232,7 @@ std::string residencyReport(const rt::Program &program) {
                 continue;
             }
             if (node->kind == runtime::GCNodeKind::Func || node->kind == runtime::GCNodeKind::Call) {
-                const GCGraph *callee = calleeGraphOf(program, *graph, ref);
+                const auto *callee = calleeGraphOf(program, *graph, ref);
                 if (callee == nullptr) {
                     continue; // The run chooses the callee: no residency answer to derive.
                 }

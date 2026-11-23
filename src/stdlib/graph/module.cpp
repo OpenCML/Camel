@@ -262,6 +262,16 @@ class GraphModule final : public BuiltinModule {
                     {"abort", onTxn},
                 });
         }
+        // What `open` touches: the transaction it makes, which is the handle the nine above then
+        // edit. It reads the function value it is handed (a value, not a resource) and writes
+        // nothing outside the program, so its whole statement is the resource it allocates.
+        {
+            using camel::core::sem::Resource;
+            using camel::core::sem::ResourceClass;
+            camel::core::sem::ResourceSpec opensTxn;
+            opensTxn.allocates = Resource{.cls = ResourceClass::Handle, .name = "graph::Txn"};
+            table.declareResources("graph", {{"open", opensTxn}});
+        }
         // What the operators that read the *spelling* of the program say about themselves (design
         // principles 9.5): a graph's or a function's name, a node's source position, the text it
         // shows, and the number it was created with. Declared here, once, the way an operator's

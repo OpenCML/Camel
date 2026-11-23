@@ -17,7 +17,7 @@ func main(): int sync {
     println(codepoints(from_codepoints([0, 127, 128, 2047, 2048, 65535, 65536, 1114111]) !! ''))
     println(s[0], s[1], s[2], s[3])
     println(s[1..3], s[0..4])
-    println(len(s[4..4]), len(''[0:0]))
+    println(len(s[4..4]), len(''[0..0]))
 
     // not a code point: an error value
     println(from_codepoints([55296]) !! 'surrogate')

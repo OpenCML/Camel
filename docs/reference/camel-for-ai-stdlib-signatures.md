@@ -162,7 +162,7 @@ tee_note: (hint: int, cap: int, elements: int, peak: int, s: T..) => void
 
 ```text
 codepoints: (s: string) => int[]
-from_codepoints: (xs: int[]) => string!
+from_codepoints: (xs: int[]) => string! panic
 to_upper: (s: string) => string
 to_lower: (s: string) => string
 index_of: <sub: string> (s: string) => int?
@@ -364,8 +364,8 @@ argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_int
 argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
 shape: (xs: T[...]) => int[]
 numel: (xs: T[...]) => int
-dim: <axis: int> (xs: T[...]) => int
-to_bytes: (xs: T[...]) => Bytes when is_plain::<T>()
+dim: <axis: int> (xs: T[...]) => int panic
+to_bytes: (xs: T[...]) => Bytes panic when is_plain::<T>()
 argsort: (keys: i32[]) => int[]
 argsort: (keys: int[]) => int[]
 argsort: (keys: f32[]) => int[]
@@ -496,7 +496,7 @@ randn: () => float
 
 ```text
 now: () => float
-strftime: <format: string> (timestamp: float) => string
+strftime: <format: string> (timestamp: float) => string panic
 strptime: <format: string> (text: string) => float!
 ```
 
@@ -505,7 +505,7 @@ strptime: <format: string> (text: string) => float!
 ```text
 read_text: (path: string) => string!
 read_bytes: (path: string) => Bytes!
-read_chunk: <offset: int, size: int> (path: string) => Bytes!
+read_chunk: <offset: int, size: int> (path: string) => Bytes! panic
 write_text: <path: string, atomic: bool = false> (content: string) => void!
 write_bytes: <path: string, atomic: bool = false> (content: Bytes) => void!
 append_text: <path: string> (content: string) => void!
@@ -527,7 +527,7 @@ remove_dir: (path: string) => void!
 set_terminal_raw_mode: (enabled: bool) => void!
 input: (prompt: string) => string
 has_input: () => bool
-get_chars: (max: int) => string
+get_chars: (max: int) => string panic
 get_char: () => string?
 clear_input_buffer: () => void
 ```
@@ -535,7 +535,7 @@ clear_input_buffer: () => void
 **`process`** — import { ... } from process — 4 name(s)
 
 ```text
-sleep: (seconds: float) => void
+sleep: (seconds: float) => void panic
 exit: (code: int) => never uses var process
 user_name: () => string!
 cpu_count: () => int
@@ -586,7 +586,7 @@ as_object: (j: Json) => Map<string, Json>?
 as_object: (j: Json?) => Map<string, Json>?
 as_object: (j: Json!) => Map<string, Json>!?
 as_object: (j: Json!?) => Map<string, Json>!?
-encode: <indent: int? = null> (value: T) => string when has_json_form::<T>()
+encode: <indent: int? = null> (value: T) => string panic when has_json_form::<T>()
 decode_as: (source: string) => T! when has_json_form::<T>()
 decode_as: (source: Json) => T! when has_json_form::<T>()
 ```
@@ -602,9 +602,9 @@ sha256: (text: string) => string
 
 ```text
 ref: (v: T) => Ref<T>
-get: (r: Ref<T>) => T uses r
-set: (r: Ref<T>, v: T) => T uses var r
-update: (r: Ref<T>, f: (x: T) => T pure) => T uses var r
+get: (r: Ref<T>) => T panic uses r
+set: (r: Ref<T>, v: T) => T panic uses var r
+update: (r: Ref<T>, f: (x: T) => T pure) => T panic uses var r
 ```
 
 **`re`** — import { ... } from re — 7 name(s)
@@ -629,8 +629,8 @@ unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 **`test_support`** — import { ... } from test_support — 5 name(s)
 
 ```text
-rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
-thread_count: () => int uses process
+rendezvous: (parties: int, timeout: float) => int panic uses var rendezvous_point
+thread_count: () => int panic uses process
 with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
 with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
 arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_function::<F>()
@@ -708,7 +708,7 @@ rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, prote
 saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! panic when is_function::<F>()
 extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
 run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! panic when is_function::<F>()
-check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
+check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport panic
 check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic when is_function::<F>()
 check_text: (r: CheckReport) => string
 coverage_table: string
@@ -738,28 +738,28 @@ device: () => string! uses var driver
 **`pyplot`** — import { ... } from pyplot — 1 name(s)
 
 ```text
-plot: (data: i32[]) => void
-plot: (data: int[]) => void
-plot: (data: f32[]) => void
-plot: (data: float[]) => void
-plot: (data: i32[], filename: string) => void
-plot: (data: int[], filename: string) => void
-plot: (data: f32[], filename: string) => void
-plot: (data: float[], filename: string) => void
+plot: (data: i32[]) => void panic
+plot: (data: int[]) => void panic
+plot: (data: f32[]) => void panic
+plot: (data: float[]) => void panic
+plot: (data: i32[], filename: string) => void panic
+plot: (data: int[], filename: string) => void panic
+plot: (data: f32[], filename: string) => void panic
+plot: (data: float[], filename: string) => void panic
 ```
 
 **`python`** — import { ... } from python — 9 name(s)
 
 ```text
-exec: (code: string) => void!
-eval: (expression: string) => PyObject!
-run_file: (path: string) => void!
-import_module: (name: string) => PyObject!
-attr: <name: string> (obj: PyObject) => PyObject!
-call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
-to_string: (obj: PyObject) => string!
-to_py: (x: T) => PyObject! when has_python_form::<T>()
-from_py: (obj: PyObject) => T! when has_python_form::<T>()
+exec: (code: string) => void! panic
+eval: (expression: string) => PyObject! panic
+run_file: (path: string) => void! panic
+import_module: (name: string) => PyObject! panic
+attr: <name: string> (obj: PyObject) => PyObject! panic
+call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject! panic
+to_string: (obj: PyObject) => string! panic
+to_py: (x: T) => PyObject! panic when has_python_form::<T>()
+from_py: (obj: PyObject) => T! panic when has_python_form::<T>()
 ```
 
 **`nn`** — import { ... } from nn — 19 name(s)
@@ -882,8 +882,8 @@ vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...] when is_numeric::<
 **`sim`** — import { ... } from sim — 2 name(s)
 
 ```text
-pi_hits: (samples: int, seed: int) => int
-asian_call_price: (paths: int, steps: int, seed: int) => float
+pi_hits: (samples: int, seed: int) => int panic
+asian_call_price: (paths: int, steps: int, seed: int) => float panic
 ```
 
 **`onnx`** — import { ... } from onnx — 2 name(s)

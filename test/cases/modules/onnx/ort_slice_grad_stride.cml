@@ -1,9 +1,9 @@
 /**
  * A slice whose step is not 1, and its adjoint, exported to ONNX: `:op/slice_sub` takes any
  * non-zero step (design principles 5.4), so a slice takes the positions the step names along the
- * axis it slices -- every second position for `[0:5:2]`, the positions 5 and 3 for `[5:1:-2]`,
- * and two positions of every row for `[:, :0:-2]` -- and the gradient of a value a slice produced
- * goes back to exactly those positions.
+ * axis it slices -- every second position for `range(0, 5, 2)`, the positions 5 and 3 for
+ * `range(5, 1, -2)`, and two positions of every row for `[.., range(3, 0, -2)]` -- and the
+ * gradient of a value a slice produced goes back to exactly those positions.
  *
  * The loss slices three times: with a step of 2, with a negative step of 2, and along the second
  * axis of a rank-2 value, with a negative step whose start the source left out.

@@ -266,7 +266,7 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
     // Effects executed while a call is evaluated ahead of time are traced with stage "macro".
     camel::core::effect_trace::MacroStageScope macroStage;
     try {
-        GCGraph *runtimeGraph = candidate.runtimeGraph;
+        auto *runtimeGraph = candidate.runtimeGraph;
         const auto *node      = runtimeGraph ? runtimeGraph->node(candidate.nodeRef) : nullptr;
         if (node == nullptr) {
             return std::nullopt;

@@ -48,7 +48,7 @@ struct OperatorSurface {
 OperatorSurface operatorSurface(const rt::Program &program) {
     OperatorSurface surface;
     auto &table = core::OperatorTable::instance();
-    for (const rt::GCGraph *graph : rt::collectReachableGraphs(program, program.root())) {
+    for (const auto *graph : rt::collectReachableGraphs(program, program.root())) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const auto ref   = it.ref();
             const auto *node = *it;

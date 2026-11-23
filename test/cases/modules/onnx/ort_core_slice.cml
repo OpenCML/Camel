@@ -21,10 +21,12 @@
  *
  * The sign of the step is one node and one encoding, so every backward slice of the family below
  * is paired with the forward slice that writes the same bounds and the two are read side by side:
- * `[5:1:-2]` with `[1:5:2]`, `[3::-2]` with `[3::2]`, `[::-2]` with `[::2]`, `[::-1]` with `[:]`,
- * and `[:, ::-2]` with `[:, ::2]`. A backward slice's end that the source did not write is the
- * position before the first element, which the kernel reads as -1 (`src/builtin/operators/
- * struct.cpp`, `sliceRange`); ONNX names that position with an end below every extent and clamps a
+ * `range(5, 1, -2)` with `range(1, 5, 2)`, `range(3, -1, -2)` with `range(3, n, 2)`,
+ * `range(n - 1, -1, -2)` with `range(0, n, 2)`, `range(n - 1, -1, -1)` with `[..]`, and
+ * `[.., range(3, -1, -2)]` with `[.., range(0, 4, 2)]`, where `n` is the extent of the axis. A
+ * backward slice's end that the source did not write is the position before the first element,
+ * which the kernel reads as -1 (`src/builtin/operators/struct.cpp`, `sliceRange`); ONNX names
+ * that position with an end below every extent and clamps a
  * negative step's end to -1, where an end of -1 would be added to the extent and read as the axis'
  * last position instead, leaving the slice empty. MODE=sweep is that same backward slice of an axis
  * whose extent only the run knows, which is where the encoding has to name the position without the
