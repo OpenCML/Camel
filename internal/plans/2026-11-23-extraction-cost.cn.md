@@ -12,7 +12,7 @@
 
 1. **内核只留机制**：`extractWritings(ctx, program, const CostModel &)` 与 `CostModel` 这个接口保留；内核里的代价表、两个内置模型、`findCostModel`、`registerCostModel`、`kWritingsCostModel` 全部删除。
 2. **代价是函数值，由目标库提供**：标准库给一个默认代价（今天 `weighted` 的意思，但它判"贵"读的是算子记录上声明的性质——在登记时写进记录，例如相对代价——不按算子名字）；CPU、tiles、GPU 等目标库各自导出自己的代价函数。代价函数能读节点的算子、操作数的形状事实、算子记录上的性质。
-3. **一条路**：`std::cxx::extract` 的参数改成函数值（命令行上按限定名给出，如 `std::cxx::extract cost=std::cost::default`），与 `rewrite::extract<cost>` 同一个参数形状；两者最终都走内核的 `extractWritings`。
+3. **一条路，一个入口**：删掉 `std::cxx::extract`，提取只有 `rewrite::extract<cost>`。把 Camel 函数变成代价模型的那一层（`CamelCostModel`）在 rewrite 模块，它链 graph、认得 `Node`；`libcamel` 不能反向链模块，所以 C++ 的入口要么另造一座桥、要么不存在——取后者。命令行把 Camel 函数当遍用（`docs/cli.md`「A pass written in Camel」），函数型遍参数让它写成 `rewrite::extract cost=std::cost::default`。
 4. **不做隐式提取**：pass.cpp 那段删掉；程序带着多种写法交给后端或导出器时，报 `PassNeedsExtraction`，诊断写明"在它前面加一个写明代价的提取"。若默认流水线里有饱和，它也写明提取与所用代价。
 5. **按共享计**：同一个值被多处读，只计一次代价（按有共享的图算，不展开成树）；若现在的实现按树计，改过来。
 
