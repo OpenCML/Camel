@@ -338,14 +338,26 @@ export function getGitVersion() {
  * every reconfigure recompiled config.cpp (17 s) and repl.cpp (15 s) even when not one byte of the
  * tree had moved: a gate re-run on an unchanged tree paid 43 s of rebuild for a new timestamp.
  *
- * Pin it to what actually produces the binary -- the source content, the configuration and the
- * option flags -- in `build/footprint.json`. A rebuild of the same tree keeps the same stamp (no
- * recompile); a changed tree, configuration or option set gets a new one, so two different builds
- * still print different stamps. Deleting `build/` drops the pin and stamps afresh.
+ * It is now a function of the tree and of nothing else: the first 12 hex digits of the build key
+ * (configuration, option flags and the source fingerprint, hashed together) plus the `git describe`
+ * marker when git answers. Two properties follow, and both are what a reader of a reading needs:
+ *
+ *   * the same build prints the same stamp -- in a checkout that was built last week, in one
+ *     rebuilt from scratch, and in a worktree that never saw the earlier build, because the stamp
+ *     does not depend on `build/` surviving. A stamp minted from a timestamp named the *moment a
+ *     configure happened*, so a rebuild of unchanged sources either kept an old time or got a new
+ *     one; either way it was not a name for the build.
+ *   * a different build prints a different stamp -- other sources, another configuration or another
+ *     option set -- and the difference is visible in the string itself, not only in
+ *     `build/footprint.json` on the machine that built it.
+ *
+ * `build/footprint.json` stays: it records which content a configure stamped (`key`, `fingerprint`,
+ * `writtenAt`), which is what the log and the `-NoBuild` guard read. It is a record of the build,
+ * not the source of the stamp.
  */
-function pinnedFootprint(config, cmakeOptionFlags, gitVersion) {
-    const pinPath = path.join(BASEDIR, 'build', 'footprint.json')
-    const fingerprint = sourceFingerprint(BASEDIR)
+export function pinnedFootprint(config, cmakeOptionFlags, gitVersion, root = BASEDIR) {
+    const pinPath = path.join(root, 'build', 'footprint.json')
+    const fingerprint = sourceFingerprint(root)
     const key = createHash('sha256')
         .update(config)
         .update('\0')
@@ -353,18 +365,23 @@ function pinnedFootprint(config, cmakeOptionFlags, gitVersion) {
         .update('\0')
         .update(fingerprint.hash)
         .digest('hex')
+    // The stamp itself, computed before the pin is read: it is a function of the build, so a pin that
+    // disagrees with it (a `build/` left by an older rule, a checkout copied from another machine)
+    // cannot rename the build.
+    const footprint = key.slice(0, 12) + (gitVersion ? `_${gitVersion}` : '')
+    let pinned = null
     try {
         const pin = JSON.parse(fs.readFileSync(pinPath, 'utf-8'))
-        if (pin.key === key && typeof pin.footprint === 'string' && pin.footprint) {
-            logStep(`Footprint ${pin.footprint} reused: sources, configuration and options unchanged`)
-            return pin.footprint
+        if (pin.key === key && pin.footprint === footprint) {
+            pinned = pin
         }
     } catch {
-        // No pin yet (first configure, or build/ was removed): stamp afresh below.
+        // No pin yet (first configure, or build/ was removed): recorded below.
     }
-    const footprint =
-        new Date().toISOString().replace(/[-:]/g, '').replace(/[T]/g, '_').slice(2, 15) +
-        (gitVersion ? `_${gitVersion}` : '')
+    if (pinned) {
+        logStep(`Footprint ${footprint} reused: sources, configuration and options unchanged`)
+        return footprint
+    }
     fs.mkdirSync(path.dirname(pinPath), { recursive: true })
     fs.writeFileSync(
         pinPath,

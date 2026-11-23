@@ -18,6 +18,8 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `camel-test.ps1` | Local helper: one plan run at a time under a lock of its own, publishing to the panel's test state file. |
 | `watch-fsh-dev.ps1` | Watcher for a branch moving on `origin`; not a gate entry and unrelated to the two locks. |
 | `camel-gate-config.ps1` | The loader the four scripts above use for their machine-local settings. |
+| `camel-remote-args.ps1` | The argument rules `camel-remote.ps1` applies before it pushes anything: comma-split lists (`-Plan`, `-AstOnly`, `-AstDrop`), the `--only`/`--drop` words built from them, and the refusal for a glob that names no `.cml` of this tree. Separated out because those rules are the part that used to fail silently on the host. |
+| `camel-remote-args.test.ps1` | Their test, run without a host: `pwsh -NoProfile -File internal/tools/camel-remote-args.test.ps1` prints `N checks, M failed` and exits 1 on a failure. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
 
 ## The machine-local settings file
@@ -86,8 +88,9 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-NoGpuWatch` | Leave out the gpu observation: every run that takes a reading also runs `test/plans/gpu` once and prints one `check=gpu-plans … mode=report` line. |
 | `-Changed` | Run the plans the change touches (`--changed`) instead of a written list. The change is listed here, where the base branch is readable, and handed to the host as `--changed-files`; a base that cannot be read is exit 2 before the push, and it never widens to the whole fast layer. |
 | `-ChangedBase <rev>` | The base for `-Changed`. Default `origin/develop`. Unreadable here is exit 2, naming the revision. |
-| `-UpdateGolden` | Rewrite the named plans' goldens instead of checking them. It rewrites `kind = "snapshot"` goldens only. |
+| `-UpdateGolden` | Rewrite the named plans' goldens instead of checking them. It rewrites `kind = "snapshot"` goldens only, and brings every golden the run rewrote back into this tree -- all of them or none: a transfer that did not finish writes nothing and is exit 2, because the recording run is green against the files it just wrote while the next run is red against the old ones. |
 | `-UpdateAstHashes` | Re-record the front-end AST snapshot: runs `test/tools/parsecheck/check.py snapshot --update` on the host, before the plan, and writes `test/plans/feat/parse/golden/ast_hashes.txt` back into this tree. It is the only way a new `.cml` case reaches that record, because `-UpdateGolden` cannot (`frontend.ast_snapshot` is `tool = "python"` and the runner never passes it `--update`). Name the parse plan beside it to verify the record in the same call. The write-back refuses a record that loses a row whose `.cml` file this tree still has, and refuses a bulk re-record (no `-AstOnly`) that loses any row, so a re-record taken on a tree that is missing another lane's files cannot delete their rows. |
+| `-AstOnly <glob>[,...]` | With `-UpdateAstHashes`: name the cases the re-record rewrites. Commas split the list, so `-AstOnly 'a.cml,b.cml'` -- including what `pwsh -File` makes of `'a','b'` -- is two globs; repeating the parameter is a PowerShell binding error, and has to be written as one of those two forms. A glob that names no `.cml` of this tree is exit 2 before the push: a narrowing that selects nothing is a bulk re-record, which is exactly what the flag exists to prevent. |
 | `-AstDrop <path>[,...]` | With `-UpdateAstHashes`: a recorded path whose row this re-record may lose (a case that really is deleted). Each name is printed as it is dropped, and a name that no row was dropped for is printed too. Without it the write-back refuses the drop. |
 | `-Clean` | Delete this worktree's host checkout, build directory included, and stop. |
 | `-StackTrace` | Diagnostic build with assertion stack traces. Its readings do not decide green or red. |

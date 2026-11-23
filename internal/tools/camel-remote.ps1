@@ -404,6 +404,9 @@ $ErrorActionPreference = 'Stop'
 # kept apart from an empty one. Its own file because it is the one decision here that can delete
 # another lane's work, and `camel-remote-cleanup.test.ps1` has to be able to call it.
 . (Join-Path $PSScriptRoot 'camel-remote-live.ps1')
+# The command-line lists and what a badly-given one means. Also its own file, for the same reason:
+# `camel-remote-args.test.ps1` measures the binding rule without a host.
+. (Join-Path $PSScriptRoot 'camel-remote-args.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{
     stateDir         = $StateDir
     hostLibStdCxxDir = $LibStdCxxDir
@@ -421,7 +424,12 @@ $remoteName = $sshHost
 
 # `-File script.ps1 -Plan a,b` can arrive as the single string "a,b"; split and drop empties so
 # `target = $Plan[0]` is a real target and the plan list matches what camel-test.ps1 publishes.
-$Plan = @($Plan | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+# The same rule for the two recording lists: `pwsh -File` does not split a comma, so `-AstOnly
+# 'a','b'` is one glob named `a,b` unless it is split here -- and a narrowing that selects nothing is
+# a whole-record re-record, which is what `-AstOnly` exists to prevent (`camel-remote-args.ps1`).
+$Plan = @(Split-CamelArgList -Values $Plan)
+$AstOnly = @(Split-CamelArgList -Values $AstOnly)
+$AstDrop = @(Split-CamelArgList -Values $AstDrop)
 
 # The checkers -Check knows, in the order `all` runs them. Every entry is the invocation the
 # repository already uses, so this channel cannot drift into checking something else than the gate
@@ -512,6 +520,14 @@ $checkers = [ordered]@{
     # so `-NoBuild` after one needs `-AllowStale` -- the parser's reading of a file does not depend
     # on the tree its binary was built from, which is the one thing that stamp cannot know.
     'ast-hashes'          = @{ script = 'scripts/check-ast-hashes.mjs'; args = @(); compiler = $true }
+    # The build stamp's two directions, measured on a tree it writes in the temp directory: the same
+    # content stamps the same in a fresh configure, one byte of build-read content moves it, and a
+    # document edit does not. `BUILD_FOOTPRINT` is the only name a reading carries for the binary
+    # that produced it, so the two properties are what make two readings comparable -- and a stamp
+    # that names a wall clock instead has to be read as "the same" or "different" with the reader's
+    # own memory, which is what this lane replaced. A wall: pure static reading, about a second, no
+    # compiler and no install.
+    'build-stamp'         = @{ script = 'scripts/check-build-stamp.mjs'; args = @(); compiler = $false }
     # A comment says what the code does and why; it does not record how the project got there. This
     # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake -- so a date or
     # a path that is data in a string literal is not its business, and it counts a comment that names
@@ -727,6 +743,18 @@ if ($AstOnly.Count -gt 0 -and -not $UpdateAstHashes) {
 # reads, and with no write-back there is nothing that could honour it.
 if ($AstDrop.Count -gt 0 -and -not $UpdateAstHashes) {
     Write-Host "[camel-remote] -AstDrop names a row -UpdateAstHashes may lose; give -UpdateAstHashes, or drop -AstDrop"
+    exit 2
+}
+# And the narrowing itself has to narrow. A glob that names no `.cml` of this tree, or a flag that
+# arrived with nothing after the split, reaches the host as `--only` selecting none -- where the
+# answer is a sentence about the selection rather than about the flag, one host run later. Both are
+# refused here, from the flag's own name.
+$astProblems = @()
+if ($PSBoundParameters.ContainsKey('AstOnly')) {
+    $astProblems += @(Get-CamelGlobProblems -Globs $AstOnly -Flag '-AstOnly' -Root $Path -Named)
+}
+if ($astProblems.Count -gt 0) {
+    foreach ($problem in $astProblems) { Write-Host "[camel-remote] $problem" }
     exit 2
 }
 
@@ -1000,6 +1028,17 @@ $astPayloadText = $null
 # The file `-FetchFile` asks for: same shape as the AST record above.
 $fetchCapture = $null
 $fetchPayloadText = $null
+# The goldens a `-UpdateGolden` run rewrote (`-UpdateGolden` only): one payload per file, the count
+# the host announced after the last one, and whether the host could read its own list at all. They
+# are written together or not at all -- a set that arrived in part is the tree-keeps-old-goldens
+# state the stage exists to end.
+$goldenOpen = $false
+$goldenEnded = $false
+$goldenList = @()
+$goldenPath = ''
+$goldenBuf = $null
+$goldenCount = -1
+$goldenState = ''
 $lastRunPublish = [datetime]::MinValue
 
 # One line per run for the panel's run registry. `slot` stays null (the host does not report which
@@ -1344,10 +1383,10 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # `-NoBuild` the record is taken by whatever the host built last. `-NoBuild` therefore appends
     # `(NOT REBUILT -- may be stale)` to that line rather than leaving it looking like a fresh build.
     $astBuiltNote = if ($NoBuild) { ' (NOT REBUILT -- may be stale)' } else { '' }
-    $astOnlyArgs = ($AstOnly | ForEach-Object { " --only '$_'" }) -join ''
+    $astOnlyArgs = Get-AstOnlyArgs -AstOnly $AstOnly
     # The rows the recording may lose, by path as the record spells it: the host's guard refuses a
     # drop it was not told about, and this is what tells it (`check.py`, `--drop`).
-    $astDropArgs = ($AstDrop | ForEach-Object { " --drop '$_'" }) -join ''
+    $astDropArgs = Get-AstDropArgs -AstDrop $AstDrop
 # The file `-FetchFile` asks for, sent back the same way the AST record is: base64 between two
 # markers, after the plan. It runs after `RUN_EXIT` so a record the plan wrote is complete, and it
 # names the path when the host has nothing there -- a fetch that silently sends nothing would look
@@ -1381,6 +1420,71 @@ echo '__CAMEL_REMOTE_AST_FILE_BEGIN__'
 base64 "$R/test/plans/feat/parse/golden/ast_hashes.txt"
 echo '__CAMEL_REMOTE_AST_FILE_END__'
 '@.Replace('TAG', $verifyTag).Replace('NOTE', $astBuiltNote).Replace('ONLY', $astOnlyArgs).Replace('DROP', $astDropArgs)
+    } else { ':' }
+
+    # Every golden `--update-golden` rewrote, sent back the way the AST record is: base64 between two
+    # markers, on the same stream, after the plan.
+    #
+    # The host checkout is reset to the patch on every run, so a golden written there and not carried
+    # back is gone by the next run -- and the two runs read differently: the recording run is green
+    # (it just wrote the file it compares with) and the next run is red against the old file. That
+    # reading has been attributed to a stale build and to nondeterministic output, and it is neither;
+    # it is a record that never came home. Only the AST record used to travel back, so every other
+    # `kind = "snapshot"` golden stayed on the host.
+    #
+    # Which files: what this run *wrote*, by mtime against a marker created just before the plan.
+    # The first attempt here read `git status` instead, and it answered zero on a run that had
+    # rewritten a golden: the update writes the file it just compared with, so a golden whose
+    # recorded content is the committed one is invisible to `git status` while still being a write
+    # this tree needed. A marker is the honest question -- "which files did this run touch" -- and it
+    # also catches a golden rewritten to the same bytes, which is exactly the case that has to show
+    # up as "already identical" rather than as silence.
+    #
+    # The listing is restricted to a `golden/` directory because that is where `run-tests.mjs`
+    # resolves `test.golden`. Anything else a run leaves behind is a `[TREE]` red, not a recording,
+    # and is deliberately not carried: fetching it would let a tree look tested by a file the test
+    # wrote. `GOLDENS_STATE` separates "the run rewrote none" from "the list could not be read": both
+    # would otherwise arrive as `GOLDENS_COUNT=0`. The AST record is excluded because the stage above
+    # owns it (`-UpdateGolden` cannot record it, and two carriers would let the wrong copy win).
+    $goldenMark = if ($UpdateGolden) {
+        @'
+gmarker=SCRATCH/golden-marker
+rm -f "$gmarker"
+touch "$gmarker" || echo '[camel-remote] could not mark the start of the plan: the goldens it rewrites cannot be listed afterwards'
+'@.Replace('SCRATCH', $remoteScratch)
+    } else { ':' }
+    $goldenStage = if ($UpdateGolden) {
+        @'
+echo '__CAMEL_REMOTE_GOLDENS_BEGIN__'
+gmarker=SCRATCH/golden-marker
+glist=/tmp/camel-goldens.$$
+gstate=read
+if [ ! -f "$gmarker" ]; then
+    gstate=unmarked
+elif ! find "$R" \( -path "$R/out" -o -path "$R/build" -o -path "$R/.git" \) -prune -o -type f -path '*/golden/*' -newer "$gmarker" -print0 > "$glist" 2>/dev/null; then
+    gstate=unread
+fi
+if [ "$gstate" != read ]; then
+    echo "[camel-remote] the goldens this run wrote could not be listed ($gstate); nothing was carried back"
+fi
+gcount=0
+if [ "$gstate" = read ]; then
+    while IFS= read -r -d '' gfull; do
+        gpath=${gfull#"$R"/}
+        # The AST record is the previous stage's, never this one's.
+        if [ "$gpath" = 'test/plans/feat/parse/golden/ast_hashes.txt' ]; then continue; fi
+        gcount=$((gcount + 1))
+        echo "GOLDEN_PATH=$gpath"
+        echo '__CAMEL_REMOTE_GOLDEN_BEGIN__'
+        base64 "$gfull"
+        echo '__CAMEL_REMOTE_GOLDEN_END__'
+    done < "$glist"
+fi
+rm -f "$glist"
+echo "GOLDENS_COUNT=$gcount"
+echo "GOLDENS_STATE=$gstate"
+echo '__CAMEL_REMOTE_GOLDENS_END__'
+'@.Replace('SCRATCH', $remoteScratch)
     } else { ':' }
 
     # One block per checker: a header naming it and the command it runs, the command's own stdout and
@@ -1836,9 +1940,11 @@ $planMarker
 # stack of a mistyped plan path), so without this the caller gets `RUN_EXIT=1` and not one word of
 # why -- a red that says nothing, indistinguishable from a run that measured nothing. Do not remove
 # the `2>&1`: it is what puts the reason on the same stream as RUN_EXIT, in the order it happened.
+$goldenMark
 $runPlan 2>&1
 code=`$?
 echo "RUN_EXIT=`$code"
+$goldenStage
 $fetchStage
 # Released here, before the checkers: they read a finished run and need no exclusion.
 exec 7>&- 2>/dev/null
@@ -1924,6 +2030,46 @@ exit `$code
             }
             if ($null -ne $fetchCapture) {
                 [void]$fetchCapture.Append($cleanLine)
+                return
+            }
+            # The goldens a `-UpdateGolden` run rewrote: one block, a path line and a base64 payload
+            # per file, then the count and the state of the host's own listing. Collected here and
+            # written together after the run; every line inside the block is consumed, so a stage
+            # message is printed under this branch rather than falling through to the parsers below.
+            if ($line -match '__CAMEL_REMOTE_GOLDENS_BEGIN__') {
+                $goldenOpen = $true
+                $goldenList = @()
+                $goldenPath = ''
+                $goldenBuf = $null
+                $goldenCount = -1
+                $goldenState = ''
+                return
+            }
+            if ($line -match '__CAMEL_REMOTE_GOLDENS_END__') {
+                $goldenOpen = $false
+                $goldenEnded = $true
+                return
+            }
+            if ($goldenOpen) {
+                if ($cleanLine -match '^GOLDEN_PATH=(.+)$') {
+                    $goldenPath = $Matches[1]
+                } elseif ($cleanLine -match '^GOLDENS_COUNT=(\d+)$') {
+                    $goldenCount = [int]$Matches[1]
+                } elseif ($cleanLine -match '^GOLDENS_STATE=(\w+)$') {
+                    $goldenState = $Matches[1]
+                } elseif ($line -match '__CAMEL_REMOTE_GOLDEN_BEGIN__') {
+                    $goldenBuf = New-Object System.Text.StringBuilder
+                } elseif ($line -match '__CAMEL_REMOTE_GOLDEN_END__') {
+                    if ($null -ne $goldenBuf -and $goldenPath) {
+                        $goldenList += [pscustomobject]@{ path = $goldenPath; payload = $goldenBuf.ToString() }
+                    }
+                    $goldenBuf = $null
+                    $goldenPath = ''
+                } elseif ($null -ne $goldenBuf) {
+                    [void]$goldenBuf.Append($cleanLine)
+                } else {
+                    Write-Host $line
+                }
                 return
             }
             if ($line -match '^AST_UPDATE_EXIT=(\d+)\s*$') {
@@ -2139,6 +2285,77 @@ exit `$code
     $run.exit = $code
     $run.phase = if ($code -eq 0) { 'done' } else { 'fail' }
     Publish-Run
+
+    # The goldens a `-UpdateGolden` run rewrote, written as one set. The recording run is green
+    # because it compared against the files it had just written; if those files stay on the host, the
+    # next run compares the same tree against the old ones and is red -- the "recorded green, red on
+    # the next run" reading that gets attributed to a stale build or to nondeterministic output.
+    #
+    # So this is all or nothing. Four conditions, and a failure writes nothing and is exit 2 (the
+    # transfer's failure, not the tests'): the block reached its end marker, the host read its own
+    # list (`GOLDENS_STATE=read`; `unread` would otherwise arrive as a count of zero), the number of
+    # payloads equals the count the host announced, and every payload decodes to a path inside this
+    # tree's `golden/` directories. The last one is also what stops a host path from reaching this
+    # checkout at all.
+    if ($UpdateGolden) {
+        $goldenProblems = @()
+        if (-not $goldenEnded) {
+            $goldenProblems += 'the host did not finish sending the goldens it rewrote (no end marker); nothing was written'
+        } elseif ($goldenState -ne 'read') {
+            $goldenProblems += "the host could not read the list of goldens it rewrote (GOLDENS_STATE='$goldenState'); nothing was written"
+        } elseif ($goldenCount -ne $goldenList.Count) {
+            $goldenProblems += ("the host said it rewrote {0} golden(s) and {1} arrived; nothing was written" -f $goldenCount, $goldenList.Count)
+        } else {
+            $goldenFiles = @()
+            foreach ($golden in $goldenList) {
+                $rel = ($golden.path -replace '\\', '/')
+                if ($rel.StartsWith('/') -or $rel -match '(^|/)\.\.(/|$)' -or $rel -notmatch '(^|/)golden/') {
+                    $goldenProblems += "the host named a path this write may not take: '$rel'"
+                    continue
+                }
+                $payload = ($golden.payload -replace '\s', '')
+                if ($payload.Length -eq 0 -or $payload.Length % 4 -ne 0 -or
+                    $payload -notmatch '^[A-Za-z0-9+/]*={0,2}$') {
+                    $goldenProblems += ("'{0}': the payload did not arrive intact ({1} chars, length mod 4 = {2})" -f $rel, $payload.Length, ($payload.Length % 4))
+                    continue
+                }
+                $goldenFiles += [pscustomobject]@{ path = $rel; bytes = [System.Convert]::FromBase64String($payload) }
+            }
+            if ($goldenProblems.Count -eq 0) {
+                $goldenWritten = 0
+                $goldenSame = 0
+                foreach ($golden in $goldenFiles) {
+                    $target = Join-Path $Path $golden.path
+                    $before = if (Test-Path -LiteralPath $target) { [System.IO.File]::ReadAllBytes($target) } else { $null }
+                    $identical = $null -ne $before -and $before.Length -eq $golden.bytes.Length
+                    if ($identical) {
+                        for ($i = 0; $i -lt $before.Length; $i++) {
+                            if ($before[$i] -ne $golden.bytes[$i]) { $identical = $false; break }
+                        }
+                    }
+                    if ($identical) {
+                        $goldenSame++
+                        Write-Host ("[camel-remote]   golden {0} ({1} bytes) already identical" -f $golden.path, $golden.bytes.Length)
+                        continue
+                    }
+                    $dir = Split-Path -Parent $target
+                    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+                    [System.IO.File]::WriteAllBytes($target, $golden.bytes)
+                    $goldenWritten++
+                    Write-Host ("[camel-remote]   golden {0} ({1} bytes) written" -f $golden.path, $golden.bytes.Length)
+                }
+                # The reading that matters: how many of the goldens this run rewrote are still the
+                # old file in this tree. Zero after the write, by construction; the line says so with
+                # both counts, so "nothing to carry" and "carried nothing" cannot read alike.
+                Write-Host ("[camel-remote] goldens: {0} rewritten on the host, {1} written here, {2} already identical, {3} left stale in this tree" -f `
+                    $goldenFiles.Count, $goldenWritten, $goldenSame, 0)
+            }
+        }
+        if ($goldenProblems.Count -gt 0) {
+            foreach ($goldenProblem in $goldenProblems) { Write-Host ("[camel-remote] goldens: {0}" -f $goldenProblem) }
+            if ($code -eq 0) { $code = 2 }
+        }
+    }
 
     # The AST snapshot record (`-UpdateAstHashes`): the host sent back the file it recorded, and this is
     # where it lands in this tree. All three conditions must hold -- the stage said it recorded, the
