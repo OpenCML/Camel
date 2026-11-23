@@ -3516,26 +3516,10 @@ const GCUseIndex &GCGraph::uses() const {
 }
 
 const ExecPlan &GCGraph::execPlan() const {
-    if (ExecPlan *known = execPlan_.load(std::memory_order_acquire)) {
-        return *known;
-    }
-    if (!executable()) [[unlikely]] {
-        throw std::logic_error(
-            "Graph '" + name() +
-            "' has values with several writings: it has no execution plan "
-            "until they are extracted.");
-    }
-    ExecPlan *built    = buildExecPlan(*this).release();
-    ExecPlan *expected = nullptr;
-    if (!execPlan_.compare_exchange_strong(
-            expected,
-            built,
-            std::memory_order_acq_rel,
-            std::memory_order_acquire)) {
-        delete built; // another thread was first
-        return *expected;
-    }
-    return *built;
+    // The plan is the fact `std.execPlan` of the module that reads it: the store answers, and a
+    // kind that is not registered is an error about the kind rather than a plan computed here
+    // (camel/runtime/exec_plan.h, `execPlanOf`).
+    return *execPlanOf(*this);
 }
 
 GCGraph::~GCGraph() {
@@ -3548,7 +3532,6 @@ GCGraph::~GCGraph() {
     delete static_cast<const camel::graph::GraphView *>(viewCache_);
     viewCache_ = nullptr;
     delete uses_.load(std::memory_order_acquire);
-    delete execPlan_.load(std::memory_order_acquire);
 }
 
 void GCGraph::releaseNodeChunks() {

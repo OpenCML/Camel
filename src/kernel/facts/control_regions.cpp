@@ -40,6 +40,8 @@ std::uint32_t parentControlOf(
     return parent == 0 || parent >= tree.enclosing.size() ? 0u : tree.enclosing[parent];
 }
 
+} // namespace
+
 /// The store of the frozen graphs' facts. See the file comment for why its version is constant and
 /// why it is never destroyed.
 Store &frozenGraphFacts() {
@@ -51,8 +53,6 @@ Store &frozenGraphFacts() {
         true);
     return *store;
 }
-
-} // namespace
 
 namespace {
 

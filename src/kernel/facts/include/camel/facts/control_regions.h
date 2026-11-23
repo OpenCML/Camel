@@ -57,6 +57,13 @@ struct ControlRegionTree {
 /// The id of the kind `core.controlRegions`, registered the first time it is asked for.
 KindId controlRegionKind();
 
+/// The store the frozen graphs' facts are kept in: one store for the process's frozen graphs, keyed
+/// by the graph as a value, whose entries end when their graph does (`forgetGraph`). It is how a
+/// kind whose computation lives in a module reaches the store -- `std.execPlan` is one
+/// (camel/runtime/exec_plan.h, `execPlanOf`) -- because a module registers and computes a kind but
+/// does not own the store its answers are kept in.
+Store &frozenGraphFacts();
+
 /// The control regions of `graph`, built the first time it is asked for and kept while the graph
 /// lives: the one place the tree is computed. `graph` is the graph as a value, which is what the
 /// fact is anchored on.

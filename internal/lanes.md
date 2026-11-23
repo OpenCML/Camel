@@ -14,6 +14,8 @@
 
 | lane/facts-b3 | 阶段 3 计划 3b 的余下五样：效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取。**只做了一样**：`ControlRegions`；其余四样各有一份「改前」读数与不挪的理由 | 首笔 **`38d24c183`**：`ControlRegions` 构造 13 处不变、**计算 13 → 1**（事实层 kind `core.controlRegions`），emitter 的按图缓存 `regions_` 删除，`ControlRegions` 只剩薄读；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` **2669/2664/0（known 5）是本轮唯一站得住的读数**（选择集内、可复现）；整层 fast 报 `9844/9644/135` skip 24，**这 135 是孤立数、不作读数引用**（基线那一跑 15:07 起主机超时，没送出去；按类看在本笔不碰的 docs/lsp/grammar/capacity/记号解析，另 2 个 gpu 红是主机 checkout 缺 `build/lib/tiles/Release/*`，与 `plan_validation` 同因）；事实层无回落：全树只有 `facts:control_regions.cpp#buildControlRegionTree` 会建树，`ControlRegions` 造不出来，拿不到树即抛 | 未合 | 第二笔（本行同笔）：形状先于第二样——`internal/questions/2026-11-23-who-owns-a-store.cn.md` 立四个问题（Store 生命周期 / `--facts` 接不接线 / 模块不在时报什么红 / 可变值与不可变表要不要拆 kind），头文件草案 `src/kernel/facts/include/camel/facts/store_owner.h` 只有声明、无 `.cpp`、无人 include，交作者裁；四件不裁，3b 其余四样一件也挪不动 | 2026-11-23 15:35 |
 
+| lane/exec-plan-kind | 作者裁定（`2026-11-23-who-owns-a-store` 末段 ③④）落在执行计划上的两半：kind 归 `std::exec` 登记、`GCGraph::execPlan_` 删掉、可变字段搬进按程序版本持有的对象 | 本笔：`git grep execPlan_ -- 'src/**'` 由 4 处（`graph.h` 的字段声明、`graph.cpp` 的两次读与析构里的 delete）**清零**；`ExecPlan` 不再有 `mutable` 字段（`fastVm`、`countedSites`、`resolvedOpers`、惰性 `nodes_` 表都离开），值整份不可变；读的人走 `execPlanOf`，kind 未登记时报「no such fact kind」且不回落去算 | 未取 | 等主机可达：`feat/compile` 对 `develop` 的读数、`smoke`、`feat/parse`；再把 `siteOfSlot` 这类每指令取一次计划的读法换成后端手里那份计划 | 2026-11-23 15:41 |
+
 ## 没开车道的一件
 
 | 项 | 为什么 |
