@@ -47,6 +47,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "graph_faces.view_ports"
+desc = "The face's port answer against the graph's own, node by node, on the branch graph: the nodes are enumerated from the graph and not from `view.nodes()`, so the JOIN a branch is closed by is compared too -- a walk over the view's nodes would skip exactly the node whose ports parted, and the reading would be green in the case it exists to catch. `[VP] agree=1` says every node the graph holds answers the same list on both sides, with the two counts printed so a run that compared nothing cannot pass as agreement. Red before the face answered a JOIN's ports: one line per node that differed, naming the group each missing port sits in (`norm#0` is the BRCH a join closes, `with#` are the values its arms hand out)."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::view_ports", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["join ref=", "[VP] agree=1 graphs=3 nodes=30 ports=32 joins=1 joinports=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "graph_faces.readings_body"
 desc = "The same readings on a graph whose body does work of its own (`arm_tail_gate_regions.cml`), after `test::regions` put its two blocks down: the plan reads the relations instead of that one graph's node numbers -- a reference five past the end answers nothing on both faces, the erased node is the last that is neither a port nor the answer, the branch is the graph's only BRCH with two arms on both, and the two faces name the same answer -- with five regions and two static slots on both."
 kind = "behavior"

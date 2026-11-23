@@ -45,9 +45,9 @@ const camel::graph::GraphView &camel::runtime::GCGraph::view() const {
 namespace camel::graph {
 namespace {
 
+using camel::runtime::GCGraph;
 using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
-using camel::runtime::GCGraph;
 
 /// A node of the frozen graph that the view has: the four kinds that become operators, the JOIN,
 /// the draft's placeholder and a removed place are not nodes of the view (the file comment).
@@ -63,6 +63,15 @@ bool viewHasNode(const GCNode *node) {
     default:
         return true;
     }
+}
+
+/// Whether the graph holds a node record at `ref`: the question `inputs`, `users` and
+/// `predecessors` ask. It is **not** `contains` (see graph_view.h): a JOIN, a DREF and a dead place
+/// hold a record and no kind, and their ports are a fact about the graph's edges that a reader
+/// standing on the numbering still needs -- a cut has to carry what a join's arms hand out.
+bool holdsRecord(const GCGraph &graph, NodeRef ref) {
+    return ref < static_cast<NodeRef>(graph.nodeCount()) &&
+           graph.node(static_cast<camel::runtime::gc_node_ref_t>(ref)) != nullptr;
 }
 
 /// The payload body of `ref` copied out of its bytes; false when the node has none or the payload
@@ -171,8 +180,8 @@ std::optional<::slot_t> FrozenGraphAdapter::constantOf(NodeRef ref) const {
     if (node == nullptr || node->kind != GCNodeKind::Data || node->dataIndex >= 0) {
         return std::nullopt;
     }
-    const auto index   = static_cast<std::size_t>(-node->dataIndex);
-    const auto &slots  = graph_.staticSlots();
+    const auto index  = static_cast<std::size_t>(-node->dataIndex);
+    const auto &slots = graph_.staticSlots();
     if (index >= slots.size()) {
         return std::nullopt;
     }
@@ -185,7 +194,7 @@ std::uint64_t FrozenGraphAdapter::originOf(NodeRef ref) const {
 
 std::span<const NodeRef> FrozenGraphAdapter::inputs(NodeRef ref, PortGroup group) const {
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
-    if (!contains(ref)) {
+    if (!holdsRecord(graph_, ref)) {
         return {};
     }
     switch (group) {
@@ -202,7 +211,7 @@ std::span<const NodeRef> FrozenGraphAdapter::inputs(NodeRef ref, PortGroup group
 
 std::span<const NodeRef> FrozenGraphAdapter::users(NodeRef ref, PortGroup group) const {
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
-    if (!contains(ref)) {
+    if (!holdsRecord(graph_, ref)) {
         return {};
     }
     switch (group) {
@@ -218,7 +227,7 @@ std::span<const NodeRef> FrozenGraphAdapter::users(NodeRef ref, PortGroup group)
 std::vector<NodeRef> FrozenGraphAdapter::predecessors(NodeRef ref, EdgeKind kind) const {
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
     std::vector<NodeRef> preds;
-    if (!contains(ref)) {
+    if (!holdsRecord(graph_, ref)) {
         return preds;
     }
     switch (kind) {
@@ -283,9 +292,9 @@ RegionRecord FrozenGraphAdapter::region(RegionId id) const {
         record.kind = RegionKind::Root;
         break;
     }
-    record.owner  = stored->owner == camel::runtime::kInvalidNodeRef
-                        ? kNoNode
-                        : static_cast<NodeRef>(stored->owner);
+    record.owner = stored->owner == camel::runtime::kInvalidNodeRef
+                       ? kNoNode
+                       : static_cast<NodeRef>(stored->owner);
     record.index = stored->index;
     // The body is in nothing; every other region is in at least the body, so the representation's
     // "0" is a real parent for everything but region 0 itself.
@@ -359,8 +368,7 @@ std::vector<RegionId> FrozenGraphAdapter::regionsOwnedBy(NodeRef ref) const {
         break;
     }
     case GCNodeKind::Loop: {
-        const camel::runtime::gc_node_ref_t loop =
-            static_cast<camel::runtime::gc_node_ref_t>(ref);
+        const camel::runtime::gc_node_ref_t loop = static_cast<camel::runtime::gc_node_ref_t>(ref);
         const std::uint32_t cond =
             graph_.loopRegionOf(loop, camel::runtime::GCRegionKind::LoopCond);
         const std::uint32_t body =
@@ -431,7 +439,7 @@ camel::core::OperId FrozenGraphAdapter::operatorOf(NodeRef ref) const {
 LoopForm FrozenGraphAdapter::loopFormOf(NodeRef ref) const {
     LoopForm form;
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
-    const GCNode *stored                      = graph_.node(node);
+    const GCNode *stored                     = graph_.node(node);
     if (stored == nullptr || stored->kind != GCNodeKind::Loop) {
         return form;
     }

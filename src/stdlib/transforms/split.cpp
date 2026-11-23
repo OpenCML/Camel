@@ -53,7 +53,7 @@ gc_node_ref_t branchConditionOf(const rt::GCGraph *graph, gc_node_ref_t join) {
 
 /// The node's data inputs: its norm inputs followed by its with inputs, in order (`dataInputsOf`
 /// below has the whole of it; the walk is written before it and needs the name).
-std::vector<gc_node_ref_t> dataInputsOf(const rt::GCGraph *graph, gc_node_ref_t ref);
+std::vector<gc_node_ref_t> dataInputsOf(const camel::graph::GraphView &view, gc_node_ref_t ref);
 
 /// What one half finds when it enters a region: which region, which arm of which branch, how many
 /// nodes live in it, and how many form ports it takes. This is the entrance a branch cut needs --
@@ -91,7 +91,7 @@ RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
         if (node->kind == rt::GCNodeKind::Brch) {
             ++walk.nestedBrchs;
         }
-        for (gc_node_ref_t input : dataInputsOf(graph, ref)) {
+        for (gc_node_ref_t input : dataInputsOf(graph->view(), ref)) {
             // A ref that is not a node of this graph is not in any region, and the region query no
             // longer answers the body for it: ask "is this a node" here (`containsNodeRef`), which
             // is the question, instead of leaning on a region query's fallback for a node that is
@@ -122,21 +122,13 @@ gc_node_ref_t ungated(const rt::GCGraph *graph, gc_node_ref_t ref) {
 /// The data ports of `ref`, in port order: the ordinary ones and then the context ones. The effect
 /// runs are not here on purpose -- a node that has one is refused, never copied without it.
 ///
-/// Read from the frozen graph, and not from `GraphView`: a joined BRCH is not a node of the view,
-/// and what a join carries out of its arms is one of its **with** ports. `walkRegion` walks every
-/// node of a region -- a join among them -- and counts what each reads from outside it, which is
-/// what a cut must carry; the walk that follows a value to the exit meets the join the same way. A
-/// face that answers nothing for a join would quietly drop those ports from both, so this one
-/// reader stays on the graph (`C-1123-17`, which names the same wall for the numbered walks).
-std::vector<gc_node_ref_t> dataInputsOf(const rt::GCGraph *graph, gc_node_ref_t ref) {
-    std::vector<gc_node_ref_t> inputs;
-    for (gc_node_ref_t input : graph->normInputsOf(ref)) {
-        inputs.push_back(input);
-    }
-    for (gc_node_ref_t input : graph->withInputsOf(ref)) {
-        inputs.push_back(input);
-    }
-    return inputs;
+/// One query, because the face answers the same list: the ordinary group and then the context one,
+/// which is the order this walk has always had. It answers a **JOIN** too, although a JOIN is not
+/// one of the face's kinds -- what a join carries out of its arms is one of its context ports and a
+/// cut has to carry it -- and `test::view_ports` pins that answer against the graph's own, node by
+/// node, which is what lets this function name no representation at all.
+std::vector<gc_node_ref_t> dataInputsOf(const camel::graph::GraphView &view, gc_node_ref_t ref) {
+    return view.predecessors(ref, camel::graph::EdgeKind::Data);
 }
 
 /// A FILL node that makes the tuple `type` out of `members`, in order: the static template is the
