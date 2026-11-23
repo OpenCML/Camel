@@ -215,9 +215,37 @@ if (opt.mode === 'files') {
                 widened = `neither ${opt.base} nor HEAD^1 resolves, so every unit is checked`
             }
         }
+        // A base that IS this commit says nothing about what this tree brings: on the host the base
+        // ref is the very commit the wrapper just pushed, so this is the ordinary case there and not
+        // an empty change. The commit's own content is then the change to read (HEAD^1), with the
+        // same line as the unresolvable base above, so the reading names what it compared. A tree
+        // whose HEAD really is already contained in the base is refused by the caller (which is the
+        // only place the two can be told apart: camel-remote.ps1 compares the checkout's own
+        // merge-base before it pushes anything).
+        if (baseCommit === git(['rev-parse', 'HEAD']).trim()) {
+            try {
+                const own = git(['rev-parse', 'HEAD^1']).trim()
+                console.log(`clang-syntax: ${opt.base} is this commit; reading the change against HEAD^1 (${own.slice(0, 10)})`)
+                baseCommit = own
+            } catch {
+                // A root commit has nothing to compare against, so there is no change to select.
+                opt.mode = 'all'
+                widened = 'this commit has no parent, so every unit is checked'
+            }
+        }
     }
     if (opt.mode === 'changed') {
         const changed = git(['diff', '--name-only', baseCommit, 'HEAD']).split('\n').filter(Boolean)
+    // Two zeroes read the same on the summary line and mean opposite things: "the change compiles
+    // nothing" (a plan, a document, a golden -- a real reading about a real change) and "there was
+    // no change to compare" (base and HEAD are the same commit -- nothing was measured at all).
+    // The second is not a green: a lane whose HEAD is already contained in develop has an empty
+    // `--changed` diff forever, so this gate would hand it a blank pass on every run, and at the
+    // merge position the base IS this commit. Same rule as the row channel: a zero that no
+    // measurement produced is a refusal, not a pass.
+    if (changed.length === 0) {
+        die(`the base and this tree are the same commit (${baseCommit.slice(0, 10)}): there was no change to measure, so nothing was checked`)
+    }
     const touched = new Set()
     const headers = []
     for (const rel of changed) {
