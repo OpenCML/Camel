@@ -3532,28 +3532,208 @@ const ExecPlan &GCGraph::execPlan() const {
     return *execPlanOf(*this);
 }
 
-void GCGraph::setNodeFactSlot(
-    std::uint32_t kind, gc_node_ref_t node, const void *value) const noexcept {
-    if (kind >= kFactSlotCount || node >= nodeCount()) {
+namespace {
+
+/// A table with `capacity` slots of both shapes. The columns are filled here rather than by their
+/// default constructor: an atomic's default constructor is not required to write a value.
+FactSlotTable *makeSlotTable(std::uint32_t capacity) noexcept {
+    auto *table = new (std::nothrow) FactSlotTable();
+    if (table == nullptr) {
+        return nullptr;
+    }
+    table->capacity   = capacity;
+    table->values     = new (std::nothrow) std::atomic<const void *>[capacity];
+    table->nodeArrays = new (std::nothrow) std::atomic<FactNodeArray *>[capacity];
+    if (table->values == nullptr || table->nodeArrays == nullptr) {
+        delete[] table->values;
+        delete[] table->nodeArrays;
+        delete table;
+        return nullptr;
+    }
+    for (std::uint32_t at = 0; at < capacity; ++at) {
+        table->values[at].store(nullptr, std::memory_order_relaxed);
+        table->nodeArrays[at].store(nullptr, std::memory_order_relaxed);
+    }
+    return table;
+}
+
+/// Frees a table and its two columns. A table's retired list is freed by its owner, one link at a
+/// time, because a retired table and the current one are freed on different paths.
+void freeSlotTable(FactSlotTable *table) noexcept {
+    if (table == nullptr) {
         return;
     }
-    FactNodeSlots *array = nodeFactSlots_[kind].load(std::memory_order_acquire);
+    delete[] table->values;
+    delete[] table->nodeArrays;
+    delete table;
+}
+
+FactNodeArray *makeNodeArray(gc_cnt_t nodeCount) noexcept {
+    auto *array = new (std::nothrow) FactNodeArray();
     if (array == nullptr) {
-        array = new (std::nothrow) FactNodeSlots[nodeCount()];
+        return nullptr;
+    }
+    array->slots = new (std::nothrow) std::atomic<const void *>[nodeCount];
+    if (array->slots == nullptr) {
+        delete array;
+        return nullptr;
+    }
+    for (gc_cnt_t at = 0; at < nodeCount; ++at) {
+        array->slots[at].store(nullptr, std::memory_order_relaxed);
+    }
+    return array;
+}
+
+void freeNodeArray(FactNodeArray *array) noexcept {
+    if (array == nullptr) {
+        return;
+    }
+    delete[] array->slots;
+    delete array;
+}
+
+/// How many kinds are registered: the number of slots a table made at this moment has. The kinds
+/// are append-only, so a KindId a writer can name is always below this.
+std::uint32_t registeredKindCount() noexcept {
+    return static_cast<std::uint32_t>(camel::facts::registeredKinds().size());
+}
+
+} // namespace
+
+FactSlotTable *GCGraph::slotTableFor(std::uint32_t kind) const noexcept {
+    for (;;) {
+        FactSlotTable *current = factSlots_.load(std::memory_order_acquire);
+        if (current != nullptr && kind < current->capacity) {
+            return current;
+        }
+        // The kinds registered at this moment, which is what the new table is sized for. `kind` is
+        // one of them, so the table always has the slot the write that asked for it needs.
+        const std::uint32_t was      = current == nullptr ? 0 : current->capacity;
+        const std::uint32_t capacity = std::max({registeredKindCount(), kind + 1, was + 1});
+        FactSlotTable *grown         = makeSlotTable(capacity);
+        if (grown == nullptr) {
+            return nullptr; // the slots are the fast path, never the answer
+        }
+        if (current != nullptr) {
+            for (std::uint32_t at = 0; at < was; ++at) {
+                grown->values[at].store(
+                    current->values[at].load(std::memory_order_relaxed),
+                    std::memory_order_relaxed);
+                grown->nodeArrays[at].store(
+                    current->nodeArrays[at].load(std::memory_order_relaxed),
+                    std::memory_order_relaxed);
+            }
+        }
+        FactSlotTable *expected = current;
+        if (factSlots_.compare_exchange_strong(
+                expected, grown, std::memory_order_acq_rel, std::memory_order_acquire)) {
+            // The table this one replaces may already be in a reader's hands: it goes on the
+            // retired list and is freed with the graph, not here.
+            if (current != nullptr) {
+                retireFactSlotTable(current);
+            }
+            return grown;
+        }
+        // Another writer published first. This table was never published, so nobody can hold it.
+        freeSlotTable(grown);
+    }
+}
+
+FactNodeArray *GCGraph::nodeFactArrayFor(std::uint32_t kind) const noexcept {
+    for (;;) {
+        FactSlotTable *table = slotTableFor(kind);
+        if (table == nullptr) {
+            return nullptr;
+        }
+        if (FactNodeArray *known = table->nodeArrays[kind].load(std::memory_order_acquire)) {
+            return known;
+        }
+        // A frozen graph's node count is fixed, so one array per kind serves the graph's life.
+        FactNodeArray *made = makeNodeArray(nodeCount());
+        if (made == nullptr) {
+            return nullptr;
+        }
+        FactNodeArray *expected = nullptr;
+        if (table->nodeArrays[kind].compare_exchange_strong(
+                expected, made, std::memory_order_acq_rel, std::memory_order_acquire)) {
+            keepFactNodeArray(made);
+            return made;
+        }
+        freeNodeArray(made); // another writer made it first; both are the graph's node count
+    }
+}
+
+void GCGraph::retireFactSlotTable(FactSlotTable *table) const noexcept {
+    FactSlotTable *head = retiredFactSlotTables_.load(std::memory_order_relaxed);
+    do {
+        table->next = head;
+    } while (!retiredFactSlotTables_.compare_exchange_weak(
+        head, table, std::memory_order_release, std::memory_order_relaxed));
+}
+
+void GCGraph::keepFactNodeArray(FactNodeArray *array) const noexcept {
+    FactNodeArray *head = factNodeArrays_.load(std::memory_order_relaxed);
+    do {
+        array->next = head;
+    } while (!factNodeArrays_.compare_exchange_weak(
+        head, array, std::memory_order_release, std::memory_order_relaxed));
+}
+
+void GCGraph::setFactSlot(std::uint32_t kind, const void *value) const noexcept {
+    if (value == nullptr) {
+        // Clearing is no reason to make a table: a graph no fact was written into has nothing to
+        // clear, and clearing a slot of one must not be what allocates it.
+        const FactSlotTable *table = factSlots_.load(std::memory_order_acquire);
+        if (table == nullptr || kind >= table->capacity) {
+            return;
+        }
+        table->values[kind].store(nullptr, std::memory_order_release);
+        return;
+    }
+    for (;;) {
+        FactSlotTable *table = slotTableFor(kind);
+        if (table == nullptr) {
+            return; // no table could be made: the store still answers, and owns the answer
+        }
+        table->values[kind].store(value, std::memory_order_release);
+        // A growth between the lookup and this store would have copied the slot before it: writing
+        // the table that is current now is what keeps two reads of one graph from disagreeing.
+        if (factSlots_.load(std::memory_order_acquire) == table) {
+            return;
+        }
+    }
+}
+
+void GCGraph::setNodeFactSlot(
+    std::uint32_t kind, gc_node_ref_t node, const void *value) const noexcept {
+    if (node >= nodeCount()) {
+        return;
+    }
+    if (value == nullptr) {
+        // Same rule as `setFactSlot`: a clear never makes a table or an array.
+        const FactSlotTable *table = factSlots_.load(std::memory_order_acquire);
+        if (table == nullptr || kind >= table->capacity) {
+            return;
+        }
+        const FactNodeArray *array = table->nodeArrays[kind].load(std::memory_order_acquire);
         if (array == nullptr) {
             return;
         }
-        for (gc_cnt_t at = 0; at < nodeCount(); ++at) {
-            array[at].store(nullptr, std::memory_order_relaxed);
+        array->slots[node].store(nullptr, std::memory_order_release);
+        return;
+    }
+    for (;;) {
+        FactNodeArray *array = nodeFactArrayFor(kind);
+        if (array == nullptr) {
+            return;
         }
-        FactNodeSlots *expected = nullptr;
-        if (!nodeFactSlots_[kind].compare_exchange_strong(
-                expected, array, std::memory_order_acq_rel, std::memory_order_acquire)) {
-            delete[] array; // another thread made it first; both have this graph's node count
-            array = expected;
+        array->slots[node].store(value, std::memory_order_release);
+        const FactSlotTable *table = factSlots_.load(std::memory_order_acquire);
+        if (table != nullptr && kind < table->capacity &&
+            table->nodeArrays[kind].load(std::memory_order_acquire) == array) {
+            return;
         }
     }
-    array[node].store(value, std::memory_order_release);
 }
 
 namespace {
@@ -3593,8 +3773,21 @@ GCGraph::~GCGraph() {
     delete static_cast<const camel::graph::GraphView *>(viewCache_);
     viewCache_ = nullptr;
     delete uses_.load(std::memory_order_acquire);
-    for (auto &slots : nodeFactSlots_) {
-        delete[] slots.load(std::memory_order_acquire);
+    // The slots are the graph's own memory: the table it reads now, every table a growth replaced
+    // (a reader that loaded one before a growth still had a live table, which is why they were
+    // kept), and each Node fact's dense array. The values they named are the store's, and
+    // `forgetGraph` above cleared the current table before they were released.
+    freeSlotTable(factSlots_.load(std::memory_order_acquire));
+    for (FactSlotTable *table = retiredFactSlotTables_.load(std::memory_order_acquire);
+         table != nullptr;) {
+        FactSlotTable *next = table->next;
+        freeSlotTable(table);
+        table = next;
+    }
+    for (FactNodeArray *array = factNodeArrays_.load(std::memory_order_acquire); array != nullptr;) {
+        FactNodeArray *next = array->next;
+        freeNodeArray(array);
+        array = next;
     }
 }
 

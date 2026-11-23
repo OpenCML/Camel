@@ -9,6 +9,7 @@
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
 | lane/fact-slots | 事实的读路径按槽位:`GCGraph` 自己一张固定槽表(登记时给的 `KindId` 作下标,存裸指针),节点级事实放一张按节点号稠密的数组,框架仍是唯一主人(登记、过期、随图销毁都不出 `camel/facts`) | `feat/modules/graph_facts` **9/9**(新增 `slots`,15 条检查全 ok:发布、单条失效清槽、`invalidateGraph`(= `~GCGraph` 走的那条)清两张槽、清后再发布);`smoke` 10/10/0;`feat/parse` **125/126**;`feat/compile` 2666/2672/1红/5known/1信号;三计划合计 2808/2801/2/5/1信号。那 2 红都不是本笔:1 条既有 `vmap_batches_the_element_of_a_row.prl` SIGSEGV;1 条 `frontend.ast_snapshot` 对 `test/cases/modules/nn/conv2d_shape_error.cml` —— `32a4a4f968` 记 `6692c1c6ea1a5a1b`,合并 `1e7d0dc2a3` 改了这个 case 却只留 `a41f58173fb1bc0b`,文件今天算 `2e4b0e5e1ae57d83`,基准树上就红 | 无(未合入) | 合入 `develop`;性能读数等一条在安静主机上的车道(作者 `515b0c7a0f` 撤回了本笔的基线) | 20:20 |
+| lane/fact-slots-grow | 返工 `lane/fact-slots`:`GCGraph` 只留**一个原子指针**指向 `{容量, 槽[]}`(图级值与节点级稠密数组合在一张表的两列里);**第一次有事实写进这张图时才分配**,容量取当时已登记的种类数;之后登记的种类写进来时分配更大的表、复制、原子换指针,**旧表挂到图的销毁清单**留到图销毁(读者无锁读到旧表也安全);读 = 取指针 → 判越界 → 取槽,越界 = **这张表还没长到那么大**,交回 store;固定格数常量与「第 33 种起退回」删掉。`test::fact_slots` 另加三组:表按**登记时的种类数**定尺寸(比固定 32 小、登记更多种类不扩容、没写过事实的种类没有槽)、kind 越过 32 仍走槽、扩容后旧表仍可读。注:**「完全没有事实的图」在编译产物里不存在** —— 冻结本身经 `validateRuntimeGraphPayload` 的支臂检查给每张图写了一条 `core.controlRegions`,故第一条量的是表的尺寸(实测 3 格)而不是「有没有表」 | `graph_facts` 9/9;`smoke` 10/10/0;`feat/parse` 126/126/0;`feat/compile`(smoke+parse+compile 合计)2808/2802/1红/5known/1信号(红 = 既有 SIGSEGV,`vmap_batches_the_element_of_a_row.prl`);固定格数常量在 `src` 下 0 处,全树只剩 `internal/backlog.md` 的条目文字 | 无(未合入) | 等点名合入 | 21:12 |
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |
