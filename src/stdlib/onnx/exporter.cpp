@@ -3799,6 +3799,67 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
 
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     auto *g       = act.graph;
+    const std::string_view probeUri = operUriOf(act.graph, ref);
+    if (probeUri == "tensor:matmul_grad_rhs" || probeUri == "tensor:sum_to") {
+        const auto args = camel::runtime::kernelArgumentsOf(*act.graph, ref);
+        std::fprintf(
+            stderr,
+            "PROBE %s ref=%llu result=%s\n",
+            std::string(probeUri).c_str(),
+            static_cast<unsigned long long>(ref),
+            act.graph->node(ref)->dataType() != nullptr
+                ? act.graph->node(ref)->dataType()->toString().c_str()
+                : "-");
+        for (size_t i = 0; i < args.norm.size(); ++i) {
+            const gc_node_ref_t a = args.norm[i];
+            const auto *rec         = act.graph->node(a);
+            std::fprintf(
+                stderr,
+                "PROBE   norm[%zu] ref=%llu kind=%d uri=%s type=%s\n",
+                i,
+                static_cast<unsigned long long>(a),
+                static_cast<int>(rec->kind),
+                std::string(operUriOf(act.graph, a)).c_str(),
+                rec->dataType() != nullptr ? rec->dataType()->toString().c_str() : "-");
+        }
+        for (size_t i = 0; i < args.with.size(); ++i) {
+            const gc_node_ref_t a = args.with[i];
+            const auto *rec         = act.graph->node(a);
+            std::fprintf(
+                stderr,
+                "PROBE   with[%zu] ref=%llu kind=%d uri=%s type=%s\n",
+                i,
+                static_cast<unsigned long long>(a),
+                static_cast<int>(rec->kind),
+                std::string(operUriOf(act.graph, a)).c_str(),
+                rec->dataType() != nullptr ? rec->dataType()->toString().c_str() : "-");
+        }
+        // The chain above argument 0: the producer of `dy`, then its own ordinary operands, so a
+        // reading names the node that made the value and what fed it.
+        std::function<void(gc_node_ref_t, int)> walk = [&](gc_node_ref_t at, int depth) {
+            if (depth > 2) {
+                return;
+            }
+            const auto nested = camel::runtime::kernelArgumentsOf(*act.graph, at);
+            for (size_t i = 0; i < nested.norm.size(); ++i) {
+                const gc_node_ref_t a = nested.norm[i];
+                const auto *rec       = act.graph->node(a);
+                std::fprintf(
+                    stderr,
+                    "PROBE   [d%d] norm[%zu] ref=%llu kind=%d uri=%s type=%s\n",
+                    depth,
+                    i,
+                    static_cast<unsigned long long>(a),
+                    static_cast<int>(rec->kind),
+                    std::string(operUriOf(act.graph, a)).c_str(),
+                    rec->dataType() != nullptr ? rec->dataType()->toString().c_str() : "-");
+                walk(a, depth + 1);
+            }
+        };
+        if (!args.norm.empty()) {
+            walk(args.norm.front(), 0);
+        }
+    }
     const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
     if (core::oper::isVariableRead(body->oper)) {
         return evalVariableRead(act, ref);
@@ -3884,6 +3945,32 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     const camel::runtime::KernelArguments kernelArguments = camel::runtime::kernelArgumentsOf(*g, ref);
     std::vector<Value> norm = evalAll(act, kernelArguments.norm);
     std::vector<Value> with = evalAll(act, kernelArguments.with);
+    if (probeUri == "tensor:matmul_grad_rhs" || probeUri == "tensor:sum_to") {
+        for (size_t i = 0; i < norm.size(); ++i) {
+            const Value &v = norm[i];
+            std::string shape = "none";
+            if (v.shape) {
+                shape = "[";
+                for (size_t k = 0; k < v.shape->size(); ++k) {
+                    if (k != 0) {
+                        shape += ",";
+                    }
+                    shape += (*v.shape)[k] ? std::to_string(*(*v.shape)[k]) : std::string("?");
+                }
+                shape += "]";
+            }
+            std::fprintf(
+                stderr,
+                "PROBE   value[%zu] kind=%d form=%d name=%s dtype=%d shape=%s camel=%s\n",
+                i,
+                static_cast<int>(v.kind),
+                static_cast<int>(v.form),
+                v.name.c_str(),
+                v.dtype ? static_cast<int>(*v.dtype) : -1,
+                shape.c_str(),
+                v.camelType != nullptr ? v.camelType->toString().c_str() : "-");
+        }
+    }
     return applyOper(act, uri, std::move(norm), g->node(ref)->dataType(), std::move(with));
 }
 

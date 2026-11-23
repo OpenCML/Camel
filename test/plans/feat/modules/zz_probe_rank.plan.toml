@@ -1,0 +1,34 @@
+# Scratch: reads back the exporter's PROBE lines for the two red training-step exports.
+# Untracked instrumentation; deleted before the change lands.
+
+[[tests]]
+name = "probe_bn"
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_bn.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/probe_bn.onnx"]
+verify_script = """
+async ({ input, fail, assert }) => {
+const err = String(input.stderr).split('\n')
+const probe = err.filter((l) => l.includes('PROBE'))
+const other = err.filter((l) => !l.includes('PROBE') && l.trim() !== '')
+assert(false, `PROBEX exit=${input.exit_code} n=${probe.length} | ` + probe.slice(0, 60).join(' || ') + ' ||| OTHER ' + other.slice(-6).join(' || '))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "probe_conv"
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_train_step_conv.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/probe_conv.onnx"]
+verify_script = """
+async ({ input, fail, assert }) => {
+const err = String(input.stderr).split('\n')
+const probe = err.filter((l) => l.includes('PROBE'))
+const other = err.filter((l) => !l.includes('PROBE') && l.trim() !== '')
+assert(false, `PROBEX exit=${input.exit_code} n=${probe.length} | ` + probe.slice(0, 60).join(' || ') + ' ||| OTHER ' + other.slice(-6).join(' || '))
+}
+"""
+timeout_ms = 30000
