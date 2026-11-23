@@ -423,23 +423,25 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_cml"
-desc = "`std::cml` prints the interval as `a..b` again: the operator a value-position interval lowers to is the interval's own spelling, and the printed program compiles back to the same graph (the round trip itself is pinned by feat.trans.cml, over test/cases/trans/cml/interval.cml)."
-kind = "behavior"
-case = "../../../cases/compile/stream/interval.cml"
+desc = "`std::cml` cannot print a program that holds a range value yet, and the refusal names the reason: a `Range` carries `int?` ends, so the value is a tagged/nullable tuple, which the printer does not print. The line is a pin on the printer's limit, not on the value's meaning -- the value itself is pinned by stream.interval and stream.range_value. When the printer learns the nullable tuple, this entry becomes the `let span: Range = 1..(n + 1)` spelling it had."
+kind = "negative"
+case = "../../../cases/trans/cml/interval.cml"
 args = ["${case}", "std::cml"]
-expect_exit = 0
-expect_stdout_contains = ["let xs: int[] = 1..5", "println(0..n)"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CmlUnsupportedConstruct"
+expect_output_contains = ["tagged, nullable or cell tuple"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_loop_cml"
-desc = "`std::cml` prints the sequence of a fused loop as the interval: the graph holds the two bounds (`LoopIterableForm::Interval`), and the source form is `for i in a..b`, with a bound parenthesised when it has to be (`(-2)..3`, `0..(n + 1)`)."
-kind = "behavior"
+desc = "`std::cml` cannot print a loop over a range yet, and the refusal names the reason: since the ruling on `a..b` such a loop walks the range's stream through `prelude::iter`, whose return type is the stream type `int..`, and the printer does not print a stream type. The line is a pin on the printer's limit, not on the loop's meaning -- the loop itself is pinned over the graph by stream.interval_loop. When the printer learns `T..`, this entry becomes the `for i in a..b` spelling it had."
+kind = "negative"
 case = "../../../cases/compile/stream/interval_loop.cml"
 args = ["${case}", "std::cml"]
-expect_exit = 0
-expect_stdout_contains = ["for i in 0..5", "for i in 3..3", "for i in 5..1", "for i in 0..(n + 1)", "for i in (-2)..3", "for i in 1..4"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CmlUnsupportedConstruct"
+expect_output_contains = ["prelude::iter", "int.."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 

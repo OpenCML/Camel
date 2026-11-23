@@ -1094,22 +1094,41 @@ export func is_empty(r: Range) => bool {
 // that is the one form `a..b` cannot write (an interval always names both ends, design principles
 // 4.2), but the type allows it and walking it is what "count on" means.
 
+/// One round of the walk while the count has not reached stop: the integer and the walk from the
+/// next one, or null when the range has run out. A stream cannot name itself in the closure that
+/// makes it (a closure cannot capture a stream, design principles 5.4), so the round is a function
+/// of its own and the stream is the `match` over it -- the shape `unfold` has in stdlib/stream.cml.
+func upto_round(i: int, stop: int, stride: int) => (int, int..)? {
+    return if (if stride > 0 then i < stop else i > stop) then
+        (i, range_upto(i + stride, stop, stride))
+    else
+        null
+}
+
 /// The integers from i on, in steps of stride, while the count has not reached stop: a stop that
-/// does not lie past i names no integer at all (design principles 4.2). The stream is the one
-/// `unfold` makes (stdlib/stream.cml): one integer with the rest of the stream after it, or null
-/// when the range has run out.
+/// does not lie past i names no integer at all (design principles 4.2).
 func range_upto(i: int, stop: int, stride: int) => int.. {
-    return func () => (int, int..)? {
-        if (if stride > 0 then i < stop else i > stop) then
-            (i, range_upto(i + stride, stop, stride))
-        else
-            null
+    return func () {
+        match upto_round(i, stop, stride) {
+            case null => null
+            case pair => pair
+        }
     }
+}
+
+/// One round of the walk without end: the integer and the walk from the next one.
+func from_round(i: int, stride: int) => (int, int..)? {
+    return (i, range_from(i + stride, stride))
 }
 
 /// The integers from i on, in steps of stride, without end.
 func range_from(i: int, stride: int) => int.. {
-    return func () => (int, int..)? { (i, range_from(i + stride, stride)) }
+    return func () {
+        match from_round(i, stride) {
+            case null => null
+            case pair => pair
+        }
+    }
 }
 
 /// The integers r names, one per round: `for i in 0..3` takes the next one each round, so a loop

@@ -9,7 +9,7 @@
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
 | lane/range-rn | `D-1123-41` 2(a) 名字解析:同层 `#op` 声明与同名有体声明合成一个重载集;prelude 导出的类型免导入 | `len([1,2,3])`=3、`"xy"->len()`=2、`r->len()`=3、`r->map<dbl>`=[0,2,4]、`[1,2]->map<dbl>`=[2,4];`prelude::len: (r: Range) => int` 那条红字消失;`feat/parse` 因 prelude 加了四个函数体报 125/126,已准本笔带 `-AstOnly src/stdlib/prelude.cml` 重录 | 未合入 | 重录后 `feat/parse` 126/126/0 | 21:00 |
-| lane/range-ri | `D-1123-41` 2(b) `a..b` 产 `Range`、`for` 走该类型的迭代器、转置反向循环、C++ 后端、`cml` 打印 | 两笔:`e49bdeae88`(22 文件,不含 `ast_hashes.txt`)+ `e93a627d9d`;`feat/compile/stream` 基线 150/150,改后 **144/150**,6 红全是 `for` 找 `iter` 一条根;`feat/parse`/`smoke`/`feat/trans` 待跑 | 未推未合 | 那 6 条逐条结案(见报告);`__iter__` 这个名字在库里写不出来(`validateIdent` 拒 `__x__`),落地成 prelude 里与 `Range` 同处的 `iter` | 2026-11-23 21:40 |
+| lane/range-ri | `D-1123-41` 2(b) `a..b` 产 `Range`、`for` 走该类型的迭代器、转置反向循环、C++ 后端、`cml` 打印 | 四笔:`e49bdeae88`(22 文件,不含 `ast_hashes.txt`)、`e93a627d9d`(按 `declaredName` 也找得到模块)、`f44f8b8bec`(merge `develop` 38 笔);`feat/compile/stream` 基线 150/150 → **149/150**,那 1 条是 `interval_cml` 的用例缺 `import { Range }`,正在跑全量四计划 | 未推未合 | 逐条结案见报告;`__iter__` 这个名字在库里写不出来(`validateIdent` 拒 `__x__`),落地成 prelude 里与 `Range` 同处的 `iter`;`std::cml` 打印不了流类型,`for` 过 range 的打印那条钉成拒绝 | 2026-11-23 22:10 |
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |
