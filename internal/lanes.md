@@ -23,7 +23,7 @@
 
 
 
-| lane/facts-b3 | 阶段 3 计划 3b 的余下五样：效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取。**只做了一样**：`ControlRegions`；其余四样各有一份「改前」读数与不挪的理由，见 `internal/lanes.md` 下方的说明与车道报告 | 首笔（本行同笔）：`ControlRegions` 构造 13 处不变、**计算 13 → 1**（事实层 kind `core.controlRegions`），emitter 的按图缓存 `regions_` 删除，`ControlRegions` 只剩薄读；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` 2669/2664/0（known 5）、整层 fast 9844/9644/**135**/skip 24/known 41（红集中在本笔不碰的 docs/lsp/grammar/capacity/记号解析与主机缺 `build/lib/tiles` 二进制；**未取基线**，见报告）；事实层无回落：全树只有 `facts:control_regions.cpp#buildControlRegionTree` 会建树，`ControlRegions` 造不出来，构造时拿不到树即抛 | 未合 | 效应汇总（`core.effects` 在旧事实库 + 7 处直接调 compute，8 处入口）是下一笔，卡在「新事实框架没有 owner/create 一个 Store」的形状 | 2026-11-23 15:05 |
+| lane/facts-b3 | 阶段 3 计划 3b 的余下五样：效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取。**只做了一样**：`ControlRegions`；其余四样各有一份「改前」读数与不挪的理由，见 `internal/lanes.md` 下方的说明与车道报告 | 首笔（本行同笔）：`ControlRegions` 构造 13 处不变、**计算 13 → 1**（事实层 kind `core.controlRegions`），emitter 的按图缓存 `regions_` 删除，`ControlRegions` 只剩薄读；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` 2669/2664/0（known 5）、整层 fast 9844/9644/**135**/skip 24/known 41（红集中在本笔不碰的 docs/lsp/grammar/capacity/记号解析与主机缺 `build/lib/tiles` 二进制；**基线未取**：15:07 起 `ssh 10.126.62.88:22` 超时，基线那一跑没送出去）；事实层无回落：全树只有 `facts:control_regions.cpp#buildControlRegionTree` 会建树，`ControlRegions` 造不出来，构造时拿不到树即抛 | 未合 | 效应汇总（`core.effects` 在旧事实库 + 7 处直接调 compute，8 处入口）是下一笔，卡在「新事实框架没有 owner/create 一个 Store」的形状 | 2026-11-23 15:05 |
 
 ## 没开车道的一件
 
