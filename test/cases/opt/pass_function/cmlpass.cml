@@ -1,0 +1,18 @@
+/**
+ * The pass `cmlpass::show`, a pass written in Camel whose one parameter is a *function*: the word
+ * `cost=lib::twice` is resolved to the function value itself before the pass is built
+ * (camel/execute/pass/params.h), and the pass calls it. The line it prints is the number the
+ * function gave, so a case reads the value the pipeline handed over, not the text of the word.
+ *
+ * This is the second of the two entries that read a parameter's declared type -- the pass
+ * declaration's `with` list (this file) and a `test.cml` declaration (`test::declared`) -- and both
+ * have to accept a function type: one that did not would leave the parameter as text.
+ */
+
+import { is_function } from types
+
+with <cost: (n: int) => int>
+export func show::<F>(f: F) => F! when is_function::<F>() {
+    println(cost(5))
+    return f
+}

@@ -1,0 +1,16 @@
+/**
+ * The declaration of `test::declared` for this case directory
+ * (test/plans/feat/opt/pass_function.plan.toml), which runs with `-I .` so that the module `test`
+ * is this file the way `stdlib/test.cml` is for a run without one.
+ *
+ * `cost` is the parameter no constant reads: its type is a function, and the pipeline resolves the
+ * word `cost=<module>::<function>` to the function value itself (camel/execute/pass/params.h). It
+ * has no default -- a function is not a constant -- so every call writes it, and the case's
+ * function is `(n: int) => int`, which is what `test::declared` calls it with.
+ */
+
+with <
+    cost: (n: int) => int,
+    flag: bool = false
+>
+export func declared::<F>(f: F) => F! when is_function::<F>()

@@ -1,0 +1,9 @@
+/**
+ * The library whose function a pass parameter names: `cost=lib::twice` is the value of the
+ * function `twice`, not the text of the word (camel/execute/pass/params.h). Its shape is the one
+ * the declaration of `test::declared` writes, `(n: int) => int`.
+ */
+
+export func twice(n: int) => int {
+    return n + n
+}

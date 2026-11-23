@@ -18,6 +18,13 @@
  * pipeline checks the written ones against the declaration (unknown name, wrong type, missing
  * value are diagnostics) and hands the factory a PassArgs with every parameter set: the written
  * value or the default the declaration evaluates once, where it is.
+ *
+ * One type is not a constant: a function parameter (`cost: (n: Node, inputs: float[]) => float`)
+ * takes the *function value* its word names, written `<module>::<function>` -- the same value
+ * `rewrite::extract<cost>` takes. The pipeline resolves the name while it reads the call, so a
+ * name that is no function is a diagnostic of the call at the position of the word, and the pass
+ * reads the value back with `getFunction`, which answers the value itself and never the text.
+ * A function parameter has no default: every call writes it.
  */
 
 #pragma once
@@ -26,15 +33,16 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
-enum class PassParamType { Bool, Int, Float, String, IntArray };
+enum class PassParamType { Bool, Int, Float, String, IntArray, Function };
 
 /// The type as a declaration writes it, with the `?` a nullable parameter carries: `bool`, `int`,
-/// `float`, `string`, `int[]`, `int[]?`, `string?`.
+/// `float`, `string`, `int[]`, `int[]?`, `string?`, `function`.
 std::string passParamTypeName(PassParamType type, bool nullable = false);
 
 /// `std::monostate` is `null`: the value of a parameter declared `T?` that no word gave and that
@@ -56,6 +64,20 @@ struct PassParam {
     /// The declaration wrote `T?`: `null` is a value of this parameter, so leaving it out is not
     /// the same as a parameter that has no value at all.
     bool nullable = false;
+    /// The type as the declaration wrote it, when that says more than `type` does: a function
+    /// parameter's `(n: Node, inputs: float[]) => float`. Empty for the scalar types, whose name
+    /// `passParamTypeName` gives.
+    std::string written = {};
+};
+
+/// A function-valued parameter, resolved: the qualified name as the call wrote it and the
+/// function value it names.
+struct PassFunction {
+    std::string name; // `<module>::<function>`, as written
+    slot_t value = 0; // the function value (`::Function *`)
+    /// Keeps the value alive, and where it is after every safepoint, while this argument lives.
+    /// The pipeline makes it; a pass only reads `value`.
+    std::shared_ptr<void> root;
 };
 
 /// The parameters of one pass invocation, defaults filled in. Asking for a name the pass did
@@ -79,13 +101,24 @@ class PassArgs {
     /// Whether the pipeline wrote the parameter (as against the default being used).
     bool given(const std::string &name) const;
 
+    /// The function a function-valued parameter was resolved to: its value, and the qualified name
+    /// the call wrote. Throws std::logic_error when the parameter was never resolved, which is a
+    /// defect of the pass (it does not fall back to the text: the text is not the value).
+    const PassFunction &getFunction(const std::string &name) const;
+    /// Whether this parameter was resolved to a function value, for a pass that reads the
+    /// parameters a declaration gave without knowing their types one by one.
+    bool isFunction(const std::string &name) const;
+
     /// Used by the pipeline parser and by tests.
     void set(const std::string &name, PassParamValue value, bool written);
+    /// Used by the pipeline, when it resolves a function-valued parameter.
+    void setFunction(const std::string &name, PassFunction function);
 
   private:
     const PassParamValue &at(const std::string &name) const;
     std::map<std::string, PassParamValue> values_;
     std::map<std::string, bool> written_;
+    std::map<std::string, PassFunction> functions_;
 };
 
 using PassMaker = std::function<std::unique_ptr<GraphIRPass>(

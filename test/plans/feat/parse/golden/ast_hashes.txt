@@ -1747,6 +1747,9 @@ e5ea31ef31060cf5 ok test/cases/compile/stream/interval.cml
 82b28f9560901e74 ok test/cases/compile/stream/interval_loop_not_materialised.cml
 240873612ef90856 ok test/cases/compile/stream/interval_own_range.cml
 38f98cf7cde23334 ok test/cases/compile/stream/loop_state_consumes.cml
+e1afbadcfc137a2d ok test/cases/compile/stream/operator_for_needs_a_stream.cml
+df10ae6fc9641bd4 ok test/cases/compile/stream/operator_for_not_a_plain_function.cml
+0d5bf0013321fd21 ok test/cases/compile/stream/operator_for_user_type.cml
 8564d42105cc1419 ok test/cases/compile/stream/probe_pull_type.cml
 aeffff18cf2a99ab no test/cases/compile/stream/probe_unwrap_nullable.cml
 9813dd244143d5a7 ok test/cases/compile/stream/probe_var_null.cml
@@ -1757,8 +1760,8 @@ fcd61a7cd396ffe9 ok test/cases/compile/stream/pull_order.cml
 7f944c00804d758e ok test/cases/compile/stream/range_two_arguments.cml
 afaf6dd76c8ef116 ok test/cases/compile/stream/range_two_arguments_builtin.cml
 4d5af385008e02a3 ok test/cases/compile/stream/range_value.cml
-df494949affcb440 ok test/cases/compile/stream/range_value_is_not_the_interval.cml
-1eec932b2eb3a083 ok test/cases/compile/stream/range_value_map_still_the_interval.cml
+fdab830561aba4de ok test/cases/compile/stream/range_value_from_array.cml
+b55e3a685f9ac5c4 ok test/cases/compile/stream/range_value_map_no_instance.cml
 7973c5ad7b784b07 ok test/cases/compile/stream/step_value.cml
 09a5bf9ea1bfcc81 ok test/cases/compile/stream/step_value_signature.cml
 8a908039211cde5e ok test/cases/compile/stream/tee_consumers.cml
@@ -4107,6 +4110,10 @@ bbc3463af6eedbd1 ok test/cases/opt/inline/strategy_small_non_arm.cml
 f01f87361edf8dd9 ok test/cases/opt/inline_cycle/seed23_fold_inline_within_call.cml
 f43817f03113bee0 ok test/cases/opt/never_exit/exit_last.cml
 be4ded360aea4594 ok test/cases/opt/never_exit/fail_last.cml
+dcbe48847fec16db ok test/cases/opt/pass_function/cmlpass.cml
+80e8ab9054c90913 ok test/cases/opt/pass_function/lib.cml
+494c7b5d0c175f5f ok test/cases/opt/pass_function/plain.cml
+16e7065b26913446 ok test/cases/opt/pass_function/test.cml
 d47b3947a9e509c8 ok test/cases/opt/pass_params/plain.cml
 7c268b848ff0a040 ok test/cases/opt/pass_params/test.cml
 76633fa857cf59fe ok test/cases/opt/progen/seed8_join_reads_gate.cml

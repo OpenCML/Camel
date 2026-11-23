@@ -48,11 +48,15 @@ struct CamelParam {
     std::string name;
     PassParamType passType = PassParamType::Bool;
     TypeCode code          = TypeCode::Bool;
+    /// The declared type itself, for the one parameter whose value is not built from the code: a
+    /// function (`cost: (n: Node, inputs: float[]) => float`) needs its own type as the `with`
+    /// argument's type.
+    camel::core::type::Type *type = nullptr;
 };
 
 /// The pass parameters of `type`, in declaration order, or why it has none this pipeline can
-/// supply. A pass whose declaration is its own `with` list takes a bool, an int, a float or a
-/// string: those are the values the pipeline can put into a `with` argument, and a `with`
+/// supply. A pass whose declaration is its own `with` list takes a bool, an int, a float, a string
+/// or a function: those are the values the pipeline can put into a `with` argument, and a `with`
 /// parameter has no default in source, so the pipeline has to write each of them (design
 /// principles 4.4, 9.3). A parameter of another type — `int[]`, or a nullable `T?`, which a
 /// default of `null` makes omittable — belongs to a declaration in the module's `.cml`, where the
@@ -83,15 +87,21 @@ passParamsOf(const camel::core::type::FunctionType &type, std::vector<CamelParam
         case TypeCode::String:
             param.passType = PassParamType::String;
             break;
+        case TypeCode::Function:
+            // A function value: the pipeline resolves the name the call wrote to the value, and
+            // the `with` argument is that value.
+            param.passType = PassParamType::Function;
+            break;
         default:
             return std::format(
                 "its `with` parameter '{}' has type {}, and a pass written in Camel takes a bool, "
-                "an int, a float or a string; a parameter of another type, with the default that "
-                "makes it optional, is declared in the module's `.cml`",
+                "an int, a float, a string or a function; a parameter of another type, with the "
+                "default that makes it optional, is declared in the module's `.cml`",
                 param.name,
                 type.withTypeAt(i)->toString());
         }
         param.code = type.withTypeAt(i)->code();
+        param.type = type.withTypeAt(i);
         params.push_back(std::move(param));
     }
     return std::nullopt;
@@ -177,6 +187,10 @@ PassParamValue zeroOf(PassParamType type) {
         // no parameter of this pass ever arrives here. The case is here so the switch covers every
         // type a parameter may have.
         return std::vector<int64_t>();
+    case PassParamType::Function:
+        // A function parameter has no default (`readPassParams` fills this): the depth of the
+        // value is here only so the switch covers every type a parameter may have.
+        return std::monostate{};
     }
     return false;
 }
@@ -203,7 +217,10 @@ class CamelPass final : public GraphIRPass {
         camel::core::type::Type *subject = root->funcType();
         camel::core::type::FunctionTypeFactory factory;
         for (const CamelParam &param : params_) {
-            factory.addWithArg(param.name, camel::core::type::Type::create(param.code), false);
+            factory.addWithArg(
+                param.name,
+                param.type != nullptr ? param.type : camel::core::type::Type::create(param.code),
+                false);
         }
         factory.addNormArg("f", subject, false);
         factory.setExitType(camel::core::type::TupleType::fallible(subject));
@@ -250,6 +267,11 @@ class CamelPass final : public GraphIRPass {
             case TypeCode::String:
                 withArgs.push_back(
                     toSlot(::String::from(args_.getString(param.name), camel::core::mm::autoSpace())));
+                break;
+            case TypeCode::Function:
+                // The value the pipeline resolved, not a name: the pass calls it like any other
+                // function value. The PassArgs keeps it rooted across the call.
+                withArgs.push_back(args_.getFunction(param.name).value);
                 break;
             default:
                 ASSERT(false, "A pass parameter was checked when the pass was registered.");

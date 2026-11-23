@@ -15,6 +15,8 @@
 
 #include "camel/execute/pass/registration.h"
 
+#include "src/stdlib/std/nvm/nodevm.h"
+
 #include <format>
 #include <memory>
 #include <ostream>
@@ -23,6 +25,22 @@
 using camel::core::context::context_ptr_t;
 
 namespace {
+
+/// Runs the function a function parameter resolved to, with one `int`. A function takes no
+/// constant, so the value a case can read back is what calling it gives, and a declaration a case
+/// writes says `(n: int) => int` for that reason. `callFunction` opens the run the function's
+/// program needs; the value is the PassArgs' own, rooted for as long as the arguments live.
+int64_t callFunctionArgument(
+    const context_ptr_t &ctx, std::shared_ptr<NodeVMSchedPass> &vm, const PassFunction &function,
+    int64_t n) {
+    if (vm == nullptr) {
+        vm = std::make_shared<NodeVMSchedPass>(ctx);
+    }
+    const slot_t argument = camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(n);
+    const slot_t answer   = vm->callFunction(
+        camel::core::rtdata::fromSlot<::Function *>(function.value), std::span(&argument, 1));
+    return camel::core::rtdata::fromSlot<camel::core::rtdata::Int64>(answer);
+}
 
 /// A test-only pass whose call can be read back: it prints every parameter the declaration names,
 /// the value it was given, whether that value was written, and how many default expressions have
@@ -58,6 +76,13 @@ class PassParamsTestPass final : public GraphIRPass {
                 // so the switch covers every type a parameter may have.
                 os << args_.text(p.name);
                 break;
+            case PassParamType::Function:
+                // A function parameter is the function the call named, so the only honest thing to
+                // print is what calling it gives: a case's declaration says `(n: int) => int`, and
+                // the number printed is 5 through that function. A value that were still the text
+                // would have nothing to call (camel/execute/pass/params.h).
+                os << callFunctionArgument(context_, vm_, args_.getFunction(p.name), 5);
+                break;
             }
             os << (args_.given(p.name) ? " (given)" : " (default)");
         }
@@ -68,6 +93,7 @@ class PassParamsTestPass final : public GraphIRPass {
   private:
     PassArgs args_;
     std::vector<PassParam> declared_;
+    std::shared_ptr<NodeVMSchedPass> vm_;
 };
 
 /// A test-only pass whose parameters are a declaration and not a list in C++: it has none of its
@@ -75,9 +101,10 @@ class PassParamsTestPass final : public GraphIRPass {
 /// module search path writes for `test::declared` (`test.cml` in a case's own directory, `-I .`).
 /// It prints every parameter the declaration named, the value the declared type read from the word,
 /// and whether that value was written -- which is what a case that checks how a type is read
-/// compares against. A declaration the pipeline cannot read (a type it has no value for, a default
-/// that does not fit it) is refused while the pass is resolved, so nothing here ever asks for a
-/// parameter by a type the declaration did not write.
+/// compares against. A function parameter has no value a word reads as text, so what it prints is
+/// what calling the function gives (`callFunctionArgument`). A declaration the pipeline cannot read
+/// (a type it has no value for, a default that does not fit it) is refused while the pass is
+/// resolved, so nothing here ever asks for a parameter by a type the declaration did not write.
 class DeclaredParamsTestPass final : public GraphIRPass {
   public:
     DeclaredParamsTestPass(const context_ptr_t &ctx, const PassArgs &args)
@@ -88,8 +115,16 @@ class DeclaredParamsTestPass final : public GraphIRPass {
         const std::vector<std::string> names = args_.names();
         os << "test::declared";
         for (const auto &name : names) {
-            os << ' ' << name << '=' << args_.text(name)
-               << (args_.given(name) ? " (given)" : " (default)");
+            os << ' ' << name << '=';
+            // A function parameter is the function the call named, and what a case can read back
+            // is what calling it gives (the declaration says `(n: int) => int`); every other
+            // parameter prints the value its declared type read from the word.
+            if (args_.isFunction(name)) {
+                os << callFunctionArgument(context_, vm_, args_.getFunction(name), 5);
+            } else {
+                os << args_.text(name);
+            }
+            os << (args_.given(name) ? " (given)" : " (default)");
         }
         os << std::format(" declared={}\n", names.size());
         return program;
@@ -97,6 +132,7 @@ class DeclaredParamsTestPass final : public GraphIRPass {
 
   private:
     PassArgs args_;
+    std::shared_ptr<NodeVMSchedPass> vm_;
 };
 
 /// The parameters of `test::params`, one of every type the declaration can write. This is the one

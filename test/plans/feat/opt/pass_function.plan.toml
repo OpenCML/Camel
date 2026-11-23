@@ -1,0 +1,67 @@
+id = "opt.pass_function"
+order = 334
+tier = "fast"
+tags = ["feat", "opt", "pipeline", "pass-parameters"]
+
+# A pass parameter whose type is a function (camel/execute/pass/params.h): the word names a
+# function value, `<module>::<function>`, and the pipeline resolves it to the function before the
+# pass is built. There is no constant reading of such a word and no default: a function is not a
+# constant. Both entries that read a declared parameter type accept it -- a `test.cml` declaration
+# (`test::declared`) and a pass written in Camel (`cmlpass::show`) -- because one that did not
+# would leave the parameter as text, and text is not a value the pass can call.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/opt/pass_function/plain.cml"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "declared.function_value"
+desc = "A declaration's function parameter is the function its word names: `cost=lib::twice` and the declaration `(n: int) => int` give `cost=10` when the pass calls it with 5. The line pins the call, so a parameter left as the word's text has nothing to call and cannot print 10; `declared=2` pins that the declaration still holds two parameters."
+args = ["-I", ".", "${case}", "test::declared cost=lib::twice flag=true", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["test::declared cost=10 (given) flag=true (given) declared=2", "camel-ran-marker"]
+
+[[tests]]
+name = "declared.default_absent"
+desc = "A function parameter has no default, so leaving it out is a missing value at the call and nothing runs: the other parameter's default needs no word, and the function one always does."
+args = ["-I", ".", "${case}", "test::declared flag=true", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
+expect_output_contains = ["The call gives no value for the parameter 'cost' of 'test::declared', and it has no default."]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "declared.no_module"
+desc = "A word that names no function is refused at the call, in the word's own column: the parameter takes `<module>::<function>`, and `twice` is neither."
+args = ["-I", ".", "${case}", "test::declared cost=twice flag=true", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidPassParameter"
+expect_output_contains = ["the parameter 'cost' takes a function value, written <module>::<function>", "'twice' names no function"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "declared.no_such_function"
+desc = "A library that is there and has no such function is a diagnostic of the call, with the library's own reason, and nothing runs."
+args = ["-I", ".", "${case}", "test::declared cost=lib::nope flag=true", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidPassParameter"
+expect_output_contains = ["takes the function 'lib::nope'", "which cannot be used"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "camel_pass.function_value"
+desc = "The other entry: a pass written in Camel declares the parameter in its own `with` list, and the pipeline hands the pass the function value, which the pass calls. The pass prints what the function gave (10) before the program prints its marker."
+args = ["-I", ".", "${case}", "cmlpass::show cost=lib::twice", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "10\ncamel-ran-marker\n"
+
+[[tests]]
+name = "camel_pass.required"
+desc = "The Camel pass declares the function parameter, so the pipeline knows it is required: it is listed and a call that leaves it out is refused before the pass is built."
+args = ["-I", ".", "${case}", "cmlpass::show", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
+expect_output_contains = ["The call gives no value for the parameter 'cost' of 'cmlpass::show', and it has no default."]
+expect_output_not_contains = ["camel-ran-marker"]
