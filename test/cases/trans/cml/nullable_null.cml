@@ -1,0 +1,14 @@
+// A `T?` that holds nothing is not a value `std::cml` writes, and the reason is measured rather than
+// assumed: the language reaches the emptiness of a `T?` through the operator that tests its tag
+// (`??` on an absent value is `:op/tag_is_null`), so the graph holds an operator node and not a
+// `null` constant, and the printer refuses the program at that node.
+//
+// This is the counter-reading to `nullable_value.cml`: widening the printer to name `T?` must not
+// widen it to invent a value that is not there. A printed program cannot say something the source
+// did not, so the refusal is the answer, and the entry pins the node it names.
+
+func main() => int sync {
+    let c: int? = null
+    println(c ?? -1)
+    return 0
+}
