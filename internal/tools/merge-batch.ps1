@@ -92,6 +92,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# `pwsh -File` makes `-Branch a,b` one word, and `-Branch a -Branch b` is a PowerShell binding error
+# (the engine refuses it before this body runs). So the list is split on commas exactly as
+# `-Plan`/`-AstOnly` are elsewhere in this directory (camel-remote-args.ps1), and both spellings
+# `-Branch 'a,b'` and `-Branch a,b` mean the same two lanes.
+$Branch = @($Branch | ForEach-Object { "$_".Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if ($Branch.Count -eq 0) { Write-Host '[batch] -Branch names no lane'; exit 1 }
+
 $script:pushHappened = $false
 $script:pushedSha = ''
 $script:mergeTip = ''
