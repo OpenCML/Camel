@@ -47,7 +47,9 @@
 #   * `-Clean` drops one checkout by name when a task is finished.
 #
 # Exit code is the exit code of the build or of the plan run, or -- when -Check was given and the
-# plan was green -- of the first checker that failed. 5 means the gpu observation read a case red
+# plan was green -- of the first checker that failed. 6 means the tree under test changed while the
+# run held it, or the probe that reads that could not read it (see "the tree under test is the tree
+# this run handed over"). 5 means the gpu observation read a case red
 # that its baseline does not name (see "the gpu layer is observed, and never gates"; the known reds
 # never decide a run). 4 means the -NoBuild guard refused before anything ran; 3 means the host is
 # short of disk; 2 means the worktree, the push or the transfer failed, or -Check named a checker
@@ -109,6 +111,38 @@
 # refusing would block every old worktree. With git unavailable the stamp records no revision and
 # says so; the fingerprint still works (it is file content), so the guard stays effective.
 #
+# --- the tree under test is the tree this run handed over --------------------
+# A build or a test that writes a tracked file changes, without saying so, both what is compiled and
+# what is asserted: the reading this run reports is then a reading of a tree that is not the commit
+# it was given. That is not hypothetical. `npm run build` ran `scripts/diagnostics-catalog.mjs
+# --generate` before CMake configured, and on a registry.tsv that had moved ahead of its tables it
+# rewrote `src/kernel/core/error/diagnostics/messages/semantic.cpp` (md5 045daa5c… -> a5a33101…)
+# inside the build: the build was green, and `--check` on the commit it was given was red, and no
+# run ever said so.
+#
+# So the host reads one thing twice, in the checkout it builds and tests (`$R`):
+# `git status --porcelain --untracked-files=no`, once at hand-over -- after the checkout, the patch
+# and the untracked files are in place, so a lane's own uncommitted change is the baseline and not a
+# finding -- and again after the build and after the plan. Only lines that are *new* against that
+# baseline are reported, so this measures "written during this run" and not "dirty when it started".
+#
+#   * only tracked paths are asked about (`--untracked-files=no`): build outputs are ignored or
+#     untracked by construction, and a wall that reds on them is one readers learn to skip. The
+#     files that must be caught are the *tracked* generated ones (`registry.tsv`, `semantic.cpp`),
+#     because those are what gets compiled;
+#   * the names are printed, not just the fact: "a tracked file changed" sends the next reader to
+#     `git checkout -- .`, which erases the reading and leaves the writer in place, while the name
+#     points at the generator that wrote it;
+#   * a probe that could not read its own status is red, never green -- an unread reading is not a
+#     clean tree;
+#   * the after-plan probe is not taken under `-UpdateGolden` / `-UpdateAstHashes`: those modes exist
+#     to record into tracked files (the goldens, the AST hashes), so the run prints that it stood
+#     down and why instead of reporting the recording as a defect. A silent skip would be a green
+#     that proves nothing.
+#
+# The reading is `TREE_STATE=clean stage=after-build|after-plan` or `TREE_STATE=dirty` followed by
+# one `[TREE]` line per file; a dirty or unread probe is exit 6.
+
 # --- -Check runs the repository's own checkers there ------------------------
 # The static checkers have to run against the tree this run just built and patched, and a lane that
 # opens its own ssh session to do it carries a hand-written copy of every checker's command line
@@ -1066,6 +1100,10 @@ $buildFinishedAt = $null
 $planStartedAt = $null
 $buildExit = $null
 $code = 2
+# Whether the tree probe caught a tracked file written by this run (`__CAMEL_REMOTE_TREE_FAILED__`).
+# It decides the registry entry for a build-only run, whose own exit is the build's 0: without this,
+# a run that failed on the probe would be recorded as a green build.
+$treeFailed = $false
 # Phase marks for the summary line: transfer ends at the sync marker, the plan starts at its own.
 $syncedAt = $null
 # The checker stage's own clock and results. The start is the stage's marker; the results are read
@@ -1595,6 +1633,11 @@ echo '[camel-remote] -FetchFile: the host has no FETCHREL (whatever writes it mu
 fi
 '@.Replace('FETCHREL', $fetchRel)
 } else { ':' }
+    # Whether the after-plan tree probe is taken. Two modes write tracked files on purpose, and the
+    # host script prints that it stood down instead of calling the recording a defect; every other run
+    # takes it. The after-build probe is never skipped: no mode here writes a source file during the
+    # build, which is the defect this probe exists for.
+    $treeProbeAfterPlan = -not ($UpdateGolden -or $UpdateAstHashes)
     $astStage = if ($UpdateAstHashes) {
         @'
 echo '__CAMEL_REMOTE_AST_START__'
@@ -2069,6 +2112,46 @@ else
     if [ -s '$remoteScratch/changes.patch' ]; then git apply --whitespace=nowarn '$remoteScratch/changes.patch' || { echo '[camel-remote] patch did not apply'; exit 2; }; fi
     if [ -f '$remoteScratch/untracked.tar' ]; then tar -xf '$remoteScratch/untracked.tar' -C "`$R" || exit 2; fi
 fi
+# --- the tree under test, as it was handed over -----------------------------
+# The baseline for `tree_probe` below, taken once the tree is in the state this run asked for: the
+# commit, this lane's own uncommitted change (the patch above), and its untracked files. A porcelain
+# line that shows up in a later reading but not in this one was written *during* this run, which is
+# the question -- a lane's own dirty tree is its business, not the build's doing.
+tree_handover='$remoteScratch/tree-handover'
+git -C "`$R" status --porcelain --untracked-files=no > "`$tree_handover" 2>/dev/null ||
+    echo '[camel-remote] the hand-over listing could not be read; the tree probe below will say so'
+# `--untracked-files=no` is the discrimination the whole probe rests on: build outputs are ignored or
+# untracked by construction, so they never appear here, while the tracked generated files
+# (`registry.tsv`, `semantic.cpp`) are exactly what a generator that runs inside the build must not
+# touch. Dropping the flag would turn the probe into noise about `out/`, and a wall that reds on
+# build outputs is one readers learn to skip.
+tree_probe() {
+    probe_stage=`$1
+    probe_now='$remoteScratch/tree-now'
+    if ! git -C "`$R" status --porcelain --untracked-files=no > "`$probe_now" 2>/dev/null; then
+        echo "[TREE] state=unread stage=`$probe_stage: git status could not be read in `$R, so whether this is still the tree the run was given is not known; an unread probe is not a clean tree" >&2
+        echo "TREE_STATE=unread stage=`$probe_stage"
+        return 2
+    fi
+    grep -vxF -f "`$tree_handover" "`$probe_now" > "`$probe_now.new" 2>/dev/null
+    probe_grep=`$?
+    if [ "`$probe_grep" -gt 1 ]; then
+        echo "[TREE] state=unread stage=`$probe_stage: the hand-over listing could not be compared (grep exit `$probe_grep)" >&2
+        echo "TREE_STATE=unread stage=`$probe_stage"
+        return 2
+    fi
+    # grep selected nothing (exit 1) is the clean reading, not a failure: every line was in the
+    # hand-over listing, so nothing was written.
+    if [ ! -s "`$probe_now.new" ]; then
+        echo "TREE_STATE=clean stage=`$probe_stage"
+        return 0
+    fi
+    echo "[TREE] state=dirty stage=`$probe_stage: this run wrote tracked files in the tree it is testing, so the tree it built and tested is not the tree it was given"
+    sed 's/^/[TREE]   /' "`$probe_now.new"
+    echo '[TREE] a build or a plan that writes a tracked file is the defect, not the file: fix the writer, regenerate, and commit the result -- never carry the dirty tree forward'
+    echo "TREE_STATE=dirty stage=`$probe_stage"
+    return 1
+}
 export PATH="`$HOME/$($cfg.hostLocalBin):`$B:`$V:`$C/bin:`$HOME/$($cfg.hostWorkRoot)/bin:`$PATH"
 # Until 26888783c the tree's `camel` binary needed a libstdc++ newer than the host's system one
 # (GLIBCXX_3.4.31/32/35/36 not found), and only two things ever provided it: the plan step, through
@@ -2280,6 +2363,14 @@ if [ '$NoBuild' != 'True' ]; then
     # the exception and releases nothing here -- its hold covers the plan, which is the whole point.
     if [ "`$held_all" = 0 ]; then exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null; fi
     if [ `$code -ne 0 ]; then echo '__CAMEL_REMOTE_BUILD_FAILED__'; exit `$code; fi
+    # What the build was handed, and what it left behind: a generator that ran inside it would have
+    # rewritten a tracked file here, and every target compiled from that file would be compiled from
+    # bytes that are not in the commit. This is the reading that says so, before the plan runs against
+    # the same rewritten tree.
+    if ! tree_probe after-build; then
+        echo '__CAMEL_REMOTE_TREE_FAILED__'
+        exit 6
+    fi
 fi
 # The AST snapshot record (only with -UpdateAstHashes): before the plan, because the plan reads the
 # record this stage writes.
@@ -2325,6 +2416,20 @@ $planMarker
 $goldenMark
 $planRunStage
 echo "RUN_EXIT=`$code"
+# After the plan, because a test can write a tracked file too -- a golden re-recorded from the wrong
+# parser, a case that touches a source file. Only the two record modes write tracked files on purpose
+# (`-UpdateGolden` rewrites goldens, `-UpdateAstHashes` the AST record), and those runs say they stood
+# the probe down instead of reporting the recording as this defect.
+if [ '$($treeProbeAfterPlan.ToString())' = 'True' ]; then
+    if ! tree_probe after-plan; then
+        echo '__CAMEL_REMOTE_TREE_FAILED__'
+        # A red plan keeps its own exit code, the way a red checker does; the tree reading still
+        # reaches the caller through the marker and the printed block.
+        if [ "`$code" -eq 0 ]; then code=6; fi
+    fi
+else
+    echo '[TREE] the after-plan probe is not taken: this run records into tracked files on purpose (-UpdateGolden / -UpdateAstHashes); the after-build probe was taken'
+fi
 $goldenStage
 $fetchStage
 # Released here, before the checkers: they read a finished run and need no exclusion. A
@@ -2652,6 +2757,17 @@ exit `$code
                 Set-BuildPhase 'fail' "[camel-remote] build failed on $sshHost"
                 $run.phase = 'fail'
                 $run.lastLine = "[camel-remote] build failed on $sshHost"
+                Publish-Run
+                return
+            }
+            if ($line -match '__CAMEL_REMOTE_TREE_FAILED__') {
+                # The [TREE] block above already names the files; this is only what the panel and the
+                # registry show, so it says the one thing that decides the run: the tree under test is
+                # not the commit it was given.
+                $treeFailed = $true
+                $run.phase = 'fail'
+                $run.lastLine = "[camel-remote] the tree under test changed during the run on $sshHost (a tracked file was written)"
+                Set-BuildPhase 'fail' $run.lastLine
                 Publish-Run
                 return
             }
@@ -3165,6 +3281,7 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
         # history shows slot wait + compile, never transfer + queue folded into compile time; a
         # checks run is credited with its own stage, because it is work this entry must not hide.
         $recordedExit = if ($null -ne $astExit -and $astExit -ne 0) { $astExit }
+            elseif ($treeFailed) { $code }
             elseif ($null -ne $buildExit -and $checkNames.Count -eq 0) { $buildExit } else { $code }
         $buildStartForPanel = if ($null -ne $buildStartedAt) { $buildStartedAt } elseif ($null -ne $syncedAt) { $syncedAt } else { $startedAt }
         $queueForPanel = if ($null -ne $queueStartedAt) { $queueStartedAt } else { $startedAt }
