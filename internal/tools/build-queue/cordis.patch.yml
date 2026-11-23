@@ -1,0 +1,8 @@
+# Build-queue bundle: one Host row that reads the Camel build-state file and
+# serves it below the authenticated /api channel, plus the Client row that
+# renders the panel in the Web GUI.
+- insert:
+    - id: build-queue
+      name: '@local/dsh-build-queue'
+      config:
+        statePath: 'D:\Projects\Camel-wt\build-state.json'
