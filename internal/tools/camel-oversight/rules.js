@@ -187,8 +187,11 @@ export const RULES = [
         level: 'wake',
         hold: 3,
         cooldown: 10,
-        check: ({ m, target, backlogOpen, now }) => {
+        check: ({ m, target, backlogOpen, now, lanes, limits }) => {
             if (!target || target.status !== 'idle' || backlogOpen === 0) return null
+            // Idle while its lanes are full is the coordinator waiting on their reports, which is its
+            // job; only idle with lanes to spare (or unknown) is time lost.
+            if (readable(lanes) && lanes.running >= limits.minLanes) return null
             const minutes = target.since ? Math.round((now - target.since) / 60_000) : null
             const rows = m.backlog instanceof Map ? [...m.backlog.entries()] : []
             const open = rows.filter(([, row]) => !row.done && !row.doing && !row.blocked).map(([id]) => id).slice(0, 8)
