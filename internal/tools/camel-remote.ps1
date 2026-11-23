@@ -805,16 +805,28 @@ if ($astProblems.Count -gt 0) {
 }
 
 # One checkout per worktree name, kept for its incremental build directory. `-Clean` throws that
-# away when a task is finished; the stale ones are removed automatically at the start of every run
-# (a checkout whose local worktree is gone is only disk).
+# away when a task is finished; the stale ones are reclaimed at the start of a run, but only those
+# that carry a creation record (`~/camel-work/.records/`) and that no run is inside -- a checkout
+# whose local worktree is gone is only disk, and "looks only like disk" is not a reading.
 if ($Clean) {
     $cleanScript = @"
 : "`${HOME:=`$(getent passwd "`$(id -un)" | cut -d: -f6)}"
-d=`$HOME/$($cfg.hostWorkRoot)/$name
+root=`$HOME/$($cfg.hostWorkRoot)
+d=`$root/$name
+# `-Clean` removes a checkout because a person named it, which is not the guess rule 12 forbids.
+# What it must still never remove is what lives beside the checkouts:
+#   * the shared staging bare `~/camel-work/Camel.git`. On 2026-11-23 a lane cleared exactly that
+#     while clearing a temporary checkout, and every lane pushes through it. A bare is not a
+#     checkout: HEAD and objects sit at its top level.
+#   * the bookkeeping this mechanism keeps (`tmp/`, the root; `.records/`, the creation records).
+case "`$d" in "`$root"/?*) ;; *) echo "refusing to remove `$d: it is not under `$root"; exit 3;; esac
+case "`$d" in */tmp|*/.records) echo "refusing to remove `$d: it is the cleanup root's own bookkeeping"; exit 3;; esac
+if [ -f "`$d/HEAD" ] && [ -d "`$d/objects" ]; then echo "refusing to remove `$d: it is a bare repository, not a checkout"; exit 3; fi
 # Never gate the removal on `[ -d ]`: a half-removed checkout (a leftover tmp/ or test/results/)
 # makes the test false while the directory still exists, and the next clone then refuses a
 # non-empty destination. Report what was there and remove it either way.
 if [ -e "`$d" ]; then n=`$(du -sm "`$d" 2>/dev/null | cut -f1); rm -rf "`$d"; if [ -e "`$d" ]; then echo "still there after rm -rf: `$d"; else echo "removed `$n MB"; fi; else echo 'already gone'; fi
+rm -f "`$root/.records/$name"
 "@
     # A here-string carries its line endings verbatim, and a carriage return before a newline
     # makes the remote shell read `d` with a trailing CR: `[ -e "$d" ]` is false for a directory
@@ -822,8 +834,11 @@ if [ -e "`$d" ]; then n=`$(du -sm "`$d" 2>/dev/null | cut -f1); rm -rf "`$d"; if
     # script goes through the same normalization when it is written out.
     $cleanScript = $cleanScript -replace "`r`n", "`n"
     $freed = & $sshExe -o ConnectTimeout=20 $sshHost $cleanScript 2>&1
+    $cleanExit = $LASTEXITCODE
     Write-Host "[camel-remote] host checkout $name`: $freed"
-    exit 0
+    # A refusal is not a cleanup: report it as one, so a script calling `-Clean` cannot read
+    # "nothing to remove" as "the disk is free".
+    exit $cleanExit
 }
 
 # --- published state --------------------------------------------------------
@@ -1170,10 +1185,14 @@ try {
         remote    = $remoteName
     })
 
-    $scratch = Join-Path $env:TEMP "camel-remote-$name"
-    if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
+    # The workstation half of the scratch. Its name carries this run's id, so the delete below can
+    # only reach a directory that a run with this exact id left behind -- the creation record, not
+    # "looks unused" (rule 12). It used to be the fixed `camel-remote-<name>`, cleared at the start
+    # of every run, which deleted the scratch of a second run on the same worktree while that run
+    # was still using it (two runs on one worktree are refused later by the tree lock, not here).
+    $scratch = Join-Path $env:TEMP "camel-remote-$name-$($run.runId)"
+    if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force }
     New-Item -ItemType Directory -Path $scratch | Out-Null
-    $stamp = Get-Date -Format 'HHmmss'
     $patchFile = Join-Path $scratch 'changes.patch'
     $untrackedTar = Join-Path $scratch 'untracked.tar'
 
@@ -1373,7 +1392,9 @@ try {
     # --- carry it over ------------------------------------------------------
     # The patch, the untracked files and the run script travel in one scp: each ssh/scp costs a
     # connection, and there is no ControlMaster on the Windows client to amortise it.
-    $remoteScratch = "/tmp/camel-remote-$name-$stamp"
+    # The name carries this run's id, so two runs on one worktree started in the same second cannot
+    # share -- and then remove -- one scratch directory.
+    $remoteScratch = "/tmp/camel-remote-$name-$($run.runId)"
 
     # What the checkout should be at afterwards, and which host checkouts are still wanted. `-s` on
     # the patch and `-f` on the tar are the fast path's guard: a clean tree needs neither.
@@ -1895,6 +1916,12 @@ cleanup_host_checkouts() {
         # The runner's scratch root lives next to the checkouts and is regenerated every run:
         # removing it here is not a cleanup, and it would invalidate the cached size measurement.
         case "$n" in *-test-tmp) continue;; esac
+        # The cleanup root and the creation records are this mechanism's own bookkeeping, not
+        # checkouts: `tmp/` holds per-run directories that only `camel-cleanup.sh` may remove, and
+        # `.records/` is the bookkeeping this sweep itself reads. A sweep that walked into either
+        # would delete the record it judges by (and `tmp/` has no HEAD/objects, so nothing else
+        # would stop it).
+        case "$n" in tmp|.records) continue;; esac
         # A bare repository is not a checkout: HEAD and objects sit at its top level, and removing it
         # would take the staging remote every lane pushes through.
         if [ -f "$dd/HEAD" ] && [ -d "$dd/objects" ]; then continue; fi
@@ -1928,10 +1955,20 @@ cleanup_host_checkouts() {
             echo "[camel-remote] keeping host checkout $n: a file in it changed in the last 10 minutes"
             continue
         fi
+        # (d) The creation record; everything above is a guess about whether anyone is using this,
+        # and a guess is what deleted a live checkout and the shared bare. A run writes
+        # `~/camel-work/.records/<name>` when it creates (or takes over) a checkout, and this sweep
+        # removes only what carries one. A directory without a record is not this sweep's to delete,
+        # however idle it looks: it is named and left, and `-Clean` is the explicit way to reclaim it.
+        if [ ! -f "$root/.records/$n" ]; then
+            echo "[camel-remote] keeping host checkout $n: no creation record ($root/.records/$n); run -Clean on its worktree when you know it is done"
+            continue
+        fi
         # The lock is taken again for the removal itself: a run that grabbed it in the last
         # millisecond must not have its checkout disappear underneath it.
         if flock -n "$lockf" rm -rf "$dd" 2>/dev/null; then
             reclaimed=1
+            rm -f "$root/.records/$n"
             echo "[camel-remote] removing host checkout $n, its worktree is gone"
         else
             echo "[camel-remote] keeping host checkout $n: a run took its lock while it was being removed"
@@ -1964,7 +2001,15 @@ V=`$HOME/$($cfg.hostBuildEnv)
 B=`$HOME/$($cfg.hostBenchEnv)
 $cleanupGuard
 cleanup_host_checkouts "`$HOME/$($cfg.hostWorkRoot)" '$($liveNames -join ' ')' '$liveTrustedFlag' '$bareLeaf'
-find /tmp -maxdepth 1 -name 'camel-remote-*' -mtime +0 -exec rm -rf {} + 2>/dev/null || true
+# Other runs' scratch directories in /tmp are not this run's to remove (rule 12): the run that left
+# one an hour ago may still be the tree a person is reading, and a directory older than a day is not
+# evidence that nobody is using it. Name what is old and leave it; the run's own scratch goes at the
+# end of the run (see the `rm -rf` beside `exit`), and its name carries its own run id.
+for old in /tmp/camel-remote-*; do
+    [ -d "`$old" ] || continue
+    [ -n "`$(find "`$old" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || continue
+    echo "[camel-remote] leaving old scratch `$old: not created by this run (remove it yourself when you know it is done)"
+done
 freekb=`$(df -P -k "`$HOME" 2>/dev/null | awk 'NR==2{print `$4}')
 # The footprint of the checkouts is informational, but measuring it walks every file under
 # ~/camel-work (43 GB here, ~50 s on a loaded host, once per run). Keep the number in a small
@@ -1988,10 +2033,21 @@ case "`$freekb" in
         ;;
 esac
 mkdir -p "`$R"
+# The creation record this sweep and every later sweep judge by (rule 12), written before the
+# clone because this is the line that creates the checkout. A run that takes over a checkout
+# created before this record existed adopts it here: the run knows the directory is real and in
+# use, which is exactly the reading the sweep cannot take from the outside.
+mkdir -p "`$HOME/$($cfg.hostWorkRoot)/.records"
+printf '%s\t%s\t%s\n' '$($run.runId)' "`$(date -Is)" "`$R" > "`$HOME/$($cfg.hostWorkRoot)/.records/`$(basename "`$R")"
 # `git clone` refuses a non-empty destination, and a half-removed checkout (a leftover tmp/ or
 # test/results/) leaves exactly that: on 2026-10-24 a lane's run died with exit 2 because the
 # destination existed without a `.git`. Clear the path first; the branch's content comes from the
 # bare repository and the patch below, so nothing of value is in the way.
+# What must not be cleared is the shared staging bare itself: on 2026-11-23 a lane cleared
+# `~/camel-work/Camel.git` while clearing a temporary checkout, and every lane pushes through it.
+if [ -f "`$R/HEAD" ] && [ -d "`$R/objects" ]; then
+    echo "[camel-remote] refusing to clear `$R: it is a bare repository (the shared staging remote is $bare)"; exit 2
+fi
 if [ ! -d "`$R/.git" ]; then rm -rf "`$R"; mkdir -p "`$R"; git clone -q "$bare" "`$R" || { echo '[camel-remote] clone failed'; exit 2; }; fi
 cd "`$R" || exit 2
 cur=`$(git rev-parse HEAD 2>/dev/null || true)
@@ -2297,8 +2353,10 @@ fi
 # thing it does not do is touch `code` -- `checkfail` is untouched by it, so no reading it prints can
 # decide this run.
 $gpuBlock
-# The scratch directory goes with the run: doing it here saves a connection, and a run that dies
-# before this line leaves something the day-old prune in /tmp sweeps up.
+# The scratch directory goes with the run: doing it here saves a connection. The path carries this
+# run's id (`/tmp/camel-remote-<name>-<stamp>`, made above by `scp -r`), so this is the one
+# `rm -rf` here that removes a directory this run created -- a run that dies before this line
+# leaves its own directory behind, and a later run names it instead of deleting it.
 cd /tmp && rm -rf '$remoteScratch'
 exit `$code
 "@
