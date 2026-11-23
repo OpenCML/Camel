@@ -92,6 +92,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# The two composition readings live in their own file so they can be checked without a host (see
+# `merge-batch-sets.test.ps1`): the pairwise intersection of the lanes' file sets, and the plan set
+# with the name `scripts/merge-readings.mjs` gives it.
+. (Join-Path $PSScriptRoot 'merge-batch-sets.ps1')
+
 # `pwsh -File` makes `-Branch a,b` one word, and `-Branch a -Branch b` is a PowerShell binding error
 # (the engine refuses it before this body runs). So the list is split on commas exactly as
 # `-Plan`/`-AstOnly` are elsewhere in this directory (camel-remote-args.ps1), and both spellings
@@ -313,25 +318,22 @@ try {
     # An intersection of the sets, not an impression of the diff: "they look like they touch
     # different things" is a guess, and the conflict it misses is found after two plan runs. Every
     # pair is printed, the empty ones included, because a "0 shared files" that was never printed is
-    # indistinguishable from a pair nobody compared.
-    $pairCount = 0
+    # indistinguishable from a pair nobody compared. The intersection itself is in
+    # `merge-batch-sets.ps1`, which `merge-batch-sets.test.ps1` checks without a host.
+    $pairs = @(Get-BatchPairReport -Lanes $lanes)
     $collisions = @()
-    for ($i = 0; $i -lt $lanes.Count; $i++) {
-        for ($j = $i + 1; $j -lt $lanes.Count; $j++) {
-            $pairCount++
-            $shared = @($lanes[$i].Files | Where-Object { $lanes[$j].Files -contains $_ })
-            Write-Host ("  pair {0} & {1}: {2} shared file(s)" -f $lanes[$i].Short, $lanes[$j].Short, $shared.Count)
-            if ($shared.Count -gt 0) { $collisions += ("{0} & {1}: {2}" -f $lanes[$i].Short, $lanes[$j].Short, ($shared -join ', ')) }
-        }
+    foreach ($pair in $pairs) {
+        Write-Host ("  pair {0} & {1}: {2} shared file(s)" -f $pair.A, $pair.B, $pair.Shared.Count)
+        if ($pair.Shared.Count -gt 0) { $collisions += ("{0} & {1}: {2}" -f $pair.A, $pair.B, ($pair.Shared -join ', ')) }
     }
     if ($collisions.Count -gt 0) {
         $collisions | ForEach-Object { "    $_" }
         Stop-With "$($collisions.Count) pair(s) of lanes change the same file" 'A batch is only as cheap as its lanes are separate: two lanes on one file need a merge of their own, because only then is the case that moved attributable to one change.' 1
     }
-    Write-Host ("[batch] {0} pair(s), every one with 0 shared file(s)" -f $pairCount)
+    Write-Host ("[batch] {0} pair(s), every one with 0 shared file(s)" -f $pairs.Count)
 
     # --- 3. the plan set: the union of the lanes' `--changed` ----------------
-    $planSet = @($lanes | ForEach-Object { $_.Plans } | Sort-Object -Unique)
+    $planSet = @(Get-BatchPlanSet -Lanes $lanes)
     $lanes | ForEach-Object { Write-Host ("  {0}: {1} plan(s)" -f $_.Short, $_.Plans.Count) }
     Write-Host ("[batch] plan set: {0} plan(s), the union of the lanes' --changed" -f $planSet.Count)
     $planSetFile = Join-Path $ScratchRoot 'plan-set.txt'
@@ -469,18 +471,25 @@ try {
             Write-Host ("  merged {0} at {1} -> {2} (first parent {3})" -f $lane.Short, $lane.Tip.Substring(0, 9), $sha.Substring(0, 9), $parents[1].Substring(0, 9))
         }
         $head = (Invoke-Git $script:mergeTree @('rev-parse', 'HEAD')).Text
-        # The identity the whole tool rests on: walking the merged commit's FIRST-PARENT chain back
-        # must arrive at the baseline. Checking only HEAD's first parent would pass a batch whose
-        # first merge landed somewhere else and whose last one landed on the second, so the chain is
-        # walked to its root.
-        $chain = @((Invoke-Git $script:mergeTree @('rev-list', '--first-parent', $head)).Lines |
+        # The identity the whole tool rests on: walking back from the merged commit along first
+        # parents must reach the baseline in exactly as many commits as there were merges -- not one
+        # more, not one less. `--first-parent HEAD` alone walks to the root of the repository, so the
+        # walk is cut at the baseline instead: what is left is the batch and nothing else. Checking
+        # only HEAD's first parent would pass a batch whose first merge landed somewhere else, and
+        # checking only ancestry would pass one that merged something out of order.
+        $ancestor = Invoke-Git $script:mergeTree @('merge-base', '--is-ancestor', $base, $head)
+        if ($ancestor.Code -ne 0) {
+            Stop-With "the baseline $base is not an ancestor of the merged tree $head" 'The comparison would be between two unrelated trees. That is a tool fault, not a lane fault: report it rather than merging.' 2
+        }
+        $chain = @((Invoke-Git $script:mergeTree @('rev-list', '--first-parent', $head, '--not', $base)).Lines |
             ForEach-Object { "$_".Trim() } | Where-Object { $_ })
-        if ($chain.Count -eq 0 -or $chain[$chain.Count - 1] -ne $base) {
-            $root = if ($chain.Count -gt 0) { $chain[$chain.Count - 1] } else { '(unreadable)' }
-            Stop-With "the merged tree's first-parent chain ends at $root and the baseline is $base" 'The comparison would be between two unrelated trees. That is a tool fault, not a lane fault: report it rather than merging.' 2
+        $expected = @($made | ForEach-Object { $_.Sha })
+        [array]::Reverse($expected)
+        if ($chain.Count -ne $expected.Count -or ($chain -join ',') -ne ($expected -join ',')) {
+            Stop-With "the merged tree's first-parent walk from $($head.Substring(0, 9)) back to $($base.Substring(0, 9)) is $($chain.Count) commit(s) and this batch made $($expected.Count)" 'Every commit between the baseline and the merged tree must be one of this batch''s merges, in order. Anything else means the tree is not the one this batch built. That is a tool fault, not a lane fault: report it rather than merging.' 2
         }
         Write-Host ''
-        Write-Host "[batch] merged tree $($head.Substring(0, 9)); its first-parent chain ($($chain.Count) commit(s)) ends at $($base.Substring(0, 9)) -- the tree the baseline was measured on"
+        Write-Host "[batch] merged tree $($head.Substring(0, 9)); first-parent walk back to $($base.Substring(0, 9)) is exactly this batch's $($chain.Count) merge(s)"
         Write-Host "[batch] baseline $($base.Substring(0, 9)) and merged tree $($head.Substring(0, 9)) are two different commits" -ForegroundColor Cyan
         return [pscustomobject]@{ Tip = $head; Merges = $made }
     }
@@ -597,10 +606,9 @@ try {
     # per merge commit, each naming its own parents, in the directory `scripts/merge-record.mjs`
     # reads (`<git-common-dir>/camel-passed/<sha>.json`).
     $diff = Get-Content -LiteralPath (Join-Path $comparison.OutDir 'diff.json') -Raw | ConvertFrom-Json
-    $sortedNames = @(Get-Content -LiteralPath $planSetFile | ForEach-Object { "$_".Trim() } | Where-Object { $_ } | Sort-Object -Unique)
-    $hash = 0
-    foreach ($ch in ($sortedNames -join "`n").ToCharArray()) { $hash = (($hash * 31) + [int][char]$ch) -band 0xFFFFFFFF }
-    $planSetHash = "{0}-{1:x}" -f $sortedNames.Count, $hash
+    $planSetName = Get-PlanSetHash -Names @(Get-Content -LiteralPath $planSetFile)
+    $sortedNames = @($planSetName.Names)
+    $planSetHash = $planSetName.Hash
     New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
     foreach ($m in $built.Merges) {
         $record = [ordered]@{
