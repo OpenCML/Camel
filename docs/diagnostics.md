@@ -10690,13 +10690,17 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 Convert the value to a supported type before the call.
 ```
 
-**Example** (`test/cases/modules/tensor/dtype/element_type_refused.cml`, run as `camel test/cases/modules/tensor/dtype/element_type_refused.cml`)
+**Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
 
 ```camel
 // The spatial kernels -- `conv2d` and its gradients, the pooling ones and the batch-norm ones --
 // take f32 and f64 tensors, and no other element type. An integer tensor is refused at the call
 // with a diagnostic naming the operator, the argument's element type and the set the kernel
 // takes. It is never narrowed to f32 (design principles 5.1, 13.1).
+//
+// The file keeps the name it had when the set was f32 alone: it was the case that pinned an f64
+// tensor being refused, and f64 is one of the two element types these kernels are instantiated
+// for now, so what it pins is the other side of the same set.
 
 import { conv2d } from nn
 import { reshape, sum } from tensor

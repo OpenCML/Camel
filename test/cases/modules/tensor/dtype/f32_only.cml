@@ -2,6 +2,10 @@
 // take f32 and f64 tensors, and no other element type. An integer tensor is refused at the call
 // with a diagnostic naming the operator, the argument's element type and the set the kernel
 // takes. It is never narrowed to f32 (design principles 5.1, 13.1).
+//
+// The file keeps the name it had when the set was f32 alone: it was the case that pinned an f64
+// tensor being refused, and f64 is one of the two element types these kernels are instantiated
+// for now, so what it pins is the other side of the same set.
 
 import { conv2d } from nn
 import { reshape, sum } from tensor
