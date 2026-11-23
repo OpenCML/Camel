@@ -15,5 +15,7 @@
   "hostLocalBin": ".local/bin",
   "hostLibStdCxxDir": "<absolute path, on the host, of the toolchain libstdc++ directory -- only for installs built before they carried their own>",
 
-  "watchRepo": "<absolute path of the checkout watch-fsh-dev.ps1 follows>"
+  "watchRepo": "<absolute path of the checkout watch-fsh-dev.ps1 follows>",
+
+  "mergeWorktree": "<absolute path of the ONE worktree allowed to push develop -- scripts/hooks/pre-push refuses every other tree; a JSON array or a ';'-separated list when this machine keeps more than one, and leaving the key out means no tree may push develop>"
 }
