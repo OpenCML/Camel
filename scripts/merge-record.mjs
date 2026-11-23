@@ -131,12 +131,43 @@ function doWrite() {
         refuse(1, `refusing to record a pass for ${merge.slice(0, 9)}: ${regressed.length} newly red and ${changed.length} changed, and a pass record with those in it would be read as a pass`)
     }
 
+    // A batch writes one record per merge commit, because the hook asks about every merge commit on
+    // the first-parent chain and a batch is a run of them. The rows those records carry were read
+    // once, off the batch's TIP: that is the only tree that was measured, and a record that let a
+    // reader believe each commit was measured on its own tree would be the quieter lie. So the batch
+    // is named in the record -- how many lanes, which ones, and the tip whose tree the reading came
+    // off -- and a single-lane merge has no `batch` field at all rather than a batch of one.
+    const batchSize = Number(arg('--batch-size') || 0)
+    const batchLanes = argAll('--batch-lane')
+    const batchTip = arg('--batch-tip') || merge
+    if (batchSize > 0) {
+        if (batchLanes.length !== batchSize) {
+            refuse(2, `--batch-size ${batchSize} and ${batchLanes.length} --batch-lane: a batch record that cannot name its lanes cannot say what it measured`)
+        }
+        if (!SHA.test(batchTip)) refuse(2, `--batch-tip must be a full commit sha; it was '${batchTip}'`)
+        if (batchTip === merge && batchSize === 1 && batchLanes[0] === branch) {
+            refuse(2, 'a batch of one lane is a single merge: write it without the batch fields')
+        }
+    }
+
     const record = {
         sha: merge,
         firstParent,
         secondParent,
         laneBranch: branch,
         tree,
+        ...(batchSize > 0
+            ? {
+                  batch: {
+                      size: batchSize,
+                      lanes: batchLanes,
+                      tip: batchTip,
+                      // What the numbers below describe, said in the record rather than inferred from
+                      // `sha === tip`: the reading is the batch's, taken once on the tip's tree.
+                      measured: batchTip === merge ? 'this commit is the batch tip' : `the batch tip ${batchTip.slice(0, 9)}; this commit was not measured on its own tree`,
+                  },
+              }
+            : {}),
         planSet: { names: diff.planSet.names, hash: diff.planSet.hash, count: diff.planSet.names.length },
         baseline: {
             sha: diff.baseline?.sha ?? firstParent,
