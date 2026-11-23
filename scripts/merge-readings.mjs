@@ -168,6 +168,92 @@ function readWhere(key) {
     }
 }
 
+// --- one side holding a case the other does not ------------------------------
+// The evidence that a change removed a case: it touched something that holds that case. A case is
+// named `<plan id>/<case id>`; its plan is the entry in the plan set whose `id` matches, and a plan
+// target that is a directory holds every plan under it. Without that evidence, a case missing from
+// one run is the two runs selecting differently, which is a fact about the selection rules.
+const changedFiles = (() => {
+    const file = arg('--changed-files')
+    if (!file || !fs.existsSync(file)) return []
+    return fs.readFileSync(file, 'utf8').split('\n').map((s) => s.trim().replace(/\\/g, '/')).filter(Boolean)
+})()
+const mergeMessage = (() => {
+    const file = arg('--message-file')
+    return file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+})()
+
+/** A path as the change lists it: repo-relative, forward slashes. */
+function repoRelative(name) {
+    const s = name.trim().replace(/\\/g, '/')
+    const at = s.indexOf('test/plans/')
+    return at >= 0 ? s.slice(at) : s
+}
+
+/** Does a changed file sit on this path or under it? */
+function touched(rel) {
+    const dir = rel.endsWith('/') ? rel : `${rel}/`
+    return (changedFiles || []).some((f) => f === rel || f.startsWith(dir))
+}
+
+/** The plan files a target names: the file itself, or every plan under a directory target. */
+function planFilesOf(target) {
+    const rel = repoRelative(target)
+    if (rel.endsWith('.toml')) return [{ file: target, rel }]
+    const out = []
+    const walk = (dir, relDir) => {
+        let entries = []
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true })
+        } catch {
+            return
+        }
+        for (const e of entries) {
+            const child = path.join(dir, e.name)
+            const childRel = `${relDir}/${e.name}`
+            if (e.isDirectory()) walk(child, childRel)
+            else if (e.name.endsWith('.plan.toml')) out.push({ file: child, rel: childRel })
+        }
+    }
+    walk(target, rel)
+    return out
+}
+
+/** The plan id a plan file declares, or null. */
+function planIdOf(file) {
+    try {
+        const m = fs.readFileSync(file, 'utf8').match(/^\s*id\s*=\s*"([^"]+)"/m)
+        return m ? m[1] : null
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Did this change remove the case, or did the two runs select differently? True only on evidence:
+ * the merge touches a file of the plan that holds the case -- the plan file itself, or anything in a
+ * directory target that contains it.
+ */
+function removalExplained(caseName, _changedFiles, planSetPath) {
+    if (!planSetPath) return false
+    const id = caseName.split('/')[0]
+    for (const target of planSetNames(planSetPath).map((s) => s.trim()).filter(Boolean)) {
+        for (const plan of planFilesOf(target)) {
+            if (planIdOf(plan.file) !== id) continue
+            if (touched(plan.rel)) return true
+        }
+    }
+    return false
+}
+
+/** Does the merge message name this case (or its plan)? A removal has to be said out loud. */
+function messageNames(caseName, message) {
+    if (!message) return false
+    const lower = message.toLowerCase()
+    const id = caseName.split('/')[0]
+    return lower.includes(caseName.toLowerCase()) || lower.includes(id.toLowerCase())
+}
+
 let cacheKey = null
 if (cacheDir) {
     if (!develop || !planSet) die('--cache needs --develop <sha> and --plans <file or comma list>: a baseline keyed by commit alone is reused across plan sets it was not measured on')
@@ -283,20 +369,43 @@ const RED = (v) => v === 'fail'
 const fixed = []
 const regressed = []
 const changed = []
+const addedRed = []
+const addedGreen = []
+const removed = []
+const removedRedUnnamed = []
+const unexplained = []
 for (const [name, before] of base.rows) {
     const after = tree.rows.get(name)
-    if (!after) {
-        // A case the baseline measured and this run did not is not "fine": it is a reading missing.
-        die(`the baseline measured ${name} and this run did not; a case that stopped being selected is not a green`)
-    }
+    if (!after) continue
     if (RED(before.verdict) && !RED(after.verdict)) fixed.push(name)
     else if (!RED(before.verdict) && RED(after.verdict)) regressed.push({ name, reading: after.reading })
     else if (RED(before.verdict) && RED(after.verdict) && before.reading !== after.reading) {
         changed.push({ name, before: before.reading, after: after.reading })
     }
 }
-for (const name of tree.rows.keys()) {
-    if (!base.rows.has(name)) die(`this run measured ${name}, which the baseline does not hold; the two runs are not the same set of plans`)
+// A case only one side holds is not automatically a lie. The equality this replaced died on every
+// lane that adds a case, and lanes add cases constantly: the baseline tree does not hold them and
+// never will, so the equality made the gate refuse every such merge whatever it measured. Which side
+// a case is missing from, and what it read, decides what it means.
+for (const [name, after] of tree.rows) {
+    if (!base.rows.has(name)) (RED(after.verdict) ? addedRed : addedGreen).push(name)
+}
+for (const [name, before] of base.rows) {
+    if (tree.rows.has(name)) continue
+    // Missing from this run. Two very different facts wear that shape:
+    //   - the change removed the case (its file, its plan entry). Then it is `removed` and it is NOT
+    //     `fixed` -- a red case that disappears must not read as a case that went green.
+    //   - the change did not touch anything that holds the case, so the two runs selected
+    //     differently. That is a fact about the selection, not about this merge: exit 2, and name it.
+    if (!removalExplained(name, changedFiles, planSet)) {
+        unexplained.push(name)
+        continue
+    }
+    // Deleting a red case makes the three sets emptier without fixing anything: the oldest way to
+    // turn a gate green. It is allowed only when the merge says out loud that it is going, so the
+    // record carries the decision instead of the absence carrying it.
+    if (RED(before.verdict) && !messageNames(name, mergeMessage)) removedRedUnnamed.push(name)
+    else removed.push(name)
 }
 
 if (fixed.length > 0) {
@@ -306,6 +415,29 @@ if (fixed.length > 0) {
 if (regressed.length > 0) {
     console.log(`merge-readings: ${regressed.length} newly red:`)
     for (const r of regressed) console.log(`  ${r.name}: ${r.reading ?? '(no reading)'}`)
+}
+if (addedRed.length > 0) {
+    console.log(`merge-readings: ${addedRed.length} case(s) this change adds that are red:`)
+    for (const name of addedRed) console.log(`  ${name}: ${tree.rows.get(name)?.reading ?? '(no reading)'}`)
+}
+if (addedGreen.length > 0) {
+    console.log(`merge-readings: ${addedGreen.length} case(s) this change adds that are green (allowed, named so the record has them):`)
+    for (const name of addedGreen) console.log(`  ${name}`)
+}
+if (removed.length > 0) {
+    console.log(`merge-readings: ${removed.length} case(s) this change removes (not counted as fixed):`)
+    for (const name of removed) console.log(`  ${name}`)
+}
+if (removedRedUnnamed.length > 0) {
+    console.log(`merge-readings: ${removedRedUnnamed.length} red case(s) this change removes without naming them in the merge message:`)
+    for (const name of removedRedUnnamed) console.log(`  ${name}`)
+    console.log('merge-readings: deleting a red case to make this gate green is the oldest cheat; name it in the merge message if the removal is meant')
+}
+if (unexplained.length > 0) {
+    console.log(`merge-readings: ${unexplained.length} case(s) the baseline measured and this run did not, and this change does not remove:`)
+    for (const name of unexplained) console.log(`  ${name}`)
+    console.log('merge-readings: the two runs selected differently -- that is the selection, not this merge, so nothing here is a verdict on the change')
+    process.exit(2)
 }
 if (changed.length > 0) {
     console.log(`merge-readings: ${changed.length} still red, failing differently:`)
@@ -319,14 +451,15 @@ if (changed.length > 0) {
 const out = arg('--out')
 if (out) {
     fs.mkdirSync(out, { recursive: true })
-    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({ fixed, new: regressed, changed }, null, 2))
+    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({ fixed, new: regressed, changed, added: addedGreen, addedRed, removed }, null, 2))
 }
 
 console.log(
     `merge-readings: cases=${base.rows.size} fixed=${fixed.length} new=${regressed.length} changed=${changed.length} ` +
+        `added=${addedGreen.length + addedRed.length} removed=${removed.length} ` +
         `normal=${base.version}` +
         // The two shas on the line that carries the verdict: a reader who sees 0/0/0 has to be able to
         // see, without going back up the transcript, that the baseline and this run are two trees.
         (cacheKey ? ` baseline_tree=${(readWhere(cacheKey)?.tree || '?').slice(0, 9)} this_tree=${treeSha.slice(0, 9)}` : ''),
 )
-process.exit(regressed.length > 0 || changed.length > 0 ? 1 : 0)
+process.exit(regressed.length > 0 || changed.length > 0 || addedRed.length > 0 || removedRedUnnamed.length > 0 ? 1 : 0)

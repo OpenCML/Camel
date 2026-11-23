@@ -383,9 +383,19 @@ try {
         [System.IO.File]::WriteAllText($planSetFile, ($planTargets -join "`n") + "`n",
             (New-Object System.Text.UTF8Encoding($false)))
     }
-    # The change this merge brings, as `git diff --name-only HEAD^1` sees it in this checkout. The
-    # seeding run lists the change from the other end (see below); both must name the same files or
-    # the two runs hold different sets of cases and the comparison says nothing.
+    # The change this merge brings, as `git diff --name-only HEAD^1` sees it in this checkout, and the
+    # merge message. The comparison reads them to answer the one question the case sets cannot: a case
+    # the baseline holds and this run does not is either a case this change removed -- then it is
+    # `removed` and not `fixed`, and a red one has to be named in the message -- or the two runs
+    # selected differently, which is a fact about the selection and exits 2. Without these two files
+    # both readings look the same, and the gate used to call both of them "not a green".
+    $changedFilesFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-changed-$PID.txt")
+    $changedFiles = @(& git diff --name-only 'HEAD^1' 2>$null) |
+        ForEach-Object { "$_".Trim().Replace('\', '/') } | Where-Object { $_ }
+    [System.IO.File]::WriteAllText($changedFilesFile, (($changedFiles -join "`n") + "`n"),
+        (New-Object System.Text.UTF8Encoding($false)))
+    $messageFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-message-$PID.txt")
+    [System.IO.File]::WriteAllText($messageFile, "$Message`n", (New-Object System.Text.UTF8Encoding($false)))
     if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
         # Not a red and not a green: the selection itself did not answer, so the plans this merge
         # touches are unknown and nothing about the change has been measured. Same shape as the
@@ -568,7 +578,8 @@ try {
         $rowsCount, $rowsExit, $planTargets.Count, $(if ($widened) { ' (the whole fast layer)' } else { '' }))
 
     $compare = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
-        --cache $compareDir --develop $developTip --plans $planSetFile --tree $comparedTree 2>&1)
+        --cache $compareDir --develop $developTip --plans $planSetFile --tree $comparedTree `
+        --changed-files $changedFilesFile --message-file $messageFile 2>&1)
     $compareExit = $LASTEXITCODE
 
     # The same three-way convention as the clang step. 1 is a reading -- the cases that moved are
@@ -600,6 +611,11 @@ try {
     }
     # The two shas on the one line that says "measured": a reader who trusts this line has to be able
     # to see that it was two trees, not one tree twice.
+    #
+    # The comparer's line is echoed even when it allowed the merge: a case this change added and a case
+    # it removed are names the record has to carry, and a green that says only "no new red" is a green
+    # whose case set the reader cannot see.
+    $compare | Where-Object { "$_".StartsWith('merge-readings:') } | ForEach-Object { "  $_" }
     Write-Host ("  measured: baseline tree {0} ({1}) against this tree {2}, no new red and no changed failure ({3:N0} s)" -f `
         $developTip.Substring(0, 9), $(if ($seededFrom) { 'seeded now' } else { 'from the cache' }), `
         $comparedTree.Substring(0, 9), ((Get-Date) - $rowsStarted).TotalSeconds)
@@ -651,6 +667,8 @@ finally {
     if ($transcript) { Remove-Item -LiteralPath $transcript -Force -ErrorAction SilentlyContinue }
     if ($seedTranscript) { Remove-Item -LiteralPath $seedTranscript -Force -ErrorAction SilentlyContinue }
     if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
+    if ($changedFilesFile) { Remove-Item -LiteralPath $changedFilesFile -Force -ErrorAction SilentlyContinue }
+    if ($messageFile) { Remove-Item -LiteralPath $messageFile -Force -ErrorAction SilentlyContinue }
     # (the changed-file list is not a temp file: both sides read it from git)
     Pop-Location
 }
