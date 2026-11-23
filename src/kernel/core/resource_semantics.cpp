@@ -12,6 +12,7 @@
 #include <array>
 #include <format>
 
+#include "camel/core/module/module.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
@@ -328,10 +329,11 @@ std::string toString(const ResourceSpec &spec) {
         // The accesses are not itemized here: they are the function's that the operand carries.
         // Said in words, because "none" would be a different statement.
         const ResourceBinding &at = *spec.functionOperand;
-        part(std::format(
-            "accesses of the function in {} {}",
-            at.kind == ResourceBinding::Kind::Norm ? "norm" : "with",
-            at.index));
+        part(
+            std::format(
+                "accesses of the function in {} {}",
+                at.kind == ResourceBinding::Kind::Norm ? "norm" : "with",
+                at.index));
     }
     return out;
 }
@@ -345,8 +347,8 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     // program and says nothing about where: the signature a reader that has only the table can
     // honestly publish is "an effect it does not itemize" (design principles 3.3). The reader that
     // has the value narrows it -- that is what `functionOperand` is for.
-    sig.external  = spec.externalEffect || spec.functionOperand.has_value();
-    sig.spelling  = spec.spelling;
+    sig.external = spec.externalEffect || spec.functionOperand.has_value();
+    sig.spelling = spec.spelling;
     for (const ResourceAccess &access : spec.accesses) {
         switch (access.binding.kind) {
         case ResourceBinding::Kind::Norm:
@@ -470,9 +472,10 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
         return false;
     }
     // Reading the spelling is not read here: it is a capability the check of a body's declaration
-    // owns (Builder::checkInferredResources), where the clause the writer made is in hand. Comparing
-    // it here would refuse every body written in place against a position whose type promises
-    // `pure`, and a lambda has no clause to write the capability in (design principles 5.9, 9.5).
+    // owns (Builder::checkInferredResources), where the clause the writer made is in hand.
+    // Comparing it here would refuse every body written in place against a position whose type
+    // promises `pure`, and a lambda has no clause to write the capability in (design
+    // principles 5.9, 9.5).
     return true;
 }
 
@@ -574,17 +577,17 @@ std::string handleResourceName(const type::Type *type) {
         return static_cast<const type::OtherType *>(type)->resourceHandleName();
     }
     std::string name;
-    std::string module;
+    const module::Module *declaring = nullptr;
     if (type->code() == type::TypeCode::Struct) {
         const type::StructDecl *decl = static_cast<const type::StructType *>(type)->decl();
         name                         = decl->name();
-        module                       = decl->moduleName();
+        declaring                    = decl->module();
     } else {
         const type::EnumDecl *decl = static_cast<const type::EnumType *>(type)->decl();
         name                       = decl->name();
-        module                     = decl->moduleName();
+        declaring                  = decl->module();
     }
-    return module.empty() ? name : module + "::" + name;
+    return declaring == nullptr ? name : declaring->name() + "::" + name;
 }
 
 std::string toString(const ResourceSignature &signature) {

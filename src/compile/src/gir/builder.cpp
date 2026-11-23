@@ -908,8 +908,7 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
 /// something else of the same name (`export_model`: the operator takes the function and an example,
 /// the pass takes the function), and then the operator is the declaration that writes `#op`.
 bool Builder::declarationHasOperator(const GCT::node_ptr_t &gct) {
-    const std::string &declared = unit_->module->declaredName();
-    std::string uri   = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
+    std::string uri   = unit_->module->name() + ":" + gct->name();
     const auto tagged = nativeOperatorUri(gct);
     if (tagged.has_value()) {
         uri = *tagged;
@@ -1643,8 +1642,8 @@ void Builder::buildFuncBody(
                     // -- one construct with two answers, and only the lambda's a refusal. The base
                     // value of the empty tuple is a `Norm` input all the same, so the node is one
                     // the scheduler accepts: the `with` pack below builds the same tuple with no
-                    // member today, and a body that spreads it (`f<..ws>(..xs)` with no `with` value
-                    // past the ones the lambda wrote) has always run.
+                    // member today, and a body that spreads it (`f<..ws>(..xs)` with no `with`
+                    // value past the ones the lambda wrote) has always run.
                     node_handle_t tuple = fillStaticValues(
                         TupleType::create(parts),
                         members,
@@ -1784,7 +1783,7 @@ void Builder::buildFuncBody(
                 measured.has_value() && measured->anyOf.empty()) {
                 // As in measureInferredResources: the capability is not published on the type.
                 camel::core::sem::ResourceSignature published = *measured;
-                published.spelling                             = false;
+                published.spelling                            = false;
                 graph->setResources(published);
             }
         }

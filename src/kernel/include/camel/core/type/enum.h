@@ -44,6 +44,10 @@
 #include <string_view>
 #include <vector>
 
+namespace camel::core::module {
+class Module;
+}
+
 namespace camel::core::type {
 
 class EnumType;
@@ -80,15 +84,18 @@ class EnumDecl {
     /// that the variants (and other declarations of the module) can refer to it. `name` is
     /// the name as written with its namespace path (`Shape`, `geo::Shape`); `module` is the
     /// module that declares the type (an operator on a value of it is looked for there as well,
-    /// design principles 5.7).
+    /// design principles 5.7). A module outlives every declaration it makes, so the declaration
+    /// keeps it without owning it.
     static EnumDecl *create(
-        const std::string &name, std::vector<std::string> params,
-        std::string module = std::string());
+        const std::string &name, std::vector<std::string> params, module::Module *module = nullptr);
 
     const std::string &name() const { return name_; }
-    /// The name the declaring module is loaded under (`models`), empty when the declaration was
-    /// made outside a module. Not part of the type's identity: the declaration is.
-    const std::string &moduleName() const { return module_; }
+    /// The module that declares this type, or nullptr when the declaration was made outside a
+    /// module. It is the module itself, not a name of it: a named type's identity is the
+    /// declaration (design principles 5.2), and the one thing a reader needs from it -- which
+    /// module's operators a value of the type goes to (5.7) -- is answered without searching
+    /// any collection for a name.
+    module::Module *module() const { return module_; }
     /// The name without its namespace path: what a value prints (`Shape::Circle`).
     const std::string &shortName() const { return shortName_; }
     /// A number no other declaration of the process has: part of the mangled name.
@@ -114,11 +121,11 @@ class EnumDecl {
     EnumType *prototype() const;
 
   private:
-    EnumDecl(const std::string &name, std::vector<std::string> params, std::string module);
+    EnumDecl(const std::string &name, std::vector<std::string> params, module::Module *module);
 
     std::string name_;
     std::string shortName_;
-    std::string module_;
+    module::Module *module_;
     uint32_t id_;
     std::vector<std::string> params_;
     std::vector<EnumVariant> variants_;

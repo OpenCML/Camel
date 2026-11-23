@@ -68,12 +68,6 @@ std::string plainName(const std::string &written) {
     return written;
 }
 
-/// The name a module shows itself by (design principles 10.2: the name it declares, or else
-/// the name it was loaded under).
-std::string shownModuleName(const camel::core::module::Module &module) {
-    return module.declaredName().empty() ? module.name() : module.declaredName();
-}
-
 /// A condition may call a function of the library: a `match type` predicate is one, and its
 /// body is ordinary Camel. The instance's graph answers it when the result is a constant of the
 /// graph (the common case: every arm of `match type` ends in `true` or `false`). A body that
@@ -1019,7 +1013,7 @@ bool Builder::whenPredicateAmbiguous(const std::string &written, WhenResult &pro
             if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
                 if (std::ranges::find(predicates, tmpl) == predicates.end()) {
                     predicates.push_back(tmpl);
-                    modules.push_back(shownModuleName(*import.mod));
+                    modules.push_back(import.mod->name());
                 }
             } else {
                 ordinary = true;
@@ -1087,7 +1081,7 @@ auto Builder::whenPredicateNamed(
             problem.detail = std::format(
                 "module '{}' brings it, and it is not a generic function answered at compile "
                 "time",
-                shownModuleName(*source->first));
+                source->first->name());
         } else {
             problem.detail = "it is not a generic function answered at compile time";
         }
@@ -1142,13 +1136,13 @@ std::string Builder::whenPredicateElsewhere(const std::string &written) const {
         std::string candidate = written;
         if (const size_t separator = written.find("::"); separator != std::string::npos) {
             const std::string prefix = written.substr(0, separator);
-            if (prefix != module->name() && prefix != module->declaredName()) {
+            if (prefix != module->name()) {
                 continue;
             }
             candidate = written.substr(separator + 2);
         }
         if (unit->templateScope->get(candidate).has_value()) {
-            return shownModuleName(*module);
+            return module->name();
         }
     }
     return {};

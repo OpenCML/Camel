@@ -188,33 +188,39 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
 // concrete by the time an instance is built, so the declaring modules come from the operand
 // types. Anonymous types (no declaration), builtin types and aliases of them (no declaration of
 // their own) have no declaring module and are left to the lexical scope and the built-ins.
+//
+// The module that is asked is the one the type's declaration records (5.2: a named type's
+// identity is its name and the declaring module), not a name of it: the declaration is where the
+// reference was made, and nothing about which modules a program happens to hold -- the unit being
+// built, the user modules loaded, the prelude, the imports -- can decide whether the lookup
+// reaches it.
 
-std::vector<std::pair<std::string, std::string>>
+std::vector<std::pair<Module *, std::string>>
 Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normTypes) {
-    std::vector<std::pair<std::string, std::string>> found;
+    std::vector<std::pair<Module *, std::string>> found;
     const auto add = [&](Type *type) {
         type = valueTypeOf(type);
         if (type == nullptr) {
             return;
         }
-        std::string module;
+        Module *module = nullptr;
         std::string name;
         if (type->code() == TypeCode::Struct) {
             const auto *structType = tt::as_ptr<StructType>(type);
             if (structType->named()) {
-                module = structType->decl()->moduleName();
+                module = structType->decl()->module();
                 name   = structType->decl()->name();
             }
         } else if (const auto *enumType = asEnumType(type); enumType != nullptr) {
-            module = enumType->decl()->moduleName();
+            module = enumType->decl()->module();
             name   = enumType->decl()->name();
         }
         // The module this unit builds is already in the lexical scope of the expression.
-        if (module.empty() || (module_ && module == module_->name())) {
+        if (module == nullptr || module == module_.get()) {
             return;
         }
         if (std::ranges::find(found, std::make_pair(module, name)) == found.end()) {
-            found.emplace_back(std::move(module), std::move(name));
+            found.emplace_back(module, std::move(name));
         }
     };
     for (Type *type : withTypes) {
@@ -224,46 +230,6 @@ Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normT
         add(type);
     }
     return found;
-}
-
-module_ptr_t Builder::moduleNamed(const std::string &name) {
-    // One module, one name: the name its file gives it (design principles 10.1). What went wrong
-    // here was the set of modules searched, not the number of names: it was the current unit and
-    // the modules written in Camel, and the prelude is neither, so a type the prelude declares
-    // named a module this lookup could not reach -- every declaring-module lookup of the prelude
-    // (design principles 5.7) missed, which is why the operators of a prelude type were reached
-    // some other way. `importedModules` is the builtin module and every module loaded, so one
-    // search covers them all.
-    if (module_ && module_->name() == name) {
-        return module_;
-    }
-    if (context_) {
-        for (const module_ptr_t &candidate : context_->allUserModules()) {
-            if (candidate && candidate->name() == name) {
-                return candidate;
-            }
-        }
-        // The prelude is neither the current unit nor a user module: the context holds it on its
-        // own, and that is the whole of what this search was missing.
-        if (const module_ptr_t &prelude = context_->preludeModule();
-            prelude && prelude->name() == name) {
-            return prelude;
-        }
-        for (const module_ptr_t &candidate : context_->importedModules()) {
-            if (candidate && candidate->name() == name) {
-                return candidate;
-            }
-        }
-    }
-    // The type came from the module, so it is loaded: this lookup never loads one.
-    return nullptr;
-}
-
-std::string Builder::moduleDisplayName(const std::string &name) {
-    if (const module_ptr_t module = moduleNamed(name); module) {
-        return module->declaredName().empty() ? module->name() : module->declaredName();
-    }
-    return name;
 }
 
 bool Builder::addDeclaringModuleOverloads(
@@ -290,11 +256,7 @@ bool Builder::addDeclaringModuleOverloads(
     }
     OperatorOverloads &set = known->second;
     bool added             = false;
-    for (const auto &[moduleName, typeName] : declaring) {
-        const module_ptr_t module = moduleNamed(moduleName);
-        if (!module) {
-            continue;
-        }
+    for (const auto &[module, typeName] : declaring) {
         for (const auto &overload : exports_->exportedOperatorOverloads(*module, wanted)) {
             const entity &exported = overload.overloads;
             if (camel::core::module::detail::EntityAccess::isGraphSet(exported)) {
@@ -302,7 +264,7 @@ bool Builder::addDeclaringModuleOverloads(
                          camel::core::module::detail::EntityAccess::graphSet(exported))) {
                     if (std::ranges::find(set.graphs, graph) == set.graphs.end()) {
                         set.graphs.push_back(graph);
-                        set.moduleOf[graph.get()] = moduleName;
+                        set.moduleOf[graph.get()] = module->name();
                         added                     = true;
                     }
                 }
@@ -310,7 +272,7 @@ bool Builder::addDeclaringModuleOverloads(
                 for (const generic_template_ptr_t &generic : genericTemplatesOfEntity(exported)) {
                     if (std::ranges::find(set.templates, generic) == set.templates.end()) {
                         set.templates.push_back(generic);
-                        set.moduleOf[generic.get()] = moduleName;
+                        set.moduleOf[generic.get()] = module->name();
                         added                       = true;
                     }
                 }
@@ -328,9 +290,8 @@ bool Builder::hasDeclaringModuleOperator(
     if (instantiationDepth_ == 0) {
         return false;
     }
-    for (const auto &[moduleName, typeName] : declaringModulesOf(withTypes, normTypes)) {
-        if (const module_ptr_t module = moduleNamed(moduleName);
-            module && !exports_->exportedOperatorOverloads(*module, group).empty()) {
+    for (const auto &[module, typeName] : declaringModulesOf(withTypes, normTypes)) {
+        if (!exports_->exportedOperatorOverloads(*module, group).empty()) {
             return true;
         }
     }
@@ -349,7 +310,7 @@ Builder::operatorSearchScopeText(const type_vec_t &withTypes, const type_vec_t &
     }
     std::string where = "this module";
     if (module_ && context_ && context_->mainModule() != module_ && !module_->name().empty()) {
-        where = "module '" + moduleDisplayName(module_->name()) + "'";
+        where = "module '" + module_->name() + "'";
     }
     std::string text =
         "; searched the operators visible in " + where + " (where the expression is)";
@@ -358,8 +319,8 @@ Builder::operatorSearchScopeText(const type_vec_t &withTypes, const type_vec_t &
         if (i > 0) {
             text += i + 1 == declaring.size() ? " and " : ", ";
         }
-        text += "'" + moduleDisplayName(declaring[i].first) + "' (which declares '" +
-                declaring[i].second + "')";
+        text +=
+            "'" + declaring[i].first->name() + "' (which declares '" + declaring[i].second + "')";
     }
     return text;
 }

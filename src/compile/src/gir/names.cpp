@@ -87,11 +87,8 @@ std::string Builder::moduleLevelName(const std::string &written) const {
     }
     // `shapes::area` in the module `shapes` is `area` (N7).
     std::string own = written;
-    for (const std::string &self : {module_->name(), module_->declaredName()}) {
-        if (!self.empty() && own.starts_with(self + "::")) {
-            own = own.substr(self.size() + 2);
-            break;
-        }
+    if (const std::string &self = module_->name(); !self.empty() && own.starts_with(self + "::")) {
+        own = own.substr(self.size() + 2);
     }
     // From the innermost namespace out (N1).
     for (size_t depth = namespacePath_.size() + 1; depth-- > 0;) {
@@ -147,8 +144,8 @@ Builder::throughUsing(const std::string &written, const GCT::node_ptr_t &at) {
                 if (!match.ownName.empty()) {
                     return have.ownName == match.ownName;
                 }
-                if (!have.entity || EntityAccess::isNode(*have.entity) !=
-                                        EntityAccess::isNode(*match.entity)) {
+                if (!have.entity ||
+                    EntityAccess::isNode(*have.entity) != EntityAccess::isNode(*match.entity)) {
                     return false;
                 }
                 if (EntityAccess::isNode(*match.entity)) {
@@ -175,14 +172,15 @@ Builder::throughUsing(const std::string &written, const GCT::node_ptr_t &at) {
     // Several: functions of different parameter types from each form one set of overloads;
     // anything else (values, generic functions, operators, the same parameter types twice)
     // cannot be told apart.
-    auto merged = std::make_shared<EntityAccess::graph_set_t>();
+    auto merged    = std::make_shared<EntityAccess::graph_set_t>();
     bool mergeable = true;
     for (const UsingMatch &match : matches) {
         std::shared_ptr<EntityAccess::graph_set_t> graphs;
         if (!match.ownName.empty()) {
             if (auto own = unit->graphScope->get(match.ownName, false);
                 own.has_value() && !unit->decoratedScope->has(match.ownName, false)) {
-                graphs = std::make_shared<EntityAccess::graph_set_t>((*own)->begin(), (*own)->end());
+                graphs =
+                    std::make_shared<EntityAccess::graph_set_t>((*own)->begin(), (*own)->end());
             }
         } else if (EntityAccess::isGraphSet(*match.entity)) {
             graphs = EntityAccess::graphSet(*match.entity);

@@ -1,7 +1,8 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// What this file owns: the lowering of type expressions -- visitType and every case below it, the extent arithmetic, and the namespace-aware lookup that resolves a written type name.
+// What this file owns: the lowering of type expressions -- visitType and every case below it, the
+// extent arithmetic, and the namespace-aware lookup that resolves a written type name.
 
 #include "builder.h"
 #include <exception>
@@ -42,8 +43,6 @@ using namespace camel::core::data;
 using namespace camel::core::type;
 
 namespace camel::compile::gct {
-
-
 
 /*
 Type(TypeType type) :=
@@ -1582,9 +1581,7 @@ void Builder::rejectTypeCycle(
     // From the declaration that is needed again to the one that needs it, then that one again:
     // `a::A -> b::B -> a::A`.
     const auto shown = [](const std::pair<const camel::core::module::Module *, std::string> &d) {
-        const std::string &module =
-            d.first->declaredName().empty() ? d.first->name() : d.first->declaredName();
-        return module + "::" + d.second;
+        return d.first->name() + "::" + d.second;
     };
     std::string chain;
     for (auto it = start; it != inProgress.end(); ++it) {
@@ -1609,11 +1606,8 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     }
     // The module's own name may qualify its names (design principles 10.2).
     std::string own = written;
-    for (const std::string &self : {module_->name(), module_->declaredName()}) {
-        if (!self.empty() && own.starts_with(self + "::")) {
-            own = own.substr(self.size() + 2);
-            break;
-        }
+    if (const std::string &self = module_->name(); !self.empty() && own.starts_with(self + "::")) {
+        own = own.substr(self.size() + 2);
     }
     // Layer 1 and 2: the types of the enclosing scopes and of the module, from the innermost
     // namespace out. The built-in type names (`int`, `Map`, ...) are at the top of the scopes.

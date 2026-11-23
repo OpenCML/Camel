@@ -2885,12 +2885,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 // and not the group's `__iter__`, which a library cannot declare -- a name written
                 // `__x__` belongs to the compiler, so the group's members are kernels only and a
                 // stream, being a function value, cannot be one. This fallback is therefore the
-                // one road a Camel-written iterator has, and it is chosen by the type alone.
-                for (const auto &[moduleName, typeName] : declaringModulesOf({}, {type})) {
-                    const module_ptr_t module = moduleNamed(moduleName);
-                    if (!module) {
-                        continue;
-                    }
+                // one road a Camel-written iterator has, and it is chosen by the type alone: the
+                // module is the one the type's declaration records, so nothing is searched for.
+                for (const auto &[module, typeName] : declaringModulesOf({}, {type})) {
                     for (const auto &overload :
                          exports_->exportedOperatorOverloads(*module, "iter")) {
                         if ((elements = camelIterableOf(overload.overloads)) != nullptr) {

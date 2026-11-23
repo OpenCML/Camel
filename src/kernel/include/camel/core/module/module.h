@@ -10,8 +10,8 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -45,9 +45,7 @@ class Entity {
     explicit Entity(camel::core::data::data_ptr_t value) : storage_(std::move(value)) {}
     bool isOperGroup() const { return std::holds_alternative<oper_group_ptr_t>(storage_); }
     const oper_group_ptr_t &operGroup() const { return std::get<oper_group_ptr_t>(storage_); }
-    bool isValue() const {
-        return std::holds_alternative<camel::core::data::data_ptr_t>(storage_);
-    }
+    bool isValue() const { return std::holds_alternative<camel::core::data::data_ptr_t>(storage_); }
     const camel::core::data::data_ptr_t &value() const {
         return std::get<camel::core::data::data_ptr_t>(storage_);
     }
@@ -178,16 +176,6 @@ class Module : public std::enable_shared_from_this<Module> {
 
     bool loaded_;
     std::string name_;
-    /// A second name for the module, and a debt. The intent was never written down: `setDeclaredName`
-    /// has no caller, so this string is read and never written, and `declaredName()` answers ""
-    /// for every module. On 2026-11-23 that cost a wrong diagnosis -- a lookup that could not reach
-    /// the prelude was read as "the module has two names and they differ", and a fix was written
-    /// for a second name that does not exist (the real gap was the set of modules searched:
-    /// `declaringModulesOf` names the prelude, `moduleNamed` did not look at it). Not deleted here
-    /// because a field that looks live is a decision, not a typo: either write the name into it and
-    /// say which name wins, or delete it and the accessor (design principles 10.1: one module, one
-    /// name, the file's).
-    std::string declaredName_;
     std::string path_;
     context_ptr_t context_;
     /// The types this module declares and exports. A type declaration is the module's own: it
@@ -249,10 +237,6 @@ class Module : public std::enable_shared_from_this<Module> {
     /// The context this module was loaded in: the programs, the operator table, and the
     /// diagnostics configuration everything read from the module is written against.
     const context_ptr_t &context() const { return context_; }
-    /// The name the module gives itself (`module shapes`), empty when it has no declaration.
-    /// The module may qualify its own names with it, as with name() (design principles 10.2).
-    const std::string &declaredName() const { return declaredName_; }
-    void setDeclaredName(std::string name) { declaredName_ = std::move(name); }
 
     /// The module a name imported into this one comes from, and the name it has there: the
     /// first binding of `ref` in `layer` (the one getImportedType reads for a type). nullopt
@@ -462,13 +446,13 @@ class Module : public std::enable_shared_from_this<Module> {
         const Reference &name, std::string_view signature, camel::core::attr::AttrSetId tags);
     /// The numeric permissions the declaration grants (its body's), over every overload.
     sem::PermissionMask declarationPermissions(const Reference &name) const;
-    sem::PermissionMask declarationPermissions(const Reference &name, std::string_view signature) const;
+    sem::PermissionMask
+    declarationPermissions(const Reference &name, std::string_view signature) const;
     void setDeclarationPermissions(
         const Reference &name, std::string_view signature, sem::PermissionMask permissions);
     /// The facts written on field `index` of the type this module declares as `typeName`.
     camel::core::attr::AttrSetId fieldTags(const Reference &typeName, size_t index) const;
-    void setFieldTags(
-        const Reference &typeName, size_t index, camel::core::attr::AttrSetId tags);
+    void setFieldTags(const Reference &typeName, size_t index, camel::core::attr::AttrSetId tags);
 
     /// Every tag this module declares, by the name it writes (`N::t`) and its id; the facts
     /// written on its declarations and on the fields of its type declarations. For a dump of
@@ -552,4 +536,3 @@ class ProgramExports {
 using module_ptr_t = std::shared_ptr<Module>;
 
 } // namespace camel::core::module
-

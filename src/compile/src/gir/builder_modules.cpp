@@ -449,13 +449,10 @@ describeResources(const camel::core::sem::ResourceSignature &signature, const Fu
 void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     const std::string name = gct->name();
     FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
-    // The URI's prefix is the name the module declares (`module bytes`), not the name the
-    // runtime gave the file: the entry module is `main` to the runtime, but a declaration in it
-    // stands for an operator of the module it writes itself to be (design principles 10.1;
-    // rule 4).
-    const std::string &declared = unit_->module->declaredName();
-    const std::string where     = declared.empty() ? unit_->module->name() : declared;
-    std::string uri             = where + ":" + name;
+    // The URI's prefix is the module's name: one module, one name, and it is the one its file
+    // gives it (design principles 10.1), so a declaration in it stands for an operator of the
+    // module it is written in (rule 4).
+    std::string uri = unit_->module->name() + ":" + name;
     if (auto tagged = nativeOperatorUri(gct); tagged.has_value()) {
         uri = std::move(*tagged);
     }
@@ -599,7 +596,7 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     }
     auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
     // A declaration stands for an operator of this module (design principles 10.1): the prefix
-    // of its URI is the name the module declares, or one of the
+    // of its URI is the module's own name, or one of the
     // protocols the module answers on (a module whose operators are not named after it, like
     // `random`, answers on `rand:`), or empty for an operator the compiler itself names
     // (`:op/...`). The protocols are the module's own statement, not the groups it exported: a
@@ -608,7 +605,7 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     // signature belongs, and replacing its resolver from here would be one module writing
     // another's signature.
     const std::string protocol = uri.substr(0, uri.find(':'));
-    if (!protocol.empty() && protocol != where && protocol != unit_->module->name()) {
+    if (!protocol.empty() && protocol != unit_->module->name()) {
         const auto protocols = unit_->module->operatorProtocols();
         if (std::find(protocols.begin(), protocols.end(), protocol) == protocols.end()) {
             diags_->of(SemanticDiag::NativeDeclarationForeignOperator)
@@ -1087,10 +1084,8 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
     // The name of the kernel as a name of this module: a program may write it qualified with
     // the module it is declared in (`impl_demo::add_kernel`), which means the same name here.
     const auto localName = [&](const std::string &written) {
-        for (const std::string &prefix : {unit_->module->name(), unit_->module->declaredName()}) {
-            if (prefix.empty()) {
-                continue;
-            }
+        const std::string prefix = unit_->module->name();
+        if (!prefix.empty()) {
             const std::string scope = prefix + "::";
             if (written.starts_with(scope)) {
                 return written.substr(scope.size());

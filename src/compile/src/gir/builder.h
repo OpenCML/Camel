@@ -3585,10 +3585,12 @@ class Builder {
 
     /// The modules whose overloads an operator call over these operand types may also use:
     /// for each named struct or enum type among the operand value types, the module that
-    /// declares it (with the type's name as written), unless that is this module. Empty outside
-    /// a generic instance, and for anonymous, builtin and alias types, which have no declaring
-    /// module. Duplicates (two operands of the same type) appear once.
-    std::vector<std::pair<std::string, std::string>> declaringModulesOf(
+    /// declares it (with the type's name as written), unless that is this module. Each module
+    /// is the module itself, the one its declaration records (design principles 5.2), so no
+    /// collection of loaded modules is searched by name to reach it. Empty outside a generic
+    /// instance, and for anonymous, builtin and alias types, which have no declaring module.
+    /// Duplicates (two operands of the same type) appear once.
+    std::vector<std::pair<camel::core::module::Module *, std::string>> declaringModulesOf(
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
     /// Adds what the declaring modules of the operands export as overloads of `group` to the
@@ -3615,12 +3617,6 @@ class Builder {
     std::string operatorSearchScopeText(
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
-    /// The loaded module of this name, or nullptr (the declaring module of a type is loaded:
-    /// the type came from it).
-    camel::core::module::module_ptr_t moduleNamed(const std::string &name);
-    /// What a diagnostic calls the module `name`: the name its source gives it, else the name
-    /// it is loaded under.
-    std::string moduleDisplayName(const std::string &name);
     /// Whether the generic overload `tmpl` accepts the arguments `normInputs` of the types
     /// `normTypes`: its type variables bind and every argument then fits its parameter
     /// (resolveGenericCall without the diagnostics). An argument that is a composite literal
