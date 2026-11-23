@@ -337,3 +337,28 @@ expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+
+[[tests]]
+name = "op_body_imported"
+desc = "The same name imported from another module: what the module exports under it is the whole overload set, so both the `#op` rule's call and the body's call resolve in the importing module."
+kind = "behavior"
+case = "../../../cases/compile/overloads/op_body_imported.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "20\nbody text\nbody qualified\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "op_body_imported_no_match"
+desc = "An imported name's whole set still refuses a call that fits none of its candidates, and the report lists the set rather than one form of it."
+kind = "negative"
+case = "../../../cases/compile/overloads/op_body_imported_no_match.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 17
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "(float)", "<:op/idx_arr>: (xs: T[], i: int) => T", "op_body_lib::pick: (s: string) => string"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000

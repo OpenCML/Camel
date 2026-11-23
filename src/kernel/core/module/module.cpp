@@ -19,90 +19,110 @@ namespace {
 
 /// Merge identically named entities exported by multiple modules so function
 /// and operator overloading work across module boundaries.
-/// - graph_vec_ptr_t: merge all graphs into one vector
-/// - oper_group_ptr_t: merge all operator resolvers by name
-/// - node_ptr_t: keep the first one only
+///
+/// A name is one overload set (design principles 6.4), so this gathers every form the name was
+/// declared in -- the functions of each graph set, the templates of each generic function, the
+/// decorated function if one of them has one, and the rules of each operator group -- and answers
+/// the one form when there is one and one entity carrying them all when there is more
+/// (Entity::overload_set_payload_t). The kind of the first entity used to decide, so a name a
+/// module declared both as a body-less operator and with a body arrived as one of the two and the
+/// other was dropped without a word.
 std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities) {
     if (entities.empty()) {
         return std::nullopt;
     }
-    const entity &first = entities.front();
-    // A name a module declares as a decorated function and as plain functions of the same name
-    // is one entity carrying both (EntityAccess::makeDecoratedOverloads). Its overloads merge
-    // with the overloads of every other form of the name, and the decorated function is taken
-    // from the first form that has one: a name decorated in two modules is one name, exactly as
-    // the plain case below.
-    const auto decoratedOf = [&]() -> std::optional<detail::EntityAccess::graph_handle_t> {
-        for (const auto &ent : entities) {
-            if (detail::EntityAccess::isDecoratedGraph(ent)) {
-                return detail::EntityAccess::decoratedGraph(ent);
+    using detail::EntityAccess;
+    oper_group_ptr_t group;
+    std::string groupName;
+    std::vector<std::pair<std::string, resolver_ptr_t>> rules;
+    EntityAccess::graph_set_ptr_t graphs;
+    EntityAccess::graph_handle_t decorated;
+    EntityAccess::generic_template_list_t tmpls;
+    // A name of another kind altogether -- a top-level value's node or a tag: one of those, and
+    // the first one, as before.
+    std::optional<entity> other;
+    for (const auto &ent : entities) {
+        if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+            if (group == nullptr) {
+                group = ent.operGroup();
+            }
+            const auto &resolvers = ent.operGroup()->resolvers();
+            if (groupName.empty() && !resolvers.empty()) {
+                groupName = ent.operGroup()->name();
+            }
+            for (const auto &r : resolvers) {
+                // One module's group reaches here twice when a name is imported both by name and
+                // with the module's default names: the same overload is one overload.
+                const bool known = std::ranges::any_of(rules, [&](const auto &have) {
+                    return have.first == r.first && have.second == r.second;
+                });
+                if (!known) {
+                    rules.push_back(r);
+                }
             }
         }
-        return std::nullopt;
-    };
-    if (detail::EntityAccess::isGraphSet(first)) {
-        auto merged = std::make_shared<detail::EntityAccess::graph_set_t>();
-        for (const auto &ent : entities) {
-            if (detail::EntityAccess::isGraphSet(ent)) {
-                const auto &graphs = detail::EntityAccess::graphSet(ent);
-                if (graphs) {
-                    for (const auto &g : *graphs) {
-                        // One module's function reaches here twice when a name is imported
-                        // both by name and with the module's default names: it is one
-                        // function. Counted twice, the name had "2 functions" and no
-                        // function value (`xs->map<twice>` with an imported `twice`).
-                        if (std::ranges::find(*merged, g) == merged->end()) {
-                            merged->push_back(g);
-                        }
+        bool functionForm = false;
+        if (EntityAccess::isGraphSet(ent)) {
+            functionForm = true;
+            const auto &set = EntityAccess::graphSet(ent);
+            if (set) {
+                if (graphs == nullptr) {
+                    graphs = std::make_shared<EntityAccess::graph_set_t>();
+                }
+                for (const auto &g : *set) {
+                    // One module's function reaches here twice when a name is imported both by
+                    // name and with the module's default names: it is one function. Counted
+                    // twice, the name had "2 functions" and no function value (`xs->map<twice>`
+                    // with an imported `twice`).
+                    if (std::ranges::find(*graphs, g) == graphs->end()) {
+                        graphs->push_back(g);
                     }
                 }
             }
         }
-        // The name stands for the decorated function and its overloads alike, so the two leave
-        // together when the module exported both.
-        if (const auto decorated = decoratedOf(); decorated.has_value() && *decorated != nullptr) {
-            return detail::EntityAccess::makeDecoratedOverloads(*decorated, std::move(merged));
-        }
-        return detail::EntityAccess::makeGraphSet(std::move(merged));
-    }
-    if (first.isOperGroup()) {
-        std::string name;
-        std::vector<std::pair<std::string, resolver_ptr_t>> allResolvers;
-        for (const auto &ent : entities) {
-            if (ent.isOperGroup()) {
-                const auto &group = ent.operGroup();
-                if (group) {
-                    if (name.empty()) {
-                        name = group->name();
-                    }
-                    for (const auto &r : group->resolvers()) {
-                        // One module's group reaches here twice when a name is imported
-                        // both by name and with the module's default names: the same
-                        // overload is one overload.
-                        const bool known = std::ranges::any_of(allResolvers, [&](const auto &have) {
-                            return have.first == r.first && have.second == r.second;
-                        });
-                        if (!known) {
-                            allResolvers.push_back(r);
-                        }
-                    }
+        if (EntityAccess::isGenericTemplate(ent)) {
+            functionForm = true;
+            for (const auto &tmpl : EntityAccess::genericTemplates(ent)) {
+                if (std::ranges::find(tmpls, tmpl) == tmpls.end()) {
+                    tmpls.push_back(tmpl);
                 }
             }
         }
-        if (name.empty()) {
-            return std::nullopt;
+        if (EntityAccess::isDecoratedGraph(ent)) {
+            functionForm = true;
+            if (decorated == nullptr) {
+                decorated = EntityAccess::decoratedGraph(ent);
+            }
         }
-        return OperatorGroup::merged(name, std::move(allResolvers));
-    }
-    if (detail::EntityAccess::isDecoratedGraph(first)) {
-        const auto decorated = decoratedOf();
-        if (!decorated.has_value() || *decorated == nullptr) {
-            return std::nullopt;
+        if (!ent.isOperGroup() && !functionForm && !other.has_value()) {
+            other = ent;
         }
-        return detail::EntityAccess::makeDecoratedGraph(*decorated);
     }
-    // node_ptr_t or anything else: return the first one.
-    return first;
+    const bool hasGroup     = group != nullptr && !groupName.empty();
+    const int formsOfName   = (hasGroup ? 1 : 0) + (graphs != nullptr ? 1 : 0) +
+                            (decorated != nullptr ? 1 : 0) + (!tmpls.empty() ? 1 : 0);
+    if (formsOfName == 0) {
+        return other;
+    }
+    std::shared_ptr<void> tmplList;
+    if (!tmpls.empty()) {
+        tmplList = std::make_shared<EntityAccess::generic_template_list_t>(std::move(tmpls));
+    }
+    if (formsOfName > 1) {
+        // The name's whole set travels as one entity.
+        return EntityAccess::makeOverloadSet(group, graphs, decorated, tmplList);
+    }
+    if (hasGroup) {
+        return OperatorGroup::merged(groupName, std::move(rules));
+    }
+    if (graphs != nullptr) {
+        return EntityAccess::makeGraphSet(graphs);
+    }
+    if (decorated != nullptr) {
+        return EntityAccess::makeDecoratedGraph(decorated);
+    }
+    return EntityAccess::makeGenericTemplates(
+        *std::static_pointer_cast<EntityAccess::generic_template_list_t>(tmplList));
 }
 
 std::vector<std::string> refParts(const Reference &ref) {
@@ -534,14 +554,34 @@ bool ProgramExports::exportEntity(const Module &module, const Reference &ref, co
 
 std::optional<entity>
 ProgramExports::exportedEntity(const Module &module, const Reference &ref) const {
+    // What this program declared for the module and what the module declares itself are one
+    // name's overload set when both are there: a body-less declaration's operator group is the
+    // module's own entity, and the functions of the same name are this program's (its builder
+    // made their graphs). A name declared both ways answered with one of the two -- the program's
+    // table first, the module's own only when that table had nothing -- so an importing module
+    // saw half of it.
+    const std::optional<entity> native = module.getNativeEntity(ref);
     if (auto it = exports_.find(&module); it != exports_.end()) {
         if (auto found = it->second.entities->get(ref); found.has_value()) {
-            return found;
+            // Only the forms that are overloads of one name are one set. A constant, a tag or a
+            // value node under the name is not an overload of anything: those keep the order this
+            // table has always had, the program's entity first and the module's own as the
+            // fallback.
+            const auto isOverloadForm = [](const entity &ent) {
+                return ent.isOperGroup() ||
+                       camel::core::module::detail::EntityAccess::isGraphSet(ent) ||
+                       camel::core::module::detail::EntityAccess::isGenericTemplate(ent) ||
+                       camel::core::module::detail::EntityAccess::isDecoratedGraph(ent);
+            };
+            if (!native.has_value() || !isOverloadForm(*found) || !isOverloadForm(*native)) {
+                return found;
+            }
+            return mergeImportedEntities({*found, *native});
         }
     }
     // A C++ module's own names (its operator groups, constants and tags) are not program
     // entities: it declares them once when it is loaded.
-    return module.getNativeEntity(ref);
+    return native;
 }
 
 void ProgramExports::forEachExportedEntity(
@@ -632,7 +672,13 @@ ProgramExports::exportedOperatorOverloads(Module &module, const std::string &gro
     };
     std::vector<std::pair<Reference, entity>> found;
     forEachExportedEntity(module, [&](const Reference &ref, const entity &ent) {
-        if (isOverloadOf(ref) && !ent.isOperGroup()) {
+        // A function of the name: a plain one, a generic one, a decorated one, or any of those
+        // together with the name's operator group (a name declared both ways is one entity
+        // carrying its whole set, so the group being there does not make it no function).
+        const bool isFunction = detail::EntityAccess::isGraphSet(ent) ||
+                                detail::EntityAccess::isGenericTemplate(ent) ||
+                                detail::EntityAccess::isDecoratedGraph(ent);
+        if (isOverloadOf(ref) && isFunction) {
             found.emplace_back(ref, ent);
         }
     });

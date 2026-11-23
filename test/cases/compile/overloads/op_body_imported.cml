@@ -1,0 +1,16 @@
+/**
+ * The name imported from another module: the importing module receives the whole overload set --
+ * the rule of the `#op` declaration and the function of the same name -- so a call that only one
+ * of the two takes resolves here too. Before the export carried the set, the module was seen as
+ * having declared the name one way only and one of these two calls found no function.
+ */
+
+import { pick } from op_body_lib
+import op_body_lib
+
+func main() => int sync {
+    println(pick([10, 20, 30], 1))
+    println(pick('text'))
+    println(op_body_lib::pick('qualified'))
+    return 0
+}

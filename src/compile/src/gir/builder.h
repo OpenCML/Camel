@@ -181,6 +181,14 @@ class Builder {
         // resolves the kernel by module and name; no graph, no operator group and no export is
         // built for it.
         std::set<std::string> passDeclarations;
+        // The names whose declaration is the built-in operator's own, not the module's entity: the
+        // rules of a prelude `#op` join the built-in group of the same name, and a rule a loaded
+        // module already answers belongs to that module. The module exports no entity of its own
+        // under such a name -- unless it also declares the name with a body, since the two
+        // declarations of one name are one overload set (design principles 6.4) and the functions
+        // of the name are still the module's to export. This is not `passDeclarations`: a name
+        // here is not a pass, and a pass is never exported whatever else its name declares.
+        std::set<std::string> operatorOnlyNames;
         // What the link step reports per module, collected while its bodies are built.
         std::vector<compile_graph_ptr_t> builtBodies;
         std::vector<PendingIgnoredWrite> pendingIgnoredWrites;
