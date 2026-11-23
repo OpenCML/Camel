@@ -194,6 +194,12 @@ NodeRef DraftGraphAdapter::exit() const {
     return mapped != kNoNode && holdsPlace(mapped) ? mapped : kNoNode;
 }
 
+std::string_view DraftGraphAdapter::name() const {
+    // A draft is not named until it is encoded, and the name is the argument of `encode`
+    // (`draft.h`). Empty is the honest answer, and `originOf` answering 0 is the precedent for it.
+    return {};
+}
+
 std::uint32_t DraftGraphAdapter::nodeSlotCount() const {
     return kept_.empty() ? static_cast<std::uint32_t>(graph_->nodeSlotCount())
                          : static_cast<std::uint32_t>(kept_.size());
@@ -230,6 +236,22 @@ std::optional<::slot_t> DraftGraphAdapter::constantOf(NodeRef ref) const {
         return std::nullopt;
     }
     return static_[index];
+}
+
+std::optional<std::uint32_t> DraftGraphAdapter::staticIndexOf(NodeRef ref) const {
+    // The graph's own half of `dataIndex`: a negative one is the static area's index, and the
+    // value at it is what `constantOf` answers. A non-negative one is the execution plan's slot
+    // (section 13) and is not this face's.
+    const GraphDraft &draft     = *graph_;
+    const DraftNodeHeader *head = draft.header(sourceOf(ref));
+    if (head == nullptr || head->kind != GCNodeKind::Data || head->dataIndex >= 0) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(-head->dataIndex);
+}
+
+std::uint32_t DraftGraphAdapter::staticSlotCount() const {
+    return static_cast<std::uint32_t>(graph_->staticSlots().size());
 }
 
 std::uint64_t DraftGraphAdapter::originOf(NodeRef ref) const {
