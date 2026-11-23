@@ -188,11 +188,8 @@ string GraphVizDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
 }
 
 std::string GraphVizDumpPass::debugOriginAttr(
-    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref) {
-    if (!graph) {
-        return "";
-    }
-    const uint64_t origin = graph->nodeOrigin(ref);
+    const camel::graph::GraphView &graph, camel::graph::NodeRef ref) {
+    const uint64_t origin = graph.originOf(ref);
     if (origin == 0) {
         return "";
     }
@@ -297,7 +294,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         res += std::format("subgraph cluster_{} {{\n", funcId);
         res += std::format("{}{}label=\"{}\";\n", baseIndent_, indent_, funcName);
         if (config_.rich) {
-            res += std::format("{}{}tooltip=\"{}\";\n", baseIndent_, indent_, graphTooltip(graph));
+            res += std::format(
+                "{}{}tooltip=\"{}\";\n", baseIndent_, indent_, graphTooltip(graph->view()));
         }
     }
     // The facts of the body region (0): the tags written on the function. A graph whose body
@@ -414,13 +412,13 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 std::format(", param_kind=\"{}\", param_index=\"{}\"", info.kind, info.index);
         if (port->dataType())
             metadata += std::format(", value_type=\"{}\"", escape(port->dataType()->toString()));
-        metadata += debugOriginAttr(graph, ref);
+        metadata += debugOriginAttr(graph->view(), ref);
         const string styling = !config_.rich
                                    ? ""
                                    : std::format(
                                          ", shape=circle, style={}, tooltip=\"{}\"",
                                          string(nodeType) == "CLOSURE_PORT" ? "dashed" : "solid",
-                                         escape(label + "\n" + recordTooltip(graph, *port)));
+                                         escape(label + "\n" + recordTooltip(funcName, *port)));
         res += std::format(
             "{}{}{} [label=\"{}\", type=\"{}\"{}{}];\n",
             baseIndent_,
@@ -444,7 +442,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     const auto emitNode = [&](camel::runtime::gc_node_ref_t nodeRef,
                               const camel::runtime::GCNode *node) {
         string label   = recordLabel(*program_, graph, nodeRef, *node);
-        string tooltip = recordTooltip(graph, *node);
+        string tooltip = recordTooltip(funcName, *node);
         string shape   = recordShape(*node);
         string style   = recordStyle(*node);
         string size    = recordSize(*node);
@@ -508,10 +506,10 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 escape(label),
                 type,
                 roleAttr.empty() ? "" : std::format(", role=\"{}\"", roleAttr),
-                debugOriginAttr(graph, nodeRef) + valueAttr,
+                debugOriginAttr(graph->view(), nodeRef) + valueAttr,
                 classAttr);
         } else {
-            string tooltip = recordTooltip(graph, *node);
+            string tooltip = recordTooltip(funcName, *node);
             res += std::format(
                 "{}{}{} [label=\"{}\", type=\"{}\", shape={}, style={}{}{}, tooltip=\"{}\"{}];\n",
                 baseIndent_,
@@ -521,7 +519,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 type,
                 shape,
                 roleFill.empty() ? style : std::format("\"filled,{}\"", style),
-                (size.empty() ? "" : ", " + size) + valueAttr + debugOriginAttr(graph, nodeRef),
+                (size.empty() ? "" : ", " + size) + valueAttr +
+                    debugOriginAttr(graph->view(), nodeRef),
                 roleFill.empty()
                     ? ""
                     : std::format(", fillcolor=\"{}\", role=\"{}\"", roleFill, roleAttr),

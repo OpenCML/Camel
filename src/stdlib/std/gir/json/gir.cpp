@@ -254,7 +254,7 @@ std::string dumpJsonRuntimeGraph(
         json graph{
             {"id", ids.at(g)},
             {"name", g->name()},
-            {"signature", graphTooltip(g)},
+            {"signature", graphTooltip(g->view())},
             {"dependencies", json::array()},
             {"nodes", json::array()},
             {"edges", json::array()},

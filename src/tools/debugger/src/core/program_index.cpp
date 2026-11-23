@@ -486,7 +486,9 @@ const std::string &ProgramIndex::moduleOfFile(int file) {
 }
 
 void ProgramIndex::nameFunctions() {
-    std::unordered_map<std::string, GCGraph *> byGraphId;
+    // A graph, as a value: the table names one past the call and reads its name through the face,
+    // which is the same builder-written name (`name`) a frozen graph stores.
+    std::unordered_map<std::string, const camel::graph::Graph *> byGraphId;
     for (auto *g : initialGraphs_) {
         byGraphId.emplace(camel::runtime::toText(g->id()), g);
     }
@@ -508,8 +510,9 @@ void ProgramIndex::nameFunctions() {
             }
             // The builder names the graph with the full name (the module of another module's
             // function, the namespaces, the type arguments of an instance).
-            if (const std::string &name = graph->second->name(); !isCompilerNamed(name)) {
-                f.name = withoutTypeArguments(name);
+            const std::string_view name = graph->second->view().name();
+            if (!isCompilerNamed(std::string(name))) {
+                f.name = withoutTypeArguments(std::string(name));
             }
             break;
         }
