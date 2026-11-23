@@ -173,6 +173,41 @@ class Compiler {
         return program.nodes.size() - 1;
     }
 
+    /// A conversion's rule, shared by the CAST kind and the operator form the front end writes the
+    /// same conversion as (`:op/cast`): a nominal struct annotation accepts an anonymous struct
+    /// whose fields match by name (design principles 5.2) and the fields are reordered to it, an
+    /// annotation of the same order is an identity, and a tensor target asserts the operand's
+    /// shape -- converting a value to a type it already has is that value. Anything else would
+    /// have to compute on elements this back end has no width for, and the two callers report that
+    /// in their own terms (the kind as a fault, the operator as the shape refusal).
+    bool converts(Value &out, ty::Type *target) {
+        if (target->code() == ty::TypeCode::Struct && out.type->code() == ty::TypeCode::Struct &&
+            target->assignableFrom(out.type)) {
+            const auto *named   = static_cast<ty::StructType *>(target);
+            const auto *unnamed = static_cast<ty::StructType *>(out.type);
+            if (unnamed->size() != out.fields.size())
+                throw std::runtime_error("struct cast field count mismatch");
+            bool ordered = named->size() == unnamed->size();
+            for (size_t i = 0; ordered && i < named->size(); ++i)
+                ordered = named->fieldName(i) == unnamed->fieldName(i);
+            if (!ordered) {
+                std::vector<Value> fields;
+                fields.reserve(named->size());
+                for (size_t i = 0; i < named->size(); ++i) {
+                    const auto at = unnamed->findField(named->fieldName(i));
+                    if (!at)
+                        throw std::runtime_error("struct cast field is missing");
+                    fields.push_back(std::move(out.fields[*at]));
+                }
+                out.fields = std::move(fields);
+            }
+            out.type = target;
+            return true;
+        }
+        return tensor::isTensorType(target) && out.tensor != SIZE_MAX &&
+               target->assignableFrom(out.type);
+    }
+
     Value host(slot_t slot, ty::Type *type, bool runtimeInput = false) {
         if (type->code() == ty::TypeCode::Function) {
             auto *fn = td::fromSlot<::Function *>(slot);
@@ -586,38 +621,11 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Cast: {
-                out          = eval(f, ins.front());
-                auto *target = node->dataType();
-                // A nominal struct annotation accepts an anonymous struct value whose fields
-                // match by name (design principles 5.2). The same order is an identity
-                // conversion; a different order is a copy the front end otherwise emits, but
-                // reordering the already evaluated fields keeps the same value.
-                if (target->code() == ty::TypeCode::Struct &&
-                    out.type->code() == ty::TypeCode::Struct && target->assignableFrom(out.type)) {
-                    const auto *named   = static_cast<ty::StructType *>(target);
-                    const auto *unnamed = static_cast<ty::StructType *>(out.type);
-                    if (unnamed->size() != out.fields.size())
-                        throw std::runtime_error("struct cast field count mismatch");
-                    bool ordered = named->size() == unnamed->size();
-                    for (size_t i = 0; ordered && i < named->size(); ++i)
-                        ordered = named->fieldName(i) == unnamed->fieldName(i);
-                    if (!ordered) {
-                        std::vector<Value> fields;
-                        fields.reserve(named->size());
-                        for (size_t i = 0; i < named->size(); ++i) {
-                            const auto at = unnamed->findField(named->fieldName(i));
-                            if (!at)
-                                throw std::runtime_error("struct cast field is missing");
-                            fields.push_back(std::move(out.fields[*at]));
-                        }
-                        out.fields = std::move(fields);
-                    }
-                    out.type = target;
-                    break;
-                }
-                const bool isTensorTarget = tensor::isTensorType(target);
-                if (!isTensorTarget || out.tensor == SIZE_MAX ||
-                    !target->assignableFrom(out.type))
+                Value out = eval(f, ins.front());
+                // A nominal struct annotation accepts an anonymous struct value whose fields match
+                // by name (design principles 5.2); the rule itself is `converts`, which the
+                // operator form `:op/cast` reads as well.
+                if (!converts(out, node->dataType()))
                     throw std::runtime_error("unsupported cast or tensor shape assertion failed");
                 break;
             }
@@ -679,12 +687,93 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Oper: {
-                const auto oper = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                const auto *operBody        = g->nodeBodyAs<rt::GCOperBody>(id);
+                const std::string_view uri = operBody->uri();
+                const auto oper             = operBody->oper;
                 std::vector<Value> args;
                 const auto kernelArguments = rt::kernelArgumentsOf(*g, id);
-                if (!kernelArguments.with.empty())
+                // A conversion is the CAST kind's rule read through the operator the front end
+                // writes it as (`prelude.cml`, `:op/cast`), and its target type is the call's own
+                // result type. Converting a value to a type it already has is that value, field
+                // order included; anything else is an element computation this back end has no
+                // width for, refused as the shape it is rather than run somewhere else.
+                if (uri == ":op/cast" && kernelArguments.with.empty() &&
+                    kernelArguments.norm.size() == 1) {
+                    Value converted = eval(f, kernelArguments.norm.front());
+                    if (!converts(converted, node->dataType()))
+                        throw UnsupportedComputation(
+                            "'" + std::string(uri) +
+                                "' converts an element type this back end has no width for",
+                            std::string(uri),
+                            UnsupportedComputation::Reason::Shape);
+                    out = converted;
+                    break;
+                }
+                // A construction is the FILL kind's rule read through the operator the front end
+                // writes it as (`:op/fill`, prelude.cml): the first ordinary operand is the
+                // template the value is made from, and the i-th operand after it fills component
+                // i of that template (builder_helpers.h, constructionValuesOf). No element is
+                // computed, so this is a value the region already holds.
+                if (uri == ":op/fill" && kernelArguments.with.empty() &&
+                    !kernelArguments.norm.empty()) {
+                    if (node->dataType()->code() != ty::TypeCode::Tuple &&
+                        node->dataType()->code() != ty::TypeCode::Struct &&
+                        node->dataType()->code() != ty::TypeCode::Function)
+                        throw UnsupportedComputation(
+                            "'" + std::string(uri) +
+                                "' constructs an aggregate this back end does not have",
+                            std::string(uri),
+                            UnsupportedComputation::Reason::Shape);
+                    Value constructed = eval(f, kernelArguments.norm.front());
+                    for (size_t i = 1; i < kernelArguments.norm.size(); ++i) {
+                        if (i - 1 >= constructed.fields.size())
+                            throw std::runtime_error("aggregate fill arity mismatch");
+                        constructed.fields[i - 1] = eval(f, kernelArguments.norm[i]);
+                    }
+                    constructed.type = node->dataType();
+                    out              = constructed;
+                    break;
+                }
+                if (!kernelArguments.with.empty()) {
+                    // A member read's place or name is the operator's compile-time parameter
+                    // (`:op/access` / `:op/access_key`, prelude.cml), so it arrives as the call's
+                    // `with` argument and a constant the specialization reads here. The read is
+                    // the aggregate's member, which is what the ACCS case above takes as well.
+                    if ((uri == ":op/access" || uri == ":op/access_key") &&
+                        kernelArguments.with.size() == 1 && kernelArguments.norm.size() == 1) {
+                        Value aggregate    = eval(f, kernelArguments.norm.front());
+                        const Value member = eval(f, kernelArguments.with.front());
+                        if (!member.constant)
+                            throw std::runtime_error(
+                                "a member read's member has to be known when specializing");
+                        size_t index = 0;
+                        if (uri == ":op/access_key") {
+                            const auto *key = std::get_if<std::string>(&*member.constant);
+                            if (key == nullptr)
+                                throw std::runtime_error(
+                                    "a member read by name must read a name");
+                            if (aggregate.type == nullptr ||
+                                aggregate.type->code() != ty::TypeCode::Struct)
+                                throw std::runtime_error("expected struct aggregate");
+                            const auto field =
+                                static_cast<ty::StructType *>(aggregate.type)->findField(*key);
+                            if (!field)
+                                throw std::runtime_error("missing struct field");
+                            index = *field;
+                        } else {
+                            const auto *at = std::get_if<int64_t>(&*member.constant);
+                            if (at == nullptr || *at < 0)
+                                throw std::runtime_error(
+                                    "a member read by place must be given a place that is not "
+                                    "negative");
+                            index = static_cast<size_t>(*at);
+                        }
+                        out = aggregate.fields.at(index);
+                        break;
+                    }
                     throw UnsupportedComputation(
                         "operator context arguments are not supported yet");
+                }
                 for (auto in : kernelArguments.norm)
                     args.push_back(eval(f, in));
                 const auto first      = program.nodes.size();

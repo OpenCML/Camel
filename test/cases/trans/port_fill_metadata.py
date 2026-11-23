@@ -21,8 +21,12 @@ for export in ("rgir", "gir", "argir", "agir"):
         assert any(row.get("param_name") == name and row.get("param_kind") == kind and row.get("param_index") == index for row in rows), (export, name, kind)
     for value_type in ("int[]", "(int, int)", "{ value: int, size: int }", "() => int[] pure"):
         assert any(row.get("type") == "FILL" and row.get("value_type") == value_type for row in rows), (export, value_type)
-    for kind, value_type in (("DATA", "int[]"), ("OPER", "bool"), ("CALL", "int[]"), ("FUNC", "int[]"), ("BRCH", "int"), ("JOIN", "int[]"), ("ACCS", "int")):
+    for kind, value_type in (("DATA", "int[]"), ("OPER", "bool"), ("CALL", "int[]"), ("FUNC", "int[]"), ("BRCH", "int"), ("JOIN", "int[]")):
         assert any(row.get("type") == kind and row.get("value_type") == value_type for row in rows), (export, kind, value_type)
+    # A member read is the operator that reads the member, and its row carries that operator's URI
+    # as the label: `:op/access` reads an element by position, `:op/access_key` a field by name. A
+    # rich dump wraps a long label over two lines inside the DOT string.
+    assert any(row.get("label", "").replace("\\n", "") in (":op/access", ":op/access_key") and row.get("value_type") == "int" for row in rows), (export, "member read", "int")
     assert not any(row.get("type") in ("ARGS", "EXIT") and row.get("value_type") for row in rows), "synthetic boundaries must not claim a node value type"
     loops = subprocess.run([EXE, str(ROOT / "test/cases/loops/captures.cml"), "std::" + export], capture_output=True, text=True, env=env, cwd=ROOT)
     assert loops.returncode == 0, loops.stderr

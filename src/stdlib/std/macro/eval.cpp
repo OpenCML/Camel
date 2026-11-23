@@ -684,6 +684,10 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         data_arr_t wargs{indices.data() + normCount, indices.size() - normCount};
         FrameArgsView withView(*frame, wargs);
         FrameArgsView normView(*frame, nargs);
+        // The type the call's value has, as every other back end reads it off the node it runs: an
+        // operator that asks for its result type (`__cast_value__`) gets null here otherwise.
+        withView.setResultType(node->dataType());
+        normView.setResultType(withView.resultType());
         // What a pass recorded about this node (design principles 9.6).
         const auto attrs = ownerGraph->nodeAttrs(nodeRef);
         withView.setAttrs(attrs);
@@ -960,6 +964,10 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             data_arr_t wargs{indices.data() + normCount, indices.size() - normCount};
             FrameArgsView withView(*frame, wargs);
             FrameArgsView normView(*frame, nargs);
+            // The same reading the static path above takes, and the same one nodevm.cpp and
+            // taskflow.cpp take: the node's own type is the type of the value the call produces.
+            withView.setResultType(node->dataType());
+            normView.setResultType(withView.resultType());
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 camel::core::effect_trace::setSite(runtimeGraph->nodeOrigin(runtimeNodeIndex));
             }

@@ -15,6 +15,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "src/stdlib/tensor/type.h"
+#include "src/stdlib/transforms/node_operator.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/dtype_map.h"
@@ -108,6 +109,12 @@ const std::unordered_map<core::OperId, std::string> &operations() {
             result.emplace(table.intern(std::string("tensor:") + name), name);
         result.emplace(table.intern("tensor:sum"), "sum_all");
         result.emplace(table.intern("tensor:mean"), "mean_all");
+        // `zeros_like` / `ones_like` are lowered without a kernel: the compiler writes their
+        // result as one constant read through the operand's shape with every stride zero
+        // (`compiler.cpp`, `operation`). They are in this list because a device program for one
+        // exists, and `eligibility` answers a use of them from the operand's type alone.
+        result.emplace(table.intern("tensor:zeros_like"), "zeros_like");
+        result.emplace(table.intern("tensor:ones_like"), "ones_like");
         return result;
     }();
     return result;
@@ -174,6 +181,26 @@ std::string eligibility(
         return "unsupported_operator";
     if (!touchesNothing(oper))
         return "effect";
+    // The two fill-by-shape operators have no index instance and no lowering of their own: the
+    // compiler writes their result as one constant read through the operand's extents with every
+    // stride zero (`compiler.cpp`, `operation`). The operand's type is the whole answer -- its
+    // extents are the result's, and its element is the constant read through them -- so neither an
+    // instance nor the operator's own contract is asked for.
+    if (found->second == "zeros_like" || found->second == "ones_like") {
+        const auto inputs = rt::kernelArgumentsOf(graph, id).norm;
+        if (inputs.size() != 1)
+            return "operand_arity";
+        ty::Type *source  = graph.node(inputs[0])->dataType();
+        if (!source || !shape(source))
+            return "unresolved_input_type";
+        if (narrowElementType(source))
+            return "device_element_kernel_missing";
+        if (source->code() == ty::TypeCode::Float64)
+            return "scalar_tensor_operand";
+        if (!shape(node->dataType()))
+            return "unresolved_type";
+        return {};
+    }
     const auto *decl = table.semantics(oper);
     if (!decl || decl->key.major != 1)
         return "semantic_declaration";
@@ -328,6 +355,19 @@ bool touchesNothing(core::OperId oper) {
         return false;
     }
     return record->pure() && !record->external();
+}
+bool structuralOperator(core::OperId oper) {
+    // The operator forms the front end writes that run nothing of their own: a conversion, a
+    // construction, and the two member reads (by place, by name). Each answers a value it was
+    // given -- the operand read under a type, an aggregate built from its template and fields, or
+    // one member of an aggregate -- so there is no element for a kernel to compute and no shape to
+    // index. The specialization reads them where the value lives (`compiler.cpp`, the CAST, FILL
+    // and ACCS cases and the `:op/cast`, `:op/fill` and `:op/access` branches), so a device scope
+    // is not refused for holding one; what a conversion cannot do is convert an element type this
+    // back end has no width for, and that stays a refusal of the use, not of the form.
+    const std::string uri(core::OperatorTable::instance().uri(oper));
+    return uri == ":op/cast" || uri == ":op/fill" || uri == ":op/access" ||
+           uri == ":op/access_key";
 }
 bool deviceCapable(core::OperId oper) {
     return operations().find(oper) != operations().end() && touchesNothing(oper);
@@ -533,22 +573,31 @@ SegmentAnalysis analyzeRegions(
     do {
         changed = false;
         for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
-            if (nodes[id].eligible || graph.node(id)->kind != rt::GCNodeKind::Accs ||
+            // A member read is admitted by what it is, not by the kind it wears: an ACCS node and
+            // a `:op/access` call are the same read, and `nodeCaseOf` answers both. `memberReadOf`
+            // names the value and the member -- the declared shape is one ordinary operand for the
+            // value and the place or the name as the call's `with` argument
+            // (`__access_value__`, builtin/operators/struct.cpp). The member being a `with`
+            // argument is why the "no with input" test does not apply here: asked of every node it
+            // excluded every call-form read, which is the whole of what this block is for.
+            // Measured on this tree: of 190 admissions, 26 are call-form reads that the kind test
+            // silently left out of the region.
+            if (nodes[id].eligible ||
+                transforms::nodeCaseOf(graph, id) != transforms::NodeCase::Accs ||
                 !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
                 !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
-                inChain(chain, id) || !graph.withInputsOf(id).empty())
+                inChain(chain, id))
                 continue;
-            const auto inputs = graph.normInputsOf(id);
-            if (inputs.size() != 1 || !nodes[inputs[0]].eligible)
+            const auto access = transforms::memberReadOf(graph, id);
+            if (!access.has_value() || !nodes[access->value].eligible)
                 continue;
-            auto *sourceType   = graph.node(inputs[0])->dataType();
-            const auto *access = graph.nodeBodyAs<rt::GCAccsBody>(id);
+            auto *sourceType = graph.node(access->value)->dataType();
             if (sourceType->code() != ty::TypeCode::Tuple ||
-                access->accsKind != rt::GCAccsKind::TupleIndex)
+                access->kind != rt::GCAccsKind::TupleIndex)
                 continue;
             auto *tuple = static_cast<ty::TupleType *>(sourceType);
-            if (access->value >= tuple->size() ||
-                tuple->typeAt(access->value) != graph.node(id)->dataType())
+            if (access->place >= tuple->size() ||
+                tuple->typeAt(access->place) != graph.node(id)->dataType())
                 continue;
             nodes[id].eligible = true;
             reasons[id].clear();

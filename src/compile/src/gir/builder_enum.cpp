@@ -206,8 +206,8 @@ Builder::visitEnumConstruction(const GCT::node_ptr_t &gct, EnumType *type, size_
                 throw BuildAbortException();
             }
             Type *fieldType         = literalStruct->typeAt(*position);
-            node_handle_t fieldNode = currGraph_->addAccsNode(fieldType, fieldName);
-            linkNodes(LinkType::Norm, literal, fieldNode);
+            node_handle_t fieldNode =
+                memberReadNodeOf(literal, fieldType, fieldName, gct->at(1));
             registerNodeOrigin(context_, fieldNode, gct->at(1), "gir.accs");
             fields.push_back(fieldNode);
             fieldTypes.push_back(fieldType);

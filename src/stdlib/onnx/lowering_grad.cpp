@@ -462,13 +462,26 @@ template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
         }
     }
     // The reduction's target is the extents of the operand this gradient belongs to, handed to
-    // `sum_to` as the list it takes rather than as the operand read for its shape.
-    const tensor::StaticShape target = staticShape(ctx.facts(Lhs ? 1 : 2), ctx.uri());
-    if (!fullyKnown(target)) {
-        throw ExportError(std::format(
-            "{}: the extents the gradient is reduced to are not known statically", ctx.uri()));
+    // `sum_to` as the list it takes rather than as the operand read for its shape. When those
+    // extents are stated the list is a constant; when an axis is one only the model computes --
+    // the dynamic batch a training step exists to carry -- the list is the graph's own `Shape` of
+    // that operand, which is the runtime target `tensor:sum_to` already accepts from a program
+    // (`lowerSumTo`, `sumToRuntime`). Refusing here refused the models that have no static extent
+    // to state, which is the reading `shapeOperand` already makes for `broadcast_like`.
+    const size_t targetIndex         = Lhs ? 1 : 2;
+    const tensor::StaticShape target = staticShape(ctx.facts(targetIndex), ctx.uri());
+    std::string reduced;
+    if (fullyKnown(target)) {
+        reduced = sumTo(ctx, product, {dtype, productShape}, tensor::extentsOf(target));
+    } else {
+        // A shape list's own facts: one extent, its length -- the number of axes the target has,
+        // which is the rank this gradient is reduced to.
+        const TensorFacts listFacts{
+            TypeCode::Int64, tensor::StaticShape{static_cast<int64_t>(target.size())}};
+        reduced = sumToRuntime(
+            ctx, product, {dtype, productShape}, listFacts, shapeOperand(ctx, targetIndex));
     }
-    return ctx.result(sumTo(ctx, product, {dtype, productShape}, tensor::extentsOf(target)));
+    return ctx.result(reduced);
 }
 
 Value lowerCastLike(const LowerContext &ctx) {

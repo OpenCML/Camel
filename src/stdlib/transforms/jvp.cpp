@@ -1596,13 +1596,24 @@ bool liftGraph(
                 // which this transform writes a pair for the tuple at all. Every slot is listed in
                 // it: a constant the value takes from the template has derivative *zero*, not the
                 // constant, so the tangent cannot borrow the value's template.
-                const auto *fill = fillBodyOf(function, ref);
-                // The body is written into the lifted fill as it was read: a construction's copy
-                // carries the same fill kind and the same slot list, and the slot list is the
-                // payload past the header.
-                const std::span<const std::byte> payload = function.nodePayloadBytes(ref);
-                const std::vector<gc_node_ref_t> members = idListOf(function.withInputsOf(ref));
-                const auto norm                          = function.normInputsOf(ref);
+                // The construction's payload, whichever form the front end wrote it in
+                // (`fillPayloadOf`): its kind, its values and the slot each value fills. The bytes
+                // the draft is handed are built from that answer, not copied from the node: an
+                // OPER node's bytes are a `GCOperBody`, and a copy of the header alone would leave
+                // `slots()` reading past its end (measured: it read node references).
+                const auto fill = fillPayloadOf(function, ref);
+                if (!fill) {
+                    break;
+                }
+                std::vector<size_t> fillSlots;
+                fillSlots.reserve(fill->slots.size());
+                for (const rt::gc_slot_idx_t slot : fill->slots) {
+                    fillSlots.push_back(static_cast<size_t>(slot));
+                }
+                const std::vector<std::byte> payload =
+                    rt::makeFillPayload(fill->fillKind, fillSlots);
+                const std::vector<gc_node_ref_t> &members = fill->values;
+                const auto norm                           = function.normInputsOf(ref);
                 // What this tuple becomes is `Lift<its type>` (`liftedShapeOf`), and the members a
                 // tuple that lifts by component is built from are the members' *lifted* values --
                 // a value member its pair, a function member `jvp` of it. A tuple that lifts as one
@@ -1684,8 +1695,8 @@ bool liftGraph(
                     // the template's constant, not the next listed member. A slot with no member
                     // stays invalid, so a projection of it is copied as the projection it is.
                     std::vector<gc_node_ref_t> bySlot(arity, rt::kInvalidNodeRef);
-                    if (fill != nullptr) {
-                        const std::span<const rt::gc_slot_idx_t> slots = fill->slots();
+                    if (fill) {
+                        const std::vector<rt::gc_slot_idx_t> &slots = fill->slots;
                         for (size_t i = 0; i < slots.size() && i < values.size(); ++i) {
                             if (slots[i] >= 0 && static_cast<size_t>(slots[i]) < arity) {
                                 bySlot[static_cast<size_t>(slots[i])] = values[i];
@@ -1708,8 +1719,7 @@ bool liftGraph(
                                 node->dataType()->code() == camel::core::type::TypeCode::Array
                             ? static_cast<ArrayType *>(node->dataType())
                             : nullptr;
-                    const auto listed =
-                        fill != nullptr ? fill->slots() : std::span<const rt::gc_slot_idx_t>{};
+                    const std::vector<rt::gc_slot_idx_t> &listed = fill->slots;
                     std::vector<gc_node_ref_t> components(arity, rt::kInvalidNodeRef);
                     bool complete = true;
                     for (size_t i = 0; i < listed.size() && i < memberTangents.size(); ++i) {
@@ -1754,23 +1764,22 @@ bool liftGraph(
                 // forms
                 // (`addAccsNode(type, tupleIndex)` and `addAccsNode(type, structKey)`), and reading
                 // a keyed access by the number the payload carries would project another member.
-                const auto *body = nodeBodyOrNull<rt::GCAccsBody>(function, ref);
-                const auto inputs = function.normInputsOf(ref);
-                const bool tupleIndexed =
-                    body != nullptr && body->accsKind == rt::GCAccsKind::TupleIndex;
-                const bool keyed = body != nullptr && body->accsKind == rt::GCAccsKind::StructKey;
-                if ((!tupleIndexed && !keyed) || inputs.size() != 1 ||
+                const std::optional<MemberRead> read = memberReadOf(function, ref);
+                const auto inputs                    = function.normInputsOf(ref);
+                if (!read.has_value() || inputs.size() != 1 ||
                     inputs.front() >= function.nodeCount() || !copied[inputs.front()]) {
                     break;
                 }
-                const auto project = [&](gc_node_ref_t from) {
+                const bool tupleIndexed = read->kind == rt::GCAccsKind::TupleIndex;
+                const bool keyed        = read->kind == rt::GCAccsKind::StructKey;
+                const auto project      = [&](gc_node_ref_t from) {
                     const gc_node_ref_t projection =
-                        keyed ? draft.addAccsNode(node->dataType(), body->key())
-                              : draft.addAccsNode(node->dataType(), body->value);
+                        keyed ? draft.addAccsNode(node->dataType(), read->key)
+                              : draft.addAccsNode(node->dataType(), read->place);
                     draft.setNormInputs(projection, std::span<const gc_node_ref_t>(&from, 1));
                     return projection;
                 };
-                const gc_node_ref_t tuple = inputs.front();
+                const gc_node_ref_t tuple = inputs.back();
                 // Which node a projection reads, and what type the projection has, is `Lift<...>`
                 // of the aggregate and of the member (`liftedShapeOf`) -- the law again, not a kind
                 // test here. A pair-shaped aggregate is carried as the walk's two halves, and
@@ -1792,10 +1801,10 @@ bool liftGraph(
                 // component, as `(loop t = (x, x) ...).1` would).
                 const auto memberHalf = [&](gc_node_ref_t from) -> gc_node_ref_t {
                     const auto at = tupleIndexed ? membersOfFill.find(from) : membersOfFill.end();
-                    if (at == membersOfFill.end() || body->value >= at->second.size()) {
+                    if (at == membersOfFill.end() || read->place >= at->second.size()) {
                         return rt::kInvalidNodeRef;
                     }
-                    return at->second[body->value];
+                    return at->second[read->place];
                 };
                 if (!aggregate.pair) {
                     const LiftedShape memberShape = liftedShapeOf(node->dataType());
@@ -1807,8 +1816,8 @@ bool liftGraph(
                         copyOf[ref] = valueMember;
                     } else {
                         const gc_node_ref_t liftedAggregate = copyOf[tuple];
-                        copyOf[ref] = keyed ? draft.addAccsNode(memberShape.type, body->key())
-                                            : draft.addAccsNode(memberShape.type, body->value);
+                        copyOf[ref] = keyed ? draft.addAccsNode(memberShape.type, read->key)
+                                            : draft.addAccsNode(memberShape.type, read->place);
                         draft.setNormInputs(
                             copyOf[ref],
                             std::span<const gc_node_ref_t>(&liftedAggregate, 1));

@@ -858,28 +858,38 @@ bool buildTransposeMember(
                 return rt::kInvalidNodeRef;
             }
             if (nodeOperatorOf(*function, ref) == NodeOperator::Accs) {
-                const auto *accs = accsBodyOf(*function, ref);
-                const auto norm  = function->normInputsOf(ref);
-                if (accs == nullptr || norm.empty()) {
+                const std::optional<MemberRead> read = memberReadOf(*function, ref);
+                if (!read.has_value()) {
                     complete = false;
                     return rt::kInvalidNodeRef;
                 }
-                const gc_node_ref_t tuple = forward(norm.front());
+                const gc_node_ref_t tuple = forward(read->value);
                 if (tuple == rt::kInvalidNodeRef) {
                     return rt::kInvalidNodeRef;
                 }
-                const gc_node_ref_t part = draft.addAccsNode(node->dataType(), accs->value);
+                const gc_node_ref_t part =
+                    read->kind == rt::GCAccsKind::StructKey
+                        ? draft.addAccsNode(node->dataType(), read->key)
+                        : draft.addAccsNode(node->dataType(), read->place);
                 draft.setNormInputs(part, std::span<const gc_node_ref_t>(&tuple, 1));
                 forwardOf[ref] = part;
                 return part;
             }
             if (nodeOperatorOf(*function, ref) == NodeOperator::Fill) {
-                const auto *fill = fillBodyOf(*function, ref);
+                const auto fill = fillPayloadOf(*function, ref);
+                if (!fill) {
+                    complete = false;
+                    return rt::kInvalidNodeRef;
+                }
                 // The slots of a Fill live after its header, in the payload: the payload is what
                 // has to be written, not the header alone, or the copy has no components.
-                const std::vector<std::byte> fillPayload = rt::makeFillPayload(
-                    fill->fillKind,
-                    std::vector<size_t>(fill->slots().begin(), fill->slots().end()));
+                std::vector<size_t> fillSlots;
+                fillSlots.reserve(fill->slots.size());
+                for (const rt::gc_slot_idx_t slot : fill->slots) {
+                    fillSlots.push_back(static_cast<size_t>(slot));
+                }
+                const std::vector<std::byte> fillPayload =
+                    rt::makeFillPayload(fill->fillKind, fillSlots);
                 // A Fill is a value, so it needs a slot of its own: without one the loop reads its
                 // bounds from whatever slot 0 happens to hold.
                 const gc_node_ref_t made = draft.addFillNode(
@@ -887,10 +897,14 @@ bool buildTransposeMember(
                     std::span<const std::byte>(fillPayload),
                     draft.allocateRuntimeSlot(node->dataType()));
                 // A Fill's Norm input is the static template of the pair it builds: without it the
-                // node has no components, and a loop reading its bounds finds none.
+                // node has no components, and a loop reading its bounds finds none. It is the one
+                // template port in either form, and the values are the payload's -- a construction
+                // the source wrote as a call states them among its own operands, so copying its
+                // norm ports as they stand would hand this fill a template it cannot read.
                 std::vector<gc_node_ref_t> fillNorm;
-                for (gc_node_ref_t input : function->normInputsOf(ref)) {
-                    const gc_node_ref_t copied = forward(input);
+                const auto normInputs = function->normInputsOf(ref);
+                if (!normInputs.empty()) {
+                    const gc_node_ref_t copied = forward(normInputs.front());
                     if (copied == rt::kInvalidNodeRef) {
                         return rt::kInvalidNodeRef;
                     }
@@ -900,7 +914,7 @@ bool buildTransposeMember(
                     draft.setNormInputs(made, std::span<const gc_node_ref_t>(fillNorm));
                 }
                 std::vector<gc_node_ref_t> with;
-                for (gc_node_ref_t input : function->withInputsOf(ref)) {
+                for (gc_node_ref_t input : fill->values) {
                     const gc_node_ref_t copied = forward(input);
                     if (copied == rt::kInvalidNodeRef) {
                         return rt::kInvalidNodeRef;
@@ -1186,6 +1200,20 @@ bool buildTransposeMember(
                                     }
                                     operands.push_back(copied);
                                 }
+                                // The operator's `<>` arguments are ports of the same node, after
+                                // the ordinary ones, and a rebuild that dropped them would build a
+                                // *different* operator: `softmax(x)` for `softmax<1>(x)`, a member
+                                // read with no member. The forward walk copies them for exactly this
+                                // reason, and an arm reads the same operators.
+                                std::vector<gc_node_ref_t> context;
+                                for (gc_node_ref_t input : function->withInputsOf(value)) {
+                                    const gc_node_ref_t copied = forwardInArm(input);
+                                    if (copied == rt::kInvalidNodeRef) {
+                                        allForwarded = false;
+                                        break;
+                                    }
+                                    context.push_back(copied);
+                                }
                                 if (allForwarded) {
                                     const gc_node_ref_t rebuilt = draft.addOperNode(
                                         sourced->dataType(),
@@ -1195,6 +1223,9 @@ bool buildTransposeMember(
                                         draft.setNormInputs(
                                             rebuilt,
                                             std::span<const gc_node_ref_t>(operands));
+                                    }
+                                    if (!context.empty()) {
+                                        draft.setWithInputs(rebuilt, context);
                                     }
                                     return rebuilt;
                                 }
@@ -1780,14 +1811,13 @@ bool buildTransposeMember(
                 // (design principles 9.9). Resolving the name here is the one place the mapping
                 // lives: this is the only node that says which member was read, so it is the only
                 // place that can turn a name into the place the answer has for it.
-                const auto norm  = function->normInputsOf(ref);
-                const auto *body = function->nodeBodyAs<rt::GCAccsBody>(ref);
-                if (body == nullptr || norm.empty() || function->nodeRegion(norm.front()) != 0) {
+                const std::optional<MemberRead> read = memberReadOf(*function, ref);
+                if (!read.has_value() || function->nodeRegion(read->value) != 0) {
                     break;
                 }
-                const gc_node_ref_t holder = norm.front();
-                size_t member              = body->value;
-                if (body->accsKind == rt::GCAccsKind::StructKey) {
+                const gc_node_ref_t holder = read->value;
+                size_t member              = read->place;
+                if (read->kind == rt::GCAccsKind::StructKey) {
                     const camel::runtime::GCNode *const namedHolder = function->node(holder);
                     const Type *const holderType =
                         namedHolder != nullptr ? namedHolder->dataType() : nullptr;
@@ -1801,10 +1831,10 @@ bool buildTransposeMember(
                     }
                     const auto field =
                         tt::as_ptr<camel::core::type::StructType>(const_cast<Type *>(holderType))
-                            ->findField(body->key());
+                            ->findField(read->key);
                     if (!field.has_value()) {
                         refuse(TransposeRefusalCause::Component);
-                        os << " node=" << ref << " holder=" << holder << " key=" << body->key()
+                        os << " node=" << ref << " holder=" << holder << " key=" << read->key
                            << " why=no-such-field\n";
                         return false;
                     }
@@ -1819,15 +1849,14 @@ bool buildTransposeMember(
                 // `t.0`'s cotangent to `t.0`'s own value, which is a tuple written out in the body.
                 const auto nested = memberCotangents.find(ref);
                 if (nested != memberCotangents.end()) {
-                    const auto *held  = function->node(holder);
-                    const auto parts2 = function->withInputsOf(holder);
-                    if (held == nullptr ||
-                        nodeOperatorOf(*function, holder) != NodeOperator::Fill ||
-                        member >= parts2.size()) {
+                    const auto *held     = function->node(holder);
+                    const auto holderFill = fillPayloadOf(*function, holder);
+                    if (held == nullptr || !holderFill || member >= holderFill->values.size()) {
                         refuse(TransposeRefusalCause::Component);
                         os << " node=" << ref << " holder=" << holder << '\n';
                         return false;
                     }
+                    const std::vector<gc_node_ref_t> &parts2 = holderFill->values;
                     std::vector<gc_node_ref_t> &into = memberCotangents[parts2[member]];
                     for (size_t j = 0; j < nested->second.size(); ++j) {
                         const gc_node_ref_t part = nested->second[j];
@@ -1858,12 +1887,10 @@ bool buildTransposeMember(
                 // built -- a struct parameter is the second, which is why the member's type is read
                 // by `tree::childType` and not from a tuple type alone.
                 const camel::runtime::GCNode *holderNode = function->node(holder);
-                const auto holderParts                   = function->withInputsOf(holder);
+                const auto holderFill                    = fillPayloadOf(*function, holder);
                 Type *slotSpace                          = nullptr;
-                if (holderNode != nullptr &&
-                    nodeOperatorOf(*function, holder) == NodeOperator::Fill &&
-                    member < holderParts.size()) {
-                    slotSpace = cotangentTypeOf(holderParts[member]);
+                if (holderNode != nullptr && holderFill && member < holderFill->values.size()) {
+                    slotSpace = cotangentTypeOf(holderFill->values[member]);
                 } else if (
                     const Type *const holderType =
                         holderNode != nullptr ? holderNode->dataType() : nullptr;
@@ -1915,7 +1942,16 @@ bool buildTransposeMember(
                     // (`walk.cpp#buildTransposeMember` projects an array state with
                     // `:op/idx_arr` for the same reason). A type that states neither count is still
                     // refused here, by name.
-                    const auto parts          = function->withInputsOf(ref);
+                    // The members, whichever form the source wrote the construction in: a FILL
+                    // node's with-inputs, or a `fill` call's operands after the template
+                    // (`fillPayloadOf`).
+                    const auto fillPayload = fillPayloadOf(*function, ref);
+                    if (!fillPayload) {
+                        refuse(TransposeRefusalCause::Kind);
+                        os << " node=" << ref << " kind=fill no-payload\n";
+                        return false;
+                    }
+                    const std::vector<gc_node_ref_t> &parts = fillPayload->values;
                     const gc_node_ref_t whole = cotangent[ref];
                     Type *const wholeType     = cotangentTypeOf(ref);
                     // **The arity rule lands here**: one name answers the count,
@@ -2012,7 +2048,13 @@ bool buildTransposeMember(
                     }
                     break;
                 }
-                const auto parts = function->withInputsOf(ref);
+                const auto memberFill = fillPayloadOf(*function, ref);
+                if (!memberFill) {
+                    refuse(TransposeRefusalCause::Kind);
+                    os << " node=" << ref << " kind=fill no-payload\n";
+                    return false;
+                }
+                const std::vector<gc_node_ref_t> &parts = memberFill->values;
                 for (size_t i = 0; i < parts.size(); ++i) {
                     if (isConstant(parts[i])) {
                         continue;
@@ -2790,15 +2832,16 @@ bool buildTransposeMember(
                     // would be delivered to after it was passed, and the cotangent would stop
                     // there. A member is a node the fill was built from, so it always comes first.
                     const camel::runtime::GCNode *const resultNode = function->node(oldBodyResult);
-                    // The family is asked before the payload is read, inside `fillBodyOf`: the raw
+                    // The family is asked inside `fillPayloadOf`, which answers both forms: the raw
                     // bytes of an OPER node read as a FILL are some other number
                     // (`node_operator.h`).
-                    const auto *resultFill =
-                        resultNode != nullptr ? fillBodyOf(*function, oldBodyResult) : nullptr;
+                    const auto resultFill =
+                        resultNode != nullptr ? fillPayloadOf(*function, oldBodyResult)
+                                              : std::optional<FillPayload>{};
                     const bool builtByAFill =
-                        resultFill != nullptr && resultFill->fillKind == rt::GCFillKind::Array;
+                        resultFill.has_value() && resultFill->fillKind == rt::GCFillKind::Array;
                     if (builtByAFill) {
-                        const auto members = function->withInputsOf(oldBodyResult);
+                        const std::vector<gc_node_ref_t> &members = resultFill->values;
                         for (size_t i = 0; i < members.size(); ++i) {
                             const camel::runtime::GCNode *member = function->node(members[i]);
                             if (member == nullptr || isConstant(members[i])) {
@@ -2824,7 +2867,14 @@ bool buildTransposeMember(
                         seeds.push_back(ArmSeed{oldBodyResult, ctPorts.front()});
                     }
                 } else {
-                    const auto results = function->withInputsOf(oldBodyResult);
+                    const auto holdsTheStates = fillPayloadOf(*function, oldBodyResult);
+                    std::vector<gc_node_ref_t> results;
+                    if (holdsTheStates) {
+                        results = holdsTheStates->values;
+                    } else {
+                        const auto with = function->withInputsOf(oldBodyResult);
+                        results.assign(with.begin(), with.end());
+                    }
                     for (size_t i = 0; i < stateCount; ++i) {
                         seeds.push_back(
                             ArmSeed{

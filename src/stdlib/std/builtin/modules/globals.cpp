@@ -2134,9 +2134,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // The other three shapes of plan 2.3, declared the same way and for the same reason. Their
         // compile-time parameters are the node's own -- a conversion's target is the call's result
         // type, a construction's kind is the type it makes and its field order is the call's, and a
-        // member read's position or name is the call's first operand -- so a record keyed by URI
-        // carries them after all, as the operands of the call rather than as payload. Their kernels
-        // are `operators/cast.cpp` (conversion) and `operators/struct.cpp` (construction, access).
+        // member read's position or name is the operator's `with` argument -- so a record keyed by URI
+        // carries them after all, as the `with` arguments of the call rather than as payload. Their
+        // kernels are `operators/cast.cpp` (conversion) and `operators/struct.cpp` (construction,
+        // access).
         // The names are the URI's own tail, which is the name `camel inspect --ops` reports for them
         // (`copy` / `:op/copy`) and what `--verify-ops` compares a declaration with.
         OperatorGroup::create("cast", {}),

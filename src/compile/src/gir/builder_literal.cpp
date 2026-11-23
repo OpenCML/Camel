@@ -355,23 +355,19 @@ node_handle_t Builder::convertStructValue(
     // order) and what converts between two named types that write their fields in another
     // order (design principles 5.2).
     std::vector<size_t> slots(target->size());
-    std::iota(slots.begin(), slots.end(), 0);
     const slot_t empty =
         camel::core::rtdata::toSlot(::Struct::create(target->size(), camel::core::mm::autoSpace()));
     auto &draft        = currGraph_->transaction().edit();
     node_handle_t base = draft.ref(draft.materializeStaticValue(empty, target));
-    node_handle_t out  = currGraph_->addFillNode(
-        target,
-        runtime::makeFillPayload(runtime::GCFillKind::Struct, slots));
-    linkNodes(LinkType::Norm, base, out);
+    std::vector<node_handle_t> fields;
+    fields.reserve(target->size());
     for (size_t i = 0; i < target->size(); ++i) {
         const std::string name(target->fieldName(i));
         const size_t from     = *source->findField(name);
         Type *sourceFieldType = source->typeAt(from);
         Type *targetFieldType = target->typeAt(i);
-        node_handle_t access =
-            currGraph_->addAccsNode(sourceFieldType, std::string(source->fieldName(from)));
-        linkNodes(LinkType::Norm, valueOf(value), access);
+        node_handle_t access = memberReadNodeOf(
+            valueOf(value), sourceFieldType, std::string(source->fieldName(from)));
         node_handle_t field = access;
         if (targetFieldType != nullptr && sourceFieldType != nullptr &&
             !targetFieldType->equals(sourceFieldType)) {
@@ -413,8 +409,9 @@ node_handle_t Builder::convertStructValue(
                 return nullptr;
             }
         }
-        linkNodes(LinkType::With, valueOf(field), out);
+        fields.push_back(valueOf(field));
     }
+    node_handle_t out = fillNodeOf(base, target, fields);
     registerNodeOrigin(context_, out, origin, "gir.cast.struct");
     return out;
 }

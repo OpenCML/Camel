@@ -548,22 +548,43 @@ struct Half {
             return true;
         }
         case NodeCase::Oper: {
+            // The inputs arrive as one list in port order -- the ordinary ones and then the context
+            // ones (`halfInputsOf` is `dataInputsOf`) -- so they are placed back on the copy the way
+            // they were found: a member read's place, an `append`'s value or a `softmax<1>`'s axis
+            // handed to `setNormInputs` would be an ordinary operand of a different call.
             const auto *body         = source->nodeBodyAs<rt::GCOperBody>(ref);
             const gc_node_ref_t made = draft.addOperNode(node->dataType(), nullptr, body->uri());
-            draft.setNormInputs(made, inputs);
+            placeCallArguments(made, ref, inputs);
             copyOf[ref] = made;
             return true;
         }
         case NodeCase::Fill: {
-            const auto *body       = fillBodyOf(*source, ref);
-            const std::byte *begin = reinterpret_cast<const std::byte *>(body);
-            const std::vector<std::byte> payload(
-                begin,
-                begin + sizeof(rt::GCFillBody) + body->slots().size_bytes());
+            // The copy keeps the construction's own payload: the slot list is what says which
+            // member each value fills, and a call's operands already are that list
+            // (`fillPayloadOf`).
+            const auto body = fillPayloadOf(*source, ref);
+            if (!body) {
+                return refuseAt(
+                    refusal,
+                    source,
+                    ref,
+                    "a construction",
+                    "the node builds a value and its payload says neither which slots its values "
+                    "fill nor what it hands the template");
+            }
+            std::vector<size_t> slots;
+            slots.reserve(body->slots.size());
+            for (const rt::gc_slot_idx_t slot : body->slots) {
+                slots.push_back(static_cast<size_t>(slot));
+            }
+            const std::vector<std::byte> payload = rt::makeFillPayload(body->fillKind, slots);
             const gc_node_ref_t made = draft.addFillNode(node->dataType(), payload);
-            // A fill's data ports are its template (the ordinary one) and the values it carries
-            // (the context ones); `inputs` is both, in the source's port order.
-            const size_t normCount = source->normInputsOf(ref).size();
+            // A fill's data ports are its template (the ordinary one) and the values it
+            // carries (the context ones); `inputs` is both, in the source's port order. A
+            // construction the source wrote as a call states the same two things in its own
+            // operands, template first, so the copy splits at the same place either way: one
+            // template, every value after it.
+            const size_t normCount = inputs.empty() ? 0 : 1;
             if (normCount > 0) {
                 draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs.data(), normCount));
             }
@@ -769,9 +790,9 @@ struct Half {
             // half a read of component 1 is **the call of that linear half**: one indirect call, on
             // the tangents the source call passed, and the call site never sees what the callee's
             // body reads.
-            const auto *body                       = accsBodyOf(*source, ref);
+            const std::optional<MemberRead> read   = memberReadOf(*source, ref);
             const std::vector<gc_node_ref_t> reads = dataInputsOf(source, ref);
-            if (body == nullptr || reads.empty()) {
+            if (!read.has_value() || reads.empty()) {
                 return refuseAt(
                     refusal,
                     source,
@@ -881,9 +902,9 @@ struct Half {
                 copyOf[ref] = made;
                 return true;
             }
-            const gc_node_ref_t made = body->accsKind == rt::GCAccsKind::StructKey
-                                           ? draft.addAccsNode(node->dataType(), body->key())
-                                           : draft.addAccsNode(node->dataType(), body->value);
+            const gc_node_ref_t made = read->kind == rt::GCAccsKind::StructKey
+                                           ? draft.addAccsNode(node->dataType(), read->key)
+                                           : draft.addAccsNode(node->dataType(), read->place);
             draft.setNormInputs(made, inputs);
             copyOf[ref] = made;
             return true;

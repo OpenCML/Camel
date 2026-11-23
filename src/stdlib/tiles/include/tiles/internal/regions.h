@@ -87,6 +87,13 @@ std::string loopEligibility(
 /// Whether the device back end has an implementation of `oper`: the declared capability list,
 /// the same one the region compiler lowers. A `#gpu` scope refuses an operator outside it.
 bool deviceCapable(core::OperId oper);
+/// Whether `oper` is one of the forms that computes nothing of its own: a conversion, a
+/// construction, and the two member reads the front end writes as operators (`:op/cast`,
+/// `:op/fill`, `:op/access`, `:op/access_key`). Their result is a value the region already holds,
+/// read under a type, built from a template, or selected through a member, so the specialization
+/// answers them where the value lives and no device program is missing for one
+/// (`graph_regions.cpp`, `compiler.cpp`).
+bool structuralOperator(core::OperId oper);
 /// Whether running the operator touches nothing the device has to leave on the host: it writes no
 /// state and reaches nothing outside the program. The statement of it is the operator record
 /// (`camel/ops/operator_record.h`: `pure` is the empty `uses` clause, `external` the reach it
