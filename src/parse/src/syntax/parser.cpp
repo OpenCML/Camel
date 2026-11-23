@@ -778,13 +778,13 @@ void ParserImpl::parseFrontMatter() {
 }
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'?
-///            'func' (identRef | operatorName) typeParams? parentParams (('=>' | ':') typeExpr)?
+///            'func' (identRef | operatorName) typeParams? parentParams ('=>' typeExpr)?
 ///            resourceClause? whenClause? stmtBlock?
 ///
-/// The result type follows `=>` (design principles 4.4); `: 类型` is the
-/// older spelling and is still read while the corpus is written that way.
-/// Without a body the declaration stands for a C++ operator of the module the name is bound in
-/// (design principles 6.4): it has no block, and what it declares is its signature. The
+/// The result type follows `=>` (design principles 4.4), the arrow a function type and a lambda
+/// write before theirs; `: 类型` is not a return type and is refused where a reader would look
+/// for one. Without a body the declaration stands for a C++ operator of the module the name is
+/// bound in (design principles 6.4): it has no block, and what it declares is its signature. The
 /// `uses`/`pure` clause after the result type says which resources a call touches (design
 /// effects plan 3.1). The optional `when` after it is the applicability condition (design
 /// principles 5.13).
@@ -1007,13 +1007,11 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     parseParentParams(true, true);
     // The result type is written `=> T` (design principles 4.4): the same
     // arrow a function type and a lambda write before theirs, so a declaration reads like the
-    // type of what it declares. `: T` is the older spelling, and it is still read while the
-    // corpus is written that way -- one rewriting pass changes the files, and no file has to
-    // fail to parse in between.
+    // type of what it declares. A `:` here introduces no type: it is the older spelling, and a
+    // declaration that writes it is refused at the `:`, which is the token the reader has to
+    // change.
     if (cur_ == TK::FatArrow) {
         bump();
-        parseType();
-    } else if (eat(TK::Colon)) {
         parseType();
     }
     if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "panic") || atWord(0, "spelling")) {
