@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "program_index.h"
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/program.h"
 #include "values.h"
 
@@ -824,30 +825,15 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
         }
     }
 
-    // The arm or loop region each region is in (the regions that only annotate are looked through).
-    const auto isControl = [](GCRegionKind kind) {
-        return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
-               kind == GCRegionKind::LoopBody;
-    };
-    const auto controlRegionOf = [&](uint32_t r) {
-        for (int guard = 0; r != 0 && guard < 4096; ++guard) {
-            const GCRegion *region = g->region(r);
-            if (region == nullptr) {
-                return uint32_t{0};
-            }
-            if (isControl(region->kind)) {
-                return r;
-            }
-            r = region->parent;
-        }
-        return uint32_t{0};
-    };
-    info->regionOuter.assign(g->regionCount(), 0);
+    // The arm or loop region each region is in (the regions that only annotate are looked
+    // through), asked of the graph's own tree: `core.controlRegions` is a fact of the graph, so
+    // the answer here is the one the validator and the back ends read, not a second walk that
+    // has to be kept in step with it.
+    info->regions = std::make_shared<const camel::runtime::ControlRegions>(*g);
     // The ports of the condition and of the body of a loop are named as the loop declares them;
     // a name of a port is there while the code runs in its region.
     std::unordered_map<gc_node_ref_t, uint32_t> portRegion;
     for (uint32_t r = 1; r < g->regionCount(); ++r) {
-        info->regionOuter[r] = controlRegionOf(g->region(r)->parent);
         const GCRegion *region = g->region(r);
         if (region->kind != GCRegionKind::LoopCond && region->kind != GCRegionKind::LoopBody) {
             continue;
@@ -878,7 +864,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
             node.loc      = loc(node.origin);
             node.function = functionOf(node.loc);
             node.executes = executesKind(n->kind);
-            node.controlRegion = controlRegionOf(g->nodeRegion(node.ref));
+            node.controlRegion = info->regions->controlOf(node.ref);
             if (auto port = portRegion.find(node.ref); port != portRegion.end()) {
                 node.controlRegion = port->second;
             }

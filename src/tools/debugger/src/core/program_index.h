@@ -27,6 +27,7 @@
 
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/context/context.h"
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
 
 #include <map>
@@ -127,23 +128,16 @@ struct GraphInfo {
     std::unordered_map<camel::runtime::gc_node_ref_t, uint32_t> byRef;
     std::unordered_multimap<origin_t, uint32_t> byOrigin;
     std::unordered_map<int, uint32_t> bySlot;
-    /// By region id: the control region (arm, loop condition or body) the region is in; 0 for the
-    /// body. Empty for a graph without regions.
-    std::vector<uint32_t> regionOuter;
+    /// By region id: the control region (arm, loop condition or body) the region is in, or 0 for
+    /// the body -- the answer `camel/runtime/control_regions.h` gives, held once for the graph.
+    /// (The hand-rolled copy of this walk that stood here is gone: the tree is a fact of the
+    /// graph, `core.controlRegions`, and a second builder was a second answer to one question.)
+    std::shared_ptr<const camel::runtime::ControlRegions> regions;
 
     /// A name declared in control region `region` is there while the code runs in `region` or
     /// in a region inside it, as the names of a block are.
     bool visibleAt(uint32_t region, uint32_t at) const {
-        for (int guard = 0; region != 0 && guard < 4096; ++guard) {
-            if (at == region) {
-                return true;
-            }
-            if (at == 0 || at >= regionOuter.size()) {
-                return false;
-            }
-            at = regionOuter[at];
-        }
-        return region == 0;
+        return region == 0 || (regions != nullptr && regions->within(at, region));
     }
 
     const NodeInfo *node(camel::runtime::gc_node_ref_t ref) const {

@@ -414,6 +414,7 @@ bool dumpTNS       = false; // Whether to dump Topological Node Sequence
 bool dumpOps       = false; // Whether to dump the operators of the imported modules
 bool dumpInstances = false; // Whether to dump the index semantics of every operator node
 bool dumpFacts     = false; // Whether to compute and dump the graph facts of the program
+std::string factKind = "";  // The one kind `--fact` names, empty when no kind was named
 bool dumpTags      = false; // Whether to dump the tags the program declares
 bool dumpAttrs     = false; // Whether to dump the attribute-fate table and check its coverage
 bool dumpTies      = false; // Whether to dump the canonical numbering's tie groups
@@ -854,9 +855,14 @@ bool parseArgs(int argc, char *argv[]) {
              "print the tags the program declares, with the positions each allows and the passes "
              "it names (read_by), and the facts written on its declarations and struct fields",
          option("--facts").set(dumpFacts) %
-             "compute the graph facts of every kind the core and the loaded modules register "
-             "(tensor shapes, index instances, effect summaries, ...) and print each with its "
-             "stamp",
+             "print the graph facts of every kind the fact framework registers and of every kind "
+             "the older store registers (tensor shapes, index instances, effect summaries, "
+             "control regions, freedom to arrange, ...), each with its stamp and with the library "
+             "that answered it",
+         (option("--fact") & value("kind", factKind)) %
+             "print the facts of one kind, named as it is registered ('core.arrangeable'); a key "
+             "no kind is registered under is reported as no such kind rather than printed as an "
+             "empty table",
          option("--attrs").set(dumpAttrs) %
              "print every node attribute the tree can write with its fate in the interpreter, "
              "the dumps, the ONNX export and Tiles, then fail if a loaded module interned an "

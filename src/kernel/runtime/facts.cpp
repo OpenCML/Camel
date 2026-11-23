@@ -199,7 +199,7 @@ std::string_view className(FactClass cls) {
 std::string factJson(
     const KindInfo &kind, std::span<const Anchor> anchors, const void *value, const Stamp *stamp) {
     std::string out = std::format(
-        "{{\"kind\":{},\"version\":{},\"class\":{},\"anchors\":[",
+        "{{\"library\":\"runtime.facts\",\"kind\":{},\"version\":{},\"class\":{},\"anchors\":[",
         jsonString(kind.key),
         kind.version,
         jsonString(className(kind.cls)));
@@ -603,7 +603,12 @@ void computeFacts(FactStore &store, const Program &program) {
     }
 }
 
-void dumpFacts(FactStore &store, const Program &program, std::ostream &os) {
+void dumpFacts(
+    FactStore &store, const Program &program, std::ostream &os, std::span<const KindId> only) {
+    // The kinds a dump prints: every one, or the ones the caller named (`--fact`).
+    const auto wanted = [only](KindId kind) {
+        return only.empty() || std::find(only.begin(), only.end(), kind) != only.end();
+    };
     const std::vector<GCGraph *> graphs = collectReachableGraphs(program);
     std::unordered_map<GraphId, const GCGraph *> byId;
     for (const auto *graph : graphs) {
@@ -614,6 +619,9 @@ void dumpFacts(FactStore &store, const Program &program, std::ostream &os) {
     std::vector<StoredFact> stored;
     store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
     for (const StoredFact &fact : stored) {
+        if (!wanted(fact.kind)) {
+            continue;
+        }
         const KindInfo &info = kindInfo(fact.kind);
         std::vector<Anchor> anchors;
         for (const auto &[id, node] : fact.anchors) {
@@ -635,6 +643,9 @@ void dumpFacts(FactStore &store, const Program &program, std::ostream &os) {
 
     // Graph content (class i): read from the graphs.
     for (KindId kind : registeredKinds()) {
+        if (!wanted(kind)) {
+            continue;
+        }
         const KindInfo &info = kindInfo(kind);
         if (info.cls != FactClass::GraphContent) {
             continue;
