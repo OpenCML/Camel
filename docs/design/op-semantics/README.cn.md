@@ -939,7 +939,7 @@ struct Stamp {
 
 ## 11. `LOOP` 的消费接口
 
-> **实施状态（2026-10-15，`lane/loop`；2026-10-21 更新）**：`LOOP` 节点、11.1 的访问器（`kernel/include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`LoopDraftView`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）都已实现；条件与循环体是图里的两个控制区域，11.4 的尾递归降级已删除。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condRegion()` 在 `For` 时为 0（没有条件区域）；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由区域算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器都按 11.6 收集；自动微分把它当磁带（11.6，循环重写第二步）。给 Tiles 的读法见 11.5。
+> **实施状态（2026-10-15，`lane/loop`；2026-10-21 更新）**：`LOOP` 节点、11.1 的访问器（`kernel/include/camel/runtime/loop.h`，`camel::runtime::LoopView`（一个实现，冻结图与草稿各一个入口）、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）都已实现；条件与循环体是图里的两个控制区域，11.4 的尾递归降级已删除。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condRegion()` 在 `For` 时为 0（没有条件区域）；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由区域算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器都按 11.6 收集；自动微分把它当磁带（11.6，循环重写第二步）。给 Tiles 的读法见 11.5。
 
 `LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 3.10 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
 
@@ -985,12 +985,8 @@ class LoopView {
     TypeId bodyResultType() const;
     size_t bodyStateResultIndex(size_t j) const;     // j
     size_t bodyCollectionResultIndex(size_t c) const;// k + c
-    /// k > 1 (or s > 0) and the body builds its result with a tuple FILL: the node that fills
-    /// slot j; otherwise nullopt (the consumer projects with ACCS).
-    std::optional<NodeId> nextStateComponent(size_t j) const;
-    std::optional<NodeId> nextCollectionComponent(size_t c) const;
-
-    EffectSummary condEffects() const, bodyEffects() const;
+    /// k > 1 (or s > 0) 且循环体用 tuple FILL 写结果时，看到的是同一个 `nextState()`：
+    /// 投影某个位置由消费者自己做（ACCS），因此这里不再有按位置取节点的访问器。
 };
 
 LoopView loopOf(const GraphView &graph, NodeId node);   // asserts kind == LOOP
@@ -1006,7 +1002,7 @@ func row_sums(rows: Tensor<f32>[]): (Tensor<f32>, int) {
 }
 ```
 
-`kind() == ForWhile`；`iterable()` 是 `rows`；`initialState(0)`、`initialState(1)` 是 `zeros([4])` 与 `0`；`captures()` 为空；`bodyElementParam()` 是 `r` 的端口；`nextStateComponent(0)` 是 `acc + r` 那个节点。
+`kind() == ForWhile`；`iterable()` 是 `rows`；`initialState(0)`、`initialState(1)` 是 `zeros([4])` 与 `0`；`captures()` 为空；`bodyElementParam()` 是 `r` 的端口；`nextState()` 是 `acc + r` 那个节点。
 
 ### 11.2 核心在提交时校验的
 
@@ -1050,9 +1046,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
     loop.condStateParam(j); loop.bodyStateParam(j); loop.bodyElementParam();
     // 下一轮的状态与收集值
     loop.nextState();            // 循环体区域的结果节点（k > 1 或 s > 0 时是元组）
-    loop.nextStateComponent(j);  // 结果是元组 FILL 时，填第 j 个位置的节点
-    loop.nextCollectionComponent(c); // 填第 k + c 个位置（收集值）的节点
-    loop.effects();              // 两个区域之并，加"可能故障""可能不终止"
+    // 要看某个位置就投影它（ACCS）；区域的效果问 effectSummaryOfRegion(program, graph, region)
 }
 ```
 
@@ -1069,7 +1063,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 - **计数为什么必须在节点里**：`k = 2` 时值 `(状态, 数组)` 与“两个状态、第二个恰是数组”在类型上无法区分；类型本身不能说明有收集槽。
 - **执行**：每个执行器（NodeVM、FastVM 原生循环、宏求值器）为每个槽建一个空数组，把它与状态放在同一个工作元组里（节点的槽位、后端的帧里，因而被 GC 追踪），每轮把 `vc` **原地追加**到对应数组。数组由这次循环独占（循环体看不到它们），追加是 O(1) 摊还、总计 O(n)；没有轮数上限，内存耗尽按 `RuntimeDiag::MemoryExhausted` 在循环的源位置报出。
 - **收集槽在区域里**：循环体区域的结果的末尾 s 个分量是收集值；执行器每轮把 `vc` 原地追加到对应数组，不需要另建算子。
-- **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。改写一个还没编码的循环（自动微分给自己建的两个循环）用同一组访问器的 `LoopDraftView`（`camel/runtime/loop.h`，读的是 `GraphDraft` 里的节点）。
+- **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。改写一个还没编码的循环（自动微分给自己建的两个循环）用同一个 `LoopView`（`camel/runtime/loop.h`，两种表示各一个入口，读的都是同一组访问器）。
 - **自动微分**（循环重写第二步，2026-10-20）：磁带就是这些收集槽。残差是循环体回传真正读到的值（每条导数规则的入运算；循环体里一次调用的回传闭包整个作为一个 `Function` 值收进去，数组元素可以是函数，GC 追踪），所以一次循环的磁带是 `s` 个数组、每轮原地追加，没有复制。反向是一个 `While` 型 `LOOP`（`collectionCount = 0`）：状态是轮次下标加各状态与各捕获的梯度（只给能承载梯度的类型留位置），循环体用 `:op/idx_arr` 读这一轮的残差、调循环体的回传、接状态梯度、累加捕获梯度；零轮时状态梯度为种子、捕获梯度为零。循环体回传不读残差时仍收一个常量 `1`，反向循环靠它知道轮数。循环迭代或捕获的数组若依赖被微分的参数，按设计原则 9.9 在循环处拒绝并指出数组位置；不依赖的可以读，梯度在读处停住。
 - **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；"循环重写第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
 

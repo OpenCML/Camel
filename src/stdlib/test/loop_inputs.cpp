@@ -82,7 +82,7 @@ LoopInputsTestPass::apply(const camel::runtime::Program *program, std::ostream &
                 continue;
             }
             const gc_node_ref_t loop = it.ref();
-            const LoopView view(*program, *graph, loop);
+            const LoopView view(*graph, loop);
             const std::vector<gc_node_ref_t> captures = view.externalInputs(false);
             const std::vector<gc_node_ref_t> withConstants = view.externalInputs(true);
             os << std::format(

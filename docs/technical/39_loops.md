@@ -157,9 +157,8 @@ indistinguishable from two states of which the second is an array. `s = 0` is ex
 shape (the value when `k = 1`, the k-tuple when `k > 1`). `LoopView` exposes
 `collectionCount`, `valueIsTuple`, `valueComponentCount`, `stateValueIndex`,
 `collectionValueIndex`, `collectionArrayType`, `collectionElemType`, `nextStateIsTuple`,
-`bodyResultType`, `bodyStateResultIndex`, `bodyCollectionResultIndex`,
-`nextCollectionComponent`, and the free helpers `loopValueComponent`, `loopStateValue`,
-`loopCollectedValue`; the validation requires the value tuple to be the state types followed by
+`bodyResultType`, `bodyStateResultIndex`, `bodyCollectionResultIndex`, and the free helpers
+`loopValueComponent`, `loopStateValue`, `loopCollectedValue`; the validation requires the value tuple to be the state types followed by
 the array types and the body's exit to be the state types followed by their element types.
 
 ### 3.2 The tape of a differentiated loop
@@ -182,8 +181,9 @@ the round, adds each capture's gradient, and decrements `i`. The first round the
 `i = len(tape) - 1`, and a loop that ran no round leaves the state's gradient as the seed and every
 capture's gradient zero. A body whose pullback reads no residual still collects one constant `1` per
 round, so that the reverse pass knows how many rounds ran; that slot is not one of its inputs.
-`LoopDraftView` (`camel/runtime/loop.h`) is how the rewrite reads a decoded loop and writes the two
-it builds, the same accessors `LoopView` gives a consumer.
+`LoopView` (`camel/runtime/loop.h`) is how the rewrite reads a decoded loop and writes the two
+it builds: the same class and the same accessors a consumer reads, over the draft instead of the
+decoded graph.
 
 An array has a tangent of its own: the array of its elements' tangents (design principles 9.9). A
 captured array that depends on a differentiated parameter therefore carries a gradient, and the

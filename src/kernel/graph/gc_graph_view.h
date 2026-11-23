@@ -5,15 +5,11 @@
  * FrozenGraphAdapter: `GraphView` over a frozen graph (`GCGraph`, camel/runtime/graph.h).
  *
  * The transitional adapter stage 2.1 asks for ("a frozen graph and a draft, one adapter each,
- * deleted again by stage 3"). Replaces
- * `camel::compile::gir::FrozenGraphRead`
- * (`compile/include/camel/compile/gir/graph_read.h`): that class is the same idea stopped at the
- * facts the derivative lift asks, and it is deleted once its users are on this face.
+ * deleted again by stage 3").
  *
- * Who migrates to it: the lift (`modules/transforms/jvp.cpp`, `liftGraph`), the encoder's
- * self-check
- * (`compile/src/gir/graph_encode.cpp`, `firstDifference`), `lib/test/graph_faces.cpp`, then the
- * freeze side of every predicate the view is meant to answer once.
+ * Who reads through it: the encoder's self-check (`compile/src/gir/graph_encode.cpp`,
+ * `firstDifference`), `LoopView`, `ControlRegions`, `NodeRoleRegistry`, `lib/test/graph_faces.cpp`,
+ * and the freeze side of every predicate the view is meant to answer once.
  *
  * It answers; it does not decide, and it stores nothing the graph does not. The four readings that
  * differ from the stored graph are the file comment's, and the mapping is this table -- a reader

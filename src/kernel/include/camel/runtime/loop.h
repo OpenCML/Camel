@@ -33,10 +33,12 @@
  * are appended to their arrays. The rounds run strictly one after the other; each is one
  * activation of the condition region and one of the body region, in the frame of the graph.
  *
- * Ownership. A LoopView is a view: it holds the graph and the node, and is valid as long as the
- * frozen graph and the Program it was made in are (camel/runtime/graph.h, program.h). The
- * condition and the body are regions of that graph; nodes are named by their NodeIds
- * (gc_node_ref_t), types by Type pointers.
+ * Ownership. A LoopView is a view of one graph in either form: a frozen graph or the draft a
+ * builder holds. It holds the read-only face of that graph (`camel::graph::GraphView`) and the
+ * node, and is valid as long as the graph it was made in is -- the view keeps the adapter it
+ * built for the graph, not the graph itself (camel/runtime/graph.h, draft.h). The condition and
+ * the body are regions of that graph; nodes are named by their ids (gc_node_ref_t), types by Type
+ * pointers.
  */
 
 #pragma once
@@ -45,20 +47,30 @@
 #include "camel/runtime/effects.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
+#include "graph/graph_view.h"
 
+#include <memory>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace camel::runtime {
 
 using camel::core::LoopKind;
 
+class GraphDraft;
+
 class LoopView {
   public:
-    /// The LOOP node `node` of `graph`, a graph of `program`; asserts that it is one.
-    LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t node);
+    /// The LOOP node `node` of a frozen graph, and of the draft a builder holds; asserts that the
+    /// node is one. Each builds the adapter the view reads (`FrozenGraphAdapter`,
+    /// `DraftGraphAdapter`) and keeps it: the answers below are spans and ids of that graph, so the
+    /// adapter has to outlive the view.
+    LoopView(const GCGraph &graph, gc_node_ref_t node);
+    LoopView(const GraphDraft &draft, gc_node_ref_t node);
+    /// The node of a graph already read through a view: the caller keeps the adapter alive.
+    explicit LoopView(const camel::graph::GraphView &view, gc_node_ref_t node);
 
-    const GCGraph &graph() const { return *graph_; }
     gc_node_ref_t node() const { return node_; }
 
     LoopKind kind() const { return kind_; }
@@ -73,7 +85,7 @@ class LoopView {
     bool valueIsTuple() const { return stateCount_ > 1 || collectionCount_ > 0; }
     /// The type of the loop's value: the state type when k = 1 and s = 0; otherwise the tuple
     /// (state_0, ..., state_{k-1}, array_0, ..., array_{s-1}).
-    camel::core::type::Type *valueType() const { return graph_->node(node_)->dataType(); }
+    camel::core::type::Type *valueType() const;
     /// k + s: the number of components of the loop's value when valueIsTuple().
     size_t valueComponentCount() const { return stateCount_ + collectionCount_; }
     /// The index of the j-th state value in the loop's value tuple.
@@ -101,7 +113,7 @@ class LoopView {
 
     /// The Port node, of type int64, whose slot a back end counts the rounds of the loop in (the
     /// last With input of the node).
-    gc_node_ref_t roundPort() const { return graph_->withInputsOf(node_).back(); }
+    gc_node_ref_t roundPort() const { return view_.inputs(node_, camel::graph::PortGroup::Context).back(); }
     /// The nodes of the condition and of the body region, the regions inside them included, and
     /// the round port, in node order.
     std::vector<gc_node_ref_t> regionNodes() const;
@@ -138,13 +150,6 @@ class LoopView {
     gc_node_ref_t condResult() const;
     /// True when the body builds its result with a tuple FILL: k > 1 or the loop collects.
     bool nextStateIsTuple() const { return valueIsTuple(); }
-    /// The body node that fills position j of the result tuple (the j-th state value); nullopt
-    /// unless nextStateIsTuple() and the body result is a tuple FILL: a consumer may otherwise
-    /// project nextState() with ACCS.
-    std::optional<gc_node_ref_t> nextStateComponent(size_t j) const;
-    /// The body node that produces the value collected by slot c this round (result position
-    /// k + c); nullopt unless the loop collects and the body result is a tuple FILL.
-    std::optional<gc_node_ref_t> nextCollectionComponent(size_t c) const;
     /// The type of the body graph's result: the state type when it does not collect, the
     /// (state_0, ..., state_{k-1}, elem_0, ..., elem_{s-1}) tuple when it does.
     camel::core::type::Type *bodyResultType() const;
@@ -152,19 +157,15 @@ class LoopView {
     size_t bodyStateResultIndex(size_t j) const { return j; }
     size_t bodyCollectionResultIndex(size_t c) const { return stateCount_ + c; }
 
-    // ---- Effects ----
-
-    EffectSummary condEffects() const;
-    EffectSummary bodyEffects() const;
-    /// The LOOP node's own: the union of the two graphs', and "may fault" and "may not
-    /// terminate" (a loop may not end; design of loops 4.8).
-    EffectSummary effects() const;
-
   private:
-    // program-holder-exempt: borrow-or-foreign-type -- a view of a graph of a program the
-    // caller holds; it is made and dropped inside the call that reads the loop.
-    const Program *program_;
-    const GCGraph *graph_;
+    /// The facts every constructor takes from the graph: that the node is a LOOP, the form it
+    /// declares, the two parts it owns, and how many values of state it has.
+    void adopt();
+
+    // Declared before the view it holds: the adapter is what the view reads, so it is built first
+    // and destroyed last (`view_` binds into it).
+    std::unique_ptr<camel::graph::GraphView> owned_;
+    const camel::graph::GraphView &view_;
     gc_node_ref_t node_;
     LoopKind kind_;
     size_t stateCount_;
@@ -173,71 +174,10 @@ class LoopView {
     uint32_t bodyRegion_ = 0;
 };
 
-/// The LOOP node `node` of `graph`, a graph of `program` (asserts that it is one).
-inline LoopView loopOf(const Program &program, const GCGraph &graph, gc_node_ref_t node) {
-    return LoopView(program, graph, node);
-}
-
-class GraphDraft;
-
-/// The LOOP node `node` of a draft: what a graph producer (autodiff) reads while it rewrites the
-/// graph a LOOP node is in, before it is encoded. The same facts as LoopView: the draft holds the
-/// node's inputs and its value type, and its condition and body are regions of the same draft.
-/// One place, so a producer never re-derives the layout either.
-class LoopDraftView {
-  public:
-    /// The LOOP node `node` of `draft`, a region-form loop; asserts that it is one.
-    LoopDraftView(const Program &program, const GraphDraft &draft, gc_node_ref_t node);
-
-    gc_node_ref_t node() const { return node_; }
-
-    LoopKind kind() const { return kind_; }
-    size_t stateCount() const { return stateCount_; }
-    size_t collectionCount() const { return collectionCount_; }
-    bool valueIsTuple() const { return stateCount_ > 1 || collectionCount_ != 0; }
-    /// The type of the loop's value in the draft.
-    camel::core::type::Type *valueType() const;
-    size_t valueComponentCount() const { return stateCount_ + collectionCount_; }
-    size_t stateValueIndex(size_t j) const { return j; }
-    size_t collectionValueIndex(size_t c) const { return stateCount_ + c; }
-    camel::core::type::Type *stateType(size_t j) const;
-    camel::core::type::Type *collectionArrayType(size_t c) const;
-    camel::core::type::Type *collectionElemType(size_t c) const;
-
-    std::optional<gc_node_ref_t> iterable() const;
-    gc_node_ref_t initialState(size_t j) const;
-
-    uint32_t condRegion() const { return condRegion_; }
-    uint32_t bodyRegion() const { return bodyRegion_; }
-    /// The nodes of the two regions (the regions inside them included) and the round port.
-    std::vector<gc_node_ref_t> regionNodes() const;
-    /// The nodes outside the two regions that nodes inside them read, in the order they are first
-    /// read. A constant (a `DATA`, or a node marked `constant`) is evaluated in place and is left
-    /// out unless `constants`; a merely loop-invariant value stays an input.
-    std::vector<gc_node_ref_t> externalInputs(bool constants = false) const;
-
-    gc_node_ref_t condStateParam(size_t j) const;
-    std::optional<gc_node_ref_t> bodyElementParam() const;
-    gc_node_ref_t bodyStateParam(size_t j) const;
-
-    /// The body's result: the next state, followed by any collected values.
-    gc_node_ref_t nextState() const;
-    /// The node the body region ends in: nextState(), or a GATE in front of it.
-    gc_node_ref_t bodyResult() const;
-    /// The type of the body's result (the state, or the state and the collected values).
-    camel::core::type::Type *bodyResultType() const;
-    size_t bodyStateResultIndex(size_t j) const { return j; }
-    size_t bodyCollectionResultIndex(size_t c) const { return stateCount_ + c; }
-
-  private:
-    const GraphDraft *draft_;
-    gc_node_ref_t node_;
-    LoopKind kind_;
-    size_t stateCount_;
-    size_t collectionCount_;
-    uint32_t condRegion_ = 0;
-    uint32_t bodyRegion_ = 0;
-};
+/// The LOOP node `node` of a frozen graph, and of the draft a builder holds (asserts that it is
+/// one).
+inline LoopView loopOf(const GCGraph &graph, gc_node_ref_t node) { return LoopView(graph, node); }
+inline LoopView loopOf(const GraphDraft &draft, gc_node_ref_t node) { return LoopView(draft, node); }
 
 /// Reads component `index` of a finished loop's value (the layout LoopView describes): the value
 /// itself for a loop that does not wrap it, else the tuple's component. One place so consumers
