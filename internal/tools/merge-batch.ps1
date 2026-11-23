@@ -416,11 +416,43 @@ try {
     }
 
     $baseRowsFile = Join-Path $ScratchRoot 'base-rows.jsonl'
-    $baseRun = Measure-Tree -Path $baseTree -Label "baseline $($script:baseShort) (first parent)" -TranscriptPath (Join-Path $ScratchRoot 'base-transcript.txt')
-    if ($baseRun.Rows.Count -eq 0) {
-        Stop-With 'the baseline run produced no rows' "The row channel printed nothing between its markers, so nothing was measured on $($script:baseShort) and there is nothing to compare against. The transcript is $($baseRun.Transcript): read the run's own lines there. A gate that did not run is not a tree that is fine." 2
+    # --- the baseline: is one already stored for this first parent? -----------
+    # The key is the tree this batch LANDS ON -- its first parent -- and the plan set, so the cache
+    # knows exactly what a batch is: another batch with another first parent is another key, and the
+    # batch's own identity needs no separate notion in the key. A hit skips the baseline run entirely,
+    # which is the second saving a batch already gets for free.
+    #
+    # The rows that are stored carry the sha of the tree they were read on (`--tree`), and the
+    # comparison carries its own; the comparer refuses a baseline recorded on the tree it is
+    # comparing. That is the one failure the three sets cannot show -- the change against itself,
+    # 0/0/0, a green that measured one tree twice -- and in a batch it would be four lanes' worth of
+    # it, so the guard is not decoration here.
+    $cacheDir = Join-Path $commonDir 'camel-readings'
+    if (-not (Test-Path -LiteralPath $cacheDir)) { New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null }
+    $probe = @(& node $comparer --cache $cacheDir --develop $base --plans $planSetFile --probe 2>&1)
+    $probeExit = $LASTEXITCODE
+    $probe | ForEach-Object { "[batch]   $_" }
+    if ($probeExit -eq 0) {
+        Write-Host "[batch] the baseline for $($script:baseShort) under this plan set is already stored; no baseline run" -ForegroundColor Green
+        $script:timings += [pscustomobject]@{ Label = "baseline $($script:baseShort) (cache hit)"; Seconds = 0; Rows = 0; Exit = 0 }
+    } elseif ($probeExit -eq 2) {
+        $baseRun = Measure-Tree -Path $baseTree -Label "baseline $($script:baseShort) (first parent)" -TranscriptPath (Join-Path $ScratchRoot 'base-transcript.txt')
+        if ($baseRun.Rows.Count -eq 0) {
+            Stop-With 'the baseline run produced no rows' "The row channel printed nothing between its markers, so nothing was measured on $($script:baseShort) and there is nothing to compare against. The transcript is $($baseRun.Transcript): read the run's own lines there. A gate that did not run is not a tree that is fine." 2
+        }
+        Write-Text $baseRowsFile (($baseRun.Rows -join "`n") + "`n")
+        $env:CAMEL_BASELINE_SECONDS = [string][int]$baseRun.Seconds
+        $stored = @(& node $comparer --transcript $baseRun.Transcript --cache $cacheDir --develop $base `
+            --plans $planSetFile --tree $base --accept 2>&1)
+        $storedExit = $LASTEXITCODE
+        Remove-Item Env:\CAMEL_BASELINE_SECONDS -ErrorAction SilentlyContinue
+        $stored | ForEach-Object { "[batch]   $_" }
+        if ($storedExit -ne 0) {
+            Stop-With "the baseline measured on $($script:baseShort) could not be stored (exit $storedExit)" 'A baseline this batch could not file is a batch whose comparison has no baseline. Nothing was pushed.' 2
+        }
+    } else {
+        Stop-With "the baseline probe answered $probeExit" "The probe is one question -- is there a baseline for this first parent under this plan set -- and the comparer's own line is above. Nothing was pushed." 2
     }
-    Write-Text $baseRowsFile (($baseRun.Rows -join "`n") + "`n")
 
     # --- 6. the merged tree -------------------------------------------------
     function Merge-IntoTree {
@@ -495,13 +527,19 @@ try {
     }
 
     function Compare-Rows {
-        param([string] $Current, [string] $Label)
+        param([string] $Current, [string] $TreeSha, [string] $Label)
         $outDir = Join-Path $ScratchRoot ("diff-{0}" -f ($Label -replace '[^A-Za-z0-9]+', '-'))
         if (Test-Path -LiteralPath $outDir) { Remove-Item -LiteralPath $outDir -Recurse -Force }
         # The three sets are `scripts/merge-readings.mjs`' judgement and not this file's: `fixed` is
         # reported and never refuses, `new` and `changed` refuse. A second definition of green here
         # would be a second answer to the only question this stage asks.
-        $cmp = @(& node $comparer --current $Current --baseline $baseRowsFile --plans $planSetFile --out $outDir 2>&1)
+        #
+        # `--develop` is the first parent (the key) and `--tree` is the commit these rows came off
+        # (the measured tree). Both are passed on every comparison, so the one comparison this
+        # program cannot make -- a baseline measured on the tree it is comparing -- is refused by the
+        # comparer itself instead of being a green that measured one tree twice.
+        $cmp = @(& node $comparer --current $Current --cache $cacheDir --develop $base --plans $planSetFile `
+            --tree $TreeSha --out $outDir 2>&1)
         $code = $LASTEXITCODE
         foreach ($line in $cmp) {
             $text = "$_".Trim()
@@ -522,7 +560,7 @@ try {
     Write-Text $mergeRowsFile (($mergeRun.Rows -join "`n") + "`n")
 
     Write-Host "[batch] comparison: merged $($script:mergeTip.Substring(0, 9)) against $($script:baseShort) (baseline rows in $baseRowsFile) ..."
-    $comparison = Compare-Rows -Current $mergeRowsFile -Label 'batch'
+    $comparison = Compare-Rows -Current $mergeRowsFile -TreeSha $script:mergeTip -Label 'batch'
 
     # --- 8. bisect inside the batch ----------------------------------------
     # Not an inference from which lane "looks likely": each trial drops one lane, rebuilds the batch
@@ -548,7 +586,7 @@ try {
             }
             $trialRowsFile = Join-Path $ScratchRoot "rows-without-$slug.jsonl"
             Write-Text $trialRowsFile (($trialRows.Rows -join "`n") + "`n")
-            $trialCmp = Compare-Rows -Current $trialRowsFile -Label "without-$slug"
+            $trialCmp = Compare-Rows -Current $trialRowsFile -TreeSha $trial.Tip -Label "without-$slug"
             if ($trialCmp.Code -eq 0) {
                 Write-Host ("[batch]   {0} gone: the comparison is empty again, re-measured on {1}" -f $candidate.Short, $trial.Tip.Substring(0, 9)) -ForegroundColor Green
                 $dropped = $candidate
@@ -610,36 +648,32 @@ try {
     $sortedNames = @($planSetName.Names)
     $planSetHash = $planSetName.Hash
     New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+
+    # The record is written by `scripts/merge-record.mjs`, the same writer the single merge position
+    # uses and the same file the hook reads: a second writer here would be a second shape of the one
+    # claim the hook checks. What a batch adds to it is the batch itself -- how many lanes, which
+    # ones, and the tip whose tree the readings came off -- because a batch measures ONCE, on the
+    # tip, and a record that let a reader believe each merge commit was measured on its own tree
+    # would be the quieter lie. The bisect can then walk back to a single lane by name.
+    $baselineSource = if ($probeExit -eq 0) { "cached: measured earlier on the first parent $($script:baseShort)" } else { "measured in $baseTree at the first parent, in this batch" }
+    $batchLaneArgs = @()
+    foreach ($m in $built.Merges) { $batchLaneArgs += @('--batch-lane', $m.Lane.Name) }
     foreach ($m in $built.Merges) {
-        $record = [ordered]@{
-            sha          = $m.Sha
-            firstParent  = $m.FirstParent
-            secondParent = $m.SecondParent
-            laneBranch   = $m.Lane.Name
-            tree         = $script:mergeTree
-            planSet      = [ordered]@{ names = $sortedNames; hash = $planSetHash; count = $sortedNames.Count }
-            baseline     = [ordered]@{
-                sha    = $base
-                source = 'measured on a separate checkout of the first parent, in this batch'
-                file   = $baseRowsFile
-                cases  = @($baseRun.Rows).Count
-            }
-            readings     = [ordered]@{
-                cases   = @($baseRun.Rows).Count
-                fixed   = @($diff.fixed).Count
-                new     = @($diff.new).Count
-                changed = @($diff.changed).Count
-            }
-            cases        = [ordered]@{ fixed = @($diff.fixed); new = @($diff.new); changed = @($diff.changed) }
-            gates        = @('headers', 'clang-syntax', 'merge-readings')
-            measuredAt   = (Get-Date).ToString('o')
-            host         = $env:COMPUTERNAME
-            writtenBy    = 'internal/tools/merge-batch.ps1'
+        $write = @(& node (Join-Path $ToolTree 'scripts\merge-record.mjs') write `
+            --diff (Join-Path $comparison.OutDir 'diff.json') --merge $m.Sha --first-parent $m.FirstParent `
+            --second-parent $m.SecondParent --branch $m.Lane.Name --tree $script:mergeTree --out $passedDir `
+            --baseline-source $baselineSource --gate headers --gate clang-syntax --gate rows `
+            --batch-size $built.Merges.Count --batch-tip $script:mergeTip @batchLaneArgs 2>&1)
+        $writeExit = $LASTEXITCODE
+        $write | ForEach-Object { "[batch]   $_" }
+        if ($writeExit -ne 0) {
+            Stop-With "the pass record for $($m.Sha.Substring(0, 9)) could not be written (exit $writeExit)" 'The hook refuses a merge commit without one, so the push is not attempted. Nothing was pushed.' 2
         }
-        Write-Text (Join-Path $passedDir "$($m.Sha).json") (($record | ConvertTo-Json -Depth 8) + "`n")
     }
     Write-Host ("[batch] pass records: {0} written for {0} merge commit(s), in {1}" -f $built.Merges.Count, $passedDir)
     $built.Merges | ForEach-Object { Write-Host ("  {0}  first parent {1}  {2}" -f $_.Sha.Substring(0, 9), $_.FirstParent.Substring(0, 9), $_.Lane.Short) }
+    Write-Host ("[batch]   each record names the batch: {0} lane(s) [{1}], readings taken on the tip {2}" -f `
+        $built.Merges.Count, (@($built.Merges | ForEach-Object { $_.Lane.Short }) -join ', '), $script:mergeTip.Substring(0, 9))
 
     # --- 11. the push, from the merge worktree and nowhere else -------------
     # `scripts/hooks/pre-push` allows `refs/heads/develop` from the tree the settings file names and
