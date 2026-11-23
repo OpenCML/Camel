@@ -83,12 +83,12 @@ def main() -> int:
 
 func main() => int sync {{
     let up = 0..{n}
-    let down = up->map<func (i: int) => int {n} - 1 - i>
+    let down = up->map<func (i: int) => int {{ {n} - 1 - i }}>
     let a = sort(up)
     var b = down
     b = b->sort
     let c = sort(down)
-    let d = sort(up->map<(i: int): int => (i * 7919) % {n}>)
+    let d = sort(up->map<func (i: int) => int {{ (i * 7919) % {n} }}>)
     println('#', a[0], a[{n // 2}], a[{n - 1}], b[0], b[{n // 2}], b[{n - 1}], c[0], c[{n // 2}], c[{n - 1}], d[0], d[{n // 2}], d[{n - 1}])
     return 0
 }}
