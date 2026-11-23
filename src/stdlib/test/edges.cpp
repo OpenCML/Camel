@@ -135,7 +135,7 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
        << (draft.appendOrderDependency(third, first) ? 1 : 0) << "\n";
     try {
         const Program *next = session.commit();
-        const GCGraph *root = next->graph(rootId);
+        const auto *root    = next->graph(rootId);
         os << "EDGES accepted\n";
         // The graph holds the edge in its own array, and the per-node reader (the one every
         // scheduler and pass uses) agrees with that array node for node.
@@ -188,7 +188,7 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
     // would order takes no order -- so the graph the draft hands the commit does not have it.
     const GraphId rootId = program->root()->id();
     const Program *next  = session.commit();
-    const GCGraph *root  = next != nullptr ? next->graph(rootId) : nullptr;
+    const auto *root     = next != nullptr ? next->graph(rootId) : nullptr;
     os << "ORDER frozen_edges=" << (root != nullptr ? root->orderEdges().size() : 0) << "\n";
 
     // The bad graph itself: two pure nodes and an order edge on the user of them. It is written
@@ -198,7 +198,7 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
     shape.orderEdgeCount = 1;
     std::vector<GraphId> noGraphs;
     const auto sameType = camel::core::type::Type::Float32()->typeId();
-    GCGraph *bad        = GCGraphBuildAccess::create(
+    auto *bad           = GCGraphBuildAccess::create(
         context_->graphIds().allocate(),
         GCGraphDerivation{},
         createGraphDebugRecord("test$order_pure", "test$order_pure"),
@@ -267,7 +267,7 @@ EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::o
     os << "ORDER wrote=" << (wroteOrdered ? 1 : 0) << (wroteNever ? 1 : 0) << "\n";
     try {
         const Program *next = session.commit();
-        const GCGraph *root = next->graph(rootId);
+        const auto *root    = next->graph(rootId);
         os << "EDGES accepted\n";
         const auto &topo    = root->execPlan().topo;
         const auto position = [&](gc_node_ref_t ref) {
@@ -365,7 +365,7 @@ const Program *writeOrderChain(
 
 /// Prints the order edges of a committed graph as `pred>user`, in the order the graph holds them.
 void printOrderEdges(const Program *program, GraphId rootId, std::ostream &os) {
-    const GCGraph *root = program->graph(rootId);
+    const auto *root    = program->graph(rootId);
     os << "ORDER edges=" << (root != nullptr ? root->orderEdges().size() : 0);
     if (root != nullptr) {
         for (const GCGraphOrderEdge &edge : root->orderEdges()) {
@@ -444,7 +444,7 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
     GCGraph *other = nullptr;
     {
         RuntimeGraphDraftSession probe(context_, program);
-        for (GCGraph *graph : probe.collectReachableRuntimeGraphs()) {
+        for (auto *graph : probe.collectReachableRuntimeGraphs()) {
             if (graph != program->root()) {
                 other = graph;
                 break;
@@ -456,8 +456,8 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
         return program;
     }
     const GraphId rootId       = program->root()->id();
-    const GCGraph *rootBefore  = program->graph(rootId);
-    const GCGraph *otherBefore = program->graph(other->id());
+    const auto *rootBefore     = program->graph(rootId);
+    const auto *otherBefore    = program->graph(other->id());
     RuntimeGraphDraftSession first(context_, program);
     RuntimeGraphDraftSession second(context_, program);
     blankNode(first.edit(program->root()));
@@ -470,8 +470,8 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
     const bool installed = context_->currentRuntimeProgram() == two;
     // The root the first commit made has one more node than the program it started from; the
     // merge keeps that version (or a version of the same content) and adds the second's graph.
-    const GCGraph *mergedRoot  = two->graph(rootId);
-    const GCGraph *mergedOther = two->graph(other->id());
+    const auto *mergedRoot     = two->graph(rootId);
+    const auto *mergedOther    = two->graph(other->id());
     const bool keptFirst       = mergedRoot != nullptr && one->graph(rootId) != nullptr &&
                                  mergedRoot->nodeCount() == one->graph(rootId)->nodeCount() &&
                                  mergedRoot->nodeCount() > rootBefore->nodeCount();
@@ -489,7 +489,7 @@ CommitConflictTestPass::apply(const camel::runtime::Program *program, std::ostre
         return program;
     }
     GCGraph *other = nullptr;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (graph != program->root()) {
             other = graph;
             break;
@@ -611,7 +611,7 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
     }
     try {
         const Program *next = session.commit();
-        const GCGraph *root = next->graph(rootId);
+        const auto *root    = next->graph(rootId);
         os << "EDGES accepted\n";
         // What the graph the commit made holds, counted over every node: the node refs a draft
         // hands out are the graph's own only until it is encoded.
@@ -663,7 +663,7 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
 
         const std::vector<gc_node_ref_t> committedRefs = handover.committedNodeRefs(next->root());
         const Program *committed                       = handover.commit();
-        const GCGraph *changed                         = committed->graph(rootId);
+        const auto *changed                            = committed->graph(rootId);
         const gc_node_ref_t firstRef                   = committedRefs[first];
         const gc_node_ref_t lastRef                    = committedRefs[last];
         const gc_node_ref_t sharedRef                  = committedRefs[shared];
@@ -770,9 +770,9 @@ EdgePair findEdgePair(const Program *program) {
     // A graph that is not the program's root, edited the way a pass over a function value edits it
     // (`graph.open` in modules/graph/txn.cpp roots the session at the function's graph and commits
     // detached): the shape the commit's delivery sits on.
-    GCGraph *target = program->root();
+    auto *target    = program->root();
     for (const GraphId ref : program->root()->refs()) {
-        GCGraph *called = const_cast<Program *>(program)->graph(ref);
+        auto *called    = const_cast<Program *>(program)->graph(ref);
         if (called != nullptr && called != program->root()) {
             target = called;
             break;
@@ -920,13 +920,13 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
         os << "EDITONLY no_pair\n";
         return program;
     }
-    GCGraph *target          = pair.target;
+    auto *target             = pair.target;
     const GraphId targetId   = target->id();
     const gc_node_ref_t user = pair.user;
     const gc_node_ref_t pred = pair.pred;
     os << "EDITONLY pair user=" << user << " pred=" << pred << "\n";
 
-    const GCGraph *base = target;
+    const auto *base    = target;
     {
         RuntimeGraphDraftSession session(context_, program, target);
         auto &transaction   = session.edit(target);
@@ -935,7 +935,7 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
         const size_t before = base->syncEdges().size();
         try {
             const Program *next  = session.commit(true);
-            const GCGraph *after = next->graph(targetId);
+            const auto *after    = next->graph(targetId);
             const auto preds     = after->syncPredsOf(user);
             os << "EDITONLY sync wrote=" << (wrote ? 1 : 0) << " before=" << before
                << " after=" << after->syncEdges().size() << " sync_in=" << preds.size()
@@ -985,7 +985,7 @@ EdgesCommitDifferentialTestPass::apply(const camel::runtime::Program *program, s
         os << "DIFF no_pair\n";
         return program;
     }
-    GCGraph *target          = pair.target;
+    auto *target             = pair.target;
     const GraphId targetId   = target->id();
     const gc_node_ref_t user = pair.user;
     const gc_node_ref_t pred = pair.pred;
@@ -1007,7 +1007,7 @@ EdgesCommitDifferentialTestPass::apply(const camel::runtime::Program *program, s
         }
         try {
             const Program *next  = session.commit(true);
-            const GCGraph *after = next->graph(targetId);
+            const auto *after    = next->graph(targetId);
             if (after == nullptr) {
                 error = "the program the commit made does not hold the graph";
                 return {};
@@ -1054,7 +1054,7 @@ EdgesDeliveryCheckTestPass::apply(const camel::runtime::Program *program, std::o
         os << "DELIVERY no_pair\n";
         return program;
     }
-    GCGraph *target        = pair.target;
+    auto *target           = pair.target;
     const GraphId targetId = target->id();
     os << "DELIVERY pair user=" << pair.user << " pred=" << pair.pred << "\n";
     setDraftDeliveryCheckEnabled(true);
@@ -1187,7 +1187,7 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         return program;
     }
     os << "EDGES accepted\n";
-    const GCGraph *root     = next->graph(rootId);
+    const auto *root        = next->graph(rootId);
     size_t disagreeingNodes = 0;
     for (gc_node_ref_t id = 0; id < committed.size(); ++id) {
         const gc_node_ref_t ref = committed[id];

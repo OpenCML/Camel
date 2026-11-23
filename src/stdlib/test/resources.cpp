@@ -165,7 +165,7 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
     };
     const auto encode = [&](rt::GraphTransaction &transaction, const std::string &name) {
         auto &draft        = transaction.edit();
-        rt::GCGraph *graph = draft.encode("synth_" + name, "synth:" + name);
+        auto *graph        = draft.encode("synth_" + name, "synth:" + name);
         graphs.push_back(graph);
         return graph;
     };
@@ -362,12 +362,12 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
     }
 
     rt::Program synthetic(base);
-    for (rt::GCGraph *graph : graphs) {
+    for (auto *graph : graphs) {
         synthetic.bind(graph->id(), graph);
     }
 
     const auto byName = [&](const std::string &name) -> rt::GCGraph * {
-        for (rt::GCGraph *graph : graphs) {
+        for (auto *graph : graphs) {
             if (graph->name() == name) {
                 return graph;
             }
@@ -376,7 +376,7 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
     };
     for (const char *name :
          {"open", "same", "view", "next", "passthrough", "typed", "typed-unused"}) {
-        const rt::GCGraph *graph = byName(std::string("synth:") + name);
+        const auto *graph        = byName(std::string("synth:") + name);
         os << "RESOURCES synth result " << name << " "
            << rt::toString(rt::footprintOf(synthetic, graph)) << "\n";
     }
@@ -388,12 +388,12 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
              "typed-caller",
              "typed-same",
          }) {
-        const rt::GCGraph *graph = byName(std::string("synth:") + name);
+        const auto *graph        = byName(std::string("synth:") + name);
         for (rt::gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             if (graph->node(ref)->kind != rt::GCNodeKind::Func) {
                 continue;
             }
-            const rt::GCGraph *callee = synthetic.calleeOf(*graph, ref);
+            const auto *callee        = synthetic.calleeOf(*graph, ref);
             os << "RESOURCES synth node " << name << " " << ref << " FUNC "
                << (callee != nullptr ? callee->name() : std::string("<unresolved>")) << ": "
                << rt::toString(rt::resourcesOf(synthetic, *graph, ref)) << "\n";
@@ -412,7 +412,7 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
     // the graph gives (design principles 3.3; without the identity the node is bare `external` and
     // two such effects are pairs whatever they touch).
     {
-        const rt::GCGraph *graph = byName("synth:unnamed-global");
+        const auto *graph        = byName("synth:unnamed-global");
         for (rt::gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             const rt::NodeResources r = rt::resourcesOf(synthetic, *graph, ref);
             if (r.none()) {
@@ -436,7 +436,7 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
 
 const camel::runtime::Program *
 ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph                    = program->root();
     OperatorTable &table = OperatorTable::instance();
 
     // ---- Registration (design 4.4, check 5): each declaration below breaks one rule. ----
@@ -626,7 +626,7 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     std::sort(graphs.begin(), graphs.end(), [](const rt::GCGraph *x, const rt::GCGraph *y) {
         return x->name() < y->name();
     });
-    for (const rt::GCGraph *g : graphs) {
+    for (const auto *g : graphs) {
         for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
             const rt::NodeResources resources = rt::resourcesOf(*program, *g, ref);
             if (!resources.none()) {

@@ -25,7 +25,7 @@ TagsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     std::sort(graphs.begin(), graphs.end(), [](const auto *a, const auto *b) {
         return a->name() < b->name();
     });
-    for (const camel::runtime::GCGraph *graph : graphs) {
+    for (const auto *graph : graphs) {
         os << std::format(
             "TAGS independent {} {}\n",
             graph->name(),
