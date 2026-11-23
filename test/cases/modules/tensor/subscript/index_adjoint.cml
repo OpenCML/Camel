@@ -11,8 +11,8 @@
  * as well as the values.
  *
  *   m = [[1, 2], [3, 4]]
- *   sum(m[:, 0]) = 1 + 3 = 4.0;        d/dm = [[1, 0], [1, 0]]; sum = 2.0; dot = 1 + 1 = 2.0
- *   sum(m[:, [1, 1]]) = 2 + 2 + 4 + 4 = 12.0;  d/dm = [[0, 2], [0, 2]]; sum = 4.0; dot = 4 + 4 = 8.0
+ *   sum(m[.., 0]) = 1 + 3 = 4.0;        d/dm = [[1, 0], [1, 0]]; sum = 2.0; dot = 1 + 1 = 2.0
+ *   sum(m[.., [1, 1]]) = 2 + 2 + 4 + 4 = 12.0;  d/dm = [[0, 2], [0, 2]]; sum = 4.0; dot = 4 + 4 = 8.0
  *
  * Red when: the scatter puts the gradient on the wrong axis (the sums and both products change), a
  * repeated index overwrites instead of adding (the second product is 4.0, not 8.0), the rule
@@ -32,12 +32,12 @@ func table(a: f32[2, 2]): float {
 
 /// The position 0 on axis 1 of a rank-2 value: the column, an `f32[2]`.
 func firstColumn(m: f32[2, 2]): float {
-    return row(m[:, 0])
+    return row(m[.., 0])
 }
 
 /// The positions the integer array names on axis 1, a repeated index among them: an `f32[2, 2]`.
 func columnTake(m: f32[2, 2], idx: int[2]): float {
-    return table(m[:, idx])
+    return table(m[.., idx])
 }
 
 with <x: f32[...]>

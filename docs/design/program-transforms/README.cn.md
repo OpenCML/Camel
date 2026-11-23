@@ -47,11 +47,11 @@ func zip::<...A>(...xs: ...A): (...ElementOf<A>)[] when ...is_array::<A>()
 ```camel
 // 规则集模块里（例如 stdlib/rulesets/jvp.cml）：左边的运算符与元数就是这条规则所属的原语
 rule jvp_add::<T>(x: T, w: T) when is_float::<T>() {
-    x + w => (dx: T, dw: T) => add_tangent(x, w, dx, dw)
+    x + w => func (dx: T, dw: T) { add_tangent(x, w, dx, dw) }
 }
 
 rule jvp_mul::<T>(x: T, w: T) when is_float::<T>() {
-    x * w => (dx: T, dw: T) => mul_tangent(x, w, dx, dw)
+    x * w => func (dx: T, dw: T) { mul_tangent(x, w, dx, dw) }
 }
 ```
 
@@ -155,9 +155,9 @@ type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 ```camel
 func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     let (fwd, lin) = split(reinterp<jvp>(f))
-    return (...xs: ...ParamsOf<F>) => {
+    return func (...xs: ...ParamsOf<F>) {
         let (y, res) = fwd(...xs)
-        (y, (ct) => transpose(lin)(ct))
+        (y, func (ct) { transpose(lin)(ct) })
     }
 }
 ```

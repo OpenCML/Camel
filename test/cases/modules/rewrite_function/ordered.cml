@@ -38,7 +38,7 @@ func sum(x: int, y: int): int {
     return x + y
 }
 func graph_height::<F>(f: F): int {
-    return nodes(graph_of(f))->map<(n: Node): int => height(n)>->reduce<max, 0>
+    return nodes(graph_of(f))->map<func (n: Node) => int { height(n) }>->reduce<max, 0>
 }
 func height_cost(o: Op, inputs: float[]): float {
     return 1.0 + inputs->reduce<max, 0.0>

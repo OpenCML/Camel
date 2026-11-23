@@ -248,7 +248,7 @@ func report(): string[] {
 
 func main(): int sync {
     let out = report()
-    out->foreach<(line: string): void => {
+    out->foreach<func (line: string) => void {
         println(line)
     }>
     // The census is a reading, not a test: the nonzero exit is what makes the runner print the

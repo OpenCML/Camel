@@ -57,7 +57,7 @@ func keep::<T, W>(x: T): (W, T) {
 
 // a lambda in the body typed with the variable
 func lam::<T>(x: T): T[] {
-    let dup = (y: T) => [y, y]
+    let dup = func (y: T) { [y, y] }
     return dup(x)
 }
 
@@ -83,7 +83,7 @@ func bump::<T>(var x: T, d: T): void sync {
 
 // a lambda capturing a parameter whose type is the variable
 func capture_param::<T>(x: T): T {
-    let f = () => x
+    let f = func () { x }
     return f()
 }
 

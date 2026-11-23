@@ -22,7 +22,7 @@ func make_pair(c: bool, x: float, f: (dy: float) => float): Pull {
 }
 
 func main(): int sync {
-    make_pair(true, 1.5, (dy: float): float => dy * 2.0)
+    make_pair(true, 1.5, func (dy: float) => float { dy * 2.0 })
     println("pair made")
     return 0
 }

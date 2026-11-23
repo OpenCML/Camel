@@ -17,10 +17,10 @@ func apply_two(g: <w: float, v: float> (x: float) => float): float {
 func main(): int sync {
     // A rest hole stands for the position's ordinary parameters, and the `with` list is the
     // position's: nothing of the body reads either here.
-    println(`rest_hole ${apply((...xs) => 7.0)}`)
+    println(`rest_hole ${apply(func (...xs) { 7.0 })}`)
     // The parameter type comes from the position, the same way.
-    println(`named_hole ${apply((x) => x * 10.0)}`)
+    println(`named_hole ${apply(func (x) { x * 10.0 })}`)
     // Two `with` parameters, in the order the position gives them.
-    println(`two_with ${apply_two((x) => x * 4.0)}`)
+    println(`two_with ${apply_two(func (x) { x * 4.0 })}`)
     return 0
 }

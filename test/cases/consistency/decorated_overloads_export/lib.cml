@@ -5,7 +5,7 @@
  */
 
 export func twice(f: (x: int) => int): (x: int) => int {
-    return (x: int): int => {
+    return func (x: int) => int {
         return f(f(x))
     }
 }

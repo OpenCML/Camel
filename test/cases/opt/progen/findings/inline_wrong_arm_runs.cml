@@ -12,7 +12,7 @@ func f1(a2: int): bool {
 }
 
 func main(): int sync {
-    let h13 = (p12: int): int => sync {
+    let h13 = func (p12: int) => int sync {
         println('');
         return 0;
     };

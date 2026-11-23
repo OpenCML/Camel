@@ -32,8 +32,8 @@ func swap::<A, B>(p: Pair<A, B>): Pair<B, A> {
 func main(): int sync {
     println(last([1, 2, 3]), last(['a', 'b']), last([1.5, 2.5]))
     println(rotate([1, 2, 3, 4], 1), rotate(['x', 'y', 'z'], 2))
-    println(share([1, 2, 3, 4, 5], (x: int): bool => x % 2 == 1))
-    println(share(['ant', 'bee', 'cat', 'dog'], (s: string): bool => s < 'c'))
+    println(share([1, 2, 3, 4, 5], func (x: int) => bool { x % 2 == 1 }))
+    println(share(['ant', 'bee', 'cat', 'dog'], func (s: string) => bool { s < 'c' }))
 
     let no_ints: int[] = []
     println(first_or(no_ints, -1), first_or(['only'], 'none'))

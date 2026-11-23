@@ -28,6 +28,6 @@ func reportGraph(g: Graph) sync {
 }
 
 export func report::<F>(p: F): F! sync {
-    graphs_of(p)->foreach<(g: Graph) => reportGraph(g)>
+    graphs_of(p)->foreach<func (g: Graph) { reportGraph(g) }>
     return p
 }

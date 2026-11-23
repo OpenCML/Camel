@@ -19,7 +19,7 @@ func run(n: int, base: int): int sync {
     let mark = 'step'
     let thrice = base * 3
     let twice = base * 2
-    let tally = (x: int): int => sync {
+    let tally = func (x: int) => int sync {
         let bias = base + 1
         let value = bias + x
         '{} {} -> {}'->format<mark, x, bias + x>->println

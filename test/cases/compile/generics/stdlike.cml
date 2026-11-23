@@ -9,7 +9,7 @@ func my_head::<T>(xs: T[]): T {
 
 // tail: (xs: T[]) => T[]
 func my_tail::<T>(xs: T[]): T[] {
-    return xs[1:]
+    return xs[1..]
 }
 
 // zip of two arrays: (xs: T[], ys: U[]) => (T, U)[]
@@ -42,7 +42,7 @@ func main(): int sync {
     println(my_tail(['h', 't']))
     println(my_zip([1, 2, 3], ['a', 'b', 'c']))
     println(my_zip([1.5], [true, false]))
-    println([1, 2]->my_map<(x: int) => 'v{}'->format<x>>)
-    println([1, 2, 3]->my_reduce<(acc: int, x: int) => acc + x, 0>)
+    println([1, 2]->my_map<func (x: int) { 'v{}'->format<x> }>)
+    println([1, 2, 3]->my_reduce<func (acc: int, x: int) { acc + x }, 0>)
     return 0
 }

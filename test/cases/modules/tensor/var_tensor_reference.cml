@@ -27,7 +27,7 @@ func main(): int sync {
     println(sum(w))
     let s = twice(w)
     println('{} {}'->format<s, sum(w)>)
-    let f = (): f32[?, ?] => w * 2.0
+    let f = func () => f32[?, ?] { w * 2.0 }
     let doubled = f()
     w = doubled
     let r = float(sum(w))

@@ -20,7 +20,7 @@ func main(): int sync {
     let n62 = 0;
     let n72 = match n62 {
         case 10 => ''
-        case 5 => f15('', 'x', (p68: int, p69: string): string => '')
+        case 5 => f15('', 'x', func (p68: int, p69: string) => string { '' })
         case _ => ''
     };
     return 0;

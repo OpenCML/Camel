@@ -71,7 +71,7 @@ func main(): int sync {
     let read = isRule(rule_of(g, 'jvp'), graph_of(scale_jvp)) &&
         isRule(rule_of(g, 'transpose'), graph_of(scale_t)) && isRule(rule_of(g, 'vjp'), graph_of(scale_t))
     println('transform_rules read={} tags={} one={}'->format<read, len(tags), isRule(rule_of(graph_of(cube), 'jvp'), graph_of(cube_jvp)) && !written(rule_of(graph_of(cube), 'vjp'))>)
-    println(tags->map<(t: Tag): string => tag_name(t)>)
+    println(tags->map<func (t: Tag) => string { tag_name(t) }>)
     // The first tag's argument is the function written for it, and the name a program writes
     // (`jvp`) and the qualified spelling both find the same rule.
     println('transform_rules graph={} qualified={}'->format<tag_graphs(tags[0])[0] == graph_of(scale_jvp), isRule(rule_of(g, 'prelude::jvp'), graph_of(scale_jvp))>)

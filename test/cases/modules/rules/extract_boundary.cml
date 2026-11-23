@@ -37,7 +37,7 @@ func main(): int spelling sync {
 }
 
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
@@ -52,8 +52,7 @@ func typeText(n: Node): string {
 /// extraction that follows the boundary deletes one that no kept node reads.
 func unreadConstants::<F>(p: F, function: string): int spelling {
     return len(
-        nodesOf(p, function)->filter<(n: Node): bool =>
-            is_constant(n) && typeText(n) == 'string' && len(users(n)) == 0
+        nodesOf(p, function)->filter<func (n: Node) => bool { is_constant(n) && typeText(n) == 'string' && len(users(n)) == 0 }
         >
     )
 }

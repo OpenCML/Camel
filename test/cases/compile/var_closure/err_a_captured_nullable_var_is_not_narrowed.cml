@@ -14,7 +14,7 @@
 
 func main(): int sync {
     var o: int? = 1
-    let f = () => if o != null then o + 1 else 0
+    let f = func () { if o != null then o + 1 else 0 }
     println(f())
     return 0
 }

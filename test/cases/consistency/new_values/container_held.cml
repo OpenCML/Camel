@@ -25,7 +25,7 @@ func main(): int sync {
     b.xs[0] = 9
     println(a.xs, b.xs)
 
-    let rows = (0..2)->map<(i: int): int[] => [i]>
+    let rows = (0..2)->map<func (i: int) => int[] { [i] }>
     let grown = rows[1]->append<2>
     println(rows, grown)
     return 0

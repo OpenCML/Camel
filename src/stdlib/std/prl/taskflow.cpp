@@ -566,7 +566,7 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
     std::unordered_set<GCGraph *> seen{graph};
     bool heavy = false;
     while (!heavy && !work.empty()) {
-        GCGraph *current = work.back();
+        auto *current = work.back();
         work.pop_back();
         for (auto it = current->nodes().begin(); it != current->nodes().end() && !heavy; ++it) {
             const auto *node = *it;
@@ -583,7 +583,7 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
                 heavy =
                     body == nullptr || !table.isBuiltin(body->oper) || table.isMarked(body->oper);
             } else if (node->kind == GCNodeKind::Func) {
-                GCGraph *callee = programs_.of(current).calleeOf(*current, it.ref());
+                auto *callee = programs_.of(current).calleeOf(*current, it.ref());
                 if (callee == nullptr) {
                     heavy = true;
                 } else if (seen.insert(callee).second) {
@@ -596,7 +596,7 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
     heavyGraphs_[graph] = heavy;
     if (!heavy) {
         // Everything reachable from a light graph is light.
-        for (GCGraph *reached : seen) {
+        for (auto *reached : seen) {
             heavyGraphs_[reached] = false;
         }
     }
@@ -665,7 +665,7 @@ bool TaskflowExecSchedPass::boundedLight(GraphPlan &plan) {
                 if (node == nullptr || node->kind != GCNodeKind::Func) {
                     continue;
                 }
-                GCGraph *callee = programs_.of(current).calleeOf(*current, it.ref());
+                auto *callee = programs_.of(current).calleeOf(*current, it.ref());
                 if (callee == nullptr) {
                     return false;
                 }
@@ -888,7 +888,7 @@ void TaskflowExecSchedPass::printSegments(const GraphPlan &plan) const {
 }
 
 void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
-    GCGraph *graph         = plan.graph;
+    auto *graph            = plan.graph;
     const auto &topo       = plan.topo;
     const size_t blocks    = graph->nodeCount();
     constexpr uint32_t kNo = std::numeric_limits<uint32_t>::max();
@@ -1273,7 +1273,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
 
 const camel::runtime::Program *
 TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostream & /*os*/) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
     GUARD(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
     if (camel::profile::enabled()) {
         camel::profile::setBackend("std::taskflow");
@@ -1424,8 +1424,8 @@ slot_t TaskflowExecSchedPass::evalGraph(
         // Tail call: the frame protocol of the node-by-node evaluator. A self call refills
         // the frame in place; two graphs calling each other alternate between two frames.
         region.enter();
-        GCGraph *callerGraph = plan->graph;
-        GCGraph *target      = programs_.of(callerGraph).calleeOf(*callerGraph, tailRef);
+        auto *callerGraph    = plan->graph;
+        auto *target         = programs_.of(callerGraph).calleeOf(*callerGraph, tailRef);
         GUARD(target != nullptr, "Taskflow tail FUNC target graph is null.");
         GraphPlan *targetPlan = planFor(target);
         target                = targetPlan->graph;
@@ -1557,7 +1557,7 @@ void TaskflowExecSchedPass::runScope(
 void TaskflowExecSchedPass::runItems(
     GraphPlan &plan, std::span<const PlanItem> items, Frame *frame, std::atomic<uint32_t> &tailNode,
     TaskflowGcRegion &region) {
-    GCGraph *graph = plan.graph;
+    auto *graph = plan.graph;
     for (const PlanItem &item : items) {
         switch (item.kind) {
         case ItemKind::Leaf: {
@@ -1621,7 +1621,7 @@ void TaskflowExecSchedPass::runItems(
 
 void TaskflowExecSchedPass::runLinearBody(
     GraphPlan &plan, Frame *frame, std::atomic<uint32_t> &tailNode, TaskflowGcRegion &region) {
-    GCGraph *graph = plan.graph;
+    auto *graph = plan.graph;
     const std::span<const gc_node_ref_t> nodes(plan.topo);
 
     gc_node_ref_t tillNode = kInvalidNodeRef;
@@ -2878,7 +2878,7 @@ void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, 
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     const auto resIdx  = dataIndexOf(graph, nodeRef);
-    GCGraph *target =
+    auto *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan  = planFor(target);
     const size_t n   = arrayAt(frame, arrIdx)->size();
@@ -2916,7 +2916,7 @@ void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRe
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
-    GCGraph *target =
+    auto *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan = planFor(target);
     const size_t n  = arrayAt(frame, arrIdx)->size();
@@ -2964,7 +2964,7 @@ void TaskflowExecSchedPass::mark_reduce_arr(GCGraph *graph, gc_node_ref_t nodeRe
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
     const auto funcIdx    = dataIndexOf(graph, withInputs[0]);
-    GCGraph *target =
+    auto *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan   = planFor(target);
     const auto accIdx = dataIndexOf(graph, nodeRef);
@@ -2999,7 +2999,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     const auto withInputs = graph->withInputsOf(nodeRef);
     const auto funcIdx    = dataIndexOf(graph, withInputs[0]);
     const auto initIdx    = dataIndexOf(graph, withInputs[1]);
-    GCGraph *target =
+    auto *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     const size_t n = arrayAt(frame, arrIdx)->size();
     if (n == 0) {
@@ -3119,7 +3119,7 @@ void TaskflowExecSchedPass::mark_foreach_arr(GCGraph *graph, gc_node_ref_t nodeR
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
-    GCGraph *target =
+    auto *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan = planFor(target);
     const size_t n  = arrayAt(frame, arrIdx)->size();
@@ -3152,7 +3152,7 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
-    GCGraph *target =
+    auto *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan = planFor(target);
     const size_t n  = arrayAt(frame, arrIdx)->size();
@@ -3190,7 +3190,7 @@ TaskflowExecSchedPass::executeIsolateNode(GCGraph *graph, gc_node_ref_t nodeRef,
     GUARD(!normInputs.empty(), "The fault-isolation node requires a function input.");
     Function *func = frame->get<Function *>(dataIndexOf(graph, normInputs.front()));
     GUARD(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
-    GCGraph *target = programs_.graphOf(func);
+    auto *target = programs_.graphOf(func);
 
     // The room for the call is the caller's: a recursion limit reached here is a fault of the
     // enclosing graph, outside the boundary.

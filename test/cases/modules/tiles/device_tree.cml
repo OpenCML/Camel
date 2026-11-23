@@ -21,7 +21,7 @@ func main(): int sync {
     println(sum(abs(restored.weight - p.weight)))
     println(sum(restored.block.0))
     println(restored.block.1 - p.block.1)
-    let vg = (q: Model): (f32, Model) => with_grad(loss)<q>()
+    let vg = func (q: Model) => (f32, Model) { with_grad(loss)<q>() }
     let measured: (Device<f32>, Device<Model>) = run_preferred_resident<vg>(resident)
     println(download(measured.0) - loss<p>())
     let updated: Device<Model> = run_preferred_resident<descend>((resident, measured.1))

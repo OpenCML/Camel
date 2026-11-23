@@ -16,7 +16,7 @@ func net(x: f32[...]): f32[...] {
 func main(): string! sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     println(sum(net(x)))
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => net(x), x) {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { net(x) }, x) {
         case error e => { return e }
         case v => 'exported'
     }

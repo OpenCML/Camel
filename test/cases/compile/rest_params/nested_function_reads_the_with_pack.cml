@@ -15,8 +15,8 @@ func twice(): float {
 }
 
 func main(): int sync {
-    let g: PairOf<<w: float, k: float> () => float> = <w, ...rest> () => {
-        let second = () => rest.[0]
+    let g: PairOf<<w: float, k: float> () => float> = func <w, ...rest> () {
+        let second = func () { rest.[0] }
         (second(), 1.0)
     }
     let (read, constant) = g<2.0, 3.0>()

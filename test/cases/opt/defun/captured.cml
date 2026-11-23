@@ -15,7 +15,7 @@ func plus_one(x: int): int {
 
 func main(): int sync {
     let k = 10
-    let with_k = (x: int) => x + k
+    let with_k = func (x: int) { x + k }
     let captured = apply(with_k, 5)
     let named = apply(plus_one, 5)
     'CAPTURED captured={} named={}'->format<captured, named>->println

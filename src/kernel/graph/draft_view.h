@@ -5,15 +5,11 @@
  * DraftGraphAdapter: `GraphView` over the graph a session is building or editing (`GraphDraft`,
  * camel/runtime/draft.h), reached through the `GraphTransaction` that owns it.
  *
- * The second of the two transitional adapters stage 2.1 asks for. Replaces
- * `camel::compile::gir::DraftGraphRead` (`compile/include/camel/compile/gir/graph_read.h`), which
- * is the same idea stopped at the facts the derivative lift asks, together with its `kept` id table
- * -- that table stays here because it is the only way a draft's ids and a graph's ids can be the
- * same answer, and this adapter keeps it for the same reason.
+ * The second of the two transitional adapters stage 2.1 asks for. It keeps the encoder's id table,
+ * `kept`: that table is the only way a draft's ids and a graph's ids can be the same answer.
  *
- * Who migrates to it: the draft side of `firstDifference` and of the lift,
- * `lib/test/graph_faces.cpp`, then `LoopDraftView` and `decidingRegionOfDraft` -- the drafts of
- * each pair of predicates section 2 counts, which stop existing rather than move.
+ * Who reads through it: the draft side of the encoder's self-check, the encoder's own `kept` table
+ * as the view's numbering, and `lib/test/graph_faces.cpp`.
  *
  * It answers about a graph that is still being changed, so the one thing it must not do is hand
  * back a span into a buffer an edit can move. Where the frozen adapter answers a span into the

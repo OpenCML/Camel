@@ -3,11 +3,11 @@
  */
 
 func adder(a: int): (x: int) => int {
-    return (x: int): int => x + a
+    return func (x: int) => int { x + a }
 }
 
 func compose(f: (x: int) => int, g: (x: int) => int): (x: int) => int {
-    return (x: int): int => g(f(x))
+    return func (x: int) => int { g(f(x)) }
 }
 
 func twice(f: (x: int) => int): (x: int) => int {

@@ -10,7 +10,7 @@ func count(n: int): int.. {
 }
 
 func step(n: int): () => (int, int..)? {
-    return () => if n > 0 then (n, step(n - 1)) else null
+    return func () { if n > 0 then (n, step(n - 1)) else null }
 }
 
 func probe(s: int..): int {

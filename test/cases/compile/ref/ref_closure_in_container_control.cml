@@ -11,10 +11,10 @@ type Holder = { cb: () => int, n: int }
 
 func main(): int sync {
     let k = 7
-    let h = (): int => k + 35
+    let h = func () => int { k + 35 }
     let holder: Holder = { cb: h, n: 1 }
     let pair = (h, 2)
-    let many = [h, (): int => 1]
+    let many = [h, func () => int { 1 }]
     let box_holder = state::ref(holder)
     let box_pair = state::ref(pair)
     let box_many = state::ref(many)

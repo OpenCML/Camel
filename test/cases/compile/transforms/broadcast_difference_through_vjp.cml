@@ -42,7 +42,7 @@ func main(): int sync {
     let w = [0.5, 1.0] as float[2]
 
     // The library's leg: a closure that captures the batch, differentiated by `vjp`.
-    let step = (ww: float[2]): float => {
+    let step = func (ww: float[2]) => float {
         let e = m - ww
         return sum(e * e)
     }

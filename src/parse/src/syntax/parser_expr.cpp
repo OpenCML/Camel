@@ -241,11 +241,13 @@ void ParserImpl::parseRelational() {
 /// The range of two numbers and the composition of two functions, one level: `1..n+1` is
 /// `1..(n+1)`, and `...` is looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
 /// composition).
+/// Inside a subscript the same token is the slice's separator, and `noRange_` is on there: the
+/// dimension reads `a..b` as two ends, not as a range value (see `parseSliceIndices`).
 void ParserImpl::parseRange() {
     const size_t m = mark();
     parseAdditive();
     bool any = false;
-    while (cur_ == TK::DotDot && !panic_) {
+    while (cur_ == TK::DotDot && !noRange_ && !panic_) {
         bump();
         parseAdditive();
         any = true;
@@ -510,130 +512,6 @@ void ParserImpl::parseAccess() {
     }
 }
 
-/// Whether the `(` at the current token opens the parameters of a lambda and not a tuple or a
-/// parenthesized expression. Parameters are `name: type` pairs, or `name` alone in a lambda,
-/// where the type comes from the function type of the position the lambda stands in (design
-/// principles 5.9). The head tells: `(name:`, `(var`, `(name)` / `(name, ...)` when the list
-/// closes and `=>` (or the `:` of a return type) follows, or an empty list followed by `=>` or
-/// by that `:`. Only parentheses nest inside a parameter list (a type or a default value may
-/// hold a tuple, a function type or a call), so the matching `)` is found by counting them.
-bool ParserImpl::lambdaAhead() const {
-    const TK t1 = peek(1);
-    if (t1 == TK::KwVar) {
-        return true;
-    }
-    // A rest parameter's head, `(...xs)` / `(...xs, ...)`, is a lambda's like any other: the reader of
-    // the list that follows is the same, `=>` (or a return type's `:`) after the `)`. A tuple
-    // written `(...xs)` -- one rest argument in it -- has that `=>` too only when it is a lambda.
-    if (t1 == TK::DotDot || t1 == TK::Ellipsis) {
-        uint32_t depth = 0;
-        for (uint32_t i = 0;; ++i) {
-            switch (peek(i)) {
-            case TK::Eof:
-                return false;
-            case TK::LParen:
-                ++depth;
-                break;
-            case TK::RParen:
-                if (--depth == 0) {
-                    const TK after = peek(i + 1);
-                    return after == TK::FatArrow || after == TK::Colon;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-    }
-    if (t1 == TK::Identifier) {
-        if (peek(2) == TK::Colon) {
-            return true;
-        }
-        if (peek(2) != TK::Comma && peek(2) != TK::RParen) {
-            return false;
-        }
-        uint32_t depth = 0;
-        for (uint32_t i = 0;; ++i) {
-            switch (peek(i)) {
-            case TK::Eof:
-                return false;
-            case TK::LParen:
-                ++depth;
-                break;
-            case TK::RParen:
-                if (--depth == 0) {
-                    const TK after = peek(i + 1);
-                    return after == TK::FatArrow || after == TK::Colon;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-    }
-    if (t1 == TK::RParen) {
-        const TK t2 = peek(2);
-        return t2 == TK::FatArrow || t2 == TK::Colon;
-    }
-    if (t1 == TK::LParen) {
-        // A parameter destructured as a tuple (`((a, b)) => ...`): the list starts with a
-        // parenthesised parameter, so the first `)` is not the end of the list. Only a list of
-        // names can be a tuple parameter, so the head decides at once: a `(` that opens anything
-        // else is the parenthesised expression (or tuple) it looks like, and is not scanned.
-        if (peek(2) != TK::Identifier) {
-            return false;
-        }
-        uint32_t i = 2;
-        while (true) {
-            if (peek(i) != TK::Identifier) {
-                return false;
-            }
-            ++i;
-            if (peek(i) == TK::Comma) {
-                ++i;
-                continue;
-            }
-            break;
-        }
-        if (peek(i) != TK::RParen) {
-            return false;
-        }
-        ++i;
-        if (peek(i) == TK::RParen) {
-            const TK after = peek(i + 1);
-            return after == TK::FatArrow || after == TK::Colon;
-        }
-        // More parameters after the tuple: find the end of the list, which the names keep
-        // short, so counting parentheses stays cheap.
-        if (peek(i) != TK::Comma) {
-            return false;
-        }
-        uint32_t depth = 1;
-        for (; ; ++i) {
-            switch (peek(i)) {
-            case TK::Eof:
-                return false;
-            case TK::LParen:
-                ++depth;
-                break;
-            case TK::RParen:
-                if (--depth == 0) {
-                    const TK after = peek(i + 1);
-                    return after == TK::FatArrow || after == TK::Colon;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-    }
-    if (t1 == TK::Comma && peek(2) == TK::RParen) {
-        const TK t3 = peek(3);
-        return t3 == TK::FatArrow || t3 == TK::Colon;
-    }
-    return false;
-}
-
 namespace {
 
 /// The bracket that ends the group `open` opens, when `open` opens one in a type.
@@ -764,6 +642,8 @@ void ParserImpl::parseShapeComp() {
 
 /// primaryData : identRef | constasData | literal | arrayData | structData | tupleData
 ///             | funcData
+/// A lambda starts with the `func` keyword (design principles 4.4), so a parenthesised list here
+/// is always a tuple or a parenthesised expression.
 void ParserImpl::parsePrimary() {
     switch (cur_) {
     case TK::Identifier:
@@ -800,9 +680,8 @@ void ParserImpl::parsePrimary() {
     case TK::LBrace:
         return parseStructData();
     case TK::LParen:
-        return lambdaAhead() ? parseFuncData() : parseTupleData();
-    case TK::Lt:
-    case TK::LAngle:
+        return parseTupleData();
+    case TK::KwFunc:
         return parseFuncData();
     default:
         break;
@@ -968,49 +847,57 @@ void ParserImpl::parseIndices() {
     close(m, NK::Indices);
 }
 
-/// sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?
+/// sliceIndices : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | 'range' '(' dataExpr ','
+///                dataExpr ',' dataExpr ')'
 ///
-/// One dimension of a subscript: a slice when a colon follows, an element index otherwise (the
-/// expression is then the whole dimension, which `indices` writes as its other alternative).
-/// The node keeps the colons it consumed as children, so which of the three parts were written
-/// is read from the tree itself and not recovered from token positions: the part before the
-/// first colon is the start, the one between the colons the end, the one after the second colon
-/// the step.
+/// One dimension of a subscript. A dimension that writes `..` is a slice: `t[a..b]`, and either
+/// end may be left out, `t[..b]` and `t[a..]`, where the omitted end is the array's bound on that
+/// side (design principles 4.2). The node keeps the `..` tokens it consumed as children, so which
+/// end was written is read from the tree itself and not recovered from token positions: an
+/// expression before the first `..` is the start, one after it the end.
+///
+/// A stepped slice is written with the core's `range(a, b, s)` as the whole dimension
+/// (`t[range(0, n, 2)]`): a range value is not an index, so the three parts are read here as the
+/// slice's start, end and step, and the `range` token stays in the tree as the marker of that
+/// reading. The step is written only this way; a slice has no third `..`.
 void ParserImpl::parseSliceIndices() {
     const size_t m = mark();
-    if (cur_ != TK::Colon && cur_ != TK::ColonColon) {
-        parseExpr();
-        if (cur_ != TK::Colon && cur_ != TK::ColonColon) {
-            return; // an element index: the expression is the whole dimension
+    NoRangeScope noRange(*this);
+    if (atWord(0, "range") && peek(1) == TK::LParen) {
+        bump(); // `range`, kept as the marker of the three parts
+        if (!panic_ && expect(TK::LParen)) {
+            parseExpr();
+            if (!panic_ && expect(TK::Comma)) {
+                parseExpr();
+            }
+            if (!panic_ && expect(TK::Comma)) {
+                parseExpr();
+            }
+            if (!panic_) {
+                expect(TK::RParen);
+            }
         }
-    }
-    if (cur_ == TK::ColonColon) {
-        // Two colons written together (`xs[:: -1]`, `xs[a:: s]`): the lexer keeps `::` as one
-        // token (a qualified name), so a slice reads it as the two colons it is.
-        bump();
-        parseSlicePart();
         close(m, NK::SliceIndices);
         return;
     }
-    bump(); // ':'
-    parseSlicePart();
-    if (cur_ == TK::ColonColon) {
+    if (cur_ == TK::DotDot) {
         bump();
-        parseSlicePart();
-    } else if (eat(TK::Colon)) {
-        parseSlicePart();
-    }
-    close(m, NK::SliceIndices);
-}
-
-/// One part of a slice: nothing at all when the next token is a colon or the end of the
-/// subscript, which leaves the part out of the tree.
-void ParserImpl::parseSlicePart() {
-    if (cur_ == TK::Colon || cur_ == TK::ColonColon || cur_ == TK::Comma ||
-        cur_ == TK::RBracket) {
+        if (cur_ != TK::Comma && cur_ != TK::RBracket) {
+            parseExpr();
+        }
+        close(m, NK::SliceIndices);
         return;
     }
     parseExpr();
+    if (cur_ == TK::DotDot) {
+        bump();
+        if (cur_ != TK::Comma && cur_ != TK::RBracket) {
+            parseExpr();
+        }
+        close(m, NK::SliceIndices);
+        return;
+    }
+    // An element index: the expression is the whole dimension, and there is no node to close.
 }
 
 /// parentArgues : '(' argumentList? ','? ')'
@@ -1189,11 +1076,15 @@ void ParserImpl::parseTupleData() {
     close(m, NK::TupleData);
 }
 
-/// funcData : angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+/// funcData : 'func' angledParams? parentParams ('=>' typeExpr)? blockExpr
+/// A lambda is a function declaration without a name (design principles 4.4): `func (x) { x * x }`,
+/// `func (x: int) => int { x }`. Its body is the brace block and its last statement is the value;
+/// an expression body is not a lambda's body, it is the block holding that expression.
 /// A lambda has no modifier: `sync` is written before a block (design principles 3.4), so a
-/// lambda that needs a synchronous body writes `(x) => sync { ... }`.
+/// lambda that needs a synchronous body writes `func (x) sync { ... }`.
 void ParserImpl::parseFuncData() {
     const size_t m = mark();
+    bump(); // `func`
     // A lambda's parameters may leave the type out: it comes from the function type of the
     // position the lambda stands in (design principles 5.9). Its return type and the types
     // written inside its parameters are parsed with the flag off, as everywhere else.
@@ -1201,7 +1092,7 @@ void ParserImpl::parseFuncData() {
     lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         // A pack among the `with` parameters is the same rule on a lambda as on a declaration
-        // (design principles 5.6): `<...ws> (...xs) => ...`
+        // (design principles 5.6): `func <...ws> (...xs) { ... }`
         // names the `with` list the position gives the value, so the lambda's body can forward it.
         parseAngledParams(true);
     }
@@ -1210,16 +1101,16 @@ void ParserImpl::parseFuncData() {
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncData);
     }
-    // A lambda's parameter list takes a rest parameter (`(...xs) => body`). It parses here and is
-    // refused where its parameters would have to be built: a lambda's rest parameter stands for
+    // A lambda's parameter list takes a rest parameter (`func (...xs) { ... }`). It parses here and
+    // is refused where its parameters would have to be built: a lambda's rest parameter stands for
     // parameters that come from the function type the lambda stands in, and the front end does not
     // build those yet (the semantic stage names the refusal).
     parseParentParams(true);
     lambdaParams_ = outerLambdaParams;
-    if (eat(TK::Colon)) {
+    if (eat(TK::FatArrow)) {
         parseType();
     }
-    if (!panic_ && expect(TK::FatArrow)) {
+    if (!panic_) {
         parseBlockExpr();
     }
     close(m, NK::FuncData);
@@ -1326,20 +1217,22 @@ void ParserImpl::parseTypeCase() {
     close(m, NK::TypeCase);
 }
 
-/// staticForExpr : 'static' staticForHeader '=>' blockExpr
-/// `static for n, F in fields T => 块`：把结构体或元组的字段表在实例化时展开，
+/// staticForExpr : 'static' staticForHeader 'do' blockExpr
+/// `static for n, F in fields T do 块`：把结构体或元组的字段表在实例化时展开，
 /// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
-/// `static for j in indices ts => 块`：把元组 `ts` 的每个位置展开一次，`j`
+/// `static for j in indices ts do 块`：把元组 `ts` 的每个位置展开一次，`j`
 /// 是这一轮的位置（编译期整数）。两种头共用一个解析函数，只有 `in` 后面的写法不同。
 /// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
 /// The header is shared with `static loop`: the same `for ... in ...` says what is walked, and
-/// only what follows it differs (`=> 块` or `do 表达式`).
+/// the two spell one word after it (`do`), as the ordinary loop does -- `=>` follows a type or a
+/// value that stands for another (`case`, a rule), and a loop body is neither (design principles
+/// 4.1).
 /// `fields` 后面是类型位置：`(` 一律按类型读，`fields ()` 是空元组类型。
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
     bump(); // static
     parseStaticForHeader();
-    if (!panic_ && expect(TK::FatArrow)) {
+    if (!panic_ && expect(TK::KwDo)) {
         parseBlockExpr();
     }
     close(m, NK::StaticForExpr);

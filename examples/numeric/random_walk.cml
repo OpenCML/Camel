@@ -31,8 +31,8 @@ func main(): int sync {
     let ends = walks(12, no_ints)
     println(ends)
 
-    let distances = ends->map<(e: int): int => abs(e)>
-    let wide = distances->map<(e: int): float => float(e)>
+    let distances = ends->map<func (e: int) => int { abs(e) }>
+    let wide = distances->map<func (e: int) => float { float(e) }>
     println(format<mean(wide), stdev(wide)>('mean distance {:.2f}  stdev {:.2f}'))
     println('farthest:', max(distances))
     return 0

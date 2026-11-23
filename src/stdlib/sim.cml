@@ -29,7 +29,8 @@
 /// @pure
 /// @fails fault `RuntimeError` when `samples` is negative
 /// @example pi_hits(10000, 42)    // 7863
-export func pi_hits(samples: int, seed: int): int
+#op('sim:pi_hits')
+export func pi_hits(samples: int, seed: int): int panic
 
 /// Prices a one-year Asian call on a geometric random walk with `paths` simulated paths of
 /// `steps` steps each, using the fixed parameters S0 = 100, K = 100, r = 0.05 and sigma = 0.2,
@@ -38,4 +39,5 @@ export func pi_hits(samples: int, seed: int): int
 /// @pure
 /// @fails fault `RuntimeError` when `paths` is negative or `steps` is not positive
 /// @example asian_call_price(2000, 128, 42)    // 5.894325529519635
-export func asian_call_price(paths: int, steps: int, seed: int): float
+#op('sim:asian_call_price')
+export func asian_call_price(paths: int, steps: int, seed: int): float panic

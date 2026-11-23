@@ -17,6 +17,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
 
 #include <cstddef>
 #include <optional>
@@ -37,9 +38,10 @@ camel::runtime::gc_node_ref_t statedExtentsNodeOf(
     camel::runtime::GraphDraft &draft, camel::core::type::Type *type);
 
 /// The parameter whose declaration states no shape and whose value a law has to read, found by
-/// walking back from `value` to a port of `function`; nothing when no such parameter answers.
+/// walking back from `value` to a port of `function`; nothing when no such parameter answers. The
+/// walk asks the view for a node's type, kind, ports and inputs, and for nothing else.
 std::optional<size_t> unstatedParameterBehind(
-    const camel::runtime::GCGraph *function, camel::runtime::gc_node_ref_t value,
+    const camel::graph::GraphView *function, camel::runtime::gc_node_ref_t value,
     const std::vector<size_t> &portParameter, size_t paramCount, size_t nodeCount);
 
 } // namespace camel::transforms

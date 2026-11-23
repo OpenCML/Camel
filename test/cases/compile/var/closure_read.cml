@@ -18,7 +18,7 @@
 func main(): int sync {
     var x = 1
     x = 2
-    let read = () => x
+    let read = func () { x }
     println(read())
     return 0
 }

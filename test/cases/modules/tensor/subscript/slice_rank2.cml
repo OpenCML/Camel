@@ -1,5 +1,5 @@
 /**
- * `t[a:b]` on the first dimension of a tensor of rank 2 or more is the core's one slice: every
+ * `t[a..b]` on the first dimension of a tensor of rank 2 or more is the core's one slice: every
  * `slice(...)` call is the core's. The range names the rows
  * and every element of the other dimensions is taken at the coordinate it has. A step of 1 along
  * the first dimension of a compact array is a run of the block, so the slice is a view sharing it
@@ -10,10 +10,10 @@ import { reshape, shape, sum } from tensor
 func main(): int sync {
     println('ran')
     let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-    println(shape(m[0:1]))
-    println(shape(m[0:2]))
-    println(shape(m[1:2]))
-    println(shape(m[0:0]))
-    println(sum(m[0:2]))
+    println(shape(m[0..1]))
+    println(shape(m[0..2]))
+    println(shape(m[1..2]))
+    println(shape(m[0..0]))
+    println(sum(m[0..2]))
     return 0
 }

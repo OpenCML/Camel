@@ -79,7 +79,7 @@ using rt::gc_node_ref_t;
 using rt::GCGraph;
 using rt::GCNodeKind;
 using rt::kInvalidNodeRef;
-using rt::LoopDraftView;
+using rt::LoopView;
 using type::ArrayType;
 using type::FunctionType;
 using type::FunctionTypeFactory;
@@ -464,7 +464,7 @@ std::vector<gc_node_ref_t> valueOrder(
         // loop's site without a diagnostic.
         if (kindOf(transaction, node) == GCNodeKind::Loop) {
             for (gc_node_ref_t read :
-                 rt::LoopDraftView(*draft.program(), draft, node).externalInputs(false)) {
+                 rt::LoopView(draft, node).externalInputs(false)) {
                 if (!seen.contains(read) &&
                     regionMember(transaction, draft.nodeRegion(read), region)) {
                     stack.emplace_back(read, false);
@@ -2354,7 +2354,7 @@ bool ForwardRewrite::dependsOnTangentPort(gc_node_ref_t node) {
 }
 
 void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
-    const LoopDraftView view(*draft().program(), draft(), loop);
+    const LoopView view(draft(), loop);
     // A `for` over an array: when the array depends on a differentiated value, the loop's reverse
     // pass sends each round's element gradient back into an array gradient carried alongside the
     // state gradients (the reverse of a read by index is a scatter-add, design principles 9.9).
@@ -3540,7 +3540,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         }
         if (kindOf(forwardTransaction_, read) == GCNodeKind::Loop) {
             for (gc_node_ref_t inner :
-                 rt::LoopDraftView(*forward.program(), forward, read).externalInputs(false)) {
+                 rt::LoopView(forward, read).externalInputs(false)) {
                 if (self(inner, self)) {
                     return true;
                 }
@@ -3558,7 +3558,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // iteration operator of its kind (`tensor:iter` and the like), which is refused by the
         // rule lookup when the value takes part in the gradient.
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop) {
-            const auto iterable = rt::LoopDraftView(*forward.program(), forward, node).iterable();
+            const auto iterable = rt::LoopView(forward, node).iterable();
             if (iterable.has_value() &&
                 (active_.contains(*iterable) || tainted_.contains(*iterable))) {
                 Type *const iterableType = typeOf(forwardTransaction_, *iterable);
@@ -3659,7 +3659,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // composite state is dropped at the projection without a diagnostic.
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop && !inputActive) {
             for (gc_node_ref_t read :
-                 rt::LoopDraftView(*forward.program(), forward, node).externalInputs(false)) {
+                 rt::LoopView(forward, node).externalInputs(false)) {
                 if (readsActive(read, readsActive)) {
                     inputActive = true;
                     break;
@@ -3680,7 +3680,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 forward.withInputsOf(node).begin(),
                 forward.withInputsOf(node).end());
             for (gc_node_ref_t read :
-                 rt::LoopDraftView(*forward.program(), forward, node).externalInputs(false)) {
+                 rt::LoopView(forward, node).externalInputs(false)) {
                 reads.push_back(read);
             }
             for (gc_node_ref_t input : reads) {
@@ -4733,7 +4733,7 @@ LoopBodyPlan Engine::buildLoopBody(
     bool arrayGradient) {
     LoopBodyPlan plan;
     auto &draft = transaction.edit();
-    const LoopDraftView view(*draft.program(), draft, loop);
+    const LoopView view(draft, loop);
     const uint32_t bodyRegion = view.bodyRegion();
     ASSERT(
         view.stateCount() == stateCount,

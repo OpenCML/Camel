@@ -57,9 +57,9 @@ func report(r1: void!, r2: void!, r3: void!, r4: void!): string! {
 
 func main(): string! sync {
     let ex = reshape<[2, 2]>([1.0, -2.0, 0.5, 1.5] as f32[])
-    let r1 = export_model<out: 'twice.onnx'>((x: f32[...]): (f32[...], f32[...]) => twice(x), ex)
-    let r2 = export_model<out: 'repeated.onnx'>((x: f32[...]): (Run, Run) => repeated(x, 2), ex)
-    let r3 = export_model<out: 'constants.onnx'>((x: f32[...]): (float, float) => constants(x), ex)
-    let r4 = export_model<out: 'computed.onnx'>((x: f32[...]): (float, float) => computed(x), ex)
+    let r1 = export_model<out: 'twice.onnx'>(func (x: f32[...]) => (f32[...], f32[...]) { twice(x) }, ex)
+    let r2 = export_model<out: 'repeated.onnx'>(func (x: f32[...]) => (Run, Run) { repeated(x, 2) }, ex)
+    let r3 = export_model<out: 'constants.onnx'>(func (x: f32[...]) => (float, float) { constants(x) }, ex)
+    let r4 = export_model<out: 'computed.onnx'>(func (x: f32[...]) => (float, float) { computed(x) }, ex)
     return report(r1, r2, r3, r4)
 }

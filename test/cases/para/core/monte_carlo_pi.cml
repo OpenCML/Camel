@@ -16,8 +16,8 @@ func main(): int sync {
 
     let start = now()
     let total_hits = (0..repeat)
-        ->map<(i: int): int => pi_hits(samples_per_worker, base_seed + i * 7919)>
-        ->reduce<(acc: int, cur: int): int => acc + cur, 0>
+        ->map<func (i: int) => int { pi_hits(samples_per_worker, base_seed + i * 7919) }>
+        ->reduce<func (acc: int, cur: int) => int { acc + cur }, 0>
     let duration = now() - start
     let pi = 4.0 * float(total_hits) / float(total_samples)
 

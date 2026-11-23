@@ -83,7 +83,7 @@ func mergeable_constant(n: Node): bool {
 
 // Whether the two lists name the same nodes in the same order.
 func same_nodes(xs: Node[], ys: Node[]): bool {
-    return len(xs) == len(ys) && zip(xs, ys)->all<(p: (Node, Node)): bool => p.0 == p.1>
+    return len(xs) == len(ys) && zip(xs, ys)->all<func (p: (Node, Node)) => bool { p.0 == p.1 }>
 }
 
 // A pure operation the sweep may merge: one a pass may arrange anywhere (`may_be_rearranged`:
@@ -123,7 +123,7 @@ func same_node(a: Node, b: Node): bool {
 // itself when it is the first. That first node is never a node the same round merges away, which
 // is what makes one transaction enough for a round.
 func keep_of(ns: Node[], n: Node): Node {
-    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && !is_anchor(m) && same_node(n, m)>
+    let earlier = ns->filter<func (m: Node) => bool { id(m) < id(n) && !is_anchor(m) && same_node(n, m) }>
     return if len(earlier) == 0 then n else earlier[0]
 }
 
@@ -135,17 +135,17 @@ func is_hit(ns: Node[], n: Node): bool {
 
 func graph_has_hit(g: Graph): bool {
     let ns = nodes(g)
-    return ns->any<(n: Node): bool => is_hit(ns, n)>
+    return ns->any<func (n: Node) => bool { is_hit(ns, n) }>
 }
 
 func merge_hits_of::<F>(t: Txn<F>, g: Graph): void {
     let ns = nodes(g)
-    ns->filter<(n: Node): bool => is_hit(ns, n)>->foreach<(n: Node): void => replace(t, n, keep_of(ns, n))>
+    ns->filter<func (n: Node) => bool { is_hit(ns, n) }>->foreach<func (n: Node) => void { replace(t, n, keep_of(ns, n)) }>
 }
 
 func merge_hits::<F>(f: F): F! sync {
     let t = open(f)
-    graphs_of(f)->foreach<(g: Graph): void => merge_hits_of(t, g)>
+    graphs_of(f)->foreach<func (g: Graph) => void { merge_hits_of(t, g) }>
     return commit(t)
 }
 
@@ -177,8 +177,8 @@ func value_only(n: Node): bool {
 // no node of the graph's own, so this sweep does not stand a keeper in the statement's place -- it
 // keeps the reader instead, and the computation keeps the read that says it runs.
 func last_read_of_a_fault(n: Node): bool {
-    return inputs(n)->any<(m: Node): bool => may_fault(m) && len(value_users(m)) <= 1>
-        || with_inputs(n)->any<(m: Node): bool => may_fault(m) && len(value_users(m)) <= 1>
+    return inputs(n)->any<func (m: Node) => bool { may_fault(m) && len(value_users(m)) <= 1 }>
+        || with_inputs(n)->any<func (m: Node) => bool { may_fault(m) && len(value_users(m)) <= 1 }>
 }
 
 // Whether the node computes a value no node reads. A node that anchors its graph is not one: a
@@ -195,7 +195,7 @@ func dead_value(n: Node): bool {
 
 func erase_hits::<F>(f: F, hits: Node[]): F! sync {
     let t = open(f)
-    hits->foreach<(n: Node): void => erase(t, n)>
+    hits->foreach<func (n: Node) => void { erase(t, n) }>
     return commit(t)
 }
 
@@ -238,7 +238,7 @@ func is_operation(n: Node): bool {
 // because a constant replacing it would share one object between every run of the graph.
 func constant_operands(n: Node): bool {
     let ins = inputs(n)
-    return len(ins) > 0 && ins->all<(m: Node): bool => is_constant(m) && !is_written_slot(m)>
+    return len(ins) > 0 && ins->all<func (m: Node) => bool { is_constant(m) && !is_written_slot(m) }>
 }
 
 // Whether the round evaluates this node: a pure operation whose operands are all constants. A
@@ -272,7 +272,7 @@ func fold_one::<F>(t: Txn<F>, n: Node, budget: int): bool sync {
 
 // One round over the nodes it evaluates: whether it replaced anything.
 func fold_round::<F>(t: Txn<F>, hits: Node[], budget: int): bool {
-    return hits->map<(n: Node): bool => fold_one(t, n, budget)>->any<(did: bool): bool => did>
+    return hits->map<func (n: Node) => bool { fold_one(t, n, budget) }>->any<func (did: bool) => bool { did }>
 }
 
 // Commits a round that replaced something, and abandons one that replaced nothing: the program the

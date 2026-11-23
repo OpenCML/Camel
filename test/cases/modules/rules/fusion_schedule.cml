@@ -14,5 +14,5 @@ func reported::<F>(label: string, r: Run<F>): F sync {
 
 export func only_sigmoid::<F>(p: F): F! sync {
     return p->run<[array_sigmoid_chain], rounds: 16, strict: false>
-        -> (r: Run<F>) => sync { reported('only_sigmoid', r) }
+        -> func (r: Run<F>) sync { reported('only_sigmoid', r) }
 }

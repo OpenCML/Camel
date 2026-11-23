@@ -28,19 +28,19 @@ func my_fold::<U, T>(xs: T[]): U {
 }
 
 func adder::<T>(n: T): (x: T) => T {
-    return (x: T) => x + n
+    return func (x: T) { x + n }
 }
 
 func main(): int sync {
     // a lambda whose parameter types are written out instantiates the generic function
-    println([1, 2, 3]->map<(x: int) => id(x) * 2>)
-    println(['a', 'b']->map<(s: string) => id(s) + '!'>)
-    println(twice((x: int) => x + 3, 1))
-    println(twice((s: string) => s + s, 'ab'))
-    println([1, 2, 3]->my_map<(x: int) => x * x>)
-    println(my_map<(x: int) => 'n{}'->format<x>>([4, 5]))
-    println([1, 2, 3, 4]->my_filter<(x: int) => x % 2 == 0>)
-    println(['a', 'bb']->my_fold<(acc: int, s: string) => acc + len(s), 0>)
+    println([1, 2, 3]->map<func (x: int) { id(x) * 2 }>)
+    println(['a', 'b']->map<func (s: string) { id(s) + '!' }>)
+    println(twice(func (x: int) { x + 3 }, 1))
+    println(twice(func (s: string) { s + s }, 'ab'))
+    println([1, 2, 3]->my_map<func (x: int) { x * x }>)
+    println(my_map<func (x: int) { 'n{}'->format<x> }>([4, 5]))
+    println([1, 2, 3, 4]->my_filter<func (x: int) { x % 2 == 0 }>)
+    println(['a', 'bb']->my_fold<func (acc: int, s: string) { acc + len(s) }, 0>)
     // a generic function returning a closure over a value of the variable's type
     let add5 = adder(5)
     let greet = adder('!')

@@ -22,12 +22,12 @@ func has(text: string, part: string): bool {
 // '09:00:07 WARN  disk usage at 81%': the time, then the level up to the next space, then
 // the message.
 func parse(line: string): Entry {
-    let rest = line[9:]
+    let rest = line[9..]
     let cut = rest->index_of<' '> ?? len(rest)
     return {
-        time: line[0:8],
-        level: rest[0:cut],
-        message: rest[cut:]->trim
+        time: line[0..8],
+        level: rest[0..cut],
+        message: rest[cut..]->trim
     }
 }
 
@@ -48,21 +48,21 @@ func main(): int sync {
 
     // The file ends with a line feed and has an empty line: both give empty pieces.
     let lines = (path->read_text !! '')->split<'\n'>
-        ->map<(l: string): string => trim(l)>
-        ->filter<(l: string): bool => len(l) > 0>
+        ->map<func (l: string) => string { trim(l) }>
+        ->filter<func (l: string) => bool { len(l) > 0 }>
     let entries = lines->map<parse>
     println('lines:', len(lines))
 
     let levels = ['INFO', 'WARN', 'ERROR']
-    levels->foreach<(level: string) => sync {
-        println(format<level, entries->count<(e: Entry): bool => e.level == level>>('{:<5} {}'))
+    levels->foreach<func (level: string) sync {
+        println(format<level, entries->count<func (e: Entry) => bool { e.level == level }>>('{:<5} {}'))
     }>
 
     println('problems:')
-    entries->filter<(e: Entry): bool => e.level != 'INFO'>
-        ->foreach<(e: Entry) => sync { println('  ' + e.time + ' ' + e.message) }>
+    entries->filter<func (e: Entry) => bool { e.level != 'INFO' }>
+        ->foreach<func (e: Entry) sync { println('  ' + e.time + ' ' + e.message) }>
 
-    println('lines that mention cache.db:', lines->count<(l: string): bool => has(l, 'cache.db')>)
-    println('lines with a number followed by a unit:', lines->count<(l: string): bool => l->has_match<'[0-9]+(%|s)'>>)
+    println('lines that mention cache.db:', lines->count<func (l: string) => bool { has(l, 'cache.db') }>)
+    println('lines with a number followed by a unit:', lines->count<func (l: string) => bool { l->has_match<'[0-9]+(%|s)'> }>)
     return 0
 }

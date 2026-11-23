@@ -7,6 +7,6 @@ func applied(x: float): float {
 }
 
 func main(): int sync {
-    println(grad(applied)<(x: float): float => x * x>(2.0))
+    println(grad(applied)<func (x: float) => float { x * x }>(2.0))
     return 0
 }

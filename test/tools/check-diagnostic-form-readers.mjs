@@ -45,7 +45,7 @@ const SELF = fileURLToPath(import.meta.url)
 const REPO_ROOT = path.resolve(path.dirname(SELF), '..', '..')
 
 /// Where a tool that talks to `camel` lives.
-const ROOTS = ['scripts', 'test/tools', 'exemplars']
+const ROOTS = ['scripts', 'test/tools', 'internal/exemplars']
 
 /// The one-line frame, and the rich header. A tool may know either, or both.
 const SHORT_FRAME = ': [Error]: '

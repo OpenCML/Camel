@@ -7,7 +7,7 @@
 func main(): int sync {
     let p = len
     println(p('abc'))
-    println(['a']->map<(s: string): int => p(s)>)
+    println(['a']->map<func (s: string) => int { p(s) }>)
     println('never printed')
     return 0
 }

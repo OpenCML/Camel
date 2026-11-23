@@ -5,27 +5,27 @@ import { Graph, Node, RegionKind, commit, graphs_of, id, inputs, nodes, open, re
 
 /// Every node of a graph that sits in an arm.
 func arm_nodes(g: Graph): Node[] {
-    return nodes(g)->filter<(n: Node): bool => region_kind(region_of(n)) == RegionKind::Arm>
+    return nodes(g)->filter<func (n: Node) => bool { region_kind(region_of(n)) == RegionKind::Arm }>
 }
 
 /// The inputs of a node that come from the body (region 0).
 func body_inputs(n: Node): Node[] {
-    return inputs(n)->filter<(m: Node): bool => region_kind(region_of(m)) == RegionKind::Root>
+    return inputs(n)->filter<func (m: Node) => bool { region_kind(region_of(m)) == RegionKind::Root }>
 }
 
 /// The nodes of an arm that read exactly one value of the body.
 func arm_readers(g: Graph): Node[] {
-    return arm_nodes(g)->filter<(n: Node): bool => len(body_inputs(n)) >= 1>
+    return arm_nodes(g)->filter<func (n: Node) => bool { len(body_inputs(n)) >= 1 }>
 }
 
 /// The nodes of an arm other than the one `mine` is in.
 func other_arm_nodes(g: Graph, mine: Node): Node[] {
-    return arm_nodes(g)->filter<(n: Node): bool => !(region_of(n) == region_of(mine))>
+    return arm_nodes(g)->filter<func (n: Node) => bool { !(region_of(n) == region_of(mine)) }>
 }
 
 /// The one graph with two or more arm regions.
 func two_arm_graph::<F>(p: F): Graph? when is_function::<F>() {
-    let found = graphs_of(p)->filter<(g: Graph): bool => len(arm_nodes(g)) >= 2>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { len(arm_nodes(g)) >= 2 }>
     return if len(found) == 1 then found[0] else null
 }
 

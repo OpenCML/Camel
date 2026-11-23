@@ -242,7 +242,7 @@ func fill_pairs(m: Map<(int, string), string>, i: int, n: int, a: int, b: int): 
 }}
 
 func count_words(words: string[]): Map<string, int> {{
-    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+    return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> {{ acc->put<w, (acc[w] ?? 0) + 1> }}, [] as Map<string, int>>
 }}
 
 func main(): int sync {{
@@ -339,14 +339,14 @@ class Program:
         n = r.choice([0, 1, 2, 3, r.randrange(self.size + 1), r.randrange(2 * self.size + 1)])
         if typ is MAP_II and r.random() < 0.5:
             a, b, c = r.choice([1, 7, 13, 31]), r.choice([5, 17, 64, 4 * self.size + 1]), r.randrange(9)
-            expr = f"((0..{n})->map<(i: int): (int, int) => ((i * {a} + {c}) % {b}, i * 3)> as {typ.name})"
+            expr = f"((0..{n})->map<func (i: int) => (int, int) {{ ((i * {a} + {c}) % {b}, i * 3) }}> as {typ.name})"
             value = {}
             for i in range(n):
                 value[(i * a + c) % b] = i * 3
             return self.declare(typ, expr, value)
         if typ is MAP_SI and r.random() < 0.5:
             a, b = r.choice([1, 7, 13]), r.choice([3, 17, 4 * self.size + 1])
-            expr = f"((0..{n})->map<(i: int): (string, int) => ('k' + string((i * {a}) % {b}), i)> as {typ.name})"
+            expr = f"((0..{n})->map<func (i: int) => (string, int) {{ ('k' + string((i * {a}) % {b}), i) }}> as {typ.name})"
             value = {}
             for i in range(n):
                 value["k" + str((i * a) % b)] = i
@@ -354,8 +354,8 @@ class Program:
         if typ is MAP_PS and r.random() < 0.5:
             a, b = r.choice([1, 5, 11]), r.choice([4, 9, 2 * self.size + 1])
             expr = (
-                f"((0..{n})->map<(i: int): ((int, string), string) => "
-                f"(((i * {a}) % {b}, 's' + string(i % 2)), 'v' + string(i))> as {typ.name})"
+                f"((0..{n})->map<func (i: int) => ((int, string), string) {{ "
+                f"(((i * {a}) % {b}, 's' + string(i % 2)), 'v' + string(i)) }}> as {typ.name})"
             )
             value = {}
             for i in range(n):
@@ -363,7 +363,7 @@ class Program:
             return self.declare(typ, expr, value)
         if typ is SET_INT and r.random() < 0.5:
             a, b = r.choice([1, 7, 13, 31]), r.choice([5, 17, 64, 4 * self.size + 1])
-            expr = f"to_set((0..{n})->map<(i: int): int => (i * {a}) % {b}>)"
+            expr = f"to_set((0..{n})->map<func (i: int) => int {{ (i * {a}) % {b} }}>)"
             return self.declare(typ, expr, frozenset((i * a) % b for i in range(n)))
         if isinstance(typ, TSet):
             # A set literal may repeat an element; the set has it once.
@@ -524,10 +524,10 @@ class Program:
             name, m = self.pick(MAP_II)
             self.show(
                 [
-                    (f"keys({name})->reduce<(acc: int, k: int): int => acc + k, 0>", INT, sum(m)),
-                    (f"values({name})->reduce<(acc: int, v: int): int => acc + v, 0>", INT, sum(m.values())),
+                    (f"keys({name})->reduce<func (acc: int, k: int) => int {{ acc + k }}, 0>", INT, sum(m)),
+                    (f"values({name})->reduce<func (acc: int, v: int) => int {{ acc + v }}, 0>", INT, sum(m.values())),
                     (
-                        f"items({name})->map<(kv: (int, int)): int => kv.0 * 2 + kv.1>->reduce<(acc: int, x: int): int => acc + x, 0>",
+                        f"items({name})->map<func (kv: (int, int)) => int {{ kv.0 * 2 + kv.1 }}>->reduce<func (acc: int, x: int) => int {{ acc + x }}, 0>",
                         INT,
                         sum(2 * k + v for k, v in m.items()),
                     ),
@@ -542,7 +542,7 @@ class Program:
                 self.declare(MAP_SI, f"count_words({TArr(STR).lit(words)})", counts)
         else:
             name, s = self.pick(SET_INT)
-            self.show([(f"items({name})->reduce<(acc: int, k: int): int => acc + k, 0>", INT, sum(s)), (f"len({name})", INT, len(s))])
+            self.show([(f"items({name})->reduce<func (acc: int, k: int) => int {{ acc + k }}, 0>", INT, sum(s)), (f"len({name})", INT, len(s))])
 
     def op_nested(self):
         """Read a map out of a map, change it, and put it back."""

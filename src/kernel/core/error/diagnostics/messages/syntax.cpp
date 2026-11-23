@@ -161,8 +161,8 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             SyntaxDiag::LambdaParametersNeedParentheses,
             {
                 "LambdaParametersNeedParentheses",
-                "A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.",
-                "A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.",
+                "A lambda is written 'func (x) {{ … }}': a name standing before a '=>' that fits nothing is not one.",
+                "A lambda is a function declaration without a name (design principles 4.4): 'func (x) {{ x * x }}' or 'func (x: int) => int {{ x }}'. 'x => e' is not a lambda in either spelling: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.",
             },
         },
         {
@@ -170,7 +170,7 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             {
                 "IntervalHasNoOpenForm",
                 "An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side.",
-                "A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a:b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.",
+                "A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a..b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.",
             },
         },
         {

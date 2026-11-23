@@ -9,7 +9,7 @@ type A = {a: int}
 type B = {b: int}
 
 func build(u: B) {
-    return A { static for n, F in fields B => u.[n] }
+    return A { static for n, F in fields B do u.[n] }
 }
 
 func main(): int sync {

@@ -15,10 +15,10 @@
 
 namespace camel::transforms {
 
-/// The three fields of a node record these readings ask, on the three faces a graph presents: a
-/// frozen graph and a `GraphRead` hand out a record whose `kind`, `dataType()` and `dataIndex` are
+/// The three fields of a node record these readings ask, on the two faces that carry a payload: a
+/// frozen graph (`GCGraph`) hands out a record whose `kind`, `dataType()` and `dataIndex` are
 /// members, and a draft hands out `DraftNode`, which keeps the same three under `header`. Asking
-/// them through these keeps every reader below written once, for all three.
+/// them through these keeps every reader below written once, for both.
 namespace payload_detail {
 
 template <typename Node> inline runtime::GCNodeKind kindOf(const Node *node) noexcept {
@@ -46,8 +46,8 @@ template <typename Node> inline runtime::gc_slot_idx_t dataIndexOf(const Node *n
     }
 }
 
-/// Whether node `ref` has a payload. A `GraphRead` answers it of the graph (`hasPayload(ref)`), a
-/// frozen graph of the record (`GCNode::hasPayload`), and a draft's record holds the count.
+/// Whether node `ref` has a payload: a frozen graph answers it of the record
+/// (`GCNode::hasPayload`), a draft's record holds the count.
 template <typename Graph>
 inline bool hasPayloadOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
     if constexpr (requires { graph.hasPayload(ref); }) {
@@ -62,7 +62,8 @@ inline bool hasPayloadOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcep
 }
 
 /// The URI of an operator node: out of the body a frozen graph points at (`nodeBodyAs`), out of the
-/// URI a `GraphRead` answers, or out of the payload bytes a draft keeps -- the same `GCOperBody`.
+/// URI a face that answers one names, or out of the payload bytes a draft keeps -- the same
+/// `GCOperBody`.
 template <typename Graph>
 inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
     if constexpr (requires { graph.template nodeBodyAs<runtime::GCOperBody>(ref); }) {
@@ -103,14 +104,17 @@ inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) no
  * building the four node kinds is the deletion of the `kind` arm of `nodeOperatorOf(GCNodeKind)`;
  * the eight files do not change again.
  *
- * **Two faces, one question.** `GraphRead` (`compile/gir/graph_read.h`) is the face the lift in
- * `jvp.cpp` reads; a `FrozenGraphRead` and a draft answer it. The overloads below are templates
- * over the face, because both a `GCGraph` and a `GraphRead` answer `nodeCount()`, `node(ref)->kind`
- * and the operator a node names: a frozen graph reads the URI in place out of `GCOperBody`, and a
- * `GraphRead` copies the same body out of its payload and answers that URI. The payload readers at
- * the bottom are templated over the face as well, and they read the bytes where the face keeps
- * them: a frozen graph's payload is pointed at, a draft's is copied out (`payloadOf`), and neither is
- * reinterpreted in place.
+ * **Two faces, one question.** The overloads below are templates over the face, because both a
+ * frozen graph (`GCGraph`) and the graph a session is editing (`GraphDraft`) answer `nodeCount()`,
+ * `node(ref)` and the operator a node names. The payload readers at the bottom are templated over
+ * the face as well, and they read the bytes where the face keeps them: a frozen graph's payload is
+ * pointed at, a draft's is copied out (`payloadOf`), and neither is reinterpreted in place.
+ *
+ * `GraphView` (`camel/graph/graph_view.h`) is deliberately not one of these faces: it answers a
+ * node's kind, its type and its ports, and it does not hand out a payload at all -- a FILL body, an
+ * access's position, the static area -- because under the view the four kinds are operators, so the
+ * bytes these two readers decode are not a thing it answers. A caller that reaches one of these
+ * readings is holding a frozen graph or a draft, which is what every call site does.
  *
  * **The payload, the same question again.** `NotOne` means "not one of the four", so a caller that
  * only wants a yes/no keeps reading as a predicate. `fillPayloadOf` / `accsPayloadOf` are the
@@ -240,9 +244,9 @@ inline NodeOperator nodeOperatorOf(std::string_view uri) noexcept {
 
 /// Which of the four operators node `ref` of `graph` is. A ref that is not a node is `NotOne`.
 ///
-/// `Graph` is a frozen graph, a `GraphRead` or a draft: all three answer `nodeCount()` and a record
-/// for `node(ref)`, and the three fields these readings ask of that record are `kind`, `dataType`
-/// and `dataIndex` in all three (a draft keeps them under `header`, see `payload_detail`).
+/// `Graph` is a frozen graph or a draft: both answer `nodeCount()` and a record for `node(ref)`, and
+/// the three fields these readings ask of that record are `kind`, `dataType` and `dataIndex` in both
+/// (a draft keeps them under `header`, see `payload_detail`).
 template <typename Graph>
 inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
     if (ref >= graph.nodeCount()) {
@@ -256,8 +260,8 @@ inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t re
         // An operator node is one of the four by the URI its record holds, and every other operator
         // -- the overwhelming majority -- is `NotOne`, which is what makes a reader that only wants
         // a yes/no keep working. The URI is read where the face keeps it (`payload_detail::uriOf`):
-        // in place out of `GCOperBody` on a frozen graph, out of the copy a `GraphRead` answered,
-        // or out of the payload bytes a draft holds -- the same body either way.
+        // in place out of `GCOperBody` on a frozen graph, or out of the payload bytes a draft
+        // holds -- the same body either way.
         if (!payload_detail::hasPayloadOf(graph, ref)) {
             return NodeOperator::NotOne;
         }
@@ -268,8 +272,7 @@ inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t re
 
 /// Which case node `ref` is. A ref that is not a node is `Other`, the case a walk's `default:`
 /// already answered.
-template <typename Graph>
-inline NodeCase nodeCaseOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
+inline NodeCase nodeCaseOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t ref) noexcept {
     switch (nodeOperatorOf(graph, ref)) {
     case NodeOperator::Cast:
         return NodeCase::Cast;

@@ -12,7 +12,7 @@ type Box = {
 }
 
 func comprehension_total::<P>(p: P): int {
-    let readings = (static for n, F, tags in fields P => {
+    let readings = (static for n, F, tags in fields P do {
         let value: F = p.[n]
         match type typeof(tags) {
             case { width: { w: int } } => value + tags.width.w

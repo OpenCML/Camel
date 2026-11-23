@@ -50,7 +50,7 @@ func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
 /// every function a call by name goes through. A closure body is not one of them -- a closure is
 /// called through the value it is, so no node of the program names the graph that runs.
 func named_graphs::<F>(p: F): Graph[] when is_function::<F>() {
-    let funcs = all_nodes(p)->filter<(n: Node): bool => kind(n) == NodeKind::Func>
+    let funcs = all_nodes(p)->filter<func (n: Node) => bool { kind(n) == NodeKind::Func }>
     return loop acc = [] as Graph[] for n in funcs do
         match callee(n) {
             case null => acc
@@ -66,7 +66,7 @@ func prints(g: Graph): bool {
 /// The one graph of the program that prints and that no node names: the closure's body.
 func closure_body::<F>(p: F): Graph? when is_function::<F>() {
     let named = named_graphs(p)
-    let bodies = graphs_of(p)->filter<(g: Graph): bool => prints(g) && !named->contains<g>>
+    let bodies = graphs_of(p)->filter<func (g: Graph) => bool { prints(g) && !named->contains<g> }>
     return if len(bodies) == 1 then bodies[0] else null
 }
 
@@ -82,7 +82,7 @@ func body_print(g: Graph): Node? {
 func splice_point(g: Graph): Node? {
     let inners = match exit_of(g) {
         case null => [] as Node[]
-        case ex => flatten(inputs(ex)->map<inputs>)->filter<(n: Node): bool => op(n) != null && may_be_rearranged(n) && !is_anchor(n)>
+        case ex => flatten(inputs(ex)->map<inputs>)->filter<func (n: Node) => bool { op(n) != null && may_be_rearranged(n) && !is_anchor(n) }>
     }
     return if len(inners) == 1 then inners[0] else null
 }
@@ -90,7 +90,7 @@ func splice_point(g: Graph): Node? {
 /// One node as its computation: the operator, the type it carries, and the canonical numbers of the
 /// nodes it reads. Two nodes with one key compute one thing twice.
 func node_key(n: Node): string {
-    let reads = inputs(n)->map<(m: Node): string => string(id(m))>
+    let reads = inputs(n)->map<func (m: Node) => string { string(id(m)) }>
     let flat = loop acc = '' for r in reads do acc + ',' + r
     return op_text(n) + '|' + type_text(n) + '|' + flat
 }
@@ -106,7 +106,7 @@ func handed_out(g: Graph): Node? {
 
 /// The node of the graph that computes what `keep` computes, a second time.
 func duplicate_of(g: Graph, keep: Node): Node? {
-    let same = nodes(g)->filter<(n: Node): bool => id(n) != id(keep) && op(n) != null && node_key(n) == node_key(keep)>
+    let same = nodes(g)->filter<func (n: Node) => bool { id(n) != id(keep) && op(n) != null && node_key(n) == node_key(keep) }>
     return if len(same) == 1 then same[0] else null
 }
 
@@ -278,7 +278,7 @@ func graph_text(g: Graph): string {
 /// it, and it changes nothing.
 export func report::<F>(p: F): F! sync {
     let gs = graphs_of(p)
-    let counts = gs->map<(g: Graph): int => len(nodes(g))>
+    let counts = gs->map<func (g: Graph) => int { len(nodes(g)) }>
     let total = loop acc = 0 for c in counts do acc + c
     let texts = gs->map<graph_text>->sort
     let joined = loop acc = '' for t in texts do acc + t + '\n'

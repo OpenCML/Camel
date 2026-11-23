@@ -531,7 +531,7 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
 #endif
     }
 
-    camel::runtime::GCGraph *runtimeRoot = program->root();
+    auto *runtimeRoot = program->root();
     camel::execute::RunScope runScope(programs_, *context_, program);
     precompile(*program, runtimeRoot);
 
@@ -1451,7 +1451,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
 HigherOrderCallSite FastVMSchedPass::higherOrderCallSite(Function *func) {
     GUARD(func != nullptr, "Higher-order call target function is null.");
-    camel::runtime::GCGraph *runtimeGraph = programs_.graphOf(func);
+    auto *runtimeGraph = programs_.graphOf(func);
     GUARD(
         runtimeGraph != nullptr,
         "FastVM higher-order runtime call requires a materialized runtime graph.");

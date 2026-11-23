@@ -12,17 +12,17 @@ import { Json, decode, get, as_string, as_array } from json
 }
 
 func churn(n: int): int {
-    return len((0..n)->map<(i: int): string => 'item-' + string(i)>)
+    return len((0..n)->map<func (i: int) => string { 'item-' + string(i) }>)
 }
 
 func show(t: Json, n: int): int sync {
     let c = churn(n)
-    let rows = (t->get<'rows'>->as_array ?? [])->map<(x: Json): string => x->as_string ?? '?'>
+    let rows = (t->get<'rows'>->as_array ?? [])->map<func (x: Json) => string { x->as_string ?? '?' }>
     println(c, rows, t->get<'name'>->as_string ?? '?')
     return 0
 }
 
 func main(n: int): int sync {
     let t = table()
-    return t -> ((j: Json): int => show(j, n)) !! 1
+    return t -> (func (j: Json) => int { show(j, n) }) !! 1
 }

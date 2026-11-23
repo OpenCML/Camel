@@ -146,8 +146,9 @@ export func as_object(j: Json!?): Map<string, Json>!?
 /// @fails fault `InvalidArgument` when indent is negative
 /// @example [1, 2]->encode    // '[1,2]'
 /// @example [1, 2]->encode<indent: 2>    // '[\n  1,\n  2\n]'
+#op('json:encode')
 with <indent: int? = null>
-export func encode::<T>(value: T): string when has_json_form::<T>()
+export func encode::<T>(value: T): string panic when has_json_form::<T>()
 
 /// The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
 /// T typed `Json` takes whatever is there. T is given where the call is written or taken from

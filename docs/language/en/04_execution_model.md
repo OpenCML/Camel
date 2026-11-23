@@ -193,7 +193,7 @@ func main(): int sync {
 var c = 0
 
 func read(): int {
-    let f = (): void => sync { c = c + 1 }
+    let f = func () => void sync { c = c + 1 }
     f()                 // recorded as a write of `c`
     return c            // this read is what runs that write
 }
@@ -214,7 +214,7 @@ With nothing reading `c` afterwards the call still runs, because it writes: what
 var c = 0
 
 func drop(): int {
-    let f = (): void => sync {
+    let f = func () => void sync {
         c = c + 1
         println(c)      // would print 1 if the write ran
     }

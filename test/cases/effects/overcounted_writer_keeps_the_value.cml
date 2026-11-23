@@ -19,6 +19,6 @@ func apply(f: (x: int) => void, v: int): int {
 }
 
 func main(): int sync {
-    println(apply((y: int) => { println('called', y) }, 3))
+    println(apply(func (y: int) { println('called', y) }, 3))
     return 0
 }

@@ -1,7 +1,7 @@
 // The parameter `x` of the lambda shadows the narrowed `x`: it is a plain `int`, not the
 // narrowed name, so a `match` with `case null` over it is still refused (design principles 3.8).
 func f(x: int?): int {
-    return if x != null then ((x: int): int => match x { case null => -1 case _ => x })(1) else 0
+    return if x != null then (func (x: int) => int { match x { case null => -1 case _ => x } })(1) else 0
 }
 
 func main(): int sync {

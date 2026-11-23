@@ -14,12 +14,12 @@ func isUnused(n: Node): bool {
 }
 
 func allNodes::<F>(p: F): Node[] {
-    return flatten(graphs_of(p)->map<(g: Graph): Node[] => nodes(g)>)
+    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] { nodes(g) }>)
 }
 
 func eraseAll::<F>(p: F, hits: Node[]): F! sync {
     let t = open(p)
-    hits->foreach<(n: Node) => erase(t, n)>
+    hits->foreach<func (n: Node) { erase(t, n) }>
     return commit(t)
 }
 

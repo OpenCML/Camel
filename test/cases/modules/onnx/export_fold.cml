@@ -26,7 +26,7 @@ func forward(x: f32[...]): f32[...] {
 func main(): string! sync {
     let l = { w: reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[]), b: reshape<[2]>([0.5, -0.5] as f32[]) }
     let x = reshape<[3, 2]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => forward<l>(x), x) {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { forward<l>(x) }, x) {
         case error e => { return e }
         case v => 'exported'
     }

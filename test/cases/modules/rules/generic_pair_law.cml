@@ -29,14 +29,14 @@ rule pair_sum_self::<T, U>(a: T, b: U) when is_integer::<T>() && is_integer::<U>
 
 /// The nodes of one function of the program, by the name of its graph.
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
 /// A value of a function that no law touched: what `why_not` answers about a type a law cannot be
 /// written for is asked at one of these.
 func valueOf::<F>(p: F, function: string): Node spelling {
-    let values = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Data>
+    let values = nodesOf(p, function)->filter<func (n: Node) => bool { kind(n) == NodeKind::Data }>
     return values[0]
 }
 

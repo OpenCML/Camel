@@ -44,7 +44,7 @@ func main(): int sync {
     println(f(1.5))
     println(twice(21), twice('ab'))
     println(depth(3), depth('abcde'))
-    println([1, 2]->map<(x: int): int => twice(x)>)
+    println([1, 2]->map<func (x: int) => int { twice(x) }>)
 
     func local(x: int): string {
         return 'local int'

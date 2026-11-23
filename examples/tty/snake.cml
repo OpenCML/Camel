@@ -15,9 +15,9 @@ func render(snake: Point[]): void sync {
     print('\x1B[2J\x1B[H')  // Clear screen
     let rows = 0..HEIGHT
 
-    rows->foreach<(y: int) => sync {
+    rows->foreach<func (y: int) sync {
         let cols = 0..WIDTH
-        cols->map<(x: int): string => {
+        cols->map<func (x: int) => string {
             let p = {x: x, y: y}
             return if snake->contains<p> then "O" else "."
         }>->join<"">->println
@@ -35,7 +35,7 @@ func move_snake(snake: Point[], dir: string): Point[] {
         case 'd' => { x: now_head.x + 1, y: now_head.y }  // Right
         case _ => now_head
     }
-    return concat([new_head], snake[0:len(snake) - 1])
+    return concat([new_head], snake[0..len(snake) - 1])
 }
 
 // Check if the snake hits the wall

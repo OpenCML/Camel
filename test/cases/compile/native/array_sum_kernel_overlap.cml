@@ -23,7 +23,7 @@ func sum_kernel::<T>(xs: T[]): T when is_numeric::<T>()
 
 #impl(sum_kernel)
 func total::<T>(xs: T[]): T {
-    return xs->reduce<(a, b) => a + b, 0>
+    return xs->reduce<func (a, b) { a + b }, 0>
 }
 
 func main(): int sync {

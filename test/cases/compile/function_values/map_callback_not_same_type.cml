@@ -11,7 +11,7 @@ func inc(x: int): int { return x + 1 }
 
 func main(): int sync {
     let fs = [inc]
-    println(fs->map<(s: string) => len(s)>)
-    println(fs->map<(a: int, b: int) => a + b>)
+    println(fs->map<func (s: string) { len(s) }>)
+    println(fs->map<func (a: int, b: int) { a + b }>)
     return 0
 }

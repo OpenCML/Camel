@@ -36,7 +36,7 @@ func main(): int sync {
     println(acc)
     // as a condition, and with a lambda's captured value on the right
     let limit = 3
-    println([1, 2, 3, 4, 5]->filter<(x: int) => x > 1 && x < limit + 2>)
+    println([1, 2, 3, 4, 5]->filter<func (x: int) { x > 1 && x < limit + 2 }>)
     if noisy('m1', true) && noisy('m2', true) then println('both')
     return 0
 }

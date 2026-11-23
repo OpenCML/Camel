@@ -50,7 +50,7 @@ func main(): int sync {
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
 
     // The library's leg: one closure that captures the batch and the target, seeded four times.
-    let step = (ww: float[2, 2]): float => {
+    let step = func (ww: float[2, 2]) => float {
         let e = matmul(x, ww) - t
         return 0.5 * sum(e * e)
     }

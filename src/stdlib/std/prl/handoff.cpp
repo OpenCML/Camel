@@ -99,7 +99,7 @@ TaskflowExecSchedPass::TaskflowExecSchedPass(
 TaskflowExecSchedPass::~TaskflowExecSchedPass() = default;
 
 std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) const {
-    GCGraph *graph = plan.graph;
+    auto *graph = plan.graph;
     if (!graph->hasFrameLayout()) {
         return "it has no frame layout";
     }
@@ -186,7 +186,7 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
     std::vector<std::vector<size_t>> callersOf(graphs.size());
     std::vector<size_t> spoiled; // not serial, callers not yet told
     for (size_t i = 0; i < graphs.size(); ++i) {
-        GCGraph *graph = graphs[i];
+        auto *graph = graphs[i];
         obstacle[i] = serialObstacle(*planFor(graph));
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const auto *node = *it;

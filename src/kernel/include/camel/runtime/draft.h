@@ -953,7 +953,7 @@ class GraphDraft : public camel::graph::Graph {
     /// body of a loop).
     ///
     /// The last of those is not bookkeeping: a control region is entered with its port list, and
-    /// the list is positional -- `LoopDraftView::bodyStateParam(j)` is entry `j`, which is the j-th
+    /// the list is positional -- `LoopView::bodyStateParam(j)` is entry `j`, which is the j-th
     /// state -- so a port node an erasure took leaves the entry naming nothing, which the commit
     /// refuses (`validateRuntimeRegions`), and a table that dropped the entry instead renames every
     /// state after it. An unread port of such a region is therefore a name and not dead code. The

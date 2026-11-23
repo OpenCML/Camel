@@ -20,14 +20,14 @@ func g(x: int): int {
 }
 
 func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return nodes(found[0])
 }
 
 /// The one operation of `function`: the value a chain starts from or reaches, and the value
 /// `why_not` reads for a rule that cannot match it.
 func operOf::<F>(p: F, function: string): Node spelling {
-    let ops = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Oper>
+    let ops = nodesOf(p, function)->filter<func (n: Node) => bool { kind(n) == NodeKind::Oper }>
     return ops[0]
 }
 

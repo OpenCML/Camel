@@ -35,7 +35,7 @@ func mt(x: float, w: float, dx: float, dw: float): float {
 import rulesets.jvp
 func main(): int sync {
     // The refused shape: two values named by the body, two tangents the closure cannot hold.
-    let lin = (dx: float, dw: float) => mt(3.0, 2.0, dx, dw)
+    let lin = func (dx: float, dw: float) { mt(3.0, 2.0, dx, dw) }
     println(transpose(lin)(1.0))
     return 0
 }

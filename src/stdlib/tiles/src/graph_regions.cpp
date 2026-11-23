@@ -478,7 +478,7 @@ SegmentAnalysis analyzeRegions(
         if (graph.node(id)->kind != rt::GCNodeKind::Loop) {
             continue;
         }
-        const rt::LoopView view(graphs, graph, id);
+        const rt::LoopView view(graph, id);
         for (auto inner : view.regionNodes()) {
             insideLoop[inner] = true;
         }

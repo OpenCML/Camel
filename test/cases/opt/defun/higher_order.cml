@@ -28,8 +28,8 @@ func pick(flag: bool, x: int): int {
 
 func main(): int sync {
     let named = apply(square, 4)
-    let lambda = apply((x: int) => x + 100, 4)
-    let pairs = pairwise([1, 2, 3], [10, 20, 30], (x: int, y: int) => x * y)
+    let lambda = apply(func (x: int) { x + 100 }, 4)
+    let pairs = pairwise([1, 2, 3], [10, 20, 30], func (x: int, y: int) { x * y })
     let taken = pick(true, 5)
     let other = pick(false, 5)
     'HIGHER ORDER named={} lambda={} pairs={} taken={} other={}'->format<named,

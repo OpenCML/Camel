@@ -11,11 +11,11 @@
 
 func make(): (y: int) => int {
     var acc = 0
-    let inner = (x: int): int => sync {
+    let inner = func (x: int) => int sync {
         acc = acc + x
         acc
     }
-    return (y: int): int => inner(y) + 1
+    return func (y: int) => int { inner(y) + 1 }
 }
 
 func main(): int sync {

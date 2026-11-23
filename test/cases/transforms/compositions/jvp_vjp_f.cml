@@ -36,7 +36,7 @@ func main(): int sync {
     let dx: f32[] = [0.5, 1.0, 1.5]
     let v: f32 = 1.0
     // The pullback at a fixed cotangent, as a function of one number: 2*v*x.
-    let pull = (x: f32) => vjp(sq)(x).1(v).0
+    let pull = func (x: f32) { vjp(sq)(x).1(v).0 }
     let o0 = jvp(pull)(xs[0], dx[0])
     let o1 = jvp(pull)(xs[1], dx[1])
     let o2 = jvp(pull)(xs[2], dx[2])

@@ -1,6 +1,6 @@
 /**
  * `t[idx]` with an int array takes the rows the indices name, in that order, along the first
- * dimension (design principles 5.4). The result's shape is `[len(idx)] + shape(t)[1:]`, which is
+ * dimension (design principles 5.4). The result's shape is `[len(idx)] + shape(t)[1..]`, which is
  * written at the declaration: the length the index array's type states, then every dimension of
  * the array but the first. For a rank-1 array the row is the element, so a repeated index repeats
  * its element.

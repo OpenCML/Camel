@@ -18,6 +18,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
 
 #include <string>
 
@@ -28,9 +29,11 @@ namespace camel::transforms {
 std::string addUriOfSpace(camel::core::type::Type *space);
 
 /// The addition the cotangent space of the value at `ref` sums with, with the space itself written
-/// to `addType`; empty when the type has no space or the space registers no addition.
+/// to `addType`; empty when the type has no space or the space registers no addition. The value's
+/// type is the one reading of a graph this asks, so it is asked of the view
+/// (`graph/graph_view.h`) and not of a representation.
 std::string addUriFor(
-    const camel::runtime::GCGraph *function, camel::runtime::gc_node_ref_t ref,
+    const camel::graph::GraphView *function, camel::runtime::gc_node_ref_t ref,
     camel::core::type::Type *&addType);
 
 /// Why this transform has no cotangent for a result of type `result`, in the words the call site's
@@ -46,9 +49,6 @@ camel::core::type::Type *cotangentTypeOfResultType(const camel::core::type::Type
 
 /// The cotangent input of the transposition of a function of this type.
 camel::core::type::Type *resultCotangentType(const camel::core::type::FunctionType *function);
-
-/// The cotangent input of the transposition of the function `function` stands for.
-camel::core::type::Type *resultCotangentType(const camel::runtime::GCGraph *function);
 
 /// Whether `type` is the unit tuple `()`: a place that holds no cotangent and no value.
 bool isUnitType(const camel::core::type::Type *type);

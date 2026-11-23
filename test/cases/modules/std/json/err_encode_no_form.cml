@@ -3,6 +3,6 @@
 import { encode } from json
 
 func main(): int sync {
-    println(encode((x: int): int => x))
+    println(encode(func (x: int) => int { x }))
     return 0
 }

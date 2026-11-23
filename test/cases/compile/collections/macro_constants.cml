@@ -16,13 +16,13 @@
 }
 
 #macro func operations(): Map<string, (x: int) => int> {
-    let double = (x: int): int => x * 2
-    let negate = (x: int): int => 0 - x
+    let double = func (x: int) => int { x * 2 }
+    let negate = func (x: int) => int { 0 - x }
     return [('double', double), ('negate', negate)] as Map<string, (x: int) => int>
 }
 
 func apply(ops: Map<string, (x: int) => int>, name: string, x: int): int {
-    let f = ops[name] ?? ((y: int): int => y)
+    let f = ops[name] ?? (func (y: int) => int { y })
     return f(x)
 }
 

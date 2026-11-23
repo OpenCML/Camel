@@ -15,7 +15,7 @@ import { get_env } from env
 
 func main(): int sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>((t: float[...]): float[...] => t + next_key()->normal::<f32><shape: [2, 2]>, x) {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: float[...]) => float[...] { t + next_key()->normal::<f32><shape: [2, 2]> }, x) {
         case error e => sync {
             println(e)
             return 1

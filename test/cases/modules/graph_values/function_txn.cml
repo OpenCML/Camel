@@ -49,9 +49,9 @@ func viaB(x: int): int {
 
 func main(): int sync {
     let before = size(graph_of(target))
-    let held = (x: int): int => target(x) + 1000
+    let held = func (x: int) => int { target(x) + 1000 }
     let t = open(target)
-    nodes(graph_of(target))->filter<isAddOne>->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
+    nodes(graph_of(target))->filter<isAddOne>->foreach<func (n: Node) { replace(t, n, inputs(n)[0]) }>
     let g = commit(t) !! target
     println(`new: ${g(5)} ${addOnes(graph_of(g))}`)
     println(`old: ${target(5)} ${addOnes(graph_of(target))} ${size(graph_of(target)) == before}`)

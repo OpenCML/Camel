@@ -29,11 +29,11 @@ func maybe(c: bool): int[]? {
 }
 
 func producer(c: bool): (x: int) => int[] {
-    let a = (x: int): int[2] => {
+    let a = func (x: int) => int[2] {
         let xs = [x, x]
         return xs as int[2]
     }
-    let b = (x: int): int[3] => {
+    let b = func (x: int) => int[3] {
         let xs = [x, x, x]
         return xs as int[3]
     }

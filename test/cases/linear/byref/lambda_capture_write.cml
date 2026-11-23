@@ -18,7 +18,7 @@ import state
 
 func positive(): int sync {
     let c = state::ref(0)
-    let f = (): void => sync { state::set(c, state::get(c) + 1) }
+    let f = func () => void sync { state::set(c, state::get(c) + 1) }
     f()
     return state::get(c)
 }

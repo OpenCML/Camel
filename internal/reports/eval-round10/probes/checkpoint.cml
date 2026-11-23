@@ -44,8 +44,8 @@ func erase_one::<F>(f: F, victim: Node): F! sync {
 with <drop: bool = false>
 export func ckpt::<F>(f: F): F! when is_function::<F>() sync {
     let sites = all_nodes(graphs_of(f))->filter<is_carried_array>
-    sites->foreach<(n: Node): void => println(
-        `ckpt site ${id(n)}: ${op_text(n)} with ${len(value_users(n))} reader(s)`)>
+    sites->foreach<func (n: Node) => void { println(
+        `ckpt site ${id(n)}: ${op_text(n)} with ${len(value_users(n))} reader(s)`) }>
     println(`ckpt: ${len(sites)} carried array(s), drop=${drop}`)
     return if drop && len(sites) > 0 then erase_one(f, sites[0]) else commit_unchanged(f)
 }

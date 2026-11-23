@@ -24,7 +24,7 @@ func describe(g: Graph): string spelling {
 
 func withName(text: string): Graph[] spelling {
     let all = concat(concat(graphs_of(quiet), graphs_of(loud)), concat(graphs_of(fragile), graphs_of(grid)))
-    return all->filter<(g: Graph): bool => name(g) == text>
+    return all->filter<func (g: Graph) => bool { name(g) == text }>
 }
 
 func main(): int spelling sync {
@@ -35,7 +35,7 @@ func main(): int spelling sync {
     println(q.may_fault)
     println(l.external)
     println(f.may_fault)
-    println(nodes(withName('grid')[0])->map<(n: Node): string => shape_text(n) ?? '-'>)
-    println(nodes(withName('quiet')[0])->map<(n: Node): int => permissions(n)>)
+    println(nodes(withName('grid')[0])->map<func (n: Node) => string { shape_text(n) ?? '-' }>)
+    println(nodes(withName('quiet')[0])->map<func (n: Node) => int { permissions(n) }>)
     return 0
 }

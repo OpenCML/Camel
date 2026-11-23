@@ -10,6 +10,6 @@ func apply(g: (a: float) => float): float {
 }
 
 func main(): int sync {
-    println(apply((a, b, ...xs) => 0.0))
+    println(apply(func (a, b, ...xs) { 0.0 }))
     return 0
 }

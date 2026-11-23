@@ -18,8 +18,8 @@ func churn(i: int, n: int, acc: int): int {
 
 func inner_sum(seed: int): int {
     return (0..16)
-        ->map<(i: int): int => fib(18 + (seed + i) % 3)>
-        ->reduce<(acc: int, cur: int): int => acc + cur, 0>
+        ->map<func (i: int) => int { fib(18 + (seed + i) % 3) }>
+        ->reduce<func (acc: int, cur: int) => int { acc + cur }, 0>
 }
 
 func drive(step: int, steps: int, acc: int): int {

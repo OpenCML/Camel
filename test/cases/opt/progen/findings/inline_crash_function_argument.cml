@@ -10,7 +10,7 @@
 
 func f1(a2: (a0: int) => int, a3: string, a4: (int, int, bool)): int {
     let n6 = true;
-    return concat(['']->map<(p12: string): string => ''>, if false then [''] else ['', a3])->reduce<(p10: int, p11: string): int => -1, 0>;
+    return concat(['']->map<func (p12: string) => string { '' }>, if false then [''] else ['', a3])->reduce<func (p10: int, p11: string) => int { -1 }, 0>;
 }
 
 #macro func r13(a14: int, a15: float, a16: float): float {
@@ -18,7 +18,7 @@ func f1(a2: (a0: int) => int, a3: string, a4: (int, int, bool)): int {
 }
 
 func r23(a24: int, a25: int): int {
-    return if (0 <= 0) then f1((p26: int): int => 0, string(0), (0, 0, false)) else 0 - 1;
+    return if (0 <= 0) then f1(func (p26: int) => int { 0 }, string(0), (0, 0, false)) else 0 - 1;
 }
 
 func main(): int sync {
@@ -31,6 +31,6 @@ func main(): int sync {
     } else sync {
         return r23(7, -1);
     };
-    let n66 = [false]->reduce<(p63: int, p64: bool): int => -1, 0>;
+    let n66 = [false]->reduce<func (p63: int, p64: bool) => int { -1 }, 0>;
     return 0;
 }

@@ -3,6 +3,6 @@ func f1(b: bool, g: (p: float) => int, h: (p: string, q: int) => bool): bool {
 }
 
 func main(): int {
-    println('r {}'->format<f1(false, (p: float): int => 1, (p: string, q: int): bool => true)>);
+    println('r {}'->format<f1(false, func (p: float) => int { 1 }, func (p: string, q: int) => bool { true })>);
     return 0;
 }

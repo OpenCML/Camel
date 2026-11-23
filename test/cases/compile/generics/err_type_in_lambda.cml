@@ -5,6 +5,6 @@
  */
 
 func main(): int sync {
-    let f = (x: T) => x
+    let f = func (x: T) { x }
     return 0
 }

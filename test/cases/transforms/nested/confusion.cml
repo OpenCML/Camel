@@ -8,7 +8,7 @@ import { grad } from vjp
 
 with <x: float>
 func outer(): float {
-    return x * grad(<y: float>() => x + y)<1.0>()
+    return x * grad(func <y: float>() { x + y })<1.0>()
 }
 
 func main(): int sync {

@@ -14,7 +14,7 @@ type Box = { f: (x: int) => int, n: int }
 func fill(var b: Box) {
     var acc = 0
     sync {
-        b.f = (x: int): int => sync {
+        b.f = func (x: int) => int sync {
             acc = acc + x
             acc
         }
@@ -22,7 +22,7 @@ func fill(var b: Box) {
 }
 
 func main(): int sync {
-    var box: Box = { f: (x: int): int => x, n: 0 }
+    var box: Box = { f: func (x: int) => int { x }, n: 0 }
     fill(box)
     println(box.f(1))
     return 0

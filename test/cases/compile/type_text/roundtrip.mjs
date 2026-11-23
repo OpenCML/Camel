@@ -42,7 +42,7 @@ func firstType(g: Graph): TypeRef? {
 }
 
 func graphNamed(label: string): Graph {
-    let found = graphs_of(reach)->filter<(g: Graph): bool => name(g) == label>
+    let found = graphs_of(reach)->filter<func (g: Graph) => bool { name(g) == label }>
     return found[0]
 }
 `

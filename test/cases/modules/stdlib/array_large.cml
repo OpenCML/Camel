@@ -22,15 +22,15 @@ func main(): int sync {
     let xs = 1..2001
     let lengths = xs->map<steps>
     println(len(lengths), sum(lengths), max(lengths), min(lengths))
-    println(xs->count<(n: int) => steps(n) > 100>, xs->any<(n: int) => steps(n) > 200>, xs->all<(n: int) => steps(n) < 300>)
-    println(xs->find<(n: int) => steps(n) > 150> ?? -1, lengths->index_of<111> ?? -1)
+    println(xs->count<func (n: int) { steps(n) > 100 }>, xs->any<func (n: int) { steps(n) > 200 }>, xs->all<func (n: int) { steps(n) < 300 }>)
+    println(xs->find<func (n: int) { steps(n) > 150 }> ?? -1, lengths->index_of<111> ?? -1)
 
-    let longest = xs->sort_by<(n: int) => -steps(n)>->take<5>
+    let longest = xs->sort_by<func (n: int) { -steps(n) }>->take<5>
     println(longest, longest->map<steps>)
     let by_length = xs->sort_by<steps>
     println(by_length->take<8>, by_length->drop<1995>)
 
-    let pairs = xs->take<500>->flat_map<(n: int) => [n, steps(n)]>
+    let pairs = xs->take<500>->flat_map<func (n: int) { [n, steps(n)] }>
     println(len(pairs), sum(pairs), pairs->take<6>)
     println(len(unique(lengths)), unique(lengths)->take<10>)
     println(sum(zip_with<add>(xs, reverse(xs))), len(flatten([xs, lengths, xs])), enumerate(lengths)->drop<1998>)

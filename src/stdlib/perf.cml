@@ -31,7 +31,7 @@ export func timeit(fn: () => void): float[] sync {
     if repeat <= 0 then {
         return []
     } else sync {
-        let accumulate = (acc: float[], i: int): float[] => acc->append<measure(fn, repeat - i)>
+        let accumulate = func (acc: float[], i: int) => float[] { acc->append<measure(fn, repeat - i)> }
         return (0..repeat)->reduce<accumulate, []>
     }
 }

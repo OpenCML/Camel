@@ -2508,7 +2508,7 @@ std::string int64ScalarOperand(Emitter &emitter, int64_t value) {
 
 Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
     GCGraph *g                          = act.graph;
-    const camel::runtime::LoopView loop = camel::runtime::loopOf(programOf(g), *g, ref);
+    const camel::runtime::LoopView loop = camel::runtime::loopOf(*g, ref);
     if (loop.collectionCount() != 0) {
         unsupported(
             act,

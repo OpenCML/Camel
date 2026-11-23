@@ -10,7 +10,7 @@
 
 func main(): int sync {
     var x = 1
-    let g = () => x
+    let g = func () { x }
     x = 2
     println(g())
     return 0

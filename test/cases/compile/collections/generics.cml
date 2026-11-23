@@ -8,11 +8,11 @@ func get_or_else::<K, V>(m: Map<K, V>, k: K, d: V): V {
 }
 
 func map_values::<K, V, U>(m: Map<K, V>, f: (v: V) => U): Map<K, U> {
-    return items(m)->map<(kv: (K, V)): (K, U) => (kv.0, f(kv.1))> as Map<K, U>
+    return items(m)->map<func (kv: (K, V)) => (K, U) { (kv.0, f(kv.1)) }> as Map<K, U>
 }
 
 func filter_keys::<K, V>(m: Map<K, V>, f: (k: K) => bool): Map<K, V> {
-    return items(m)->filter<(kv: (K, V)): bool => f(kv.0)> as Map<K, V>
+    return items(m)->filter<func (kv: (K, V)) => bool { f(kv.0) }> as Map<K, V>
 }
 
 func to_set::<T>(xs: T[]): Set<T> {
@@ -28,7 +28,7 @@ func singleton::<K, V>(k: K, v: V): Map<K, V> {
 }
 
 func count_words(words: string[]): Map<string, int> {
-    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+    return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
 func main(): int sync {
@@ -36,9 +36,9 @@ func main(): int sync {
     println(get_or_else(m, 'b', 0), get_or_else(m, 'x', 7))
     let names = [(1, 'one'), (2, 'two')] as Map<int, string>
     println(get_or_else(names, 2, '?'), get_or_else(names, 3, '?'))
-    let scaled = map_values(m, (v: int): float => float(v) * 1.5)
+    let scaled = map_values(m, func (v: int) => float { float(v) * 1.5 })
     println(scaled)
-    println(filter_keys(scaled, (k: string): bool => k == 'b'))
+    println(filter_keys(scaled, func (k: string) => bool { k == 'b' }))
     println(to_set([3, 3, 1]), to_set(['y', 'x', 'y']))
     println(key_set(m), key_set(names))
     println(singleton('k', 1.5), singleton((1, 2), 'pair'))

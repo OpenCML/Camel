@@ -9,7 +9,7 @@ func main(): int sync {
     let t = [2, 3, 4] as Set<int>
     println(union(s, t), intersect(s, t), difference(s, t), difference(t, s))
     println(is_subset(s, t), is_subset(intersect(s, t), s), is_subset([] as Set<int>, s))
-    println(items(s), items(s)->map<(x: int): int => x * x>)
+    println(items(s), items(s)->map<func (x: int) => int { x * x }>)
     println(s == ([1, 2, 3] as Set<int>), s == t, s != t)
     let words = ['pear', 'apple', 'fig', 'apple'] as Set<string>
     println(words, words->contains<'fig'>, words->contains<'plum'>)

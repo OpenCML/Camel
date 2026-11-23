@@ -14,8 +14,8 @@
 
 func make(base: int): (y: int) => int {
     var acc = base * 3
-    let inner = (x: int): int => acc + x
-    return (y: int): int => inner(y) + 1
+    let inner = func (x: int) => int { acc + x }
+    return func (y: int) => int { inner(y) + 1 }
 }
 
 func main(): int sync {

@@ -1,5 +1,5 @@
 /**
- * A subscript that names a range on one dimension and a position on another (`m[:, 0]`): every
+ * A subscript that names a range on one dimension and a position on another (`m[.., 0]`): every
  * written dimension is one node of the core's -- the slice along the dimension written `:` and the
  * position on the dimension written `0` -- and each node names the axis the subscript wrote it on,
  * lowered from the last written dimension back so the axis of a dimension is the one the subscript
@@ -8,7 +8,7 @@
  * that and the call needs no conversion, while the same read on the first dimension would be the
  * first row, an `f32[3]`, which `column` refuses.
  *
- *   m = [[1, 2, 3], [4, 5, 6]];  m[:, 0] = [1, 4];  shape = [2];  sum = 5.0
+ *   m = [[1, 2, 3], [4, 5, 6]];  m[.., 0] = [1, 4];  shape = [2];  sum = 5.0
  */
 import { reshape, shape, sum } from tensor
 
@@ -19,7 +19,7 @@ func column(a: f32[2]): float {
 func main(): int sync {
     println('reached')
     let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    println(shape(m[:, 0]))
-    println("value={}"->format<column(m[:, 0])>)
+    println(shape(m[.., 0]))
+    println("value={}"->format<column(m[.., 0])>)
     return 0
 }

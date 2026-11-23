@@ -54,7 +54,7 @@ func main(): int sync {
     println('hello'->index_of<''> ?? -1, ''->index_of<''> ?? -1, ''->index_of<'a'> ?? -1)
     println('héllo'->index_of<'l'> ?? -1, 'hello'->index_of<'hello!'> ?? -1)
 
-    // a slice s[a:b] counts code points
+    // a slice s[a..b] counts code points
     show('slice', 'hello'[1:4])
     show('slice all', 'hello'[0:5])
     show('slice empty at end', 'hello'[5:5])

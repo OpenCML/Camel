@@ -37,6 +37,7 @@
 #include "camel/core/type/text.h"
 #include "camel/core/type/tree.h"
 #include "camel/utils/type.h"
+#include "graph/gc_graph_view.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -444,8 +445,11 @@ void addCotangentTo(WalkContext &ctx, gc_node_ref_t ref, gc_node_ref_t node) {
         hasCotangent[ref] = true;
         return;
     }
+    // The value's cotangent space is read off its type, which the view answers (`typeOf`); the walk
+    // holds the frozen function, so the face is made here rather than threaded through `WalkContext`.
+    const camel::graph::FrozenGraphAdapter face(*ctx.function);
     Type *addType            = nullptr;
-    const std::string addUri = addUriFor(ctx.function, ref, addType);
+    const std::string addUri = addUriFor(&face, ref, addType);
     // A space with one operator sums with it; an aggregate sums member by member (`sumOfCotangents`,
     // design principles 9.9), so `addUri` being empty is not the answer for a tuple or a struct --
     // only for a space that has neither an operator nor members.
@@ -912,11 +916,12 @@ gc_node_ref_t unitMemberOf(WalkContext &ctx, Type *unitType) {
 std::optional<size_t> unstatedParameterOfAnyInput(
     const WalkContext &ctx, std::span<const gc_node_ref_t> inputs,
     const std::vector<size_t> &portParameter) {
+    const camel::graph::FrozenGraphAdapter face(*ctx.function);
     const size_t paramCount =
-        ctx.function->funcType() != nullptr ? ctx.function->funcType()->normTypesCount() : 0;
+        face.funcType() != nullptr ? face.funcType()->normTypesCount() : 0;
     for (const gc_node_ref_t input : inputs) {
         if (const auto unstated = camel::transforms::unstatedParameterBehind(
-                ctx.function, input, portParameter, paramCount, ctx.book.nodeCount);
+                &face, input, portParameter, paramCount, ctx.book.nodeCount);
             unstated.has_value()) {
             return unstated;
         }

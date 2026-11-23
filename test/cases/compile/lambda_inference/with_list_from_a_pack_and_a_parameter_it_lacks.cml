@@ -15,7 +15,7 @@ func loss(): float {
 }
 
 func main(): int sync {
-    let g: GradientAux<<w: float> () => float> = <w, ...rest> (x) => (x, 1.0)
+    let g: GradientAux<<w: float> () => float> = func <w, ...rest> (x) { (x, 1.0) }
     println(`g ${g<2.0>()}`)
     return 0
 }

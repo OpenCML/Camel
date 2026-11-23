@@ -34,7 +34,7 @@ import { to_array } from bytes
 /// accumulator is the f64 rule already), so this is the independent reference: the one rounding
 /// into the element type is the caller's.
 func widened(xs: bf16[]): f64[] {
-    return xs->map<(x: bf16) => float(x)>
+    return xs->map<func (x: bf16) { float(x) }>
 }
 
 func main(): int sync {

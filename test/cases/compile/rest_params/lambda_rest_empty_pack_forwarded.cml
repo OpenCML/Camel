@@ -20,8 +20,8 @@ func add3(a: float, b: float, c: float = 0.0): float {
 }
 
 func main(): int sync {
-    let none: () => float = (...ys) => add3(1.0, 2.0, ...ys)
-    let one: (v: float) => float = (...ys) => add3(1.0, ...ys)
+    let none: () => float = func (...ys) { add3(1.0, 2.0, ...ys) }
+    let one: (v: float) => float = func (...ys) { add3(1.0, ...ys) }
     println('rest empty {}'->format<none()>)
     println('rest onemember {}'->format<one(5.0)>)
     return 0
