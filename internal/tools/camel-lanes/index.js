@@ -21,7 +21,7 @@ import path from 'node:path'
 // The row's config is merged over the defaults below, so there is no schema export here:
 // a plain object is not one, and the harness calls validate on the schema it is given.
 export const name = 'camel-lanes'
-export const inject = ['tools', 'systemPrompt', 'timer']
+export const inject = ['tools', 'systemPrompt', 'timer', 'webServer']
 
 const DEFAULTS = {
     repo: 'D:\\Projects\\Camel',
@@ -32,6 +32,12 @@ const DEFAULTS = {
     // "no stalled lane".
     lanesFiles: ['internal/lanes.md', 'docs/handover/lanes.cn.md'],
     fetch: true,
+    // The way in from outside. Off means no routes are registered at all, which is the safe
+    // default for a plugin that also runs where nobody asked for a door.
+    http: true,
+    // The session a network message lands in. Empty means "the single root, and refuse if there
+    // is more than one" -- a guess between two conversations is worse than a refusal.
+    sessionId: '',
 }
 
 // The gates the coordinator works to. Each one counts something that must not exceed a limit;
@@ -546,4 +552,138 @@ export function apply(ctx, rawConfig) {
     }
 
     ctx.effect(() => ctx.timer.interval(beat, Math.max(30, config.intervalSeconds) * 1000))
+
+    // A way in from outside. Two routes on the server that already serves the GUI, which is the
+    // whole point: no second listener, no second port, no second lifecycle to keep alive.
+    //
+    // The message route is not a new mechanism. It calls the same `sessionController.prompt` the
+    // composer calls when a person types, so a message arriving over the network becomes an
+    // ordinary turn with an ordinary user message -- nothing here can say anything the GUI could
+    // not, and the transcript shows the same shape either way.
+    //
+    // What that costs is worth stating where the route is: a caller who can reach the port can
+    // start a turn and, through it, ask for anything this session can do. So the route is off
+    // unless a port is reachable at all, and it says who is calling by address in the response,
+    // because the address is the only identity a plain HTTP request carries.
+    const reachableFrom = (req) => {
+        const raw = req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : 'unknown'
+        const address = raw.replace(/^::ffff:/, '')
+        // Behind a proxy the address is the proxy's, and the peer is named in a header instead.
+        // Both are reported as what they are: an address proves a route, and a header proves
+        // nothing unless something upstream put it there.
+        const claimed = req.headers['tailscale-user-login']
+        return claimed ? { address, claimedBy: claimed } : { address }
+    }
+
+    const readBody = (req, limit = 64 * 1024) =>
+        new Promise((resolve, reject) => {
+            const chunks = []
+            let size = 0
+            req.on('data', (chunk) => {
+                size += chunk.length
+                if (size > limit) {
+                    reject(new Error(`body longer than ${limit} bytes`))
+                    req.destroy()
+                    return
+                }
+                chunks.push(chunk)
+            })
+            req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+            req.on('error', reject)
+        })
+
+    const answer = (res, status, value) => {
+        const body = JSON.stringify(value)
+        res.writeHead(status, {
+            'content-type': 'application/json; charset=utf-8',
+            'content-length': Buffer.byteLength(body),
+            'cache-control': 'no-store',
+        })
+        res.end(body)
+    }
+
+    // The session a network message lands in. Configured, or the one root this process has. A
+    // process with several roots is not guessed at: a message delivered to the wrong
+    // conversation is worse than a message refused.
+    const targetSession = () => {
+        if (config.sessionId) return config.sessionId
+        const service = ctx.get('agents')
+        const roots = service && typeof service.roots === 'function' ? service.roots() : []
+        if (roots.length === 1) return roots[0].id
+        return null
+    }
+
+    if (config.http !== false) {
+        ctx.effect(() =>
+            ctx.webServer.register({
+                kind: 'exact',
+                path: '/camel/state',
+                handler: (req, res) => {
+                    if (req.method !== 'GET') return answer(res, 405, { error: 'use GET' })
+                    state = read()
+                    text = render(state, silenced)
+                    answer(res, 200, {
+                        at: state.at,
+                        develop: state.develop,
+                        gates: gateValues(state),
+                        over: breaches(state).map((gate) => gate.key),
+                        lanes: state.branches,
+                        inbox: state.inbox,
+                    })
+                },
+            }),
+        )
+
+        ctx.effect(() =>
+            ctx.webServer.register({
+                kind: 'exact',
+                path: '/camel/say',
+                handler: async (req, res) => {
+                    if (req.method !== 'POST') return answer(res, 405, { error: 'use POST' })
+                    let text
+                    try {
+                        const raw = await readBody(req)
+                        const parsed = raw === '' ? {} : JSON.parse(raw)
+                        text = typeof parsed.text === 'string' ? parsed.text.trim() : ''
+                    } catch (error) {
+                        return answer(res, 400, {
+                            error: `body must be JSON {"text": "..."}: ${String(error && error.message ? error.message : error)}`,
+                        })
+                    }
+                    if (text === '') return answer(res, 400, { error: 'text is empty' })
+                    const sessionId = targetSession()
+                    if (sessionId === null) {
+                        return answer(res, 409, {
+                            error:
+                                'no single root session to deliver to; set sessionId in the plugin config or run this in a process with one root',
+                        })
+                    }
+                    const controller = ctx.get('sessionController')
+                    if (!controller || typeof controller.prompt !== 'function') {
+                        return answer(res, 503, { error: 'no session controller in this composition' })
+                    }
+                    try {
+                        await controller.prompt(
+                            {
+                                requestId: `net-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+                                sessionId,
+                                mode: 'queue',
+                                content: [{ type: 'text', text }],
+                            },
+                            new AbortController().signal,
+                        )
+                    } catch (error) {
+                        return answer(res, 502, {
+                            error: String(error && error.message ? error.message : error),
+                        })
+                    }
+                    answer(res, 202, {
+                        accepted: true,
+                        sessionId,
+                        from: reachableFrom(req),
+                    })
+                },
+            }),
+        )
+    }
 }

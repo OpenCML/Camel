@@ -5,3 +5,9 @@
         repo: 'D:\Projects\Camel'
         intervalSeconds: 300
         staleMinutes: 120
+        # Two routes on the server that already serves the GUI: GET /camel/state and
+        # POST /camel/say. Set http: false to register neither.
+        http: true
+        # The conversation a network message lands in. Empty means the single root session,
+        # and a refusal when there is more than one.
+        sessionId: ''
