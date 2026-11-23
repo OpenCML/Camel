@@ -29,7 +29,6 @@ export const inject = ['agents', 'webServer', 'tools', 'systemPrompt']
 
 const DEFAULTS = {
     logFile: path.join(os.homedir(), '.camel-oversight', 'log.jsonl'),
-    sessionId: '',
     sender: 'decision-maker',
     tailLimit: 400,
     turnsInState: 8,
@@ -76,6 +75,7 @@ export function apply(ctx, rawConfig) {
     // ---- durable log: deliveries and acknowledgements survive a restart ----------------------
     const delivered = new Map() // id -> {id, at, mode, text}
     const acks = new Map() // id -> {id, at, status, note}
+    let claimed = null // the session that called oversight_claim last
     const record = (entry) => {
         try {
             mkdirSync(path.dirname(config.logFile), { recursive: true })
@@ -91,6 +91,7 @@ export function apply(ctx, rawConfig) {
                 const entry = JSON.parse(line)
                 if (entry.kind === 'say') delivered.set(entry.id, entry)
                 if (entry.kind === 'ack') acks.set(entry.id, entry)
+                if (entry.kind === 'claim') claimed = entry.session
             } catch {
                 // A torn last line from a crash is skipped; the rest of the log still holds.
             }
@@ -117,23 +118,33 @@ export function apply(ctx, rawConfig) {
         }),
     )
 
-    const agentsNow = () =>
-        ctx.agents.list().map((agent) => ({
-            id: String(agent.id),
-            status: agent.status,
-            since: since.get(String(agent.id)) ?? null,
-        }))
-
-    // The session a message lands in: the configured one, or the only root agent. Several roots
-    // are refused rather than guessed between.
-    const target = () => {
-        if (config.sessionId) return ctx.agents.get(config.sessionId) || null
-        const subagents = ctx.get('subagents')
-        const roots = ctx.agents
-            .list()
-            .filter((agent) => !subagents || typeof subagents.rootOf !== 'function' || subagents.rootOf(agent) === agent)
-        return roots.length === 1 ? roots[0] : null
+    const headerOf = (agent) => (agent && agent.session && agent.session.header) || {}
+    const lastEventAt = (id) => {
+        const tail = tails.get(id)
+        return tail && tail.length ? tail[tail.length - 1].time : null
     }
+
+    // A root session is one that no other session spawned. Every one is listed in the state, with
+    // its directory, so the reader can see which sessions exist and which one is the target.
+    const roots = () => ctx.agents.list().filter((agent) => !headerOf(agent).parentSession)
+    const sessionsNow = () =>
+        roots().map((agent) => {
+            const id = String(agent.id)
+            return {
+                id,
+                cwd: headerOf(agent).cwd ?? null,
+                createdAt: headerOf(agent).createdAt ?? null,
+                status: agent.status,
+                since: since.get(id) ?? null,
+                lastEventAt: lastEventAt(id),
+                claimed: claimed === id,
+            }
+        })
+
+    // The session a message lands in: the one a request names, else the one that last called
+    // oversight_claim. A process holds many sessions and none is guessed at: with no claim, or a
+    // claimed session that has ended, there is no target and a delivery is refused.
+    const target = (named) => ctx.agents.get(named || claimed || '') || null
 
     // One line per recent turn: its start, the tools it called, and how it ended.
     const recentTurns = (id, count) => {
@@ -231,8 +242,8 @@ export function apply(ctx, rawConfig) {
         const id = agent ? String(agent.id) : null
         answer(res, 200, {
             at: Date.now(),
-            target: agent ? { id, status: agent.status, since: since.get(id) ?? null } : null,
-            agents: agentsNow(),
+            target: agent ? { id, cwd: headerOf(agent).cwd ?? null, status: agent.status, since: since.get(id) ?? null } : null,
+            sessions: sessionsNow(),
             recentTurns: id ? recentTurns(id, config.turnsInState) : [],
             unacknowledged: pending(),
             build,
@@ -258,8 +269,8 @@ export function apply(ctx, rawConfig) {
         const mode = body.mode === 'steer' ? 'steer' : 'queue'
         if (!id || !text) return answer(res, 400, { error: 'body must be {"id": "...", "text": "...", "mode"?: "queue"|"steer"}' })
         if (delivered.has(id)) return answer(res, 200, { id, duplicate: true, deliveredAt: delivered.get(id).at })
-        const agent = target()
-        if (!agent) return answer(res, 409, { error: 'no single root session; set sessionId in the plugin config' })
+        const agent = target(typeof body.session === 'string' ? body.session : '')
+        if (!agent) return answer(res, 409, { error: 'no session has claimed the channel (oversight_claim), and the request names none', sessions: sessionsNow() })
         const message = Object.freeze({
             id: randomUUID(),
             role: 'user',
@@ -276,6 +287,26 @@ export function apply(ctx, rawConfig) {
     })
 
     // ---- the model's side ------------------------------------------------------------------------
+    ctx.effect(() =>
+        ctx.tools.register({
+            name: 'oversight_claim',
+            description:
+                'Make this session the one the oversight channel delivers to and reports on. Call it once at the start of a coordinating session; a later claim by another session takes over.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+            output: {
+                schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+                render: (value) => value.result,
+            },
+            async execute() {
+                const agent = ctx.agents.currentInitiator()
+                if (!agent) return { result: 'no initiating session; nothing claimed' }
+                claimed = String(agent.id)
+                record({ kind: 'claim', session: claimed, at: Date.now() })
+                return { result: `the oversight channel now targets session ${claimed}` }
+            },
+        }),
+    )
+
     ctx.effect(() =>
         ctx.tools.register({
             name: 'oversight_ack',
@@ -309,6 +340,10 @@ export function apply(ctx, rawConfig) {
             name: 'camel-oversight',
             order: 950,
             text: () => {
+                // Only the target session is told about the channel; another session that happens to
+                // run in this process has nothing to acknowledge.
+                const aimed = target()
+                if (!aimed || ctx.agents.currentInitiator() !== aimed) return ''
                 const waiting = pending()
                 const head =
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +

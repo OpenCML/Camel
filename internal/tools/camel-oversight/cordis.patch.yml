@@ -2,9 +2,10 @@
     - id: camel-oversight
       name: '@local/camel-oversight'
       config:
-        # Where deliveries and acknowledgements are logged, one JSON object per line.
-        logFile: 'C:\Users\Zhenjie\.camel-oversight\log.jsonl'
-        # The session messages land in. Empty: the only root agent; several roots are refused.
+        # The session messages land in. Empty: whichever session last called `oversight_claim`.
+        # Several sessions and no claim is a refusal, not a guess.
         sessionId: ''
         # The ssh target of the build host whose load /oversee/state reports. Empty: not reported.
         buildHost: '88zjwei'
+        # Where deliveries, claims and acknowledgements are logged, one JSON object per line.
+        logFile: 'C:\Users\Zhenjie\.camel-oversight\log.jsonl'
