@@ -1,0 +1,19 @@
+// A `let` whose value does not state its type keeps its annotation: the printer drops the
+// annotation of a `Range` because `1..(n + 1)` is a `Range` by what `..` is (design principles
+// 5.4), and that reason does not hold for a literal of a named struct -- `{ x: 1, y: 2 }` is an
+// unnamed struct unless the declaration says which named type it is (design principles 5.2).
+//
+// This is the reading that keeps the dropped annotation of a range from being the dropped
+// annotation of everything: the widening is the interval's own, and a named type still says its
+// name where the value cannot say it.
+
+type Point = {
+    x: int,
+    y: int
+}
+
+func main() => int sync {
+    let p: Point = { x: 1, y: 2 }
+    println(p.x, p.y)
+    return 0
+}

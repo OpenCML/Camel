@@ -1,0 +1,22 @@
+// `std::cml` writes a `T?` as the value it holds (design principles 3.9): the payload is what the
+// value is, the type `T?` is a type the language writes, and the position boxes the payload again.
+// It is not a one-element tuple and not an empty one.
+//
+// This is the reading that keeps the printer's acceptance of `T?` from being too wide: what gets
+// written is the payload, so a payload the printer cannot write is still refused by the same check.
+// The empty `T?` is not this reading: it has no value to write, and the source that builds one is
+// refused -- see `nullable_null.cml`.
+
+func takes_int(a: int?) => int sync {
+    return 0
+}
+
+func takes_str(b: string?) => int sync {
+    return 0
+}
+
+func main() => int sync {
+    let a: int? = 3
+    let b: string? = 'q'
+    return takes_int(a) + takes_str(b)
+}
