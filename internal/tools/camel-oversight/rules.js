@@ -177,15 +177,22 @@ export const RULES = [
         },
     },
     {
+        // An idle coordinator with work open is the most expensive state there is: every lane it would
+        // have opened stands still. It is woken after a few minutes, and again every ten while it stays
+        // idle, with the items it could start on named, so the wake-up is a work list and not a nudge.
         id: 'coordinator-idle',
         level: 'wake',
-        hold: 15,
-        cooldown: 30,
-        check: ({ target, backlogOpen }) => {
+        hold: 3,
+        cooldown: 10,
+        check: ({ m, target, backlogOpen, now }) => {
             if (!target || target.status !== 'idle' || backlogOpen === 0) return null
+            const minutes = target.since ? Math.round((now - target.since) / 60_000) : null
+            const rows = m.backlog instanceof Map ? [...m.backlog.entries()] : []
+            const open = rows.filter(([, row]) => !row.done && !row.doing && !row.blocked).map(([id]) => id).slice(0, 8)
+            const doing = rows.filter(([, row]) => row.doing).map(([id]) => id).slice(0, 8)
             return {
                 key: 'idle',
-                text: `协调者会话空闲超过 15 分钟，而 backlog 还有 ${backlogOpen} 条待做或在做。照铁律继续：补派、催合并、跑闸门，不等人。`,
+                text: `协调者会话空闲${minutes !== null ? ` ${minutes} 分钟` : ''}，backlog 还有 ${backlogOpen} 条没做完。现在开工：先看在做的（${doing.join('、') || '无'}）有没有停着的车道，再从待做的（${open.join('、') || '无'}）补派，车道开到 6–8 条；催合并、跑闸门。不等人。`,
             }
         },
     },
