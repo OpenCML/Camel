@@ -1467,7 +1467,7 @@ dd1502dbf3558ab4 ok test/cases/compile/param_defaults/overload_ambiguous_name.cm
 b2bc1c782668a0c4 ok test/cases/compile/param_defaults/overload_default_hole.cml
 c28ea2cbcd8ecb88 ok test/cases/compile/param_defaults/overload_names.cml
 e58d5c7d22a75e07 ok test/cases/compile/param_defaults/overload_unknown_name.cml
-a0c5ce9d2e6c7006 ok test/cases/compile/param_defaults/positional_after_name.cml
+2a2d790fb1efb689 ok test/cases/compile/param_defaults/positional_after_name.cml
 2e95fffaabb5875f ok test/cases/compile/param_defaults/stdlib_group_names_differ.cml
 52c0eaa9cb7cdb14 ok test/cases/compile/param_defaults/stdlib_named_args.cml
 77521213742a39c6 ok test/cases/compile/param_defaults/stdlib_no_place_for_name.cml

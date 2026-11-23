@@ -725,6 +725,8 @@ class Formatter {
 
     std::any visitPairedValues(cst::PairedValues context);
 
+    std::any visitStrayPositional(cst::StrayPositional context);
+
     std::any visitPairedParams(cst::PairedParams context);
 
     std::any visitArgumentList(cst::ArgumentList context);
