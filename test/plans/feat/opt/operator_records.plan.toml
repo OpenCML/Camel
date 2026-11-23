@@ -1,0 +1,86 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+id = "opt.operator_records"
+order = 487
+tier = "fast"
+tags = ["feat", "compile", "graph_read"]
+desc = """
+The one reading the four node kinds make two steps. `graph_view.h` folds CAST, COPY, FILL and ACCS
+into `NodeKind::Oper` while the front end and the passes still build them, and `operatorOf` answers
+`kNoOper` for those four, so a caller that wants "which operator is this" writes
+`kindOf(ref) == NodeKind::Oper && operatorOf(ref) != kNoOper` today. `test::operator_records` walks
+**every** graph of a program, asks the view for every node it calls an OPER, and asks each of those
+which operator it names:
+
+    [OO] oper=N answered=M missing=K graphs=G ok=<0|1>
+
+`ok` is 1 only when N > 0. `M == N == 0` is what a probe that walked nothing prints, so an empty set
+does not read as agreement; a run that asked no OPER node says `ok=0` and the entry is red.
+
+**N is the denominator, and this flip does not move it.** A CAST, a COPY, a FILL and an ACCS are
+already reported as `NodeKind::Oper` (the adapter folds them), so turning them into stored OPER
+records raises `answered` and leaves `oper` where it is. That is the property the entries below pin:
+the four numbers are a baseline, `missing` goes to 0, and `oper`/`graphs` staying the same across
+that work is the proof that no node was dropped to make the ratio look better.
+
+Each node that names no operator is printed with the origin its construction point registered on it,
+which is the half a bare count cannot say -- not that something is missing, but who built it:
+
+    [OO] missing graph=<id> ref=<ref> origin=<label|none> at <file>:<line> norm=<n> with=<m>
+
+Today's six, across the four programs below: one member read with **no origin** (`norm=1 with=1`, the
+shape of an `access` call), two **copies** that carry the `gir.data` label of the constant they copy
+(`norm=1 with=0`), and three **static-expansion constructions** (`gir.static.comprehension.fill`,
+`gir.static.tuple.fill`; `norm=1 with=2`, the shape of a `fill` call). Conversions are already all
+answered (`missing=0`), which is the control: the readings do move, and they move by construction
+point, not by program.
+"""
+
+[[tests]]
+name = "operator_records.branch_graph"
+desc = "A branch graph, where almost everything is already flipped: 11 OPER nodes over 4 graphs, 10 of which name an operator. The one that does not is a **member read** -- one ordinary operand and one `with` argument is the shape `:op/access` declares -- built with **no origin at all**, so the run says what it is and not who built it. Its single unnamed node is the reason the two-step reading still exists on this program; `answered` reaching 11 is what deletes it."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::operator_records", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[OO] oper=11 answered=10 missing=1 graphs=4 ok=1", "[OO] built-by none=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "operator_records.member_reads"
+desc = "Struct and tuple member reads, by place and by name (`fields_and_access.cml`): 24 OPER nodes over 8 graphs, 22 of which name an operator. The two that do not are **copies**, and the label says why this is the one shape the origin cannot name: a copy node carries the `gir.data` origin of the constant it copies, not a `gir.copy` of its own (`norm=1 with=0` is an operand and no `with`). So the two front-end copy sites that never ask `:op/copy` -- declared since `prelude.cml:961` -- are visible here by their label rather than by a name of their own."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/fields_and_access.cml"
+args = ["${case}", "test::operator_records", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[OO] oper=24 answered=22 missing=2 graphs=8 ok=1", "[OO] built-by gir.data=2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "operator_records.constructions"
+desc = "Constructions (`comprehensions.cml`): 28 OPER nodes over 9 graphs, 25 answered. The three that are not are **static-expansion** constructions -- a comprehension's struct and a tuple, not the builder's ordinary `fillNodeOf` path -- each with one ordinary operand and two `with` arguments, the shape a `fill` call carries. This entry is why the origin matters: the three constructions the first survey counted as \"the builder's fill\" are here built by a path the builder's construction sites do not name."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehensions.cml"
+args = ["${case}", "test::operator_records", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[OO] oper=28 answered=25 missing=3 graphs=9 ok=1", "[OO] built-by gir.static.comprehension.fill=2 gir.static.tuple.fill=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "operator_records.conversions"
+desc = "The control: `conversion_functions.cml` converts both ways and every one of its 13 OPER nodes over 2 graphs names an operator (`missing=0`, `answered=13`). A conversion is the first of the four that the front end stopped building as a kind, so this entry says the reading can reach `M == N` on a program -- and that the other three entries' numbers are not a limit of the probe."
+kind = "behavior"
+case = "../../../cases/compile/casts/conversion_functions.cml"
+args = ["${case}", "test::operator_records", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[OO] oper=13 answered=13 missing=0 graphs=2 ok=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
