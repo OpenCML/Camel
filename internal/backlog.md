@@ -109,3 +109,12 @@
 |---|---|---|---|
 | `D-1123-52①` | camel-oversight 防漂移三层 + 掉线预案 + 背压（fsh-dev `1a8da86a2`），已合 `3bc124bfd` | — | done（待重载） |
 | `D-1123-52②` | `moduleNamed` 改用类型记的**声明模块引用**（原则 5.2），不再拿名字去几个集合里搜；同一笔删掉 `declaredName_` | `lane/range-ri` | doing（排 49 前） |
+
+## 2026-11-23 22:35 三笔裁定（`D-1123-52②` / `53` / `54`）
+
+| 编号 | 事 | 车道 | 状态 |
+|---|---|---|---|
+| `D-1123-52②` | `moduleNamed` 撤掉名字搜索，改用类型记的声明模块引用（原则 5.2）；四个集合删掉；`declaredName_` 同一笔删干净，历史进提交说明 | `lane/range-ri` | doing（排 49 前） |
+| `D-1123-53①` | 节点效应 = 算子声明的访问 ∪ 操作数带来的访问（原则 3.3）；删掉那个参数，两个 kind 不再分歧；粗标成 external 的高阶算子改声明，不在读法里开口子 | `lane/effects-declarations` | doing |
+| `D-1123-53②` | `git grep -nE '\.isPure\(\|hasExternalEffect\(' -- src \| grep -v 'operator_table\.'` 从 19 行迁到 0，两个公开接口删掉，不留重定向 | `lane/effects-declarations` | todo |
+| `D-1123-54` | 删就删干净：代码里不留指向已删东西的说明，也不留「为什么不用 X」的记录，历史只进提交说明 | — | done（规矩） |
