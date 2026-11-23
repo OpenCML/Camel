@@ -157,6 +157,77 @@ function planSetNames(list) {
     return fs.existsSync(list) ? fs.readFileSync(list, 'utf8').split('\n') : list.split(',')
 }
 
+/** A target as both sides spell it: trimmed, forward slashes, no trailing slash. */
+const normTarget = (s) => String(s).trim().replace(/\\/g, '/').replace(/\/+$/, '')
+const isPlanFileTarget = (s) => s.endsWith('.plan.toml')
+
+/**
+ * Does one target an entry measured cover one target this merge names?
+ *
+ * A directory covers itself and everything under it (`test/plans/feat` covers
+ * `test/plans/feat/modules/tensor`); a plan file covers itself and nothing else. Containment of the
+ * path, not string equality: the whole point of a superset baseline is that the entry names a wider
+ * set than the merge does, and two spellings of the same plans never match.
+ */
+function targetCovers(measured, wanted) {
+    const m = normTarget(measured)
+    const w = normTarget(wanted)
+    if (m === w) return true
+    if (isPlanFileTarget(m)) return false
+    return w.startsWith(`${m}/`)
+}
+
+/** This merge's selection, as the names it hands to the comparer. */
+function requestedTargets() {
+    return [...new Set(planSetNames(planSet).map(normTarget).filter(Boolean))].sort()
+}
+
+/** The entries the cache holds for this develop commit and this rule set, in a stable order. */
+function entriesAt(dir, sha, normal) {
+    if (!fs.existsSync(dir)) return []
+    const head = `${sha.slice(0, 12)}-`
+    const tail = `-v${normal}.jsonl`
+    return fs.readdirSync(dir)
+        .filter((n) => n.startsWith(head) && n.endsWith(tail))
+        .sort()
+        .map((n) => path.join(dir, n))
+}
+
+/** The targets an entry records, or null when the record does not say. */
+function plansOf(key) {
+    const meta = readWhere(key)
+    if (!meta || !Array.isArray(meta.plans_list)) return null
+    return meta.plans_list.map(normTarget).filter(Boolean)
+}
+
+/**
+ * The entry this merge may compare against.
+ *
+ * The exact key first -- one command, one entry, the same reading as before. When it is not there,
+ * the smallest entry at this develop commit whose targets *cover* this selection: a baseline measured
+ * once across the whole fast layer answers every merge that lands on that commit and selects
+ * something inside it, which is the difference between measuring a baseline per merge and measuring
+ * one when the tree moved.
+ *
+ * Coverage is checked target by target, and an entry that does not cover this selection is not a
+ * candidate at any size. That is the refusal `--probe` reports and the comparison repeats: a baseline
+ * that holds fewer plans than the merge selects would put every case of the missing plans in
+ * `added`, where a red is named and allowed, and a gate that allowed a new red because its baseline
+ * did not reach the plan would be the loose direction of the same mistake.
+ */
+function resolveBaseline() {
+    if (fs.existsSync(cacheKey)) return { key: cacheKey, exact: true, plans: plansOf(cacheKey) }
+    const wanted = requestedTargets()
+    let best = null
+    for (const key of entriesAt(cacheDir, develop, READING_NORMAL_VERSION)) {
+        const plans = plansOf(key)
+        if (!plans || plans.length === 0) continue
+        if (!wanted.every((w) => plans.some((m) => targetCovers(m, w)))) continue
+        if (!best || plans.length < best.plans.length) best = { key, exact: false, plans }
+    }
+    return best
+}
+
 /** The record beside an entry, or null: what was measured, when, and on which tree. */
 function readWhere(key) {
     const file = `${key}.where`
@@ -272,17 +343,29 @@ if (cacheDir) {
 // miss is 2, and the two words are part of the output because the caller branches on them.
 if (probeOnly) {
     if (!cacheKey) die('--probe needs --cache --develop <sha> --plans <file or comma list>: it answers about one key')
-    if (!fs.existsSync(cacheKey)) {
+    const found = resolveBaseline()
+    if (!found) {
+        const wanted = requestedTargets()
+        const known = entriesAt(cacheDir, develop, READING_NORMAL_VERSION)
+        // Which of this selection no entry at this commit covers, named: "measure it again" is useless
+        // without the targets the old measurement did not reach.
+        const missing = wanted.filter((w) => !known.some((k) => (plansOf(k) || []).some((m) => targetCovers(m, w))))
+        const detail =
+            known.length === 0
+                ? (fs.existsSync(cacheDir) ? '' : `; the cache at ${cacheDir} does not exist yet`)
+                : `; ${known.length} entry(ies) exist for that commit and none covers ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ` and ${missing.length - 3} more` : ''}`
         console.log(
-            `merge-readings: cache-miss: no baseline for ${develop.slice(0, 12)} under this plan set ` +
-                `(${path.basename(cacheKey)})` +
-                (fs.existsSync(cacheDir) ? '' : `; the cache at ${cacheDir} does not exist yet`)
+            `merge-readings: cache-miss: no baseline for ${develop.slice(0, 12)} covers this selection ` +
+                `(${wanted.length} target(s))${detail}`
         )
         process.exit(2)
     }
-    const meta = readWhere(cacheKey)
+    const meta = readWhere(found.key)
     const where = meta ? `, ${meta.cases} case(s), tree ${(meta.tree || 'not recorded').slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}` : ''
-    console.log(`merge-readings: cache-hit: ${path.basename(cacheKey)}${where}`)
+    const how = found.exact
+        ? ''
+        : ` (a superset: measured across ${found.plans.length} target(s), covers the ${requestedTargets().length} this selection names)`
+    console.log(`merge-readings: cache-hit: ${path.basename(found.key)}${where}${how}`)
     process.exit(0)
 }
 
@@ -324,16 +407,24 @@ if (storeFile && cacheKey) {
 }
 
 let baseFile = arg('--baseline')
+let baselineEntry = null
 if (cacheKey) {
-    if (!fs.existsSync(cacheKey)) {
+    baselineEntry = resolveBaseline()
+    if (!baselineEntry) {
         // A miss is not a failure: it is the cache telling the caller to measure once and store.
-        console.log(`merge-readings: cache miss for ${develop.slice(0, 12)} under this plan set (${path.basename(cacheKey)}); measure the plans on that commit and store them with --accept`)
+        console.log(`merge-readings: cache miss for ${develop.slice(0, 12)} covering this selection; measure the plans on that commit and store them with --accept`)
         process.exit(2)
     }
-    baseFile = cacheKey
-    const meta = readWhere(cacheKey)
+    baseFile = baselineEntry.key
+    const meta = readWhere(baseFile)
     if (meta) {
         console.log(`merge-readings: baseline ${meta.develop.slice(0, 12)} measured ${meta.measured_at} on ${meta.host}, ${meta.cases} case(s), normal=${meta.normal}, plans=${(meta.plans_list || []).length}`)
+    }
+    if (!baselineEntry.exact) {
+        console.log(
+            `merge-readings: that baseline is a superset measured across ${baselineEntry.plans.length} target(s); ` +
+                `this merge names ${requestedTargets().length}, so only its own plans are compared`
+        )
     }
 }
 if (!baseFile) {
@@ -347,10 +438,10 @@ if (!baseFile) {
 // put side by side and a match is a refusal, not a pass. This is why `--tree` is required with a
 // cache: the record is the only thing here that knows which tree the rows came from.
 if (cacheKey) {
-    const meta = readWhere(cacheKey)
+    const meta = readWhere(baseFile)
     const measured = meta && typeof meta.tree === 'string' && meta.tree ? meta.tree : null
     if (!measured) {
-        die(`the baseline ${path.basename(cacheKey)} does not record the tree it was measured on, so nothing proves it is not this tree: measure it again with --tree <sha> --accept`)
+        die(`the baseline ${path.basename(baseFile)} does not record the tree it was measured on, so nothing proves it is not this tree: measure it again with --tree <sha> --accept`)
     }
     if (!treeSha) {
         die('--cache needs --tree <sha>: the sha of the tree these rows were measured on, which the baseline is checked against')
@@ -363,6 +454,51 @@ if (cacheKey) {
 const base = readRowsFile(baseFile)
 if (base.version !== tree.version) {
     die(`the baseline was measured under normalization ${base.version} and this tree under ${tree.version}; a rule change makes two readings incomparable, so the baseline must be measured again`)
+}
+
+// --- only the plans this merge selects ---------------------------------------
+// A superset baseline holds every case of every plan it measured; this merge selected a few of those
+// plans and ran only them. Comparing the rest would call every case of an untouched plan "missing
+// from this run", which is the `unexplained` refusal -- for a plan this merge never ran and never
+// said it would. So the baseline rows are cut to the selection's own plan ids, and a selection whose
+// plans cannot be read as plan files is refused rather than cut wrongly: cutting too much hides a
+// case, and a hidden case is a red that was never compared.
+if (baselineEntry && !baselineEntry.exact) {
+    const ids = new Set()
+    const unreadable = []
+    for (const target of requestedTargets()) {
+        const files = planFilesOf(target)
+        if (files.length === 0) {
+            unreadable.push(target)
+            continue
+        }
+        for (const plan of files) {
+            const id = planIdOf(plan.file)
+            if (id) ids.add(id)
+            else unreadable.push(plan.rel)
+        }
+    }
+    if (unreadable.length > 0) {
+        die(
+            `the selection names ${unreadable.length} target(s) whose plan id could not be read (${unreadable.slice(0, 3).join(', ')}), ` +
+                'and the baseline is a superset: without the ids there is no way to tell which of its cases this merge selected, ' +
+                'so cutting it would compare a subset of the merge'
+        )
+    }
+    const before = base.rows.size
+    for (const name of [...base.rows.keys()]) {
+        if (!ids.has(name.split('/')[0])) base.rows.delete(name)
+    }
+    if (base.rows.size === 0) {
+        die(
+            `the baseline holds ${before} case(s) and not one belongs to a plan this merge selects ` +
+                `(${[...ids].slice(0, 3).join(', ')}): comparing it would compare nothing`
+        )
+    }
+    console.log(
+        `merge-readings: ${before - base.rows.size} case(s) of plans this merge does not select left out of the comparison; ` +
+            `${base.rows.size} remain, over ${ids.size} plan(s)`
+    )
 }
 
 const RED = (v) => v === 'fail'
@@ -460,6 +596,6 @@ console.log(
         `normal=${base.version}` +
         // The two shas on the line that carries the verdict: a reader who sees 0/0/0 has to be able to
         // see, without going back up the transcript, that the baseline and this run are two trees.
-        (cacheKey ? ` baseline_tree=${(readWhere(cacheKey)?.tree || '?').slice(0, 9)} this_tree=${treeSha.slice(0, 9)}` : ''),
+        (cacheKey ? ` baseline_tree=${(readWhere(baseFile)?.tree || '?').slice(0, 9)} this_tree=${treeSha.slice(0, 9)}` : ''),
 )
 process.exit(regressed.length > 0 || changed.length > 0 || addedRed.length > 0 || removedRedUnnamed.length > 0 ? 1 : 0)
