@@ -32,6 +32,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/type.h"
+#include "graph/graph_view.h"
 // The two payload readings that answer both spellings of a construction and of a member read
 // (`transforms/node_operator.h`): a node built as one kind says it in its body, and the call the
 // front end writes says it in its operands.
@@ -53,8 +54,8 @@ namespace camel::autodiff {
 
 namespace {
 
-namespace mm = camel::core::mm;
-namespace rt = camel::runtime;
+namespace mm  = camel::core::mm;
+namespace rt  = camel::runtime;
 namespace sem = camel::core::sem;
 using ::Modifier;
 using camel::core::aggregateElement;
@@ -463,8 +464,7 @@ std::vector<gc_node_ref_t> valueOrder(
         // own inputs do not reach would not be visited, and its gradient would be lost at the
         // loop's site without a diagnostic.
         if (kindOf(transaction, node) == GCNodeKind::Loop) {
-            for (gc_node_ref_t read :
-                 rt::LoopView(draft, node).externalInputs(false)) {
+            for (gc_node_ref_t read : rt::LoopView(draft, node).externalInputs(false)) {
                 if (!seen.contains(read) &&
                     regionMember(transaction, draft.nodeRegion(read), region)) {
                     stack.emplace_back(read, false);
@@ -618,16 +618,20 @@ std::vector<Type *> portTypesOf(FunctionType *type) {
     return types;
 }
 
-/// The types of the ports of `graph` (with ports, then norm ports), read from the port nodes.
-/// The function type of a graph does not always describe its ports: a branch arm takes what it
-/// reads as with ports under the type `() => T`, and a copy specialized to constant arguments
-/// keeps the type of the function it was copied from although the bound parameters are gone.
-/// Reading tangent positions off such a type drops gradients without any error.
-std::vector<Type *> portTypesOf(const GCGraph *graph) {
+/// The types of the ports of the graph a reader holds (with ports, then norm ports), read from the
+/// port nodes through the graph's read-only face. The function type of a graph does not always
+/// describe its ports: a branch arm takes what it reads as with ports under the type `() => T`,
+/// and a copy specialized to constant arguments keeps the type of the function it was copied from
+/// although the bound parameters are gone. Reading tangent positions off such a type drops
+/// gradients without any error.
+std::vector<Type *> portTypesOf(const camel::graph::GraphView &view) {
     std::vector<Type *> types;
-    for (auto ports : {graph->withPorts(), graph->normPorts()}) {
-        for (gc_node_ref_t port : ports) {
-            types.push_back(graph->node(port)->dataType());
+    for (const camel::graph::PortGroup group :
+         {camel::graph::PortGroup::Context, camel::graph::PortGroup::Normal}) {
+        for (const camel::graph::NodeRef port : view.ports(group)) {
+            // Interned types are shared, and the plan a pullback reserves takes them the way the
+            // rest of this transform does: as the same objects, not as owned ones.
+            types.push_back(const_cast<Type *>(view.typeOf(port)));
         }
     }
     return types;
@@ -707,9 +711,10 @@ struct PullbackPlan {
     TupleType *tangentsType     = nullptr;
     FunctionType *pullbackType  = nullptr;
     TupleType *forwardValueType = nullptr;
-    /// The clause the function being differentiated publishes, when it has one, for the forward graph
-    /// to publish in turn (same parameters, same body, so nothing is renumbered). The pullback does
-    /// not take it: it publishes `pure`, because the effect skeleton went into the forward half
+    /// The clause the function being differentiated publishes, when it has one, for the forward
+    /// graph to publish in turn (same parameters, same body, so nothing is renumbered). The
+    /// pullback does not take it: it publishes `pure`, because the effect skeleton went into the
+    /// forward half
     /// (`pureClause`). Kept by value: a plan outlives the draft its source was read from.
     std::optional<sem::ResourceSignature> sourceClause;
     TangentEligibility eligible = hasTangentType;
@@ -753,9 +758,9 @@ PullbackPlan makePlanTypes(
     plan.portTypes     = std::move(portTypes);
     plan.valueType     = valueType;
     plan.eligible      = eligible;
-    plan.sourceClause  = clause != nullptr ? std::optional<sem::ResourceSignature>(*clause)
-                                           : std::nullopt;
-    plan.tangentsType  = TupleType::create(std::move(tangents));
+    plan.sourceClause =
+        clause != nullptr ? std::optional<sem::ResourceSignature>(*clause) : std::nullopt;
+    plan.tangentsType = TupleType::create(std::move(tangents));
     plan.pullbackType =
         FunctionType::create(param_vec_t{}, param_vec_t{{dyType, false}}, plan.tangentsType);
     // What the pullback publishes, and therefore what the function value the forward hands out
@@ -765,7 +770,7 @@ PullbackPlan makePlanTypes(
     // touch anything", and two such calls in one region are refused as unordered although neither
     // writes (design principles 3.3: a direct call and a call through a function value read one
     // type).
-    plan.pullbackType = plan.pullbackType->withResources(pureClause());
+    plan.pullbackType     = plan.pullbackType->withResources(pureClause());
     plan.forwardValueType = TupleType::create(std::vector<Type *>{valueType, plan.pullbackType});
     return plan;
 }
@@ -1717,7 +1722,7 @@ void ForwardRewrite::expandKernelBodies() {
         }
         const std::vector<gc_node_ref_t> withInputs = copyOf(draft().withInputsOf(id));
         const std::vector<gc_node_ref_t> normInputs = copyOf(draft().normInputsOf(id));
-        const auto portTypes                        = portTypesOf(semantic);
+        const auto portTypes                        = portTypesOf(semantic->view());
         if (withInputs.size() + normInputs.size() != portTypes.size()) {
             // Not reachable through `#impl` today: the builder compares the kernel's signature
             // with the function's, `with` and ordinary parameters apart
@@ -2801,7 +2806,7 @@ void ForwardRewrite::rewriteClosureCall(
     gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
     gc_node_ref_t calleeValue) {
     FunctionType *type            = graph->funcType();
-    std::vector<Type *> portTypes = portTypesOf(graph);
+    std::vector<Type *> portTypes = portTypesOf(graph->view());
     for (gc_node_ref_t capture : graph->closureNodes()) {
         portTypes.push_back(graph->node(capture)->dataType());
     }
@@ -2920,7 +2925,7 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
         fail("found a call without a callee graph");
     }
     FunctionType *type     = callee->funcType();
-    const auto portTypes   = portTypesOf(callee);
+    const auto portTypes   = portTypesOf(callee->view());
     Type *valueType        = type->exitType();
     const bool carriesFlow = machineryTangentTypeOf(valueType) != nullptr && anyTangent(portTypes);
     if (!carriesFlow || callee->isMacro()) {
@@ -3589,8 +3594,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             return false;
         }
         if (kindOf(forwardTransaction_, read) == GCNodeKind::Loop) {
-            for (gc_node_ref_t inner :
-                 rt::LoopView(forward, read).externalInputs(false)) {
+            for (gc_node_ref_t inner : rt::LoopView(forward, read).externalInputs(false)) {
                 if (self(inner, self)) {
                     return true;
                 }
@@ -3708,8 +3712,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // active, so the loop must see what its regions read: otherwise the gradient of a
         // composite state is dropped at the projection without a diagnostic.
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop && !inputActive) {
-            for (gc_node_ref_t read :
-                 rt::LoopView(forward, node).externalInputs(false)) {
+            for (gc_node_ref_t read : rt::LoopView(forward, node).externalInputs(false)) {
                 if (readsActive(read, readsActive)) {
                     inputActive = true;
                     break;
@@ -3729,8 +3732,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 reads.end(),
                 forward.withInputsOf(node).begin(),
                 forward.withInputsOf(node).end());
-            for (gc_node_ref_t read :
-                 rt::LoopView(forward, node).externalInputs(false)) {
+            for (gc_node_ref_t read : rt::LoopView(forward, node).externalInputs(false)) {
                 reads.push_back(read);
             }
             for (gc_node_ref_t input : reads) {
@@ -3974,12 +3976,12 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         // from rather than about what it is: a sentence such as "the function is the result of
         // 'transforms:split'" would name a transform this engine knows nothing else about, so the
         // engine does not learn to read provenance -- the library's `grad` covers those shapes.
-        // What this engine can say about such a value by its content is the sentence below the switch: it is
-        // computed at run time, so which function it calls is not evident where it is called. A
-        // transform's own answer to "what is this function's derivative" is the library's rule --
-        // `lib/vjp/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the engine
-        // neither repeats that rule nor guesses at it. `break`, not a fallthrough: the cases below
-        // read the node as the kind they name, and an operator node is not one of them.
+        // What this engine can say about such a value by its content is the sentence below the
+        // switch: it is computed at run time, so which function it calls is not evident where it is
+        // called. A transform's own answer to "what is this function's derivative" is the library's
+        // rule -- `lib/vjp/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the
+        // engine neither repeats that rule nor guesses at it. `break`, not a fallthrough: the cases
+        // below read the node as the kind they name, and an operator node is not one of them.
         break;
     case GCNodeKind::Func:
         // A call that returns a function value is never retargeted: its callee is a graph.
@@ -4436,7 +4438,7 @@ void Backward::visitFill(gc_node_ref_t node) {
     if (built->fillKind != rt::GCFillKind::Tuple && built->fillKind != rt::GCFillKind::Struct) {
         fail("cannot differentiate through this kind of literal yet");
     }
-    Tangent moved    = std::move(gradients_[node]);
+    Tangent moved      = std::move(gradients_[node]);
     const auto &values = built->values;
     const auto &slots  = built->slots;
     for (size_t i = 0; i < values.size() && i < slots.size(); ++i) {
@@ -4514,7 +4516,7 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
     PullbackPlan plan = reserve(
         callee->name(),
         makePlanTypes(
-            portTypesOf(callee),
+            portTypesOf(callee->view()),
             callee->funcType()->exitType(),
             hasTangentType,
             &callee->funcType()->resources()));
@@ -4546,7 +4548,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     for (size_t i = 0; i < type->normTypesCount(); ++i) {
         normParams.emplace_back(type->normTypeAt(i), type->normIsVarAt(i));
     }
-    std::vector<Type *> portTypes = portTypesOf(graph);
+    std::vector<Type *> portTypes = portTypesOf(graph->view());
     for (gc_node_ref_t capture : copyOf(liftedDraft.closureNodes())) {
         Type *captured = typeOf(*lifted, capture);
         liftedDraft.removeClosureNode(capture);
@@ -4557,7 +4559,8 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     liftedDraft.setFuncType(FunctionType::create(withParams, normParams, type->exitType()));
     liftedDraft.setClosureType(nullptr);
     PullbackPlan plan = reserve(
-        graph->name(), makePlanTypes(std::move(portTypes), type->exitType(), hasTangentType, &clause));
+        graph->name(),
+        makePlanTypes(std::move(portTypes), type->exitType(), hasTangentType, &clause));
     pending_.push_back(
         Pending{
             .plan   = plan,
@@ -4737,8 +4740,7 @@ void Engine::build(Pending &pending) {
     // The forward graph runs the function's own body and hands the primal value back beside the
     // pullback, so it touches exactly what the function touches: the clause travels as it is, and
     // the parameters are the same positions, so nothing is renumbered.
-    FunctionType *forwardType =
-        FunctionType::create(withParams, normParams, plan.forwardValueType);
+    FunctionType *forwardType = FunctionType::create(withParams, normParams, plan.forwardValueType);
     if (plan.sourceClause && plan.sourceClause->mode == sem::ResourceSignature::Mode::Concrete) {
         forwardType = forwardType->withResources(*plan.sourceClause);
     }
@@ -4841,7 +4843,7 @@ LoopBodyPlan Engine::buildLoopBody(
     // the loop (Builder::collectLoopAppends). They come first, before the tape; the gradient
     // still flows through the states alone, so the backward pass below is seeded with the state
     // value, not with the whole tuple.
-    const gc_node_ref_t value  = view.nextState();
+    const gc_node_ref_t value = view.nextState();
     // The construction's kind, slots and values, whichever spelling the body wrote it in
     // (`fillPayloadOf`): its values are the states followed by the collections the builder gave
     // the loop, and the count of the latter is what the tape leaves out. They are read from the
@@ -4852,7 +4854,7 @@ LoopBodyPlan Engine::buildLoopBody(
         built.has_value() && built->fillKind == rt::GCFillKind::Tuple &&
         built->values.size() > stateCount && built->slots.size() == built->values.size()) {
         existingCollections = built->values.size() - stateCount;
-        existingComponents = built->values;
+        existingComponents  = built->values;
     }
     const uint32_t savedRegion = draft.insertRegion();
     draft.setInsertRegion(bodyRegion);
