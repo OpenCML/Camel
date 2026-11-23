@@ -81,3 +81,62 @@
 - **丙：transform 另造这个数组**（再一个原生算子或一段库函数）。等于把甲换个名字。
 
 本车道倾向甲（A 能单独落），但这条一旦定成乙，A 与 C 就得合成一笔。
+
+## 第四件（不是问，是一条该被记住的编译器规则空档）
+
+`Range` 的定义域函数（`map`、`filter`、`reduce`、`len`、`print`）本可以是普通函数 —— 参数是 `Range`，
+不撞任何已有类型。但它们**同名于算子组**，而这五个名字在 `stdlib/prelude.cml` 里**全是 `#op` 声明**：
+
+- `map` → `:mark/map_arr`（`:1116`），`filter` → `:mark/filter_arr`（`:1122`），
+  `reduce` → `:mark/reduce_arr`（`:1128`），`len` → `:struct/len_arr`（`:911`）/ `:struct/len_str`（`:905`）/
+  `:struct/len_bytes`（`:918`）/ `:coll/len`（`:1179`），`print`/`println` → `:io/println`（`:858`）。
+- **一条普通函数都没有**：四条 `len` 全部 `#op`，`len` 的 map/set 那条（`:1180`）也带 `#op(':coll/len')`。
+
+于是「给 `Range` 加同名重载」只有两种写法，而它们的**分界不在库里，在编译器**：
+
+- **甲：无 `#op` 的声明与同名算子组共存，按参数类型分派**。成立的话，`Range` 的五个函数就是
+  `prelude.cml` 一笔：`with <f: (item: int) => U> export func map::<U>(r: Range): U[] { … }`。
+- **乙：每条一个新的 `:mark/map_range` 之类算子**，C++ 注册加转调，与「换 `:struct/range` 的结果类型」
+  同一级的工作量。
+
+**要知道的是「甲允许不允许」这条规则本身**：一个无 `#op`、有函数体的声明，能否与一个已注册的算子组
+同名，并由重载解析（参数类型）而不是由名字优先次序来选。树上**没有先例**（`len` 的四条都是 `#op`），
+所以它只能靠一次编译验证，验证不出就只能默认乙 —— 而乙会把「库里加一个类型」变成「算子表加五条」。
+**验过了：甲不成立**（读数与红文见下），答案落在乙。
+
+这条空档不属于本车道：任何「给已有算子名的概念加一个库类型重载」的车道都会再撞上它。若答案是甲，
+值得在 `docs/design-principles.cn.md` 的命名一节写一句（算子名与普通函数名谁先、重载怎么分派）；
+若答案是乙，则「库里加类型」的代价要按算子计。本车道按「先试甲、红了转乙并把红文贴出来」走。
+
+### 那次跑：甲不成立
+
+在 `prelude.cml` 的 `range` 声明之后加了 `export type Range`、`to_range`、`to_array` 与七个无 `#op`
+的普通函数（`map`、`filter`、`reduce`、`len`、`is_empty`、`to_array`、`print`，转调同名的数组重载），
+在构建主机上跑 `test/plans/feat/compile/stream.plan.toml`：**既有用例一条都没有变红**（147/150，红的
+三条是为这条问题新加的探针），所以「同层声明共存」本身不炸；但**同一个模块自己的函数体里，普通函数
+把同名算子组整个顶掉**，`prelude` 于是自己编不过：
+
+```
+(prelude)out/latest/stdlib/prelude.cml:1075:15: [Error]: No matching function found for argument types: <> (int[]).
+    prelude::len: (r: Range) => int
+ (name=SemanticDiag::NoMatchingFunction, code=0x0300000F)
+(prelude)out/latest/stdlib/prelude.cml:1090:12: [Error]: No matching function found for argument types: <(item: int) => bool> (int[]).
+    prelude::filter: <f: (item: int) => bool> (r: Range) => int[]
+(prelude)out/latest/stdlib/prelude.cml:1103:17: [Error]: No matching function found for argument types: <> (int[]).
+    prelude::print: (r: Range) => int[]
+(range_value)test/cases/compile/stream/range_value.cml:6:1: [Error]: Cannot import module 'prelude': it has errors
+    (out/latest/stdlib/prelude.cml).
+```
+
+读法：`len(to_array(r))` 里的 `len`（参数是 `int[]`）解析到的是新的 `prelude::len: (r: Range) => int`，
+不是 `:struct/len_arr` —— 层 2（本模块自己的名字）里同名普通函数盖住了同名算子组。而**对外**（层 5，
+ambient）盖的方向相反：没有被导入的 `len(xs)` 仍是算子组（既有 147 条全绿就是这一条）。两个方向都不是
+「按参数类型分派」，而是「先按层选一个实体，选了就不再合并」（`names.cpp` 的五条层规则，只有层内才成
+重载集）。所以 `Range` 的同名函数只有乙：五条各是一个 `:range/…` 算子，`#op` 声明加内核，与 `len` 已有
+的四条 `#op` 声明同一个机制。代价：`map`/`filter`/`reduce`/`print` 的内核要么把 `ArgsView` 转调现成的
+数组内核，要么各写一份；`print` 还要内核走与 `:io/print` 同一条写路径。
+
+顺带两条同源的读数，都属同一次跑：`export type Range` 不在 ambient 层 —— 本车道那次的探针在没导入时
+报 `Unresolved type reference: 'Range'`，程序要写 `import { Range } from prelude` 才看得见它；而一个
+模块只要有错，导它的每个程序都拿到 `Cannot import module 'prelude'`，所以这条路上「库里有类型、程序里
+写不出来」和「库自己编不过」是同一个读数。
