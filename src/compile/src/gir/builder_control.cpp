@@ -142,17 +142,17 @@ node_handle_t Builder::fillNodeOf(
 
 node_handle_t Builder::memberReadNodeOf(
     node_handle_t value, Type *target, uint32_t at, const GCT::node_ptr_t &origin) {
-    // `access::<T, U>(at: int, x: T): U` reads a member by place: the aggregate's type is the
-    // value's and the member's type is the result, which are the call's two written type
-    // arguments, and the place comes first because the program wrote it -- a constant, so it is a
-    // DATA node rather than a value anything computes.
+    // `access::<T, U><at>(x: T): U` reads a member by place: the aggregate's type is the value's
+    // and the member's type is the result, which are the call's two written type arguments, and
+    // the place -- a constant the program wrote -- is the operator's compile-time parameter, so it
+    // goes into the call's `with` list and the value is the call's one ordinary operand.
     Type *aggregate = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
     if (aggregate != nullptr && target != nullptr) {
         const oper_group_ptr_t group = importedOperatorGroupNamed("access");
         if (group != nullptr) {
             const std::vector<StaticArg> statics(2);
             const auto op = group->resolveForCall(
-                {aggregate, target}, target, {}, {Type::Int64(), aggregate}, statics);
+                {aggregate, target}, target, {Type::Int64()}, {aggregate}, statics);
             if (op.has_value()) {
                 const data_ptr_t place =
                     tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(at));
@@ -161,8 +161,21 @@ node_handle_t Builder::memberReadNodeOf(
                 registerNodeOrigin(context_, placeNode, origin, "gir.data");
                 node_handle_t node = currGraph_->addOperNode(*op, 0);
                 stampPermissions(node);
-                linkNodes(LinkType::Norm, placeNode, node);
+                linkNodes(LinkType::With, placeNode, node);
                 linkNodes(LinkType::Norm, value, node);
+                // A member read's operands are what its declaration says: one value as the
+                // ordinary operand and the member as the `with` argument. A node that says
+                // `:op/access` and carries another count is refused here, where the node is
+                // built, rather than at execution.
+                const auto *signature = (*op)->funcType();
+                GUARD(
+                    signature != nullptr &&
+                        normInputsOf(node).size() == signature->normTypesCount() &&
+                        withInputsOf(node).size() == signature->withTypesCount(),
+                    std::format(
+                        "a '{}' member read takes one value and its member as a with argument, "
+                        "as its declaration says",
+                        (*op)->uri()));
                 return node;
             }
         }
@@ -175,17 +188,17 @@ node_handle_t Builder::memberReadNodeOf(
 
 node_handle_t Builder::memberReadNodeOf(
     node_handle_t value, Type *target, const std::string &key, const GCT::node_ptr_t &origin) {
-    // `access_key::<T, U>(key: string, x: T): U` reads the same member by name. The name is a
-    // constant of the program for the same reason the place is, and it is a different operator
-    // rather than a second rule of `access` because a graph that holds the URI has said which of
-    // the two reads it is (prelude.cml says why).
+    // `access_key::<T, U><key>(x: T): U` reads the same member by name. The name is a constant of
+    // the program for the same reason the place is, it is the operator's compile-time parameter,
+    // and it is a different operator rather than a second rule of `access` because a graph that
+    // holds the URI has said which of the two reads it is (prelude.cml says why).
     Type *aggregate = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
     if (aggregate != nullptr && target != nullptr) {
         const oper_group_ptr_t group = importedOperatorGroupNamed("access_key");
         if (group != nullptr) {
             const std::vector<StaticArg> statics(2);
             const auto op = group->resolveForCall(
-                {aggregate, target}, target, {}, {Type::String(), aggregate}, statics);
+                {aggregate, target}, target, {Type::String()}, {aggregate}, statics);
             if (op.has_value()) {
                 const data_ptr_t name = tt::as_shared<Data>(std::make_shared<StringData>(key));
                 node_handle_t keyNode  = currGraph_->addStaticDataNode(name);
@@ -193,8 +206,19 @@ node_handle_t Builder::memberReadNodeOf(
                 registerNodeOrigin(context_, keyNode, origin, "gir.data");
                 node_handle_t node = currGraph_->addOperNode(*op, 0);
                 stampPermissions(node);
-                linkNodes(LinkType::Norm, keyNode, node);
+                linkNodes(LinkType::With, keyNode, node);
                 linkNodes(LinkType::Norm, value, node);
+                // See the by-place builder above: the operand count is checked where the node is
+                // built, against the declaration that answered the call.
+                const auto *signature = (*op)->funcType();
+                GUARD(
+                    signature != nullptr &&
+                        normInputsOf(node).size() == signature->normTypesCount() &&
+                        withInputsOf(node).size() == signature->withTypesCount(),
+                    std::format(
+                        "a '{}' member read takes one value and its member as a with argument, "
+                        "as its declaration says",
+                        (*op)->uri()));
                 return node;
             }
         }
@@ -433,12 +457,14 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
 /// tuple, of exactly the part's type.
 ///
 /// A member read is an operator now (`:op/access_key` by name, `:op/access` by place): the member
-/// is the call's *first* ordinary operand, a constant the builder wrote there, and the value it
-/// reads is the second. The node-kind spelling says the same thing from its payload, with the value
-/// as its one ordinary input -- a graph built before the read had a kind of its own, or built by the
-/// shape fixture, still reads that way. Both spellings answer the same question, and the value
-/// operand is the last one either way, which is what tells the caller the read is of the value it
-/// asked about.
+/// is the operator's compile-time parameter and the call's `with` argument, a constant the builder
+/// wrote there, and the value it reads is the call's one ordinary operand -- the shape the
+/// declaration states (`__access_value__`, `builtin/operators/struct.cpp`: `norm.size() == 1`,
+/// `with.size() == 1`). The node-kind spelling says the same thing from its payload, with the value
+/// as its one ordinary input -- a graph built before the read was an operator still reads that way,
+/// and the two faces this lane reads (`GCGraph`, `GraphDraft`) both carry such graphs. Both
+/// spellings answer the same question, and the value operand is the ordinary one either way, which
+/// is what tells the caller the read is of the value it asked about.
 std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
     if (type == nullptr || node == nullptr) {
         return std::nullopt;
@@ -486,10 +512,11 @@ std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
             return std::nullopt;
         }
         const auto norm = normInputsOf(node);
-        if (norm.size() != 2) {
+        const auto with = withInputsOf(node);
+        if (norm.size() != 1 || with.size() != 1) {
             return std::nullopt;
         }
-        const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(norm.front()));
+        const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(with.front()));
         if (!member.has_value()) {
             return std::nullopt;
         }

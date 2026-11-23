@@ -681,25 +681,26 @@ holds the construction under.
 #### `access`
 
 ```camel
-access: (at: int, x: T) => U panic
+access: <at: int> (x: T) => U panic
 ```
 
 A member read as an ordinary operator: the ACCS node kind written as a call of the operator
 that does the same thing (plan 2.3, step 2). The position is a compile-time parameter of the
-node and an ordinary operand of the call: an `int` for the element of a tuple, a `string` for
-the field of a struct. It comes first because the compiler makes the node before it links the
-value the node reads (`lib/std/builtin/operators/struct.cpp`).
+operator and a `with` argument of the call: an `int` for the element of a tuple, a `string`
+for the field of a struct. The value the read reads is the call's one ordinary operand; the
+compiler puts the member in `with` and links the value as the call's operand
+(`lib/std/builtin/operators/struct.cpp`).
 
 A program writes a member read as `t[0]` or `s.x`, and those reach this operator through the
 language's own rules; the call form is the name a graph holds the read under.
 
 - Pure.
-- Example: `access::<(int, int), int>(0, (1, 2))` gives `1`
+- Example: `access::<(int, int), int><0>((1, 2))` gives `1`
 
 #### `access_key`
 
 ```camel
-access_key: (key: string, x: T) => U panic
+access_key: <key: string> (x: T) => U panic
 ```
 
 The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
@@ -709,7 +710,7 @@ it holds -- the operand's type would answer the same question, but a rule that h
 the type to know what it does is what the node kinds were.
 
 - Pure.
-- Example: `access_key::<{ x: int, y: int }, int>('y', { x: 1, y: 2 })` gives `2`
+- Example: `access_key::<{ x: int, y: int }, int><'y'>({ x: 1, y: 2 })` gives `2`
 
 ### Arrays
 
@@ -1137,7 +1138,7 @@ Text functions. A string is always valid UTF-8, and its length and indices count
 - A result that may not exist is `T?` (`index_of`, `strip_prefix`). A number that is not a
   code point is an error value (`from_codepoints`). An index outside the string is a fault.
 - Only what Camel cannot say about a string is native: code points as numbers and
-  letter case (cutting by code point is the subscript `s[a:b]` of the core). The rest is
+  letter case (cutting by code point is the subscript `s[a..b]` of the core). The rest is
   written here; `index_of` and `split` carry a native kernel under `#impl` for speed, with the same result as their bodies.
 
 ### Native primitives
@@ -1331,7 +1332,7 @@ s without the ASCII white space at both ends. Other white space, such as U+00A0,
 Binary data. `Bytes` is an immutable value of the core; a string is text and never holds
 arbitrary bytes, so the only crossing between the two is `encode` and `decode`.
 
-Length (`len`), concatenation (`a + b`) and cutting (`b[a:b]`) are the core's, as they are for
+Length (`len`), concatenation (`a + b`) and cutting (`b[a..b]`) are the core's, as they are for
 a string. What is here converts, and is native: a `Bytes` is a data block, and reading or
 building one needs the layout control the language does not show (design principles 10.4).
 

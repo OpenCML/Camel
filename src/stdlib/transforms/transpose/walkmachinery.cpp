@@ -826,20 +826,17 @@ void deliverCotangent(
     // about the value rather than a rule about the cotangent.
     if (const camel::runtime::GCNode *targetNode = ctx.function->node(target);
         targetNode != nullptr && nodeOperatorOf(*ctx.function, target) == NodeOperator::Accs) {
-        const auto readFrom = ctx.function->normInputsOf(target);
-        const auto body     = accsPayloadOf(*ctx.function, target);
-        // The value read is the last port in both forms (`access: (Int64, T) => ...`): a read
-        // written as a call states its place first, and that operand is no port of the arm.
+        const std::optional<MemberRead> read = memberReadOf(*ctx.function, target);
         const bool onAResidualPort =
-            !readFrom.empty() && std::any_of(
-                                     stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
-                                         return stopRef == readFrom.back();
-                                     });
-        if (body && onAResidualPort) {
-            auto &slot = (*arm.residualBack)[body->value];
+            read.has_value() && std::any_of(
+                                    stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
+                                        return stopRef == read->value;
+                                    });
+        if (read.has_value() && onAResidualPort) {
+            auto &slot = (*arm.residualBack)[read->place];
             slot       = sumOfCotangents(ctx, ctSpace, slot, node);
             ctx.os << "TRANSPOSE function=" << ctx.function->name()
-                   << " residual-return slot=" << body->value << " region=" << arm.oldRegion
+                   << " residual-return slot=" << read->place << " region=" << arm.oldRegion
                    << '\n';
             return;
         }

@@ -3835,18 +3835,20 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         return evalFill(act, ref, eval(act, norm.front()), slots, norm.subspan(1));
     }
     case execute::OperShape::Access: {
-        // `access::<T, U>(at, x)` by place, `access_key::<T, U>(key, x)` by name: the place or the
-        // name is the call's first ordinary operand, a constant the program wrote.
+        // `access::<T, U><at>(x)` by place, `access_key::<T, U><key>(x)` by name: the place or the
+        // name is the call's `with` argument, a constant the program wrote, and the value it reads
+        // is the call's one ordinary operand (`__access_value__`, builtin/operators/struct.cpp).
         const auto norm = g->normInputsOf(ref);
-        if (norm.size() != 2) {
+        const auto with = g->withInputsOf(ref);
+        if (norm.size() != 1 || with.size() != 1) {
             unsupported(
                 act,
                 std::format(
-                    "'{}' reads no value: a member read takes its place or its name and the value "
-                    "it reads",
+                    "'{}' reads no value: a member read takes its place or its name as a with "
+                    "argument and the value it reads",
                     uri));
         }
-        const Value position = eval(act, norm[0]);
+        const Value position = eval(act, with.front());
         MemberRead read;
         read.byName = uri == ":op/access_key";
         if (read.byName) {
@@ -3872,7 +3874,7 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
             }
             read.index = static_cast<size_t>(at);
         }
-        return evalAccs(act, ref, norm[1], read);
+        return evalAccs(act, ref, norm.front(), read);
     }
     case execute::OperShape::None:
         break;

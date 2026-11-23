@@ -894,27 +894,77 @@ class ForwardRewrite {
     // and every caller passed exactly `draft()`.
 
     /// Whether `node` reads a version a call handed on: an access node that takes a component past
-    /// the callee's value (callValueTypeOf).
+    /// the callee's value (callValueTypeOf). Either form of the read is one: the ACCS node, whose
+    /// place is in its body, and the operator `:op/access`, whose place is a `with` argument (a
+    /// constant the builder put there, `Builder::memberReadNodeOf`).
     bool readsCallVersion(gc_node_ref_t node) const {
-        // The read is asked of `accsPayloadOf`, which answers an ACCS node and a `:op/access` call
-        // alike; asking the kind alone answered "no" for every read the front end writes.
-        const auto read = transforms::accsPayloadOf(draft(), node);
-        if (!read.has_value()) {
+        if (kindOf(transaction_, node) == GCNodeKind::Accs) {
+            const auto payload = draft().payloadOf(node);
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                return false;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
+        }
+        if (kindOf(transaction_, node) != GCNodeKind::Oper) {
             return false;
         }
-        return read->accsKind == rt::GCAccsKind::TupleIndex && read->value >= 1;
+        const std::optional<uint32_t> place = operAccessPlaceOf(node);
+        return place.has_value() && *place >= 1;
+    }
+
+    /// The place an operator's member read takes, when `node` is `:op/access` by a constant place
+    /// and the graph has it: the constant the builder linked as the call's `with` argument.
+    /// nullopt for any other node, for a read by name, and for a place the program computes.
+    std::optional<uint32_t> operAccessPlaceOf(gc_node_ref_t node) const {
+        const auto payload = draft().payloadOf(node);
+        if (payload.size() < sizeof(rt::GCOperBody) ||
+            reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri() != ":op/access") {
+            return std::nullopt;
+        }
+        const auto with = draft().withInputsOf(node);
+        if (with.size() != 1) {
+            return std::nullopt;
+        }
+        const auto *place = draft().node(with.front());
+        if (place == nullptr || place->header.kind != GCNodeKind::Data ||
+            place->header.dataIndex >= 0) {
+            return std::nullopt;
+        }
+        const size_t slot = static_cast<size_t>(-place->header.dataIndex);
+        if (slot >= draft().staticSlots().size()) {
+            return std::nullopt;
+        }
+        const int64_t at = camel::core::rtdata::fromSlot<int64_t>(draft().staticSlots()[slot]);
+        if (at < 0) {
+            return std::nullopt;
+        }
+        return static_cast<uint32_t>(at);
     }
 
     /// The component a projection of a value reads, in either form the tree has: the ACCS node,
     /// and the member read that is an operator (`:op/access` by place, the URI prelude.cml
     /// declares for the read the programme wrote). nullopt for anything else, including a read by
     /// name -- which names a field of a struct and never a component of a tuple.
+    ///
+    /// The operator carries its place in its `with` list, a constant the builder put there, and
+    /// the value it reads is the call's one ordinary operand (`Builder::memberReadNodeOf`).
     std::optional<uint32_t> projectedComponentOf(gc_node_ref_t user) const {
-        const auto read = transforms::accsPayloadOf(draft(), user);
-        if (!read.has_value() || read->accsKind != rt::GCAccsKind::TupleIndex) {
+        const auto payload = draft().payloadOf(user);
+        if (kindOf(transaction_, user) == GCNodeKind::Accs) {
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                return std::nullopt;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            if (accs->accsKind != rt::GCAccsKind::TupleIndex) {
+                return std::nullopt;
+            }
+            return accs->value;
+        }
+        if (kindOf(transaction_, user) != GCNodeKind::Oper) {
             return std::nullopt;
         }
-        return read->value;
+        return operAccessPlaceOf(user);
     }
 
     /// The projection of `node`'s value: the access node that takes component `index` of it, or
@@ -4300,33 +4350,24 @@ void Backward::visitOper(gc_node_ref_t node) {
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {
-    // A member read states the value it reads last in both spellings -- the one ordinary input of
-    // an ACCS node, the second of a `:op/access` call -- so the value is read from the end. The
-    // place or the name comes from `accsPayloadOf`, which answers the body and the call alike: a
-    // node whose payload is not a member read at all (an OPER of some other operator, reached
-    // because the dispatch was widened) says so here instead of having its bytes read as one.
-    const auto norm = forward().normInputsOf(node);
-    if (norm.empty()) {
+    // A member read's shape is the declared one: one ordinary operand, the value, and the member
+    // as the call's `with` argument (`__access_value__`, builtin/operators/struct.cpp), while an
+    // ACCS node keeps the same two things in its body and its one ordinary input. `memberReadOf`
+    // answers both and names the value, so the value is not guessed from an operand's position --
+    // and a node that is not a member read at all (an OPER of some other operator, reached because
+    // the dispatch was widened) says so here instead of having its bytes read as one.
+    const auto read = transforms::memberReadOf(forward(), node);
+    if (!read.has_value()) {
         return;
     }
-    const gc_node_ref_t source = norm.back();
+    const gc_node_ref_t source = read->value;
     Type *sourceType           = typeOf(forwardTransaction_, source);
     if (!isAggregate(sourceType) || !active_.contains(source)) {
         return;
     }
-    const auto read = transforms::accsPayloadOf(forward(), node);
-    if (!read.has_value()) {
-        failAt(
-            forward().nodeOrigin(node),
-            std::format(
-                "the member read of '{}' states no place and no name, so the part it reads is "
-                "unknown and its gradient cannot be given to it{}",
-                sourceType->toString(),
-                whereIs(forward().nodeOrigin(node))));
-    }
-    size_t index = read->value;
-    if (read->accsKind == rt::GCAccsKind::StructKey) {
-        const auto field = tt::as_ptr<StructType>(sourceType)->findField(read->key());
+    size_t index = read->place;
+    if (read->kind == rt::GCAccsKind::StructKey) {
+        const auto field = tt::as_ptr<StructType>(sourceType)->findField(read->key);
         ASSERT(field.has_value(), "autodiff: struct field lookup failed.");
         index = *field;
     }

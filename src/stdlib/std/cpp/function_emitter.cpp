@@ -1819,27 +1819,28 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
     const auto *g     = frame.graph;
     const auto *node  = g->node(ref);
     const auto norm   = g->normInputsOf(ref);
+    const auto with   = g->withInputsOf(ref);
     // A member read is written two ways (plan 2.3): a node of the ACCS kind carries the place or
-    // the name in its own body, and the operator form (`access::<T, U>(at, x)` by place,
-    // `access_key::<T, U>(key, x)` by name, of the prelude) carries it as the call's first
-    // ordinary operand -- a constant the program wrote, which is the order the declaration writes.
-    // A record is a C++ aggregate and a tuple a C++ tuple, so neither has a field table at run
-    // time: the writer reads the constant here, on the ground the struct form of `:op/idx_str`
+    // the name in its own body, and the operator form (`access::<T, U><at>(x)` by place,
+    // `access_key::<T, U><key>(x)` by name, of the prelude) carries it as the call's `with`
+    // argument -- a constant the program wrote -- and the value it reads as the one ordinary
+    // operand. A record is a C++ aggregate and a tuple a C++ tuple, so neither has a field table at
+    // run time: the writer reads the constant here, on the ground the struct form of `:op/idx_str`
     // stands on. A name the struct does not have is the interpreter's own report, FieldNotFound,
     // at this position (`__access_value__`, lib/std/builtin/operators/struct.cpp), not a refusal.
     if (node->kind == GCNodeKind::Oper) {
         const std::string uri = operatorUri(g, ref);
-        if (norm.size() != 2) {
+        if (norm.size() != 1 || with.size() != 1) {
             refuse(
                 g,
                 ref,
                 std::format(
-                    "'{}' in {} reads no value: a member read takes its place or its name and the "
-                    "value it reads",
+                    "'{}' in {} reads no value: a member read takes its place or its name as a "
+                    "with argument and the value it reads",
                     uri,
                     describeFunction(g)));
         }
-        const gc_node_ref_t input = norm[1];
+        const gc_node_ref_t input = norm[0];
         const Type *type          = g->node(input)->dataType();
         size_t index              = 0;
         if (uri == ":op/access_key") {
@@ -1853,7 +1854,7 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
                         describeFunction(g),
                         typeName(type)));
             }
-            const auto key = stringConstantOf(g, norm[0]);
+            const auto key = stringConstantOf(g, with[0]);
             if (!key) {
                 refuse(
                     g,
@@ -1892,7 +1893,7 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
                         describeFunction(g),
                         typeName(type)));
             }
-            const auto *position = g->node(norm[0]);
+            const auto *position = g->node(with[0]);
             if (position == nullptr || position->kind != GCNodeKind::Data ||
                 position->dataType() == nullptr ||
                 position->dataType()->code() != camel::core::type::TypeCode::Int64) {

@@ -535,27 +535,30 @@ SegmentAnalysis analyzeRegions(
         changed = false;
         for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
             // A member read is admitted by what it is, not by the kind it wears: an ACCS node and
-            // a `:op/access` call are the same read, and `nodeCaseOf` answers both. The value it
-            // reads is the last ordinary input in both spellings, and the place or the name comes
-            // from `accsPayloadOf`. Measured on this tree: of 190 admissions, 26 are call-form
-            // reads that the kind test silently left out of the region.
+            // a `:op/access` call are the same read, and `nodeCaseOf` answers both. `memberReadOf`
+            // names the value and the member -- the declared shape is one ordinary operand for the
+            // value and the place or the name as the call's `with` argument
+            // (`__access_value__`, builtin/operators/struct.cpp). The member being a `with`
+            // argument is why the "no with input" test does not apply here: asked of every node it
+            // excluded every call-form read, which is the whole of what this block is for.
+            // Measured on this tree: of 190 admissions, 26 are call-form reads that the kind test
+            // silently left out of the region.
             if (nodes[id].eligible ||
                 transforms::nodeCaseOf(graph, id) != transforms::NodeCase::Accs ||
                 !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
                 !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
-                inChain(chain, id) || !graph.withInputsOf(id).empty())
+                inChain(chain, id))
                 continue;
-            const auto inputs = graph.normInputsOf(id);
-            if (inputs.empty() || !nodes[inputs.back()].eligible)
+            const auto access = transforms::memberReadOf(graph, id);
+            if (!access.has_value() || !nodes[access->value].eligible)
                 continue;
-            auto *sourceType   = graph.node(inputs.back())->dataType();
-            const auto access  = transforms::accsPayloadOf(graph, id);
-            if (sourceType->code() != ty::TypeCode::Tuple || !access.has_value() ||
-                access->accsKind != rt::GCAccsKind::TupleIndex)
+            auto *sourceType = graph.node(access->value)->dataType();
+            if (sourceType->code() != ty::TypeCode::Tuple ||
+                access->kind != rt::GCAccsKind::TupleIndex)
                 continue;
             auto *tuple = static_cast<ty::TupleType *>(sourceType);
-            if (access->value >= tuple->size() ||
-                tuple->typeAt(access->value) != graph.node(id)->dataType())
+            if (access->place >= tuple->size() ||
+                tuple->typeAt(access->place) != graph.node(id)->dataType())
                 continue;
             nodes[id].eligible = true;
             reasons[id].clear();

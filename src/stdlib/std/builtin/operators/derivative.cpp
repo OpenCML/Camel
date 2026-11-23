@@ -94,6 +94,16 @@ void requireInputs(const VjpCall &call, size_t count) {
     }
 }
 
+void requireWithInputs(const VjpCall &call, size_t count) {
+    if (call.withInputs.size() != count) {
+        throw std::runtime_error(std::format(
+            "Derivative of '{}' expects {} with inputs, got {}.",
+            call.uri,
+            count,
+            call.withInputs.size()));
+    }
+}
+
 template <typename F> void addVjp(VjpBuilder &b, const VjpCall &call) {
     requireInputs(call, 2);
     if (auto dy = b.gradientOf(call.output)) {
@@ -462,18 +472,19 @@ void scatterSliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
 
 // ---- the member read of an aggregate ----
 //
-// `access::<T, U>(at, x)` and `access_key::<T, U>(key, x)` read one member of an aggregate, and a
+// `access::<T, U><at>(x)` and `access_key::<T, U><key>(x)` read one member of an aggregate, and a
 // differentiated value passes through that read: the reverse of taking one member out is putting
 // the gradient back where the member stood, with the zero tangent in every other place. So the
 // read's gradient is the aggregate's tangent with `dy` at the member's position and nothing else
 // anywhere -- it is neither dropped nor handed to the aggregate whole.
 //
-// The place (`at`, an int) or the name (`key`, a string) is the call's first operand and a
-// compile-time constant, so which member is written is decided here, once; which spelling the call
-// used does not decide it, because that is `__access_value__`'s reading too: the operand's type
-// says whether the member is read by place or by name (prelude.cml has the two URIs).
+// The place (`at`, an int) or the name (`key`, a string) is the operator's compile-time parameter
+// and a `with` argument of the call, so which member is written is decided here, once; which
+// spelling the call used does not decide it, because that is `__access_value__`'s reading too: the
+// with argument's type says whether the member is read by place or by name (prelude.cml has the
+// two URIs).
 
-/// The member the constant operand `where` names, as an element index of `aggregate`.
+/// The member the constant with argument `where` names, as an element index of `aggregate`.
 std::optional<size_t> memberIndexOf(VjpBuilder &b, Type *aggregate, vjp_node_t where) {
     if (!isAggregate(aggregate)) {
         return std::nullopt;
@@ -582,7 +593,8 @@ vjp_node_t zeroTangentOf(VjpBuilder &b, Type *primal, vjp_node_t primalNode) {
 // A member read: the gradient of the member goes back to that member's position in the aggregate's
 // gradient, and the members that were not read get the zero tangent.
 void memberReadVjp(VjpBuilder &b, const VjpCall &call) {
-    requireInputs(call, 2);
+    requireInputs(call, 1);
+    requireWithInputs(call, 1);
     const std::optional<vjp_node_t> dy = b.gradientOf(call.output);
     if (!dy) {
         // Nothing reached the read: a member with no tangent of its own (an integer field), or a
@@ -590,8 +602,8 @@ void memberReadVjp(VjpBuilder &b, const VjpCall &call) {
         // definition (design principles 9.9), so there is no gradient to carry.
         return;
     }
-    Type *const aggregate              = b.nodeType(call.inputs[1]);
-    const std::optional<size_t> member = memberIndexOf(b, aggregate, call.inputs[0]);
+    Type *const aggregate              = b.nodeType(call.inputs[0]);
+    const std::optional<size_t> member = memberIndexOf(b, aggregate, call.withInputs[0]);
     if (!member) {
         throw std::runtime_error(std::format(
             "Derivative of '{}' cannot read the member it names: the place or the name is not a "
@@ -627,9 +639,9 @@ void memberReadVjp(VjpBuilder &b, const VjpCall &call) {
         fields.push_back(zeroTangentOf(
             b,
             aggregateElement(aggregate, *other),
-            b.addAccess(call.inputs[1], *other)));
+            b.addAccess(call.inputs[0], *other)));
     }
-    b.accumulateGradient(call.inputs[1], tangentAggregateOf(b, aggregate, fields));
+    b.accumulateGradient(call.inputs[0], tangentAggregateOf(b, aggregate, fields));
 }
 
 // A conversion between float widths: the gradient converts back.

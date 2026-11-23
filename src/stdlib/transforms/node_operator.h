@@ -117,22 +117,26 @@ inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) no
  * readings is holding a frozen graph or a draft, which is what every call site does.
  *
  * **The payload, the same question again.** `NotOne` means "not one of the four", so a caller that
- * only wants a yes/no keeps reading as a predicate. `fillPayloadOf` / `accsPayloadOf` are the
- * payload side of it, and they answer **both** forms: a FILL node carries the slot list in its body
- * and the values in its with-inputs, and a `fill` call carries the same two things as its own
- * operands -- the template first, then the values in the target type's layout order, which is the
- * slot list a construction needs. A member read is the same story: an ACCS node keeps the place or
- * the key in its body, and a `:op/access` / `:op/access_key` call keeps it as its first operand, a
- * constant the program wrote. So a reader asks for the payload and gets one answer, instead of
- * asking the kind and reading the bytes of a node that no longer has any -- which is what an OPER
- * node would give it, and "an OPER's bytes read as a FILL are some other number"
- * (`transpose/walk.cpp` used to guard that by hand).
+ * only wants a yes/no keeps reading as a predicate. `fillPayloadOf` is the payload side of it, and
+ * it answers **both** forms: a FILL node carries the slot list in its body and the values in its
+ * with-inputs, and a `fill` call carries the same two things as its own operands -- the template
+ * first, then the values in the target type's layout order, which is the slot list a construction
+ * needs. So a reader asks for the payload and gets one answer, instead of asking the kind and
+ * reading the bytes of a node that no longer has any -- which is what an OPER node would give it,
+ * and "an OPER's bytes read as a FILL are some other number" (`transpose/walk.cpp` used to guard
+ * that by hand).
  *
- * These two readings are the last place the kind was still asked, one layer below the case
- * (`nodeCaseOf` above answered the operator). They are also where a graph says which of the two
- * things a member read asks -- a place or a name -- so a copied read that took the wrong one would
- * read another member; `split_struct_field_read` records that defect: a keyed read copied as a
- * place indexed a `Struct` as a `Tuple` and the VM stopped at `idx < t->size()`.
+ * **A member read is asked of `memberReadOf`, and its shape is the declared one.** The declaration
+ * is the authority (`__access_value__`, `builtin/operators/struct.cpp`): one ordinary operand, the
+ * value, and the member -- a place or a name -- as the call's `with` argument (`norm.size() == 1`,
+ * `with.size() == 1`). An ACCS node keeps the same two things in its body and its one ordinary
+ * input, so the reader answers both spellings and says which question was asked
+ * (`MemberRead::kind`). Two defects are recorded here because this is where the shape is read: a
+ * reader that took the member from the ordinary operands was reading a shape nobody declared, and
+ * a reader that asked the kind alone saw an operator-spelled read as *no read at all* -- and a walk
+ * that does not see a member read does not project its cotangent, which is a wrong number rather
+ * than a refusal (`split_struct_field_read` is the other direction: a keyed read copied as a place
+ * indexed a `Struct` as a `Tuple` and the VM stopped at `idx < t->size()`).
  *
  * **What is deliberately not here.** `static_cast<int>(node->kind)` in the refusal readings stays
  * reading the kind: it is a reading of the graph as stored, quoted in a diagnostic, and changing it
@@ -311,15 +315,6 @@ struct FillPayload {
     size_t size() const noexcept { return values.size(); }
 };
 
-/// What a member read says: whether it reads by place or by name, and which.
-struct AccsPayload {
-    runtime::GCAccsKind accsKind = runtime::GCAccsKind::TupleIndex;
-    /// The place, when it reads by place; a read by name leaves it 0 and carries `keyName`.
-    uint32_t value = 0;
-    std::string keyName;
-
-    std::string_view key() const noexcept { return keyName; }
-};
 
 namespace payload_detail {
 
@@ -410,56 +405,80 @@ std::optional<FillPayload> fillPayloadOf(const Graph &graph, runtime::gc_node_re
     return payload;
 }
 
-/// The member read `ref` is, or nullopt when it is not one. Answers an ACCS node and a `:op/access`
-/// / `:op/access_key` call alike: the place or the name is the body's, or the call's first operand.
-template <typename Graph>
-std::optional<AccsPayload> accsPayloadOf(const Graph &graph, runtime::gc_node_ref_t ref) {
-    const auto *node = graph.node(ref);
-    if (node == nullptr) {
+/// A member read's answer, in the form a walk asks it: which member of which value. The read is
+/// written two ways and both are the same read -- the `ACCS` node (`GCAccsBody`: the kind, the place
+/// or the key) and the operator its declaration names (`:op/access` by place, `:op/access_key` by
+/// key, each carried as the call's `with` argument; `lib/std/prelude.cml`). A reader that looked at
+/// one spelling only saw an operator-spelled read as *no read at all* -- and a walk that does not
+/// see a member read does not project its cotangent, which is a wrong number rather than a refusal.
+struct MemberRead {
+    runtime::GCAccsKind kind = runtime::GCAccsKind::TupleIndex;
+    runtime::gc_node_ref_t value = runtime::kInvalidNodeRef; // the aggregate the member is read of
+    uint32_t place           = 0;                            // TupleIndex: which member
+    std::string key;                                         // StructKey: which member, by name
+};
+
+/// The member read `ref` is, whichever spelling wrote it, or nothing when it is not one -- or is not
+/// the shape its declaration states. A node like that is reported by name where it runs (the
+/// kernel's own reading of its operands), so this answers "not a read" here instead of a second
+/// opinion about it.
+///
+/// A template over the reader for the reason `fillPayloadOf` is one: the faces this directory reads
+/// answer `node`, `normInputsOf` and `withInputsOf`, and the payload is asked of `payload_detail`.
+template <typename Reader>
+inline std::optional<MemberRead> memberReadOf(const Reader &graph, runtime::gc_node_ref_t ref) {
+    const auto norm     = graph.normInputsOf(ref);
+    const auto *const record = graph.node(ref);
+    if (record == nullptr) {
         return std::nullopt;
     }
-    AccsPayload payload;
-    if (payload_detail::kindOf(node) == runtime::GCNodeKind::Accs) {
+    // An ACCS node carries the member in its body and the value as its one ordinary input.
+    if (payload_detail::kindOf(record) == runtime::GCNodeKind::Accs) {
         const std::span<const std::byte> bytes = payload_detail::bytesOf(graph, ref);
-        if (bytes.size() < sizeof(runtime::GCAccsBody)) {
+        if (bytes.size() < sizeof(runtime::GCAccsBody) || norm.empty()) {
             return std::nullopt;
         }
         const auto *body = reinterpret_cast<const runtime::GCAccsBody *>(bytes.data());
-        payload.accsKind = body->accsKind;
-        payload.value    = body->value;
-        payload.keyName  = std::string(body->key());
-        return payload;
+        MemberRead read{.kind = body->accsKind, .value = norm.front(), .place = body->value};
+        read.key = std::string(body->key());
+        return read;
     }
-    if (nodeOperatorOf(graph, ref) != NodeOperator::Accs) {
+    if (payload_detail::kindOf(record) != runtime::GCNodeKind::Oper ||
+        !payload_detail::hasPayloadOf(graph, ref)) {
         return std::nullopt;
     }
-    const auto norm = graph.normInputsOf(ref);
-    if (norm.size() != 2) {
+    // The operator the read is, and the member it names: the declaration says the member is the
+    // call's `with` argument and the value its one ordinary operand (`__access_value__`,
+    // builtin/operators/struct.cpp), so a call of another shape is not a read this answers.
+    const std::string_view uri = payload_detail::uriOf(graph, ref);
+    const bool byKey           = uri == ":op/access_key";
+    if (!byKey && uri != ":op/access") {
         return std::nullopt;
     }
-    const ::slot_t *constant = payload_detail::constantOf(graph, norm.front());
-    const auto *position     = graph.node(norm.front());
-    const auto *positionType = position == nullptr ? nullptr : payload_detail::dataTypeOf(position);
-    if (constant == nullptr || positionType == nullptr) {
+    const auto member = graph.withInputsOf(ref);
+    if (norm.size() != 1 || member.size() != 1) {
         return std::nullopt;
     }
-    // Which read this is, said by the type of the place it names: a name is text, a place a
-    // number. The URI says the same thing and this does not have to read it twice.
-    if (positionType->code() == camel::core::type::TypeCode::String) {
+    const ::slot_t *constant = payload_detail::constantOf(graph, member.front());
+    if (constant == nullptr) {
+        return std::nullopt;
+    }
+    MemberRead read{
+        .kind  = byKey ? runtime::GCAccsKind::StructKey : runtime::GCAccsKind::TupleIndex,
+        .value = norm.front()};
+    if (byKey) {
         const auto *text = camel::core::rtdata::fromSlot<::String *>(*constant);
         if (text == nullptr) {
             return std::nullopt;
         }
-        payload.accsKind = runtime::GCAccsKind::StructKey;
-        payload.keyName  = text->toString();
-        return payload;
+        read.key = text->toString();
+    } else {
+        const int64_t place = camel::core::rtdata::fromSlot<int64_t>(*constant);
+        if (place < 0) {
+            return std::nullopt;
+        }
+        read.place = static_cast<uint32_t>(place);
     }
-    if (positionType->code() == camel::core::type::TypeCode::Int64) {
-        payload.accsKind = runtime::GCAccsKind::TupleIndex;
-        payload.value    = static_cast<uint32_t>(camel::core::rtdata::fromSlot<int64_t>(*constant));
-        return payload;
-    }
-    return std::nullopt;
+    return read;
 }
-
 } // namespace camel::transforms
