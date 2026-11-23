@@ -55,6 +55,7 @@
 #include "camel/runtime/writings.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/phase_timer.h"
+#include "graph/graph_view.h"
 #include "src/stdlib/std/nvm/nodevm.h"
 #include "verify/translate.h"
 
@@ -393,7 +394,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     // published for it, which no safepoint moves.
     ::Function *when                           = rule != nullptr ? rule->when() : nullptr;
     const camel::runtime::Program *whenProgram = when != nullptr ? when->program() : call.program;
-    const camel::runtime::GCGraph *whenGraph   = when != nullptr ? when->graph() : call.graph;
+    const auto *whenGraph                      = when != nullptr ? when->graph() : call.graph;
     ASSERT(
         whenProgram != nullptr && whenGraph != nullptr,
         "A condition is a function of a rule value or the graph of an instance.");
@@ -509,7 +510,7 @@ constexpr size_t kCheckTupleCap = 64;
 /// program's own side, and the types a `check` given a program adds to its candidate set.
 std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
     std::vector<Type *> types;
-    for (const camel::runtime::GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (isRuleSide(*graph)) {
             continue;
         }
@@ -1038,7 +1039,7 @@ Application applyRewrite(
     camel::runtime::RewriteStats total;
     total.fixpoint                  = true;
     camel::runtime::RewriteLog *log = record != nullptr ? &record->steps : nullptr;
-    for (camel::runtime::GCGraph *graph : camel::runtime::collectReachableGraphs(*base, subject)) {
+    for (auto *graph : camel::runtime::collectReachableGraphs(*base, subject)) {
         if (isRuleSide(*graph)) {
             continue;
         }
@@ -1536,7 +1537,7 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             // A generic rule has no sides of its own: what the value's type has is an instance,
             // and the question is about it. Which types the rule was instantiated at, and what came
             // of each, is what a reader of a generic rule needs to know.
-            const camel::runtime::GCGraph *graph = programNow()->graph(graphId);
+            const auto *graph = programNow()->graph(graphId);
             const Type *type = graph != nullptr ? graph->node(valueIndex)->dataType() : nullptr;
             if (type == nullptr) {
                 return answer(
@@ -1706,7 +1707,7 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
         camel::runtime::Budget budget;
         budget.rounds = rounds < 0 ? 0 : static_cast<size_t>(rounds);
-        for (camel::runtime::GCGraph *graph :
+        for (auto *graph :
              camel::runtime::collectReachableGraphs(*base, subjectOf(norm)->graph())) {
             if (isRuleSide(*graph)) {
                 continue;
@@ -3602,7 +3603,7 @@ bool outsideLicensedDomain(
     bool infinity = false;
     bool nan      = false;
     bool readOne  = false;
-    for (const camel::runtime::GCGraph *side : {&leftGraph, &rightGraph}) {
+    for (const auto *side : {&leftGraph, &rightGraph}) {
         if (side->normPorts().size() > values.size()) {
             continue; // the two sides do not take the same arguments
         }
@@ -3820,10 +3821,12 @@ double declaredUlpsOf(const camel::runtime::GCGraph &graph) {
     return ulps;
 }
 
-/// The index of `ref` among the graph's form ports, the function's parameters.
-std::optional<size_t>
-portIndexIn(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
-    const auto ports = graph.normPorts();
+/// The index of `ref` among the graph's form ports, the function's parameters. A port list is the
+/// graph's shape, so it is asked of the graph's face.
+std::optional<size_t> portIndexIn(
+    const camel::graph::GraphView &graph, camel::runtime::gc_node_ref_t ref) {
+    const std::vector<camel::graph::NodeRef> ports =
+        graph.ports(camel::graph::PortGroup::Normal);
     for (size_t i = 0; i < ports.size(); ++i) {
         if (ports[i] == ref) {
             return i;
@@ -3867,7 +3870,7 @@ std::vector<uint8_t> axisPortsOf(const camel::runtime::GCGraph &graph) {
         if (index >= inputs.size()) {
             continue;
         }
-        if (const auto port = portIndexIn(graph, inputs[index])) {
+        if (const auto port = portIndexIn(graph.view(), inputs[index])) {
             marks[*port] = 1;
         }
     }
@@ -3948,7 +3951,7 @@ void checkOneRule(
     const camel::runtime::Program *program  = source.program;
     const camel::runtime::GraphId lhsId     = source.lhs;
     const camel::runtime::GraphId rhsId     = source.rhs;
-    const camel::runtime::GCGraph *lhsGraph = program->graph(lhsId);
+    const auto *lhsGraph                    = program->graph(lhsId);
     const auto *lhsType                     = lhsGraph->funcType();
     const size_t params                     = lhsType->normTypesCount();
     const Type *resultType                  = lhsType->exitType();
