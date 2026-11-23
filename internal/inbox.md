@@ -46,3 +46,4 @@
   2. `lane/facts-tools`：`D-1123-29` 第 2 条，至今未开（`inspect --facts` 接线、每个 kind 一条与旧算法逐项对照的用例、调试器 `regionOuter` 改读 `ControlRegions`）。
   3. `lane/facts-effects`：`EffectSummary`、`graph.is_pure` 的读者改读 `core.effects`，删掉并行的旧计算；读数是改前后逐节点相同。
   4. `lane/notation-corpus`：语料里的旧返回类型写法（4,252 个 `.cml`）与残留的 `f..g` 用格式化器一次改写，然后从解析器删掉旧写法；与其他车道冲突时重跑格式化器，不手工解冲突。
+- **D-1123-32（催 `D-1123-30`、`D-1123-31`）** 两条派工合走已 50 分钟，车道表里仍没有 `range-value`、`3a-b5`、`facts-tools`、`facts-effects`、`notation-corpus` 五行；而 `cleanup`、`facts-b3`、`exec-plan-kind` 已合入还挂着。请开车道并改表；某条暂时开不了，在表里写明卡在哪。
