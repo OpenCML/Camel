@@ -59,11 +59,12 @@
 | D-1123-41① | 作者 fsh-dev | 解析器删旧写法（`f::<A = int>`、`f..g` 当组合），两处都给诊断 | `lane/parser-old-spelling` | done | 2026-11-23 22:05 | `859c41200f` |
 | D-1123-33 | 作者 fsh-dev | 效应三个来源变一处；18 处直读留着 | `lane/effects-one-source` | done | 2026-11-23 22:12 | `b0dffac32f` |
 | D-1123-34 | 作者 fsh-dev | 内核 include 标准库：`shaped_operators` 16→0，stdlib 头 12→4 行 | `lane/operator-uri` | done | 2026-11-23 22:02 | `3bc124bfdb` |
-| D-1123-36 | 作者 fsh-dev | 注释里的过程痕迹 + 检查脚本；旧认领残留可弃 | `lane/comment-traces` | doing | 2026-11-23 22:40 | |
+| D-1123-36 | 作者 fsh-dev | 注释里的过程痕迹 + 检查脚本；旧认领残留可弃 | `lane/comment-traces` | doing | 2026-11-23 23:00 | |
 | D-1123-48 | 作者 fsh-dev | `moduleNamed` 到不了 prelude：判据 0→1 | `lane/range-ri` | done | 2026-11-23 22:30 | `558819d0fa` |
 | D-1123-49 | 作者 fsh-dev | `__iter__` 改 `func operator for(r: Range): int..`；7.4.5 加 `for`；两条用例 | `lane/range-ri` | todo | 2026-11-23 22:40 | |
+| D-1123-41(b)(c) | 作者 fsh-dev | (b) `a..b` 产生 `Range`；(c) 下标按类型分派，删掉解析器切片特例 | `lane/parser-old-spelling` | doing | 2026-11-23 23:00 | |
 | D-1123-50 | 作者 fsh-dev | 协作机制 ①②③：装 0.2、删定时任务与 camel-lanes、skill 合成 `internal/collab` | — | done | 2026-11-23 22:15 | `ae0e9501b8` |
-| D-1123-50④ | 作者 fsh-dev | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感独占、pre-push 限合并位 | `lane/host-locks` | doing | 2026-11-23 22:40 | |
+| D-1123-50④ | 作者 fsh-dev | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感独占、pre-push 限合并位 | `lane/host-locks` | doing | 2026-11-23 23:00 | |
 | D-1123-52② | 作者 fsh-dev | `moduleNamed` 撤名字搜索，改用类型记的声明模块引用（5.2）；`declaredName_` 删干净 | `lane/range-ri` | doing | 2026-11-23 22:40 | |
 | D-1123-53① | 作者 fsh-dev | 节点效应 = 声明访问 ∪ 操作数访问（3.3）；删参数；粗标的高阶算子改声明 | `lane/effects-declarations` | doing | 2026-11-23 22:40 | |
 | D-1123-53② | 作者 fsh-dev | `.isPure(`/`hasExternalEffect(` 读者 19→0；两个公开接口删掉 | `lane/effects-declarations` | todo | 2026-11-23 22:40 | |
@@ -74,3 +75,4 @@
 | C-1123-52 | `lane/operator-uri` 实测 | 内核握着库的执行器：`executor.h` 2 include、`graph_runtime_support.h` 2 include | — | todo | 2026-11-23 22:25 | |
 | C-1123-53 | `lane/effects-one-source` 实测 | `scripts/check-effect-facts.mjs` 在干净 develop 上也 exit 2，从没读到过东西 | — | todo | 2026-11-23 22:25 | |
 
+| C-1123-55 | 作者 fsh-dev | 阶段 3a：`src/stdlib/{rewrite,transforms,autodiff}` 与 `src/kernel/rewrite` 直读 `GCGraph`/`GraphDraft` 的改走只读接口，一批一目录 | `lane/3a-blind` | doing | 2026-11-23 23:00 | |
