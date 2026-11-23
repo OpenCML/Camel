@@ -3131,15 +3131,15 @@ class Builder {
     /// write gives).
     node_handle_t visitLinkNode(
         const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store = std::nullopt);
-    /// `a..b` (the GCT link of `kCompositionCall`) and `a <> b` (`kComposeCall`): the composition
-    /// of two functions, or -- for `..` alone -- the interval of two integers, told apart by the
-    /// types of the two operands (design principles 4.2; the rule). `compositionOnly` is set for
-    /// `<>`, which has the composition reading and no other. `expected`
-    /// is the type of the position the whole expression stands in: a function type there is the
+    /// `a..b` (the GCT link of `kCompositionCall`) and `a <> b` (`kComposeCall`): the interval of
+    /// two integers, or the composition of two functions (design principles 4.2). The token the
+    /// program wrote decides which: `intervalOnly` is set for `..`, which is the interval and has
+    /// no other reading; `<>` is the composition and nothing else. `expected` is the type of the
+    /// position the whole expression stands in: for a composition, a function type there is the
     /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (
     /// section generic-operands-of-composition).
     node_handle_t
-    buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool compositionOnly = false);
+    buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool intervalOnly);
     /// The same, from two operands already built: the sequence position of a loop builds them
     /// itself, to know whether the interval is the loop's form before the rest of `..` is built.
     /// `opText` is the operator the program wrote, which the refusals name.
@@ -3147,8 +3147,8 @@ class Builder {
         const GCT::node_ptr_t &gct,
         node_handle_t lhs,
         node_handle_t rhs,
-        bool compositionOnly = false,
-        std::string_view opText = "..");
+        bool intervalOnly,
+        std::string_view opText);
     /// Whether `expr` is written `a..b`: the GCT link of `kCompositionCall`.
     static bool isIntervalExpr(const GCT::node_ptr_t &expr);
     /// Whether the two operands of `..` are the interval's: two integers, and nothing else
@@ -3159,7 +3159,7 @@ class Builder {
     /// `int[]` of `intervalValue` in every other position.
     node_handle_t
     intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr);
-    /// The composition `f..g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
+    /// The composition `f <> g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
     /// calls `f` and then `g`, both of them captures of it.
     node_handle_t composeFunctionValue(
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,

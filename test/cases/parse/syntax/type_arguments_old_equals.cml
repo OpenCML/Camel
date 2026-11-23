@@ -1,0 +1,10 @@
+/// A named type argument writes `:` (design principles 5.9): `pair::<A = int, B = string>` is not
+/// one, and the `=` is refused where the type list expects its `>`. What the list holds up to there
+/// is read as positional, so the token the reader has to change is the `=` and not one after it.
+
+func pair::<A, B>(a: A, b: B) => (A, B) { return (a, b) }
+
+func main() => int sync {
+    println(pair::<A = int, B = string>('s', 1))
+    return 0
+}

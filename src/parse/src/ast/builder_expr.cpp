@@ -1075,10 +1075,9 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 rangeExpr
     : additiveExpr (('..' | '<>') additiveExpr)*
     ;
-`..` keeps its two readings while the corpus still writes the composition that way, and `<>` is
-the composition alone (design principles 4.2). The two are different node kinds below, so the
-readings are decided by the token rather than left to the types of the operands: an interval and a
-composition are not one construct in the tree any more.
+`..` is the interval and `<>` the composition (design principles 4.2). The two are different node
+kinds below, so the readings are decided by the token rather than left to the types of the
+operands: an interval and a composition are not one construct in the tree.
 */
 Value Builder::visitRangeExpr(cst::RangeExpr context) {
     ENTER("RangeExpr");

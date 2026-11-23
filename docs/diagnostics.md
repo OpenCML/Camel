@@ -1122,7 +1122,7 @@ func ident(x: int) => int {
 }
 
 func main() => int sync {
-    let composed: (x: int) => int = ident..ident
+    let composed: (x: int) => int = ident <> ident
     let written: (x: int) => int = x => ident(ident(x))
     println(composed(3))
     return written(3)
@@ -1180,7 +1180,7 @@ An interval has two ends: 'a..' has no open form, and this '..' has no right-han
 **Help**
 
 ```text
-A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a..b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.
+A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a..b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. '<>' composes two functions and names both of them, so an operand a composition is missing is not an interval with one end.
 ```
 
 **Example** (`test/cases/parse/rulings/open_range.cml`, run as `camel test/cases/parse/rulings/open_range.cml`)
@@ -1191,7 +1191,7 @@ func dbl(x: int) => int { return x * 2 }
 
 func main() => int {
     let bounded = 1..4
-    let composed = inc..dbl
+    let composed = inc <> dbl
     let open = 1..
     return len(open)
 }
@@ -2311,7 +2311,7 @@ The type parameter '{0}' is declared twice at the head of this declaration.
 **Help**
 
 ```text
-A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T = int>').
+A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T: int>').
 ```
 
 **Example** (`test/cases/compile/generic_head/err_duplicate_head_param.cml`, run as `camel test/cases/compile/generic_head/err_duplicate_head_param.cml`)
@@ -7463,20 +7463,20 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-'..' takes two functions or two integers, and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'.
+'..' takes two integers and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'.
 ```
 
 **Help**
 
 ```text
-'..' has two readings and '<>' has one (design principles 4.2). Between two functions the construct is the composition, written `f <> g` -- and `..` still reads it while the corpus spells it that way: it is the lambda `(x) => g(f(x))`, so 'f' is unary and 'g' takes what 'f' returns. Between two integers, and with `..` alone, it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is. Nothing else is composed or bounded, so `1 <> 2` is refused where `1..2` is an interval.
+`..` is the interval `a..b` (design principles 4.2): the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is, and its two operands must be two `int`s. `<>` is the composition `f <> g`: the lambda `(x) => g(f(x))`, so 'f' is unary and 'g' takes what 'f' returns, and its two operands must be functions. Nothing else is composed or bounded, so `1 <> 2` is refused where `1..2` is an interval.
 ```
 
 **Example** (`test/cases/compile/stream/comp_operand_mismatch.cml`, run as `camel test/cases/compile/stream/comp_operand_mismatch.cml`)
 
 ```camel
-// A text is neither a function nor an integer: `...` has no reading for it (design principles
-// 4.2), so the compiler refuses the construct and names what it does take.
+// A text is not an integer, and `..` is the interval of two integers (design principles 4.2), so
+// the compiler refuses the two ends and names what it does take.
 
 func main() => int sync {
     let xs = 'a' .. 'b'
@@ -7496,13 +7496,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-'..' and '<>' compose a unary function on the left; '{0}' takes {1} parameters.
+'<>' composes a unary function on the left; '{0}' takes {1} parameters.
 ```
 
 **Help**
 
 ```text
-The composition `f <> g` (written `f..g` while the corpus spells it that way) is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.
+The composition `f <> g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.
 ```
 
 **Example** (`test/cases/compile/stream/comp_operand_not_unary.cml`, run as `camel test/cases/compile/stream/comp_operand_not_unary.cml`)
@@ -7572,7 +7572,7 @@ None: choice: which instance the operand stands for is the writer's to say, and 
 **Help**
 
 ```text
-The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f <> g` (written `f..g` while the corpus spells it that way) is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident <> ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int> <> ident::<int>`. Only a name that is generic is refused here; an operand of a type the construct cannot take stays CompOperandMismatch.
+The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f <> g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident <> ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int> <> ident::<int>`. Only a name that is generic is refused here; an operand of a type the construct cannot take stays CompOperandMismatch.
 ```
 
 **Example** (`test/cases/compile/stream/comp_operand_generic.cml`, run as `camel test/cases/compile/stream/comp_operand_generic.cml`)
