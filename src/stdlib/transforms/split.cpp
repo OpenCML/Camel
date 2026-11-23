@@ -53,7 +53,7 @@ gc_node_ref_t branchConditionOf(const rt::GCGraph *graph, gc_node_ref_t join) {
 
 /// The node's data inputs: its norm inputs followed by its with inputs, in order (`dataInputsOf`
 /// below has the whole of it; the walk is written before it and needs the name).
-std::vector<gc_node_ref_t> dataInputsOf(const rt::GCGraph *graph, gc_node_ref_t ref);
+std::vector<gc_node_ref_t> dataInputsOf(const camel::graph::GraphView &view, gc_node_ref_t ref);
 
 /// What one half finds when it enters a region: which region, which arm of which branch, how many
 /// nodes live in it, and how many form ports it takes. This is the entrance a branch cut needs --
@@ -91,7 +91,7 @@ RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
         if (node->kind == rt::GCNodeKind::Brch) {
             ++walk.nestedBrchs;
         }
-        for (gc_node_ref_t input : dataInputsOf(graph, ref)) {
+        for (gc_node_ref_t input : dataInputsOf(graph->view(), ref)) {
             // A ref that is not a node of this graph is not in any region, and the region query no
             // longer answers the body for it: ask "is this a node" here (`containsNodeRef`), which
             // is the question, instead of leaning on a region query's fallback for a node that is
@@ -122,21 +122,13 @@ gc_node_ref_t ungated(const rt::GCGraph *graph, gc_node_ref_t ref) {
 /// The data ports of `ref`, in port order: the ordinary ones and then the context ones. The effect
 /// runs are not here on purpose -- a node that has one is refused, never copied without it.
 ///
-/// Read from the frozen graph, and not from `GraphView`: a joined BRCH is not a node of the view,
-/// and what a join carries out of its arms is one of its **with** ports. `walkRegion` walks every
-/// node of a region -- a join among them -- and counts what each reads from outside it, which is
-/// what a cut must carry; the walk that follows a value to the exit meets the join the same way. A
-/// face that answers nothing for a join would quietly drop those ports from both, so this one
-/// reader stays on the graph (`C-1123-17`, which names the same wall for the numbered walks).
-std::vector<gc_node_ref_t> dataInputsOf(const rt::GCGraph *graph, gc_node_ref_t ref) {
-    std::vector<gc_node_ref_t> inputs;
-    for (gc_node_ref_t input : graph->normInputsOf(ref)) {
-        inputs.push_back(input);
-    }
-    for (gc_node_ref_t input : graph->withInputsOf(ref)) {
-        inputs.push_back(input);
-    }
-    return inputs;
+/// One query, because the face answers the same list: the ordinary group and then the context one,
+/// which is the order this walk has always had. It answers a **JOIN** too, although a JOIN is not
+/// one of the face's kinds -- what a join carries out of its arms is one of its context ports and a
+/// cut has to carry it -- and `test::view_ports` pins that answer against the graph's own, node by
+/// node, which is what lets this function name no representation at all.
+std::vector<gc_node_ref_t> dataInputsOf(const camel::graph::GraphView &view, gc_node_ref_t ref) {
+    return view.predecessors(ref, camel::graph::EdgeKind::Data);
 }
 
 /// A FILL node that makes the tuple `type` out of `members`, in order: the static template is the
@@ -411,7 +403,7 @@ bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_nod
 /// `widen(n: int, x: float)` whose lifted list is `(int, float, (), float)`.
 std::vector<gc_node_ref_t>
 tangentArgumentsOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref) {
-    const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
+    const std::vector<gc_node_ref_t> all = dataInputsOf(graph.view(), ref);
     const size_t withCount               = graph.withInputsOf(ref).size();
     const size_t ordinary                = all.size() > withCount ? all.size() - withCount : 0;
     const size_t half                    = ordinary / 2;
@@ -445,7 +437,7 @@ pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_
     if (!read.has_value() || read->kind != rt::GCAccsKind::TupleIndex || read->place != 1) {
         return rt::kInvalidNodeRef;
     }
-    const std::vector<gc_node_ref_t> reads = dataInputsOf(&graph, ref);
+    const std::vector<gc_node_ref_t> reads = dataInputsOf(graph.view(), ref);
     // The value read is the node's last data port: a read written as a call states the place
     // first (`access: (Int64, T) => ...`), and a node of the ACCS kind has no other port.
     if (reads.empty() || !answersAPairAt(graph, program, reads.back())) {
@@ -518,7 +510,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
         while (!stack.empty()) {
             const gc_node_ref_t ref = stack.back();
             stack.pop_back();
-            for (gc_node_ref_t input : dataInputsOf(&lifted, ref)) {
+            for (gc_node_ref_t input : dataInputsOf(lifted.view(), ref)) {
                 if (input < nodeCount && beforeCut[input] == 0) {
                     beforeCut[input] = 1;
                     stack.push_back(input);
@@ -659,7 +651,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 const auto *lateCallee     = program != nullptr && rt::isValid(lateCalleeId)
                                                  ? program->graph(lateCalleeId)
                                                  : nullptr;
-                const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
+                const std::vector<gc_node_ref_t> arguments = dataInputsOf(lifted.view(), ref);
                 const size_t withArguments                 = lifted.withInputsOf(ref).size();
                 const size_t ordinary =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
@@ -749,7 +741,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                     found.push_back(ref);
                     continue;
                 }
-                const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
+                const std::vector<gc_node_ref_t> arguments = dataInputsOf(lifted.view(), ref);
                 // Which of those arguments are values is the callee's signature's answer, read
                 // from its type (`valuePortsOf`): the ports of `Lift<F>` whose partner is their own
                 // tangent space. `dataInputsOf` is the ordinary inputs followed by the context
@@ -809,7 +801,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 }
                 continue;
             }
-            for (gc_node_ref_t input : dataInputsOf(&lifted, ref)) {
+            for (gc_node_ref_t input : dataInputsOf(lifted.view(), ref)) {
                 if (input < nodeCount && visited[input] == 0) {
                     stack.push_back(input);
                 }
@@ -1050,7 +1042,7 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
                 program->graph(calleeId) != nullptr) {
                 callees.push_back(program->graph(calleeId));
             }
-            const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
+            const std::vector<gc_node_ref_t> all = dataInputsOf(graph.view(), ref);
             // The values the caller passes, read from the callee's signature (`valuePortsOf`), and
             // then the call's `with` arguments, which that reading does not name.
             const auto *callee =
@@ -1071,7 +1063,7 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
                 inputs.push_back(all[i]);
             }
         } else {
-            inputs = dataInputsOf(&graph, ref);
+            inputs = dataInputsOf(graph.view(), ref);
         }
         for (gc_node_ref_t input : inputs) {
             if (input < nodeCount && visited[input] == 0) {
@@ -1693,7 +1685,7 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
         // A projection of the loop's pair is the edge into the cell, and its component is what the
         // half reads. Any other node reading the loop itself would hold the cell's pair as one
         // value, which no half can be handed (`split` hands the components, not the pair).
-        const std::vector<gc_node_ref_t> inputs = dataInputsOf(function, ref);
+        const std::vector<gc_node_ref_t> inputs = dataInputsOf(function->view(), ref);
         bool readsTheCell                       = false;
         for (gc_node_ref_t input : inputs) {
             const rt::GCNode *source =
@@ -2094,7 +2086,7 @@ SplitGraph buildSplitGraph(
                     if (function->nodeRegion(r) != region) {
                         continue;
                     }
-                    for (gc_node_ref_t input : dataInputsOf(function, r)) {
+                    for (gc_node_ref_t input : dataInputsOf(function->view(), r)) {
                         const rt::GCNode *read = function->node(input);
                         if (read == nullptr || read->kind == rt::GCNodeKind::Data) {
                             continue; // a constant is not a value the cut has to carry
