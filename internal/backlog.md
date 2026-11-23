@@ -21,6 +21,7 @@
 | D-1123-68 | 作者 fsh-dev | 车道开到 6–8 条：视图补 JOIN 输入口、GraphView 文档与四缺口、Range 打印器与 map、名字解析合成重载集、槽表预算，不再按 load average 停派 | 多条 | done | 2026-11-23 23:50 | `72be170e8a` |
 | D-1123-71 | 作者 fsh-dev | CAST/COPY/FILL/ACCS 翻成普通 OPER 那一摞停在半路（无分支带着它）；重排车道，验收四种 kind 引用为 0 且视图不再需要两步读法 | `lane/kinds-to-oper` | doing | 2026-11-23 23:50 | |
 | D-1123-72 | 作者 fsh-dev | 补开车道；合 fsh-dev 七笔插件修复，车道少时请负责人重载 | 多条 | done | 2026-11-23 23:50 | `e492cdff07` |
+| D-1123-73 | 作者 fsh-dev | 合并脚本推送前断言两件：`git merge` 退出码为 0（不看输出文本）、`merge-base --is-ancestor <分支头> HEAD` 成立；任一不过就停、不提交、不推，并报哪条没过；合并说明附被合分支头哈希 | — | done | 2026-11-23 23:55 | `c27bcee9dc` |
 | C-1123-1 | `lane/stage2-frontend-oper` 的实测 | autodiff 没有 `:op/access_key` 的导数规则：`no derivative rule for operator ':op/access_key' of type 'float[4, 2]'`，tuple 那几处梯度算成 `(0.0)`；9 处（`transpose_tuple_component` 4、`transpose_loop_escape` 2、`transpose_no_tangent.tuple_member`、`jvp_loop.struct_state_is_lifted`、`transformer_step_gradient`、`stated_extents/sum_axis_in_a_training_step`） | 待派 | open | 2026-11-23 01:20 | — |
 | C-1123-2 | 同上 | `std::cpp` 不认识 `:op/access_key`：`uses the operator ':op/access_key' on a value of type 'P', which has n…`；`entry_args/cpp_struct_refused` 与 `feat/trans` 的 `print_shape`、`enum_types`、`recursive_enum_types` 共 4 处，另 `static_expansion/` 2 处 | 待派 | open | 2026-11-23 01:20 | — |
 | C-1123-3 | 同上 | 按 kind 数成员读的校验判据要改：`Error: field accesses changed:` 与 `the caller does not project the returned tuple: 0`，`port/fill metadata: PASS` 不再出现。**起因是闸门按 family 判而非按 kind 判**，判定改窄后本该绿的项翻了 | 待派 | open | 2026-11-23 01:20 | — |
