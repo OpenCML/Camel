@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
+
 """Every generator whose output is Camel source, handed back to the parser.
 
 The notation ruling of 2026-11-23 (design principles 4.4, 5.9) changed what a person writes:
