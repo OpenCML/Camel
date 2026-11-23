@@ -1039,9 +1039,7 @@ export func range(start: int, end: int, step: int) => int[] panic
 // A range is a value of its own type, not an array (design principles 5.4): `Range` writes the
 // three numbers that name it down, `to_array` is the one conversion from it to the integers it
 // names, and `to_range` is the constructor the interval `a..b` itself is built with (with a step
-// of 1). The functions a range shares with an `int[]` (`map`, `filter`, `reduce`, `len`, `print`)
-// are not here: a function of one of those names declared beside the operator group of the same
-// name is not an overload of it, it shadows it.
+// of 1).
 //
 // These names are written by a program only after `import { ... } from prelude`: the prelude's
 // types and its functions that are not operators are not brought along unasked. `to_range` is an
