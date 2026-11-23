@@ -130,6 +130,9 @@ function Stop-With {
     } else {
         Write-Host 'Nothing was merged and nothing was pushed.'
     }
+    # A refusal after the two plan runs is where the numbers matter most -- they are what the batch
+    # cost to learn this -- so the timing table is printed on the way out and not only on success.
+    if ($script:timings.Count -gt 0) { Write-BatchSummary }
     exit $Code
 }
 
@@ -173,7 +176,9 @@ function Write-BatchSummary {
     $total = ($script:timings | Measure-Object -Property Seconds -Sum).Sum
     if ($null -eq $total) { $total = 0 }
     Write-Host ("[batch]   {0,-30} {1,7:N1} min  ({2} run(s))" -f 'total', ($total / 60), $script:timings.Count)
-    Write-Host ("[batch] baseline {0} -> merged {1}; host load {2} at the start, {3} at the end" -f $script:baseShort, $script:mergeTip.Substring(0, 9), $script:loadStart, (Get-LoadAverage))
+    $tipShort = ''
+    if ($script:mergeTip) { $tipShort = $script:mergeTip.Substring(0, 9) }
+    Write-Host ("[batch] baseline {0} -> merged {1}; host load {2} at the start, {3} at the end" -f $script:baseShort, $tipShort, $script:loadStart, (Get-LoadAverage))
     Write-Host '─────────────────────────────────────────────────────────────────'
 }
 
@@ -618,32 +623,49 @@ try {
     $built.Merges | ForEach-Object { Write-Host ("  {0}  first parent {1}  {2}" -f $_.Sha.Substring(0, 9), $_.FirstParent.Substring(0, 9), $_.Lane.Short) }
 
     # --- 11. the push, from the merge worktree and nowhere else -------------
-    if (-not (Test-Path -LiteralPath $MergeWorktree)) {
-        $how = "The settings file's mergeWorktree names the tree that pushes develop; fix that key or pass -MergeWorktree."
-        Stop-With "the merge worktree $MergeWorktree does not exist" $how 2
-    }
-    $localDev = Invoke-Git $MergeWorktree @('rev-parse', '--verify', '--quiet', 'develop^{commit}')
-    if ($localDev.Code -eq 0 -and $localDev.Text -ne $base) {
-        $inBatch = Invoke-Git $MergeWorktree @('merge-base', '--is-ancestor', $localDev.Text, $script:mergeTip)
-        if ($inBatch.Code -ne 0) {
-            $how = "That develop carries commits this batch does not, so pushing the batch would leave it diverged.`n" +
-            "  Finish that push first (agents/dispatch.md 8.1: already merged and not pushed is more expensive`n" +
-            "  than not merged), then run this batch again -- a batch based on an older develop is not a`n" +
-            "  fast-forward. The merged tree is kept at $($script:mergeTree) ($($script:mergeTip)), and this is`n" +
-            "  the push it would have run:`n" +
-            "      git -C $MergeWorktree push origin $($script:mergeTip):develop"
-            Stop-With "the merge worktree's develop is $($localDev.Text.Substring(0, 9)) and the batch's first parent is $($script:baseShort)" $how 1
+    # `scripts/hooks/pre-push` allows `refs/heads/develop` from the tree the settings file names and
+    # from no other, so the push is made there (`<sha>:develop`, which is a fast-forward from the
+    # commit this batch measured against) and never from the merged tree, whose name the hook does
+    # not know.
+    function Get-PushVerdict {
+        if (-not (Test-Path -LiteralPath $MergeWorktree)) {
+            return [pscustomobject]@{ Ok = $false; Why = "the merge worktree $MergeWorktree does not exist; the settings file's mergeWorktree names the tree that pushes develop" }
         }
+        $localDev = Invoke-Git $MergeWorktree @('rev-parse', '--verify', '--quiet', 'develop^{commit}')
+        if ($localDev.Code -ne 0 -or $localDev.Text -eq $base) { return [pscustomobject]@{ Ok = $true; Why = '' } }
+        $inBatch = Invoke-Git $MergeWorktree @('merge-base', '--is-ancestor', $localDev.Text, $script:mergeTip)
+        if ($inBatch.Code -eq 0) { return [pscustomobject]@{ Ok = $true; Why = '' } }
+        # The branch pointer there carries commits this batch does not. The push below is still a
+        # fast-forward on origin, so it would be accepted -- and it would leave that checkout's
+        # `develop` diverged from origin, which is somebody else's work to reconcile. That is the one
+        # state a merge position must not create from a side lane, so it is refused and named.
+        $why = "That develop carries commits this batch does not, so pushing the batch would leave it diverged.`n" +
+        "  Finish that push first (agents/dispatch.md 8.1: already merged and not pushed is more expensive`n" +
+        "  than not merged), then run this batch again -- a batch based on an older develop is not a`n" +
+        "  fast-forward. The merged tree is kept at $($script:mergeTree) ($($script:mergeTip)), and this is`n" +
+        "  the push it would have run:`n" +
+        "      git -C $MergeWorktree push origin $($script:mergeTip):develop"
+        return [pscustomobject]@{ Ok = $false; Why = "the merge worktree's develop is $($localDev.Text.Substring(0, 9)) and the batch's first parent is $($script:baseShort)`n  $why" }
     }
+
+    $verdict = Get-PushVerdict
 
     if ($NoPush) {
         Write-Host ''
         Write-Host '[batch] -NoPush: everything was measured and recorded; nothing was pushed.' -ForegroundColor Yellow
+        if ($verdict.Ok) {
+            Write-Host "[batch]   a push would go from $MergeWorktree as:"
+        } else {
+            Write-Host '[batch]   and a push would be refused anyway:' -ForegroundColor Yellow
+            Write-Host "  $($verdict.Why)"
+        }
         Write-Host "[batch]   git -C $MergeWorktree push origin $($script:mergeTip):develop"
         $script:mergesPushed = $built.Merges.Count
         Write-BatchSummary
         exit 0
     }
+
+    if (-not $verdict.Ok) { Stop-With "the push was refused before it ran" $verdict.Why 1 }
 
     $remoteNow = ((& git -C $ToolTree ls-remote origin refs/heads/develop) -split "`t") | Select-Object -First 1
     if ($remoteNow -ne $base) {
