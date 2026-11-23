@@ -231,3 +231,19 @@ After `git worktree add`, copy the file:
 Copy-Item D:\Projects\Camel\internal\tools\camel-gate.local.json `
           <new worktree>\internal\tools\camel-gate.local.json
 ```
+
+## `patches/`：装/更新被补丁的第三方包后要重打
+
+`camel-oversight` 与 DSH 的 `dsh-git-panel` 都住在 profile 的 `node_modules` 里，而 `dsh-git-panel`
+每次读主检出的改动都跑 `git status --porcelain=v1 -z --untracked-files=all`。`git status` 默认刷新
+索引、拿 `index.lock`，于是它会把一次正在进行的合并挡成 `fatal: Unable to write index`。
+`internal/tools/patches/dsh-git-panel-optional-locks.patch` 给它的 `runner.run` 选项加上
+`GIT_OPTIONAL_LOCKS: "0"`。
+
+**装过或更新过 `dsh-git-panel` 之后要重打这个补丁**，否则 `index.lock` 会悄悄回来。重打是一次性的：
+
+```
+git -C C:\Users\<你>\.dsh\profiles\web\node_modules\@xbzbing\dsh-git-panel apply --unidiff-zero <patch>
+```
+
+上游还没修（提 issue 需要负责人点头）。
