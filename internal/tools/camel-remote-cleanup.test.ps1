@@ -200,12 +200,13 @@ if (-not $guard) {
     #
     # What each fake checkout is for:
     #   live-a   named by LIVE                                   -> kept by (a)
-    #   dead-b   absent, unlocked, unused, old                   -> removed
+    #   dead-b   absent, unlocked, unused, old, recorded         -> removed
     #   busy-c   absent but a run holds its per-checkout lock    -> kept by (c1)
     #   fresh-d  absent but written within ten minutes           -> kept by (c3)
     #   probe-f  absent but a process has its cwd inside         -> kept by (c2)
-    #   dead-e   absent, unlocked, unused, old                   -> removed
-    #   Camel.git / bin / x-test-tmp                             -> never candidates
+    #   dead-e   absent, unlocked, unused, old, recorded         -> removed
+    #   stray-g  absent, idle, old, but NO creation record       -> kept by (d) and named
+    #   Camel.git / bin / x-test-tmp / tmp / .records            -> never candidates
     $harness = @(
         'set -u',
         'T=$(mktemp -d)/camel-work',
@@ -219,10 +220,16 @@ if (-not $guard) {
         '    echo x > "$T/$1/file"',
         '    touch -d "2 hours ago" "$T/$1/file" "$T/$1"',
         '}',
-        'for d in live-a dead-b busy-c fresh-d dead-e probe-f; do mk $d; done',
+        '# the creation record a run writes when it creates a checkout (rule 12)',
+        'mkrec() { mkdir -p "$T/.records"; printf "%s\t%s\t%s\n" "test-run" "2026-11-24T00:00:00+08:00" "$T/$1" > "$T/.records/$1"; }',
+        'for d in live-a dead-b busy-c fresh-d dead-e probe-f stray-g; do mk $d; done',
+        'for d in dead-b dead-e; do mkrec $d; done',
         'touch "$T/fresh-d/file"',
         'mkdir -p "$T/Camel.git/objects"; printf "ref: refs/heads/main\n" > "$T/Camel.git/HEAD"',
         'mkdir -p "$T/bin" "$T/x-test-tmp"',
+        '# the cleanup root and its record are bookkeeping, not checkouts: both must survive the sweep',
+        'mkdir -p "$T/tmp/lane-20260101-000000/checkout"',
+        'touch -d "2 hours ago" "$T/tmp/lane-20260101-000000/checkout"',
         '# a live run holds its own checkout''s lock',
         'busykey=$(printf "%s" "$T/busy-c" | cksum | cut -d" " -f1)',
         'flock "/tmp/camel-tree-$busykey.lock" sleep 30 &',
@@ -230,7 +237,19 @@ if (-not $guard) {
         '# a process working inside probe-f',
         '( cd "$T/probe-f" && exec sleep 30 ) &',
         'prockpid=$!',
-        'sleep 0.3',
+        '# Wait until both are actually visible instead of sleeping a fixed 0.3 s: on a loaded build host',
+        '# (several lanes compiling) the fork lands after the sleep, the sweep correctly says "nothing',
+        '# uses probe-f", and the check that it did is what fails -- a flake that reads like a defect',
+        '# in the guard. 2026-11-24: this failed twice that way, then passed on a quieter minute.',
+        'i=0; lock_held=0; seen=0',
+        'while [ "$i" -lt 50 ]; do',
+        '    for p in /proc/[0-9]*; do',
+        '        [ "$(readlink "$p/cwd" 2>/dev/null)" = "$T/probe-f" ] && seen=1 && break',
+        '    done',
+        '    flock -n "/tmp/camel-tree-$busykey.lock" true 2>/dev/null || lock_held=1',
+        '    [ "$seen" = 1 ] && [ "$lock_held" = 1 ] && break',
+        '    sleep 0.1; i=$((i+1))',
+        'done',
         '# the harness itself must not look like it is working inside the fake root',
         'cd /tmp',
         '',
@@ -248,15 +267,20 @@ if (-not $guard) {
         'cleanup_host_checkouts "$T" "live-a Camel.git" "1" "Camel.git" > "$O/out1.txt" 2>&1',
         'reclaimed1=$reclaimed',
         'out=$(cat "$O/out1.txt")',
-        'for d in live-a busy-c fresh-d probe-f Camel.git bin x-test-tmp; do',
+        'for d in live-a busy-c fresh-d probe-f stray-g Camel.git bin x-test-tmp tmp .records; do',
         '    [ -d "$T/$d" ] && pass "kept $d" || bad "kept $d" "it was removed"',
         'done',
-        '[ ! -d "$T/dead-b" ] && pass "removed dead-b (gone, unlocked, unused)" || bad "removed dead-b"',
-        '[ ! -d "$T/dead-e" ] && pass "removed dead-e (gone, unlocked, unused)" || bad "removed dead-e"',
+        '[ ! -d "$T/dead-b" ] && pass "removed dead-b (gone, unlocked, unused, recorded)" || bad "removed dead-b"',
+        '[ ! -d "$T/dead-e" ] && pass "removed dead-e (gone, unlocked, unused, recorded)" || bad "removed dead-e"',
+        '[ ! -f "$T/.records/dead-b" ] && pass "the record goes with the checkout it describes" || bad "record removed"',
         '[ "$reclaimed1" = 1 ] && pass "the reclaim is reported" || bad "the reclaim is reported"',
         'case "$out" in *"keeping host checkout busy-c: a run holds its lock"*) pass "a held lock is named";; *) bad "a held lock is named" "$out";; esac',
         'case "$out" in *"keeping host checkout probe-f: a process is using it"*) pass "a process inside it is named";; *) bad "a process inside it is named" "$out";; esac',
         'case "$out" in *"keeping host checkout fresh-d: a file in it changed in the last 10 minutes"*) pass "a fresh checkout is named";; *) bad "a fresh checkout is named" "$out";; esac',
+        '# (d) the creation record: idle and old is not enough, the sweep must find a record',
+        'case "$out" in *"keeping host checkout stray-g: no creation record"*) pass "an unrecorded checkout is kept and named";; *) bad "unrecorded checkout kept" "$out";; esac',
+        '[ -d "$T/stray-g" ] && pass "the unrecorded checkout is still there" || bad "unrecorded checkout still there"',
+        '[ -d "$T/tmp/lane-20260101-000000/checkout" ] && pass "the cleanup root is not swept" || bad "cleanup root swept"',
         '',
         'kill $lockpid $prockpid 2>/dev/null || true',
         'wait 2>/dev/null || true',

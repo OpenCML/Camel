@@ -20,6 +20,8 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `camel-gate-config.ps1` | The loader the four scripts above use for their machine-local settings. |
 | `camel-remote-args.ps1` | The argument rules `camel-remote.ps1` applies before it pushes anything: comma-split lists (`-Plan`, `-AstOnly`, `-AstDrop`), the `--only`/`--drop` words built from them, and the refusal for a glob that names no `.cml` of this tree. Separated out because those rules are the part that used to fail silently on the host. |
 | `camel-remote-args.test.ps1` | Their test, run without a host: `pwsh -NoProfile -File internal/tools/camel-remote-args.test.ps1` prints `N checks, M failed` and exits 1 on a failure. |
+| `camel-cleanup.sh` | The cleanup door: a run's temporaries live under `~/camel-work/tmp/<lane>-<time>/` and are judged by the manifest the run wrote when it created them. `rm` accepts a path only when it is under that root **and** in a manifest. |
+| `camel-cleanup.test.ps1` | Its test: the six readings against a fake home (never the real one). `pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <alias>`. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
 
 ## The machine-local settings file
@@ -92,7 +94,7 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-UpdateAstHashes` | Re-record the front-end AST snapshot: runs `test/tools/parsecheck/check.py snapshot --update` on the host, before the plan, and writes `test/plans/feat/parse/golden/ast_hashes.txt` back into this tree. It is the only way a new `.cml` case reaches that record, because `-UpdateGolden` cannot (`frontend.ast_snapshot` is `tool = "python"` and the runner never passes it `--update`). Name the parse plan beside it to verify the record in the same call. The write-back refuses a record that loses a row whose `.cml` file this tree still has, and refuses a bulk re-record (no `-AstOnly`) that loses any row, so a re-record taken on a tree that is missing another lane's files cannot delete their rows. |
 | `-AstOnly <glob>[,...]` | With `-UpdateAstHashes`: name the cases the re-record rewrites. Commas split the list, so `-AstOnly 'a.cml,b.cml'` -- including what `pwsh -File` makes of `'a','b'` -- is two globs; repeating the parameter is a PowerShell binding error, and has to be written as one of those two forms. A glob that names no `.cml` of this tree is exit 2 before the push: a narrowing that selects nothing is a bulk re-record, which is exactly what the flag exists to prevent. |
 | `-AstDrop <path>[,...]` | With `-UpdateAstHashes`: a recorded path whose row this re-record may lose (a case that really is deleted). Each name is printed as it is dropped, and a name that no row was dropped for is printed too. Without it the write-back refuses the drop. |
-| `-Clean` | Delete this worktree's host checkout, build directory included, and stop. |
+| `-Clean` | Delete this worktree's host checkout, build directory included, and stop. Refuses (exit 3) what lives beside the checkouts: a bare repository, and the cleanup root's own bookkeeping (`tmp/`, `.records/`). |
 | `-StackTrace` | Diagnostic build with assertion stack traces. Its readings do not decide green or red. |
 | `-StateDir <dir>` | Override the settings file's `stateDir`. |
 | `-LocalConfig <file>` | Use that settings file instead of the one beside the script. |
@@ -141,6 +143,49 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Clean
 The header of the script states the rest as rules: the staging push, what the `-NoBuild` guard
 compares and why content rather than a commit, how a checker stage reports, why the plan's stderr is
 folded into its stdout, and the exact shape of the panel's state files.
+
+## Cleaning up: the record, not the guess
+
+Twice today a cleanup deleted something that had a user, and both times the criterion was the same
+sentence — *it looks like nobody is using it*:
+
+* a lane checkout still waiting for CI, deleted because `ahead==0 && status clean` cannot tell
+  "pushed and finished" from "pushed and working";
+* the shared staging bare `~/camel-work/Camel.git`, deleted by a lane clearing a temporary checkout.
+  Every lane pushes through that repository, and it looks exactly like a directory nobody owns.
+
+So rule 12 (`internal/collab/rules.md`) is not a convention here, it is a mechanism:
+
+| Where | What |
+|---|---|
+| root | `~/camel-work/tmp` — the only place a run may put a temporary checkout, replay tree or sandbox |
+| one run | `~/camel-work/tmp/<lane>-<time>/` |
+| record | `~/camel-work/manifests/<lane>-<time>.tsv` — **outside** the root, because clearing the root must not delete the record the clear is judged by |
+| checkouts | `~/camel-work/<name>` — the persistent per-worktree cache, which cannot live under the root because its build directory is reused across runs. Its creation record is `~/camel-work/.records/<name>`, written by the run that creates or takes over it. |
+
+`camel-cleanup.sh` is the only door a run's own temporaries may go out through, and it refuses
+everything else by construction:
+
+```bash
+# a run creates and records
+run=$(bash internal/tools/camel-cleanup.sh init my-lane --purpose "replay of the 2026-11-23 gate" \
+        | awk -F'\t' '$1=="runId"{print $2}')
+bash internal/tools/camel-cleanup.sh add "$run" ~/camel-work/tmp/$run/replay --kind replay-tree
+
+# a cleanup removes, and only this
+bash internal/tools/camel-cleanup.sh rm ~/camel-work/tmp/$run/replay
+bash internal/tools/camel-cleanup.sh prune "$run"          # every recorded path, then the run dir if empty
+```
+
+`rm` resolves `..`, an absolute spelling and every symlink to a real path **before** comparing, so
+`tmp/x/../../Camel.git` is judged as the path it is (outside the root, refused, printed) and not as a
+string that starts with the root. A path that is under the root but in no manifest is refused too:
+being under the root is not being mine. The manifest stays after a prune — it is the evidence.
+
+The host sweep applies the same idea to the persistent checkouts: it removes one only when
+`~/camel-work/.records/<name>` exists, on top of the three liveness readings it already took (a free
+per-checkout lock, no process inside, nothing written in ten minutes). A checkout with no record is
+named and left, and `-Clean` is the explicit way to reclaim it.
 
 ## `camel-build.ps1`
 
