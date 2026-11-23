@@ -4,12 +4,12 @@ using namespace namespace_lib
 
 namespace Foo {
     type Point = { x: int, y: int }
-    func new(x: int, y: int): Point {
+    func new(x: int, y: int) => Point {
         return { x: x, y: y }
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = Foo::new(1, 2)
     let q = tensor::ones::<f32>([2, 2])
     return 0

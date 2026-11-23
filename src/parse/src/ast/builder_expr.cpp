@@ -1073,15 +1073,21 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 
 /*
 rangeExpr
-    : additiveExpr ('..' additiveExpr)*
+    : additiveExpr (('..' | '<>') additiveExpr)*
     ;
+`..` keeps its two readings while the corpus still writes the composition that way, and `<>` is
+the composition alone (design principles 4.2). The two are different node kinds below, so the
+readings are decided by the token rather than left to the types of the operands: an interval and a
+composition are not one construct in the tree any more.
 */
 Value Builder::visitRangeExpr(cst::RangeExpr context) {
     ENTER("RangeExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
         string strOp        = context->child(i * 2 - 1)->text();
-        node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
+        const bool compose  = strOp == "<>";
+        node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(
+            compose ? ReservedDataOp::Compose : ReservedDataOp::Comp);
         setNodeTokenRangeByContext(dataNode, context);
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
         *dataNode << lhsNode << rhsNode;

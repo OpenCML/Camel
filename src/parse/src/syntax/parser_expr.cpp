@@ -237,17 +237,21 @@ void ParserImpl::parseRelational() {
     }
 }
 
-/// rangeExpr : additiveExpr ('..' additiveExpr)*
+/// rangeExpr : additiveExpr (('..' | '<>') additiveExpr)*
 /// The range of two numbers and the composition of two functions, one level: `1..n+1` is
-/// `1..(n+1)`, and `...` is looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
-/// composition).
-/// Inside a subscript the same token is the slice's separator, and `noRange_` is on there: the
+/// `1..(n+1)`, and both are looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
+/// composition by pipe).
+/// `..` is the interval, and it keeps its second reading as the composition while the corpus
+/// still spells it that way (`lane/notation-b3`); `<>` is the composition and has no other
+/// reading (design principles 4.2). The AST builder tells them apart by
+/// the operator token.
+/// Inside a subscript the `..` is the slice's separator, and `noRange_` is on there: the
 /// dimension reads `a..b` as two ends, not as a range value (see `parseSliceIndices`).
 void ParserImpl::parseRange() {
     const size_t m = mark();
     parseAdditive();
     bool any = false;
-    while (cur_ == TK::DotDot && !noRange_ && !panic_) {
+    while ((cur_ == TK::DotDot || cur_ == TK::LtGt) && !noRange_ && !panic_) {
         bump();
         parseAdditive();
         any = true;
@@ -931,9 +935,11 @@ void ParserImpl::parseAngledValues() {
 }
 
 /// typeArguments : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
-/// namedTypeArgument : IDENTIFIER '=' typeExpr
+/// namedTypeArgument : IDENTIFIER (':' | '=') typeExpr
 /// The arguments are all positional or all named (design principles 5.9): `f::<int, string>`
-/// or `f::<A = int, B = string>`.
+/// or `f::<A: int, B: string>`. The colon says the argument is named, as it does in a parameter
+/// and in a field; `=` is the older spelling, still read while the corpus is written that way
+/// (design principles 5.9).
 void ParserImpl::parseTypeArguments() {
     const size_t m = mark();
     bump(); // ::
@@ -941,7 +947,7 @@ void ParserImpl::parseTypeArguments() {
     bump(); // < (not an expression's with-argument list)
     {
         Scope scope(*this, false, open);
-        if (cur_ == TK::Identifier && peek(1) == TK::Assign) {
+        if (cur_ == TK::Identifier && (peek(1) == TK::Colon || peek(1) == TK::Assign)) {
             while (!panic_) {
                 const size_t named = mark();
                 // The name is not optional: `namedTypeArgument` is `IDENTIFIER '=' typeExpr`, and
@@ -961,7 +967,9 @@ void ParserImpl::parseTypeArguments() {
                     break;
                 }
                 bump();
-                eat(TK::Assign);
+                if (!eat(TK::Colon)) {
+                    eat(TK::Assign);
+                }
                 parseType();
                 close(named, NK::NamedTypeArgument);
                 if (cur_ != TK::Comma || peek(1) == TK::Gt)

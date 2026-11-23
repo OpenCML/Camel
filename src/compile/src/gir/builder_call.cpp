@@ -116,6 +116,14 @@ node_handle_t Builder::visitLinkNode(
         LEAVE("LINK");
         return composed;
     }
+    // `f <> g` (gct.compose): the composition and nothing else, so the interval reading is not
+    // offered here (design principles 4.2).
+    if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
+        gct->at(0)->name() == camel::core::kComposeCall) {
+        node_handle_t composed = buildComposition(gct, expectedResult, true);
+        LEAVE("LINK");
+        return composed;
+    }
     // An expression of literals only is computed now, exactly (design principles 5.1):
     // `1 + 2`, `2 ^ 10`, `0.1 + 0.2 == 0.3`. Its value takes the type this position expects,
     // and the default type of its kind when nothing does.

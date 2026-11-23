@@ -6,12 +6,12 @@ func combine_all::<T>(
     second: T[...],
     third: T[...],
     scale: T
-): T[...]
+) => T[...]
     when is_numeric::<T>() {
     return first + second + third
 }
 
 // A head that fits keeps the clauses on the signature's line.
-func add::<T>(a: T, b: T): T when is_numeric::<T>() {
+func add::<T>(a: T, b: T) => T when is_numeric::<T>() {
     return a + b
 }

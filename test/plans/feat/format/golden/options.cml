@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
   let msg = "hello"
   if true then {
     return 1
