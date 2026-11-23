@@ -659,7 +659,7 @@ bool Builder::handleKeyOf(
             return true;
         }
         const auto kind = nodeKindOf(node);
-        if (kind == runtime::GCNodeKind::Gate || kind == runtime::GCNodeKind::Copy) {
+        if (kind == runtime::GCNodeKind::Gate || isCopyNode(node)) {
             const auto in = draft.normInputsOf(value);
             if (in.empty()) {
                 return false;
