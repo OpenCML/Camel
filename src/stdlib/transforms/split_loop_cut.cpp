@@ -7,9 +7,9 @@
  * the entry point, and asks `readLoopCut` and `cutLoopGraph` from here.
  */
 
-#include "split_internal.h"
 #include "node_operator.h"
 #include "refusal_readings.h"
+#include "split_internal.h"
 
 namespace camel::transforms {
 
@@ -820,9 +820,9 @@ SplitGraph cutLoopGraph(
         draft.setReturnNode(answered, rt::GCReturnKind::Self);
     }
     group.encode();
-    const auto *forwardMade         = group.encoded(forwardId);
-    const auto *backwardMade        = group.encoded(backwardId);
-    built.residuals                 = cuts.size();
+    const auto *forwardMade  = group.encoded(forwardId);
+    const auto *backwardMade = group.encoded(backwardId);
+    built.residuals          = cuts.size();
     // `invariants` counts what the forward half takes *before* the loop -- the reading this cell
     // has always printed -- and `after` what it takes from the loop's result, printed only when
     // there is such a value, so that a cut that has none reads exactly as it did.
