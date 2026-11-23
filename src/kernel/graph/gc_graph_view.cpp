@@ -155,6 +155,8 @@ NodeRef FrozenGraphAdapter::exit() const {
     return static_cast<NodeRef>(ref);
 }
 
+std::string_view FrozenGraphAdapter::name() const { return graph_.name(); }
+
 std::uint32_t FrozenGraphAdapter::nodeSlotCount() const {
     return static_cast<std::uint32_t>(graph_.nodeCount());
 }
@@ -187,6 +189,21 @@ std::optional<::slot_t> FrozenGraphAdapter::constantOf(NodeRef ref) const {
         return std::nullopt;
     }
     return slots[index];
+}
+
+std::optional<std::uint32_t> FrozenGraphAdapter::staticIndexOf(NodeRef ref) const {
+    // The graph's own half of `dataIndex`: a negative one is the static area's index, and the
+    // value at it is what `constantOf` answers. A non-negative one is the execution plan's slot
+    // (section 13) and is not this face's.
+    const GCNode *node = graph_.node(static_cast<camel::runtime::gc_node_ref_t>(ref));
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataIndex >= 0) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(-node->dataIndex);
+}
+
+std::uint32_t FrozenGraphAdapter::staticSlotCount() const {
+    return static_cast<std::uint32_t>(graph_.staticSlots().size());
 }
 
 std::uint64_t FrozenGraphAdapter::originOf(NodeRef ref) const {

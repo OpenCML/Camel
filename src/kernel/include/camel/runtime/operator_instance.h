@@ -18,6 +18,7 @@
 
 #include "camel/core/operator_semantics.h"
 #include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
 
 #include <iosfwd>
 #include <optional>
@@ -31,10 +32,11 @@ namespace camel::runtime {
 /// one list, and for it `norm` is that list and `with` is empty. For every other operator the two
 /// are the node's own. A reader that hands arguments to a kernel, a derivative rule, a lowering
 /// or an index instance reads them here, not off the node's edge lists.
-struct KernelArguments {
-    std::vector<gc_node_ref_t> norm;
-    std::vector<gc_node_ref_t> with;
-};
+///
+/// The shape is the face's (`camel::graph::KernelArguments`): `GraphView::kernelArgumentsOf`
+/// answers the same thing off the view, and one definition is what keeps the two answers from
+/// ordering a kernel's arguments differently.
+using KernelArguments = camel::graph::KernelArguments;
 KernelArguments kernelArgumentsOf(const GCGraph &graph, gc_node_ref_t node);
 /// The same for a node of a graph being rewritten.
 KernelArguments kernelArgumentsOf(const class GraphDraft &draft, gc_node_ref_t node);

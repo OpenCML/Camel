@@ -12,11 +12,9 @@
 
  *   [GF] regions D/F exit D/F slots D/F node N D/F
  *        the graph's own facts: how many regions it has, which node it answers, the size of its
- *        static area, and the region one node is in. The static area is the one field of the two
- *        readings the view does not answer on purpose (the interface review took it off the face:
- *        which slot a value sits in is the execution plan's), so it is read from the two
- *        representations here -- the pass is comparing the representations, not asking a reader's
- *        question.
+ *        static area, and the region one node is in. The area's size is read from the two
+ *        representations here (the pass compares the representations); the view answers the same
+ *        number as `staticSlotCount`, and the `[GC]` lines below read it there.
  *   [NF] dead <id past the end> draft=null frozen=null
  *        an id that names no node answers nothing on both sides.
  *   [NF] erased <id> draft=null frozen=record
@@ -34,6 +32,27 @@
  *        same graph read twice has to be the same graph. It is the same check the encoder asks of
  *        every graph it writes, printed here so that a change in either adapter is a changed line
  *        in the fast layer, and the difference itself is printed when there is one.
+ *
+ *   [GC] name length <n> same=1 draft-empty=1
+ *        the label the graph was encoded with, read off the view on both sides: the frozen adapter
+ *        answers the graph's own name and a draft answers empty (a draft is not named until it is
+ *        encoded). `same=1` is the view's answer against `GCGraph::name`.
+ *   [GC] oper real <n> stored <n> same=1
+ *        `isOperRecord` against the stored kind: a node the view calls a real OPER record has to
+ *        be an OPER node of the graph and one with an operator, and the two counts have to be the
+ *        same number -- the four structural kinds fold into `NodeKind::Oper` and name no operator,
+ *        so `kindOf` alone would count them and this line would read `real 7 stored 3 same=0`.
+ *   [GC] args nodes <n> same=1
+ *        `kernelArgumentsOf` against `runtime::kernelArgumentsOf` for every record the graph holds,
+ *        both groups compared in order: one definition, two ways to ask it.
+ *   [GC] slots graph <n> view <n> same=1 draft <n> draft-view <n> draft-same=1
+ *        `staticSlotCount` against the size of each representation's static area on both sides.
+ *   [GC] static at <ref> index <i> same=1 value=1
+ *        `staticIndexOf` for one DATA constant: the index it answers is the graph's `-dataIndex`
+ *        on both sides, and `constantOf` at that node is the value at that slot.
+ *   [GC] caps name=1 oper=1 args=1 slots=1 index=1
+ *        the five relations above as one line, so a plan can pin the shape without one graph's
+ *        node numbers.
 
  * The frozen side is read first and its answers are kept as plain numbers: a draft decoded from a
  * graph borrows the graph's storage, so reading the frozen graph while the draft is open reads
@@ -44,13 +63,18 @@
 
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/operator_instance.h"
 #include "graph/callee_graph_of.h"
 #include "graph/consistency.h"
 #include "graph/draft_view.h"
 #include "graph/gc_graph_view.h"
 #include "graph/graph_view.h"
 
+#include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 using camel::graph::DraftGraphAdapter;
 using camel::graph::FrozenGraphAdapter;
@@ -99,6 +123,19 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
     NodeRef anyNode   = camel::graph::kNoNode;
     NodeRef brchRef   = camel::graph::kNoNode;
     NodeRef victimRef = camel::graph::kNoNode;
+    // The answers this lane added, each against the representation's own on the frozen side.
+    bool nameSame        = true;
+    size_t nameLength    = 0;
+    size_t operRecords   = 0;
+    size_t storedOper    = 0;
+    size_t argumentNodes = 0;
+    bool argumentsSame   = true;
+    size_t frozenSlotsFromView = 0;
+    bool slotsSame       = true;
+    NodeRef staticRef    = camel::graph::kNoNode;
+    std::uint32_t staticIndex = 0;
+    bool indexSame       = false;
+    bool valueSame       = false;
     Reading frozen;
     {
         const FrozenGraphAdapter view(*target, calleeGraphOf);
@@ -129,6 +166,46 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
         frozen.arms       = brchRef == camel::graph::kNoNode
                                 ? 0
                                 : view.regionsOwnedBy(brchRef).size();
+
+        // --- the answers this lane added, against the representation's own --------------------
+        nameLength = view.name().size();
+        nameSame   = view.name() == std::string_view(target->name());
+        frozenSlotsFromView = view.staticSlotCount();
+        slotsSame = frozenSlotsFromView == target->staticSlots().size();
+        indexSame = true;
+        for (camel::runtime::gc_node_ref_t ref = 0; ref < target->nodeCount(); ++ref) {
+            const GCNode *node = target->node(ref);
+            if (node == nullptr) {
+                continue;
+            }
+            if (view.isOperRecord(ref)) {
+                ++operRecords;
+            }
+            if (node->kind == GCNodeKind::Oper) {
+                ++storedOper;
+            }
+            ++argumentNodes;
+            const camel::graph::KernelArguments fromView   = view.kernelArgumentsOf(ref);
+            const camel::runtime::KernelArguments fromGraph =
+                camel::runtime::kernelArgumentsOf(*target, ref);
+            if (fromView.norm != fromGraph.norm || fromView.with != fromGraph.with) {
+                argumentsSame = false;
+            }
+            // The graph's own half of `dataIndex`: a negative one names a slot of the static area,
+            // and a node that has none is one the face answers nothing for.
+            const bool hasStaticSlot = node->kind == GCNodeKind::Data && node->dataIndex < 0;
+            const std::optional<std::uint32_t> index = view.staticIndexOf(ref);
+            const bool agrees =
+                index.has_value() == hasStaticSlot &&
+                (!index || *index == static_cast<std::uint32_t>(-node->dataIndex));
+            indexSame = indexSame && agrees;
+            if (staticRef == camel::graph::kNoNode && index) {
+                staticRef   = ref;
+                staticIndex = *index;
+                valueSame   = *index < view.staticSlotCount() &&
+                            view.constantOf(ref) == target->staticSlots()[*index];
+            }
+        }
     }
 
     // --- "names no node": both sides, frozen first ------------------------------------------
@@ -157,6 +234,10 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
     Reading draft;
     bool deadDraft   = true;
     bool erasedDraft = true;
+    bool draftNameEmpty = false;
+    std::uint32_t draftSlotsFromView = 0;
+    bool draftSlotsSame              = false;
+    std::optional<std::uint32_t> draftStaticIndex;
     {
         RuntimeGraphDraftSession reading(context_, program);
         GraphTransaction &txn = reading.edit(target);
@@ -167,6 +248,12 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
         draft.slots      = txn.graph().staticSlots().size();
         draft.nodeRegion = view.regionOf(anyNode);
         draft.arms = brchRef == camel::graph::kNoNode ? 0 : view.regionsOwnedBy(brchRef).size();
+        draftNameEmpty     = view.name().empty();
+        draftSlotsFromView = view.staticSlotCount();
+        draftSlotsSame     = draftSlotsFromView == txn.graph().staticSlots().size();
+        if (staticRef != camel::graph::kNoNode) {
+            draftStaticIndex = view.staticIndexOf(staticRef);
+        }
         deadDraft  = !view.contains(past);
         if (victimRef != camel::graph::kNoNode) {
             editable.eraseNode(victimRef);
@@ -222,6 +309,29 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
     os << "[GF] exit at=" << draft.exitRef << " same=" << (draft.exitRef == frozen.exitRef ? 1 : 0)
        << " answer=" << (draft.exitRef == frozen.exitRef && brchRef != camel::graph::kNoNode ? 1 : 0)
        << "\n";
+    // The answers this lane added, each beside the representation's own. A graph with no constant
+    // has no `[GC] static` line, and the `index=` of the last line is then true by having had
+    // nothing to disagree about -- the same reading `oper` takes on a graph that has no OPER node.
+    const bool staticOk =
+        indexSame && (staticRef == camel::graph::kNoNode || valueSame) && draftSlotsSame &&
+        (!draftStaticIndex || staticRef == camel::graph::kNoNode ||
+         *draftStaticIndex == staticIndex);
+    os << "[GC] name length " << nameLength << " same=" << (nameSame ? 1 : 0)
+       << " draft-empty=" << (draftNameEmpty ? 1 : 0) << "\n";
+    os << "[GC] oper real " << operRecords << " stored " << storedOper
+       << " same=" << (operRecords == storedOper ? 1 : 0) << "\n";
+    os << "[GC] args nodes " << argumentNodes << " same=" << (argumentsSame ? 1 : 0) << "\n";
+    os << "[GC] slots graph " << frozen.slots << " view " << frozenSlotsFromView
+       << " same=" << (slotsSame ? 1 : 0) << " draft " << draft.slots << " draft-view "
+       << draftSlotsFromView << " draft-same=" << (draftSlotsSame ? 1 : 0) << "\n";
+    if (staticRef != camel::graph::kNoNode) {
+        os << "[GC] static at " << staticRef << " index " << staticIndex
+           << " same=" << (indexSame ? 1 : 0) << " value=" << (valueSame ? 1 : 0) << "\n";
+    }
+    os << "[GC] caps name=" << (nameSame && draftNameEmpty ? 1 : 0)
+       << " oper=" << (operRecords == storedOper ? 1 : 0)
+       << " args=" << (argumentsSame ? 1 : 0) << " slots=" << (slotsSame && draftSlotsSame ? 1 : 0)
+       << " index=" << (staticOk ? 1 : 0) << "\n";
     os << "[VF] agree=" << (viewAgrees ? 1 : 0)
        << (viewAgrees ? "" : (std::string(" ") + viewDifference)) << "\n";
     return program;
