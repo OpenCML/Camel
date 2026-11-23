@@ -17,6 +17,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
@@ -456,9 +457,10 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
                 captured.empty() ? std::format("{} value(s)", graph->closureNodes().size())
                                  : captured));
     }
-    // The effects (design 9.2): within the operator's.
+    // The effects (design 9.2): within the operator's. Read as the graph's fact (`core.effects`),
+    // the answer every other reader of this graph's effects gets.
     const auto traits           = table.find(oper);
-    const EffectSummary effects = effectSummaryOf(*program, graph);
+    const EffectSummary effects = fact::graphEffects(context_.facts(), *program, graph);
     if (traits && traits->pure && (effects.external || effects.writesVariables)) {
         return refuse("the operator is pure and its definition has an effect");
     }

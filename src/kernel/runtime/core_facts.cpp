@@ -11,17 +11,22 @@
 
 #include "camel/runtime/core_facts.h"
 
+#include "effect_walk.h"
+
 #include "camel/core/operator_semantics.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tags.h"
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/operator_instance.h"
 
 #include <charconv>
 #include <format>
 #include <mutex>
 #include <shared_mutex>
+#include <stdexcept>
+#include <string>
 
 namespace camel::runtime::fact {
 
@@ -224,6 +229,72 @@ std::optional<EffectSummary> decodeEffects(std::string_view text) {
     };
 }
 
+// ---- core.nodeEffects, core.regionEffects, core.operatorEffects -------------------------------
+
+std::optional<EffectSummary> computeNodeEffects(std::span<const Anchor> anchors) {
+    return effectwalk::ofNode(*anchors[0].program, anchors[0].graph, anchors[0].node);
+}
+
+/// A region is not something a fact can be anchored on, so the answer is stored at the node that
+/// owns the regions and each field is that region's own summary. A JOIN's arms and a LOOP's body
+/// and condition are all of the regions a node of a graph can run; the walk is the same one the
+/// graph's summary takes (`effectwalk::ofRegion` is `EffectWalk::ofNodes` at a region), so a reader
+/// here and `core.effects` cannot disagree about the nodes they both cover.
+std::optional<RegionEffects> computeRegionEffects(std::span<const Anchor> anchors) {
+    const Program &program = *anchors[0].program;
+    const GCGraph &graph   = *anchors[0].graph;
+    const gc_node_ref_t node = anchors[0].node;
+    const GCNode *n          = graph.node(node);
+    if (n == nullptr) {
+        return std::nullopt;
+    }
+    RegionEffects effects;
+    switch (n->kind) {
+    case GCNodeKind::Join: {
+        const auto *body = graph.nodeBodyAs<GCJoinBody>(node);
+        if (body == nullptr) {
+            return std::nullopt;
+        }
+        for (const uint32_t arm : ControlRegions(graph).armsOf(body->brch)) {
+            if (arm != 0) {
+                effects.arms |= effectwalk::ofRegion(program, &graph, arm);
+            }
+        }
+        return effects;
+    }
+    case GCNodeKind::Loop: {
+        const LoopView view(graph, node);
+        effects.body = effectwalk::ofRegion(program, &graph, view.bodyRegion());
+        effects.cond = effectwalk::ofRegion(program, &graph, view.condRegion());
+        return effects;
+    }
+    default:
+        // A node that runs no region has no answer here: an empty one would read as "asked, and
+        // its regions have no effects" rather than "this node runs no regions".
+        return std::nullopt;
+    }
+}
+
+std::optional<EffectSummary> computeOperatorEffects(std::span<const Anchor> anchors) {
+    const GCGraph &graph      = *anchors[0].graph;
+    const GCNode *n           = graph.node(anchors[0].node);
+    if (n == nullptr || n->kind != GCNodeKind::Oper) {
+        return std::nullopt;
+    }
+    const auto *body = graph.nodeBodyAs<GCOperBody>(anchors[0].node);
+    if (body == nullptr) {
+        return std::nullopt;
+    }
+    return effectSummaryOfOperator(body->oper);
+}
+
+/// The three effect kinds are read at the anchors a pass names -- the node whose effects it is
+/// about, the node whose regions it runs -- and nothing reads them in bulk. Saying so here keeps
+/// `computeFacts` from walking every node of every graph to fill a store no consumer asks, and
+/// keeps the shape of the dump (how many facts a graph has of which kind) what it was: a reader
+/// that wants one asks one.
+std::vector<std::vector<Anchor>> noBulkAnchors(const Program &, const GCGraph &) { return {}; }
+
 // ---- core.loopDomain -------------------------------------------------------------------------
 
 /// The number of elements a `for` takes along the first dimension of the array `node` holds as a
@@ -318,16 +389,40 @@ CoreKinds registerCoreKinds() {
         .encode  = encodeReorder,
         .decode  = decodeReorder,
     });
-    k.effects     = registerKind(KindSpec<EffectSummary>{
-            .key     = "core.effects",
-            .owner   = "core",
-            .scope   = Scope::Graph,
-            .compute = [](std::span<const Anchor> anchors) -> std::optional<EffectSummary> {
-            return effectSummaryOf(*anchors[0].program, anchors[0].graph);
+    k.effects = registerKind(KindSpec<EffectSummary>{
+        .key     = "core.effects",
+        .owner   = "core",
+        .scope   = Scope::Graph,
+        .compute = [](std::span<const Anchor> anchors) -> std::optional<EffectSummary> {
+            return effectwalk::ofGraph(*anchors[0].program, anchors[0].graph);
         },
-            .print  = [](const EffectSummary &e) { return toString(e); },
-            .encode = encodeEffects,
-            .decode = decodeEffects,
+        .print  = [](const EffectSummary &e) { return toString(e); },
+        .encode = encodeEffects,
+        .decode = decodeEffects,
+    });
+    k.nodeEffects = registerKind(KindSpec<EffectSummary>{
+            .key       = "core.nodeEffects",
+            .owner     = "core",
+            .scope     = Scope::Node,
+            .compute   = computeNodeEffects,
+            .print     = [](const EffectSummary &e) { return toString(e); },
+            .anchorsIn = noBulkAnchors,
+    });
+    k.regionEffects = registerKind(KindSpec<RegionEffects>{
+            .key       = "core.regionEffects",
+            .owner     = "core",
+            .scope     = Scope::Node,
+            .compute   = computeRegionEffects,
+            .print     = [](const RegionEffects &e) { return toString(e); },
+            .anchorsIn = noBulkAnchors,
+    });
+    k.operatorEffects = registerKind(KindSpec<EffectSummary>{
+            .key       = "core.operatorEffects",
+            .owner     = "core",
+            .scope     = Scope::Node,
+            .compute   = computeOperatorEffects,
+            .print     = [](const EffectSummary &e) { return toString(e); },
+            .anchorsIn = noBulkAnchors,
     });
     k.loopDomain = registerKind(KindSpec<LoopDomain>{
         .key       = "core.loopDomain",
@@ -400,6 +495,70 @@ const CoreKinds &coreKinds() {
     return kinds;
 }
 
+// ---- Readers ------------------------------------------------------------------------------------
+//
+// The one way a pass, a module or a tool gets an effect answer. Each asks the fact store and never
+// computes: `effect_walk.h` is not reachable from outside this file, so "the reader computes its own
+// copy" is not a mistake a later change can make quietly. The answer is absent only when the kind
+// has nothing at the anchor -- a red, because a reader that guessed would be a second answer to the
+// question this one is asked.
+
+namespace {
+
+[[noreturn]] void rejectMissing(const char *kind, const GCGraph &graph, gc_node_ref_t node) {
+    throw std::logic_error(std::format(
+        "{} has no answer for node {} of graph '{}': nothing may compute a second one here",
+        kind,
+        static_cast<unsigned>(node),
+        graph.name()));
+}
+
+} // namespace
+
+EffectSummary graphEffects(FactStore &facts, const Program &program, const GCGraph *graph) {
+    if (graph == nullptr) {
+        return {};
+    }
+    const Anchor anchor{&program, graph, kInvalidNodeRef};
+    const auto summary = facts.obtain<EffectSummary>(coreKinds().effects, anchor);
+    if (!summary) {
+        throw std::logic_error(std::format(
+            "core.effects has no answer for graph '{}': nothing may compute a second one here",
+            graph->name()));
+    }
+    return *summary;
+}
+
+EffectSummary nodeEffects(
+    FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node) {
+    const Anchor anchor{&program, &graph, node};
+    const auto summary = facts.obtain<EffectSummary>(coreKinds().nodeEffects, anchor);
+    if (!summary) {
+        rejectMissing("core.nodeEffects", graph, node);
+    }
+    return *summary;
+}
+
+RegionEffects regionEffectsOf(
+    FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node) {
+    const Anchor anchor{&program, &graph, node};
+    const auto effects = facts.obtain<RegionEffects>(coreKinds().regionEffects, anchor);
+    if (!effects) {
+        rejectMissing("core.regionEffects", graph, node);
+    }
+    return *effects;
+}
+
+EffectSummary operatorEffectsOf(
+    FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node) {
+    const Anchor anchor{&program, &graph, node};
+    const auto summary = facts.obtain<EffectSummary>(coreKinds().operatorEffects, anchor);
+    if (!summary) {
+        rejectMissing("core.operatorEffects", graph, node);
+    }
+    return *summary;
+}
+
 std::string toString(const TensorShape &shape) {
     std::string out = shape.dtype ? camel::core::type::typeCodeToString(*shape.dtype) : "?";
     if (!shape.dims) {
@@ -425,6 +584,10 @@ std::string toString(const Reorder &r) {
         }
     }
     return out.empty() ? "in order" : out;
+}
+
+std::string toString(const RegionEffects &e) {
+    return std::format("arms({}) body({}) cond({})", toString(e.arms), toString(e.body), toString(e.cond));
 }
 
 std::string toString(const EffectSummary &e) {

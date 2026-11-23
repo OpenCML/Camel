@@ -348,6 +348,12 @@ class Context : public std::enable_shared_from_this<Context> {
     /// about its graphs, each with a stamp that a read checks. Lives as long as the context;
     /// a fact survives rewrites of the program and reads as absent once it no longer holds.
     camel::runtime::fact::FactStore &facts();
+    /// The same store, through a context a caller holds only for reading: a fact store is a cache,
+    /// and asking it changes nothing the context is. A reader that has the program and nothing else
+    /// (a printer, a query) asks it this way.
+    camel::runtime::fact::FactStore &facts() const {
+        return const_cast<Context *>(this)->facts();
+    }
     /// The facts of this context's frozen graphs (camel/facts/facts.h): one store for the whole
     /// context, keyed by the graph as a value, made here rather than by whoever asks first so that
     /// the graph manager can tell it about every graph the context makes. A graph's facts end with

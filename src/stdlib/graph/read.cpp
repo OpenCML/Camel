@@ -26,7 +26,9 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/context/context.h"
 #include "camel/runtime/canonical.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effects.h"
@@ -542,17 +544,28 @@ camel::core::OperId operOf(const NodeView &node, const Handle *handle, const cha
 }
 
 /// Whether the node's operator is pure: it writes nothing, neither state of the program nor
-/// anything outside it. The answer is the effect fact of the operator
-/// (`camel::runtime::effectSummaryOfOperator`; design principles 3.1, 3.3: an effect is a write,
-/// and a read is a dependency), which is the statement the compiler's own judgement of a node
-/// starts from -- so this query and that judgement are one answer read in one place instead of a
-/// purity column of their own.
-slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &) {
+/// anything outside it. The answer is the operator's clause as the fact layer holds it
+/// (`core.operatorEffects`; design principles 3.1, 3.3: an effect is a write, and a read is a
+/// dependency), which is the statement the compiler's own judgement of a node starts from -- so
+/// this query and that judgement are one answer read in one place instead of a purity column of
+/// their own.
+slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView node = viewOf(handle, "graph.is_pure");
     bool pure           = false;
     if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
-        pure = camel::runtime::effectSummaryOfOperator(operOf(node, handle, "graph.is_pure")).pure();
+        if (handle->transaction() == nullptr) {
+            const camel::runtime::GCGraph &graph = graphOf(handle, "graph.is_pure");
+            pure = camel::runtime::fact::operatorEffectsOf(
+                       ctx.facts(), *handle->program(), graph, handle->index())
+                       .pure();
+        } else {
+            // A node of a draft: a draft is not a frozen graph, so there is no answer a fact can be
+            // kept at. The declaration is what is asked, and it is the same line the walk starts a
+            // node from (effects.h), not a second reading of a graph's summary.
+            pure =
+                camel::runtime::effectSummaryOfOperator(operOf(node, handle, "graph.is_pure")).pure();
+        }
     }
     return toSlot<Bool>(pure);
 }
