@@ -27,7 +27,7 @@ import { ElementOf, WithElement, is_array, is_map, is_set, is_complex, is_numeri
 
 // An array of numbers or booleans (the element types an array stores compactly): the argument the
 // elementwise conversions below take.
-func is_compact_array::<A>(): bool {
+func is_compact_array::<A>() => bool {
     return match type A {
         case array => is_numeric::<ElementOf<A>>() || is_same::<ElementOf<A>, bool>()
         case _ => false
@@ -47,7 +47,7 @@ export type Error
 /// fold, merge or drop it.
 /// @example std::mem::blocks().live    // 0 when no block is alive
 #op(':op/mem_blocks')
-export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int }
+export func std::mem::blocks() => { allocs: int, frees: int, live: int, bytes: int }
 
 // ---- the tags of a derivative rule ----
 //
@@ -82,22 +82,22 @@ export tag vjp::<F>(rule: F) on func when is_function::<F>()
 /// The sum of two 32-bit floats.
 /// @example f32(1.5) + f32(2.5)    // 4.0
 #op(':op/add_f')
-export func operator +(x: f32, y: f32): f32
+export func operator +(x: f32, y: f32) => f32
 
 /// The sum of two 64-bit floats.
 /// @example 1.5 + 2.5    // 4.0
 #op(':op/add_d')
-export func operator +(x: float, y: float): float
+export func operator +(x: float, y: float) => float
 
 /// The difference of two 32-bit floats.
 /// @example f32(3.5) - f32(1.25)    // 2.25
 #op(':op/sub_f')
-export func operator -(x: f32, y: f32): f32
+export func operator -(x: f32, y: f32) => f32
 
 /// The difference of two 64-bit floats.
 /// @example 3.5 - 1.25    // 2.25
 #op(':op/sub_d')
-export func operator -(x: float, y: float): float
+export func operator -(x: float, y: float) => float
 
 // The remaining element types of `+` and `-`, one declaration per type: the sum of two integers is
 // `+` at those two types, the sum of two strings is `+` too, and `-` is the difference at every
@@ -108,59 +108,59 @@ export func operator -(x: float, y: float): float
 
 /// The sum of two 32-bit integers.
 #op(':op/add_i')
-export func operator +(x: i32, y: i32): i32
+export func operator +(x: i32, y: i32) => i32
 
 /// The sum of two 64-bit integers.
 #op(':op/add_l')
-export func operator +(x: int, y: int): int
+export func operator +(x: int, y: int) => int
 
 /// The sum of two 16-bit floats.
 #op(':op/add_f6')
-export func operator +(x: f16, y: f16): f16
+export func operator +(x: f16, y: f16) => f16
 
 /// The sum of two `bf16` values.
 #op(':op/add_bf')
-export func operator +(x: bf16, y: bf16): bf16
+export func operator +(x: bf16, y: bf16) => bf16
 
 /// The sum of two single-precision complex numbers.
 #op(':op/add_c')
-export func operator +(x: c64, y: c64): c64
+export func operator +(x: c64, y: c64) => c64
 
 /// The sum of two double-precision complex numbers.
 #op(':op/add_z')
-export func operator +(x: c128, y: c128): c128
+export func operator +(x: c128, y: c128) => c128
 
 /// Two strings joined into one, the left one first.
 #op(':op/add_s')
-export func operator +(x: string, y: string): string
+export func operator +(x: string, y: string) => string
 
 /// Two byte strings joined into one, the left one first.
 #op(':op/add_bytes')
-export func operator +(x: Bytes, y: Bytes): Bytes
+export func operator +(x: Bytes, y: Bytes) => Bytes
 
 /// The difference of two 32-bit integers.
 #op(':op/sub_i')
-export func operator -(x: i32, y: i32): i32
+export func operator -(x: i32, y: i32) => i32
 
 /// The difference of two 64-bit integers.
 #op(':op/sub_l')
-export func operator -(x: int, y: int): int
+export func operator -(x: int, y: int) => int
 
 /// The difference of two 16-bit floats.
 #op(':op/sub_f6')
-export func operator -(x: f16, y: f16): f16
+export func operator -(x: f16, y: f16) => f16
 
 /// The difference of two `bf16` values.
 #op(':op/sub_bf')
-export func operator -(x: bf16, y: bf16): bf16
+export func operator -(x: bf16, y: bf16) => bf16
 
 /// The difference of two single-precision complex numbers.
 #op(':op/sub_c')
-export func operator -(x: c64, y: c64): c64
+export func operator -(x: c64, y: c64) => c64
 
 /// The difference of two double-precision complex numbers.
 #op(':op/sub_z')
-export func operator -(x: c128, y: c128): c128
+export func operator -(x: c128, y: c128) => c128
 
 // The rest of the scalar arithmetic, one declaration per element type: a token's meaning at a type
 // is what the type's operator is, and the declaration below is that meaning written down. `*`, `/`
@@ -172,99 +172,99 @@ export func operator -(x: c128, y: c128): c128
 
 /// The product of two 32-bit floats.
 #op(':op/mul_f')
-export func operator *(x: f32, y: f32): f32
+export func operator *(x: f32, y: f32) => f32
 
 /// The product of two 64-bit floats.
 #op(':op/mul_d')
-export func operator *(x: float, y: float): float
+export func operator *(x: float, y: float) => float
 
 /// The product of two 32-bit integers.
 #op(':op/mul_i')
-export func operator *(x: i32, y: i32): i32
+export func operator *(x: i32, y: i32) => i32
 
 /// The product of two 64-bit integers.
 #op(':op/mul_l')
-export func operator *(x: int, y: int): int
+export func operator *(x: int, y: int) => int
 
 /// The product of two 16-bit floats.
 #op(':op/mul_f6')
-export func operator *(x: f16, y: f16): f16
+export func operator *(x: f16, y: f16) => f16
 
 /// The product of two `bf16` values.
 #op(':op/mul_bf')
-export func operator *(x: bf16, y: bf16): bf16
+export func operator *(x: bf16, y: bf16) => bf16
 
 /// The product of two single-precision complex numbers.
 #op(':op/mul_c')
-export func operator *(x: c64, y: c64): c64
+export func operator *(x: c64, y: c64) => c64
 
 /// The product of two double-precision complex numbers.
 #op(':op/mul_z')
-export func operator *(x: c128, y: c128): c128
+export func operator *(x: c128, y: c128) => c128
 
 /// The quotient of two 32-bit floats.
 #op(':op/div_f')
-export func operator /(x: f32, y: f32): f32 panic
+export func operator /(x: f32, y: f32) => f32 panic
 
 /// The quotient of two 64-bit floats.
 #op(':op/div_d')
-export func operator /(x: float, y: float): float panic
+export func operator /(x: float, y: float) => float panic
 
 /// The truncated quotient of two 32-bit integers.
 #op(':op/div_i')
-export func operator /(x: i32, y: i32): i32 panic
+export func operator /(x: i32, y: i32) => i32 panic
 
 /// The truncated quotient of two 64-bit integers.
 #op(':op/div_l')
-export func operator /(x: int, y: int): int panic
+export func operator /(x: int, y: int) => int panic
 
 /// The quotient of two 16-bit floats.
 #op(':op/div_f6')
-export func operator /(x: f16, y: f16): f16 panic
+export func operator /(x: f16, y: f16) => f16 panic
 
 /// The quotient of two `bf16` values.
 #op(':op/div_bf')
-export func operator /(x: bf16, y: bf16): bf16 panic
+export func operator /(x: bf16, y: bf16) => bf16 panic
 
 /// The quotient of two single-precision complex numbers.
 #op(':op/div_c')
-export func operator /(x: c64, y: c64): c64 panic
+export func operator /(x: c64, y: c64) => c64 panic
 
 /// The quotient of two double-precision complex numbers.
 #op(':op/div_z')
-export func operator /(x: c128, y: c128): c128 panic
+export func operator /(x: c128, y: c128) => c128 panic
 
 /// The negation of a 32-bit float.
 #op(':op/neg_f')
-export func operator -(x: f32): f32
+export func operator -(x: f32) => f32
 
 /// The negation of a 64-bit float.
 #op(':op/neg_d')
-export func operator -(x: float): float
+export func operator -(x: float) => float
 
 /// The negation of a 32-bit integer.
 #op(':op/neg_i')
-export func operator -(x: i32): i32
+export func operator -(x: i32) => i32
 
 /// The negation of a 64-bit integer.
 #op(':op/neg_l')
-export func operator -(x: int): int
+export func operator -(x: int) => int
 
 /// The negation of a 16-bit float.
 #op(':op/neg_f6')
-export func operator -(x: f16): f16
+export func operator -(x: f16) => f16
 
 /// The negation of a `bf16` value.
 #op(':op/neg_bf')
-export func operator -(x: bf16): bf16
+export func operator -(x: bf16) => bf16
 
 /// The negation of a single-precision complex number.
 #op(':op/neg_c')
-export func operator -(x: c64): c64
+export func operator -(x: c64) => c64
 
 /// The negation of a double-precision complex number.
 #op(':op/neg_z')
-export func operator -(x: c128): c128
+export func operator -(x: c128) => c128
 
 // Indexing, `xs[i]`. The operator registers three words -- the array, the position, and the
 // dimension the position names -- and its registration says so
@@ -283,64 +283,64 @@ export func operator -(x: c128): c128
 /// The element at position `i` on the first dimension of `xs`.
 /// @example [7, 8, 9][0]    // 7
 #op(':op/idx_arr')
-export func operator []::<T>(xs: T[], i: int): T panic
+export func operator []::<T>(xs: T[], i: int) => T panic
 
 /// The character at position i of a string.
 /// @example 'abc'[1]    // 'b'
 #op(':op/idx_str')
-export func operator [](s: string, i: int): string panic
+export func operator [](s: string, i: int) => string panic
 
 /// The value stored under key, or null when the map has no such key.
 /// @example ([('a', 1)] as Map<string, int>)['a']    // 1
 #op(':coll/map_idx')
-export func operator []::<K, V>(m: Map<K, V>, key: K): V?
+export func operator []::<K, V>(m: Map<K, V>, key: K) => V?
 
 /// A copy of the array holding the elements at the given indices along the axis.
 #op(':op/idx_take')
-export func operator []::<T>(arr: T[], indices: int[], axis: int): T[] panic
+export func operator []::<T>(arr: T[], indices: int[], axis: int) => T[] panic
 
 // ---- the unary operators ----
 
 /// The bitwise complement of a 32-bit integer.
 /// @example ~i32(0)    // -1
 #op(':op/inv_i')
-export func operator ~(x: i32): i32
+export func operator ~(x: i32) => i32
 
 /// The bitwise complement of a 64-bit integer.
 /// @example ~0    // -1
 #op(':op/inv_l')
-export func operator ~(x: int): int
+export func operator ~(x: int) => int
 
 /// The negation of a boolean.
 /// @example !true    // false
 #op(':op/not')
-export func operator !(x: bool): bool
+export func operator !(x: bool) => bool
 
 // ---- the remaining binary operators: `%`, `&`, `|`, and the generic `==` ----
 
 /// The remainder of dividing the first 32-bit integer by the second.
 /// @example i32(7) % i32(2)    // 1
 #op(':op/mod_i')
-export func operator %(x: i32, y: i32): i32 panic
+export func operator %(x: i32, y: i32) => i32 panic
 
 /// The remainder of dividing the first 64-bit integer by the second.
 /// @example 7 % 2    // 1
 #op(':op/mod_l')
-export func operator %(x: int, y: int): int panic
+export func operator %(x: int, y: int) => int panic
 
 /// The conjunction of two booleans.
 /// @example true & false    // false
 #op(':op/and')
-export func operator &(x: bool, y: bool): bool
+export func operator &(x: bool, y: bool) => bool
 
 /// The disjunction of two booleans.
 /// @example true | false    // true
 #op(':op/or')
-export func operator |(x: bool, y: bool): bool
+export func operator |(x: bool, y: bool) => bool
 
 /// Whether two arrays, tuples or structs of comparable parts are equal, part by part.
 #op(':op/eq')
-export func operator ==::<T>(a: T, b: T): bool
+export func operator ==::<T>(a: T, b: T) => bool
 
 // ---- comparison ----
 //
@@ -350,233 +350,233 @@ export func operator ==::<T>(a: T, b: T): bool
 /// Whether two 64-bit floats are equal.
 /// @example 1.5 == 1.5    // true
 #op(':op/eq_d')
-export func operator ==(x: float, y: float): bool
+export func operator ==(x: float, y: float) => bool
 
 /// Whether two 32-bit floats are equal.
 /// @example f32(1.5) == f32(1.5)    // true
 #op(':op/eq_f')
-export func operator ==(x: f32, y: f32): bool
+export func operator ==(x: f32, y: f32) => bool
 
 /// Whether two 32-bit integers are equal.
 /// @example i32(3) == i32(3)    // true
 #op(':op/eq_i')
-export func operator ==(x: i32, y: i32): bool
+export func operator ==(x: i32, y: i32) => bool
 
 /// Whether two 64-bit integers are equal.
 /// @example 3 == 3    // true
 #op(':op/eq_l')
-export func operator ==(x: int, y: int): bool
+export func operator ==(x: int, y: int) => bool
 
 /// Whether two half floats are equal.
 /// @example f16(0.5) == f16(0.5)    // true
 #op(':op/eq_f6')
-export func operator ==(x: f16, y: f16): bool
+export func operator ==(x: f16, y: f16) => bool
 
 /// Whether two bfloat16 values are equal.
 /// @example bf16(0.5) == bf16(0.5)    // true
 #op(':op/eq_bf')
-export func operator ==(x: bf16, y: bf16): bool
+export func operator ==(x: bf16, y: bf16) => bool
 
 /// Whether two single-precision complex values are equal.
 /// @example c64(1.0, 2.0) == c64(1.0, 2.0)    // true
 #op(':op/eq_c')
-export func operator ==(x: c64, y: c64): bool
+export func operator ==(x: c64, y: c64) => bool
 
 /// Whether two double-precision complex values are equal.
 /// @example c128(1.0, 2.0) == c128(1.0, 2.0)    // true
 #op(':op/eq_z')
-export func operator ==(x: c128, y: c128): bool
+export func operator ==(x: c128, y: c128) => bool
 
 /// Whether two strings are equal, character by character.
 /// @example 'ab' == 'ab'    // true
 #op(':op/eq_s')
-export func operator ==(x: string, y: string): bool
+export func operator ==(x: string, y: string) => bool
 
 /// Whether two byte blocks are equal, byte by byte.
 /// @example to_bytes([1] as i32[]) == to_bytes([1] as i32[])    // true
 #op(':op/eq_bytes')
-export func operator ==(x: Bytes, y: Bytes): bool
+export func operator ==(x: Bytes, y: Bytes) => bool
 
 /// Whether two booleans are equal.
 /// @example true == true    // true
 #op(':op/eq_b')
-export func operator ==(x: bool, y: bool): bool
+export func operator ==(x: bool, y: bool) => bool
 
 // ---- ordering ----
 
 /// Whether the first 64-bit float is less than the second.
 /// @example 1.5 < 2.5    // true
 #op(':op/lt_d')
-export func operator <(x: float, y: float): bool
+export func operator <(x: float, y: float) => bool
 
 /// Whether the first of two 32-bit floats is less than the second.
 #op(':op/lt_f')
-export func operator <(x: f32, y: f32): bool
+export func operator <(x: f32, y: f32) => bool
 
 /// Whether the first of two 32-bit integers is less than the second.
 #op(':op/lt_i')
-export func operator <(x: i32, y: i32): bool
+export func operator <(x: i32, y: i32) => bool
 
 /// Whether the first of two 64-bit integers is less than the second.
 #op(':op/lt_l')
-export func operator <(x: int, y: int): bool
+export func operator <(x: int, y: int) => bool
 
 /// Whether the first of two half floats is less than the second.
 #op(':op/lt_f6')
-export func operator <(x: f16, y: f16): bool
+export func operator <(x: f16, y: f16) => bool
 
 /// Whether the first of two bfloat16 values is less than the second.
 #op(':op/lt_bf')
-export func operator <(x: bf16, y: bf16): bool
+export func operator <(x: bf16, y: bf16) => bool
 
 /// Whether the first of two strings is less than the second.
 #op(':op/lt_s')
-export func operator <(x: string, y: string): bool
+export func operator <(x: string, y: string) => bool
 
 // ---- ordering: `<=` ----
 
 /// Whether the first 64-bit float is less than or equal to the second.
 /// @example 1.5 <= 1.5    // true
 #op(':op/le_d')
-export func operator <=(x: float, y: float): bool
+export func operator <=(x: float, y: float) => bool
 
 /// Whether the first 32-bit float is less than or equal to the second.
 #op(':op/le_f')
-export func operator <=(x: f32, y: f32): bool
+export func operator <=(x: f32, y: f32) => bool
 
 /// Whether the first 32-bit integer is less than or equal to the second.
 #op(':op/le_i')
-export func operator <=(x: i32, y: i32): bool
+export func operator <=(x: i32, y: i32) => bool
 
 /// Whether the first 64-bit integer is less than or equal to the second.
 #op(':op/le_l')
-export func operator <=(x: int, y: int): bool
+export func operator <=(x: int, y: int) => bool
 
 /// Whether the first half float is less than or equal to the second.
 #op(':op/le_f6')
-export func operator <=(x: f16, y: f16): bool
+export func operator <=(x: f16, y: f16) => bool
 
 /// Whether the first bfloat16 value is less than or equal to the second.
 #op(':op/le_bf')
-export func operator <=(x: bf16, y: bf16): bool
+export func operator <=(x: bf16, y: bf16) => bool
 
 /// Whether the first string is less than or equal to the second, character by character.
 #op(':op/le_s')
-export func operator <=(x: string, y: string): bool
+export func operator <=(x: string, y: string) => bool
 
 // ---- ordering: `>` ----
 
 /// Whether the first of two 64-bit floats is greater than the second.
 /// @example 2.5 > 1.5    // true
 #op(':op/gt_d')
-export func operator >(x: float, y: float): bool
+export func operator >(x: float, y: float) => bool
 
 /// Whether the first of two 32-bit floats is greater than the second.
 #op(':op/gt_f')
-export func operator >(x: f32, y: f32): bool
+export func operator >(x: f32, y: f32) => bool
 
 /// Whether the first of two 32-bit integers is greater than the second.
 #op(':op/gt_i')
-export func operator >(x: i32, y: i32): bool
+export func operator >(x: i32, y: i32) => bool
 
 /// Whether the first of two 64-bit integers is greater than the second.
 #op(':op/gt_l')
-export func operator >(x: int, y: int): bool
+export func operator >(x: int, y: int) => bool
 
 /// Whether the first of two half floats is greater than the second.
 #op(':op/gt_f6')
-export func operator >(x: f16, y: f16): bool
+export func operator >(x: f16, y: f16) => bool
 
 /// Whether the first of two bfloat16 values is greater than the second.
 #op(':op/gt_bf')
-export func operator >(x: bf16, y: bf16): bool
+export func operator >(x: bf16, y: bf16) => bool
 
 /// Whether the first of two strings is greater than the second.
 #op(':op/gt_s')
-export func operator >(x: string, y: string): bool
+export func operator >(x: string, y: string) => bool
 
 // ---- ordering: `>=` ----
 
 /// Whether the first of two 64-bit floats is greater than or equal to the second.
 /// @example 2.5 >= 2.5    // true
 #op(':op/ge_d')
-export func operator >=(x: float, y: float): bool
+export func operator >=(x: float, y: float) => bool
 
 /// Whether the first of two 32-bit floats is greater than or equal to the second.
 #op(':op/ge_f')
-export func operator >=(x: f32, y: f32): bool
+export func operator >=(x: f32, y: f32) => bool
 
 /// Whether the first of two 32-bit integers is greater than or equal to the second.
 #op(':op/ge_i')
-export func operator >=(x: i32, y: i32): bool
+export func operator >=(x: i32, y: i32) => bool
 
 /// Whether the first of two 64-bit integers is greater than or equal to the second.
 #op(':op/ge_l')
-export func operator >=(x: int, y: int): bool
+export func operator >=(x: int, y: int) => bool
 
 /// Whether the first of two half floats is greater than or equal to the second.
 #op(':op/ge_f6')
-export func operator >=(x: f16, y: f16): bool
+export func operator >=(x: f16, y: f16) => bool
 
 /// Whether the first of two bfloat16 values is greater than or equal to the second.
 #op(':op/ge_bf')
-export func operator >=(x: bf16, y: bf16): bool
+export func operator >=(x: bf16, y: bf16) => bool
 
 /// Whether the first of two strings is greater than or equal to the second.
 #op(':op/ge_s')
-export func operator >=(x: string, y: string): bool
+export func operator >=(x: string, y: string) => bool
 
 // ---- power and the remaining binary operators ----
 
 /// The 64-bit float raised to the power of the second.
 /// @example 2.0 ^ 3.0    // 8.0
 #op(':op/pow_d')
-export func operator ^(x: float, y: float): float
+export func operator ^(x: float, y: float) => float
 
 /// The 32-bit float raised to the power of the second.
 /// @example f32(2.0) ^ f32(3.0)    // 8.0
 #op(':op/pow_f')
-export func operator ^(x: f32, y: f32): f32
+export func operator ^(x: f32, y: f32) => f32
 
 /// The 32-bit integer raised to the power of the second.
 #op(':op/pow_i')
-export func operator ^(x: i32, y: i32): i32
+export func operator ^(x: i32, y: i32) => i32
 
 /// The 64-bit integer raised to the power of the second.
 #op(':op/pow_l')
-export func operator ^(x: int, y: int): int
+export func operator ^(x: int, y: int) => int
 
 /// The half float raised to the power of the second.
 #op(':op/pow_f6')
-export func operator ^(x: f16, y: f16): f16
+export func operator ^(x: f16, y: f16) => f16
 
 /// The bfloat16 value raised to the power of the second.
 #op(':op/pow_bf')
-export func operator ^(x: bf16, y: bf16): bf16
+export func operator ^(x: bf16, y: bf16) => bf16
 
 /// The single-precision complex value raised to the power of the second.
 #op(':op/pow_c')
-export func operator ^(x: c64, y: c64): c64
+export func operator ^(x: c64, y: c64) => c64
 
 /// The single-precision complex value raised to a 32-bit integer power.
 #op(':op/pow_c_i')
-export func operator ^(x: c64, y: i32): c64
+export func operator ^(x: c64, y: i32) => c64
 
 /// The single-precision complex value raised to a 64-bit integer power.
 #op(':op/pow_c_l')
-export func operator ^(x: c64, y: int): c64
+export func operator ^(x: c64, y: int) => c64
 
 /// The double-precision complex value raised to the power of the second.
 #op(':op/pow_z')
-export func operator ^(x: c128, y: c128): c128
+export func operator ^(x: c128, y: c128) => c128
 
 /// The double-precision complex value raised to a 32-bit integer power.
 #op(':op/pow_z_i')
-export func operator ^(x: c128, y: i32): c128
+export func operator ^(x: c128, y: i32) => c128
 
 /// The double-precision complex value raised to a 64-bit integer power.
 #op(':op/pow_z_l')
-export func operator ^(x: c128, y: int): c128
+export func operator ^(x: c128, y: int) => c128
 
 // ---- conversions ----
 //
@@ -591,109 +591,109 @@ export func operator ^(x: c128, y: int): c128
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
 /// @example int(2.9)    // 2
 #op(':op/itol')
-export func int(x: i32): int
+export func int(x: i32) => int
 #op(':op/ltol')
-export func int(x: int): int
+export func int(x: int) => int
 #op(':op/ftol')
-export func int(x: f32): int
+export func int(x: f32) => int
 #op(':op/dtol')
-export func int(x: float): int
+export func int(x: float) => int
 #op(':op/stol')
-export func int(x: string): int
+export func int(x: string) => int
 #op(':op/bftol')
-export func int(x: bf16): int
+export func int(x: bf16) => int
 #op(':op/f6tol')
-export func int(x: f16): int
+export func int(x: f16) => int
 
 /// The same as int.
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
 /// @example i64('42')    // 42
 #op(':op/itol')
-export func i64(x: i32): int
+export func i64(x: i32) => int
 #op(':op/ltol')
-export func i64(x: int): int
+export func i64(x: int) => int
 #op(':op/ftol')
-export func i64(x: f32): int
+export func i64(x: f32) => int
 #op(':op/dtol')
-export func i64(x: float): int
+export func i64(x: float) => int
 #op(':op/stol')
-export func i64(x: string): int
+export func i64(x: string) => int
 #op(':op/bftol')
-export func i64(x: bf16): int
+export func i64(x: bf16) => int
 #op(':op/f6tol')
-export func i64(x: f16): int
+export func i64(x: f16) => int
 
 /// x as a 32-bit integer.
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
 /// @example i32(7)    // 7
 #op(':op/itoi')
-export func i32(x: i32): i32
+export func i32(x: i32) => i32
 #op(':op/ltoi')
-export func i32(x: int): i32
+export func i32(x: int) => i32
 #op(':op/ftoi')
-export func i32(x: f32): i32
+export func i32(x: f32) => i32
 #op(':op/dtoi')
-export func i32(x: float): i32
+export func i32(x: float) => i32
 #op(':op/stoi')
-export func i32(x: string): i32
+export func i32(x: string) => i32
 #op(':op/bftoi')
-export func i32(x: bf16): i32
+export func i32(x: bf16) => i32
 #op(':op/f6toi')
-export func i32(x: f16): i32
+export func i32(x: f16) => i32
 
 /// x as a 64-bit float.
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow); use parse_float to handle that in the program
 /// @example float(3)    // 3
 #op(':op/itod')
-export func float(x: i32): float
+export func float(x: i32) => float
 #op(':op/ltod')
-export func float(x: int): float
+export func float(x: int) => float
 #op(':op/ftod')
-export func float(x: f32): float
+export func float(x: f32) => float
 #op(':op/dtod')
-export func float(x: float): float
+export func float(x: float) => float
 #op(':op/stod')
-export func float(x: string): float
+export func float(x: string) => float
 #op(':op/bftod')
-export func float(x: bf16): float
+export func float(x: bf16) => float
 #op(':op/f6tod')
-export func float(x: f16): float
+export func float(x: f16) => float
 
 /// The same as float.
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow)
 /// @example f64('2.5')    // 2.5
 #op(':op/itod')
-export func f64(x: i32): float
+export func f64(x: i32) => float
 #op(':op/ltod')
-export func f64(x: int): float
+export func f64(x: int) => float
 #op(':op/ftod')
-export func f64(x: f32): float
+export func f64(x: f32) => float
 #op(':op/dtod')
-export func f64(x: float): float
+export func f64(x: float) => float
 #op(':op/stod')
-export func f64(x: string): float
+export func f64(x: string) => float
 #op(':op/bftod')
-export func f64(x: bf16): float
+export func f64(x: bf16) => float
 #op(':op/f6tod')
-export func f64(x: f16): float
+export func f64(x: f16) => float
 
 /// x as a 32-bit float.
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow)
 /// @example f32(0.5)    // 0.5
 #op(':op/itof')
-export func f32(x: i32): f32
+export func f32(x: i32) => f32
 #op(':op/ltof')
-export func f32(x: int): f32
+export func f32(x: int) => f32
 #op(':op/ftof')
-export func f32(x: f32): f32
+export func f32(x: f32) => f32
 #op(':op/dtof')
-export func f32(x: float): f32
+export func f32(x: float) => f32
 #op(':op/stof')
-export func f32(x: string): f32
+export func f32(x: string) => f32
 #op(':op/bftof')
-export func f32(x: bf16): f32
+export func f32(x: bf16) => f32
 #op(':op/f6tof')
-export func f32(x: f16): f32
+export func f32(x: f16) => f32
 
 /// x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
 /// floating-point type of the language (design principles 7.3), not only a tensor element type,
@@ -701,137 +701,137 @@ export func f32(x: f16): f32
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of bf16 (overflow or underflow)
 /// @example bf16(0.5)    // 0.5
 #op(':op/itobf')
-export func bf16(x: i32): bf16
+export func bf16(x: i32) => bf16
 #op(':op/ltobf')
-export func bf16(x: int): bf16
+export func bf16(x: int) => bf16
 #op(':op/ftobf')
-export func bf16(x: f32): bf16
+export func bf16(x: f32) => bf16
 #op(':op/dtobf')
-export func bf16(x: float): bf16
+export func bf16(x: float) => bf16
 #op(':op/bftobf')
-export func bf16(x: bf16): bf16
+export func bf16(x: bf16) => bf16
 #op(':op/stobf')
-export func bf16(x: string): bf16
+export func bf16(x: string) => bf16
 
 /// x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
 /// conversion as bf16, at the other reduced precision (design principles 7.3).
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow)
 /// @example f16(0.5)    // 0.5
 #op(':op/itof6')
-export func f16(x: i32): f16
+export func f16(x: i32) => f16
 #op(':op/ltof6')
-export func f16(x: int): f16
+export func f16(x: int) => f16
 #op(':op/ftof6')
-export func f16(x: f32): f16
+export func f16(x: f32) => f16
 #op(':op/dtof6')
-export func f16(x: float): f16
+export func f16(x: float) => f16
 #op(':op/f6tof6')
-export func f16(x: f16): f16
+export func f16(x: f16) => f16
 #op(':op/stof6')
-export func f16(x: string): f16
+export func f16(x: string) => f16
 
 /// The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
 /// @pure
 /// @example i32([1.0, 2.0])
 #op(':op/atoi')
-export func i32::<A>(x: A): WithElement<A, i32> when is_compact_array::<A>()
+export func i32::<A>(x: A) => WithElement<A, i32> when is_compact_array::<A>()
 
 /// The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
 /// @pure
 /// @example i64([1.0, 2.0])
 #op(':op/atol')
-export func i64::<A>(x: A): WithElement<A, int> when is_compact_array::<A>()
+export func i64::<A>(x: A) => WithElement<A, int> when is_compact_array::<A>()
 
 /// The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
 /// @pure
 /// @example int([1.0, 2.0])
 #op(':op/atol')
-export func int::<A>(x: A): WithElement<A, int> when is_compact_array::<A>()
+export func int::<A>(x: A) => WithElement<A, int> when is_compact_array::<A>()
 
 /// The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
 /// @pure
 /// @example f32([1.0, 2.0])
 #op(':op/atof')
-export func f32::<A>(x: A): WithElement<A, f32> when is_compact_array::<A>()
+export func f32::<A>(x: A) => WithElement<A, f32> when is_compact_array::<A>()
 
 /// The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
 /// @pure
 /// @example f64([1.0, 2.0])
 #op(':op/atod')
-export func f64::<A>(x: A): WithElement<A, float> when is_compact_array::<A>()
+export func f64::<A>(x: A) => WithElement<A, float> when is_compact_array::<A>()
 
 /// The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
 /// @pure
 /// @example float([1.0, 2.0])
 #op(':op/atod')
-export func float::<A>(x: A): WithElement<A, float> when is_compact_array::<A>()
+export func float::<A>(x: A) => WithElement<A, float> when is_compact_array::<A>()
 
 /// The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
 /// @pure
 /// @example bf16([1.0, 2.0])
 #op(':op/atobf')
-export func bf16::<A>(x: A): WithElement<A, bf16> when is_compact_array::<A>()
+export func bf16::<A>(x: A) => WithElement<A, bf16> when is_compact_array::<A>()
 
 /// The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
 /// @pure
 /// @example f16([1.0, 2.0])
 #op(':op/atof6')
-export func f16::<A>(x: A): WithElement<A, f16> when is_compact_array::<A>()
+export func f16::<A>(x: A) => WithElement<A, f16> when is_compact_array::<A>()
 
 /// x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
 /// keeps both parts as they are.
 /// @example c64(2)    // 2+0i
 #op(':op/itoc')
-export func c64(x: i32): c64
+export func c64(x: i32) => c64
 #op(':op/ltoc')
-export func c64(x: int): c64
+export func c64(x: int) => c64
 #op(':op/ftoc')
-export func c64(x: f32): c64
+export func c64(x: f32) => c64
 #op(':op/dtoc')
-export func c64(x: float): c64
+export func c64(x: float) => c64
 #op(':op/ctoc')
-export func c64(x: c64): c64
+export func c64(x: c64) => c64
 #op(':op/ztoc')
-export func c64(x: c128): c64
+export func c64(x: c128) => c64
 
 /// x as a 128-bit complex number: the real part is x and the imaginary part is zero.
 /// @example c128(2)    // 2+0i
 #op(':op/itoz')
-export func c128(x: i32): c128
+export func c128(x: i32) => c128
 #op(':op/ltoz')
-export func c128(x: int): c128
+export func c128(x: int) => c128
 #op(':op/ftoz')
-export func c128(x: f32): c128
+export func c128(x: f32) => c128
 #op(':op/dtoz')
-export func c128(x: float): c128
+export func c128(x: float) => c128
 #op(':op/ctoz')
-export func c128(x: c64): c128
+export func c128(x: c64) => c128
 #op(':op/ztoz')
-export func c128(x: c128): c128
+export func c128(x: c128) => c128
 
 /// x as text, as println writes it. A float is written as the shortest text that reads back as
 /// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @example string(42)    // '42'
 #op(':op/atos')
-export func string::<T>(x: T): string
+export func string::<T>(x: T) => string
 
 /// The integer a text spells, or an error value.
 /// @fails error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped)
 /// @example parse_int('42') !! 0    // 42
 #op(':op/parse_int')
-export func parse_int(text: string): int!
+export func parse_int(text: string) => int!
 
 /// The number a text spells, or an error value.
 /// @fails error `ParseError` when the text is not a number
 /// @example parse_float('2.5') !! 0.0    // 2.5
 #op(':op/parse_float')
-export func parse_float(text: string): float!
+export func parse_float(text: string) => float!
 
 /// An Error value of the given kind with the given message; the compiler adds the source
 /// position of the call. `return error(...)` hands it out of a function declared `T!`.
 /// @example return error('RangeError', 'too large')
 #op(':op/error_new')
-export func error(kind: string, message: string): Error
+export func error(kind: string, message: string) => Error
 
 // ---- input and output ----
 
@@ -842,11 +842,11 @@ export func error(kind: string, message: string): Error
 /// @example print('a', 1)    // a 1
 #op(':io/print')
 with <fmt: string>
-export func print::<T>(x: T, ...rest): T panic
+export func print::<T>(x: T, ...rest) => T panic
 #op(':io/print')
-export func print::<T>(x: T, ...rest): T panic
+export func print::<T>(x: T, ...rest) => T panic
 #op(':io/print')
-export func print(): void panic
+export func print() => void panic
 
 /// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
 /// that the write can be part of the data flow). The other arguments may each have a type of
@@ -855,11 +855,11 @@ export func print(): void panic
 /// @example println('a', 1)    // a 1
 #op(':io/println')
 with <fmt: string>
-export func println::<T>(x: T, ...rest): T panic
+export func println::<T>(x: T, ...rest) => T panic
 #op(':io/println')
-export func println::<T>(x: T, ...rest): T panic
+export func println::<T>(x: T, ...rest) => T panic
 #op(':io/println')
-export func println(): void panic
+export func println() => void panic
 
 /// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
 /// the first one (so that the write can be part of the data flow). The other arguments may each
@@ -868,11 +868,11 @@ export func println(): void panic
 /// @example eprintln('a', 1)    // a 1
 #op(':io/eprintln')
 with <fmt: string>
-export func eprintln::<T>(x: T, ...rest): T panic
+export func eprintln::<T>(x: T, ...rest) => T panic
 #op(':io/eprintln')
-export func eprintln::<T>(x: T, ...rest): T panic
+export func eprintln::<T>(x: T, ...rest) => T panic
 #op(':io/eprintln')
-export func eprintln(): void panic
+export func eprintln() => void panic
 
 // ---- strings ----
 
@@ -891,32 +891,32 @@ export func eprintln(): void panic
 /// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
 #op(':str/format')
 with <...args>
-export func format(fmt: string): string panic
+export func format(fmt: string) => string panic
 
 /// The strings of xs joined with sep between them.
 /// @example ['a', 'b']->join<', '>    // 'a, b'
 #op(':str/join')
 with <sep: string>
-export func join(xs: string[]): string
+export func join(xs: string[]) => string
 
 /// The number of code points of a string.
 /// @pure
 /// @example len('h€')    // 2
 #op(':struct/len_str')
-export func len(x: string): int
+export func len(x: string) => int
 
 /// The length of the first dimension of an array of any rank.
 /// @pure
 /// @example len([1, 2, 3])    // 3
 #op(':struct/len_arr')
-export func len::<A>(x: A): int when is_array::<A>()
+export func len::<A>(x: A) => int when is_array::<A>()
 
 /// The number of bytes of a `Bytes`.
 /// @pure
 /// @example len(encode('h€'))    // 4
 /// @example-fragment the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 #op(':struct/len_bytes')
-export func len(x: Bytes): int
+export func len(x: Bytes) => int
 
 /// The extents an array type writes down, in order: `extent_of::<float[2, 3]>()` is `[2, 3]`.
 ///
@@ -944,7 +944,7 @@ export func len(x: Bytes): int
 /// @pure
 /// @example extent_of::<float[2, 3]>()    // [2, 3]
 #op(':op/extent_of')
-export func extent_of::<A>(): int[] when is_array::<A>()
+export func extent_of::<A>() => int[] when is_array::<A>()
 
 /// A second name of a mutable value: a write the program makes through the copy is not seen
 /// through the original, and vice versa. A value the collector traces is cloned under its own
@@ -959,7 +959,7 @@ export func extent_of::<A>(): int[] when is_array::<A>()
 /// @pure
 /// @example copy([1, 2])    // [1, 2]
 #op(':op/copy')
-export func copy::<T>(x: T): T
+export func copy::<T>(x: T) => T
 
 /// A conversion as an ordinary operator: the CAST node kind written as a call of the operator that
 /// does the same thing (plan 2.3, step 2). The target type is the call's own result type and the
@@ -976,7 +976,7 @@ export func copy::<T>(x: T): T
 /// @pure
 /// @example cast::<int, float>(1)    // 1.0
 #op(':op/cast')
-export func cast::<T, U>(x: T): U panic
+export func cast::<T, U>(x: T) => U panic
 
 /// A construction as an ordinary operator: the FILL node kind written as a call of the operator
 /// that does the same thing (plan 2.3, step 2). `template` is the aggregate the value is made from
@@ -992,7 +992,7 @@ export func cast::<T, U>(x: T): U panic
 /// @pure
 /// @example fill((0, 0), 1, 2)    // (1, 2)
 #op(':op/fill')
-export func fill::<T, ...F>(template: T, ...fields: ...F): T panic
+export func fill::<T, ...F>(template: T, ...fields: ...F) => T panic
 
 /// A member read as an ordinary operator: the ACCS node kind written as a call of the operator
 /// that does the same thing (plan 2.3, step 2). The position is a compile-time parameter of the
@@ -1007,7 +1007,7 @@ export func fill::<T, ...F>(template: T, ...fields: ...F): T panic
 /// @example access::<(int, int), int><0>((1, 2))    // 1
 #op(':op/access')
 with <at: int>
-export func access::<T, U>(x: T): U panic
+export func access::<T, U>(x: T) => U panic
 
 /// The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
 /// second URI rather than a second rule of `:op/access`, because the two read different things of
@@ -1018,7 +1018,7 @@ export func access::<T, U>(x: T): U panic
 /// @example access_key::<{ x: int, y: int }, int><'y'>({ x: 1, y: 2 })    // 2
 #op(':op/access_key')
 with <key: string>
-export func access_key::<T, U>(x: T): U panic
+export func access_key::<T, U>(x: T) => U panic
 
 // ---- arrays ----
 
@@ -1032,7 +1032,7 @@ export func access_key::<T, U>(x: T): U panic
 /// @example range(0, 10, 3)     // [0, 3, 6, 9]
 /// @example range(10, 0, -3)    // [10, 7, 4, 1]
 #op(':struct/range')
-export func range(start: int, end: int, step: int): int[] panic
+export func range(start: int, end: int, step: int) => int[] panic
 
 // ---- ranges ----
 //
@@ -1054,7 +1054,7 @@ export type Range = { start: int?, stop: int?, step: int }
 /// The range from start up to, not including, stop, taken in steps of step: the step of
 /// `range(a, b, s)`, and 1 for the interval `a..b`.
 /// @example to_range(1, 5, 1)->to_array()    // [1, 2, 3, 4]
-export func to_range(start: int, stop: int, step: int): Range {
+export func to_range(start: int, stop: int, step: int) => Range {
     // A struct literal does not put a value into a `T?` field by itself (a declaration does), so
     // the two ends are boxed where they are bound and the literal only copies what it is given.
     let start_boxed: int? = start
@@ -1068,7 +1068,7 @@ export func to_range(start: int, stop: int, step: int): Range {
 /// inventing one.
 /// @fails fault `RangeWithoutEnd` when start or stop is null
 /// @example to_range(1, 5, 1)->to_array()    // [1, 2, 3, 4]
-export func to_array(r: Range): int[] {
+export func to_array(r: Range) => int[] {
     let start = r.start ?? fail<'RangeWithoutEnd'>('an open range has no array form: start is left out')
     let stop = r.stop ?? fail<'RangeWithoutEnd'>('an open range has no array form: stop is left out')
     return range(start, stop, r.step)
@@ -1076,7 +1076,7 @@ export func to_array(r: Range): int[] {
 
 /// Whether r holds no integer.
 /// @example to_range(3, 3, 1)->is_empty()    // true
-export func is_empty(r: Range): bool {
+export func is_empty(r: Range) => bool {
     return len(to_array(r)) == 0
 }
 
@@ -1086,7 +1086,7 @@ export func is_empty(r: Range): bool {
 /// @fails fault `IndexOutOfRange` when the array is empty
 /// @example last([1, 2, 3])    // 3
 #op(':struct/last_arr')
-export func last::<T>(xs: T[]): T panic
+export func last::<T>(xs: T[]) => T panic
 
 /// The part of x from start up to, not including, end along one axis, taking every step-th
 /// position (a step of 1 by default, any non-zero value allowed). x is an array of any rank, a
@@ -1098,14 +1098,14 @@ export func last::<T>(xs: T[]): T panic
 /// @example [1, 2, 3, 4]->slice<0, 1, 3>    // [2, 3]
 #op(':op/slice_sub')
 with <axis: int, start: int, end: int, step: int = 1>
-export func slice::<T>(x: T[]): T[] panic
+export func slice::<T>(x: T[]) => T[] panic
 
 /// The same slice of a string, by code point: a string has the one axis 0, and the result is a
 /// string. `'中文字'[1..3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
 /// @example 'hello'->slice<0, 1, 4>    // 'ell'
 #op(':op/slice_str')
 with <axis: int, start: int, end: int, step: int = 1>
-export func slice(x: string): string panic
+export func slice(x: string) => string panic
 
 /// The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 /// `b[1..3]` and `b->slice<0, 1, 3>` are the same bytes.
@@ -1113,33 +1113,35 @@ export func slice(x: string): string panic
 /// @example-fragment the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 #op(':op/slice_bytes')
 with <axis: int, start: int, end: int, step: int = 1>
-export func slice(x: Bytes): Bytes panic
+export func slice(x: Bytes) => Bytes panic
 
 /// The elements of xs followed by those of ys, as a new array.
 /// @example concat([1], [2, 3])    // [1, 2, 3]
 #op(':struct/concat_arr')
-export func concat::<T>(xs: T[], ys: T[]): T[]
+export func concat::<T>(xs: T[], ys: T[]) => T[]
 
 /// Whether an element of xs equals value, by the `==` of the element type (by content for
 /// arrays, tuples and structs).
 /// @example [1, 2, 3]->contains<2>    // true
 #op(':struct/contains_arr')
 with <value: T>
-export func contains::<T>(xs: T[]): bool
+export func contains::<T>(xs: T[]) => bool
 
 /// Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
 /// string.
 /// @example 'hello'->contains<'ell'>    // true
 #op(':struct/contains_str')
 with <sub: string>
-export func contains(s: string): bool
+export func contains(s: string) => bool
 
 /// Two arrays combined element by element into pairs. They must have the same length.
 /// Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 /// @fails fault `InvalidArgument` when the lengths differ
 /// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
 #op(':struct/zip')
-export func zip::<...A>(...xs: ...A): (...ElementOf<A>)[] panic when ...is_array::<A>()
+export func zip::<...A>(...xs: ...A) => (...ElementOf<A>)[]
+    panic
+    when ...is_array::<A>()
 
 /// A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
 /// to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
@@ -1147,7 +1149,7 @@ export func zip::<...A>(...xs: ...A): (...ElementOf<A>)[] panic when ...is_array
 /// @example [1, 2, 3]->append<4>    // [1, 2, 3, 4]
 #op(':struct/append_arr')
 with <value: T>
-export func append::<T>(xs: T[]): T[]
+export func append::<T>(xs: T[]) => T[]
 
 // ---- higher-order functions ----
 //
@@ -1164,25 +1166,25 @@ export func append::<T>(xs: T[]): T[]
 /// @example [1, 2, 3]->map<(x) => x * 2>    // [2, 4, 6]
 #op(':mark/map_arr')
 with <f: (item: T) => U>
-export func map::<T, U>(xs: T[]): U[]
+export func map::<T, U>(xs: T[]) => U[]
 
 /// The elements for which f is true, in order; the calls of f have no order among them.
 /// @example [1, 2, 3, 4]->filter<(x) => x % 2 == 0>    // [2, 4]
 #op(':mark/filter_arr')
 with <f: (item: T) => bool>
-export func filter::<T>(xs: T[]): T[]
+export func filter::<T>(xs: T[]) => T[]
 
 /// The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
 /// @example [1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>    // 6
 #op(':mark/reduce_arr')
 with <f: (acc: U, item: T) => U, initial: U>
-export func reduce::<U, T>(xs: T[]): U
+export func reduce::<U, T>(xs: T[]) => U
 
 /// Calls f for every element, in order.
 /// @example [1, 2, 3]->foreach<(x) => println(x)>
 #op(':mark/foreach_arr')
 with <f: (item: T) => void>
-export func foreach::<T>(xs: T[]): void
+export func foreach::<T>(xs: T[]) => void
 
 // ---- fault isolation ----
 //
@@ -1201,7 +1203,7 @@ export func foreach::<T>(xs: T[]): void
 /// @example fail<'BadLimit'>('the limit must be positive')
 #op(':op/fail')
 with <Kind: string>
-export func fail(message: string): never panic
+export func fail(message: string) => never panic
 
 /// The function f with the faults of its calls turned into error values: `attempt(f)` takes the
 /// parameters of f and gives the result of f plus `!`. A fault raised inside a call becomes an
@@ -1214,7 +1216,7 @@ export func fail(message: string): never panic
 /// @example attempt((x: int) => 10 / x)(2) !! -1    // 5
 /// @example attempt((x: int) => 10 / x)(0) !! -1    // -1: the division fault becomes an error value
 #op(':mark/attempt')
-export func attempt::<F>(f: F): F!
+export func attempt::<F>(f: F) => F!
 
 // ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
 // Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new
@@ -1226,99 +1228,99 @@ export func attempt::<F>(f: F): F!
 /// whose length is asked for, whatever its type.
 /// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
 #op(':coll/len')
-export func len::<C>(x: C): int when is_map::<C>() || is_set::<C>()
+export func len::<C>(x: C) => int when is_map::<C>() || is_set::<C>()
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @example ([('a', 1)] as Map<string, int>)->get<'z'> ?? 0    // 0 when the map has no 'z'
 #op(':coll/map_get')
 with <key: K>
-export func get::<K, V>(m: Map<K, V>): V?
+export func get::<K, V>(m: Map<K, V>) => V?
 
 /// The value stored under key, or fallback when the map has no such key.
 /// @example ([('a', 1)] as Map<string, int>)->get_or<'z', -1>    // -1 when the map has no 'z'
 #op(':coll/map_get_or')
 with <key: K, fallback: V>
-export func get_or::<K, V>(m: Map<K, V>): V
+export func get_or::<K, V>(m: Map<K, V>) => V
 
 /// A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 /// @example ([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>    // {a: 1, b: 2, c: 3}
 #op(':coll/map_put')
 with <key: K, value: V>
-export func put::<K, V>(m: Map<K, V>): Map<K, V>
+export func put::<K, V>(m: Map<K, V>) => Map<K, V>
 
 /// A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 /// @example ([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>    // {b: 2}
 #op(':coll/remove')
 with <key: K>
-export func remove::<K, V>(c: Map<K, V>): Map<K, V>
+export func remove::<K, V>(c: Map<K, V>) => Map<K, V>
 #op(':coll/remove')
 with <key: K>
-export func remove::<K>(c: Set<K>): Set<K>
+export func remove::<K>(c: Set<K>) => Set<K>
 
 /// Whether a map has an entry of key. (A set is asked with `contains`.)
 /// @example ([('a', 1)] as Map<string, int>)->has<'a'>    // true
 #op(':coll/has')
 with <key: K>
-export func has::<K, V>(c: Map<K, V>): bool
+export func has::<K, V>(c: Map<K, V>) => bool
 
 /// The keys of a map, in ascending order.
 /// @example keys([('b', 2), ('a', 1)] as Map<string, int>)    // [a, b]
 #op(':coll/keys')
-export func keys::<K, V>(m: Map<K, V>): K[]
+export func keys::<K, V>(m: Map<K, V>) => K[]
 
 /// The values of a map, in the ascending order of their keys.
 /// @example values([('b', 2), ('a', 1)] as Map<string, int>)    // [1, 2]
 #op(':coll/map_values')
-export func values::<K, V>(m: Map<K, V>): V[]
+export func values::<K, V>(m: Map<K, V>) => V[]
 
 /// The entries of a map as (key, value) tuples, in ascending order of the keys.
 /// @example items([('b', 2), ('a', 1)] as Map<string, int>)    // [(a, 1), (b, 2)]
 #op(':coll/map_items')
-export func items::<K, V>(m: Map<K, V>): (K, V)[]
+export func items::<K, V>(m: Map<K, V>) => (K, V)[]
 
 /// The elements of a set as an array, in ascending order. The collection is `m`, the name the
 /// map declaration above gives its one parameter: the position means the collection whose items
 /// are listed.
 /// @example items([3, 1, 2] as Set<int>)    // [1, 2, 3]
 #op(':coll/set_items')
-export func items::<T>(m: Set<T>): T[]
+export func items::<T>(m: Set<T>) => T[]
 
 /// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 /// @example merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)    // {a: 1, b: 20, c: 30}
 #op(':coll/merge')
-export func merge::<K, V>(m: Map<K, V>, other: Map<K, V>): Map<K, V>
+export func merge::<K, V>(m: Map<K, V>, other: Map<K, V>) => Map<K, V>
 
 /// Whether value is an element of the set.
 /// @example ([1, 2, 3] as Set<int>)->contains<9>    // false
 #op(':coll/set_contains')
 with <value: T>
-export func contains::<T>(s: Set<T>): bool
+export func contains::<T>(s: Set<T>) => bool
 
 /// A set with value added; s is unchanged.
 /// @example ([1, 2, 3] as Set<int>)->add<9>    // {1, 2, 3, 9}
 #op(':coll/set_add')
 with <value: T>
-export func add::<T>(s: Set<T>): Set<T>
+export func add::<T>(s: Set<T>) => Set<T>
 
 /// The set of the elements that are in either set.
 /// @example union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2, 3, 4}
 #op(':coll/set_union')
-export func union::<T>(s: Set<T>, other: Set<T>): Set<T>
+export func union::<T>(s: Set<T>, other: Set<T>) => Set<T>
 
 /// The set of the elements that are in both sets.
 /// @example intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {3}
 #op(':coll/set_intersect')
-export func intersect::<T>(s: Set<T>, other: Set<T>): Set<T>
+export func intersect::<T>(s: Set<T>, other: Set<T>) => Set<T>
 
 /// The set of the elements of s that are not in other.
 /// @example difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2}
 #op(':coll/set_difference')
-export func difference::<T>(s: Set<T>, other: Set<T>): Set<T>
+export func difference::<T>(s: Set<T>, other: Set<T>) => Set<T>
 
 /// Whether every element of s is an element of other.
 /// @example is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)    // true
 #op(':coll/set_is_subset')
-export func is_subset::<T>(s: Set<T>, other: Set<T>): bool
+export func is_subset::<T>(s: Set<T>, other: Set<T>) => bool
 
 // ---- streams ----
 
@@ -1331,4 +1333,10 @@ export func is_subset::<T>(s: Set<T>, other: Set<T>): bool
 /// @example tee_note(8, 64, 2, 2, s)    // the tee written `s->tee<8>` reports itself this way
 /// @example-fragment the last operand is the stream a tee reads, and no example program has one
 #op(':stream/tee_note')
-export func tee_note::<T>(hint: int, cap: int, elements: int, peak: int, s: T..): void
+export func tee_note::<T>(
+    hint: int,
+    cap: int,
+    elements: int,
+    peak: int,
+    s: T..
+) => void

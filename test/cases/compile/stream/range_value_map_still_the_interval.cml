@@ -3,10 +3,12 @@
 // at `int[]`, in both spellings. Nothing declares `map` again beside the group, so nothing shadows
 // it -- a range's own `map` would be an operator of its own, not a function of this name.
 
-func dbl(x: int): int { return x * 2 }
+func dbl(x: int) => int {
+    return x * 2
+}
 
-func main(): int sync {
-    println(map<dbl>(1..5))
-    println((1..5)->map<dbl>)
+func main() => int sync {
+    println(map<dbl>(1 .. 5))
+    println((1 .. 5)->map<dbl>)
     return 0
 }
