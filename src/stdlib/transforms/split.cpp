@@ -411,7 +411,7 @@ bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_nod
 /// `widen(n: int, x: float)` whose lifted list is `(int, float, (), float)`.
 std::vector<gc_node_ref_t>
 tangentArgumentsOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref) {
-    const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
+    const std::vector<gc_node_ref_t> all = dataInputsOf(graph.view(), ref);
     const size_t withCount               = graph.withInputsOf(ref).size();
     const size_t ordinary                = all.size() > withCount ? all.size() - withCount : 0;
     const size_t half                    = ordinary / 2;
@@ -445,7 +445,7 @@ pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_
     if (!read.has_value() || read->kind != rt::GCAccsKind::TupleIndex || read->place != 1) {
         return rt::kInvalidNodeRef;
     }
-    const std::vector<gc_node_ref_t> reads = dataInputsOf(&graph, ref);
+    const std::vector<gc_node_ref_t> reads = dataInputsOf(graph.view(), ref);
     // The value read is the node's last data port: a read written as a call states the place
     // first (`access: (Int64, T) => ...`), and a node of the ACCS kind has no other port.
     if (reads.empty() || !answersAPairAt(graph, program, reads.back())) {
@@ -518,7 +518,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
         while (!stack.empty()) {
             const gc_node_ref_t ref = stack.back();
             stack.pop_back();
-            for (gc_node_ref_t input : dataInputsOf(&lifted, ref)) {
+            for (gc_node_ref_t input : dataInputsOf(lifted.view(), ref)) {
                 if (input < nodeCount && beforeCut[input] == 0) {
                     beforeCut[input] = 1;
                     stack.push_back(input);
@@ -659,7 +659,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 const auto *lateCallee     = program != nullptr && rt::isValid(lateCalleeId)
                                                  ? program->graph(lateCalleeId)
                                                  : nullptr;
-                const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
+                const std::vector<gc_node_ref_t> arguments = dataInputsOf(lifted.view(), ref);
                 const size_t withArguments                 = lifted.withInputsOf(ref).size();
                 const size_t ordinary =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
@@ -749,7 +749,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                     found.push_back(ref);
                     continue;
                 }
-                const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
+                const std::vector<gc_node_ref_t> arguments = dataInputsOf(lifted.view(), ref);
                 // Which of those arguments are values is the callee's signature's answer, read
                 // from its type (`valuePortsOf`): the ports of `Lift<F>` whose partner is their own
                 // tangent space. `dataInputsOf` is the ordinary inputs followed by the context
@@ -809,7 +809,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 }
                 continue;
             }
-            for (gc_node_ref_t input : dataInputsOf(&lifted, ref)) {
+            for (gc_node_ref_t input : dataInputsOf(lifted.view(), ref)) {
                 if (input < nodeCount && visited[input] == 0) {
                     stack.push_back(input);
                 }
@@ -1050,7 +1050,7 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
                 program->graph(calleeId) != nullptr) {
                 callees.push_back(program->graph(calleeId));
             }
-            const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
+            const std::vector<gc_node_ref_t> all = dataInputsOf(graph.view(), ref);
             // The values the caller passes, read from the callee's signature (`valuePortsOf`), and
             // then the call's `with` arguments, which that reading does not name.
             const auto *callee =
@@ -1071,7 +1071,7 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
                 inputs.push_back(all[i]);
             }
         } else {
-            inputs = dataInputsOf(&graph, ref);
+            inputs = dataInputsOf(graph.view(), ref);
         }
         for (gc_node_ref_t input : inputs) {
             if (input < nodeCount && visited[input] == 0) {
@@ -1693,7 +1693,7 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
         // A projection of the loop's pair is the edge into the cell, and its component is what the
         // half reads. Any other node reading the loop itself would hold the cell's pair as one
         // value, which no half can be handed (`split` hands the components, not the pair).
-        const std::vector<gc_node_ref_t> inputs = dataInputsOf(function, ref);
+        const std::vector<gc_node_ref_t> inputs = dataInputsOf(function->view(), ref);
         bool readsTheCell                       = false;
         for (gc_node_ref_t input : inputs) {
             const rt::GCNode *source =
@@ -2094,7 +2094,7 @@ SplitGraph buildSplitGraph(
                     if (function->nodeRegion(r) != region) {
                         continue;
                     }
-                    for (gc_node_ref_t input : dataInputsOf(function, r)) {
+                    for (gc_node_ref_t input : dataInputsOf(function->view(), r)) {
                         const rt::GCNode *read = function->node(input);
                         if (read == nullptr || read->kind == rt::GCNodeKind::Data) {
                             continue; // a constant is not a value the cut has to carry

@@ -210,7 +210,7 @@ struct Half {
     /// tangent arguments, because the value it stands for is `lin_g` applied to them. Every other
     /// node takes all of them, in order.
     std::vector<gc_node_ref_t> halfInputsOf(gc_node_ref_t ref) const {
-        const std::vector<gc_node_ref_t> all = dataInputsOf(source, ref);
+        const std::vector<gc_node_ref_t> all = dataInputsOf(source->view(), ref);
         if (tangent) {
             const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
             return call != rt::kInvalidNodeRef ? tangentArgumentsOf(*source, program, call) : all;
@@ -795,7 +795,7 @@ struct Half {
             // the tangents the source call passed, and the call site never sees what the callee's
             // body reads.
             const std::optional<MemberRead> read   = memberReadOf(*source, ref);
-            const std::vector<gc_node_ref_t> reads = dataInputsOf(source, ref);
+            const std::vector<gc_node_ref_t> reads = dataInputsOf(source->view(), ref);
             if (!read.has_value() || reads.empty()) {
                 return refuseAt(
                     refusal,
