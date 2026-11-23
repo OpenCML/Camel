@@ -56,3 +56,12 @@
 | D-1123-41 | 作者 `fsh-dev` 的 inbox | `0.2.46` 的稳定点，最高优先：① `notation-corpus` 收尾（已合，语料 4,254→0、旧写法 0 处）；② `range-value` 拆三条 —— (a) 名字解析同层合成重载集 + prelude 导出名免导入 `lane/range-rn`、(b) `a..b` 产 `Range`/`for` 按 `__iter__`/转置反向/后端/打印 `lane/range-ri`、(c) 下标逐维按类型分派、删切片路径与按 `range` 名字判断 `lane/range-rx`；③ `nn-element-type` 返工 = `D-1123-38` | 见各行 | doing | 2026-11-23 20:15 | |
 | D-1123-42 | 作者 `fsh-dev` 的 inbox | **返工 `D-1123-39` 的槽表：不定死 32 格。** 合入的是固定 32 格、内嵌在 `GCGraph` 的两张表（`kFactSlotCount`），每张冻结图无论有没有事实都占 512 字节，第 33 种起退回查表 —— 而 `D-1123-39` 定稿写的是按需分配、可扩容。改法：`GCGraph` 只留**一个原子指针**指向 `{容量, 槽[]}`；第一次有事实写进这张图时才分配，容量取当时已登记的种类数；之后登记新种类时分配更大的表、复制、原子换指针，旧表留到图销毁时一起释放（读者无锁读到旧表也安全）；读 = 取指针、判越界、取槽。**删掉 `kFactSlotCount` 与「超出就走存储」的分支** | `lane/fact-slots-grow` | doing | 2026-11-23 20:44 | |
 | C-1123-33 | `oper-identity-write`（栈上量到） | **`[a:b]` 切片写法在 `develop` 上不解析，而五处语料与一处文档仍在写它**：`parser_expr.cpp:248` 起只把 `..` 与 `<>` 当切片分隔符，没有 `:`；而 `src/stdlib/prelude.cml:1055` 的注释写着「`'中文字'[1:3]` 与 `'中文字'->slice<0, 1, 3>` 都是 `'文字'`」，`str_unicode.cml:58`、`str_chars.cml:20`、`string_slice.cml:6`、`ort_core_slice*.cml` 都真的写着 `['hello'[1:4]]` 这类表达式。后果是 `feat/modules` 的 `stdlib_values` 24 条红（4 用例 × 6 后端）全部报 `Expected ']' before ':'`。**这不是迁移带来的** —— `develop` 上就是 24 条。要先答一个问题再动手：`[a:b]` 是该**恢复**（作者裁过切片只能用 `..`？见 3.x），还是这几处语料与那行注释是**旧写法的遗留**、该改成语料侧用 `..`。两个答案改动的地方完全不同。 **现状**：问题答了 —— `[a:b]` 是旧写法，七处文本已在 `8ee76003e` 迁移完，`git grep` 全树 0 行。余下的只有「反向切片的末端」一族：`ort_core_slice.cml:83/93/103/113/118` 与 `slice_step_negative.cml:15` 写的 `range(3, -1, -1)`，前端在问 extent **之前**就按「端点不许是负数」拒掉（`globals.cpp#staticSliceRejection`），而内核只把 `-1` 给**没写**的末端（`struct.cpp:357`），于是「走到了第一个元素」这件事在当前语法里写不出来。这不是文本迁移，是语言问题，交裁：`internal/questions/2026-11-23-how-a-backward-slice-names-the-position-before-the-first.cn.md`（两处、六条用例、两条计划红在编译） |
+
+## 2026-11-23 21:40 认领（决策者通道 D-1123-45）
+
+| 编号 | 事 | 车道 | 状态 |
+|---|---|---|---|
+| D-1123-41① | 解析器删旧写法 | `lane/parser-old-spelling` | doing |
+| D-1123-33 | 效应仍有两个来源，21 处读者 | `lane/effects-one-source` | doing |
+| D-1123-34 | 四算子按 URI 分类 + 内核 include 标准库 | `lane/operator-uri` | doing |
+| D-1123-36 | 注释里的过程痕迹 + 检查脚本 | `lane/comment-traces` | doing |
