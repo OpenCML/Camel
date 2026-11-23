@@ -2838,37 +2838,54 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // A `__iter__` written in Camel, as the one call the loop makes: the overload that
             // takes this type, chosen by the type itself. Any other shape of declaration (a
             // generic one, or one whose parameter is another type) is not this type's answer.
-            const auto camelIterableOf = [&](const entity &written) -> node_handle_t {
+            const auto camelIterableOf = [&](const compile_graph_ptr_t &graph) -> node_handle_t {
+                FunctionType *signature = graph != nullptr ? graph->funcType() : nullptr;
+                if (signature == nullptr || signature->withTypesCount() != 0 ||
+                    signature->normTypesCount() != 1 || signature->normTypeAt(0) == nullptr ||
+                    !signature->normTypeAt(0)->assignableFrom(type)) {
+                    return nullptr;
+                }
+                node_handle_t call = createFuncDataNode(graph, false, true);
+                registerNodeOrigin(context_, call, expr, "gir.loop.iter");
+                linkNodes(LinkType::Norm, iterable, call);
+                return call;
+            };
+            const auto camelIterableOfEntity = [&](const entity &written) -> node_handle_t {
                 using camel::core::module::detail::EntityAccess;
                 if (!EntityAccess::isGraphSet(written)) {
                     return nullptr;
                 }
                 for (const compile_graph_ptr_t &graph :
                      *asCompileGraphSet(EntityAccess::graphSet(written))) {
-                    FunctionType *signature = graph != nullptr ? graph->funcType() : nullptr;
-                    if (signature == nullptr || signature->withTypesCount() != 0 ||
-                        signature->normTypesCount() != 1 || signature->normTypeAt(0) == nullptr ||
-                        !signature->normTypeAt(0)->assignableFrom(type)) {
-                        continue;
+                    if (node_handle_t call = camelIterableOf(graph)) {
+                        return call;
                     }
-                    node_handle_t call = createFuncDataNode(graph, false, true);
-                    registerNodeOrigin(context_, call, expr, "gir.loop.iter");
-                    linkNodes(LinkType::Norm, iterable, call);
-                    return call;
                 }
                 return nullptr;
             };
             node_handle_t elements = nullptr;
             std::optional<oper_idx_ptr_t> resolved;
             const std::vector<StaticArg> statics(1);
-            // `__iter__` is a group of several overloads (`:struct/iter_str`,
-            // `:coll/map_items`), one per iterable type: no one OperId names it, so it is still
-            // looked up by the group's name.
-            if (const auto iter = importedEntity("__iter__"); iter.has_value()) {
-                if (iter->isOperGroup()) {
-                    resolved = iter->operGroup()->resolve({}, {type}, statics);
-                } else {
-                    elements = camelIterableOf(*iter);
+            // `__iter__` is the operator group a `for` calls (design principles 4.3), and the
+            // operator is `for`: a program declares `func operator for(v: V): T..` and it lands in
+            // this group, exactly as `func operator []` lands in `__idx__`. What it declares is
+            // taken first, as the more specific overload (4.3), from the module the loop is
+            // written in and from what it imports.
+            for (const compile_graph_ptr_t &graph : operatorOverloadsOf("__iter__").graphs) {
+                if ((elements = camelIterableOf(graph)) != nullptr) {
+                    break;
+                }
+            }
+            // The group's kernel members -- a string's characters, a map's pairs -- answer for
+            // their own types: several overloads with no one OperId naming them, so the group is
+            // looked up by its name.
+            if (elements == nullptr) {
+                if (const auto iter = importedEntity("__iter__"); iter.has_value()) {
+                    if (iter->isOperGroup()) {
+                        resolved = iter->operGroup()->resolve({}, {type}, statics);
+                    } else {
+                        elements = camelIterableOfEntity(*iter);
+                    }
                 }
             }
             if (resolved.has_value()) {
@@ -2880,17 +2897,13 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             }
             if (elements == nullptr) {
                 // A named type's own module says how to walk it (design principles 5.7), which is
-                // where a range's stream stands: the prelude declares `Range` and the function
-                // together, and a program that walks a range imports neither. The name is `iter`
-                // and not the group's `__iter__`, which a library cannot declare -- a name written
-                // `__x__` belongs to the compiler, so the group's members are kernels only and a
-                // stream, being a function value, cannot be one. This fallback is therefore the
-                // one road a Camel-written iterator has, and it is chosen by the type alone: the
-                // module is the one the type's declaration records, so nothing is searched for.
+                // where a range's stream stands: the prelude declares `Range` and its `for`
+                // together, and a program that walks a range imports neither. The module is the
+                // one the type's declaration records, so nothing is searched for by name.
                 for (const auto &[module, typeName] : declaringModulesOf({}, {type})) {
                     for (const auto &overload :
-                         exports_->exportedOperatorOverloads(*module, "iter")) {
-                        if ((elements = camelIterableOf(overload.overloads)) != nullptr) {
+                         exports_->exportedOperatorOverloads(*module, "__iter__")) {
+                        if ((elements = camelIterableOfEntity(overload.overloads)) != nullptr) {
                             break;
                         }
                     }

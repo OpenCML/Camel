@@ -8,6 +8,8 @@
  * `a + b` is the call `__add__(a, b)`: the operator group `__add__` holds the built-in
  * overloads and those of the C++ modules, and a program adds its own with
  * `func operator +(a: V, b: V): V` (design principles 4.3; the notation is provisional).
+ * `for x in c` is the call `__iter__(c)` in the same way, with one parameter: the group
+ * answers with the values the loop reads, round by round.
  * This table is the one place that says which symbol is which function, which symbols can be
  * overloaded and with how many parameters, and why the others cannot: the parser takes any
  * operator token after `func operator`, the compiler checks the declaration here, the

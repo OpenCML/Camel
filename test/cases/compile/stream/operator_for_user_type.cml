@@ -1,0 +1,42 @@
+// `for` is an operator (design principles 4.3). A type says how a loop walks it with
+// `func operator for(v: V) => T..`: the operator's group is `__iter__`, as `[]`'s is `__idx__`,
+// and `for x in v` is the call `__iter__(v)` whose answer the loop reads round by round.
+//
+// What it answers is what the loop reads, so the answer is a stream (design principles 5.4): the
+// operator is a generator, and its body runs once per pull.
+
+type Counter = {
+    lo: int,
+    hi: int
+}
+
+// One round of the walk while the count has not reached the end: the integer and the walk from the
+// next one, or null when it has run out. A stream cannot name itself in the closure that makes it
+// (a closure cannot capture a stream, design principles 5.4), so the round is a function of its own
+// and the stream is the `match` over it.
+func counter_round(i: int, hi: int) => (int, int..)? {
+    return if i < hi then (i, counter_upto(i + 1, hi)) else null
+}
+
+func counter_upto(i: int, hi: int) => int.. {
+    return func () {
+        match counter_round(i, hi) {
+            case null => null
+            case pair => pair
+        }
+    }
+}
+
+func operator for(c: Counter) => int.. {
+    return counter_upto(c.lo, c.hi)
+}
+
+func main() => int sync {
+    let c: Counter = { lo: 2, hi: 5 }
+    // The loop calls the type's own operator: the rounds are 2, 3, 4.
+    println(loop acc = 0 for i in c do acc * 10 + i)
+    // Walked again: the operator answers a fresh stream each time, so the second loop reads all
+    // three rounds of 2, 3, 4 rather than continuing the first one.
+    println(loop n = 0 for i in c do n + 1)
+    return 0
+}

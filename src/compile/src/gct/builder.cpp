@@ -950,6 +950,23 @@ void Builder::checkOperatorDeclaration(
             throw BuildAbortException();
         }
     }
+    // `for x in c` reads what the operator answers round by round, so what it answers is a
+    // stream (design principles 5.4): `func operator for(r: Range): int..`. A `for` that answers
+    // a value has no reading in a loop, and a loop that would use it cannot be the place that
+    // finds out.
+    if (symbol == "for") {
+        const AST::node_ptr_t returned = funcType->optAtAs<AST::TypeLoad>(2);
+        if (returned == nullptr ||
+            returned->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Stream) {
+            diags_->of(SemanticDiag::OperatorOverloadInvalid)
+                .at(at)
+                .commit(
+                    symbol,
+                    "what it answers is what the loop reads round by round, so its return type is "
+                    "a stream ('func operator for(r: Range): int..')");
+            throw BuildAbortException();
+        }
+    }
 }
 
 /*

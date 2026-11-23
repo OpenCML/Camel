@@ -1080,15 +1080,16 @@ export func is_empty(r: Range) => bool {
 
 // ---- a range's stream ----
 //
-// `for i in r` asks the type of `r` how to walk it (design principles 3.10, 5.4): the operator
-// group `__iter__` answers for a string and a map, and a named type answers with a function of its
-// own module, which is `iter` below for `Range`. The group's name cannot be declared here (a name
-// written `__x__` is the compiler's), so the function the loop reads carries the readable name and
-// the group is still the first road the loop takes.
+// `for i in r` asks the type of `r` how to walk it (design principles 3.10, 5.4): it calls the
+// operator group `__iter__`, exactly as `r[i]` calls `__idx__`. The operator is `for`, so a type
+// answers with `func operator for(v: V) => T..`, and a range's answer is `operator for` below. Its
+// parameters are the value to walk -- one, like `operator []`'s two -- and what it answers is a
+// stream (the loop reads it round by round), which the compiler checks when the operator is
+// declared: a `for` that answers a value has no reading in a loop.
 //
 // A range hands out its integers one round at a time instead of building the array `to_array`
-// makes: `iter` is a generator (design principles 5.4), so the body runs one stretch per pull and
-// the integer a round sees is the one the pull before it stopped at.
+// makes: the operator is a generator (design principles 5.4), so the body runs one stretch per
+// pull and the integer a round sees is the one the pull before it stopped at.
 //
 // The loop counts towards the end the range names, and a range whose end is left out counts on:
 // that is the one form `a..b` cannot write (an interval always names both ends, design principles
@@ -1132,19 +1133,18 @@ func range_from(i: int, stride: int) => int.. {
 }
 
 /// The integers r names, one per round: `for i in 0..3` takes the next one each round, so a loop
-/// over a range counts instead of walking an array. This is the `Range` type's iterator, and the
-/// compiler reads it for the type of the thing a `for` walks (design principles 5.4, 5.7: a named
-/// type's operators go with the type). The operator group of that name is `__iter__`, which a
-/// library cannot declare -- a name written `__x__` is the compiler's own -- so this is the
-/// function of the type's module the loop falls back on, and the name a program may also call.
+/// over a range counts instead of walking an array. This is `Range`'s `for` operator, and the
+/// compiler reads it for the type of the thing a `for` walks (design principles 4.3, 5.4, 5.7: a
+/// named type's operators go with the type, and the group `__iter__` is where `for` lands).
 /// @example loop acc = 0 for i in to_range(0, 4, 1) do acc + i    // 6
-export func iter(r: Range) => int.. {
+export func operator for(r: Range) => int.. {
     let first = r.start ?? 0
     return match r.stop {
         case null => range_from(first, r.step)
         case stop => range_upto(first, stop, r.step)
     }
 }
+
 /// The last element. An empty array has none: check len first. Negative indices are not
 /// counted from the end (a negative index is a fault), so this is how the last element is
 /// written.

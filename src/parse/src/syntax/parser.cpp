@@ -232,7 +232,7 @@ bool ParserImpl::expectListEnd(TK closer) {
     // A list whose text ends before its closer is reported and the list closes without one. The
     // terminal token is not taken: it belongs to the node that closes the Program, and taking it
     // here would leave it out of the tree or, when a caller took it for the closer, in it twice
-    // 
+    //
     unexpected({e(TK::Comma), e(closer)});
     return false;
 }
@@ -266,13 +266,13 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
                 break;
             }
             if (pos_ != start && tok().newlineBefore() &&
-                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atFactDecl(0) : startsStmt(cur_))) {
+                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atFactDecl(0)
+                          : startsStmt(cur_))) {
                 break;
             }
             // A declaration keyword starts a declaration wherever it stands.
-            if (pos_ != start &&
-                (cur_ == TK::KwFunc || cur_ == TK::KwLet || cur_ == TK::KwVar ||
-                 cur_ == TK::KwImport || cur_ == TK::KwNamespace)) {
+            if (pos_ != start && (cur_ == TK::KwFunc || cur_ == TK::KwLet || cur_ == TK::KwVar ||
+                                  cur_ == TK::KwImport || cur_ == TK::KwNamespace)) {
                 break;
             }
         }
@@ -875,14 +875,13 @@ void ParserImpl::parseTagPositions() {
 /// 6.2). The first three are keywords of the language, the last two are not; after `on` all
 /// five are read as names, and one that is none of them is reported by the AST builder.
 void ParserImpl::parseTagPositionName() {
-    static const std::array<std::string_view, 5> kPositions = {
-        "func", "type", "field", "nodes", "param"};
+    static const std::array<std::string_view, 5> kPositions =
+        {"func", "type", "field", "nodes", "param"};
     const bool name = cur_ == TK::Identifier &&
-                      std::ranges::find(kPositions, tree_.tokens_.text(pos_)) !=
-                          kPositions.end();
-    const bool keyword = isKeyword(cur_) &&
-                         std::ranges::find(kPositions, tree_.tokens_.text(pos_)) !=
-                             kPositions.end();
+                      std::ranges::find(kPositions, tree_.tokens_.text(pos_)) != kPositions.end();
+    const bool keyword =
+        isKeyword(cur_) &&
+        std::ranges::find(kPositions, tree_.tokens_.text(pos_)) != kPositions.end();
     if (!name && !keyword) {
         unexpected({e(TK::Identifier)});
         return;
@@ -1024,8 +1023,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     // signature is the whole of it (design principles 6.4 step 1). A block is
     // still what follows a signature in every other case, so the next token decides; `sync`
     // belongs to the block and is read with it (parseStmtBlock).
-    const bool hasBlock =
-        cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace);
+    const bool hasBlock = cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace);
     if (!panic_ && hasBlock) {
         parseStmtBlock();
     }
@@ -1111,16 +1109,19 @@ void ParserImpl::markNameAsPack(size_t mark) {
 
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')
 ///
-/// The IDENTIFIER is the name `operator`; OPERATOR is any operator token. An operator overload
-/// (design principles 4.3): `func operator +(a: V, b: V): V`. The notation is provisional, and
-/// this production is the whole of it in the parser: `operator` is not a keyword (a function may
-/// still be called `operator`), it starts this form only right after `func` and before an operator
-/// token other than `(`. Every operator token is taken here; which of them can be overloaded, and
-/// with how many parameters, is decided when the declaration is compiled
+/// The IDENTIFIER is the name `operator`; OPERATOR is any operator token, punctuation or the word
+/// `for`. An operator overload (design principles 4.3): `func operator +(a: V, b: V): V`, and
+/// `func operator for(r: Range): int..` for the operator a `for` loop calls. The notation is
+/// provisional, and this production is the whole of it in the parser: `operator` is not a keyword
+/// (a function may still be called `operator`), it starts this form only right after `func` and
+/// before an operator token other than `(`. Every operator token is taken here; which of them can
+/// be overloaded, and with how many parameters, is decided when the declaration is compiled
 /// (camel/core/operator_names.h), so that the error can say why.
 bool ParserImpl::atOperatorName() const {
-    return cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "operator" &&
-           isPunctuation(peek(1)) && peek(1) != TK::LParen;
+    if (cur_ != TK::Identifier || tree_.tokens_.text(pos_) != "operator") {
+        return false;
+    }
+    return peek(1) == TK::KwFor || (isPunctuation(peek(1)) && peek(1) != TK::LParen);
 }
 
 void ParserImpl::parseOperatorName() {
@@ -1306,8 +1307,8 @@ void ParserImpl::parseModifiers() {
 /// that only expect one use `expectName`, which reports the token that stands where the name was.
 /// Asking through `identDef` is what the parser does where a name is required but the text may end
 /// where the name should be. There, taking the token that stands at the end would fold the terminal
-/// token into the tree, and `parseProgram` closes the Program node with that same token, so the tree
-/// would hold one token twice and stop being lossless.
+/// token into the tree, and `parseProgram` closes the Program node with that same token, so the
+/// tree would hold one token twice and stop being lossless.
 void ParserImpl::parseIdentDef() { expectName(NK::IdentDef); }
 
 /// identRef : (IDENTIFIER '::')* IDENTIFIER
@@ -1437,9 +1438,8 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angle
         // `...ts` (and `...P` in a function type) is a name; `...ParamsOf<F>` is a type expression,
         // a pack written out in a function type's parameter list.
         const bool plain =
-            cur_ == TK::Identifier &&
-            (peek(1) == TK::Colon || peek(1) == TK::Comma || peek(1) == TK::RParen ||
-             peek(1) == TK::Gt);
+            cur_ == TK::Identifier && (peek(1) == TK::Colon || peek(1) == TK::Comma ||
+                                       peek(1) == TK::RParen || peek(1) == TK::Gt);
         if (plain) {
             parseIdentDef();
             if (eat(TK::Colon)) {
@@ -1484,7 +1484,7 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angle
 
 /// pairedParams : keyParamPair (',' keyParamPair)*
 void ParserImpl::parsePairedParams(TK closer, bool allowRest, bool allowConstas) {
-    const size_t m = mark();
+    const size_t m    = mark();
     const bool angled = closer == TK::Gt;
     parseKeyParamPair(allowRest, allowConstas, angled);
     while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
@@ -1509,11 +1509,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
             parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
             unexpected(
-                {e(TK::Comma),
-                 e(TK::RParen),
-                 e(TK::KwVar),
-                 e(TK::KwConstas),
-                 e(TK::Identifier)});
+                {e(TK::Comma), e(TK::RParen), e(TK::KwVar), e(TK::KwConstas), e(TK::Identifier)});
         }
         eat(TK::Comma);
     }

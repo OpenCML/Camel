@@ -435,13 +435,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_loop_cml"
-desc = "`std::cml` cannot print a loop over a range yet, and the refusal names the reason: since the ruling on `a..b` such a loop walks the range's stream through `prelude::iter`, whose return type is the stream type `int..`, and the printer does not print a stream type. The line is a pin on the printer's limit, not on the loop's meaning -- the loop itself is pinned over the graph by stream.interval_loop. When the printer learns `T..`, this entry becomes the `for i in a..b` spelling it had."
+desc = "`std::cml` cannot print a loop over a range yet, and the refusal names the reason: since the ruling on `a..b` such a loop walks the range's stream through the range's `operator for` in the prelude, whose return type is the stream type `int..`, and the printer does not print a stream type. The line is a pin on the printer's limit, not on the loop's meaning -- the loop itself is pinned over the graph by stream.interval_loop. When the printer learns `T..`, this entry becomes the `for i in a..b` spelling it had."
 kind = "negative"
 case = "../../../cases/compile/stream/interval_loop.cml"
 args = ["${case}", "std::cml"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CmlUnsupportedConstruct"
-expect_output_contains = ["prelude::iter", "int.."]
+expect_output_contains = ["prelude::operator for", "int.."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -1425,4 +1425,38 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+# D-1123-49: `for` is an overloadable operator (design principles 4.3), so a type of a program says
+# how a loop walks it, and a plain function named `iter` no longer stands where the operator stands.
+[[tests]]
+name = "stream.operator_for_user_type"
+desc = "A named type says how a `for` walks it with `func operator for(v: V): T..` (design principles 4.3): the declaration lands in the operator group `__iter__`, as `func operator []` lands in `__idx__`, and `for x in v` is the call that group resolves for `v`'s type. The operator is a generator, so its body runs once per pull and a second loop starts it over: the program counts 2, 3, 4 and prints 234, then walks it again and counts the three rounds, printing 3. It also pins that the loop reaches the type`s own operator at all, which is what `D-1123-49` asked for."
+kind = "behavior"
+case = "../../../cases/compile/stream/operator_for_user_type.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "234\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.operator_for_not_a_plain_function"
+desc = "A plain function named `iter` is a name like any other and does not stand where the operator stands: `for` calls the operator group `__iter__` (design principles 4.3), and the ordinary function is called only where a program writes its name. The program declares `iter(r: Range)` that always answers ten rounds from 100; the loop over `0 .. 3` still walks the range's own operator and prints 0, 1, 2 as the digits they are built into, 12, while the explicit call to `iter(0 .. 0)` reads the function's ten rounds."
+kind = "behavior"
+case = "../../../cases/compile/stream/operator_for_not_a_plain_function.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "12\n1045\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.operator_for_needs_a_stream"
+desc = "What a `for` reads round by round is what the operator answers, so the answer is a stream `T..` (design principles 5.4): `func operator for(c: Counter): int` is refused where it is written, and the diagnostic names the operator and the reason rather than leaving a loop to find out."
+kind = "negative"
+case = "../../../cases/compile/stream/operator_for_needs_a_stream.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
