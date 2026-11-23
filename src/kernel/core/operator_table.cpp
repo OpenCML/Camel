@@ -43,17 +43,17 @@ OperatorTraits OperatorTable::traitsOf(const sem::OperatorSemantics &facts) {
     // state-only answer are read off the access list, and "may fault" off the fault table
     // (docs/design/op-semantics/README.cn.md 4.2).
     return OperatorTraits{
-        .pure      = facts.effect() == sem::Effect::Pure,
+        .pure        = facts.effect() == sem::Effect::Pure,
         .elementwise = facts.elementwise || (facts.binary && facts.binary->elementwise),
-        .stateOnly = facts.effect() == sem::Effect::StateOnly,
+        .stateOnly   = facts.effect() == sem::Effect::StateOnly,
         // A declared empty table: it never faults. No table: undeclared, may fault.
-        .mayFault  = facts.mayFault(),
+        .mayFault = facts.mayFault(),
         // Calling the function values it receives (declared, or by calling elements) is what
         // makes the call depend on those functions.
-        .callsGraphs = facts.callsGraphs || facts.elementCalls.has_value(),
-        .readsGraphs = facts.readsGraphs,
-        .macro       = facts.macro,
-        .foldable    = facts.foldable,
+        .callsGraphs   = facts.callsGraphs || facts.elementCalls.has_value(),
+        .readsGraphs   = facts.readsGraphs,
+        .macro         = facts.macro,
+        .foldable      = facts.foldable,
         .withAfterNorm = facts.withAfterNorm,
     };
 }
@@ -73,7 +73,7 @@ OperId OperatorTable::internLocked(std::string_view uri) {
     // The record is seated before the entry, so an id this table answers always has one to ask: a
     // reader of a node holds the id and the record is keyed by its own (camel/ops).
     const std::uint32_t record = camel::ops::Registry::instance().intern(uri);
-    const OperId id = entries_.append([&](Entry &entry) {
+    const OperId id            = entries_.append([&](Entry &entry) {
         entry.uri    = symbol;
         entry.family = family;
         entry.record = record;
@@ -114,10 +114,10 @@ namespace {
 /// for the operator. Every place the table states an effect calls this -- `set`, whose word `pure`
 /// is the empty access list, and `declareSemantics`, which is where `declareResources` lands -- so
 /// the record carries the statement from the moment it is made, at whichever of the table's
-/// entrances it was made. The record is interned by `internLocked` before any declaration, so a zero
-/// id is an operator the registry never saw: nothing to write there. A record that already states a
-/// clause keeps it -- that statement came from the same declaration through the Camel entrance, and
-/// two writers of one fact is the defect this removes.
+/// entrances it was made. The record is interned by `internLocked` before any declaration, so a
+/// zero id is an operator the registry never saw: nothing to write there. A record that already
+/// states a clause keeps it -- that statement came from the same declaration through the Camel
+/// entrance, and two writers of one fact is the defect this removes.
 void stateUsesInRecord(
     std::uint32_t recordId, std::string_view uri, const sem::ResourceSpec &spec) {
     if (recordId == 0) {
@@ -142,8 +142,8 @@ void stateUsesInRecord(
 
 void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     std::unique_lock lock(mutex_);
-    const OperId id = internLocked(uri);
-    Entry &entry    = entries_[id];
+    const OperId id                   = internLocked(uri);
+    Entry &entry                      = entries_[id];
     const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
     // The traits are not a second declaration: they are the shorthand the record's facts are
     // written with, and a record may exist before any semantics (the effects of a built-in
@@ -151,12 +151,12 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     sem::OperatorSemantics facts =
         old ? *old : sem::OperatorSemantics{.key = sem::OperatorKey::of(uri)};
     // The effect the traits state, in the record's own terms
-    // (design principles 3.3; docs/design/op-semantics/README.cn.md 4.2): pure is the empty access list,
-    // so it is written as one and never as a word about the operator; state-only and effectful are
-    // what a module says when it has not itemized its accesses. An access list already declared is
-    // the truth about the operator and is not taken back by a later word.
+    // (design principles 3.3; docs/design/op-semantics/README.cn.md 4.2): pure is the empty access
+    // list, so it is written as one and never as a word about the operator; state-only and
+    // effectful are what a module says when it has not itemized its accesses. An access list
+    // already declared is the truth about the operator and is not taken back by a later word.
     facts.declaredEffect = traits.stateOnly ? sem::Effect::StateOnly
-                         : traits.pure      ? sem::Effect::Pure
+                           : traits.pure    ? sem::Effect::Pure
                                             : sem::Effect::Effectful;
     if (traits.pure) {
         if (!facts.resources) {
@@ -168,11 +168,11 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
         // list would leave the record saying it touches nothing.
         facts.resources.reset();
     }
-    facts.elementwise  = traits.elementwise;
-    facts.callsGraphs  = traits.callsGraphs;
-    facts.readsGraphs  = traits.readsGraphs;
-    facts.macro        = traits.macro;
-    facts.foldable     = traits.foldable;
+    facts.elementwise   = traits.elementwise;
+    facts.callsGraphs   = traits.callsGraphs;
+    facts.readsGraphs   = traits.readsGraphs;
+    facts.macro         = traits.macro;
+    facts.foldable      = traits.foldable;
     facts.withAfterNorm = traits.withAfterNorm;
     // "Never faults" is the empty fault table. Saying it may fault (the default) does not take
     // back a declared empty table; a declaration that does contradict it is refused when the
@@ -180,8 +180,7 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     if (!traits.mayFault) {
         facts.faults = std::vector<sem::FaultSpec>{};
     }
-    declarations_.push_back(
-        std::make_unique<const sem::OperatorSemantics>(std::move(facts)));
+    declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(facts)));
     entry.facts.store(declarations_.back().get(), std::memory_order_release);
     if (entry.declared.load(std::memory_order_relaxed) != nullptr) {
         // Semantics already published: the traits belong to the same record, so publish the
@@ -190,11 +189,11 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     }
     // The effect the word states, written into the operator record it belongs to. `pure` above made
     // it the empty access list, which is a clause; a word that says "state-only" or "effectful"
-    // itemizes nothing, and the record's own reading of a clause nobody wrote is already that answer
-    // (design principles 3.3: it writes the global resource), so nothing is invented for it. This is
-    // the entrance a module's `declare` uses, and most of the standard library says `pure` and
-    // nothing else -- without this call those records would state no clause while the table states
-    // one.
+    // itemizes nothing, and the record's own reading of a clause nobody wrote is already that
+    // answer (design principles 3.3: it writes the global resource), so nothing is invented for it.
+    // This is the entrance a module's `declare` uses, and most of the standard library says `pure`
+    // and nothing else -- without this call those records would state no clause while the table
+    // states one.
     if (declarations_.back()->resources) {
         stateUsesInRecord(entry.record, uri, *declarations_.back()->resources);
     }
@@ -262,7 +261,7 @@ sem::Effect OperatorTable::effectOf(std::string_view uri) const {
 }
 
 bool OperatorTable::withAfterNorm(std::string_view uri) const {
-    const auto id = lookup(uri);
+    const auto id                       = lookup(uri);
     const sem::OperatorSemantics *facts = id ? record(*id) : nullptr;
     return facts != nullptr && facts->withAfterNorm;
 }
@@ -275,9 +274,9 @@ bool OperatorTable::mayBeRecomputed(OperId id) const {
     // `with_grad(loss)<m>` into the derived function value at compile time, so the macro operator
     // was gone before `onnx::export` could say its `run std::macro` refusal
     // (`modules/onnx/passes/export.cpp#refuseUnexpandedMacros`). A macro operator stays outside
-    // the foldable set even when it is declared pure, which is the answer `mayBeRecomputed` gives for it,
-    // for the reason the table already states on `isMacro` (a call of it is what `std::macro`
-    // evaluates, operator_table.h).
+    // the foldable set even when it is declared pure, which is the answer `mayBeRecomputed` gives
+    // for it, for the reason the table already states on `isMacro` (a call of it is what
+    // `std::macro` evaluates, operator_table.h).
     return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&
            facts->effect() == sem::Effect::Pure && facts->foldable && !facts->macro;
 }
@@ -439,11 +438,11 @@ void OperatorTable::markExported(std::string_view uri) {
     for (auto &[declared, form] : callForms_) {
         // A declaration may cover a family of operators with one `*` (`:op/*tos`), and the export
         // names one operator of that family: the family's shape is the one a program writes.
-        const size_t star  = declared.find('*');
-        const bool family = star != std::string::npos && uri.size() + 1 >= declared.size() &&
-                            uri.starts_with(std::string_view(declared.data(), star)) &&
-                            uri.ends_with(std::string_view(
-                                declared.data() + star + 1, declared.size() - star - 1));
+        const size_t star = declared.find('*');
+        const bool family =
+            star != std::string::npos && uri.size() + 1 >= declared.size() &&
+            uri.starts_with(std::string_view(declared.data(), star)) &&
+            uri.ends_with(std::string_view(declared.data() + star + 1, declared.size() - star - 1));
         if (declared == uri || family) {
             form.exported = true;
             return;
@@ -527,8 +526,8 @@ std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group)
     std::vector<type::Type *> types;
     const auto add = [&types](type::Type *type) {
         if (type == nullptr || type == type::Type::Never()) {
-            // `never` is the result of an operator that does not return (`fail`): no value has it, so no
-            // rule is instantiated at it.
+            // `never` is the result of an operator that does not return (`fail`): no value has it,
+            // so no rule is instantiated at it.
             return;
         }
         // A signature that still writes a type variable belongs to a *generic* resolver (a group
@@ -547,7 +546,7 @@ std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group)
     // The lock is taken once per overload, after the group's list has been read: a group may be
     // declared again while modules load, and an overload's resolver may be replaced then.
     for (const std::string &uri : uris) {
-        const type::resolver_ptr_t resolver          = this->resolver(uri);
+        const type::resolver_ptr_t resolver = this->resolver(uri);
         type::FunctionType *const signature =
             resolver != nullptr ? resolver->fixedSignature() : nullptr;
         if (signature == nullptr) {
@@ -587,10 +586,10 @@ std::vector<type::Type *> OperatorTable::allRegisteredTypes() const {
 
 void OperatorTable::setInPlaceForm(std::string_view uri, std::string_view inPlaceUri) {
     std::unique_lock lock(mutex_);
-    const OperId plain                  = internLocked(uri);
-    const OperId form                   = internLocked(inPlaceUri);
-    entries_[plain].inPlace             = entries_[form].uri;
-    entries_[form].plain                = entries_[plain].uri;
+    const OperId plain      = internLocked(uri);
+    const OperId form       = internLocked(inPlaceUri);
+    entries_[plain].inPlace = entries_[form].uri;
+    entries_[form].plain    = entries_[plain].uri;
 }
 
 std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) const {
@@ -675,6 +674,21 @@ std::optional<ConversionTypes> OperatorTable::conversionTypesOf(std::string_view
     }
     std::shared_lock lock(mutex_);
     return entries_[*id].conversion;
+}
+
+void OperatorTable::declareShape(std::string_view uri, camel::ops::OperShape shape) {
+    // The shape is a record item and not a field of the entry: unlike `conversion` it is asked of a
+    // node's operator while graphs are analysed, and the record is where a fact a graph reader and
+    // a back end both need lives. This entry is what joins the id a node holds to the record's own
+    // id
+    // (`recordOf`), so the statement goes through that join and nowhere else.
+    const OperId id              = intern(uri);
+    const std::uint32_t recordId = entries_[id].record;
+    if (recordId == 0) {
+        throw std::logic_error(
+            std::format("{}: no operator record was seated for it at intern", uri));
+    }
+    camel::ops::Registry::instance().stateShape(recordId, shape);
 }
 
 void OperatorTable::declareGrant(std::string_view uri, AttrGrant grant) {
@@ -844,12 +858,10 @@ std::string checkSemantics(
 
 } // namespace
 
-
-
 void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantics semantics) {
     std::unique_lock lock(mutex_);
-    const OperId id                  = internLocked(uri);
-    Entry &entry                     = entries_[id];
+    const OperId id                   = internLocked(uri);
+    Entry &entry                      = entries_[id];
     const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
     // The traits declared so far are the old record's: the checks compare the new semantics
     // with the facts already declared, and the derivation is the same one find() uses.
@@ -891,10 +903,10 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
         if (!semantics.resources) {
             semantics.resources = old->resources;
         }
-        semantics.elementwise = semantics.elementwise || old->elementwise;
-        semantics.callsGraphs = semantics.callsGraphs || old->callsGraphs;
-        semantics.readsGraphs = semantics.readsGraphs || old->readsGraphs;
-        semantics.macro       = semantics.macro || old->macro;
+        semantics.elementwise   = semantics.elementwise || old->elementwise;
+        semantics.callsGraphs   = semantics.callsGraphs || old->callsGraphs;
+        semantics.readsGraphs   = semantics.readsGraphs || old->readsGraphs;
+        semantics.macro         = semantics.macro || old->macro;
         semantics.withAfterNorm = semantics.withAfterNorm || old->withAfterNorm;
         if (!semantics.faults && old->faults) {
             semantics.faults = old->faults;
@@ -919,8 +931,8 @@ void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec res
     // carries traits keeps them: the resources join the same facts. Load time only: the read
     // of the old record and the declaration are not one step, as for every declaration.
     std::unique_lock lock(mutex_);
-    const OperId id                  = internLocked(uri);
-    Entry &entry                     = entries_[id];
+    const OperId id                   = internLocked(uri);
+    Entry &entry                      = entries_[id];
     const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
     sem::OperatorSemantics record;
     if (old != nullptr && entry.declared.load(std::memory_order_relaxed) != nullptr) {
@@ -929,7 +941,7 @@ void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec res
             ++record.key.minor;
         }
     } else {
-        record = old != nullptr ? *old : sem::OperatorSemantics{};
+        record     = old != nullptr ? *old : sem::OperatorSemantics{};
         record.key = sem::OperatorKey::of(uri);
     }
     record.resources = std::move(resources);
@@ -943,8 +955,8 @@ void OperatorTable::declareFaults(std::string_view uri, std::vector<sem::FaultSp
     // it). A record nobody declared semantics for stays that way: the effect facts of an operator
     // are declared before its semantics and are not semantics by themselves. Load time only.
     std::unique_lock lock(mutex_);
-    const OperId id                  = internLocked(uri);
-    Entry &entry                     = entries_[id];
+    const OperId id                   = internLocked(uri);
+    Entry &entry                      = entries_[id];
     const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
     if (old != nullptr && !faults.empty() && old->declaredEffect != sem::Effect::Undeclared &&
         !traitsOf(*old).mayFault) {
@@ -969,8 +981,8 @@ void OperatorTable::declareFaults(std::string_view uri, std::vector<sem::FaultSp
 void OperatorTable::declareDefinition(std::string_view uri, sem::Definition definition) {
     // As declareResources: a record of its own, or the existing one a minor version up.
     std::unique_lock lock(mutex_);
-    const OperId id                  = internLocked(uri);
-    Entry &entry                     = entries_[id];
+    const OperId id                   = internLocked(uri);
+    Entry &entry                      = entries_[id];
     const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
     sem::OperatorSemantics record;
     if (old != nullptr && entry.declared.load(std::memory_order_relaxed) != nullptr) {
@@ -979,7 +991,7 @@ void OperatorTable::declareDefinition(std::string_view uri, sem::Definition defi
             ++record.key.minor;
         }
     } else {
-        record = old != nullptr ? *old : sem::OperatorSemantics{};
+        record     = old != nullptr ? *old : sem::OperatorSemantics{};
         record.key = sem::OperatorKey::of(uri);
     }
     record.definition = std::move(definition);

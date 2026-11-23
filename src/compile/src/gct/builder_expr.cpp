@@ -1,7 +1,8 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// What this file owns: the lowering of statements and of control-flow expressions -- blocks, exits, if/loop/match, the static forms, the operator expressions and shape comprehensions.
+// What this file owns: the lowering of statements and of control-flow expressions -- blocks, exits,
+// if/loop/match, the static forms, the operator expressions and shape comprehensions.
 
 #include "builder.h"
 #include <exception>
@@ -43,8 +44,6 @@ using namespace camel::core::type;
 
 namespace camel::compile::gct {
 
-
-
 /*
 ExprStmt() : Data data ;
 */
@@ -69,10 +68,10 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // A `yield` is a node of this tree: the generator body is built in GIR, and the GIR splits the
     // body into arms at the `yield` it finds there, so the node is the only thing it can find. The
     // machine in this file still claims every `yield` before the statement builder is reached, so
-    // nothing builds one today: this line is the seam the GIR machine lands on. An unclaimed `yield`
-    // arrives one layer down (`gir::Builder::visitExitNode`).
-    node_ptr_t exitNode = tree_->makeExit(
-        astExit == AST::ExitType::Yield ? ExitType::Yield : ExitType::Return);
+    // nothing builds one today: this line is the seam the GIR machine lands on. An unclaimed
+    // `yield` arrives one layer down (`gir::Builder::visitExitNode`).
+    node_ptr_t exitNode =
+        tree_->makeExit(astExit == AST::ExitType::Yield ? ExitType::Yield : ExitType::Return);
     if (astExit == AST::ExitType::Return) {
         reportExitInUnusedArm(ast);
     }
@@ -683,8 +682,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         // is the plain assignment, and which are the compound ones, is the table in
         // `operator_names.cpp`: this line asks it instead of
         // spelling the name.
-        const bool compound =
-            camel::core::plainGroupOfCompoundAssignment(groupName).has_value();
+        const bool compound = camel::core::plainGroupOfCompoundAssignment(groupName).has_value();
         if (groupName == camel::core::kAssignmentGroup || compound) {
             const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
             node_ptr_t target      = visitData(lhsASTNode);
@@ -694,7 +692,8 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 compound ? std::string_view(groupName) : std::string_view());
             *write << target << value;
             const auto operatorOrigin = findSemanticOrigin(
-                astSemantic(context_, ast), camel::source::SemanticRole::Operator);
+                astSemantic(context_, ast),
+                camel::source::SemanticRole::Operator);
             // The write stands where the statement does (`x += 5`), and it keeps the operator's
             // own place as a part of what it stands for: the token the program wrote, which is
             // where a fault of the operator is reported (a `%=` by zero is a DivisionByZero at
@@ -702,20 +701,17 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             // reads that part back, as a call reads its callee's place from the reference it was
             // written with (Builder::storeOperatorOrigin): a node carries one origin, so the
             // operator's place is a part of the bundle rather than the node's own origin.
-            setOriginFromAst(
-                context_,
-                write,
-                ast,
-                camel::source::OriginKind::GctNode,
-                "gct.data");
+            setOriginFromAst(context_, write, ast, camel::source::OriginKind::GctNode, "gct.data");
             registerGctSemantic(
                 context_,
                 write,
                 ast,
                 {semanticPart(
-                     camel::source::SemanticRole::Operator, operatorOrigin, -1, "operator"),
-                 semanticPart(
-                     camel::source::SemanticRole::Argument, nodeOrigin(target), 0, "lhs"),
+                     camel::source::SemanticRole::Operator,
+                     operatorOrigin,
+                     -1,
+                     "operator"),
+                 semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(target), 0, "lhs"),
                  semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(value), 1, "rhs")},
                 {operatorOrigin, nodeOrigin(target), nodeOrigin(value)});
             LEAVE("BinaryExpr");
@@ -840,7 +836,7 @@ enum ReservedDataOp {
     ErrorThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data obj, Data* args, NamedData* kwargs
-    Comp, // Data lhs, Data rhs -- `a..b`, two readings
+    Comp, // Data lhs, Data rhs -- `a..b`, the interval
     Compose, // Data lhs, Data rhs -- `a<>b`, the composition alone
     As, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
@@ -1082,10 +1078,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Comp:
     case AST::ReservedDataOp::Compose: {
-        // `a..b` has two readings and `a<>b` has one (design principles 4.2). GCT has no types,
-        // so the construct goes on as one call of the compiler's own name for it, which the GIR
-        // builder resolves: `Comp` keeps both readings while the corpus still writes the
-        // composition as `..`, and `Compose` is the composition alone.
+        // `a..b` is the interval and `a <> b` the composition (design principles 4.2). GCT has no
+        // types, so each goes on as a call of the compiler's own name for it, which the GIR
+        // builder resolves: `Comp` is the interval alone and `Compose` the composition alone; the
+        // token the program wrote decides which, so no reader has to guess from the operands.
         //
         // It is not handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
         // src/builtin/operators/macro.cpp), whose resolver takes two functions and answers with
@@ -1093,10 +1089,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // value of a function type is a graph, and no built-in executor has one — and it has no
         // reading for two integers. The operator and its executor stay registered; the compiler
         // has no user for them.
-        const bool compose = reservedExpr->op() == AST::ReservedDataOp::Compose;
+        const bool compose     = reservedExpr->op() == AST::ReservedDataOp::Compose;
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        node_ptr_t opNode  = tree_->makeDRef(std::string(
-            compose ? camel::core::kComposeCall : camel::core::kCompositionCall));
+        node_ptr_t opNode      = tree_->makeDRef(
+            std::string(compose ? camel::core::kComposeCall : camel::core::kCompositionCall));
         res                = tree_->makeLink(2);
         auto compAstBundle = astSemantic(context_, ast);
         setOriginFromOrigin(

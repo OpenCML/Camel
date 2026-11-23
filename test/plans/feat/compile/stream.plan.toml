@@ -3,11 +3,11 @@ id = "compile.stream"
 order = 336
 tier = "fast"
 tags = ["feat", "compile", "stream"]
-desc = "The stream surface: `f..g` and the interval `a..b` (slice A of the stream plan: the ruled readings of `..`, and the removal of `?..`); and the interval line: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
+desc = "The stream surface: the composition `f <> g` and the interval `a..b` (slice A of the stream plan: the ruled readings of `..` and `<>`, and the removal of `?..`); and the interval line: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
 
 [[tests]]
 name = "stream.composition"
-desc = "`f..g` is the composition `(x) => g(f(x))`: `(inc..dbl)(3)` is `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7. It used to be ConstructNotSupported at the operator. The case composes with `<>` as well, the spelling the author gave the composition, and both spellings give 8."
+desc = "`f <> g` is the composition `func (x) { g(f(x)) }`: `(inc <> dbl)(3)` is `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7. It used to be ConstructNotSupported at the operator. The composition has one spelling, `<>`, and writing it twice in one program gives 8 twice."
 kind = "behavior"
 case = "../../../cases/compile/stream/composition.cml"
 args = ["${case}"]
@@ -19,7 +19,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.composition_uses"
-desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->(inc..dbl)` give what the two calls written out give. Beside `->` a composition keeps its parentheses, because `..` is looser than `->`: `3->inc..dbl` is `(3->inc)..dbl` and is refused where an `int` meets a function."
+desc = "A composition is a function value like any other: `map<inc <> dbl>` and `3->(inc <> dbl)` give what the two calls written out give. Beside `->` a composition keeps its parentheses, because `<>` is looser than `->`: `3->inc <> dbl` is `(3->inc) <> dbl` and is refused where an `int` meets a function."
 kind = "behavior"
 case = "../../../cases/compile/stream/composition_uses.cml"
 args = ["${case}"]
@@ -84,7 +84,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_mismatch"
-desc = "`..` has two readings and takes nothing else: two texts are neither two functions nor two integers, so the compiler refuses the construct and names both operand types."
+desc = "`..` is the interval and takes nothing else: two texts are not two integers, so the compiler refuses the construct and names both operand types."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_mismatch.cml"
 args = ["${case}"]
@@ -93,14 +93,14 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 5
 expect_diagnostic_column = 14
-expect_output_contains = ["'..' takes two functions or two integers, and '<>' takes two functions; the left operand is 'string' and the right one 'string'."]
+expect_output_contains = ["'..' takes two integers and '<>' takes two functions; the left operand is 'string' and the right one 'string'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_not_unary"
-desc = "The composition `f..g` is the lambda `(x) => g(f(x))`, so `f` is unary: a left operand of two parameters has no reading, and the diagnostic says how many it takes."
+desc = "The composition `f <> g` is the lambda `func (x) { g(f(x)) }`, so `f` is unary: a left operand of two parameters has no reading, and the diagnostic says how many it takes."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_not_unary.cml"
 args = ["${case}"]
@@ -109,7 +109,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandNotUnary"
 expect_diagnostic_code = "0x030001E2"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 13
-expect_output_contains = ["'..' and '<>' compose a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
+expect_output_contains = ["'<>' composes a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -289,7 +289,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CompOperandGenericWithoutType"
 expect_diagnostic_code = "0x030001E4"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 13
 expect_diagnostic_column = 20
 expect_output_contains = ["and its right operand, the generic function 'ident', has no instance here"]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "'void'"]
@@ -298,7 +298,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_expected_type"
-desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `...`, with the operand printed as `void`."
+desc = "`f <> g` is the lambda `func (x) { g(f(x)) }` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `...`, with the operand printed as `void`."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_expected_type.cml"
 args = ["${case}"]
@@ -310,7 +310,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_chain"
-desc = "The expected type reaches every link of a chain: `f..g..h` is `(x) => h(g(f(x)))`, so the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and the result the position expects is what `h` gives. The three operands of this case take three different instances (`wrap::<int>`, `head::<int>`, `wrap::<int>`), which a distribution that handed them one and the same type could not produce. The lambda written out is the same value."
+desc = "The expected type reaches every link of a chain: `f <> g <> h` is `func (x) { h(g(f(x))) }`, so the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and the result the position expects is what `h` gives. The three operands of this case take three different instances (`wrap::<int>`, `head::<int>`, `wrap::<int>`), which a distribution that handed them one and the same type could not produce. The lambda written out is the same value."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_chain.cml"
 args = ["${case}"]
@@ -342,16 +342,16 @@ verify_script = """
 
 [[tests]]
 name = "stream.comp_operand_function_integer"
-desc = "The refusal CompOperandMismatch was written for stays where it was written for: `..` takes two functions or two integers (design principles 4.2), and a function with an integer is neither. Both operands are named by their types, and a function among them is not a generic-operand case - that refusal needs a name that is generic, which this program has none of."
+desc = "The refusal CompOperandMismatch was written for stays where it was written for: `..` takes two integers (design principles 4.2), and a function with an integer is not that. Both operands are named by their types, and a function among them is not a generic-operand case - that refusal needs a name that is generic, which this program has none of."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_function_integer.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 10
 expect_diagnostic_column = 20
-expect_output_contains = ["'..' takes two functions or two integers, and '<>' takes two functions; the left operand is '(x: int) => int pure' and the right one 'int'."]
+expect_output_contains = ["'..' takes two integers and '<>' takes two functions; the left operand is '(x: int) => int pure' and the right one 'int'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -1415,3 +1415,14 @@ expect_exit = 0
 expect_stdout_exact = "!\nbroke\n"
 expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+[[tests]]
+name = "stream.comp_dotdot_spelling"
+desc = "`..` is the interval and has no composition reading (design principles 4.2): `inc..dbl` is two functions where the interval wants two integers, so CompOperandMismatch names both operands and the composition's spelling, `<>`, is the one that composes them."
+kind = "negative"
+case = "../../../cases/compile/stream/comp_dotdot_spelling.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
+expect_diagnostic_code = "0x030001E1"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

@@ -4,19 +4,19 @@
 // DraftWritings: what makes two nodes one writing, and the index that answers it.
 
 #include "camel/runtime/writings.h"
-#include "writings_internal.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/reachable.h"
+#include "writings_internal.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
-#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/runtime/oper_shape.h"
 
 #include <algorithm>
 #include <chrono>
@@ -68,22 +68,22 @@ std::string nodeText(const GraphTransaction &transaction, gc_node_ref_t id) {
     }
     std::string text = "%" + std::to_string(id) + " ";
     // The four operators the front end still builds as nodes of their own are named here by their
-    // shape, not by their kind (`camel/execute/shaped_operators.h`, refactor stage 2.3): that is
+    // shape, not by their kind (`camel/runtime/oper_shape.h`, refactor stage 2.3): that is
     // the question this text asks, and it answers the same word either way.
-    switch (camel::execute::shapeOfKind(header->kind)) {
-    case camel::execute::OperShape::Conversion:
+    switch (camel::runtime::shapeOfKind(header->kind)) {
+    case camel::ops::OperShape::Conversion:
         text += "cast";
         break;
-    case camel::execute::OperShape::Clone:
+    case camel::ops::OperShape::Clone:
         text += "copy";
         break;
-    case camel::execute::OperShape::Construction:
+    case camel::ops::OperShape::Construction:
         text += "fill";
         break;
-    case camel::execute::OperShape::Access:
+    case camel::ops::OperShape::Access:
         text += "access";
         break;
-    case camel::execute::OperShape::None:
+    case camel::ops::OperShape::None:
         break;
     }
     switch (header->kind) {
@@ -314,9 +314,8 @@ bool shapeTakesPart(
     const auto &draft = transaction.graph();
     // A conversion and an access compute their value from what they read and change nothing (the
     // same question asked of them by their shape, not their kind: refactor stage 2.3).
-    const camel::execute::OperShape oper = camel::execute::shapeOfKind(kind);
-    if (oper == camel::execute::OperShape::Conversion ||
-        oper == camel::execute::OperShape::Access) {
+    const camel::ops::OperShape oper = camel::runtime::shapeOfKind(kind);
+    if (oper == camel::ops::OperShape::Conversion || oper == camel::ops::OperShape::Access) {
         return true;
     }
     switch (kind) {

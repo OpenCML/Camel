@@ -88,6 +88,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/resolver.h"
+#include "camel/ops/oper_shape.h"
 
 #include <cstdint>
 #include <functional>
@@ -364,6 +365,18 @@ struct Record {
     /// The types the operator converts between, when it is a conversion of the language.
     std::optional<ConversionTypes> conversion;
 
+    /**
+     * Which of the four shaped operations it is -- a conversion, a copy, a construction, a member
+     * read -- or None for an operator that is not one of them (D-1123-34). Stated where the
+     * operator is registered, and the only place a reader asks: what a node does is the record of
+     * the operator it names, and a reader that decoded the letters of a URI instead would hold a
+     * second statement of one fact ("never by comparing URI text", operator_table.h).
+     *
+     * None is the answer for an operator nobody stated a shape for, so no reader has to tell "not
+     * one of the four" from "nobody said".
+     */
+    OperShape shape = OperShape::None;
+
     /// What the operator grants when it is used as a decorator.
     std::shared_ptr<const AttrGrant> grant;
 
@@ -497,6 +510,19 @@ class Registry {
      * must be equal, else std::invalid_argument names the operator, the item and both values.
      */
     void declare(OperId id, const Record &statement);
+
+    /**
+     * States the shape of the four that have one (D-1123-34), at module load time. It is a
+     * statement of one item rather than a `Record` merge because it is the one item no Camel
+     * declaration can state: the four are written in `prelude.cml` as functions and the front end
+     * builds them as operators, so "this one is a construction" is the C++ side's to write, where
+     * the operator is registered with the executor that runs it.
+     *
+     * Before the record is completed a later statement stands (the bare-value convention of
+     * `CppRegistration`'s seven setters); a completed record refuses a statement that disagrees
+     * with the one it holds, naming the operator and both shapes.
+     */
+    void stateShape(OperId id, OperShape shape);
 
     // ---- Entrance 2: the C++ registration API ----------------------------------------------
 

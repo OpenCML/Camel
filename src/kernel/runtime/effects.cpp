@@ -59,9 +59,9 @@ OperandClause clauseReach(const std::optional<core::sem::ResourceSignature> &cla
 }
 
 OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
-    const auto &table = camel::core::OperatorTable::instance();
+    const auto &table       = camel::core::OperatorTable::instance();
     const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
-    const auto *facts = table.semantics(oper);
+    const auto *facts       = table.semantics(oper);
     if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
         return OperandClause{};
     }
@@ -105,7 +105,6 @@ struct EffectWalk {
 
     /// The nodes of `graph` that lie in `region` (0: all of them).
     EffectSummary ofNodes(const GCGraph *graph, uint32_t region) {
-        const auto &table = camel::core::OperatorTable::instance();
         EffectSummary summary;
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             if (region != 0) {
@@ -123,35 +122,20 @@ struct EffectWalk {
             }
             switch (node->kind) {
             case GCNodeKind::Oper: {
-                const auto oper   = graph->nodeBodyAs<GCOperBody>(ref)->oper;
-                const auto traits = table.find(oper);
-                summary.mayFault |= !traits || traits->mayFault;
-                if (traits && traits->callsGraphs) {
-                    // It runs a function the program hands it, and its accesses are that
-                    // function's (design principles 3.3): the same reading a
-                    // call through a value follows reads the clause off the value's type, so a
-                    // `map` over a pure function is not an external effect. What the declaration
-                    // cannot narrow -- a type that writes no clause -- keeps the conservative
-                    // reading, which is what `functionOperandClause` answers.
-                    const OperandClause clause = functionOperandClause(*graph, ref);
-                    summary.external |= clause.external;
-                    summary.writesVariables |= clause.writesVariables;
-                    summary.writesVariables |= table.writesProgramState(oper);
-                    summary.mayNotTerminate = true;
-                    break;
-                }
-                summary.external |= table.hasExternalEffect(oper);
-                // What an operator writes is its resource declaration's (design principles 3.3).
-                summary.writesVariables |= table.writesProgramState(oper);
+                // The one reading of an operator's effect, at the node it runs at
+                // (`effectSummaryOfOperator`, which `core.operatorEffects` and a per-node reader
+                // ask as well), so this summary and those readers cannot disagree.
+                summary |=
+                    effectSummaryOfOperator(graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
                 break;
             }
             case GCNodeKind::Call:
                 // A call through a function value: its reach is the value's clause, read the same
-                // way `Resolver::call` reads it for the footprint (design principles 3.3). `pure` is
-                // the clause that names nothing, so a call through a pure value is not an external
-                // effect. A reader that answers from no type at all calls every call "external",
-                // `pure` included, which is what makes a pure call look like a write nobody can
-                // name.
+                // way `Resolver::call` reads it for the footprint (design principles 3.3). `pure`
+                // is the clause that names nothing, so a call through a pure value is not an
+                // external effect. A reader that answers from no type at all calls every call
+                // "external", `pure` included, which is what makes a pure call look like a write
+                // nobody can name.
                 summary.external |= callClause(*graph, ref).external;
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
@@ -192,22 +176,38 @@ EffectSummary ofRegion(const Program &program, const GCGraph *graph, uint32_t re
 
 } // namespace effectwalk
 
-EffectSummary effectSummaryOfOperator(camel::core::OperId oper) {
+EffectSummary
+effectSummaryOfOperator(camel::core::OperId oper, const GCGraph *graph, gc_node_ref_t ref) {
     const auto &table = camel::core::OperatorTable::instance();
     EffectSummary summary;
     const auto traits = table.find(oper);
     summary.mayFault |= !traits || traits->mayFault;
     if (traits && traits->callsGraphs) {
-        // What it runs is the function value's and its accesses are that value's; without the
-        // value the answer cannot be narrower than "may reach outside and may not end".
-        summary.external        = true;
+        // It runs a function the program hands it, and its accesses are that function's
+        // (design principles 3.3). Where the node it runs at is known, the clause is read off the
+        // value's type -- the same reading a call through a value follows -- so a `map` over a
+        // pure function is not an external effect. With no node there is nothing to read it from,
+        // and the answer cannot be narrower than "may reach outside and may not end".
         summary.mayNotTerminate = true;
         summary.writesVariables |= table.writesProgramState(oper);
+        if (graph != nullptr) {
+            const OperandClause clause = functionOperandClause(*graph, ref);
+            summary.external |= clause.external;
+            summary.writesVariables |= clause.writesVariables;
+        } else {
+            summary.external = true;
+        }
         return summary;
     }
     summary.external |= table.hasExternalEffect(oper);
+    // What an operator writes is its resource declaration's (design principles 3.3).
     summary.writesVariables |= table.writesProgramState(oper);
     return summary;
+}
+
+EffectSummary effectSummaryOfOperator(camel::core::OperId oper) {
+    // A reader of the declaration has no node to read a function operand's clause off.
+    return effectSummaryOfOperator(oper, nullptr, 0);
 }
 
 namespace effectwalk {
@@ -217,27 +217,11 @@ EffectSummary ofNode(const Program &program, const GCGraph *graph, gc_node_ref_t
     if (graph == nullptr || graph->node(ref) == nullptr) {
         return summary;
     }
-    const auto &table = camel::core::OperatorTable::instance();
     switch (graph->node(ref)->kind) {
-    case GCNodeKind::Oper: {
-        // The graph's own summary reads one operator node the same way (`EffectWalk::ofNodes`);
-        // this is that reading, at one node, so a per-node reader and the graph's summary cannot
-        // disagree about what the operator does.
-        const auto oper   = graph->nodeBodyAs<GCOperBody>(ref)->oper;
-        const auto traits = table.find(oper);
-        summary.mayFault |= !traits || traits->mayFault;
-        if (traits && traits->callsGraphs) {
-            const OperandClause clause = functionOperandClause(*graph, ref);
-            summary.external |= clause.external;
-            summary.writesVariables |= clause.writesVariables;
-            summary.writesVariables |= table.writesProgramState(oper);
-            summary.mayNotTerminate = true;
-            break;
-        }
-        summary.external |= table.hasExternalEffect(oper);
-        summary.writesVariables |= table.writesProgramState(oper);
+    case GCNodeKind::Oper:
+        // The one reading of an operator's effect, at this node (`effectSummaryOfOperator`).
+        summary |= effectSummaryOfOperator(graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
         break;
-    }
     case GCNodeKind::Call:
         // A call through a function value: its reach is the value's clause (design principles 3.3),
         // and nothing says what it runs may end or cannot fault.

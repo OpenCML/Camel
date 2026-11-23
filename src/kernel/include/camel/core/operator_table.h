@@ -55,6 +55,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/resolver.h"
+#include "camel/ops/oper_shape.h"
 #include "camel/utils/append_only_table.h"
 
 #include <atomic>
@@ -484,7 +485,8 @@ class OperatorTable {
     // of that operand's value, as a JOIN, a GATE and a port are carriers of theirs -- it makes no
     // reference of its own, and the reference of the value it hands on is the holder's. Declared
     // where the operator is registered, beside `declareReusesOperand`, and read by the plan --
-    // `forwardsItsValue` (src/execute/exec_plan.cpp) -- so there is one fact and one place to write it.
+    // `forwardsItsValue` (src/execute/exec_plan.cpp) -- so there is one fact and one place to write
+    // it.
 
     /// Declares that `uri` answers a value an operand already holds; `onlyOutsideArrays` restricts
     /// that to the results that are not arrays (a row of a higher-rank value is its own).
@@ -511,6 +513,20 @@ class OperatorTable {
 
     /// True when the operator is a declared conversion (the question `find("to")` answers).
     bool isConversion(std::string_view uri) const { return conversionTypesOf(uri).has_value(); }
+
+    // ---- The shape of the four operations ------------------------------------------------
+    //
+    // A conversion, a copy, a construction and a member read are four operators the front end
+    // builds (`prelude.cml`) and four node kinds it still builds for the same operations; what a
+    // reader needs to know is "which of the four does this node perform". The answer is the
+    // operator's (`Record::shape`, camel/ops/oper_shape.h), stated here where the operator is
+    // registered with its implementation -- one statement, read by the operator's identity, and no
+    // reader comparing the letters of a URI (design section 3.8, R10; D-1123-34).
+
+    /// Declares which of the four `uri` is (module load time). An operator that is not one of them
+    /// declares nothing, which is what `shapeOfOperator` (camel/runtime/oper_shape.h) reads as
+    /// None.
+    void declareShape(std::string_view uri, camel::ops::OperShape shape);
 
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------
 
@@ -871,10 +887,10 @@ void joinKernelArguments(std::string_view uri, std::vector<T> &norm, std::vector
  *
  * A clause is present iff the type writes one (`Concrete`); a type that writes none (`Generic`)
  * answers nullopt, and every caller keeps the conservative reading there -- never "touches
- * nothing", because an unread clause is not an empty one. `pure` is not an absence: it is the clause
- * that names nothing, so it comes back as a `Concrete` signature whose `pure()` is true and whose
- * reach is the empty set. That distinction is the whole point of this one function, and it is why
- * the two answers are `has_value()` and `->pure()` rather than a single bool.
+ * nothing", because an unread clause is not an empty one. `pure` is not an absence: it is the
+ * clause that names nothing, so it comes back as a `Concrete` signature whose `pure()` is true and
+ * whose reach is the empty set. That distinction is the whole point of this one function, and it is
+ * why the two answers are `has_value()` and `->pure()` rather than a single bool.
  */
 std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionType *value);
 
@@ -904,16 +920,18 @@ struct FunctionValueClause {
 
 /**
  * One rule, read wherever a call stands (design principles 3.3): a call through a function value
- * takes its accesses from the value's type (`Builder::reachOfCall`, `Builder::isEffectNode`'s `Call`
- * case, `Resolver::call`), and a higher-order operator's call is that same reading with the value at
- * the operand its declaration names (`sem::ResourceSpec::functionOperand`) -- the builder's ordering
+ * takes its accesses from the value's type (`Builder::reachOfCall`, `Builder::isEffectNode`'s
+ * `Call` case, `Resolver::call`), and a higher-order operator's call is that same reading with the
+ * value at the operand its declaration names (`sem::ResourceSpec::functionOperand`) -- the
+ * builder's ordering
  * (`Builder::reachOfOper`) and effect check (`Builder::isEffectNode`'s operator case), both through
  * `Builder::functionValueAt`; the node-role registry; the effect summary (`EffectWalk::ofNodes`);
- * and `Resolver::fromFunctionOperand`. The clause itself is read once (`functionValueClause`, above),
- * and every one of those readers asks this reading for it -- through `functionValueClauseAt` here,
- * or the clause alone where the base and the count are not needed -- rather than reading the type's
- * `resources()` itself. The one reader that does read the signature itself is `declaredClauseAt`,
- * because a call site that writes no clause has to be judged there and not declined.
+ * and `Resolver::fromFunctionOperand`. The clause itself is read once (`functionValueClause`,
+ * above), and every one of those readers asks this reading for it -- through
+ * `functionValueClauseAt` here, or the clause alone where the base and the count are not needed --
+ * rather than reading the type's `resources()` itself. The one reader that does read the signature
+ * itself is `declaredClauseAt`, because a call site that writes no clause has to be judged there
+ * and not declined.
  */
 FunctionValueClause functionValueClauseAt(
     const type::FunctionType *value, sem::ResourceBinding::Kind kind, size_t index);

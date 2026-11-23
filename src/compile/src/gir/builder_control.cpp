@@ -87,8 +87,8 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     return castNode;
 }
 
-node_handle_t Builder::fillNodeOf(
-    node_handle_t tmpl, Type *type, const std::vector<node_handle_t> &values) {
+node_handle_t
+Builder::fillNodeOf(node_handle_t tmpl, Type *type, const std::vector<node_handle_t> &values) {
     // `fill::<T, ...F>(template: T, ...fields: ...F): T` says a construction is about the type it
     // makes and the values it is made of: the template comes first as an ordinary operand and the
     // values follow it in the order the target lays its components out, which is the order the call
@@ -130,8 +130,8 @@ node_handle_t Builder::fillNodeOf(
     // and it stays a FILL until the operator can say that order.
     std::vector<size_t> slots(values.size());
     std::iota(slots.begin(), slots.end(), size_t{0});
-    node_handle_t fillNode = currGraph_->addFillNode(
-        type, runtime::makeFillPayload(fillKindForType(type), slots));
+    node_handle_t fillNode =
+        currGraph_->addFillNode(type, runtime::makeFillPayload(fillKindForType(type), slots));
     linkNodes(LinkType::Norm, tmpl, fillNode);
     for (node_handle_t value : values) {
         linkNodes(LinkType::With, value, fillNode);
@@ -152,7 +152,11 @@ node_handle_t Builder::memberReadNodeOf(
         if (group != nullptr) {
             const std::vector<StaticArg> statics(2);
             const auto op = group->resolveForCall(
-                {aggregate, target}, target, {Type::Int64()}, {aggregate}, statics);
+                {aggregate, target},
+                target,
+                {Type::Int64()},
+                {aggregate},
+                statics);
             if (op.has_value()) {
                 const data_ptr_t place =
                     tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(at));
@@ -198,10 +202,14 @@ node_handle_t Builder::memberReadNodeOf(
         if (group != nullptr) {
             const std::vector<StaticArg> statics(2);
             const auto op = group->resolveForCall(
-                {aggregate, target}, target, {Type::String()}, {aggregate}, statics);
+                {aggregate, target},
+                target,
+                {Type::String()},
+                {aggregate},
+                statics);
             if (op.has_value()) {
                 const data_ptr_t name = tt::as_shared<Data>(std::make_shared<StringData>(key));
-                node_handle_t keyNode  = currGraph_->addStaticDataNode(name);
+                node_handle_t keyNode = currGraph_->addStaticDataNode(name);
                 rememberConstant(keyNode, name);
                 registerNodeOrigin(context_, keyNode, origin, "gir.data");
                 node_handle_t node = currGraph_->addOperNode(*op, 0);
@@ -397,7 +405,6 @@ std::string aggregatePartName(const Type *type, size_t index) {
     return std::to_string(index);
 }
 
-
 /// The next value of the part `step` of `value` (`value` is a struct or tuple FILL, or any value
 /// of that type). A FILL's parts are its With inputs, which is what lets an `append` among them
 /// keep growing the state's array in place; a part the FILL does not write is read from it.
@@ -548,7 +555,6 @@ std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
     }
     return index;
 }
-
 
 void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
     Type *exitType = arm->exitType();
@@ -858,9 +864,9 @@ void Builder::setArmResult(ArmBuild &arm, node_handle_t result) {
     }
     // The arm gives the GATE a sync block ends with; its value is what the GATE forwards.
     node_handle_t value = behindSyncGate(result);
-    arm.output = result;
-    arm.value  = value;
-    arm.type   = nodeTypeOf(value);
+    arm.output          = result;
+    arm.value           = value;
+    arm.type            = nodeTypeOf(value);
 }
 
 node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
@@ -980,7 +986,7 @@ node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle
         insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, call));
         ExpectedValueScope noPosition(expectedValueType_, nullptr);
         node_handle_t result = behindSyncGate(visitPipeLink(call, passed));
-        Type *type = valueTypeOf(nodeTypeOf(result));
+        Type *type           = valueTypeOf(nodeTypeOf(result));
         if (onNull) {
             resultType = type->code() == TypeCode::Void || asNullable(type) != nullptr
                              ? type
@@ -2259,7 +2265,14 @@ node_handle_t Builder::buildBranch(
     // it begins at BRCH and is complete at JOIN, and the JOIN is the version of the variable an
     // arm wrote through its own value.
     attachRegionStatement(
-        joinNode, armList, gct, brchNode, joinNode, "The branch", "an arm writes", mergeVariable);
+        joinNode,
+        armList,
+        gct,
+        brchNode,
+        joinNode,
+        "The branch",
+        "an arm writes",
+        mergeVariable);
 
     return joinNode;
 }
@@ -2333,8 +2346,8 @@ void Builder::mergeArmVariables(
 
 void Builder::attachRegionStatement(
     node_handle_t node, const std::vector<arm_ptr_t> &parts, const GCT::node_ptr_t &gct,
-    node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject,
-    const char *verb, node_handle_t versionOf) {
+    node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject, const char *verb,
+    node_handle_t versionOf) {
     std::vector<node_handle_t> capturedWrites;
     mergeArmVariables(parts, node, capturedWrites);
     if (versionOf != nullptr) {
@@ -2621,12 +2634,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 // into a value (`v.f = e`) is the whole variable's write, which this scan is not
                 // about, and the builder's own rebuilds (`Rebuilt`, `Owned`) are not the program's
                 // writes.
-                const bool nameWrite =
-                    node->type() == GCT::NodeKind::ASSIGN &&
-                    (node->assignmentForm() == GCT::AssignmentForm::Plain ||
-                     node->assignmentForm() == GCT::AssignmentForm::Compound) &&
-                    node->assignmentTarget() != nullptr &&
-                    node->assignmentTarget()->type() == GCT::NodeKind::DREF;
+                const bool nameWrite = node->type() == GCT::NodeKind::ASSIGN &&
+                                       (node->assignmentForm() == GCT::AssignmentForm::Plain ||
+                                        node->assignmentForm() == GCT::AssignmentForm::Compound) &&
+                                       node->assignmentTarget() != nullptr &&
+                                       node->assignmentTarget()->type() == GCT::NodeKind::DREF;
                 const bool plainAssign =
                     nameWrite && node->assignmentForm() == GCT::AssignmentForm::Plain;
                 const bool compoundAssign =
@@ -2712,7 +2724,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // A name the declaration built as a value is carried as a value: the
             // body's name is the port, and the head carries whatever the body wrote. Nothing of it
             // is a cell, so none of the cell questions below apply.
-            const SsaEnv::Entry *ssa = ssa_.find(nodeScope_, name);
+            const SsaEnv::Entry *ssa  = ssa_.find(nodeScope_, name);
             const node_handle_t value = ssa_.valueOf(ssa);
             const bool asValue        = ssa != nullptr && value != nullptr && !isVariable(bound);
             // A name that is still a cell is carried only when the body's block writes it and no
@@ -2846,7 +2858,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 }
                 return nullptr;
             };
-            node_handle_t elements        = nullptr;
+            node_handle_t elements = nullptr;
             std::optional<oper_idx_ptr_t> resolved;
             const std::vector<StaticArg> statics(1);
             // `__iter__` is a group of several overloads (`:struct/iter_str`,
@@ -2879,7 +2891,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                     if (!module) {
                         continue;
                     }
-                    for (const auto &overload : exports_->exportedOperatorOverloads(*module, "iter")) {
+                    for (const auto &overload :
+                         exports_->exportedOperatorOverloads(*module, "iter")) {
                         if ((elements = camelIterableOf(overload.overloads)) != nullptr) {
                             break;
                         }
@@ -3147,7 +3160,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         continue;
                     }
                     node_handle_t part = memberReadNodeOf(
-                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
+                        returned,
+                        stateTypes[j],
+                        static_cast<uint32_t>(j),
+                        gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
@@ -3180,7 +3196,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         continue;
                     }
                     node_handle_t part = memberReadNodeOf(
-                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
+                        returned,
+                        stateTypes[j],
+                        static_cast<uint32_t>(j),
+                        gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
@@ -3464,7 +3483,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             const slot_t empty =
                 camel::core::rtdata::toSlot(::Tuple::create(count, camel::core::mm::autoSpace()));
             node_handle_t source = draft.ref(draft.materializeStaticValue(empty, valueType));
-            result = fillNodeOf(source, valueType, resolved);
+            result               = fillNodeOf(source, valueType, resolved);
             registerNodeOrigin(context_, result, gct->loopBody(), "gir.loop.split");
         }
         if (bodyPart->output != bodyPart->value) {
@@ -3569,8 +3588,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`).
     node_handle_t loopValue = loopNode;
     if (!collected.empty() || !carried.empty()) {
-        const std::vector<Type *> visible(
-            stateTypes.begin(), stateTypes.begin() + declaredStates);
+        const std::vector<Type *> visible(stateTypes.begin(), stateTypes.begin() + declaredStates);
         loopValue = attachVisibleLoopState(loopNode, visible, 0, gct);
     }
     // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
@@ -3587,8 +3605,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         const size_t index  = declaredStates + j;
         node_handle_t value = loopNode;
         if (stateCount > 1) {
-            value = memberReadNodeOf(
-                loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
+            value =
+                memberReadNodeOf(loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
             registerNodeOrigin(context_, value, gct, "gir.loop.value");
         }
         if (carried[j].ssa) {
@@ -3614,7 +3632,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             node_handle_t access = memberReadNodeOf(
-                loopValue, splitComponents[j]->type, static_cast<uint32_t>(j), gct);
+                loopValue,
+                splitComponents[j]->type,
+                static_cast<uint32_t>(j),
+                gct);
             registerNodeOrigin(context_, access, gct, "gir.loop.value");
             componentValues[j] = access;
         }
@@ -3631,11 +3652,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::vector<size_t> slots(count);
             std::iota(slots.begin(), slots.end(), size_t{0});
             const bool isStruct = part.type->code() == TypeCode::Struct;
-            const slot_t empty = isStruct
-                                     ? camel::core::rtdata::toSlot(
-                                           ::Struct::create(count, camel::core::mm::autoSpace()))
-                                     : camel::core::rtdata::toSlot(
-                                           ::Tuple::create(count, camel::core::mm::autoSpace()));
+            const slot_t empty  = isStruct
+                                      ? camel::core::rtdata::toSlot(
+                                            ::Struct::create(count, camel::core::mm::autoSpace()))
+                                      : camel::core::rtdata::toSlot(
+                                            ::Tuple::create(count, camel::core::mm::autoSpace()));
             node_handle_t source =
                 currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, part.type));
             node_handle_t fill = fillNodeOf(source, part.type, values);
@@ -3852,8 +3873,7 @@ node_handle_t Builder::buildStreamLoop(
                     // The element this round is about and the rest of the stream, taken out of
                     // the pull that has just answered.
                     node_handle_t pair = applyTagOperator(TagNullValue, pullTemp, gct->loopBody());
-                    node_handle_t element =
-                        memberReadNodeOf(pair, elementType, 0, gct->loopBody());
+                    node_handle_t element = memberReadNodeOf(pair, elementType, 0, gct->loopBody());
                     registerNodeOrigin(context_, element, gct->loopBody(), "gir.loop.element");
                     insertNode(gct->loopElementName(), element);
                     if (recorder_) {
@@ -3879,7 +3899,10 @@ node_handle_t Builder::buildStreamLoop(
                     } else {
                         for (size_t j = 0; j < k; ++j) {
                             node_handle_t component = memberReadNodeOf(
-                                state, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
+                                state,
+                                stateTypes[j],
+                                static_cast<uint32_t>(j),
+                                gct->loopBody());
                             registerNodeOrigin(
                                 context_,
                                 component,

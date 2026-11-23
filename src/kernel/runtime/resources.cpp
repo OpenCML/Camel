@@ -22,8 +22,8 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/func.h"
-#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
@@ -485,7 +485,7 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
     case GCNodeKind::Oper:
         return oper(graph, ref);
     case GCNodeKind::Func: {
-        const auto norm       = graph.normInputsOf(ref);
+        const auto norm    = graph.normInputsOf(ref);
         const auto *callee = program_.calleeOf(graph, ref);
         if (callee != nullptr && callee->funcType() != nullptr &&
             callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete &&
@@ -529,7 +529,7 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
     default:
         // A copy is a new object nobody else refers to, and no other kind reaches a resource
         // through this node: the answer is the same one, so it is asked once (the copy is a
-        // `Clone` by its shape, `camel/execute/shaped_operators.h`).
+        // `Clone` by its shape, `camel/runtime/oper_shape.h`).
         return NodeResources{};
     }
 }
@@ -791,10 +791,10 @@ NodeResources Resolver::fromSignature(
     const ClosureAt closure = closureAt(graph, ref, withArgBase);
     const GCGraph *body     = closure.function != nullptr ? closure.function->graph() : nullptr;
     for (uint8_t position : signature.captures) {
-        const gc_node_ref_t at = size_t(position) < closure.captures.size()
-                                     ? closure.captures[position]
-                                     : kInvalidNodeRef;
-        const GCNode *node       = at != kInvalidNodeRef ? graph.node(at) : nullptr;
+        const gc_node_ref_t at       = size_t(position) < closure.captures.size()
+                                           ? closure.captures[position]
+                                           : kInvalidNodeRef;
+        const GCNode *node           = at != kInvalidNodeRef ? graph.node(at) : nullptr;
         const core::type::Type *type = node != nullptr ? node->dataType() : nullptr;
         if (type == nullptr && body != nullptr) {
             // The call site does not hand the value over (a closure called where it was not made):
@@ -872,10 +872,9 @@ ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
         const GCNode *node = graph.node(ref);
         // A copy and a construction make a value of their own: asked of the operator the node
         // names, or of the kind for the form the front end still builds
-        // (`camel/execute/shaped_operators.h`, refactor stage 2.3).
-        const camel::execute::OperShape shape = camel::execute::shapeOfOperation(graph, ref);
-        if (shape == camel::execute::OperShape::Clone ||
-            shape == camel::execute::OperShape::Construction) {
+        // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+        const camel::ops::OperShape shape = camel::runtime::shapeOfOperation(graph, ref);
+        if (shape == camel::ops::OperShape::Clone || shape == camel::ops::OperShape::Construction) {
             return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
         }
         switch (node->kind) {
@@ -922,10 +921,9 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
         const GCNode *node = graph.node(value);
         // A copy and a construction make a value of their own: asked of the operator the node
         // names, or of the kind for the form the front end still builds
-        // (`camel/execute/shaped_operators.h`, refactor stage 2.3).
-        const camel::execute::OperShape shape = camel::execute::shapeOfOperation(graph, value);
-        if (shape == camel::execute::OperShape::Clone ||
-            shape == camel::execute::OperShape::Construction) {
+        // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+        const camel::ops::OperShape shape = camel::runtime::shapeOfOperation(graph, value);
+        if (shape == camel::ops::OperShape::Clone || shape == camel::ops::OperShape::Construction) {
             return sem::ResultAlias{.kind = ResultAlias::Kind::Fresh};
         }
         switch (node->kind) {
@@ -2309,7 +2307,8 @@ std::optional<CommitViolation> commitViolation(
     const auto withSignatureNote = [&](CommitViolation violation) {
         if (signatureChanged) {
             violation.text += std::format(
-                "; the graph's signature changed at this commit: it declared {} and now declares {}",
+                "; the graph's signature changed at this commit: it declared {} and now declares "
+                "{}",
                 declaredEffectText(*before),
                 declaredEffectText(graph));
         }
@@ -2377,8 +2376,12 @@ std::optional<CommitViolation> commitViolation(
                         before->name(),
                         beforeBeyond->text));
             }
-            if (auto effect =
-                    effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
+            if (auto effect = effectBeyondDeclaration(
+                    program,
+                    graph,
+                    walk,
+                    table,
+                    EffectReader::Publishing)) {
                 return withSignatureNote(*effect);
             }
         }

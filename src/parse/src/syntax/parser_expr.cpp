@@ -14,21 +14,16 @@
  *   andExpr         &                both sides evaluated        left
  *   equalityExpr    ===  !==  ==  !=                            left
  *   relationalExpr  <  >  <=  >=                                left
- *   rangeExpr       ..                                          left; looser than `+` and `-`, tighter
- *                                                               than the comparisons: `1..n+1` is
- *                                                               `1..(n+1)`
- *   additiveExpr    +  -                                        left
- *   multiplicative  *  /  @  %                                  left
- *   powerExpr       ^                                           right
- *   nullableExpr    ??  !!           right operand: a whole dataExpr
- *   unaryExpr       postfix `as T`
- *   negExpr         prefix -  !  ~   looser than `->` and than `^`, tighter than the other binary
- *                                    operators: `-x->f` is `-(x->f)`, `!xs->is_empty()` is
- *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a) * b`
- *   linkExpr        ->                                          left
- *   annoExpr        [index]  (arguments)  <arguments>  .member   postfix, touching
- *   accessExpr      .member
- *   primaryData     name, literal, [array], {struct}, (tuple), lambda
+ *   rangeExpr       ..                                          left; looser than `+` and `-`,
+ * tighter than the comparisons: `1..n+1` is `1..(n+1)` additiveExpr    +  - left multiplicative  *
+ * /  @  %                                  left powerExpr       ^ right nullableExpr    ??  !!
+ * right operand: a whole dataExpr unaryExpr       postfix `as T` negExpr         prefix -  !  ~
+ * looser than `->` and than `^`, tighter than the other binary operators: `-x->f` is `-(x->f)`,
+ * `!xs->is_empty()` is
+ *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a)
+ * * b` linkExpr        ->                                          left annoExpr        [index]
+ * (arguments)  <arguments>  .member   postfix, touching accessExpr      .member primaryData name,
+ * literal, [array], {struct}, (tuple), lambda
  *
  * Line breaks (rule 2). Where `nl_` is set, an operator that could also start a statement does
  * not continue an expression across a line break: `+`, `-` (a negation) and `@` (an
@@ -38,8 +33,8 @@
  * taken wherever it stands, too.
  */
 
-#include "parser_impl.h"
 #include "camel/parse/ast/type_case_words.h"
+#include "parser_impl.h"
 
 #include <optional>
 
@@ -239,12 +234,10 @@ void ParserImpl::parseRelational() {
 
 /// rangeExpr : additiveExpr (('..' | '<>') additiveExpr)*
 /// The range of two numbers and the composition of two functions, one level: `1..n+1` is
-/// `1..(n+1)`, and both are looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
+/// `1..(n+1)`, and both are looser than `->`, so `x->f <> g` is `(x->f) <> g` (`x->f->g` is the
 /// composition by pipe).
-/// `..` is the interval, and it keeps its second reading as the composition while the corpus
-/// still spells it that way (`lane/notation-b3`); `<>` is the composition and has no other
-/// reading (design principles 4.2). The AST builder tells them apart by
-/// the operator token.
+/// `..` is the interval and `<>` is the composition; each has one reading (design principles
+/// 4.2), and the AST builder tells them apart by the operator token.
 /// Inside a subscript the `..` is the slice's separator, and `noRange_` is on there: the
 /// dimension reads `a..b` as two ends, not as a range value (see `parseSliceIndices`).
 void ParserImpl::parseRange() {
@@ -600,8 +593,7 @@ bool ParserImpl::shapeCompAhead() const {
         if (const auto closer = bracketCloser(kind); closer.has_value()) {
             // `f(x)` is a call and `(x)` a parenthesised value where a type has no call: a `(`
             // opens a type only where a type starts, never after a name or a closing bracket.
-            if (kind == TK::LParen &&
-                previous.has_value() &&
+            if (kind == TK::LParen && previous.has_value() &&
                 (*previous == TK::Identifier || *previous == TK::RParen ||
                  *previous == TK::RBracket || *previous == TK::Gt)) {
                 return false;
@@ -935,11 +927,10 @@ void ParserImpl::parseAngledValues() {
 }
 
 /// typeArguments : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
-/// namedTypeArgument : IDENTIFIER (':' | '=') typeExpr
+/// namedTypeArgument : IDENTIFIER ':' typeExpr
 /// The arguments are all positional or all named (design principles 5.9): `f::<int, string>`
 /// or `f::<A: int, B: string>`. The colon says the argument is named, as it does in a parameter
-/// and in a field; `=` is the older spelling, still read while the corpus is written that way
-/// (design principles 5.9).
+/// and in a field; written with `=` it is an ordinary syntax error at the `=`.
 void ParserImpl::parseTypeArguments() {
     const size_t m = mark();
     bump(); // ::
@@ -947,12 +938,12 @@ void ParserImpl::parseTypeArguments() {
     bump(); // < (not an expression's with-argument list)
     {
         Scope scope(*this, false, open);
-        if (cur_ == TK::Identifier && (peek(1) == TK::Colon || peek(1) == TK::Assign)) {
+        if (cur_ == TK::Identifier && peek(1) == TK::Colon) {
             while (!panic_) {
                 const size_t named = mark();
-                // The name is not optional: `namedTypeArgument` is `IDENTIFIER '=' typeExpr`, and
+                // The name is not optional: `namedTypeArgument` is `IDENTIFIER ':' typeExpr`, and
                 // the AST builder reads the name to reach the type parameter it fills
-                // (builder.cpp, visitAnnoExpr). `f::<A = int, = string>` wrote a second argument
+                // (builder.cpp, visitAnnoExpr). `f::<A: int, = string>` wrote a second argument
                 // without one; `eat` said nothing and consumed nothing, the node was closed
                 // around `= string` alone, and the read of the name it does not have followed a
                 // null tree. The name is asked for where it should stand, as everywhere else a
@@ -967,9 +958,7 @@ void ParserImpl::parseTypeArguments() {
                     break;
                 }
                 bump();
-                if (!eat(TK::Colon)) {
-                    eat(TK::Assign);
-                }
+                eat(TK::Colon);
                 parseType();
                 close(named, NK::NamedTypeArgument);
                 if (cur_ != TK::Comma || peek(1) == TK::Gt)

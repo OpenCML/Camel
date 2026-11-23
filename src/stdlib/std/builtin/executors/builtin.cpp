@@ -640,7 +640,8 @@ void registerBuiltinOperatorTraits() {
         // itemized elsewhere is declared by that list, not by this one (design principles 3.3).
         // Listing it here as well was a leftover of the pure word and a second statement of it: the
         // record keeps the first statement it is given (a record is never re-stated), so the two
-        // disagreed on the one operator -- `scripts/check-operator-uses.mjs` prints that disagreement.
+        // disagreed on the one operator -- `scripts/check-operator-uses.mjs` prints that
+        // disagreement.
         "op/mod",
         "op/mod_i",
         "op/mod_l",
@@ -771,22 +772,32 @@ void registerBuiltinOperatorTraits() {
     // `kAccessFree` and outside `kConversions`, so its three answers are written here with the
     // kernel they belong to.
     registry.set(":op/copy", {.pure = true, .elementwise = false, .mayFault = false});
+    // The shape of it, which is a copy: the four statements below say what that fact is and why it
+    // is written where the operator is registered.
+    registry.declareShape(":op/copy", camel::ops::OperShape::Clone);
     // The record's `panic` for `:op/copy` is one entry of the same list
-    // (`src/stdlib/std/builtin/executors/builtin_semantics.cpp#declareBuiltinOperatorFaults`), where
-    // the fault table and the record are stated from one list.
-    // The three shapes plan 2.3, step 2 turns into operators (`operators/cast.cpp`,
-    // `operators/struct.cpp`). Each reads the values of its own call and writes nothing outside
-    // them, so each is pure and none is elementwise. Each may fault: a conversion checks the value
-    // when the pair's types make it unsafe, a construction checks that the template clones into the
-    // type it is made for, and a member read checks that the member is there. `mayFault` is stated
-    // per operator rather than per pair, which is the one thing the CAST arm could say and this
-    // record cannot: a conversion of a pair whose types make it safe is read as one that may fault,
-    // so a pass keeps it where it stands instead of moving it
+    // (`src/stdlib/std/builtin/executors/builtin_semantics.cpp#declareBuiltinOperatorFaults`),
+    // where the fault table and the record are stated from one list. The three shapes plan 2.3,
+    // step 2 turns into operators (`operators/cast.cpp`, `operators/struct.cpp`). Each reads the
+    // values of its own call and writes nothing outside them, so each is pure and none is
+    // elementwise. Each may fault: a conversion checks the value when the pair's types make it
+    // unsafe, a construction checks that the template clones into the type it is made for, and a
+    // member read checks that the member is there. `mayFault` is stated per operator rather than
+    // per pair, which is the one thing the CAST arm could say and this record cannot: a conversion
+    // of a pair whose types make it safe is read as one that may fault, so a pass keeps it where it
+    // stands instead of moving it
     // (`kernel/runtime/graph.cpp#nodeMayFault` asks this answer once the node is an OPER node).
     registry.set(":op/cast", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = true});
+    // Which of the four each of them is: the one fact a reader of a graph asks instead of comparing
+    // the letters of the URI (`camel/runtime/oper_shape.h`). Written here, where the operator is
+    // registered with the kernel that runs it, and at no second place (D-1123-34).
+    registry.declareShape(":op/cast", camel::ops::OperShape::Conversion);
+    registry.declareShape(":op/fill", camel::ops::OperShape::Construction);
+    registry.declareShape(":op/access", camel::ops::OperShape::Access);
+    registry.declareShape(":op/access_key", camel::ops::OperShape::Access);
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.
@@ -850,7 +861,8 @@ void registerBuiltinOperatorTraits() {
     // the other two forms, because a declaration belongs where the operator is registered and not
     // in its reader.
     registry.declareCallForm(
-        ":struct/append_arr_owned", {.name = "append", .minArgs = 1, .declaredByModule = true});
+        ":struct/append_arr_owned",
+        {.name = "append", .minArgs = 1, .declaredByModule = true});
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});

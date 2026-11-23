@@ -14,7 +14,7 @@
  * resolution of a call recognises an operator by its group name, and the diagnostics and the
  * language server show the symbol instead of the reserved name.
  *
-* Not in the table as overloadable: `&&` and `||` are branches (4.2); `??` and `!!` are
+ * Not in the table as overloadable: `&&` and `||` are branches (4.2); `??` and `!!` are
  * branches on the mark of a `T?` / `T!`; `->` passes a value to a function (and carries a null
  * or an error along); `..` composes two
  * functions; `=` and the compound assignments write a variable (`a += b` is `a = a + b`, so it
@@ -51,8 +51,8 @@ inline constexpr std::string_view kAssignmentGroup = "__assn__";
 
 /// Whether `uri` names an assignment operator: `:op/assn`, `:op/assn_i`, `:op/assn_owned` and the
 /// compound families. The table's `kFamilyAssignment` bit is set from this one answer
-/// (`OperatorTable::internLocked`), so "is this operator a write" is asked one way, and the compiler
-/// layer asks it by calling this rather than comparing the prefix itself.
+/// (`OperatorTable::internLocked`), so "is this operator a write" is asked one way, and the
+/// compiler layer asks it by calling this rather than comparing the prefix itself.
 inline bool isAssignmentUri(std::string_view uri) { return uri.starts_with(":op/assn"); }
 
 /// The prefix of a name the compiler writes for a built-in operator it means itself, when the name
@@ -69,12 +69,10 @@ inline std::string compilerNamedOperator(std::string_view plain) {
     return std::string(kBuiltinPrefix) + std::string(plain);
 }
 
-/// The name the compiler writes for `a..b` before the two readings of the construct are told
-/// apart (design principles 4.2; the rule on
-/// the rule): between two functions it is the composition `f..g`, the
-/// lambda `(x) => g(f(x))`, and between two integers it is the interval `[a, b)`. The graph
-/// builder writes the construct as one call of this name and the GIR builder resolves it, since
-/// only there are the types of the two operands known. No program writes the name.
+/// The name the compiler writes for `a..b`, the interval (design principles 4.2; the rule on
+/// the rule): the integers from `a` to `b - 1`, and nothing else -- the composition is `f <> g`
+/// and has the name of its own below. The graph builder writes the construct as one call of this
+/// name and the GIR builder resolves it. No program writes the name.
 inline constexpr std::string_view kCompositionCall = "$comp::..";
 
 /// The name the compiler writes for `f <> g` (design principles 4.2): the

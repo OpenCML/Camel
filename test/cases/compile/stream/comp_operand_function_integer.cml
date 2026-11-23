@@ -1,8 +1,6 @@
-// `..` has two readings - two functions, or two integers - and a function with an integer is
-// neither, so the construct is refused with the reading it does not have as its own diagnostic:
-// the operands are named
-// by their types, and
-// neither of them is generic or unsettled.
+// `..` is the interval - two integers and nothing else - and a function with an integer is not
+// that, so the construct is refused: the operands are named by their types, and neither of them is
+// generic or unsettled.
 
 func inc(x: int) => int {
     return x + 1

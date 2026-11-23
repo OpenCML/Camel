@@ -131,8 +131,8 @@ class Builder {
     enum class BuildState { Declared, Building, Built, Failed };
     struct TopLevelDeclaration {
         GCT::node_ptr_t gct = {};
-        ModuleUnit *unit = nullptr;
-        BuildState state = BuildState::Declared;
+        ModuleUnit *unit    = nullptr;
+        BuildState state    = BuildState::Declared;
         // The names a value declaration binds; the function's name for a function.
         std::vector<std::string> names;
         bool isVar = false;
@@ -424,7 +424,7 @@ class Builder {
     /// not zeroed, every later statement then believes it is in a sync chain. A boolean is a
     /// `bool` from its first read, not from its first write.
     bool synced_ = false;
-    bool varied_  = false;
+    bool varied_ = false;
     // The numeric permissions in force where the builder is (design principles 7.5): those of
     // the nearest GCT EXEC, which already include every enclosing block and function
     // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
@@ -712,9 +712,7 @@ class Builder {
     /// (capturing, origin's graph) that says which record was made of a value that graph cannot
     /// reach. The walk itself reads only `graph`.
     node_handle_t captureInto(
-        const compile_graph_ptr_t &graph,
-        node_handle_t origin,
-        const std::string &name,
+        const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name,
         DraftGraphBuilder *capturing = nullptr);
     /// Whether the graph being built is `origin`'s own graph or one of its inner graphs, so that
     /// a capture of `origin` here is a capture this graph can make.
@@ -938,12 +936,11 @@ class Builder {
     /// What the scan says about one declaration, in the two shapes a declaration of a value has:
     /// `asValue` -- a value when every use stays
     /// in a region that carries one; and `asHandle` -- the answer a `var` whose value is a counted
-    /// handle takes, which a use that only reads the name across a closure's body does not rule out.
-    /// A handle is a value (design principles 3.3, 3.5): a closure that reads the name captures the
-    /// handle itself, and no cell is shared.
-    /// A write across
-    /// such a region, a `var` parameter's write-back and an in-place update of a place keep the
-    /// cell, in both answers: a write needs somewhere to land that a captured value cannot give.
+    /// handle takes, which a use that only reads the name across a closure's body does not rule
+    /// out. A handle is a value (design principles 3.3, 3.5): a closure that reads the name
+    /// captures the handle itself, and no cell is shared. A write across such a region, a `var`
+    /// parameter's write-back and an in-place update of a place keep the cell, in both answers: a
+    /// write needs somewhere to land that a captured value cannot give.
     struct SsaAnswer {
         bool asValue  = true;
         bool asHandle = true;
@@ -1079,8 +1076,8 @@ class Builder {
         };
         std::vector<Version> versions;
         /// How many versions the call hands back: the numbers set in its mask. Counted from the
-        /// mask and not from `versions`, because the mask is the record of the slots and a slot this
-        /// graph cannot fill is one of them (GCFuncRef::reserved packs the value from it).
+        /// mask and not from `versions`, because the mask is the record of the slots and a slot
+        /// this graph cannot fill is one of them (GCFuncRef::reserved packs the value from it).
         uint32_t versionCount = 0;
         std::vector<node_handle_t> parts;
         bool hasReturn = true;
@@ -2233,7 +2230,7 @@ class Builder {
     /// The callee of a call, once its `with` applications are taken off.
     struct FoldRequest {
         GCT::node_ptr_t callee = {};
-        bool typeApplied = false;
+        bool typeApplied       = false;
         std::string name;
         const std::vector<data_ptr_t> *arguments = nullptr;
         std::vector<data_ptr_t> withArguments;
@@ -2244,7 +2241,7 @@ class Builder {
     /// What a call names, ready to be read: the body, the signature with the types bound, and
     /// where the declaration's own `when` is answered.
     struct FoldTarget {
-        GCT::node_ptr_t func = {};
+        GCT::node_ptr_t func    = {};
         FunctionType *signature = nullptr;
         camel::core::type::type_bindings_t bindings;
         generic_template_ptr_t declaring;
@@ -2373,13 +2370,13 @@ class Builder {
     node_handle_t addCallNodeOf(const compile_graph_ptr_t &callee);
     // The one place a CALL node is constructed: every construction site in the builder comes
     // through here and passes, as `exitType`, the type the call hands on exactly as that site
-    // states it today -- the declared exit type at five of them, `pullType` (itself the exit type of
-    // the step it calls) at the loop's pull. Unifying the construction is what gives a later rule
-    // one place to stand; which of those answers a site asks for is a different change and this one
-    // does not make it. The derivation the rule will ask for (`graphExitTypeOf`) is not taken here:
-    // it answers a tuple for a signature that states a `var` parameter, while a call still hands a
-    // bare value, so taking it at all five sites would break cases. The FUNC node of a direct call is
-    // the other half and is already one place: `addCallNodeOf` above.
+    // states it today -- the declared exit type at five of them, `pullType` (itself the exit type
+    // of the step it calls) at the loop's pull. Unifying the construction is what gives a later
+    // rule one place to stand; which of those answers a site asks for is a different change and
+    // this one does not make it. The derivation the rule will ask for (`graphExitTypeOf`) is not
+    // taken here: it answers a tuple for a signature that states a `var` parameter, while a call
+    // still hands a bare value, so taking it at all five sites would break cases. The FUNC node of
+    // a direct call is the other half and is already one place: `addCallNodeOf` above.
     node_handle_t addCallSite(const compile_graph_ptr_t &graph, Type *exitType);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
@@ -2775,20 +2772,20 @@ class Builder {
         BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
         const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
         size_t withArgBase, draft_node_ref_t id, const compile_graph_ptr_t &calleeGraph) const;
-    /// The function value standing at one of a node's operands, and what its type says: the builder's
-    /// one operand lookup (`functionValueAt`).
+    /// The function value standing at one of a node's operands, and what its type says: the
+    /// builder's one operand lookup (`functionValueAt`).
     struct FunctionValueAt {
         camel::core::FunctionValueClause site;
         compile_graph_ptr_t body;
     };
     /// The function value at the operand the binding names, found where the graph stores it: the
-    /// `Norm`/`With` input at that index (a call's callee is its `With` 0), and the type it carries.
-    /// `nullopt` when the operand holds no value, or one that is not a function. `site` is
-    /// `core::functionValueClauseAt`'s answer about that type -- the clause (absent: the type writes
-    /// none, keep the conservative reading), the base its `with` parameters land at, how many there
-    /// are -- and `body` is the graph behind the value when the program names one statically. The
-    /// builder's half of `runtime::clauseOfOperand`/`clauseOfCall`, so the ordering, the effect
-    /// summary and the footprint answer alike about one type.
+    /// `Norm`/`With` input at that index (a call's callee is its `With` 0), and the type it
+    /// carries. `nullopt` when the operand holds no value, or one that is not a function. `site` is
+    /// `core::functionValueClauseAt`'s answer about that type -- the clause (absent: the type
+    /// writes none, keep the conservative reading), the base its `with` parameters land at, how
+    /// many there are -- and `body` is the graph behind the value when the program names one
+    /// statically. The builder's half of `runtime::clauseOfOperand`/`clauseOfCall`, so the
+    /// ordering, the effect summary and the footprint answer alike about one type.
     std::optional<FunctionValueAt> functionValueAt(
         const runtime::GraphTransaction &transaction, draft_node_ref_t node,
         const camel::core::sem::ResourceBinding &where) const;
@@ -3131,27 +3128,23 @@ class Builder {
     /// write gives).
     node_handle_t visitLinkNode(
         const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store = std::nullopt);
-    /// `a..b` (the GCT link of `kCompositionCall`) and `a <> b` (`kComposeCall`): the composition
-    /// of two functions, or -- for `..` alone -- the interval of two integers, told apart by the
-    /// types of the two operands (design principles 4.2; the rule). `compositionOnly` is set for
-    /// `<>`, which has the composition reading and no other. `expected`
-    /// is the type of the position the whole expression stands in: a function type there is the
+    /// `a..b` (the GCT link of `kCompositionCall`) and `a <> b` (`kComposeCall`): the interval of
+    /// two integers, or the composition of two functions (design principles 4.2). The token the
+    /// program wrote decides which: `intervalOnly` is set for `..`, which is the interval and has
+    /// no other reading; `<>` is the composition and nothing else. `expected` is the type of the
+    /// position the whole expression stands in: for a composition, a function type there is the
     /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (
     /// section generic-operands-of-composition).
-    node_handle_t
-    buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool compositionOnly = false);
+    node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool intervalOnly);
     /// The same, from two operands already built: the sequence position of a loop builds them
     /// itself, to know whether the interval is the loop's form before the rest of `..` is built.
     /// `opText` is the operator the program wrote, which the refusals name.
     node_handle_t buildCompositionWith(
-        const GCT::node_ptr_t &gct,
-        node_handle_t lhs,
-        node_handle_t rhs,
-        bool compositionOnly = false,
-        std::string_view opText = "..");
+        const GCT::node_ptr_t &gct, node_handle_t lhs, node_handle_t rhs, bool intervalOnly,
+        std::string_view opText);
     /// Whether `expr` is written `a..b`: the GCT link of `kCompositionCall`.
     static bool isIntervalExpr(const GCT::node_ptr_t &expr);
-    /// The composition `f..g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
+    /// The composition `f <> g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
     /// calls `f` and then `g`, both of them captures of it.
     node_handle_t composeFunctionValue(
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
@@ -3318,7 +3311,7 @@ class Builder {
     /// One case of a `match` whose cases carry guards: the form `buildCaseChain` lowers them
     /// in.
     struct CaseStep {
-        GCT::node_ptr_t exec = {};            // the arm of the case: its region, and its body
+        GCT::node_ptr_t exec = {};       // the arm of the case: its region, and its body
         node_handle_t condition{};       // the test of its pattern, none for the case that ends
         GCT::node_ptr_t guard = nullptr; // its guard, when it has one
         std::function<void()> bind{};    // takes out the names its pattern binds, in the arm
@@ -3781,21 +3774,22 @@ class Builder {
     /// operator's rule does not cover keeps the node kind it had instead of disappearing.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
-    /// A construction written as the operator it is (`fill::<T, ...F>` of the prelude): an OPER node
-    /// whose ordinary operands are the template the compiler made and then the values, in component
-    /// order. Nothing about a construction configures the call -- `with` is what says which function
-    /// this is -- so the whole call is ordinary parameters: the declaration says so, and the order
-    /// the components are written in is the operand order. `target` is the type being made and the
-    /// values' types are the declaration's `...F`. Falls back to `addFillNode` where no declaration
-    /// answers, so a construction the rule does not cover keeps the node kind it had.
+    /// A construction written as the operator it is (`fill::<T, ...F>` of the prelude): an OPER
+    /// node whose ordinary operands are the template the compiler made and then the values, in
+    /// component order. Nothing about a construction configures the call -- `with` is what says
+    /// which function this is -- so the whole call is ordinary parameters: the declaration says so,
+    /// and the order the components are written in is the operand order. `target` is the type being
+    /// made and the values' types are the declaration's `...F`. Falls back to `addFillNode` where
+    /// no declaration answers, so a construction the rule does not cover keeps the node kind it
+    /// had.
     node_handle_t fillNodeOf(
         node_handle_t tmpl, camel::core::type::Type *target,
         const std::vector<node_handle_t> &values);
     /// A member read written as the operator it is (`access::<T, U>` by place, `access_key::<T, U>`
     /// by name, of the prelude): an OPER node whose first ordinary operand is the place or the name
     /// -- a constant of the program, so a DATA node -- and whose second is the value it reads,
-    /// which is the order the declaration writes. `target` is the member's type and the value's type
-    /// is the aggregate's; the two are the call's written type arguments. Falls back to
+    /// which is the order the declaration writes. `target` is the member's type and the value's
+    /// type is the aggregate's; the two are the call's written type arguments. Falls back to
     /// `addAccsNode` where no declaration answers, so a read the rule does not cover keeps the node
     /// kind it had instead of disappearing.
     node_handle_t memberReadNodeOf(

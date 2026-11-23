@@ -153,7 +153,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "syntax.type_arguments_missing_name"
-desc = "`pair::<A = int, = string>` writes a named type argument whose name is missing. The name is asked for where it should stand and the list stops there: it used to be passed over in silence, the argument was closed around `= string` alone, and the AST builder read the name that argument does not have - a token handle holding no token - which ended `camel-parsecheck fuzz` with a signal. This case is the minimized input the fuzzer found, written down instead of drawn from a seed."
+desc = "`pair::<A: int, = string>` writes a named type argument whose name is missing. The name is asked for where it should stand and the list stops there: it used to be passed over in silence, the argument was closed around `= string` alone, and the AST builder read the name that argument does not have - a token handle holding no token - which ended `camel-parsecheck fuzz` with a signal. This case is the minimized input the fuzzer found, written down instead of drawn from a seed."
 kind = "negative"
 case = "../../../cases/parse/syntax/type_arguments_missing_name.cml"
 args = ["${case}"]
@@ -161,7 +161,7 @@ expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
 expect_diagnostic_code = "0x0200000A"
 expect_diagnostic_line = 9
-expect_diagnostic_column = 29
+expect_diagnostic_column = 28
 expect_output_contains = ["Unexpected '='; expected a name."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -461,5 +461,17 @@ expect_diagnostic_name = "SyntaxDiag::ComparisonAcrossLines"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 10
 expect_output_contains = ["This '>' is read as a comparison with the next line, which starts with 'b'", "A '>' after a space, at the end of a line, is the comparison operator"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.type_arguments_old_equals"
+desc = "`=` is not the separator of a named type argument (design principles 5.9): `pair::<A = int, B = string>` is refused at the `=`, and the list is read as the positional one up to the `>` there. The old spelling therefore gets an ordinary syntax error where the reader has to change a token, instead of being read as a named argument."
+kind = "negative"
+case = "../../../cases/parse/syntax/type_arguments_old_equals.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingToken"
+expect_output_contains = ["Expected '>' before '='"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

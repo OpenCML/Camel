@@ -923,7 +923,7 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
 resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
 */
 any Formatter::visitResourceDecl(cst::ResourceDecl context) {
-    string result = context->tok(TK::KwExport) ? "export " : "";
+    string result   = context->tok(TK::KwExport) ? "export " : "";
     const auto name = context->get<cst::IdentDef>();
     result += "resource " + any_cast<string>(visitIdentDef(name));
     if (const auto members = context->get<cst::BracketIdents>()) {
@@ -969,7 +969,7 @@ any Formatter::visitResourceClause(cst::ResourceClause context) {
     // `uses`), so only a token standing before the `uses` keyword is the word itself. `pure` was
     // read as any child that says it, which would have written a `uses pure` entry back as the
     // word as well; the two are read the same way now.
-    bool pure = false;
+    bool pure      = false;
     bool panicWord = false;
     for (size_t i = 0; i < context->childCount(); ++i) {
         const auto child = context->child(i);
@@ -1760,8 +1760,8 @@ any Formatter::visitRangeExpr(cst::RangeExpr context) {
         std::string operand = std::any_cast<std::string>(visit(child.node()));
         // Only the operand a `..` follows: a conversion at the end of the range can be written
         // as it stands, nothing follows it that a type would take.
-        const bool followedByRange = i + 1 < n && !context.child(i + 1).isNode() &&
-                                     context.child(i + 1).text() == "..";
+        const bool followedByRange =
+            i + 1 < n && !context.child(i + 1).isNode() && context.child(i + 1).text() == "..";
         if (followedByRange && child.node().is(NK::CastExpr)) {
             operand = "(" + operand + ")";
         }
@@ -2146,10 +2146,10 @@ any Formatter::visitTypeArguments(cst::TypeArguments context) {
 
 /*
 namedTypeArgument
-    : IDENTIFIER (':' | '=') typeExpr
+    : IDENTIFIER ':' typeExpr
     ;
 The named argument writes the colon (design principles 5.9): `f::<T: int>`, as a parameter or a
-field names its type. `=` is the older spelling and is still read; the formatter writes `:`.
+field names its type.
 */
 any Formatter::visitNamedTypeArgument(cst::NamedTypeArgument context) {
     return context->tok(TK::Identifier)->text() + ": " +

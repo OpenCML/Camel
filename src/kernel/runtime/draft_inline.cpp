@@ -28,10 +28,10 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
-#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -495,7 +495,7 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             canonicalId           = withInputs.empty() ? kInvalidNodeRef : withInputs.front();
             continue;
         }
-        if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
             // A CAST computes a value: `7 as float` is 7.0, not the bits of the integer 7.
             // Looking through it bound the unconverted constant to the parameter (f(i as
             // float) computed with 0.0...035 instead of 7.0). Only a CAST between equal
@@ -511,7 +511,7 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             canonicalId = normInputs.front();
             continue;
         }
-        if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Clone ||
+        if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Clone ||
             header->kind == GCNodeKind::Dref) {
             const auto normInputs = draft.normInputsOf(canonicalId);
             canonicalId           = normInputs.empty() ? kInvalidNodeRef : normInputs.front();
@@ -580,8 +580,8 @@ bool onCallCycle(const Program &program, const GCGraph *graph) {
 /// stopped at the JOIN -- the only way into an arm such a walk has is the ctrl edge the builder
 /// draws from the BRCH to the arm's first node. That edge is a position the regions already carry,
 /// and the answer here decides something else: whether binding constants into a call may unroll a
-/// recursion (collectDirectFuncSpecializations). Reading it off the edge would mean that deleting the
-/// edge lets a guarded recursion unroll one level per rewriting round.
+/// recursion (collectDirectFuncSpecializations). Reading it off the edge would mean that deleting
+/// the edge lets a guarded recursion unroll one level per rewriting round.
 bool insideBranchArm(const GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
     if (!draft.alive(id)) {
@@ -957,7 +957,10 @@ void setRenumberedClause(GraphDraft &draft, const sem::ResourceSignature &clause
             factory.addWithConstasArg(name, type->withTypeAt(i));
         } else {
             factory.addWithArg(
-                name, type->withTypeAt(i), type->withIsVarAt(i), type->withNeedsValueAt(i));
+                name,
+                type->withTypeAt(i),
+                type->withIsVarAt(i),
+                type->withNeedsValueAt(i));
         }
     }
     for (size_t i = 0; i < type->normTypesCount(); ++i) {
@@ -1382,10 +1385,10 @@ bool specializeDirectFuncInDraft(
                 appendControlDependency(transaction, current, funcNodeId);
                 break;
             }
-            const camel::execute::OperShape oper = camel::execute::shapeOfKind(header->kind);
-            const bool carriesValue              = oper == camel::execute::OperShape::Clone ||
-                                                   oper == camel::execute::OperShape::Conversion ||
-                                                   header->kind == GCNodeKind::Dref;
+            const camel::ops::OperShape oper = camel::runtime::shapeOfKind(header->kind);
+            const bool carriesValue          = oper == camel::ops::OperShape::Clone ||
+                                               oper == camel::ops::OperShape::Conversion ||
+                                               header->kind == GCNodeKind::Dref;
             if (header->kind != GCNodeKind::Gate && !carriesValue) {
                 break;
             }

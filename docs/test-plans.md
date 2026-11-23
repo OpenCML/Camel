@@ -660,6 +660,16 @@ Each plan file may define:
   Free-form string array for indexing and search.
 - `desc`
   Optional plan description shown in logs.
+- `time_sensitive`
+  `true` declares that this plan's readings are measurements — durations, budgets, counts that move
+  with the machine — and that they are only comparable on a host it has to itself. Nothing in the
+  runner reads it: the field is read by the gate (`internal/tools/camel-remote.ps1`), which then
+  takes the plan slot and both build slots together before the build and releases all three after
+  the plan. A wait that runs out is `state=noslot`, which is "not measured" rather than a red or a
+  green. It must be written at the top level, before any table header: a `time_sensitive` inside
+  `[defaults]` belongs to that table and is not a declaration about the host. A directory target
+  (`smoke`, `feat/opt`) and `--changed` carry no declaration of their own, so only a named
+  `*.plan.toml` can ask for the whole host.
 - `[defaults]`
   A table of test fields every entry of the plan inherits (see "Plan Defaults").
 - `[[tests]]`

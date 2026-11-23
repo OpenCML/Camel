@@ -1,4 +1,4 @@
-// `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the type the position expects
+// `f <> g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the type the position expects
 // is the type that lambda would have: it gives the composition's input and its output, and it
 // instantiates a generic operand where that operand stands, as the lambda's calls do
 // (`ident(ident(x))` with `x: int` is `ident::<int>`).

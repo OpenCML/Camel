@@ -51,8 +51,8 @@ using namespace camel::core::data;
 using namespace camel::core::type;
 
 namespace camel::compile::gir {
-node_handle_t Builder::visitLinkNode(
-    const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
+node_handle_t
+Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
     // A call. `store` says this call is the store a write makes: the two arguments are the cell
     // and the value, and the result is the cell's new state. Whether a value of this call may be
     // dropped, and which type an argument is expected to have, is asked of that.
@@ -107,12 +107,11 @@ node_handle_t Builder::visitLinkNode(
             return built;
         }
     }
-    // `a..b` (gct.comp): one construct of two readings, told apart by the types of its two
-    // operands, and they are known only here (design principles 4.2). The type this position
-    // expects is what a generic operand is instantiated from (design principles 5.5).
+    // `a..b` (gct.comp): the interval of two integers and no other construct (design principles
+    // 4.2). The type this position expects says nothing about its operands.
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kCompositionCall) {
-        node_handle_t composed = buildComposition(gct, expectedResult);
+        node_handle_t composed = buildComposition(gct, expectedResult, true);
         LEAVE("LINK");
         return composed;
     }
@@ -120,7 +119,7 @@ node_handle_t Builder::visitLinkNode(
     // offered here (design principles 4.2).
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kComposeCall) {
-        node_handle_t composed = buildComposition(gct, expectedResult, true);
+        node_handle_t composed = buildComposition(gct, expectedResult, false);
         LEAVE("LINK");
         return composed;
     }
@@ -2692,13 +2691,14 @@ node_handle_t Builder::visitLinkNode(
             // The version the call hands back is this graph's capture of that variable, and it
             // exists only when the variable lives here or inside this graph: a callee reached
             // through a value was made elsewhere and the value carries its captures. The mask keeps
-            // naming the slot -- the positions are counted over it, and the run time packs the value
-            // from it -- and this graph has no entry for a version it cannot make.
+            // naming the slot -- the positions are counted over it, and the run time packs the
+            // value from it -- and this graph has no entry for a version it cannot make.
             if (!enclosesOrigin(table->second[k].origin)) {
                 continue;
             }
             value.versions.push_back(
-                {captureInto(currGraph_, table->second[k].origin, table->second[k].name), position});
+                {captureInto(currGraph_, table->second[k].origin, table->second[k].name),
+                 position});
         }
         callValues_[targetNode] = std::move(value);
     }

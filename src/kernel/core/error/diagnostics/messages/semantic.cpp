@@ -274,7 +274,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeVariableRedeclared",
                 "The type parameter '{0}' is declared twice at the head of this declaration.",
-                "A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T = int>').",
+                "A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T: int>').",
             },
         },
         {
@@ -1537,16 +1537,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::CompOperandMismatch,
             {
                 "CompOperandMismatch",
-                "'..' takes two functions or two integers, and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'.",
-                "'..' has two readings and '<>' has one (design principles 4.2). Between two functions the construct is the composition, written `f <> g` -- and `..` still reads it while the corpus spells it that way: it is the lambda `(x) => g(f(x))`, so 'f' is unary and 'g' takes what 'f' returns. Between two integers, and with `..` alone, it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is. Nothing else is composed or bounded, so `1 <> 2` is refused where `1..2` is an interval.",
+                "'..' takes two integers and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'.",
+                "`..` is the interval `a..b` (design principles 4.2): the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is, and its two operands must be two `int`s. `<>` is the composition `f <> g`: the lambda `(x) => g(f(x))`, so 'f' is unary and 'g' takes what 'f' returns, and its two operands must be functions. Nothing else is composed or bounded, so `1 <> 2` is refused where `1..2` is an interval.",
             },
         },
         {
             SemanticDiag::CompOperandNotUnary,
             {
                 "CompOperandNotUnary",
-                "'..' and '<>' compose a unary function on the left; '{0}' takes {1} parameters.",
-                "The composition `f <> g` (written `f..g` while the corpus spells it that way) is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.",
+                "'<>' composes a unary function on the left; '{0}' takes {1} parameters.",
+                "The composition `f <> g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.",
             },
         },
         {
@@ -1554,7 +1554,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "CompOperandGenericWithoutType",
                 "'{0}' composes two functions, and its {1} operand, the generic function '{2}', has no instance here: write its type arguments ('{2}::<int>'), or give the whole expression an expected function type.",
-                "The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f <> g` (written `f..g` while the corpus spells it that way) is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident <> ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int> <> ident::<int>`. Only a name that is generic is refused here; an operand of a type the construct cannot take stays CompOperandMismatch.",
+                "The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f <> g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident <> ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int> <> ident::<int>`. Only a name that is generic is refused here; an operand of a type the construct cannot take stays CompOperandMismatch.",
             },
         },
         {

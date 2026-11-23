@@ -388,11 +388,11 @@ enum class SemanticDiag : uint32_t {
     ParamArgumentWrongType = 0x0001D6,
 
     // Composition and the interval (`..`, design principles 4.2). 0x1D7 and up.
-    /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
+    /// Neither `..` nor `<>` takes these operands: the interval's two ends are integers and the composition's two operands are functions.
     CompOperandMismatch = 0x0001E1,
-    /// The left operand of `..` is a function that takes more or fewer than one parameter.
+    /// The left operand of `<>` is a function that takes more or fewer than one parameter.
     CompOperandNotUnary = 0x0001E2,
-    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (design principles 5.5).
+    /// An operand of `<>` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (design principles 5.5).
     CompOperandGenericWithoutType = 0x0001E4,
     /// A range over two integers is one construct, `a..b`, with no call form of its own
     /// (design principles 4.2).

@@ -1,5 +1,5 @@
-// A text is neither a function nor an integer: `...` has no reading for it (design principles
-// 4.2), so the compiler refuses the construct and names what it does take.
+// A text is not an integer, and `..` is the interval of two integers (design principles 4.2), so
+// the compiler refuses the two ends and names what it does take.
 
 func main() => int sync {
     let xs = 'a' .. 'b'

@@ -787,7 +787,7 @@ From lowest to highest:
 | 4b | `&` | Left-associative, both sides evaluated |
 | 5 | `==` `!=` `===` `!==` | Whole and element-wise comparison (see [6.7.3](#673-comparison)) |
 | 6 | `<` `>` `<=` `>=` | |
-| 6a | `..` | Range (between numbers) and function composition (between functions); looser than `+` and `-`, so `1..n+1` is `1..(n+1)` |
+| 6a | `..` `<>` | The interval `a..b` (between integers) and the function composition `f <> g` (between functions); looser than `+` and `-`, so `1..n+1` is `1..(n+1)` |
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `@` | Left-associative |
 | 8a | `^` | Right-associative, one level above the multiplicative operators |

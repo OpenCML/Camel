@@ -26,11 +26,11 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_exit_type.h"
 #include "camel/runtime/graph_ref_check.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
@@ -204,8 +204,9 @@ class EdgeChecker {
      * This is asked of every graph a commit encodes, in every build (see
      * `validateRuntimeGraphPortTypes` below for where it is called). It is asked of every graph and
      * not only of one the commit gave another signature, because a graph that is wrong from the
-     * moment it is made would otherwise be missed: a specialization whose norm-port list is one entry
-     * short of the signature it publishes gives the port of parameter 0 the type of parameter 1
+     * moment it is made would otherwise be missed: a specialization whose norm-port list is one
+     * entry short of the signature it publishes gives the port of parameter 0 the type of parameter
+     * 1
      * (`walk$spec0` in `test/cases/opt/generic/specialize_dim_name_recursion.cml` declared
      * `(n: int, xs: f32[n])` over one port whose type was `f32[n]`).
      *
@@ -238,10 +239,11 @@ class EdgeChecker {
         }
         // Both sides are read by value: the port of a `var` parameter holds the variable, and the
         // parameter itself is typed by that variable's value (`var int` and `int` are one promise).
-        declared = camel::core::type::valueTypeOf(declared);
+        declared     = camel::core::type::valueTypeOf(declared);
         Type *actual = camel::core::type::valueTypeOf(node->dataType());
         if (isUndecidedType(declared) || isUndecidedType(actual)) {
-            return; // a type the reading cannot fill in is not another type (as in checkReturnValueType)
+            return; // a type the reading cannot fill in is not another type (as in
+                    // checkReturnValueType)
         }
         if (compatible(declared, actual)) {
             return;
@@ -785,15 +787,15 @@ class EdgeChecker {
         const auto with = graph_.withInputsOf(ref);
         Type *type      = node.dataType();
         // A copy and a conversion are checked by their shape, not their kind
-        // (`camel/execute/shaped_operators.h`, refactor stage 2.3): what must hold of the value
+        // (`camel/runtime/oper_shape.h`, refactor stage 2.3): what must hold of the value
         // they hand on is a property of the operator.
-        if (camel::execute::shapeOfKind(node.kind) == camel::execute::OperShape::Clone) {
+        if (camel::runtime::shapeOfKind(node.kind) == camel::ops::OperShape::Clone) {
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type)) {
                 report(ref, std::format("copies a {} as a {}", show(typeOf(norm[0])), show(type)));
             }
             return;
         }
-        if (camel::execute::shapeOfKind(node.kind) == camel::execute::OperShape::Conversion) {
+        if (camel::runtime::shapeOfKind(node.kind) == camel::ops::OperShape::Conversion) {
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type) &&
                 type->castSafetyFrom(typeOf(norm[0])) == CastSafety::Forbidden) {
                 report(
@@ -976,8 +978,7 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
  * Every graph and not only one the commit gave another signature: a graph that is wrong from the
  * moment it is made is exactly what a check placed on republished graphs misses.
  */
-void validateRuntimeGraphPortTypes(
-    const Program &program, const GCGraph *graph, GraphState state) {
+void validateRuntimeGraphPortTypes(const Program &program, const GCGraph *graph, GraphState state) {
     if (graph == nullptr || !graph->hasNodePayload()) {
         return;
     }
@@ -1021,7 +1022,7 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
     // types can make it infallible, and dropping the order is the pass's choice, not a defect.
     const GCNode *node = graph.node(ref);
     if (node != nullptr &&
-        camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
+        camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
         return false;
     }
     return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
