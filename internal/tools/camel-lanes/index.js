@@ -49,6 +49,11 @@ const GATES = [
     { key: 'maxBehind', limit: 100, what: 'commits behind on the worst lane, so merging it is unsafe' },
     { key: 'mergedLocal', limit: 20, what: 'local branches already merged and not deleted' },
     { key: 'mergedRemote', limit: 10, what: 'remote branches already merged and not deleted' },
+    {
+        key: 'takenNotRecorded',
+        limit: 0,
+        what: 'items the decision-maker sent that were acknowledged as taken and never entered in the backlog, so the answer to who is doing this is a log line and not a row',
+    },
 ]
 
 function git(repo, args) {
@@ -124,6 +129,7 @@ export function measure({
     repo,
     staleMinutes,
     fetch,
+    logPath = '',
     // The build panel's three files. `stateDir` names the directory; empty means "read it from the
     // gate's machine-local settings", which is where the scripts that write them got it. A hard
     // path here would be a second copy of a decision that already has an owner.
@@ -194,6 +200,40 @@ export function measure({
             }
         }),
         merged: attempt(() => branchesAlreadyMerged(repo)),
+        // What was taken and not written down. The decision-maker sends an item, the coordinating
+        // session acknowledges it as `taken`, and from that moment on the log says someone is doing
+        // it. If no row in the backlog says the same, the answer to "who is doing this" is a log
+        // line -- and a log line is not a place a plan can be corrected or a lane found.
+        //
+        // Both files are on this machine: the log the channel writes, the backlog the repository
+        // carries. Reading them together is the whole check.
+        claims: attempt(() => {
+            const log = readText(
+                logPath || path.join(process.env.USERPROFILE || process.env.HOME || '', '.camel-oversight', 'log.jsonl'),
+            )
+            const taken = new Set()
+            for (const line of log.split('\n')) {
+                if (line.trim() === '') continue
+                let entry
+                try {
+                    entry = JSON.parse(line)
+                } catch {
+                    continue
+                }
+                // Only an item number is an item. An id a session invents for its own
+                // bookkeeping -- a note about a defect, say -- is not something a backlog
+                // row can ever carry, and counting it would make the gate unwinnable.
+                if (entry.kind !== 'ack' || !/^D-\d{4}-\d+$/.test(entry.id || '')) continue
+                // A later ack for the same id replaces the earlier one: an item taken and then
+                // finished is recorded, and being finished is the recording.
+                if (entry.status === 'done') taken.delete(entry.id)
+                else if (entry.status === 'taken') taken.add(entry.id)
+            }
+            const backlog = readText(path.join(repo, 'internal', 'backlog.md'))
+            const recorded = new Set((backlog.match(/\bD-\d{4}-\d+\b/g) || []))
+            const missing = [...taken].filter((id) => !recorded.has(id))
+            return { taken: taken.size, missing, ids: [...taken] }
+        }),
         fshDev: attempt(() => git(repo, ['rev-parse', '--short=9', 'origin/fsh-dev'])),
         // What the build host is doing, read from the same three files the build panel reads. The
         // age of each file is part of the reading: a queue that stopped being written reports an
@@ -278,12 +318,14 @@ export function gateValues(state) {
     const value = (f) => (f && !f.unreadable ? f : null)
     const branches = value(state.branches)
     const mergedBranches = value(state.merged)
+    const claims = value(state.claims)
     return {
         unmerged: branches ? branches.unmerged : null,
         maxBehind: branches ? branches.maxBehind : null,
         worktrees: typeof state.worktrees === 'number' ? state.worktrees : null,
         mergedLocal: mergedBranches ? mergedBranches.mergedLocal.length : null,
         mergedRemote: mergedBranches ? mergedBranches.mergedRemote.length : null,
+        takenNotRecorded: claims ? claims.missing.length : null,
     }
 }
 

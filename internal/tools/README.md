@@ -218,3 +218,16 @@ readers naming different directories is indistinguishable from an idle machine.
 `run-registry.jsonl` is the one that carries concurrent runs, one line per snapshot keyed by
 `runId`. The two state files are a single slot each, so a coordinator reading only those sees one
 run where there are three.
+## A new worktree needs its own settings file
+
+`camel-gate.local.json` is git-ignored, so `git worktree add` does not copy it, and a run in the new
+tree stops with exit 2 **before** it transfers anything -- it never reaches the host, so nothing is
+queued and no slot is taken. That failure looks like a lane that has not started, which is what three
+lanes looked like on 2026-11-23 until one of them said so.
+
+After `git worktree add`, copy the file:
+
+```powershell
+Copy-Item D:\Projects\Camel\internal\tools\camel-gate.local.json `
+          <new worktree>\internal\tools\camel-gate.local.json
+```
