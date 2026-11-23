@@ -3743,25 +3743,26 @@ class CmlPrinter {
 
     /// A member read that arrives as an operator prints the postfix the program wrote.
     ///
-    /// The read is `:op/access_key` or `:op/access` now: the name or the place is the call's first
-    /// ordinary operand and the value is its second (`__access_value__`,
+    /// The read is `:op/access_key` or `:op/access` now: the name or the place is the call's
+    /// `with` argument and the value is its one ordinary operand (`__access_value__`,
     /// builtin/operators/struct.cpp), so `accessExpression` above -- which reads the position out
     /// of an access node's body -- never sees it, and the call printing spells the operator's own
     /// name: `access_key('x', p)`. A program written that way is one the front end refuses, because
-    /// the declaration is generic over the value's type (`(key: string, x: T) => U`) and a call in
+    /// the declaration is generic over the value's type (`<key: string>(x: T) => U`) and a call in
     /// the source cannot supply the instance: recompiling answers `NoMatchingFunction` at the two
     /// lines the read is on (`trans/cml_contract`, `linear.cml`, measured). The postfix is the
     /// spelling both graphs are built from, so it is what the printer writes.
     Expr memberReadExpression(gc_node_ref_t ref) {
         const auto *body  = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        const auto with   = graph_->withInputsOf(ref);
         const auto inputs = graph_->normInputsOf(ref);
-        if (body == nullptr || inputs.size() != 2) {
+        if (body == nullptr || with.size() != 1 || inputs.size() != 1) {
             fail(ref, "a member read without a member and a value");
         }
         const bool byName = body->uri() == ":op/access_key";
         std::string member;
         if (byName) {
-            const camel::runtime::GCNode *key = graph_->node(inputs.front());
+            const camel::runtime::GCNode *key = graph_->node(with.front());
             if (key == nullptr || key->kind != camel::runtime::GCNodeKind::Data ||
                 key->dataIndex >= 0 || key->dataType() == nullptr ||
                 key->dataType()->code() != TypeCode::String) {
@@ -3779,7 +3780,7 @@ class CmlPrinter {
                         "a member read of a name that is not a source identifier ('{}')", member));
             }
         } else {
-            const std::optional<int64_t> at = constantIntOf(inputs.front());
+            const std::optional<int64_t> at = constantIntOf(with.front());
             if (at.has_value() && *at >= 0) {
                 member = std::to_string(*at);
             }
@@ -3787,7 +3788,7 @@ class CmlPrinter {
         if (member.empty()) {
             fail(ref, "a member read whose member is not a constant");
         }
-        Expr base            = expression(inputs[1]);
+        Expr base            = expression(inputs[0]);
         std::string baseText = parenthesize(base, 90);
         // A struct literal starts with `{`: as in `accessExpression`, the postfix needs the
         // parentheses the source wrote, or it binds inside the braces.

@@ -525,7 +525,7 @@ ce01f0d22b7c595f ok src/stdlib/opt.cml
 c6f6680ea8f9a69e ok src/stdlib/optim.cml
 9b35942b550de4e6 ok src/stdlib/para.cml
 fdf2fb65cea9e1db ok src/stdlib/perf.cml
-06d4fd27c3bfa3c5 ok src/stdlib/prelude.cml
+ee61fbbb882d5484 ok src/stdlib/prelude.cml
 afdf7917f9dabed7 ok src/stdlib/process.cml
 544a284d59035114 ok src/stdlib/pyplot.cml
 83277e2ac031c99b ok src/stdlib/python.cml

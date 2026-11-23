@@ -890,47 +890,39 @@ class ForwardRewrite {
     // and every caller passed exactly `draft()`.
 
     /// Whether `node` reads a version a call handed on: an access node that takes a component past
-    /// the callee's value (callValueTypeOf).
+    /// the callee's value (callValueTypeOf). Either form of the read is one: the ACCS node, whose
+    /// place is in its body, and the operator `:op/access`, whose place is a `with` argument (a
+    /// constant the builder put there, `Builder::memberReadNodeOf`).
     bool readsCallVersion(gc_node_ref_t node) const {
-        if (kindOf(transaction_, node) != GCNodeKind::Accs) {
-            return false;
-        }
-        const auto payload = draft().payloadOf(node);
-        if (payload.size() < sizeof(rt::GCAccsBody)) {
-            return false;
-        }
-        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-        return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
-    }
-
-    /// The component a projection of a value reads, in either form the tree has: the ACCS node,
-    /// and the member read that is an operator (`:op/access` by place, the URI prelude.cml
-    /// declares for the read the programme wrote). nullopt for anything else, including a read by
-    /// name -- which names a field of a struct and never a component of a tuple.
-    std::optional<uint32_t> projectedComponentOf(gc_node_ref_t user) const {
-        const auto payload = draft().payloadOf(user);
-        if (kindOf(transaction_, user) == GCNodeKind::Accs) {
+        if (kindOf(transaction_, node) == GCNodeKind::Accs) {
+            const auto payload = draft().payloadOf(node);
             if (payload.size() < sizeof(rt::GCAccsBody)) {
-                return std::nullopt;
+                return false;
             }
             const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-            if (accs->accsKind != rt::GCAccsKind::TupleIndex) {
-                return std::nullopt;
-            }
-            return accs->value;
+            return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
         }
-        if (kindOf(transaction_, user) != GCNodeKind::Oper ||
-            payload.size() < sizeof(rt::GCOperBody)) {
+        if (kindOf(transaction_, node) != GCNodeKind::Oper) {
+            return false;
+        }
+        const std::optional<uint32_t> place = operAccessPlaceOf(node);
+        return place.has_value() && *place >= 1;
+    }
+
+    /// The place an operator's member read takes, when `node` is `:op/access` by a constant place
+    /// and the graph has it: the constant the builder linked as the call's `with` argument.
+    /// nullopt for any other node, for a read by name, and for a place the program computes.
+    std::optional<uint32_t> operAccessPlaceOf(gc_node_ref_t node) const {
+        const auto payload = draft().payloadOf(node);
+        if (payload.size() < sizeof(rt::GCOperBody) ||
+            reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri() != ":op/access") {
             return std::nullopt;
         }
-        if (reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri() != ":op/access") {
+        const auto with = draft().withInputsOf(node);
+        if (with.size() != 1) {
             return std::nullopt;
         }
-        const auto inputs = draft().normInputsOf(user);
-        if (inputs.size() != 2) {
-            return std::nullopt;
-        }
-        const auto *place = draft().node(inputs[0]);
+        const auto *place = draft().node(with.front());
         if (place == nullptr || place->header.kind != GCNodeKind::Data ||
             place->header.dataIndex >= 0) {
             return std::nullopt;
@@ -944,6 +936,31 @@ class ForwardRewrite {
             return std::nullopt;
         }
         return static_cast<uint32_t>(at);
+    }
+
+    /// The component a projection of a value reads, in either form the tree has: the ACCS node,
+    /// and the member read that is an operator (`:op/access` by place, the URI prelude.cml
+    /// declares for the read the programme wrote). nullopt for anything else, including a read by
+    /// name -- which names a field of a struct and never a component of a tuple.
+    ///
+    /// The operator carries its place in its `with` list, a constant the builder put there, and
+    /// the value it reads is the call's one ordinary operand (`Builder::memberReadNodeOf`).
+    std::optional<uint32_t> projectedComponentOf(gc_node_ref_t user) const {
+        const auto payload = draft().payloadOf(user);
+        if (kindOf(transaction_, user) == GCNodeKind::Accs) {
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                return std::nullopt;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            if (accs->accsKind != rt::GCAccsKind::TupleIndex) {
+                return std::nullopt;
+            }
+            return accs->value;
+        }
+        if (kindOf(transaction_, user) != GCNodeKind::Oper) {
+            return std::nullopt;
+        }
+        return operAccessPlaceOf(user);
     }
 
     /// The projection of `node`'s value: the access node that takes component `index` of it, or
