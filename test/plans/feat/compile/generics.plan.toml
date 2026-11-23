@@ -893,7 +893,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericInstantiationTooDeep"
 expect_diagnostic_line = 30
-expect_diagnostic_column = 32
+expect_diagnostic_column = 25
 expect_output_contains = ["8 instances of it are already being built inside one another", "name=SemanticDiag::GenericInstantiationTooDeep, code=0x03000055"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

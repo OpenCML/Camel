@@ -85,7 +85,7 @@ const BODY = [
     '    println(sum(), diff(), first, second)',
     '    return 0',
 ]
-const program = (order) => ['func main(): int sync {', ...DECLARATIONS[order], ...BODY, '}', ''].join('\n')
+const program = (order) => ['func main() => int sync {', ...DECLARATIONS[order], ...BODY, '}', ''].join('\n')
 
 const usage = (message) => {
     console.error(`${NAME}: ${message}`)

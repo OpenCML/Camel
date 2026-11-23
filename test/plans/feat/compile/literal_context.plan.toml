@@ -575,7 +575,7 @@ case = "../../../cases/compile/literals/context_struct_argument_out_of_range.cml
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 14
 expect_diagnostic_column = 21
 expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -589,7 +589,7 @@ case = "../../../cases/compile/literals/context_array_argument_element_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 13
 expect_diagnostic_column = 21
 expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -602,7 +602,7 @@ kind = "negative"
 case = "../../../cases/compile/literals/context_argument_name.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["context_argument_name.cml:11:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int[])", "pick: (xs: f32[]) => f32"]
+expect_output_contains = ["context_argument_name.cml:13:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int[])", "pick: (xs: f32[]) => f32"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -613,7 +613,7 @@ kind = "negative"
 case = "../../../cases/compile/literals/context_struct_argument_shape.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["context_struct_argument_shape.cml:12:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "({ x: float })", "norm: (p: Point) => f32"]
+expect_output_contains = ["context_struct_argument_shape.cml:14:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "({ x: float })", "norm: (p: Point) => f32"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -693,7 +693,7 @@ case = "../../../cases/compile/literals/context_tuple_argument_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 11
 expect_diagnostic_column = 22
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["NoMatchingFunction", "LiteralNotRepresentable"]
@@ -723,7 +723,7 @@ case = "../../../cases/compile/literals/context_argument_field_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 15
 expect_diagnostic_column = 29
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["NoMatchingFunction", "LiteralNotRepresentable"]
@@ -738,8 +738,8 @@ case = "../../../cases/compile/literals/context_return_field_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 8
-expect_diagnostic_column = 34
+expect_diagnostic_line = 9
+expect_diagnostic_column = 17
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["ReturnTypeMismatch", "LiteralNotRepresentable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -924,7 +924,7 @@ verify_script = """
 const diags = input.diagnostics.filter((d) => d.name === 'SemanticDiag::ElementTypeMismatch')
 assert(diags.length === 2, `expected one element type mismatch per struct, got ${JSON.stringify(input.diagnostics)}`)
 const at = diags.map((d) => `${d.line}:${d.column}`).join(',')
-assert(at === '14:47,17:54', `expected the computed fields at 15:47 and 18:54, got ${at}`)
+assert(at === '15:17,20:23', `expected the computed fields at 15:17 and 20:23, got ${at}`)
 const out = input.normalized.output
 assert(out.includes("a(n) field 'n' of 'MA' with element type 'int'"), `the field and its type are named: ${out}`)
 assert(out.includes("a(n) field 'v' of 'MB' with element type 'f32[2]'"), `the field and its type are named: ${out}`)
@@ -974,9 +974,9 @@ verify_script = """
 const diags = input.diagnostics.filter((d) => d.name === 'SemanticDiag::ElementTypeMismatch')
 assert(diags.length === 3, `expected one element type mismatch per position, got ${JSON.stringify(input.diagnostics)}`)
 const lines = diags.map((d) => d.line).join(',')
-assert(lines === '13,16,20', `expected the computed elements at lines 13, 16 and 20, got ${lines}`)
+assert(lines === '16,20,25', `expected the computed elements at lines 16, 20 and 25, got ${lines}`)
 const at = diags.map((d) => `${d.line}:${d.column}`).join(',')
-assert(at === '13:64,16:32,20:58', `expected the three positions to name the same element, got ${at}`)
+assert(at === '16:29,20:32,25:23', `expected the three positions to name the same element, got ${at}`)
 assert(input.diagnostics.every((d) => d.name === 'SemanticDiag::ElementTypeMismatch'), `unexpected diagnostic among the three: ${JSON.stringify(input.diagnostics)}`)
 }
 """

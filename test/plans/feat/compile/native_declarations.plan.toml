@@ -761,8 +761,8 @@ case = "../../../cases/compile/native/para_unordered_pure_result.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
-expect_diagnostic_line = 12
-expect_diagnostic_column = 42
+expect_diagnostic_line = 13
+expect_diagnostic_column = 9
 
 [[tests]]
 name = "native.para_unordered_reduce_callback_arity"
@@ -771,7 +771,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_reduce_callback_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:12:111", "argument types: <(acc: int, item: int, extra: int) => int pure, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:14:10", "argument types: <(acc: int, item: int, extra: int) => int pure, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
 
 #  ---- The declaration of `this` ----
 
@@ -1375,7 +1375,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidOperatorURI"
 expect_diagnostic_code = "0x03000019"
-expect_diagnostic_line = 3
+expect_diagnostic_line = 2
 expect_diagnostic_column = 1
 expect_output_contains = ["Invalid operator URI format: 'stdadd'. Expected 'protocol:path'."]
 
@@ -1388,7 +1388,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationIncomplete"
 expect_diagnostic_code = "0x0300017B"
-expect_diagnostic_line = 3
+expect_diagnostic_line = 2
 expect_diagnostic_column = 1
 expect_output_contains = ["The body-less declaration 'foo' is incomplete: it has no result type."]
 

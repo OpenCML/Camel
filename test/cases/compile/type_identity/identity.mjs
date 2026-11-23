@@ -70,13 +70,13 @@ function run(source) {
 // Whether a value of type `from` is accepted where `to` is written: a call compiles.
 function accepts(from, to) {
     const result = run(`${PRELUDE}
-func take(x: ${to}, y: ${to}): int {
+func take(x: ${to}, y: ${to}) => int {
     return 0
 }
-func give(x: ${from}, y: ${from}): int {
+func give(x: ${from}, y: ${from}) => int {
     return take(x, y)
 }
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 `)
@@ -98,7 +98,7 @@ import { Graph, Node, NodeKind, TypeRef } from graph
 // A port is what the corpus means: \`first(x: a, y: a)\` and \`second(x: b, y: b)\` write the type
 // under test as both of their parameters, so any port answers \`a\` (or \`b\`), and which port stands
 // first does not matter.
-func firstType(g: Graph): TypeRef? {
+func firstType(g: Graph) => TypeRef? {
     let ports = nodes(g)->filter<func (n: Node) => bool { kind(n) == NodeKind::Port }>
     return match len(ports) {
         case 0 => null
@@ -106,7 +106,7 @@ func firstType(g: Graph): TypeRef? {
     }
 }
 
-func graphNamed(label: string): Graph {
+func graphNamed(label: string) => Graph {
     let found = graphs_of(reach)->filter<func (g: Graph) => bool { name(g) == label }>
     return found[0]
 }
@@ -116,19 +116,19 @@ func graphNamed(label: string): Graph {
 function sameType(a, b) {
     const result = run(`${PRELUDE}
 ${PRINT}
-func first(x: ${a}, y: ${a}): int {
+func first(x: ${a}, y: ${a}) => int {
     return 0
 }
-func second(x: ${b}, y: ${b}): int {
+func second(x: ${b}, y: ${b}) => int {
     return 0
 }
 /// The graphs the probe reads are the ones this function reaches: it names both without calling them.
-func reach(): int {
+func reach() => int {
     let a = first
     let b = second
     return 0
 }
-func main(): int sync {
+func main() => int sync {
     println(match firstType(graphNamed('first')) {
         case null => false
         case p => match firstType(graphNamed('second')) {

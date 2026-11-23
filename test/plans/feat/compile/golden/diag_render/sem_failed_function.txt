@@ -1,8 +1,8 @@
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'nope'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_failed_function.cml:1:29
+  --> <ROOT>/test/cases/compile/diag_render/sem_failed_function.cml:2:16
    |
- 1 | func f(a: int) { return a + nope }
-   |                             ^^^^
+ 2 |     return a + nope
+   |                ^^^^
 help: Make sure the name is declared and in scope.
 
 camel: 1 error

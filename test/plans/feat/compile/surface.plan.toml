@@ -62,7 +62,7 @@ case = "../../../cases/compile/surface/name_as_value_user_overloads.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 12
 expect_output_contains = ["2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 
 [[tests]]
@@ -105,9 +105,9 @@ case = "../../../cases/compile/surface/function_name_bound_at_a_used_tail.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 17
-expect_output_contains = ["function_name_bound_at_a_used_tail.cml:4:17: [Error]: 'step' is used as a value here, but it names an operator with 4 signatures [(x: string) => int; (x: A) => int; (x: Bytes) => int; (x: C) => int], not one function. Only a name that stands for exactly one function has a function value. Wrap the call in a function whose parameter types are written out, e.g. '(x: int) => step(x)'"]
+expect_diagnostic_line = 5
+expect_diagnostic_column = 5
+expect_output_contains = ["function_name_bound_at_a_used_tail.cml:5:5: [Error]: 'step' is used as a value here, but it names an operator with 4 signatures [(x: string) => int; (x: A) => int; (x: Bytes) => int; (x: C) => int], not one function. Only a name that stands for exactly one function has a function value. Wrap the call in a function whose parameter types are written out, e.g. '(x: int) => step(x)'"]
 
 [[tests]]
 name = "surface.if_without_else"
@@ -136,7 +136,7 @@ case = "../../../cases/compile/surface/array_element_type.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
-expect_diagnostic_line = 3
+expect_diagnostic_line = 5
 expect_diagnostic_column = 9
 
 [[tests]]
@@ -186,7 +186,7 @@ kind = "negative"
 case = "../../../cases/compile/surface/angle_then_name_line.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["angle_then_name_line.cml:3:5: [Error]", "name=SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["angle_then_name_line.cml:5:5: [Error]", "name=SemanticDiag::NoMatchingFunction"]
 expect_output_not_contains = ["ComparisonAcrossLines", "UnresolvedReference"]
 
 [[tests]]
