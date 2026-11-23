@@ -22,3 +22,9 @@
 ## 读数
 
 两次实跑的过程与读数记在车道分支 `lane/merge-reuse` 的交付说明里。
+
+## 读数（第一次真跑，2026-11-24 06:28 CST）
+
+- 宿主机上叶名 `merge` 的 checkout 没有 `build/compile_commands.json`，clang 那一步 `exit 2`，前一句是 `camel-remote` 的 `-NoBuild refused: out/latest has no build-info.json`。
+- 基线种子 21 个 case、12 s；行读数 26 s。
+- 同一跑暴露：`scripts/merge-record.mjs` 从丢弃式树里取，而它的基比工具早，于是合并是绿的、记录写不出。
