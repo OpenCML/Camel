@@ -68,7 +68,7 @@ std::string nodeText(const GraphTransaction &transaction, gc_node_ref_t id) {
     }
     std::string text = "%" + std::to_string(id) + " ";
     // The four operators the front end still builds as nodes of their own are named here by their
-    // shape, not by their kind (`camel/runtime/oper_shape.h`, refactor stage 2.3): that is
+    // shape, not by their kind (`camel/runtime/oper_shape.h`): that is
     // the question this text asks, and it answers the same word either way.
     switch (camel::runtime::shapeOfKind(header->kind)) {
     case camel::ops::OperShape::Conversion:
@@ -313,7 +313,7 @@ bool shapeTakesPart(
     std::span<const std::byte> payload) {
     const auto &draft = transaction.graph();
     // A conversion and an access compute their value from what they read and change nothing (the
-    // same question asked of them by their shape, not their kind: refactor stage 2.3).
+    // same question asked of them by their shape, not their kind).
     const camel::ops::OperShape oper = camel::runtime::shapeOfKind(kind);
     if (oper == camel::ops::OperShape::Conversion ||
         oper == camel::ops::OperShape::Access) {

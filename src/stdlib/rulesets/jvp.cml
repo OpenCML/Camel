@@ -250,7 +250,7 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() { matmul(
 // the `<>` ones included, so the *pattern* half names that position the way it names an operand:
 // `reshape<dims>(x)` binds the value the node writes, and the right side receives it as a value it
 // can hand on (`jvp_reshape` below and the `reshape_jvp` it calls; `rulesets.vmap`'s
-// `vmap_rule_reshape`/`vmap_reshape` is where that same arrangement was first landed, `ff09ab5a0`).
+// `vmap_rule_reshape`/`vmap_reshape` reads the same arrangement the same way).
 //
 // What a law must not do is write a **constant** there. The fit compares the value a `<>` port
 // carries against the one the law wrote (`lib/transforms/rule_expand.cpp#lawConstantsFitNode`),
@@ -808,7 +808,7 @@ export rule jvp_abs::<T>(x: T[...]) when is_float::<T>() { abs(x) => func (dx: T
 /// `mul_tensor_t`'s name a position nothing stands at and the walk stops the program by name. The
 /// wall this entry was marked on is the division (`skip=parameter-shape uri=tensor:divide`), because
 /// the walk meets a node before recursing into its operands; the product behind it is the same shape
-/// and was refused the same way until `4d511a22d` (`jvp_rsqrt`'s `dx * -0.5`, `uri=tensor:multiply`).
+/// and is refused the same way (`jvp_rsqrt`'s `dx * -0.5`, `uri=tensor:multiply`).
 /// The two lists are this quotient's own shapes, which is `shape(x)` twice: `dx * 0.5` carries the
 /// tangent's shape and the tangent carries its value's. The half goes through `mul_stated` with
 /// `full(shape(x), 0.5)` because the stated product takes an array in each operand slot; the value is

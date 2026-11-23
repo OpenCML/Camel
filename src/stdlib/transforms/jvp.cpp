@@ -105,9 +105,9 @@ camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
     return camel::core::type::TupleType::create(std::vector<camel::core::type::Type *>{type, type});
 }
 
-/// `Lift<T>` -- declared in `lift.h` with the three cases and the ruling that names them, defined
-/// below the signature law it answers with (`liftSignature`), because a function's lift *is* its
-/// lifted signature and the two must not be able to disagree.
+/// `Lift<T>` -- declared in `lift.h` with its three cases, defined below the signature law it
+/// answers with (`liftSignature`), because a function's lift *is* its lifted signature and the two
+/// must not be able to disagree.
 FunctionType *liftSignature(FunctionType *function);
 
 /// The empty tuple `()`, which is the tangent space of a parameter that has none
@@ -407,7 +407,7 @@ LiftedMember liftedMemberOf(Type *member) {
     if (member->code() == camel::core::type::TypeCode::Function) {
         // A function component: `m` *is* `Lift<F>` for the source function `F`, and the forward
         // side keeps it as it stands -- a lifted function is a value. No tangent: a function is not
-        // a vector space, and the ruling that lifts the function component leaves that standing.
+        // a vector space, and lifting the function component leaves that standing.
         read.forward = member;
         read.value   = false;
         return read;
@@ -1433,9 +1433,9 @@ bool liftGraph(
             const uint32_t region = function.nodeRegion(ref);
             draft.setInsertRegion(
                 region != 0 && region < liftedRegion.size() ? liftedRegion[region] : 0);
-            // The four families stage 2.3 turns into ordinary operators (a conversion, a copy, a
-            // construction, a member read) are cases by operator; every other kind is a case by its
-            // kind (`node_operator.h`).
+            // The four families read as ordinary operators (a conversion, a copy, a construction,
+            // a member read) are cases by operator; every other kind is a case by its kind
+            // (`node_operator.h`).
             const NodeCase nodeCase = nodeCaseOf(function, ref);
             switch (nodeCase) {
             case NodeCase::Port: {

@@ -1767,8 +1767,8 @@ bool buildTransposeMember(
                 // An arm's nodes are the arm's business; walking them here would run both arms.
                 continue;
             }
-            // The four families stage 2.3 turns into ordinary operators are cases by
-            // operator; every other kind is a case by its kind (`node_operator.h`). The case is
+            // The four families read as ordinary operators are cases by operator; every other
+            // kind is a case by its kind (`node_operator.h`). The case is
             // kept in a variable because a body shared by two labels (`Call`/`Func`) reads which
             // of its two it is.
             const NodeCase nodeCase = nodeCaseOf(*function, ref);

@@ -1129,8 +1129,8 @@ gc_node_ref_t expandRuleRightSide(
             const bool isFunctionValue =
                 node->dataType() != nullptr &&
                 node->dataType()->code() == camel::core::type::TypeCode::Function;
-            // The four families stage 2.3 turns into ordinary operators are cases by
-            // operator; every other kind is a case by its kind (`node_operator.h`).
+            // The four families read as ordinary operators are cases by operator; every other
+            // kind is a case by its kind (`node_operator.h`).
             const NodeCase nodeCase = nodeCaseOf(*body, ref);
             switch (nodeCase) {
             case NodeCase::Data: {

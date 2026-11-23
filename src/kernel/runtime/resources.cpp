@@ -872,7 +872,7 @@ ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
         const GCNode *node = graph.node(ref);
         // A copy and a construction make a value of their own: asked of the operator the node
         // names, or of the kind for the form the front end still builds
-        // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+        // (`camel/runtime/oper_shape.h`).
         const camel::ops::OperShape shape = camel::runtime::shapeOfOperation(graph, ref);
         if (shape == camel::ops::OperShape::Clone ||
             shape == camel::ops::OperShape::Construction) {
@@ -922,7 +922,7 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
         const GCNode *node = graph.node(value);
         // A copy and a construction make a value of their own: asked of the operator the node
         // names, or of the kind for the form the front end still builds
-        // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+        // (`camel/runtime/oper_shape.h`).
         const camel::ops::OperShape shape = camel::runtime::shapeOfOperation(graph, value);
         if (shape == camel::ops::OperShape::Clone ||
             shape == camel::ops::OperShape::Construction) {

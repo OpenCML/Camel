@@ -83,10 +83,10 @@ inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) no
 } // namespace payload_detail
 
 /*
- * The four node kinds that become **ordinary operators** -- a conversion (CAST), a copy (COPY), a
- * construction (FILL) and a member read (ACCS) -- read as the operators they are becoming. The
- * refactor plan (docs/design/architecture/refactor-plan.cn.md, stage 2) turns these four from kinds
- * of node into operators declared in `lib/std` and built by the front end as OPER nodes.
+ * The four node kinds that stand for **ordinary operators** -- a conversion (CAST), a copy (COPY),
+ * a construction (FILL) and a member read (ACCS) -- read as the operators they stand for: `cast`,
+ * `copy`, `fill` and `access` are declared operators, and the front end still builds the same four
+ * operations as nodes of those kinds.
  *
  * **Why one place.** A reader that has to know "is this node a construction" used to say
  * `node->kind == rt::GCNodeKind::Fill`, and this directory said it, in its own words, in eight
@@ -173,8 +173,8 @@ enum class NodeCase : uint8_t {
     Other,
 };
 
-/// The operator a kind stands for. **This is the arm stage 2.3 deletes**: after it, a construction is an
-/// OPER and there is no kind that means "a cast".
+/// The operator a kind stands for: a conversion, a copy, a construction or a member read, asked of
+/// a node the front end still builds as one of those four kinds.
 inline NodeOperator nodeOperatorOf(runtime::GCNodeKind kind) noexcept {
     switch (kind) {
     case runtime::GCNodeKind::Cast:

@@ -19,13 +19,10 @@
  *     prevent.
  *
  * Why a base and not a rename (design principles: a graph's identity is the value, and the two
- * representations are two implementations of it): there are two representations this stage, and a
- * draft's callee has to be nameable by the same `const Graph *` a frozen graph's is. A rename would
- * leave the draft side with no type to point at, and stage 3 -- which is where the two
- * representations become one -- is the change that removes the seam, not this one.
- *
- * Stage 3 deletes both representations in favour of one and this header goes with the adapters:
- * what remains is that a graph's identity is the value, which is then the single class itself.
+ * representations are two implementations of it): there are two representations, and a draft's
+ * callee has to be nameable by the same `const Graph *` a frozen graph's is. A rename would leave
+ * the draft side with no type to point at, and the seam is what lets one `const Graph *` name
+ * either side.
  */
 
 #pragma once

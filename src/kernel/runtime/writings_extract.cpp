@@ -56,7 +56,7 @@ class WeightedModel : public CostModel {
         const auto &draft = context.transaction.graph();
         const auto *h     = draft.header(node);
         // A conversion costs what the operator costs, asked of its shape rather than its kind
-        // (`camel/runtime/oper_shape.h`, refactor stage 2.3).
+        // (`camel/runtime/oper_shape.h`).
         if (camel::runtime::shapeOfKind(h->kind) == camel::ops::OperShape::Conversion) {
             return 0.5;
         }

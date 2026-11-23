@@ -4,8 +4,8 @@
 /*
  * FrozenGraphAdapter: `GraphView` over a frozen graph (`GCGraph`, camel/runtime/graph.h).
  *
- * The transitional adapter stage 2.1 asks for ("a frozen graph and a draft, one adapter each,
- * deleted again by stage 3").
+ * One of the two adapters a `GraphView` is read through: a frozen graph and a draft, one adapter
+ * each.
  *
  * Who reads through it: the encoder's self-check (`compile/src/gir/graph_encode.cpp`,
  * `firstDifference`), `LoopView`, `ControlRegions`, `NodeRoleRegistry`, `lib/test/graph_faces.cpp`,
