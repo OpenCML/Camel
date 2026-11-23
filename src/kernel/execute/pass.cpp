@@ -11,12 +11,16 @@
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/process_exit.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/core/slot.h"
 #include "camel/core/source/manager.h"
 #include "camel/core/tags.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/trace.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/core_facts.h"
+#include "camel/runtime/definitions.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/effects.h"
 #include "camel/runtime/graph_exit_type.h"
@@ -508,6 +512,87 @@ struct ResolvedPass {
 std::optional<camel::execute::detail::ParamProblem>
 valueProblem(const std::string &name, const PassArgs &args);
 
+/// Resolves the function-valued parameters of one call: the word names a function of a library
+/// module (`<module>::<function>`), and the value the pass reads is that function. The function is
+/// compiled as the program the store keeps for it (its entry graph has the function's own
+/// signature and computes the library's module-level values first), and the pass receives a
+/// function value over that program, rooted by the PassArgs for as long as the arguments live.
+/// A name that is no function is refused here, while the pipeline is still being read, so the
+/// report carries the position of the word (camel/execute/pass/params.h).
+std::optional<camel::execute::detail::ParamProblem> bindFunctionValues(
+    const std::vector<PassParam> &declared, const camel::execute::detail::ParsedSpec &parsed,
+    PassArgs &args, const context_ptr_t &ctx) {
+    using camel::execute::detail::ParamProblem;
+    using camel::execute::detail::ParamProblemKind;
+    for (const PassParam &param : declared) {
+        if (param.type != PassParamType::Function || args.isNull(param.name)) {
+            continue;
+        }
+        const std::string written = args.getString(param.name);
+        const auto refuse         = [&](std::string text) {
+            ParamProblem problem;
+            problem.kind = ParamProblemKind::Syntax;
+            problem.name = param.name;
+            problem.text = std::move(text);
+            for (const auto &word : parsed.params) {
+                if (word.key == param.name) {
+                    // The value, not the whole word: the name is not what is wrong.
+                    problem.column = word.column + word.key.size() + 1;
+                    problem.length = word.raw.size();
+                    break;
+                }
+            }
+            return problem;
+        };
+        const size_t separator = written.find("::");
+        if (separator == std::string::npos || separator == 0 ||
+            separator + 2 >= written.size()) {
+            return refuse(std::format(
+                "the parameter '{}' takes a function value, written <module>::<function>; '{}' "
+                "names no function",
+                param.name,
+                written));
+        }
+        if (ctx == nullptr) {
+            return refuse(std::format(
+                "the parameter '{}' names the function '{}', and there is no context to resolve it "
+                "in",
+                param.name,
+                written));
+        }
+        const std::string module   = written.substr(0, separator);
+        const std::string function = written.substr(separator + 2);
+        std::string problem;
+        std::optional<DiagLabel> where;
+        camel::runtime::DefinitionStore::LibraryLookup lookup;
+        const auto found = ctx->definitions().libraryFunction(
+            module, function, problem, &where, &lookup);
+        if (!found) {
+            return refuse(std::format(
+                "the parameter '{}' takes the function '{}', which cannot be used: {}",
+                param.name,
+                written,
+                problem.empty() ? std::string("no function of that name") : problem));
+        }
+        // The library's entry graph has the function's signature and computes its module-level
+        // values before it calls the function, so the value needs no closure of its own.
+        static const camel::core::type::TupleType *noClosure =
+            camel::core::type::TupleType::create();
+        ::Function *value = ::Function::create(
+            found->program, found->graph->id(), noClosure, camel::core::mm::autoSpace());
+        PassFunction argument;
+        argument.name = written;
+        argument.value = camel::core::rtdata::toSlot(value);
+        argument.root  = std::make_shared<camel::core::mm::RootHandle>(
+            camel::core::mm::autoSpace(),
+            value,
+            found->graph->funcType(),
+            "pass." + param.name);
+        args.setFunction(param.name, std::move(argument));
+    }
+    return std::nullopt;
+}
+
 ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     ResolvedPass result;
     camel::execute::detail::ParsedSpec parsed;
@@ -565,6 +650,12 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     PassArgs args;
     if (auto problem =
             camel::execute::detail::bindArgs(parsed.name, descriptor->params, parsed, args)) {
+        result.paramProblem = std::move(problem);
+        return result;
+    }
+    // A function-valued parameter is resolved here, with the context the call runs in: the value
+    // is a function of a library module, and a name that is no function is a problem of the call.
+    if (auto problem = bindFunctionValues(descriptor->params, parsed, args, ctx)) {
         result.paramProblem = std::move(problem);
         return result;
     }

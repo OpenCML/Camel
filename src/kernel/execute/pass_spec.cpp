@@ -43,6 +43,9 @@ std::string passParamTypeName(PassParamType type, bool nullable) {
     case PassParamType::IntArray:
         base = "int[]";
         break;
+    case PassParamType::Function:
+        base = "function";
+        break;
     }
     return nullable ? std::string(base) + "?" : std::string(base);
 }
@@ -73,6 +76,25 @@ std::string passParamValueText(const PassParamValue &value) {
 void PassArgs::set(const std::string &name, PassParamValue value, bool written) {
     values_[name]  = std::move(value);
     written_[name] = written;
+}
+
+void PassArgs::setFunction(const std::string &name, PassFunction function) {
+    functions_[name] = std::move(function);
+}
+
+bool PassArgs::isFunction(const std::string &name) const {
+    return functions_.find(name) != functions_.end();
+}
+
+const PassFunction &PassArgs::getFunction(const std::string &name) const {
+    const auto it = functions_.find(name);
+    if (it == functions_.end()) {
+        throw std::logic_error(
+            "pass parameter '" + name +
+            "' is a function and the pipeline did not resolve it; a pass reads the value, never "
+            "the text");
+    }
+    return it->second;
 }
 
 const PassParamValue &PassArgs::at(const std::string &name) const {
@@ -111,6 +133,12 @@ std::vector<std::string> PassArgs::names() const {
     return out;
 }
 std::string PassArgs::text(const std::string &name) const {
+    // A function parameter was resolved to a value; the text a report shows is the qualified name
+    // the call wrote, not a quoted string.
+    if (functions_.find(name) != functions_.end()) {
+        const auto *text = std::get_if<std::string>(&at(name));
+        return text != nullptr ? *text : std::string("null");
+    }
     return passParamValueText(at(name));
 }
 bool PassArgs::given(const std::string &name) const {
@@ -497,10 +525,65 @@ struct DeclaredParamType {
     std::string written;
 };
 
+/// The type one type node writes, as source writes it: `float[]`, `T?`, and
+/// `(n: Node, inputs: float[]) => float` for a function. A message about a parameter shows the type
+/// the declaration gave it, and a function's type is more than its name.
+std::string typeText(const ast::node_ptr_t &node);
+
+/// The parameters of a function type's list (`(n: Node, inputs: float[]) => float`): `n: Node,
+/// inputs: float[]`.
+std::string paramListText(const ast::node_ptr_t &list) {
+    std::string text;
+    for (size_t i = 0; i < list->size(); ++i) {
+        const auto &pair  = list->at(i);
+        const auto named  = std::dynamic_pointer_cast<ast::NamedPairLoad>(pair->load());
+        if (named == nullptr) {
+            continue;
+        }
+        if (!text.empty()) {
+            text += ", ";
+        }
+        text += named->getRef().toString() + ": " +
+                (pair->size() > 0 ? typeText(pair->at(0)) : std::string("type"));
+    }
+    return text;
+}
+
+std::string typeText(const ast::node_ptr_t &node) {
+    const auto load = std::dynamic_pointer_cast<ast::TypeLoad>(node->load());
+    if (load == nullptr) {
+        return "type";
+    }
+    switch (load->typeType()) {
+    case ast::TypeType::Ref:
+        return node->loadAs<ast::RefTypeLoad>()->ref().toString();
+    case ast::TypeType::Array:
+        return (node->size() > 0 ? typeText(node->at(0)) : std::string("type")) + "[]";
+    case ast::TypeType::Null: {
+        const auto mark      = std::dynamic_pointer_cast<ast::NullableTypeLoad>(load);
+        const bool fallible  = mark != nullptr && mark->fallible();
+        const std::string in = node->size() > 0 ? typeText(node->at(0)) : std::string("type");
+        return in + (fallible ? "!" : "?");
+    }
+    case ast::TypeType::Func: {
+        // `with <...>` is child 0, the ordinary parameters child 1, the exit type child 2.
+        const std::string with = node->size() > 0 ? paramListText(node->at(0)) : std::string();
+        const std::string norm = node->size() > 1 ? paramListText(node->at(1)) : std::string();
+        std::string exit       = "void";
+        if (node->size() > 2 && node->at(2)->size() > 0) {
+            exit = typeText(node->at(2)->at(0));
+        }
+        return "(" + (with.empty() ? norm : "with <" + with + "> " + norm) + ") => " + exit;
+    }
+    default:
+        return ast::to_string(load->typeType());
+    }
+}
+
 /// The type of one `with` parameter, read from the type the declaration wrote. A pass parameter
-/// is a bool, an int, a float, a string, or an `int[]`; any of them may carry the `?` that says
-/// `null` is a value of it (design principles 9.3: the declared type decides how the value is
-/// read). Every other type is refused: the pipeline can only read a value for these.
+/// is a bool, an int, a float, a string, an `int[]`, or a function; any of them may carry the `?`
+/// that says `null` is a value of it (design principles 9.3: the declared type decides how the
+/// value is read). Every other type is refused: the pipeline can only read a value for these.
 DeclaredParamType declaredParamType(
     const ast::node_ptr_t &typeNode, const std::string &parameter) {
     const ast::node_ptr_t *node = &typeNode;
@@ -528,18 +611,26 @@ DeclaredParamType declaredParamType(
             "the parameter '{}' has a type that is not a pass parameter type", parameter));
     }
     DeclaredParamType declared;
+    if (load->typeType() == ast::TypeType::Func) {
+        // A function parameter: the word names a function value (`<module>::<function>`), which
+        // the pipeline resolves before the pass is built (camel/execute/pass/params.h). The type
+        // as written is kept for the messages.
+        declared.type     = PassParamType::Function;
+        declared.nullable = nullable;
+        declared.written  = typeText(*node) + (nullable ? "?" : "");
+        return declared;
+    }
     if (load->typeType() == ast::TypeType::Ref) {
         const std::string ref = (*node)->loadAs<ast::RefTypeLoad>()->ref().toString();
         const char *scalar    = scalarTypeName(ref);
         if (scalar == nullptr) {
             throw std::runtime_error(std::format(
                 "the parameter '{}' has the type '{}'; a pass parameter is bool, int, float, "
-                "string or int[]",
+                "string, int[] or a function",
                 parameter,
                 ref));
         }
-        declared.written = nullable ? ref + "?" : ref;
-        declared.type    = scalar[0] == 'b'   ? PassParamType::Bool
+        declared.type     = scalar[0] == 'b'   ? PassParamType::Bool
                            : scalar[0] == 'i' ? PassParamType::Int
                            : scalar[0] == 'f' ? PassParamType::Float
                                               : PassParamType::String;
@@ -566,7 +657,6 @@ DeclaredParamType declaredParamType(
         }
         declared.type     = PassParamType::IntArray;
         declared.nullable = nullable;
-        declared.written  = nullable ? "int[]?" : "int[]";
         return declared;
     }
     throw std::runtime_error(std::format(
@@ -585,6 +675,9 @@ PassParamValue zeroValue(PassParamType type) {
         return std::string();
     case PassParamType::IntArray:
         return std::vector<int64_t>();
+    case PassParamType::Function:
+        // A function has no default: the parameter is required (see readPassParams).
+        return std::string();
     }
     return false;
 }
@@ -605,6 +698,10 @@ bool fits(PassParamType type, bool nullable, const PassParamValue &value) {
         return std::holds_alternative<std::string>(value);
     case PassParamType::IntArray:
         return std::holds_alternative<std::vector<int64_t>>(value);
+    case PassParamType::Function:
+        // Until the pipeline resolves it, a function parameter's value is the qualified name the
+        // call wrote; after that it is a value in `PassArgs`, and `null` where the type says so.
+        return std::holds_alternative<std::string>(value);
     }
     return false;
 }
@@ -663,9 +760,26 @@ std::vector<PassParam> camel::execute::detail::readPassParams(
                 const DeclaredParamType declared = declaredParamType(pair->at(0), name);
                 param.type                       = declared.type;
                 param.nullable                   = declared.nullable;
+                param.written                    = declared.written;
             } catch (const std::exception &e) {
                 throw std::runtime_error(
                     std::format("pass declaration '{}': {}", passName, e.what()));
+            }
+            if (param.type == PassParamType::Function) {
+                // A function parameter takes a function value, and a value is not a constant: the
+                // declaration cannot hold a default for it. Written `T?`, its absent value is
+                // `null` (the parameter is not required); otherwise every call writes the name.
+                if (pair->size() > 1 && pair->at(1)->size() > 0) {
+                    throw std::runtime_error(std::format(
+                        "pass declaration '{}': the parameter '{}' is a function, and a function "
+                        "parameter has no default: every call writes the function's name",
+                        passName,
+                        name));
+                }
+                param.defaultValue = std::monostate{};
+                param.required     = !param.nullable;
+                declared.push_back(std::move(param));
+                continue;
             }
             if (pair->size() > 1 && pair->at(1)->size() > 0) {
                 const auto &expr = pair->at(1)->at(0);
@@ -877,7 +991,8 @@ std::string camel::execute::detail::describeParams(const std::vector<PassParam> 
     for (const auto &p : declared) {
         if (!text.empty())
             text += ", ";
-        text += p.name + ": " + passParamTypeName(p.type, p.nullable);
+        text += p.name + ": " +
+                (p.written.empty() ? passParamTypeName(p.type, p.nullable) : p.written);
         if (p.required) {
             text += " (required)";
             continue;
@@ -921,7 +1036,10 @@ std::optional<ParamProblem> camel::execute::detail::bindArgs(
         // reading, which is how a quoted value with a space (`out="a b.onnx"`) arrives whole, and
         // `null` written for a nullable parameter is that parameter's null value.
         PassParamValue value;
-        if (it->type == PassParamType::String) {
+        if (it->type == PassParamType::String || it->type == PassParamType::Function) {
+            // A function parameter takes the word as written too: the qualified name of the
+            // function value, which the pipeline resolves once it has a context to resolve it in
+            // (it is not a constant, and the text is not the value).
             if (it->nullable && w.isConstant &&
                 std::holds_alternative<std::monostate>(w.value)) {
                 args.set(w.key, std::monostate{}, true);

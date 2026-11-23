@@ -1,0 +1,10 @@
+/**
+ * A program for the tests of function-valued pass parameters
+ * (test/plans/feat/opt/pass_function.plan.toml): it prints one line, so a case reads the passes
+ * that ran before it from the lines they printed above the marker.
+ */
+
+func main() => int sync {
+    println('camel-ran-marker')
+    return 0
+}

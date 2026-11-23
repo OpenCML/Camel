@@ -226,7 +226,8 @@ with <
 export func opt::<F>(f: F): F! when is_function::<F>()
 ```
 
-The type is `bool`, `int`, `float`, `string` or `int[]`, written `T?` where the declaration makes
+The type is `bool`, `int`, `float`, `string`, `int[]` or a function type
+(`(n: Node, inputs: float[]) => float`), written `T?` where the declaration makes
 the parameter nullable (`string?`, `int[]?`). The declared type decides how a value is read, not the
 text of the word: a `bool`, `int`, `float` or `int[]` parameter takes a Camel constant expression of
 that type (`safe_fp=!false`, `growth_budget=2*8`, `axes=[0,1]`), a `string` parameter takes the word
@@ -241,6 +242,13 @@ assumption. A pass takes the function it is applied to and nothing else: one ord
 body-less declaration with the same condition and more ordinary parameters is an operator that wants
 a function (`onnx::export_model`, called with the function and an example), and is not a pass.
 
+A **function parameter** is the one type a word does not read as a constant: the word names a
+function value, `<module>::<function>`, the same value `f->rewrite<cost>` takes, and the pipeline
+resolves it while it reads the call, so the pass receives the function itself and not its name
+(`cost=<module>::<function>`). A name that is no function is refused at the call, in the word's own
+column. A function parameter has no default — a function is not a constant expression — so every
+call writes it; written `T?`, leaving it out is `null`.
+
 The call is checked when the pipeline is resolved, before any pass runs, and the refusal is the
 language's own for a call, located at the call and in the semantic stage (`typecheck`):
 
@@ -250,6 +258,7 @@ language's own for a call, located at the call and in the semantic stage (`typec
 | the same name twice | `SemanticDiag::ParamArgumentDuplicate` | `The parameter 'safe_fp' of 'std::opt' is given twice.` |
 | a value of the wrong type | `SemanticDiag::ParamArgumentWrongType` | `The argument 'safe_fp' of 'std::opt' has type 'int', not 'bool'.` |
 | a required parameter left out | `SemanticDiag::ParamArgumentMissing` | `The call gives no value for the parameter 'flag' of 'test::params', and it has no default.` |
+| a word for a function parameter that names no function | `RuntimeDiag::InvalidPassParameter` | `the parameter 'cost' takes a function value, written <module>::<function>; 'twice' names no function` |
 
 The position is the call in the pipeline: one pass is one line, so the second pass of
 `camel f.cml std::fvm 'std::opt safe_fpp=true'` is reported at ``<pipeline>:2:10` (line 2, the column
