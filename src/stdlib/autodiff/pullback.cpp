@@ -3928,6 +3928,15 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
 
 std::string Backward::whyNotEvident(gc_node_ref_t function) const {
     function = ungated(forward(), function);
+    // A member read is an operator now (`:op/access` by place, `:op/access_key` by name), and the
+    // sentence about it is about what the read is, not about the kind it wears: asking the kind
+    // alone said "the function is computed at run time" about a function read out of a tuple, and
+    // a refusal with the wrong reason sends the next reader after the wrong thing. The read is
+    // asked of `memberReadOf`, which answers the operator and a node of the old ACCS kind alike --
+    // which is why the kind's own case below has nothing left to answer.
+    if (transforms::memberReadOf(forward(), function).has_value()) {
+        return "the function is read from a tuple, a struct or an array";
+    }
     switch (kindOf(forwardTransaction_, function)) {
     case GCNodeKind::Port:
         if (!scope_.recursive.empty()) {
@@ -3956,8 +3965,6 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         break;
     case GCNodeKind::Join:
         return "the function is chosen by a branch at run time";
-    case GCNodeKind::Accs:
-        return "the function is read from a tuple, a struct or an array";
     case GCNodeKind::Oper:
         if (camel::core::oper::isVariableRead(operId(function))) {
             return "the function is read from a variable";
