@@ -613,8 +613,12 @@ try {
         $warmTranscript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-warm-rows-$PID.txt")
         Write-Host ("  measuring the fast layer on $Target {0} in {1} -- the run every merge after this one would otherwise do for itself ..." -f `
             $originTarget.Substring(0,9), $warmPath)
+        # Joined, not a bare array: `pwsh -File` passes each element as its own argument, so
+        # `-Plan @('test/plans/smoke', 'test/plans/feat')` arrives as `-Plan test/plans/smoke` plus a
+        # stray positional `test/plans/feat`, and the run stops before measuring anything. The gate's
+        # own `-Plan` reads a comma list; that is the form it is given here.
         $warmRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
-            -Path $warmPath -Plan @('test/plans/smoke', 'test/plans/feat') -ListKnown -NoGpuWatch 2>&1)
+            -Path $warmPath -Plan 'test/plans/smoke,test/plans/feat' -ListKnown -NoGpuWatch 2>&1)
         $warmExit = $LASTEXITCODE
         $warmSeconds = ((Get-Date) - $warmStarted).TotalSeconds
         [System.IO.File]::WriteAllText($warmTranscript,
@@ -938,7 +942,7 @@ try {
         }
         if ($seedRows -eq 0) {
             Write-Host ''
-            Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
+Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
             # The run's own last lines are the only place that says why it measured nothing: without
             # them the refusal says "no rows" and the reader has to guess whether it was the plan
             # set, the slot, the host or the tree. The transcript is removed on the way out, so this
@@ -989,7 +993,7 @@ try {
     # One measurement, one transcript. The rows are read out of it twice -- once for the comparison
     # and once, after the push, to store this commit's own reading as the baseline for the next
     # merge -- so the plan runs once and both readers read the same run.
-    $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
+$transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
     $rowsRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
         -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
     $rowsExit = $LASTEXITCODE
