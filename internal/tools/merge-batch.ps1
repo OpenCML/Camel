@@ -559,7 +559,7 @@ try {
     }
     Write-Text $mergeRowsFile (($mergeRun.Rows -join "`n") + "`n")
 
-    Write-Host "[batch] comparison: merged $($script:mergeTip.Substring(0, 9)) against $($script:baseShort) (baseline rows in $baseRowsFile) ..."
+    Write-Host "[batch] comparison: merged $($script:mergeTip.Substring(0, 9)) against $($script:baseShort) (the first parent's rows for this plan set) ..."
     $comparison = Compare-Rows -Current $mergeRowsFile -TreeSha $script:mergeTip -Label 'batch'
 
     # --- 8. bisect inside the batch ----------------------------------------
@@ -732,7 +732,13 @@ try {
         $push | Select-Object -Last 2 | ForEach-Object { "    $_" }
         Start-Sleep -Seconds 4
     }
-    if (-not $pushOk) { Stop-With 'git push failed after 3 attempts' 'The merged tree is still here and still recorded; nothing about it changed.' 2 }
+    if (-not $pushOk) {
+        # A record is a claim about a commit; a commit nobody can fetch has no reader, and leaving the
+        # claims behind would let a later push of the same commits pass on a reading about a tree that
+        # was never published. All of them go, not only the tip's: the hook walks the chain.
+        foreach ($m in $built.Merges) { Remove-Item -LiteralPath (Join-Path $passedDir "$($m.Sha).json") -Force -ErrorAction SilentlyContinue }
+        Stop-With 'git push failed after 3 attempts' 'The merged tree is still here and its readings are in the transcripts, but the pass records were removed with the failed push.' 2
+    }
     $script:pushHappened = $true
     $script:pushedSha = $script:mergeTip
     $script:mergesPushed = $built.Merges.Count
