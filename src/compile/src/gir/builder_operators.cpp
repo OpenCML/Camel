@@ -227,14 +227,24 @@ Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normT
 }
 
 module_ptr_t Builder::moduleNamed(const std::string &name) {
-    if (module_ && module_->name() == name) {
+    // A module answers to the name its file gives it and to the name it declares (design
+    // principles 10.1: `declaredName` is what the module writes itself to be). The prelude's two
+    // are not the same string, and a type declared there names it by the second, so reading only
+    // the first made every declaring-module lookup of the prelude miss.
+    const auto isNamed = [&name](const module_ptr_t &candidate) {
+        return candidate && (candidate->name() == name || candidate->declaredName() == name);
+    };
+    if (isNamed(module_)) {
         return module_;
     }
     if (context_) {
         for (const module_ptr_t &candidate : context_->allUserModules()) {
-            if (candidate && candidate->name() == name) {
+            if (isNamed(candidate)) {
                 return candidate;
             }
+        }
+        if (const module_ptr_t &prelude = context_->preludeModule(); isNamed(prelude)) {
+            return prelude;
         }
     }
     // The type came from the module, so it is loaded: this lookup never loads one.
