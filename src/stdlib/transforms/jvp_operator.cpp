@@ -205,7 +205,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // signature. Only a value that already *is* the answer is answered as it stands.
     {
         FunctionType *answered           = tt::as_ptr<FunctionType>(norm.resultType());
-        camel::runtime::GCGraph *operand = function->graph();
+        auto *operand                    = function->graph();
         if (answered != nullptr && operand->liftedFrom() != camel::runtime::kInvalidGraphId &&
             operand->funcType() != nullptr && operand->funcType()->equals(answered)) {
             printJvpCallReading(readings(), operand->funcType(), answered);
