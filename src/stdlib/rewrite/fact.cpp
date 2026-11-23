@@ -683,7 +683,7 @@ std::shared_ptr<Definition> buildDefinition(
         definition->roots.push_back(root(index + 1)); // fact
         const uint64_t constParams =
             static_cast<uint64_t>(norm.get<rtdata::Int64>(index + 2));
-        const GCGraph &graph = *patternFn->graph();
+        const auto &graph = *patternFn->graph();
         std::vector<gc_node_ref_t> ports(graph.normPorts().begin(), graph.normPorts().end());
         std::vector<type::Type *> portTypes;
         for (size_t i = 0; i < ports.size(); ++i) {

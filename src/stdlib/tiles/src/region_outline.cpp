@@ -469,14 +469,14 @@ const runtime::Program *outlineRegions(
     // Whether `id` is inside a `#gpu` scope: a device answer places it there directly, and a graph
     // the scope reaches places every node it did not explicitly tag for the host. A `#cpu` fact
     // is the host escape the design keeps, so it is never part of a device promise.
-    const auto nodeInScope = [&](rt::GCGraph &graph, rt::gc_node_ref_t id) {
+    const auto nodeInScope = [&](auto &graph, rt::gc_node_ref_t id) {
         return scopes.covers(graph, id);
     };
-    const auto scopeNameOf = [&](rt::GCGraph &graph) {
+    const auto scopeNameOf = [&](auto &graph) {
         const auto *scope = scopes.scopeOf(graph);
         return std::string((scope == nullptr ? &graph : scope)->name());
     };
-    const auto regionInScope = [&](rt::GCGraph &graph, const Segment &region) {
+    const auto regionInScope = [&](auto &graph, const Segment &region) {
         if (!refuseGpuScopes)
             return false;
         for (const auto member : region.members) {
@@ -510,7 +510,7 @@ const runtime::Program *outlineRegions(
             std::vector<Refusal> notExpanded;
         };
         std::vector<std::pair<rt::GCGraph *, ScopeRefusals>> refusals;
-        const auto groupOf = [&](rt::GCGraph &graph) -> ScopeRefusals & {
+        const auto groupOf = [&](auto &graph) -> ScopeRefusals & {
             for (auto &entry : refusals)
                 if (entry.first == &graph)
                     return entry.second;

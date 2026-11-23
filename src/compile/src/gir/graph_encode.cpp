@@ -316,7 +316,7 @@ class EncodeSession {
                 // rather than read out of it: the encoder writes no order edge into a node that
                 // arranges itself freely (`nodeTakesNoOrder`, camel/runtime/graph.h), while the
                 // draft keeps the edge it was built with (consistency.h says the same).
-                const camel::runtime::GCGraph &frozenGraph = *prepared.runtime;
+                const auto &frozenGraph = *prepared.runtime;
                 const camel::graph::OrderDropped orderDropped =
                     [&frozenGraph](camel::graph::NodeRef ref) {
                         return camel::runtime::nodeTakesNoOrder(

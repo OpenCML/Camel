@@ -238,7 +238,7 @@ Handle *Handle::create(
     // the graph does not have -- so the mistake is refused here, where the handle is made, rather
     // than where somebody reads it.
     if (kind == HandleKind::Node && program != nullptr) {
-        const camel::runtime::GCGraph *published = program->graph(graph);
+        const auto *published = program->graph(graph);
         if (published == nullptr || !published->containsNodeRef(index)) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,

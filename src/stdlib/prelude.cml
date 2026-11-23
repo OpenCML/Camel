@@ -1034,6 +1034,52 @@ export func access_key::<T, U>(x: T): U panic
 #op(':struct/range')
 export func range(start: int, end: int, step: int): int[] panic
 
+// ---- ranges ----
+//
+// A range is a value of its own type, not an array (design principles 5.4): `Range` writes the
+// three numbers that name it down, and `to_array` is the one conversion from it to the integers it
+// names. Nothing else in the library is renamed or retyped here: the interval `a..b` still builds
+// the array `range(a, b, 1)`, and the functions a range shares with an `int[]` (`map`, `filter`,
+// `reduce`, `len`, `print`) are not this round's -- a function of one of those names declared
+// beside the operator group of the same name is not an overload of it, it shadows it.
+//
+// These names are written by a program only after `import { ... } from prelude`: the prelude's
+// types and its functions that are not operators are not brought along unasked.
+
+/// The three numbers naming a step of integers: `start`, `start + step`, ... up to, not
+/// including, `stop`. An end is null when a range is written without it (`..b`, `a..`, `..`), and
+/// there the missing end is the axis's own where the range is a subscript of it.
+export type Range = { start: int?, stop: int?, step: int }
+
+/// The range from start up to, not including, stop, taken in steps of step: the step of
+/// `range(a, b, s)`, and 1 for the interval `a..b`.
+/// @example to_range(1, 5, 1)->to_array()    // [1, 2, 3, 4]
+export func to_range(start: int, stop: int, step: int): Range {
+    // A struct literal does not put a value into a `T?` field by itself (a declaration does), so
+    // the two ends are boxed where they are bound and the literal only copies what it is given.
+    let start_boxed: int? = start
+    let stop_boxed: int? = stop
+    return { start: start_boxed, stop: stop_boxed, step: step }
+}
+
+/// The integers of r as an array: the conversion from a range to the array it is not, and the only
+/// one -- nothing turns an array into a range. A range whose end is left out names no array (an
+/// open end is a bound of the axis the range is a subscript of), so the call faults instead of
+/// inventing one.
+/// @fails fault `RangeWithoutEnd` when start or stop is null
+/// @example to_range(1, 5, 1)->to_array()    // [1, 2, 3, 4]
+export func to_array(r: Range): int[] {
+    let start = r.start ?? fail<'RangeWithoutEnd'>('an open range has no array form: start is left out')
+    let stop = r.stop ?? fail<'RangeWithoutEnd'>('an open range has no array form: stop is left out')
+    return range(start, stop, r.step)
+}
+
+/// Whether r holds no integer.
+/// @example to_range(3, 3, 1)->is_empty()    // true
+export func is_empty(r: Range): bool {
+    return len(to_array(r)) == 0
+}
+
 /// The last element. An empty array has none: check len first. Negative indices are not
 /// counted from the end (a negative index is a fault), so this is how the last element is
 /// written.

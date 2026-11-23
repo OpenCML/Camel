@@ -525,7 +525,7 @@ a39827f24191d8d3 ok src/stdlib/opt.cml
 da1b41f825462dd5 ok src/stdlib/optim.cml
 9b35942b550de4e6 ok src/stdlib/para.cml
 72187cc45b3ae505 ok src/stdlib/perf.cml
-262a82768c97fa33 ok src/stdlib/prelude.cml
+ef4cf655209c76c3 ok src/stdlib/prelude.cml
 ff2ad9cfe5e97c39 ok src/stdlib/process.cml
 833c58f7091af08e ok src/stdlib/pyplot.cml
 b36e6c4deb719e4b ok src/stdlib/python.cml
@@ -1754,6 +1754,9 @@ f7b2bfea0c9b4d02 ok test/cases/compile/stream/pull_order.cml
 8e1e917ef0e97aef ok test/cases/compile/stream/range_step_zero.cml
 4c85553e9fa847f4 ok test/cases/compile/stream/range_two_arguments.cml
 79d47939f6262a3b ok test/cases/compile/stream/range_two_arguments_builtin.cml
+494f2893dccf86fa ok test/cases/compile/stream/range_value.cml
+4da3f191b52d2781 ok test/cases/compile/stream/range_value_is_not_the_interval.cml
+dbb0b6d998965baf ok test/cases/compile/stream/range_value_map_still_the_interval.cml
 dffbbb87949ca561 ok test/cases/compile/stream/step_value.cml
 e31c19a889012ab7 ok test/cases/compile/stream/step_value_signature.cml
 61ad69067013616c ok test/cases/compile/stream/tee_consumers.cml
@@ -3058,7 +3061,6 @@ cd77d2e1477deacc ok test/cases/modules/autodiff/second_order_refused_vjp.cml
 d2dd88f7800b6525 ok test/cases/modules/autodiff/slice_grad.cml
 7f6e92ee1a8cc190 ok test/cases/modules/autodiff/slice_grad_negative_step.cml
 e8e4da97fcb524ae ok test/cases/modules/autodiff/slice_open_end.cml
-983772a5d30f31bb ok test/cases/modules/autodiff/struct_member_read_grad.cml
 0965607e93a9c7bf ok test/cases/modules/autodiff/tensor_grad_check.cml
 7180668b579bfd14 ok test/cases/modules/autodiff/transform_rules.cml
 554f094bc9bd1045 ok test/cases/modules/autodiff/transpose_needs_parameter_shape.cml

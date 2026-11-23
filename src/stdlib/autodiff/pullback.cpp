@@ -1514,7 +1514,7 @@ void ForwardRewrite::followFunctionValues() {
                 continue;
             }
             // The function whose body would come in (for a closure, the function it closes).
-            GCGraph *const function =
+            auto *const function =
                 kind == GCNodeKind::Func
                     ? calleeOf(transaction_, id)
                     : engine_.graphOf(evidentFunction(draft().withInputsOf(id).front()));
@@ -1560,7 +1560,7 @@ void ForwardRewrite::followFunctionValues() {
             }
             if (camel::passes::opt::inlineCallInOrder(engine_.inlining(), transaction_, id)) {
                 changed = true;
-                for (GCGraph *arm : armGraphs()) {
+                for (auto *arm : armGraphs()) {
                     if (!armsBefore.contains(arm)) {
                         engine_.noteArmOwner(arm, function);
                     }
@@ -1584,7 +1584,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
     const auto evident = [&](gc_node_ref_t node) { return evidentFunction(node) != nullptr; };
     // A macro, and a function with a derivative rule of its own, are not differentiated
     // through their bodies.
-    const auto opaque = [](const GCGraph *graph) {
+    const auto opaque = [](const auto *graph) {
         return graph == nullptr || graph->isMacro() || hasRule(graph);
     };
     GCGraph *graph  = nullptr;
@@ -1651,7 +1651,7 @@ const std::unordered_map<std::string, std::vector<GCGraph *>> &Engine::implBodie
         }
         return false;
     };
-    for (GCGraph *body : program->implBodies()) {
+    for (auto *body : program->implBodies()) {
         const std::string &uri = body->implKernelUri();
         if (!uri.empty() && !callsItsKernel(body, uri)) {
             implBodies_[uri].push_back(body);
@@ -1692,14 +1692,14 @@ void ForwardRewrite::expandKernelBodies() {
         if (found == bodies.end()) {
             continue;
         }
-        GCGraph *const semantic = found->second.front();
+        auto *const semantic = found->second.front();
         if (found->second.size() > 1) {
             // Two `#impl` functions of the program name this one kernel, and a call site shows
             // only the kernel: which of their bodies the call means is not in the graph. Taking
             // one would be a semantic choice this pass may not make, and taking the kernel's
             // own rule is what design principles 10.4 forbids. Stop and name both functions.
             std::string named;
-            for (GCGraph *implementing : found->second) {
+            for (auto *implementing : found->second) {
                 named += named.empty() ? "" : ", ";
                 named += "'" + implementing->name() + "'";
             }
@@ -2915,7 +2915,7 @@ void ForwardRewrite::rewriteClosureCall(
 }
 
 void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
-    GCGraph *callee = calleeOf(transaction_, call);
+    auto *callee = calleeOf(transaction_, call);
     if (callee == nullptr) {
         fail("found a call without a callee graph");
     }
@@ -3033,7 +3033,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             const auto &parent = draft().region(r);
             if (parent.kind == rt::GCRegionKind::Inline && parent.inlineOf != rt::kInvalidGraphId &&
                 draft().program() != nullptr) {
-                if (GCGraph *function = draft().program()->graph(parent.inlineOf)) {
+                if (auto *function = draft().program()->graph(parent.inlineOf)) {
                     arm.scope.enclosing.insert(function);
                 }
             }
@@ -3047,7 +3047,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         // inside of: a refusal in the arm then says the function is a parameter of it, rather
         // than that the value comes from outside the arm.
         if (arm.scope.recursive.empty()) {
-            for (GCGraph *function : arm.scope.enclosing) {
+            for (auto *function : arm.scope.enclosing) {
                 if (engine_.isRecursive(function)) {
                     arm.scope.recursive = function->name();
                     break;
@@ -5312,7 +5312,7 @@ GradientGraph buildGradientGraph(
     // The gradient reads the function's own graph: its loops and its branch arms are regions
     // there, and the transformation rewrites them where they are.
     Engine engine(context, program, function);
-    GCGraph *graph = engine.gradient(function, withValue, hasAux);
+    auto *graph = engine.gradient(function, withValue, hasAux);
     // The gradient's function value is installed in the graph that calls it (a static DATA
     // node), and the collector roots every program named by the function values of a rooted
     // graph (GCGraphManager::rebuildGcRoots, functionsInStatics). Tracking the program here
