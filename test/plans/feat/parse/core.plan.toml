@@ -471,7 +471,7 @@ kind = "negative"
 case = "../../../cases/parse/syntax/type_arguments_old_equals.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_name = "SyntaxDiag::MissingToken"
 expect_output_contains = ["Expected '>' before '='"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
