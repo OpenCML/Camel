@@ -1,7 +1,7 @@
 /**
  * The with parameter of `rewrite:extract` is the declaration's cost function: an `int` there is
  * refused at the call, and the candidate the message lists is the declaration's
- * `(f: F): F!` with `cost: (o: Op, inputs: float[]) => float` — `stdlib/rewrite.cml`, not the C++
+ * `(f: F): F!` with `cost: (n: Node, inputs: float[]) => float` — `stdlib/rewrite.cml`, not the C++
  * module.
  */
 

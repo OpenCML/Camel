@@ -1749,11 +1749,13 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 }
 
-/// A cost written in Camel, `(o: Op, inputs: float[]) => float`: what a writing costs, from its
-/// operator and the costs of the cheapest writings of the values it reads (egg's
-/// `CostFunction`). A node that is no operator (a constant, a port, a branch) costs one more than
-/// its inputs do. The function is Camel code, so it runs at a safepoint: it is rooted, and read
-/// again from the root at every call.
+/// A cost written in Camel, `(n: Node, inputs: float[]) => float`: what a writing costs, from its
+/// node and the costs of the cheapest writings of the values it reads (egg's `CostFunction`). A
+/// node that is no operator (a constant, a port, a branch) costs one more than its inputs do. The
+/// node is handed over as a `Node` of the transaction's graph rather than as its operator, so the
+/// function reads the operator, the shapes of the operands and the operator's own record -- the
+/// facts a target judges dear by -- and not a name. The function is Camel code, so it runs at a
+/// safepoint: it is rooted, and read again from the root at every call.
 class CamelCostModel final : public camel::runtime::CostModel {
   public:
     CamelCostModel(Context &ctx, ::Function *cost, Type *costType)
@@ -1780,26 +1782,20 @@ class CamelCostModel final : public camel::runtime::CostModel {
         if (bytes.size() < sizeof(camel::runtime::GCOperBody)) {
             return own + inputsTotal;
         }
-        const auto oper = reinterpret_cast<const camel::runtime::GCOperBody *>(bytes.data())->oper;
-        // The operator handle is rooted while the array of the input costs is made: that
-        // allocation can collect.
-        auto *op = camel::graphmod::Handle::create(
-            camel::graphmod::HandleKind::Op,
-            nullptr,
-            camel::runtime::GraphId::Invalid,
-            oper,
-            nullptr,
-            mm::autoSpace());
-        mm::RootHandle opRoot(
+        // The node handle is rooted while the array of the input costs is made: that allocation
+        // can collect.
+        auto *subject =
+            camel::graphmod::Handle::createInTransaction(context.transaction, node, mm::autoSpace());
+        mm::RootHandle subjectRoot(
             mm::autoSpace(),
-            op,
-            camel::graphmod::HandleType::get(camel::graphmod::HandleKind::Op),
-            "rewrite.cost.op");
+            subject,
+            camel::graphmod::HandleType::get(camel::graphmod::HandleKind::Node),
+            "rewrite.cost.node");
         Array *costs = Array::create(mm::autoSpace(), inputs.size());
         for (size_t i = 0; i < inputs.size(); ++i) {
             costs->set<Float64>(i, inputs[i]);
         }
-        const slot_t args[2] = {toSlot(opRoot.getAs<camel::graphmod::Handle>()), toSlot(costs)};
+        const slot_t args[2] = {toSlot(subjectRoot.getAs<camel::graphmod::Handle>()), toSlot(costs)};
         const slot_t answer  = vm_->callFunction(cost_.getAs<::Function>(), args);
         const double total   = fromSlot<Float64>(answer);
         if (!(total > 0.0)) {

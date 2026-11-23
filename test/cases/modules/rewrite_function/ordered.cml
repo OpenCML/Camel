@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Positional applicability is observable independently of arithmetic equality.
-import { Node, Op, graph_of, nodes, is_anchor } from graph
+import { Node, graph_of, nodes, is_anchor } from graph
 import { max } from math
 import { Rule, Run, rewrite, run, saturate, extract, why_not } from rewrite
 
@@ -42,7 +42,7 @@ func graph_height::<F>(f: F) => int {
         height(n)
     }>->reduce<max, 0>
 }
-func height_cost(o: Op, inputs: float[]) => float {
+func height_cost(n: Node, inputs: float[]) => float {
     return 1.0 + inputs->reduce<max, 0.0>
 }
 with <ordered: bool>

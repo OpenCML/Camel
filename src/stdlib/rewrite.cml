@@ -125,11 +125,13 @@ with <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool 
 export func saturate::<F>(f: F) => F! panic when is_function::<F>()
 
 /// Chooses one writing of every value that has several, the one of least total cost. The cost of
-/// a writing is `cost(o, inputs)`: the operator and the costs of the writings of its inputs.
+/// a writing is `cost(n, inputs)`: the node and the costs of the writings of its inputs. The node
+/// arrives as a `Node` of the graph being read, so a cost function reads its operator, the shapes
+/// of its operands and what the operator's own record says, and judges by those and not by a name.
 /// @example-fragment the cost function comes from `rules`
 /// @example f->extract<rules::nodes>
 #op('rewrite:extract')
-with <cost: (o: Op, inputs: float[]) => float>
+with <cost: (n: Node, inputs: float[]) => float>
 export func extract::<F>(f: F) => F! when is_function::<F>()
 
 /// Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
