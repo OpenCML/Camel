@@ -338,9 +338,12 @@ uses the normal typed write barriers; no GC pointers survive in the CUDA cache.
 Plan validation checks topology, shapes, stage boundaries, launch dimensions,
 storage capacities and nonoverlapping lifetimes. Matmul uses masked 16x16 shared-memory tiles and explicit
 f32 FMA. Last-axis maximum uses a block-parallel implementation for widths of at
-least 128. Extrema propagate any NaN to canonical f32 `0x7fc00000` and order
-negative zero below positive zero, matching the CPU numeric contract. Other axis
-reductions are serial per output, with f64 accumulation for sum/mean.
+least 128. Extrema propagate any NaN to the canonical f32 `0x7fc00000` today and
+order negative zero below positive zero, matching the CPU result on the tested
+platforms. A NaN's payload and signalling bit are not part of the value, so no
+promise is made to carry either through; a check compares whether a value is a
+NaN. Other axis reductions are serial per output, with f64 accumulation for
+sum/mean.
 There is no fast-math mode; GPU transcendental results need not be bitwise equal
 to CPU results. Strict arithmetic is checked bitwise; transcendental operations
 use their declared ulp bounds. Relaxed comparison applies only to algorithms
@@ -481,8 +484,10 @@ rounding mode. It covers arithmetic bodies, not complete kernels or graph faults
 scalar division's zero check remains in the surrounding kernel control flow.
 A native GPU differential check compares 5,120 f32/f64 arithmetic results
 against this evaluator, including random bit patterns, signed zeros, subnormals,
-infinities, NaNs and explicit casts. Extrema compare canonical NaN bits; other
-arithmetic compares NaN classification because its payload is unspecified.
+infinities, NaNs and explicit casts. Extrema compare whether a value is a NaN
+rather than which NaN it is -- the canonical pattern is today's result, not a
+promise -- and other arithmetic compares NaN classification because its payload
+is unspecified.
 Host transcendental results are not a proof of CUDA's declared ulp bounds.
 The selected FMA still requires the original nodes' permissions and operator
 contracts; constructing a physical FMA expression does not grant permission.
