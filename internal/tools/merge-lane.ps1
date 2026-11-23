@@ -939,13 +939,19 @@ try {
         if ($seedRows -eq 0) {
             Write-Host ''
             Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
+            # The run's own last lines are the only place that says why it measured nothing: without
+            # them the refusal says "no rows" and the reader has to guess whether it was the plan
+            # set, the slot, the host or the tree. The transcript is removed on the way out, so this
+            # is the one moment they can be read.
+            Write-Host '  the baseline run returned no rows; its last lines:' -ForegroundColor Yellow
+            $seedRun | Select-Object -Last 6 | ForEach-Object { "    $_" }
             Write-Host "  This is not a defect in your tree: the baseline run on develop $($developTip.Substring(0, 9)) recorded no row, so nothing was learned about this change and nothing was pushed."
             Write-Host "  What repairs it: the row block must arrive with rows inside it. Re-run internal/tools/camel-remote.ps1 -Path $baselinePath -Changed -ChangedBase $head -ListKnown -NoGpuWatch and read what it prints; a build that failed or a plan set that starts no case writes no block. An empty baseline is never stored -- it would call every case fixed."
             Write-Host ''
             Write-GitState -MergeCommit $mergeCommit
             exit 2
         }
-        # The seconds and the case count are the reading this step owes: "it measured" is only worth
+# The seconds and the case count are the reading this step owes: "it measured" is only worth
         # something if it says how much. They travel into the entry's `.where` beside the shas.
         $env:CAMEL_BASELINE_SECONDS = [string][int]$seedSeconds
         $accept = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $seedTranscript `
