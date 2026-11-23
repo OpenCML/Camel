@@ -1,0 +1,116 @@
+#!/bin/sh
+# Only the merge worktree may push `develop`.
+#
+# `develop` has one writer by rule (agents/dispatch.md section 8.3): one lane merges and pushes,
+# every other lane hands its branch over. A rule kept by memory is kept until the next writer
+# forgets it, and the moment it breaks is the moment two lanes have to rebase on each other -- so
+# it is a hook. The rule is written the way it is enforced: whichever tree the settings file names
+# may push; every other tree is refused with the reason and the key to set.
+#
+# What it reads: the refs git is about to send, on stdin, one per line as
+#   <local ref> <local sha> <remote ref> <remote sha>
+# and nothing else. A line whose remote ref is `refs/heads/develop` (a delete included -- `(delete)`
+# in the local-ref column) is the one this hook is about. Everything else is allowed, which is the
+# normal case: a lane pushing its own branch, and the gate's own staging push to the host's bare
+# repository, whose refs are `refs/heads/lane-*`.
+#
+# Which tree is the merge worktree is machine-local, so it comes from
+# `internal/tools/camel-gate.local.json` (git-ignored) under `mergeWorktree`: one absolute path, or
+# a list of them when a machine keeps two. It is read with node, and there is no fallback: a value
+# this hook cannot read is a refusal that names the file and the key, never a default of "allow".
+# That matters on the day it is broken rather than on the day it is written -- a fresh worktree
+# without the settings file must not be the one that writes develop by accident.
+#
+# The check is the tree doing the push (`git rev-parse --show-toplevel`), not the branch or the
+# user: a worktree is what a lane has, and the same person runs the merge lane from another one.
+#
+# Installed by `.husky/pre-push`, which calls this script before anything else reads stdin -- a
+# reader that runs second may see a drained stream, and an empty stream reads as "no push to
+# develop", which is exactly how this hook would let through what it exists to stop.
+set -u
+
+target_ref='refs/heads/develop'
+
+refs=$(cat)
+develop_push=''
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$remote_ref" = "$target_ref" ]; then
+        develop_push="$target_ref"
+    fi
+done <<EOF
+$refs
+EOF
+# Nothing here is about another branch: a hook that speaks on every push is read as noise.
+[ -n "$develop_push" ] || exit 0
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "pre-push: refusing to push $develop_push: this is not inside a worktree, so which tree is" >&2
+    echo "pre-push: pushing cannot be answered -- and 只有合并位能推 develop (only the merge worktree may)." >&2
+    exit 1
+}
+config="$top/internal/tools/camel-gate.local.json"
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "pre-push: refusing to push $develop_push: node is not on PATH, so $config cannot be read." >&2
+    echo "pre-push: an unreadable rule is not an absent one -- 只有合并位能推 develop." >&2
+    exit 1
+fi
+
+allowed=$(node -e '
+const fs = require("fs")
+let doc
+try {
+    doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+} catch (error) {
+    process.exit(4)
+}
+const value = doc.mergeWorktree
+const list = (Array.isArray(value) ? value : [value])
+    .flatMap((one) => String(one).split(";"))
+    .map((one) => one.trim())
+    .filter(Boolean)
+if (list.length === 0) process.exit(3)
+process.stdout.write(list.join("\n"))
+' "$config")
+state=$?
+
+if [ "$state" -eq 3 ]; then
+    echo "pre-push: refusing to push $develop_push: $config has no 'mergeWorktree'." >&2
+    echo "pre-push: 只有合并位能推 develop -- write that key with the merge worktree's absolute path" >&2
+    echo "pre-push: (internal/tools/camel-gate.example.json shows the shape; the file is git-ignored)." >&2
+    exit 1
+elif [ "$state" -ne 0 ]; then
+    echo "pre-push: refusing to push $develop_push: $config could not be read as JSON (node exit $state)." >&2
+    echo "pre-push: 只有合并位能推 develop -- an unreadable setting is not an absent one." >&2
+    exit 1
+fi
+
+# Paths on one machine, written by different tools: `D:\Projects\X`, `D:/Projects/X` and a trailing
+# separator are the same tree, and a comparison that says otherwise would refuse the merge lane.
+normalize() {
+    printf '%s' "$1" | tr 'A-Z' 'a-z' | tr '\\' '/' | sed -e 's:/*$::'
+}
+
+here=$(normalize "$top")
+match=''
+while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    if [ "$(normalize "$candidate")" = "$here" ]; then
+        match="$candidate"
+    fi
+done <<EOF
+$allowed
+EOF
+
+if [ -z "$match" ]; then
+    echo "pre-push: refusing to push $develop_push from this tree: 只有合并位能推 develop" >&2
+    echo "pre-push: (only the merge worktree may push develop)." >&2
+    echo "pre-push:   this tree:      $top" >&2
+    echo "pre-push:   merge worktree: $(printf '%s' "$allowed" | tr '\n' ' ')" >&2
+    echo "pre-push:   $config, key 'mergeWorktree', names the tree that may write develop." >&2
+    echo "pre-push: push your own branch and hand it to the merge lane; develop is merged there." >&2
+    exit 1
+fi
+
+echo "pre-push: $develop_push from the merge worktree ($top): allowed"
+exit 0

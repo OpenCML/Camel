@@ -62,12 +62,26 @@ function Get-CamelGateConfig {
         hostLibStdCxxDir = ''
         # The checkout watch-fsh-dev.ps1 follows.
         watchRepo        = ''
+        # The one worktree allowed to push `develop` (scripts/hooks/pre-push). One absolute path,
+        # or several separated by ';' when a machine keeps the merge tree in more than one place.
+        # Empty means no tree may push develop -- the hook refuses and says what to write, because
+        # a rule it cannot read must not default to "allow".
+        mergeWorktree    = ''
     }
 
     if ($null -ne $file) {
         foreach ($key in @($settings.Keys)) {
             $value = $file.PSObject.Properties[$key]
-            if ($null -ne $value -and "$($value.Value)".Trim()) { $settings[$key] = "$($value.Value)" }
+            if ($null -eq $value) { continue }
+            # A key that takes more than one value (mergeWorktree: the merge tree on more than one
+            # drive) is written as a JSON array and kept here as one ';'-separated string, so a
+            # caller prints it instead of "System.Object[]".
+            $text = if ($value.Value -is [System.Array]) {
+                (@($value.Value) | ForEach-Object { "$_" }) -join ';'
+            } else {
+                "$($value.Value)"
+            }
+            if ($text.Trim()) { $settings[$key] = $text }
         }
         # An unknown key is a typo or a leftover, and silently ignoring it is how a machine keeps
         # running with a setting its owner believes changed.

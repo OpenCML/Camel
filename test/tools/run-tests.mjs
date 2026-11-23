@@ -73,6 +73,11 @@ const BUILDS = {
  */
 const PLAN_FIELDS = new Set([
     'id', 'desc', 'order', 'tier', 'debug_tier', 'parallel', 'tags', 'defaults', 'tests', 'sweeps',
+    // A plan whose readings are durations says so here, and the gate takes the host for it
+    // (internal/tools/camel-remote.ps1: the plan slot and both build slots together). Nothing in
+    // this runner reads it, and that is the division: the runner measures, the gate decides what
+    // company a measurement may be taken in.
+    'time_sensitive',
 ])
 const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
@@ -289,6 +294,11 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
  */
 function validatePlanSchema(doc, planPath) {
     checkFields(planPath, doc, PLAN_FIELDS, 'plan')
+    // The one plan-level field that is a declaration about the host and not about a case: a plan
+    // that spells it `"yes"` would be read as "not time sensitive" by the gate and measured beside
+    // somebody else's build, which is the reading the field exists to prevent. Refused here, where
+    // the file and the value are named.
+    checkFieldType(planPath, doc, 'time_sensitive', 'plan', 'boolean')
     if (doc.defaults !== undefined) {
         if (doc.defaults === null || typeof doc.defaults !== 'object' || Array.isArray(doc.defaults)) {
             throw new PlanSchemaError(`${planLabel(planPath)}: [defaults] must be a table`)

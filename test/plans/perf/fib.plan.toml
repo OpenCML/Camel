@@ -18,6 +18,11 @@ id = "perf.fib"
 order = 400
 tier = "milestone"
 tags = ["perf", "fib"]
+# This plan's readings are durations, and the header above is the reason the field exists: the same
+# command spread from 432 ms to 960 ms between runs at load 26 to 54. So the run takes the plan slot
+# and both build slots together (internal/tools/camel-remote.ps1) and is not started at all if one
+# of them is held: a number taken beside another lane's build is a number of the wrong thing.
+time_sensitive = true
 
 [[tests]]
 name = "nvm_timeit"
