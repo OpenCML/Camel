@@ -840,7 +840,8 @@ enum ReservedDataOp {
     ErrorThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data obj, Data* args, NamedData* kwargs
-    Comp, // Data lhs, Data rhs
+    Comp, // Data lhs, Data rhs -- `a..b`, two readings
+    Compose, // Data lhs, Data rhs -- `a<>b`, the composition alone
     As, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
 }
@@ -1079,14 +1080,12 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
     } break;
 
-    case AST::ReservedDataOp::Comp: {
-        const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        // `a..b` has two readings, and the types of its two operands tell them apart (design
-        // principles 4.2):
-        // between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`, and
-        // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
-        // is handed on as one call of the compiler's own name for it, which the GIR builder
-        // resolves (Builder::buildComposition).
+    case AST::ReservedDataOp::Comp:
+    case AST::ReservedDataOp::Compose: {
+        // `a..b` has two readings and `a<>b` has one (design principles 4.2). GCT has no types,
+        // so the construct goes on as one call of the compiler's own name for it, which the GIR
+        // builder resolves: `Comp` keeps both readings while the corpus still writes the
+        // composition as `..`, and `Compose` is the composition alone.
         //
         // It is not handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
         // src/builtin/operators/macro.cpp), whose resolver takes two functions and answers with
@@ -1094,7 +1093,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // value of a function type is a graph, and no built-in executor has one — and it has no
         // reading for two integers. The operator and its executor stay registered; the compiler
         // has no user for them.
-        node_ptr_t opNode  = tree_->makeDRef(std::string(camel::core::kCompositionCall));
+        const bool compose = reservedExpr->op() == AST::ReservedDataOp::Compose;
+        const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
+        node_ptr_t opNode  = tree_->makeDRef(std::string(
+            compose ? camel::core::kComposeCall : camel::core::kCompositionCall));
         res                = tree_->makeLink(2);
         auto compAstBundle = astSemantic(context_, ast);
         setOriginFromOrigin(

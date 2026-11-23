@@ -1037,7 +1037,24 @@ string Generator::generateReservedExprLoad(const AST::node_ptr_t &node) {
                 string leftCode  = generateNode(leftAstNode);
                 string rightCode = generateNode(rightAstNode);
 
-                return leftCode + ".." + rightCode;
+                return leftCode + " .. " + rightCode;
+            }
+        }
+        return "";
+    }
+    case AST::ReservedDataOp::Compose: {
+        if (node->size() >= 2) {
+            auto leftNode  = node->at(0);
+            auto rightNode = node->at(1);
+
+            if (leftNode && rightNode) {
+                auto leftAstNode  = static_pointer_cast<AST::Node>(leftNode);
+                auto rightAstNode = static_pointer_cast<AST::Node>(rightNode);
+
+                string leftCode  = generateNode(leftAstNode);
+                string rightCode = generateNode(rightAstNode);
+
+                return leftCode + " <> " + rightCode;
             }
         }
         return "";

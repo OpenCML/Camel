@@ -778,9 +778,11 @@ void ParserImpl::parseFrontMatter() {
 }
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'?
-///            'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+///            'func' (identRef | operatorName) typeParams? parentParams (('=>' | ':') typeExpr)?
 ///            resourceClause? whenClause? stmtBlock?
 ///
+/// The result type follows `=>` (design principles 4.4, the author 2026-11-23); `: 类型` is the
+/// older spelling and is still read while the corpus is written that way.
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
 /// `uses`/`pure` clause after the result type says which resources a call touches (design
@@ -1003,7 +1005,15 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseTypeParams();
     }
     parseParentParams(true, true);
-    if (eat(TK::Colon)) {
+    // The result type is written `=> T` (design principles 4.4, the author 2026-11-23): the same
+    // arrow a function type and a lambda write before theirs, so a declaration reads like the
+    // type of what it declares. `: T` is the older spelling, and it is still read while the
+    // corpus is written that way -- one rewriting pass changes the files, and no file has to
+    // fail to parse in between.
+    if (cur_ == TK::FatArrow) {
+        bump();
+        parseType();
+    } else if (eat(TK::Colon)) {
         parseType();
     }
     if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "panic") || atWord(0, "spelling")) {
