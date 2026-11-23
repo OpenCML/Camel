@@ -41,3 +41,8 @@
   3. `lane/exec-plan-kind`：执行计划作为 `std::exec` 登记的事实 kind，不可变的计划进事实、fvm 的可变状态留在 fvm；删 `GCGraph::execPlan_`（同一页答复的 ③④）。与 `facts-b3` 分文件：`facts-b3` 做内核框架侧，本车道只动 `src/stdlib/std/{exec,nvm,fvm,prl}`。
   4. `lane/cleanup`：`C-1123-33` 剩余的旧切片写法、25 个真沉默算子逐个补 `uses`/`pure` 声明、`:op/` 以外的其余小欠账。
 - **D-1123-30（新车道 `lane/range-value`）** 范围改成值：`Range` 是标准库的命名类型，下标逐维按类型分派，`for` 接受能转成流的值，删掉解析器与建图器里按 `range` 名字的特例。原则 5.4 已改，计划与验收见 `internal/plans/2026-11-23-range-value.cn.md`。反向切片那页的修法并进这条车道做。
+- **D-1123-31（负责人看到只有 4 条在跑；当轮开到 8 条，开了在车道表加行）** 除 `D-1123-30` 的 `range-value` 外再开四条，彼此不改同一组文件：
+  1. `lane/3a-b5`：与 `3a-b4` 分目录并行（`3a-b4` 留 `kernel/runtime`、`stdlib/std`；本条做 `src/compile`、`src/stdlib` 其余子目录、`src/tools`），注意 `C-1123-17`（视图里 JOIN 与墓碑不占位）。
+  2. `lane/facts-tools`：`D-1123-29` 第 2 条，至今未开（`inspect --facts` 接线、每个 kind 一条与旧算法逐项对照的用例、调试器 `regionOuter` 改读 `ControlRegions`）。
+  3. `lane/facts-effects`：`EffectSummary`、`graph.is_pure` 的读者改读 `core.effects`，删掉并行的旧计算；读数是改前后逐节点相同。
+  4. `lane/notation-corpus`：语料里的旧返回类型写法（4,252 个 `.cml`）与残留的 `f..g` 用格式化器一次改写，然后从解析器删掉旧写法；与其他车道冲突时重跑格式化器，不手工解冲突。
