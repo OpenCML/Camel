@@ -1124,7 +1124,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 
 **CPU 的结果变了，Tiles 的参考随之变：**
 
-- `max`/`min`（逐元素的 `maximum`/`minimum`、`max_axis`/`min_axis`）是 IEEE 754-2019 的 `maximum`/`minimum`：任一边是 NaN 得的**不是值的一部分**，只保证"它是 NaN"：今天实现在这种情况下产出规范的 quiet NaN（`0x7fc00000`，符号位为 0），但**不承诺携带负载位与信号位** —— 所以一个检查比的是"是不是 NaN"，不是"是哪一个 NaN"。`-0 < +0`。Tiles 的 `max_axis` 今天保留"首个 NaN 与 ±0 的平局规则"并带下标比较，要改为这条规则，带下标的并行比较可以去掉（6.9 第 6 条）。CUDA 的 `fmaxf` 不是它：用"两边有 NaN 则规范 NaN，否则相等时按位与（取 `+0`）、不等时取大"的比较序列。
+- `max`/`min`（逐元素的 `maximum`/`minimum`、`max_axis`/`min_axis`）是 IEEE 754-2019 的 `maximum`/`minimum`：任一边是 NaN 得一个 quiet NaN；NaN 的负载位与信号位不属于值，只保证"它是 NaN"。今天实现在这种情况下产出规范的 quiet NaN（`0x7fc00000`，符号位为 0），但**不承诺携带负载位与信号位** —— 所以一个检查比的是"是不是 NaN"，不是"是哪一个 NaN"。`-0 < +0`。Tiles 的 `max_axis` 今天保留"首个 NaN 与 ±0 的平局规则"并带下标比较，要改为这条规则，带下标的并行比较可以去掉（6.9 第 6 条）。CUDA 的 `fmaxf` 不是它：用"两边有 NaN 则规范 NaN，否则相等时按位与（取 `+0`）、不等时取大"的比较序列。
 - `relu(x) = maximum(x, +0)`：NaN 得一个 NaN（今天实现给规范 NaN，负载位与信号位不承诺），`-0` 得 `+0`。Tiles 今天的 `a<0.0f?0.0f:a` 对 NaN 给原 NaN、对 `-0` 给 `-0`，两处都要改（6.9 第 3 条）。
 - `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear` 先算完链再加偏置。库实现（CBLAS）只改累加的顺序与分组，是节点属性 `tensor.kernel` 上的选择，算子是 `matmul`（9.6）。
 - `softmax` 的 CPU 内核与定义 `exp(x - m) / sum(exp(x - m))` 逐位一致（除法，不是乘倒数；和在 f64 里累加、最后舍入为 f32）。Tiles 把 softmax 写成组合，逐位比较时以定义为准。
