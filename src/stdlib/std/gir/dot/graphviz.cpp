@@ -236,15 +236,15 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     auto nodeIdent = [&](const camel::runtime::GCNode *record) { return pointerToIdent(record); };
 
     // The classes of a graph whose values have several writings: every class is drawn as a
-    // dashed cluster of its writings, the writing extraction would take is marked, and an input
-    // edge of a writing leaves the class of the value it reads. A graph with one writing per
-    // value (the executable state) has none of this and is dumped exactly as before.
+    // dashed cluster of its writings, and an input edge of a writing leaves the class of the value
+    // it reads. A graph with one writing per value (the executable state) has none of this and is
+    // dumped exactly as before. Which writing a target would keep is not drawn: that is a cost,
+    // and a cost is the target library's judgement, not the kernel's.
     const auto graphClasses = [&]() {
-        const auto model = camel::runtime::findCostModel(camel::runtime::kWritingsCostModel);
-        if (!model || graph->executable()) {
+        if (graph->executable()) {
             return camel::runtime::GraphWritings{};
         }
-        return camel::runtime::graphWritings(*program_, graph, *model, context_.get());
+        return camel::runtime::graphWritings(*program_, graph, context_.get());
     }();
     // The class a node is a writing of, or nullptr when its value has one writing only.
     const auto classOf = [&](camel::runtime::gc_node_ref_t node) -> const camel::runtime::GraphWritings::Value * {
@@ -348,16 +348,6 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 record.parent,
                 escape(camel::core::attr::text(record.attrs)));
         }
-    }
-
-    // Which cost model marks the writing extraction would take: the model the pipeline itself
-    // extracts by. A graph with one writing per value prints nothing here.
-    if (!graphClasses.empty()) {
-        res += std::format(
-            "{}{}writings_cost=\"{}\";\n",
-            baseIndent_,
-            indent_,
-            camel::runtime::kWritingsCostModel);
     }
 
     program_->traceGraphs(*graph, [&](camel::runtime::GCGraph *dep) {
@@ -503,14 +493,11 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         }
         const size_t lineStart = res.size();
         // The class of the value this node is a writing of, when the value has several: the
-        // writing names its class, and the one extraction would take is marked (a heavier border
-        // in the styled dump)..
+        // writing names its class. No writing is marked as the one to keep: that is a cost, and
+        // the kernel does not judge one.
         string classAttr;
         if (const auto *value = classOf(nodeRef); value != nullptr) {
             classAttr = std::format(", class=\"{}\"", classLabel(value->root));
-            if (value->chosen == nodeRef) {
-                classAttr += config_.rich ? ", chosen=\"true\", penwidth=2" : ", chosen=\"true\"";
-            }
         }
         if (!config_.rich) {
             res += std::format(

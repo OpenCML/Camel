@@ -33,82 +33,6 @@
 
 namespace camel::runtime {
 
-namespace {
-
-std::mutex &costModelsMutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-
-std::map<std::string, std::shared_ptr<const CostModel>> &costModels() {
-    static std::map<std::string, std::shared_ptr<const CostModel>> models;
-    return models;
-}
-
-class NodeCountModel : public CostModel {
-  public:
-    double nodeCost(const CostContext &, gc_node_ref_t) const override { return 1.0; }
-};
-
-class WeightedModel : public CostModel {
-  public:
-    double nodeCost(const CostContext &context, gc_node_ref_t node) const override {
-        const auto &draft = context.transaction.graph();
-        const auto *h     = draft.header(node);
-        // A conversion costs what the operator costs, asked of its shape rather than its kind
-        // (`camel/runtime/oper_shape.h`).
-        if (camel::runtime::shapeOfKind(h->kind) == camel::ops::OperShape::Conversion) {
-            return 0.5;
-        }
-        switch (h->kind) {
-        case GCNodeKind::Data:
-        case GCNodeKind::Port:
-            return 0.1;
-        case GCNodeKind::Oper: {
-            const std::string_view uri =
-                reinterpret_cast<const GCOperBody *>(draft.payloadOf(node).data())->uri();
-            auto has = [&](std::string_view name) { return uri.find(name) != uri.npos; };
-            if (has("div") || has("mod")) {
-                return 8.0;
-            }
-            if (has("mul")) {
-                return 3.0;
-            }
-            if (has("add") || has("sub") || has("neg")) {
-                return 1.0;
-            }
-            return 2.0;
-        }
-        default:
-            return 2.0;
-        }
-    }
-};
-
-void ensureBuiltinCostModels() {
-    static const bool once = [] {
-        costModels().emplace("nodes", std::make_shared<NodeCountModel>());
-        costModels().emplace("weighted", std::make_shared<WeightedModel>());
-        return true;
-    }();
-    (void)once;
-}
-
-} // namespace
-
-void registerCostModel(std::string name, std::shared_ptr<const CostModel> model) {
-    std::lock_guard lock(costModelsMutex());
-    ensureBuiltinCostModels();
-    costModels()[std::move(name)] = std::move(model);
-}
-
-std::shared_ptr<const CostModel> findCostModel(const std::string &name) {
-    std::lock_guard lock(costModelsMutex());
-    ensureBuiltinCostModels();
-    auto found = costModels().find(name);
-    return found == costModels().end() ? nullptr : found->second;
-}
-
 WritingChoice
 DraftWritings::choiceByCost(const CostModel &model, camel::core::context::Context *context) {
     rebuild();
@@ -453,8 +377,8 @@ std::span<const gc_node_ref_t> DraftWritings::writingsOf(gc_node_ref_t node) {
 }
 
 GraphWritings graphWritings(
-    const Program &program, const GCGraph *graph, const CostModel &model,
-    camel::core::context::Context *context) {
+    const Program &program, const GCGraph *graph, camel::core::context::Context *context) {
+    (void)context;
     GraphWritings classes;
     // The executable state has one writing per value by definition: a dump of such a graph draws
     // no class, and does not pay for a decode of it.
@@ -469,21 +393,18 @@ GraphWritings graphWritings(
         return classes;
     }
     auto &draft = transaction->edit();
-    // The same policy the driver's extraction uses (`extractWritings`), so the classes and the
-    // choice the dump shows are the ones the pipeline would act on.
+    // The classes alone: no cost model is asked, so the dump shows which writings a value has and
+    // never which one a target would keep.
     DraftWritings writings(*transaction);
     writings.build();
-    const WritingChoice choice = writings.choiceByCost(model, context);
     for (gc_node_ref_t node = 0; node < draft.nodeSlotCount(); ++node) {
         if (!draft.alive(node)) {
             continue;
         }
-        classes.nodes[node] = GraphWritings::Node{
-            .root  = choice.classOf[node],
-            .own   = choice.own[node],
-            .value = choice.cost[node]};
+        const gc_node_ref_t root = writings.find(node);
+        classes.nodes[node]      = root;
         // One entry per value, at its root (the smallest writing); the members are ascending.
-        if (!choice.multi[node] || choice.classOf[node] != node) {
+        if (root != node) {
             continue;
         }
         const auto members = writings.writingsOf(node);
@@ -493,8 +414,6 @@ GraphWritings graphWritings(
         GraphWritings::Value value;
         value.root = node;
         value.writings.assign(members.begin(), members.end());
-        value.chosen          = choice.chosen[node];
-        value.cost            = choice.cost[node];
         classes.valueOf[node] = classes.values.size();
         for (gc_node_ref_t member : value.writings) {
             classes.valueOf[member] = classes.values.size();

@@ -220,9 +220,9 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.value.after_saturate.runs"
-desc = "Limit 100 after std::cxx::saturate: step(50) runs; this pass moves the boundary too."
+desc = "Limit 100 after std::cxx::saturate and a named extraction: step(50) runs; this pass moves the boundary too."
 case = "../../../cases/consistency/limits/depth_value.cml"
-args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "${backend}"]
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "rewrite::extract cost=rules::nodes", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=50"]
 expect_exit = 0
@@ -230,9 +230,9 @@ expect_stdout_starts_with = "start\n50\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_saturate.still_stops"
-desc = "Limit 100 after std::cxx::saturate: step(100) stops -- this pass moves the boundary to 99 levels, not past them."
+desc = "Limit 100 after std::cxx::saturate and a named extraction: step(100) stops -- this pass moves the boundary to 99 levels, not past them."
 case = "../../../cases/consistency/limits/depth_value.cml"
-args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "${backend}"]
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "rewrite::extract cost=rules::nodes", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=100"]
 expect_exit = 1

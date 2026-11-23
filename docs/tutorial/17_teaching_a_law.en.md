@@ -118,7 +118,9 @@ The `doubled` half of `camel docs/tutorial/examples/17_rule.cml std::cxx::satura
 ![doubled: the several writings of x * 2 + x * 2 stay in one equivalence class each](images/17_rule_saturate.svg)
 
 Each dashed box is **one class of equivalent values** (a `class`): the nodes inside are different writings of the
-same value, and the one marked `chosen="true"` is the one extraction would keep. So `x * 2 + x * 2` in `doubled`
+same value. Nothing in the picture says which writing is cheaper — a cost is the target library's judgement, and
+a dump does not make it; a pipeline that wants one writing per value names an extraction,
+`rewrite::extract cost=...`. So `x * 2 + x * 2` in `doubled`
 still has `x * (2 + 2)`, `x * 4` and others — the laws have been applied, and the choice is left for later. That
 way an optimization does not lose a possibility just because some law happened to fire first.
 
