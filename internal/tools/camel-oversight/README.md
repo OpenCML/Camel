@@ -8,10 +8,12 @@ leave it messages without waiting for a git round trip.
 | `/oversee/state` | GET | the target session's status (`idle`/`running`) and since when, every live agent, one summary per recent turn (tools called, how it ended), unacknowledged message ids, the build host's load |
 | `/oversee/tail?n=50` | GET | the last n session events, one line each (turn start/end, user and assistant text, tool calls and results) |
 | `/oversee/say` | POST | `{"id": "D-1123-43", "text": "...", "mode": "queue"}` queues a user message prefixed `[decision-maker · D-1123-43]`; `mode: "steer"` delivers it at the nearest step instead of the next turn; neither cancels the running turn; a repeated id is dropped |
-| `/oversee/acks` | GET | what the model answered for each message |
+| `/oversee/acks` | GET | what the model answered for each message, and the messages it sent of its own accord |
+| `/oversee/events` | GET | a server-sent event stream: each acknowledgement, each `oversight_tell`, and the claimed session ending, pushed as it happens (`data: {json}` per event, a comment every 25 s) |
 
-The model gets two tools: `oversight_claim()`, which makes the calling session the target, and
-`oversight_ack(id, status, note)` with status `taken`, `declined` or `done`. The target session also gets a
+The model gets three tools: `oversight_claim()`, which makes the calling session the target;
+`oversight_ack(id, status, note)` with status `taken`, `declined` or `done`; and `oversight_tell(text, urgent)`
+for what it has to say of its own accord, pushed at once to whoever holds `/oversee/events` open. The target session also gets a
 system-prompt paragraph naming the messages it has not acknowledged yet.
 
 ## Which session is the target
