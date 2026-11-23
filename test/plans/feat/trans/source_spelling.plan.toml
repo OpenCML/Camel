@@ -1,0 +1,15 @@
+id = "trans.source_spelling"
+order = 345
+tier = "fast"
+tags = ["feat", "trans", "cml", "spelling"]
+
+[[tests]]
+name = "every_generator_writes_source_the_parser_reads"
+desc = "The notation ruling of 2026-11-23 changed five spellings (`=> T` for a result type, `<>` for a composition, `A: int` for a named type argument, `func (x) { }` for a lambda, `t[a..b]` for a slice) and rewrote the corpus, and every place that writes a program for a person or for a test to compile kept writing the old ones. This is the check the ruling asks for: each generator is asked for a sample that covers the forms and the sample is compiled back -- `camel check -s`, the syntax tree and nothing after it. A sample is also counted, so a generator that answers nothing cannot pass by having no error in an empty file: `std::cml` over four corpus cases (a closure, the interval, a configured call, straight-line statements), `camel-format` over the same four and over a fixture that writes all five forms the way the ruling writes them (the formatted text must keep them), and `test/tools/progen`'s draw of one seed. The generators whose output needs a whole install to produce -- the diagnostic registry's prose, the programs the python drivers and the benchmarks write -- get the weaker reading, a lint for the three old forms a grep tells apart from the new ones, and the line says so. `..` is both the interval and what a composition used to be written with, so that form is measured by the fixture instead of linted."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/spelling/check.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["SOURCE-SPELLING PASS", "ok   std::cml closure", "ok   std::cml interval", "ok   camel-format fixture (five forms)", "ok   progen seed 3"]
+timeout_ms = 120000

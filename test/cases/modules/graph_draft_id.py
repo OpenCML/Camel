@@ -47,7 +47,7 @@ EXE, ARGV = camel_from_argv(ROOT)
 BEFORE = """\
 import { Graph, Node, add_constant, graph_of, id, open } from graph
 
-func main(): int sync {
+func main() => int sync {
     let p = main
     let t = open(p)
     let added = add_constant(t, graph_of(p), 7)
@@ -60,14 +60,14 @@ AFTER = """\
 import { Graph, Node, add_constant, commit, graph_of, id, nodes, open } from graph
 import { is_function } from types
 
-func report::<F>(published: F): int when is_function::<F>() sync {
+func report::<F>(published: F) => int when is_function::<F>() sync {
     let all = nodes(graph_of(published))
     println(len(all))
-    println(all->map<(m: Node): int => id(m)>)
+    println(all->map<func (m: Node) => int id(m)>)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = main
     let t = open(p)
     let added = add_constant(t, graph_of(p), 7)

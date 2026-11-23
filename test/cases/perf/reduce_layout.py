@@ -192,11 +192,11 @@ import {{ grad }} from autodiff
 import {{ now }} from time
 
 with <{probe["with"]}>
-func body({probe["args"]}): f32 {{
+func body({probe["args"]}) => f32 {{
     return {probe["body"]}
 }}
 
-func main(reps: int): int sync {{
+func main(reps: int) => int sync {{
     seed(11)
     {lets}
     let g = grad(body)

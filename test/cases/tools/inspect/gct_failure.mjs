@@ -49,7 +49,7 @@ const realDeclaration = fs.readFileSync(path.join(HOME, 'stdlib', 'math.cml'), '
 const brokenDeclaration = `${realDeclaration.trimEnd()}
 
 // Added by the case: this names an operator the module does not register.
-export func no_such_operator(x: i32): i32
+export func no_such_operator(x: i32) => i32
 `
 fs.writeFileSync(path.join(STDLIB, 'math.cml'), brokenDeclaration)
 
@@ -59,15 +59,15 @@ const file = (name, text) => {
     return target
 }
 
-const semantic = file('semantic.cml', 'func main(): int {\n    let x = undefined_name + 1\n    return x\n}\n')
-const missingImport = file('missing_import.cml', 'import no_such_module\n\nfunc main(): int {\n    return 0\n}\n')
-const healthy = file('healthy.cml', 'import math\n\nfunc main(): int {\n    return 0\n}\n')
-const library = file('library.cml', 'func twice(x: i32): i32 {\n    return x * 2\n}\n')
+const semantic = file('semantic.cml', 'func main() => int {\n    let x = undefined_name + 1\n    return x\n}\n')
+const missingImport = file('missing_import.cml', 'import no_such_module\n\nfunc main() => int {\n    return 0\n}\n')
+const healthy = file('healthy.cml', 'import math\n\nfunc main() => int {\n    return 0\n}\n')
+const library = file('library.cml', 'func twice(x: i32) => i32 {\n    return x * 2\n}\n')
 // The construction tree builds; the call only fails when the graph is built, which `--gct`
 // does not do.
 const typeError = file(
     'type_error.cml',
-    'func f(x: i32): i32 {\n    return x\n}\n\nfunc main(): int {\n    return f(true)\n}\n',
+    'func f(x: i32) => i32 {\n    return x\n}\n\nfunc main() => int {\n    return f(true)\n}\n',
 )
 
 function inspect(args, stdlib) {

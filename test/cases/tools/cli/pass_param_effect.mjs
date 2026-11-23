@@ -30,7 +30,7 @@ fs.mkdirSync(SCRATCH, { recursive: true })
 const program = path.join(SCRATCH, 'effect.cml')
 fs.writeFileSync(
     program,
-    'func main(): int sync {\n    println("camel-ran-marker")\n    return 0\n}\n'
+    'func main() => int sync {\n    println("camel-ran-marker")\n    return 0\n}\n'
 )
 
 const camel = (args) =>

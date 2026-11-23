@@ -69,12 +69,12 @@ await withServer(async (ls) => {
     h = await hover('var total', 1, 4)
     check(h.includes('var total: int'), 'a var shows `var` and `int`, not i64', h)
     h = await hover('norm2(p)')
-    check(h.includes('export func norm2(p: Point): int'), 'an imported function: its header as written', h)
+    check(h.includes('export func norm2(p: Point) => int'), 'an imported function: its header as written', h)
     check(h.includes('The squared length of p.\nSecond line of the comment.'),
         'the `///` lines above the declaration are the documentation', h)
     check(h.includes('shapes.cml'), 'the file of the definition is named', h)
     h = await hover('identity(n)')
-    check(h.includes('func identity::<T>(x: T): T'), 'a generic function: its header', h)
+    check(h.includes('func identity::<T>(x: T) => T'), 'a generic function: its header', h)
     check(h.includes('(x: int) => int') && h.includes('This call'),
         'at a call the instance of the generic function is shown', h)
     check(h.includes('Returns its argument.'), 'with its documentation', h)
@@ -88,10 +88,10 @@ await withServer(async (ls) => {
     check(h.includes('copy: int') && h.includes('copy: string'),
         'a local of a generic function has one type per instance', h)
     h = await hover('add(1, 2)')
-    check(h.includes('func add(a: int, b: int): int') && !h.includes('float'),
+    check(h.includes('func add(a: int, b: int) => int') && !h.includes('float'),
         'a call of an overloaded function shows the overload it chose', h)
     h = await hover('add(1.5')
-    check(h.includes('func add(a: float, b: float): float'), 'and the other one', h)
+    check(h.includes('func add(a: float, b: float) => float'), 'and the other one', h)
     h = await hover('q.x', 1, 2)
     check(h.includes('(field) x: int'), 'a field shows its type', h)
     h = await hover('pair.0', 1, 5)
@@ -106,7 +106,7 @@ await withServer(async (ls) => {
     check(h.includes('=> int'), 'an inferred return type is shown', h)
     h = await hover('Pair = (1', 1, 0)
     check(h.includes('type Pair = (int, string)'), 'a type alias shows its definition', h)
-    h = await hover('a: int, b: int): int', 1, 3)
+    h = await hover('a: int, b: int) => int', 1, 3)
     check(h.includes('type int'), 'a built-in type name', h)
     h = await hover('func main', 1, 0)
     checkEq(h, null, 'a keyword has no hover')
@@ -137,7 +137,7 @@ await withServer(async (ls) => {
     checkEq(d.map((l) => fmtRange(l.range)), ['15:5-15:8'], 'a call: the overload chosen')
     d = await def('Pair = (1')
     checkEq(fmtRange(d[0].range), '3:5-3:9', 'a type alias')
-    d = await def('): T', 1, 3)
+    d = await def(') => T', 1, 5)
     checkEq(fmtRange(d[0].range), '6:16-6:17', 'a type variable: its head declaration')
     d = await def('v * 2')
     checkEq(fmtRange(d[0].range), '36:18-36:19', 'a parameter of a function literal')
@@ -179,7 +179,7 @@ await withServer(async (ls) => {
     const mainSymbol = symbols.find((s) => s.name === 'main')
     check(mainSymbol.children.some((c) => c.name === 'total' && c.kind === 13),
         'locals are children of their function', mainSymbol.children)
-    checkEq(symbols[1].detail, '(x: T): T', 'a function carries its signature')
+    checkEq(symbols[1].detail, '(x: T) => T', 'a function carries its signature')
     checkEq(fmtRange(symbols[1].selectionRange), '6:5-6:13', 'selection range is the name')
 
     // ---- incremental synchronisation ----

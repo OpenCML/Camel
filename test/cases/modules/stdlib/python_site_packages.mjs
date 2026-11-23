@@ -44,7 +44,7 @@ const probe = {
     name: 'probe',
     text: `import { import_module, attr, from_py, PyObject } from python
 
-func main(): int sync {
+func main() => int sync {
     let value = match import_module("camel_site_probe") {
         case error e => -1
         case m => match m->attr<"VALUE"> {
@@ -63,7 +63,7 @@ const versionProbe = run({
     name: 'which_python',
     text: `import { eval, from_py, PyObject } from python
 
-func main(): int sync {
+func main() => int sync {
     let major = match eval("__import__('sys').version_info[0]") {
         case error e => -1
         case v => from_py::<int>(v) !! -1

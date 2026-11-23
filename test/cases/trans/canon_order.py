@@ -72,10 +72,10 @@ import tempfile
 # `read_ba`'s reads `b` and then `a`. The two values the body adds are the same values in the same
 # operand slots; only the capture table's order -- the order the source mentioned them -- moves.
 CAPTURE_AB = """
-func main(): int sync {
+func main() => int sync {
     var a = 1
     var b = 2
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let p = a
         let q = b
         return u + p + q
@@ -85,10 +85,10 @@ func main(): int sync {
 """
 
 CAPTURE_BA = """
-func main(): int sync {
+func main() => int sync {
     var a = 1
     var b = 2
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let q = b
         let p = a
         return u + p + q
@@ -101,9 +101,9 @@ func main(): int sync {
 # here and in the two-capture program below, so hashing it here is hashing the fragment the tie
 # will arrange.
 CAPTURE_ONE = """
-func main(): int sync {
+func main() => int sync {
     var a = @VALUE@
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         return a
     }
     return read(0)
@@ -115,10 +115,10 @@ func main(): int sync {
 # values are a width-2 tie. The payloads are chosen (by the reading) so that a structural hash of
 # the two fragments orders them the other way as well.
 CAPTURE_TWO = """
-func main(): int sync {
+func main() => int sync {
     var a = @LARGER@
     var b = @SMALLER@
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         return a + b
     }
     return read(0)
@@ -128,7 +128,7 @@ func main(): int sync {
 # A program whose output is the same before and after the change: the ordering rule is a query,
 # and the canonical numbering is not a scheduler.
 ORDERED_RUN = """
-func main(): int sync {
+func main() => int sync {
     var a = 0
     var b = 0
     a = 1
@@ -146,10 +146,10 @@ func main(): int sync {
 # which one the program takes, and it decides it the same way in both spellings (design principles
 # 9.5: the minimum is taken over the combinations across graphs, not fixed per graph).
 PROGRAM_AB = """
-func main(): int sync {
+func main() => int sync {
     var a = 1
     var b = 2
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let p = a
         let q = b
         return u + p + q
@@ -159,10 +159,10 @@ func main(): int sync {
 """
 
 PROGRAM_BA = """
-func main(): int sync {
+func main() => int sync {
     var a = 1
     var b = 2
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let q = b
         let p = a
         return u + p + q
@@ -177,7 +177,7 @@ func main(): int sync {
 # still that wide is reported by `camel inspect --ties` instead of being arranged in the order the
 # source wrote it in.
 WIDE_AB = """
-func main(): int sync {
+func main() => int sync {
     var a = 1
     var b = 2.5
     var c = true
@@ -186,7 +186,7 @@ func main(): int sync {
     var f = 4.5
     var g = false
     var h = "t"
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let p = a
         let q = b
         let r = c
@@ -202,7 +202,7 @@ func main(): int sync {
 """
 
 WIDE_BA = """
-func main(): int sync {
+func main() => int sync {
     var a = 1
     var b = 2.5
     var c = true
@@ -211,7 +211,7 @@ func main(): int sync {
     var f = 4.5
     var g = false
     var h = "t"
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let y = h
         let x = g
         let w = f
@@ -238,7 +238,7 @@ func main(): int sync {
 # fell back to either order would number the two writings differently while neither of them is a
 # different graph.
 WIDE_SAME_AB = """
-func main(): int sync {
+func main() => int sync {
     var a = 1
     var b = 1
     var c = 1
@@ -247,7 +247,7 @@ func main(): int sync {
     var f = 1
     var g = 1
     var h = 1
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let p = a + 1
         let q = b + 2
         let r = c + 3
@@ -263,7 +263,7 @@ func main(): int sync {
 """
 
 WIDE_SAME_BA = """
-func main(): int sync {
+func main() => int sync {
     var h = 1
     var g = 1
     var f = 1
@@ -272,7 +272,7 @@ func main(): int sync {
     var c = 1
     var b = 1
     var a = 1
-    let read = (u: int): int => {
+    let read = func (u: int) => int {
         let y = h + 8
         let x = g + 7
         let w = f + 6

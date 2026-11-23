@@ -78,7 +78,7 @@ def function(shape: str, i: int) -> Tuple[str, int]:
     if shape == "lambda":
         return (
             f"func f{i}(x: int): int {{\n"
-            f"    return len([x, {k}]->map<(p: int): int => p + {i}>) + {k}\n}}\n",
+            f"    return len([x, {k}]->map<func (p: int) => int p + {i}>) + {k}\n}}\n",
             2 + k,
         )
     raise ValueError(f"unknown shape {shape}")
@@ -101,7 +101,7 @@ def program(shape: str, n: int) -> Tuple[str, int]:
         calls = " + ".join(f"f{i}(1)" for i in range(c, min(n, c + chunk)))
         helpers.append(f"func sum{c // chunk}(): int {{\n    return {calls}\n}}\n")
     parts.extend(helpers)
-    body = ["func main(): int sync {", "    var total = 0"]
+    body = ["func main() => int sync {", "    var total = 0"]
     for h in range(len(helpers)):
         body.append(f"    total = total + sum{h}()")
     body.append("    println('scale total={}'->format<total>)")
@@ -128,10 +128,10 @@ def wide_program(n: int) -> Tuple[str, int]:
     params = ", ".join(f"p{k}: int" for k in range(WIDE_PARAMS))
     args = ", ".join("1" for _ in range(WIDE_PARAMS))
     lines = [
-        f"func wide({params}): int {{",
+        f"func wide({params}) => int {{",
         f"    return {level[0]}",
         "}",
-        "func main(): int sync {",
+        "func main() => int sync {",
         f"    let total = wide({args})",
         "    println('scale total={}'->format<total>)",
         "    return 0",
@@ -150,10 +150,10 @@ def fanout_program(n: int) -> Tuple[str, int]:
             upper.append(level[-1])
         level = upper
     lines = [
-        "func wide(x: int): int {",
+        "func wide(x: int) => int {",
         f"    return {level[0]}",
         "}",
-        "func main(): int sync {",
+        "func main() => int sync {",
         "    let total = wide(1)",
         "    println('scale total={}'->format<total>)",
         "    return 0",

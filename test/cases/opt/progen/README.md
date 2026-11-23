@@ -543,7 +543,7 @@ now discards a program whose skipped operand would fault (one program of 1200, s
 finding depends on this.
 
 **J5. Which type should a `return` inside a branch arm have?** Decided  (reading
-B, and the seed is back in the batch): `func e23(...): float` contains
+B, and the seed is back in the batch): `func e23(...) => float` contains
 `let v = match a { case 'm' => { return 5 - 10 } case 'yz' => 0 case _ => 100 }`. `return` in an
 arm gives the value of that arm, not of the function (language reference 7.3), so the arm's value
 is an `int` and joins the `int` arms; the position it takes its type from is the arm's, never the

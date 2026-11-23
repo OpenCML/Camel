@@ -27,7 +27,7 @@
 import { starts_with } from str
 import { Node, Graph, Txn, nodes, op, op_name, open, replace, commit, graphs_of } from graph
 
-func isMul(n: Node): bool {
+func isMul(n: Node) => bool {
     return match op(n) {
         case null => false
         case o => op_name(o)->starts_with<':op/mul'>

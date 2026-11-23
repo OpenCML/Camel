@@ -122,11 +122,11 @@ SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
                "import", "compile", "gct", "gir", "encode"]
 
-SMALL_ARITH = """func square(x: int): int {
+SMALL_ARITH = """func square(x: int) => int {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = square(3) + square(4)
     println(a)
     return 0

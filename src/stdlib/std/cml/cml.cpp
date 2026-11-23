@@ -449,7 +449,7 @@ class CmlPrinter {
             out_ << '\n';
         }
         // One `type` statement per named struct type the program names, before the text that names
-        // it: `func f(x: V): int` on its own is `UnresolvedTypeReference: 'V'`, and the declaration
+        // it: `func f(x: V) => int` on its own is `UnresolvedTypeReference: 'V'`, and the declaration
         // is the half the printed program was missing (see `collectNamedTypes`).
         for (const StructType *record : namedTypeOrder_) {
             out_ << namedTypeText(record) << '\n';
@@ -1869,7 +1869,7 @@ class CmlPrinter {
     // ---- named struct types ---------------------------------------------------------------
     //
     // A named struct type is printed by its name (`V`), and a program that writes the name has to
-    // declare it: `func f(x: V): int` on its own does not compile (`UnresolvedTypeReference:
+    // declare it: `func f(x: V) => int` on its own does not compile (`UnresolvedTypeReference:
     // 'V'`), while the same function after `type V = { x: int }` does. Nothing in the graph gives
     // the second half: the field table is on the type (`StructType::size()` / `typeAt(i)` /
     // `fieldName(i)`), so the declaration can be written, but the printer had no `type` emitter
@@ -3607,7 +3607,11 @@ class CmlPrinter {
         const Body body          = buildBody(0, tail, outerIndent, false);
 
         std::string text;
-        text += "(";
+        // A lambda starts with `func` and writes its result type after the same arrow a
+        // declaration does (design principles 4.4): a `(` in data position is a tuple or a
+        // parenthesised expression, and `: T` is not a result type anywhere. A lambda printed
+        // as a parenthesised list and a colon is a program the front end refuses.
+        text += "func (";
         for (size_t i = 0; i < type->normTypesCount(); ++i) {
             std::string name(type->argNameAt(i));
             if (!isIdentifier(name)) {
@@ -3620,9 +3624,9 @@ class CmlPrinter {
         }
         text += ")";
         if (type->hasExitType()) {
-            text += ": " + writtenTypeText(type->exitType());
+            text += " => " + writtenTypeText(type->exitType());
         }
-        text += " => " + blockText(body, body.sync);
+        text += " " + blockText(body, body.sync);
 
         lines_             = std::move(savedLines);
         params_            = std::move(savedParams);

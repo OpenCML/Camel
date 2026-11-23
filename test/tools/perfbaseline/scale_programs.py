@@ -63,7 +63,7 @@ def unit(i):
 def program(units):
     parts = [
         f"module scale_{units}\n",
-        "func pick::<T>(a: T, b: T, c: bool): T {\n    return if c then a else b\n}\n",
+        "func pick::<T>(a: T, b: T, c: bool) => T {\n    return if c then a else b\n}\n",
     ]
     parts.extend(unit(i) for i in range(units))
     helpers = []
@@ -71,7 +71,7 @@ def program(units):
         calls = " + ".join(f"f{i}(1)" for i in range(start, min(units, start + HELPER)))
         helpers.append(f"func sum{start // HELPER}(): int {{\n    return {calls}\n}}\n")
     parts.extend(helpers)
-    main = ["func main(): int sync {", "    var total = 0"]
+    main = ["func main() => int sync {", "    var total = 0"]
     main += [f"    total = total + sum{h}()" for h in range(len(helpers))]
     main += ["    println('scale total={}'->format<total>)", "    return 0", "}"]
     parts.append("\n".join(main) + "\n")

@@ -34,7 +34,7 @@ await runTest(async t => {
     check(await dap.waitEvent('terminated'), 'natural termination after memory inspection')
     check(!(await dap.request('camel/memorySnapshot')).success, 'ended program cannot expose a stale heap')
     if (alloc.body.supported) {
-        const program = t.program('allocation.cml', 'func make(n: int): int[] { return [n, n + 1] }\nfunc main(): int sync {\n let values = make(7)\n println(values)\n return 0\n}\n')
+        const program = t.program('allocation.cml', 'func make(n: int) => int[] { return [n, n + 1] }\nfunc main() => int sync {\n let values = make(7)\n println(values)\n return 0\n}\n')
         const allocation = await t.dap()
         await allocation.launch(program, { passes: ['std::nvm'], stopOnEntry: true })
         await allocation.waitEvent('stopped'); await allocation.waitEvent('camel/stopped')

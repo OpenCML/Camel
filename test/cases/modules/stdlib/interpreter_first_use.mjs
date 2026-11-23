@@ -50,26 +50,26 @@ fs.mkdirSync(BROKEN_HOME, { recursive: true })
 const programs = {
     import_pyplot: `import pyplot
 
-func main(): int {
+func main() => int {
     return 0
 }
 `,
     import_python: `import python
 
-func main(): int {
+func main() => int {
     return 0
 }
 `,
     use_pyplot: `import { plot } from pyplot
 
-func main(): int sync {
+func main() => int sync {
     plot([1.0, 2.0, 3.0], "${CML}/use-pyplot.svg")
     return 0
 }
 `,
     use_python: `import { exec } from python
 
-func main(): int sync {
+func main() => int sync {
     let _ = exec("x = 1")
     return 0
 }
@@ -77,7 +77,7 @@ func main(): int sync {
     python_then_plot: `import { import_module } from python
 import { plot } from pyplot
 
-func main(): int sync {
+func main() => int sync {
     let failed = match import_module("_ssl") {
         case error e => 1
         case v => 0
@@ -89,7 +89,7 @@ func main(): int sync {
     plot_then_python: `import { plot } from pyplot
 import { import_module } from python
 
-func main(): int sync {
+func main() => int sync {
     plot([1.0, 2.0, 3.0], "${CML}/plot-then-python.svg")
     let failed = match import_module("_ssl") {
         case error e => 1
@@ -101,7 +101,7 @@ func main(): int sync {
     twice: `import { plot } from pyplot
 import { exec } from python
 
-func main(): int sync {
+func main() => int sync {
     plot([1.0, 2.0, 3.0], "${CML}/twice-1.svg")
     let _ = exec("x = 1")
     plot([3.0, 2.0, 1.0], "${CML}/twice-2.svg")

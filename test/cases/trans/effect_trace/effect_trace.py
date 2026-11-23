@@ -124,7 +124,7 @@ def main() -> int:
             special = 'q"b\\s|p\tz'  # quote, backslash, the separator character, a tab
             program = Path(t) / "payload.cml"
             program.write_text(
-                "func main(): int sync {\n"
+                "func main() => int sync {\n"
                 '    println("hi")\n'
                 '    println("q\\"b\\\\s|p\\tz")\n'
                 f'    println("{long_text}")\n'
@@ -150,7 +150,7 @@ def main() -> int:
         elif mode == "variables":
             program = Path(t) / "variables.cml"
             program.write_text(
-                "func main(): int sync {\n"
+                "func main() => int sync {\n"
                 "    var c = 1\n"
                 "    let a = c + 1\n"
                 "    c += a\n"

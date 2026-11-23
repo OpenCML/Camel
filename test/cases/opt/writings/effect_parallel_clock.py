@@ -15,14 +15,14 @@ The resources, as `stdlib` declares them:
 
 The program puts one 200 ms effect on each, in a `main` that is **not** a `sync` body:
 
-    func wait_clock(ms: int): int sync {      // void effect, so in a `sync` body or it is dropped
+    func wait_clock(ms: int) => int sync {      // void effect, so in a `sync` body or it is dropped
         sleep(float(ms) / 1000.0)             // -- `fs.cml`: "a call runs only when its result is
         return 1                              //    needed or it is written in a `sync` block"
     }
-    func wait_meet(ms: int): int {            // `unordered`, so no `sync` and no written order
+    func wait_meet(ms: int) => int {            // `unordered`, so no `sync` and no written order
         return rendezvous(2, float(ms) / 1000.0)
     }
-    func main(): int {                        // not `sync`: the two calls are free to be unordered
+    func main() => int {                        // not `sync`: the two calls are free to be unordered
         let a = wait_clock(ms)
         let b = wait_meet(ms)
         ...
@@ -91,16 +91,16 @@ THREADS = "4"
 TWO_RESOURCES = """import {{ sleep }} from process
 import {{ rendezvous }} from test_support
 
-func wait_clock(ms: int): int sync {{
+func wait_clock(ms: int) => int sync {{
     sleep(float(ms) / 1000.0)
     return 1
 }}
 
-func wait_meet(ms: int): int {{
+func wait_meet(ms: int) => int {{
     return rendezvous(2, float(ms) / 1000.0)
 }}
 
-func main(): int {{
+func main() => int {{
     let a = wait_clock({delay})
     let b = wait_meet({delay})
     print(a * 1000 + b)
@@ -112,11 +112,11 @@ func main(): int {{
 # against `sync` off. Nothing about seconds here -- the values say how many calls met.
 SYNC_PAIR = """import {{ rendezvous }} from test_support
 
-func meet(ms: int): int sync {{
+func meet(ms: int) => int sync {{
     return rendezvous(2, float(ms) / 1000.0)
 }}
 
-func main(): int sync {{
+func main() => int sync {{
     let a = meet({delay})
     let b = meet({delay})
     print(a * 1000 + b)
@@ -126,11 +126,11 @@ func main(): int sync {{
 
 FREE_PAIR = """import {{ rendezvous }} from test_support
 
-func meet(ms: int): int {{
+func meet(ms: int) => int {{
     return rendezvous(2, float(ms) / 1000.0)
 }}
 
-func main(): int {{
+func main() => int {{
     let a = meet({delay})
     let b = meet({delay})
     print(a * 1000 + b)
@@ -148,11 +148,11 @@ WIDE_MS = DELAY_MS * 10
 
 FREE_PAIR_WIDE = """import {{ rendezvous }} from test_support
 
-func meet(): int {{
+func meet() => int {{
     return rendezvous(2, {window})
 }}
 
-func main(): int {{
+func main() => int {{
     let a = meet()
     let b = meet()
     print(a * 1000 + b)

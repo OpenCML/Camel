@@ -107,7 +107,9 @@ MARKERS = {
     # body, which is the whole point of the pair of functions in this program. Pin that body.
     "write_value": ["return 2"],
     # The declaration is the half the printed program was missing: the name alone does not compile.
-    "named_type": ["type P = { x: int, y: int }", "with <m: P>", "p: P", "): P"],
+    # The result type stands after the arrow (design principles 4.4): the printed head is
+    # `func mk(x: int) => P` and never a colon before the type.
+    "named_type": ["type P = { x: int, y: int }", "with <m: P>", "p: P", ") => P"],
     "map_with_closure": ["map<", "=>", "let ys"],
 }
 # What the printed text must not spell, per corpus program: the defect each case pins. An arm whose
@@ -200,7 +202,7 @@ DECLARED_TYPE = re.compile(r"^\s*(?:export\s+)?type\s+([A-Za-z_][A-Za-z0-9_]*)",
 def check_declarations(source, printed):
     """A type the source declares and the printed program uses in a type position is declared.
 
-    The name alone is not enough: `func get(p: Point): int` without `type Point = { ... }` is
+    The name alone is not enough: `func get(p: Point) => int` without `type Point = { ... }` is
     `UnresolvedTypeReference: 'Point'`, so the printer has to write the declaration too. Only a
     type the printed text actually uses is required, because a program may declare one that no
     printed position names.
@@ -298,7 +300,7 @@ def main():
     big = TMP / "big.cml"
     big.write_text(
         "let text = '" + "a" * 80 + "'\n"
-        "func main(): int sync {\n"
+        "func main() => int sync {\n"
         "    println(text)\n"
         "    return 0\n"
         "}\n",

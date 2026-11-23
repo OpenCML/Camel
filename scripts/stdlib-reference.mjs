@@ -33,9 +33,9 @@
 //   ///                                                          shown but not compiled)
 //   #op('protocol:operator')                       (only when the URI is not `<module>:<name>`;
 //   with <a: A>                                     `*` stands for any text, for a group of
-//   export func name(x: X): R                       overloads that differ by type)
+//   export func name(x: X) => R                       overloads that differ by type)
 //
-// A declaration never carries a body. The old form wrote the URI in one — `func name(...): R {
+// A declaration never carries a body. The old form wrote the URI in one — `func name(...) => R {
 // return '<uri>' }` — and it is gone: a `func` with a body is an ordinary function,
 // and --verify-ops refuses a signature file whose entry still has one.
 //
@@ -619,7 +619,7 @@ function braceDepth(text) {
 // The `panic` a declaration writes beside its result type, taken out of the type: the type, and
 // whether the clause was stated. `panic` says a call of the operator can fail (design principles
 // 3.9); it is a statement about the operator's faults, written where the `uses` and `when` clauses
-// are (`export func save_tree::<T>(tree: T): void! panic uses var fs when has_ckpt_form::<T>()`),
+// are (`export func save_tree::<T>(tree: T) => void! panic uses var fs when has_ckpt_form::<T>()`),
 // and it is not part of the type. Read as part of the type it poisoned both halves of the
 // comparison: `T panic when ...` left the conditions cut off one word late, so every declaration
 // that states it disagreed with a registered signature that has no place for the clause, and a
@@ -637,10 +637,10 @@ function takePanicClause(text) {
 // The result type a declaration states, read from the line the declaration is on. A `match type`
 // result is written over several lines -- its case list is the part that looks like a body -- so
 // the brace group is followed to its close and the whole text is the result. Any other result is
-// the text after the colon, with a body opening (when the declaration has a body) cut off. The
+// the text after the arrow, with a body opening (when the declaration has a body) cut off. The
 // `panic` clause is not part of the type and is returned beside it (see `takePanicClause`).
 function readResultType(after, lines, lineIndex) {
-    const text = after.replace(/^\s*:\s*/, '').trim()
+    const text = after.replace(/^\s*=>\s*/, '').trim()
     if (!/^match\s+type\b/.test(text)) return takePanicClause(text.replace(/\s*(sync\s*)?\{\s*$/, '').trim())
     let joined = text
     let depth = braceDepth(joined)
@@ -956,7 +956,7 @@ function readDeclarations(file, module, options = {}) {
                 continue
             }
             // A declaration may write the capability clauses it takes after its result type
-            // (`export func name(g: Graph): string spelling`, design principles 9.5). The clause is
+            // (`export func name(g: Graph) => string spelling`, design principles 9.5). The clause is
             // not part of the type, so the result every comparison reads is the type alone and the
             // clause is printed back where the declaration wrote it (signatureText).
             const stated = readResultType(after, lines, i)
@@ -1495,8 +1495,8 @@ async function probeImport(name, moduleName) {
         for (const spelling of [name, `${name}<int>`]) {
             fs.writeFileSync(
                 file,
-                `import { ${name} } from ${moduleName}\nfunc __doc_type(v: ${spelling}): void {\n    let _ = v\n}\n` +
-                    'func main(): int sync { return 0 }\n',
+                `import { ${name} } from ${moduleName}\nfunc __doc_type(v: ${spelling}) => void {\n    let _ = v\n}\n` +
+                    'func main() => int sync { return 0 }\n',
             )
             const result = await runCamelCompile(file, dir)
             if (result.ok) {
@@ -1534,7 +1534,7 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
     // An example that returns an error value leaves a function declared to return a `T!`, so it
     // compiles in a fallible body.
     const fallible = /^return\s+error\(/.test(code.trim())
-    lines.push(`func __doc_example(${params}): ${fallible ? 'int!' : 'void'} {`)
+    lines.push(`func __doc_example(${params}) => ${fallible ? 'int!' : 'void'} {`)
     // A call of a `void` function has no value to bind, so it is a statement, not an expression.
     if (asStatement || entry.result === 'void' || STATEMENT_STARTS.test(code.trim())) {
         lines.push(`    ${code.trim()}`)
@@ -1542,7 +1542,7 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
         lines.push(`    let __doc_example = ${code.trim()}`)
     }
     lines.push('}')
-    lines.push('func main(): int sync { return 0 }')
+    lines.push('func main() => int sync { return 0 }')
     return lines.join('\n') + '\n'
 }
 

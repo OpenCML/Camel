@@ -18,7 +18,7 @@ type Record = {
     note: string, cursor: (int, float), enabled: bool
 }
 
-func main(dir: string): int sync {
+func main(dir: string) => int sync {
     let record: Record = {
         w: new([1.0, -2.0]), odd: new([9007199254740993, -2]), empty: zeros::<f32>([2, 0]),
         note: '中文 checkpoint', cursor: (3, 0.5), enabled: true

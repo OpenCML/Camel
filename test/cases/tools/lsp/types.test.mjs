@@ -6,7 +6,7 @@ import { withServer, check, checkEq, fmtRange, marked } from '../../../tools/lsp
 
 const LIB = `export type Point = { x: int, y: int }
 
-export func norm(p: Point): int {
+export func norm(p: Point) => int {
     return p.x * p.x + p.y * p.y
 }
 `

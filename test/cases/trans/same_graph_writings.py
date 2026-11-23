@@ -58,7 +58,7 @@ def body(statements, result="0"):
     lines = [
         "import { write_text } from fs",
         "",
-        "func main(): int {",
+        "func main() => int {",
         "    let path = 'same_graph_out.txt'",
         "    let x = 1",
     ]

@@ -44,14 +44,14 @@ const realDeclaration = fs.readFileSync(path.join(HOME, 'stdlib', 'math.cml'), '
 const brokenDeclaration = `${realDeclaration.trimEnd()}
 
 // Added by the case: this names an operator the module does not register.
-export func no_such_operator(x: i32): i32
+export func no_such_operator(x: i32) => i32
 `
 fs.writeFileSync(path.join(STDLIB, 'math.cml'), brokenDeclaration)
 
 const mainPath = path.join(SCRATCH, 'main.cml')
 const noImportPath = path.join(SCRATCH, 'no_import.cml')
-fs.writeFileSync(mainPath, 'import math\n\nfunc main(): int {\n    return 0\n}\n')
-fs.writeFileSync(noImportPath, 'func main(): int {\n    return 0\n}\n')
+fs.writeFileSync(mainPath, 'import math\n\nfunc main() => int {\n    return 0\n}\n')
+fs.writeFileSync(noImportPath, 'func main() => int {\n    return 0\n}\n')
 
 function inspectOps(entry) {
     return spawnSync(CAMEL, ['inspect', '--ops', entry], {
@@ -108,7 +108,7 @@ check('no failure is reported for a healthy module', !healthy.stderr.includes('f
 // 4. A C++ module whose signatures are computed (`env`'s computed signatures were recorded under `stdlib/signatures/`, since deleted; no `.cml` beside
 //    its `.cmo`): no declaration file exists, so there is nothing that could fail to load.
 const computedPath = path.join(SCRATCH, 'computed.cml')
-fs.writeFileSync(computedPath, 'import env\n\nfunc main(): int {\n    return 0\n}\n')
+fs.writeFileSync(computedPath, 'import env\n\nfunc main() => int {\n    return 0\n}\n')
 const computed = inspectOps(computedPath)
 check(
     'a module whose signatures are computed in C++ still exits 0',

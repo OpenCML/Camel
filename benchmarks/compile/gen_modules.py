@@ -108,7 +108,7 @@ def main_source(modules: int) -> str:
         lines.append(f"import {{ entry_{index:04d} }} from {module_name(index)}")
     if lines:
         lines.append("")
-    lines.append("func main(): int sync {")
+    lines.append("func main() => int sync {")
     lines.append("    var total = 0")
     for index in range(modules):
         lines.append(f"    total = total + entry_{index:04d}(1)")

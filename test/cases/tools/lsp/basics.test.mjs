@@ -62,15 +62,16 @@ await withServer(async (ls) => {
     checkEq(fmtRange(edits[0].range), '0:0-4:0', 'the edit replaces the whole document')
     check(edits[0].newText.includes("\n    println('hi')\n"), 'the text is formatted', edits[0].newText)
 
-    // A subscript is formatted by its own rule: a slice writes its colons without spaces,
-    // `xs[a:2]`, however they were spaced in the source (design principles 5.4).
-    ls.change(uri, 'func part(xs: int[], a: int): int[] {\nreturn xs[a : 2]\n}\n', 5)
+    // A subscript is formatted by its own rule: a slice writes its two bounds around `..`
+    // without spaces, `xs[a..2]`, however they were spaced in the source (design principles
+    // 5.4): `:` separates neither a slice's bounds nor anything else outside a type.
+    ls.change(uri, 'func part(xs: int[], a: int) => int[] {\nreturn xs[a .. 2]\n}\n', 5)
     edits = await ls.request('textDocument/formatting', {
         textDocument: { uri },
         options: { tabSize: 4, insertSpaces: true },
     })
     checkEq(edits.length, 1, 'a slice is formatted')
-    check(edits[0].newText.includes('\n    return xs[a:2]\n'), 'the parts keep their place',
+    check(edits[0].newText.includes('\n    return xs[a..2]\n'), 'the parts keep their place',
         edits[0].newText)
 
     // A document with a syntax error is not formatted.
