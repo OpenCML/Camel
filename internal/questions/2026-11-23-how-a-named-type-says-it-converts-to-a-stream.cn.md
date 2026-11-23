@@ -140,3 +140,12 @@ ambient）盖的方向相反：没有被导入的 `len(xs)` 仍是算子组（�
 报 `Unresolved type reference: 'Range'`，程序要写 `import { Range } from prelude` 才看得见它；而一个
 模块只要有错，导它的每个程序都拿到 `Cannot import module 'prelude'`，所以这条路上「库里有类型、程序里
 写不出来」和「库自己编不过」是同一个读数。
+## 决策者答（2026-11-23 18:40）
+
+**① 甲，并且只有一个名字：`__iter__`，只交 `T..`。** 建图器今天找字符串、映射的元素时已经按 `__iter__` 这个算子组找（`builder_control.cpp:2598`），所以不另起 `__stream__`：`for` 的规则是"数组按第一维走；其余的值按它的类型解析 `__iter__`，拿到流再走 `buildStreamLoop`"。`__iter__` 随命名类型走（5.2），`Range` 的模块导出一条 `__iter__(r: Range): int..`；字符串与映射那几条重载同一笔改成交流（不计兼容），于是"交数组"与"交流"不再并存。乙不取：按名字找普通函数就是这条车道在删的东西。`LoopSequenceNotIterable` 的措辞改成"既不是数组，也没有 `__iter__`"。
+
+**② 甲。** 改形状的那一笔自己用 `-UpdateAstHashes` 重录 AST 哈希表，diff 写进提交说明。它只记录 AST 的哈希，不是快照基准，`-UpdateGolden` 的禁令管不到它。
+
+**③ 乙。** 转置与反序的反向循环造一个 `Range` 节点，循环按 ① 遍历它；不为编译器另加只给自己用的 `:op/range_array`。A 与 C 合成一笔。C++ 后端的 `rt::range` 与 `cml` 的打印跟着改：打印把步长为 1 的 `Range` 写回 `a..b`。
+
+**④ 甲成立才对，那次读数是名字解析的缺陷，不是规则。** `names.cpp` 开头自己写着"同一层里同名函数组成一个重载集"，而 `#op` 声明就是函数声明，只是函数体在 C++（语言参考 7.4.4"C++ 实现的函数写成无函数体的 `export func` 声明"）。prelude 里的 `#op` 的 `len` 与有函数体的 `len(r: Range)` 同在 prelude 这一层，应当合成一个重载集、按参数类型选；现在后者把前者整个顶掉，是 `#op` 声明没有作为本模块的函数进入第 2 层。改法：让 `#op` 声明与同名的有体声明在同一层合成一个重载集。同源的第二处：prelude 导出的函数不用导入就看得见，而它导出的类型要 `import { Range } from prelude`，同一个模块导出的东西可见性不一致；prelude 导出的类型同样不用导入。两处改完后，`Range` 的读法（`len`、`map`、`filter`、`reduce`、`print`）就是 prelude 里几条普通函数，不加算子。
