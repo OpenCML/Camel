@@ -335,23 +335,39 @@ export function apply(ctx, rawConfig) {
     // live set, not the durable catalog: the catalog read (`listDescendants`) walks every child's
     // history and does not return within seconds, and a lane that is not live is not a lane at work.
     // A lane run by another process is not in this process and is not counted.
+    // Tree membership by the sessions' own headers: a child session records its parent, so following
+    // `parentSession` upwards from a live agent reaches the root it belongs to. This needs nothing but
+    // the agents list; the subagent runtime, when it is bound, only supplies the lanes' names.
+    const rootIdOf = (agent) => {
+        let current = agent
+        for (let depth = 0; current && depth < 16; depth += 1) {
+            const parent = headerOf(current).parentSession
+            if (!parent) return String(current.id)
+            const next = ctx.agents.get(parent)
+            if (!next) return String(parent)
+            current = next
+        }
+        return null
+    }
     const lanesOf = async (id) => {
         const subagents = subagentService()
         const root = id ? ctx.agents.get(id) : null
-        if (!root || !subagents || typeof subagents.rootOf !== 'function') return { unreadable: 'no target or no subagent service' }
+        if (!root) return { unreadable: 'no claimed session' }
         const members = []
         for (const agent of ctx.agents.list()) {
             if (agent === root) continue
-            let inTree = false
-            try {
-                inTree = subagents.rootOf(agent) === root
-            } catch {
-                inTree = false
+            let inTree = rootIdOf(agent) === String(root.id)
+            if (!inTree && subagents && typeof subagents.rootOf === 'function') {
+                try {
+                    inTree = subagents.rootOf(agent) === root
+                } catch {
+                    inTree = false
+                }
             }
             if (!inTree) continue
             let name = String(agent.id)
             try {
-                name = subagents.namesOf(agent).self
+                if (subagents && typeof subagents.namesOf === 'function') name = subagents.namesOf(agent).self
             } catch {
                 // an agent whose tree is being torn down keeps its id as its name
             }
