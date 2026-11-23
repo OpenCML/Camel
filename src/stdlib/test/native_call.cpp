@@ -27,6 +27,15 @@ NativeCallbackTestPass::apply(const camel::runtime::Program *program, std::ostre
     camel::core::OperatorTable::instance().set(
         uri,
         {.pure = false, .callsGraphs = true, .readsGraphs = true});
+    // What it touches is the function value it is handed and calls (ordinary operand 0,
+    // `invokeOriginal`), so the declaration names that operand instead of leaving the operator
+    // with the coarse "reaches outside, itemizing nothing" one nobody declared gets (design
+    // principles 3.3: a function operand's accesses are read off the value the node carries).
+    camel::core::OperatorTable::instance().declareResources(
+        uri,
+        camel::core::sem::ResourceSpec{
+            .functionOperand = camel::core::sem::ResourceBinding{
+                .kind = camel::core::sem::ResourceBinding::Kind::Norm}});
     // Schedulers resolve the URI through the executor manager, independently of
     // the function pointer retained in the graph payload.
     if (!context_->execMgr().findWithoutImport(uri))

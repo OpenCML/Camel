@@ -2445,8 +2445,13 @@ bool liftGraph(
                 // forward rule would ask it to differentiate a write to the outside world, and the
                 // honest answer -- "there is no such rule" -- would stop a program whose effect
                 // the lift has no business touching. The copy keeps the operator and its inputs, so
-                // the effect runs the same number of times it ran before.
-                if (camel::core::OperatorTable::instance().hasExternalEffect(uri)) {
+                // the effect runs the same number of times it ran before. The record's answer is
+                // read here (`Effectful` reaches outside the program, and a clause nobody stated is
+                // read the same way).
+                const camel::core::sem::Effect effect =
+                    camel::core::OperatorTable::instance().effectOf(uri);
+                if (effect == camel::core::sem::Effect::Effectful ||
+                    effect == camel::core::sem::Effect::Undeclared) {
                     if (pairOf(node->dataType()) != nullptr) {
                         tangentOf[ref] = zeroConstantFor(node->dataType());
                     }

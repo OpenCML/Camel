@@ -408,10 +408,18 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
 void registerRegionTestPasses(
     operator_t run, SegmentDeviceOps device, SegmentDeviceOps host, SegmentDeviceOps preferred) {
     // Test-only passes: named by a test's pipeline and by nothing else. No environment
-    // variable gates them.
+    // variable gates them. Both call the function value they are handed (`with` operand 0,
+    // `testNativeCall` / `testCompiledCall`), so their accesses are that value's and the
+    // declaration names the operand instead of leaving them with the coarse "reaches outside,
+    // itemizing nothing" an undeclared one gets (design principles 3.3).
     core::OperatorTable::instance().set(
         "tiles:test_compiled_call",
         {.pure = false, .callsGraphs = true, .readsGraphs = true});
+    core::OperatorTable::instance().declareResources(
+        "tiles:test_compiled_call",
+        core::sem::ResourceSpec{
+            .functionOperand =
+                core::sem::ResourceBinding{.kind = core::sem::ResourceBinding::Kind::With}});
     // `reasons` and `declarations` are pass parameters, not environment variables: a reading a
     // test cannot pass and assert is a reading no test pins, and a case that turns one on has to
     // say so in its own args.
@@ -443,6 +451,11 @@ void registerRegionTestPasses(
     core::OperatorTable::instance().set(
         "tiles:test_call",
         {.pure = false, .callsGraphs = true});
+    core::OperatorTable::instance().declareResources(
+        "tiles:test_call",
+        core::sem::ResourceSpec{
+            .functionOperand =
+                core::sem::ResourceBinding{.kind = core::sem::ResourceBinding::Kind::With}});
     registerModulePass(
         "tiles::test_outline_native",
         [](const core::context::context_ptr_t &ctx) {

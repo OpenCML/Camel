@@ -13,6 +13,7 @@
 #include "camel/runtime/effect_liveness.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/resources.h"
 
@@ -56,6 +57,34 @@ OperandClause clauseReach(const std::optional<core::sem::ResourceSignature> &cla
         }
     }
     return out;
+}
+
+/// The half of its answer the operator states itself: an `externalEffect`, and an access whose
+/// resource is outside the program. What it leaves out is the "may reach outside" an operator
+/// answers when its accesses are a function operand's (`OperatorSemantics::external`,
+/// `Record::external`): that half is not the operator's to state -- it is the value's that arrives
+/// in the operand, and it is read at the node.
+///
+/// The access list is asked where the operator states one; an operator that states only a word
+/// (`OperatorTable::set`, which is how most of the standard library says `pure`) is read through
+/// the traits that word produced, and an operator nobody declared reaches outside (design
+/// principles 3.3). Only an itemized list can say "the accesses are my operand's", so the two
+/// readings agree wherever they overlap.
+bool declaresExternalAccess(
+    const std::optional<camel::core::OperatorTraits> &traits,
+    const core::sem::OperatorSemantics *facts) {
+    if (facts == nullptr || !facts->resources) {
+        return !traits || (!traits->pure && !traits->stateOnly);
+    }
+    if (facts->resources->externalEffect) {
+        return true;
+    }
+    for (const core::sem::ResourceAccess &access : facts->resources->accesses) {
+        if (core::sem::reachesOutside(access.resource.cls)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
@@ -181,34 +210,35 @@ EffectSummary effectSummaryOfOperator(
     const GCGraph *graph,
     gc_node_ref_t ref) {
     const auto &table = camel::core::OperatorTable::instance();
+    const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
     EffectSummary summary;
-    const auto traits = table.find(oper);
     summary.mayFault |= !traits || traits->mayFault;
+    // The half the declaration states: fixed, whatever the operands are (design principles 3.3).
+    summary.external |= declaresExternalAccess(traits, table.semantics(oper));
+    // What an operator writes is its resource declaration's (design principles 3.3).
+    summary.writesVariables |= table.writesProgramState(oper);
     if (traits && traits->callsGraphs) {
-        // It runs a function the program hands it, and its accesses are that function's
-        // (design principles 3.3). Where the node it runs at is known, the clause is read off the
-        // value's type -- the same reading a call through a value follows -- so a `map` over a
-        // pure function is not an external effect. With no node there is nothing to read it from,
-        // and the answer cannot be narrower than "may reach outside and may not end".
+        // It runs a function the program hands it, so the node's effect is also what that
+        // function does: the clause of the function value that arrives in the operand the
+        // declaration names (design principles 3.3). The two halves are united and neither one
+        // replaces the other -- an operator declared to reach outside is external even when the
+        // value it is handed is pure.
         summary.mayNotTerminate = true;
-        summary.writesVariables |= table.writesProgramState(oper);
-        if (graph != nullptr) {
+        if (graph == nullptr) {
+            // No node to read the value off: the conservative answer for the half an operand
+            // carries, because a clause the walk cannot read is not an empty one.
+            summary.external = true;
+        } else {
             const OperandClause clause = functionOperandClause(*graph, ref);
             summary.external |= clause.external;
             summary.writesVariables |= clause.writesVariables;
-        } else {
-            summary.external = true;
         }
-        return summary;
     }
-    summary.external |= table.hasExternalEffect(oper);
-    // What an operator writes is its resource declaration's (design principles 3.3).
-    summary.writesVariables |= table.writesProgramState(oper);
     return summary;
 }
 
-EffectSummary effectSummaryOfOperator(camel::core::OperId oper) {
-    // A reader of the declaration has no node to read a function operand's clause off.
+EffectSummary declaredEffectsOfOperator(camel::core::OperId oper) {
+    // A reader with no node to read a function operand's clause off (a draft under rewrite).
     return effectSummaryOfOperator(oper, nullptr, 0);
 }
 

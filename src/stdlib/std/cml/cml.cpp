@@ -1297,10 +1297,12 @@ class CmlPrinter {
     /// Whether running the operator has no effect: the declaration answers it, and the variable
     /// operators (`:var/*`, the assignments) are part of the answer -- each declares itself
     /// state-only, so a call of one is never pure (`src/builtin`, `declareResources` and
-    /// `declareBuiltinOperatorResources`). Asking the table rather than special-casing the family
-    /// here is what keeps the two from disagreeing.
+    /// `declareBuiltinOperatorResources`). The record's own answer is asked here
+    /// (`sem::Effect::Pure` is the empty stated clause) rather than special-casing the family,
+    /// which keeps the two from disagreeing.
     static bool isPureOper(OperId oper) {
-        return camel::core::OperatorTable::instance().isPure(oper);
+        return camel::core::OperatorTable::instance().effectOf(oper) ==
+               camel::core::sem::Effect::Pure;
     }
 
     /// Whether the one user of `ref` is a `GATE` slot the gate does not hand on. A gate answers with

@@ -172,8 +172,9 @@ void apart(Report &r, const Program &program) {
             }
         }
         if (h->kind == GCNodeKind::Oper &&
-            !camel::core::OperatorTable::instance().isPure(
-                reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper)) {
+            camel::core::OperatorTable::instance().effectOf(
+                reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper) !=
+                camel::core::sem::Effect::Pure) {
             events.push_back(id);
         }
     }

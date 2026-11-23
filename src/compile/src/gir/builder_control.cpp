@@ -285,7 +285,12 @@ bool nodeKeepsItsInput(node_handle_t node) {
         return true;
     }
     const auto op = nodeGraphOf(node)->operTarget(node);
-    if (op == nullptr || !camel::core::OperatorTable::instance().isPure(op->uri())) {
+    // The record's own answer (`sem::Effect`): a pure operator is one whose stated clause is the
+    // empty access list, and an operator nobody declared a clause for is not one (design
+    // principles 3.3). This is a node of a draft, so there is no fact to read it at.
+    if (op == nullptr ||
+        camel::core::OperatorTable::instance().effectOf(op->uri()) !=
+            camel::core::sem::Effect::Pure) {
         return true;
     }
     const Type *result = valueTypeOf(nodeTypeOf(node));
