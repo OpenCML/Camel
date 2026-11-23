@@ -1,0 +1,12 @@
+/**
+ * The integers of a range combined from left to right: `reduce` is an ordinary function of the
+ * prelude declared beside the operator of the same name.
+ */
+
+import { Range, reduce } from prelude
+
+func main() => int sync {
+    let r: Range = 0 .. 5
+    println(r->reduce<func (acc: int, x: int) => int { acc + x }, 0>)
+    return 0
+}

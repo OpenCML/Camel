@@ -1,0 +1,55 @@
+id = "compile.range_functions"
+order = 324
+tier = "fast"
+tags = ["feat", "compile", "overloads", "range"]
+desc = "Temporary probe: which of the functions a range shares with an `int[]` resolve once they are ordinary prelude functions declared beside the operator of the same name."
+
+[[tests]]
+name = "range_len"
+kind = "behavior"
+case = "../../../cases/compile/overloads/range_len.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "range_filter"
+kind = "behavior"
+case = "../../../cases/compile/overloads/range_filter.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[0, 2, 4]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "range_map"
+kind = "behavior"
+case = "../../../cases/compile/overloads/range_map.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[0, 2, 4, 6, 8]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "range_reduce"
+kind = "behavior"
+case = "../../../cases/compile/overloads/range_reduce.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "10\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "range_print"
+kind = "behavior"
+case = "../../../cases/compile/overloads/range_print.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[0, 1, 2, 3, 4]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

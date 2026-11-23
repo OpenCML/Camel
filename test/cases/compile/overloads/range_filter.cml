@@ -1,0 +1,12 @@
+/**
+ * The integers of a range for which f is true, in order: `filter` is an ordinary function of the
+ * prelude declared beside the operator of the same name.
+ */
+
+import { Range, filter } from prelude
+
+func main() => int sync {
+    let r: Range = 0 .. 5
+    println(r->filter<func (x: int) => bool { x % 2 == 0 }>)
+    return 0
+}

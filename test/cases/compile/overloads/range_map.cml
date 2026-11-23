@@ -1,0 +1,12 @@
+/**
+ * f applied to every integer of a range, by position: `map` is an ordinary function of the prelude
+ * declared beside the operator of the same name.
+ */
+
+import { Range, map } from prelude
+
+func main() => int sync {
+    let r: Range = 0 .. 5
+    println(r->map<func (x: int) => int { x * 2 }>)
+    return 0
+}

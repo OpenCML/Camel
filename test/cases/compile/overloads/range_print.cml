@@ -1,0 +1,12 @@
+/**
+ * The integers of a range written out: `print` on a range is the prelude's ordinary function of
+ * that name, and it writes them as the array they are.
+ */
+
+import { Range, print } from prelude
+
+func main() => int sync {
+    let r: Range = 0 .. 5
+    r->print()
+    return 0
+}
