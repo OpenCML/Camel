@@ -48,7 +48,7 @@
 **★ 不许在本机构建**（会蓝屏）。构建只在 88zjwei 上，用 `internal/tools/camel-remote.ps1`。
 **★ 手工 `ssh` 必须写 `ssh 88zjwei`，不许写 `ssh 88zjwei@10.126.62.88`。** 主机名带 `@` 地址时 rsync/ssh 不走 `~/.ssh/config` 里那个 `Host 88zjwei`（`IdentityFile` 只写在那里），于是卡在口令提示。2026-11-22 一条车道的 `-Clean` 因此没跑成。
 **★ 新工作树缺 `internal/tools/camel-gate.local.json`（git-ignored）⇒ 首跑 exit 2。** 从主检出复制过去，不入库。
-**★ `-AstOnly` 必须传真数组**：`pwsh -File … -AstOnly 'a','b'` 会变成一个含逗号的字符串（`--only selected none`），重复参数则绑定报错。必须在本会话里 `& .\internal\tools\camel-remote.ps1 … -AstOnly @('a','b')`。
+**★ `-AstOnly` 的写法**：`-AstOnly 'a,b'`（逗号）与 `-AstOnly @('a','b')` 等价 —— 逗号由工具拆开，`pwsh -File` 把 `'a','b'` 也送成同一个含逗号字符串，同样拆开。**重复写 `-AstOnly a -AstOnly b` 仍是 PowerShell 自己的绑定错误**（引擎在脚本体执行前就拒绝，工具够不着），改写成上面两种之一。一个 `.cml` 都选不出的 glob 会让工具当场 exit 2 并点名它，不会走到主机才回一句 `--only selected none`。
 **★ 合并者：先提交后验证。** `git merge --no-commit` 之前不该有自己的脏改动；冲突一律用生成器解。
 ```
 
