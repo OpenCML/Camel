@@ -352,8 +352,22 @@ try {
     Write-Host ''
     Write-Host 'row readings (the plans this merge touches, case by case) ...'
     $rowsStarted = Get-Date
-    $selectOut = @(& node (Join-Path $MainCheckout 'scripts\test.js') --changed --list 2>&1)
-    $selectExit = $LASTEXITCODE
+    # The base of this selection is the tree the merge lands on (`HEAD^1`), not `origin/develop`.
+    # That ref is not this sha and other people move it: it advanced between two runs of one identical
+    # merge while this stage was being proved, the selection went from 2 plans to 22, and the second
+    # comparison -- correctly -- refused for a plan set the baseline had never been measured under.
+    # The change a merge *brings* is its first parent's difference from itself, and nothing moves that.
+    # The sha is read the same way a few lines below, where it becomes the cache key; it is the same
+    # commit, and that block is the one that refuses when git cannot name it.
+    $savedBase = $env:CAMEL_TEST_BASE
+    $env:CAMEL_TEST_BASE = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
+    try {
+        $selectOut = @(& node (Join-Path $MainCheckout 'scripts\test.js') --changed --list 2>&1)
+        $selectExit = $LASTEXITCODE
+    } finally {
+        if ($null -eq $savedBase) { Remove-Item Env:\CAMEL_TEST_BASE -ErrorAction SilentlyContinue }
+        else { $env:CAMEL_TEST_BASE = $savedBase }
+    }
     $prefix = $MainCheckout.TrimEnd('\') + '\'
     $planTargets = @($selectOut | ForEach-Object { "$_".Trim() } | Where-Object { $_ -and $_.StartsWith($prefix) } |
         ForEach-Object { $_.Substring($prefix.Length) -replace '\\', '/' })
@@ -535,7 +549,7 @@ try {
     # merge -- so the plan runs once and both readers read the same run.
     $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
     $rowsRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
-        -Path $MainCheckout -Changed -ListKnown -NoGpuWatch 2>&1)
+        -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
     $rowsExit = $LASTEXITCODE
     # Byte for byte, without a BOM and with LF: the comparer splits on `\n` and matches the markers
     # exactly, and a transcript written by `>` in PowerShell would be UTF-16.
