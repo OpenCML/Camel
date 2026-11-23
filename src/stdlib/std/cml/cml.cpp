@@ -449,8 +449,8 @@ class CmlPrinter {
             out_ << '\n';
         }
         // One `type` statement per named struct type the program names, before the text that names
-        // it: `func f(x: V) => int` on its own is `UnresolvedTypeReference: 'V'`, and the declaration
-        // is the half the printed program was missing (see `collectNamedTypes`).
+        // it: `func f(x: V) => int` on its own is `UnresolvedTypeReference: 'V'`, and the
+        // declaration is the half the printed program was missing (see `collectNamedTypes`).
         for (const StructType *record : namedTypeOrder_) {
             out_ << namedTypeText(record) << '\n';
         }
@@ -889,6 +889,29 @@ class CmlPrinter {
         }
     }
 
+    /// The prelude's `Range`, when `type` is it: the type of the interval `a..b` (design
+    /// principles 5.4), which is a named struct whose ends are `int?` and whose step is an `int`.
+    ///
+    /// Two things follow, and both are about what the printed file needs. The name is in scope in
+    /// every program without an import (the prelude's names are, which is why
+    /// `collectOperatorModules` skips it), so a printed file may name `Range` where a type has to
+    /// be written; and no `type` statement is written for it, because the declaration is the
+    /// prelude's and not this program's, which declares only the types it declares itself -- a
+    /// `type Range = { ... }` in the printed file would be a second declaration of a type that
+    /// already exists, and the fields it states are the prelude's to state.
+    bool isRangeType(const Type *type) const {
+        if (type == nullptr || type->code() != TypeCode::Struct || context_ == nullptr) {
+            return false;
+        }
+        const auto *record     = static_cast<const StructType *>(type);
+        const StructDecl *decl = record->decl();
+        if (!record->named() || decl == nullptr || decl->name() != "Range") {
+            return false;
+        }
+        const auto prelude = context_->preludeModule();
+        return prelude != nullptr && decl->module() == prelude.get();
+    }
+
     void checkType(const Type *type, std::string_view where) {
         if (type == nullptr) {
             fail(camel::runtime::kInvalidNodeRef, std::format("{} has no type", where));
@@ -911,10 +934,19 @@ class CmlPrinter {
         }
         case TypeCode::Tuple: {
             const auto *tuple = static_cast<const TupleType *>(type);
-            if (tuple->isTagged() || tuple->isNullable() || tuple->isCell()) {
+            // `T?` is a type the language writes (design principles 3.9) and `type->toString()`
+            // spells it, so a field or a value of a nullable type is a type this printer can name:
+            // the range's two ends are `int?`, and a value of one has to be writeable where its
+            // type is stated. The value's own text is the payload it holds (`constantText`), and
+            // the position boxes it again, so nothing is lost by naming the type.
+            if (tuple->isNullable()) {
+                checkType(tuple->typeAt(0), "the payload of a nullable value");
+                return;
+            }
+            if (tuple->isTagged() || tuple->isCell()) {
                 fail(
                     camel::runtime::kInvalidNodeRef,
-                    std::format("{} is a tagged, nullable or cell tuple", where));
+                    std::format("{} is a tagged or a cell tuple", where));
             }
             for (size_t i = 0; i < tuple->size(); ++i) {
                 checkType(tuple->typeAt(i), "a tuple element");
@@ -923,6 +955,11 @@ class CmlPrinter {
         }
         case TypeCode::Struct: {
             const auto *record = static_cast<const StructType *>(type);
+            if (isRangeType(type)) {
+                // The interval's type is the prelude's, and the printed file names it as it
+                // stands (see `isRangeType`): the declaration is not this program's to write.
+                return;
+            }
             if (record->named()) {
                 // The program writes the type's name, and `run` writes one `type` statement per
                 // named type it mentions, so the name is declared. Its fields are the declaration
@@ -1016,6 +1053,11 @@ class CmlPrinter {
     }
 
     std::string annotationOf(const Type *type) {
+        // The interval's spelling states its type: `1..5` is a `Range` because `..` is, so the
+        // declaration says the same thing by saying nothing (design principles 5.4).
+        if (isRangeType(type)) {
+            return {};
+        }
         if (hasFunction(type)) {
             return {};
         }
@@ -1533,6 +1575,11 @@ class CmlPrinter {
         if (type == nullptr) {
             return false;
         }
+        if (isRangeType(type)) {
+            // The interval's spelling states its type: `1..5` is a `Range` because `..` is, so an
+            // unannotated `let` says the same thing by saying nothing (design principles 5.4).
+            return false;
+        }
         if (type->code() == TypeCode::Array && isConstant(ref)) {
             // An empty literal whose element type nobody wrote has no `let` of its own: the
             // annotation position reads a type and `[]` is a shape, while an unannotated `let` of
@@ -1938,6 +1985,11 @@ class CmlPrinter {
                 for (size_t i = 0; i < record->size(); ++i) {
                     visitNamedTypes(record->typeAt(i));
                 }
+                return;
+            }
+            // The prelude's `Range` declares nothing: the declaration is the prelude's, not this
+            // program's (see `isRangeType`).
+            if (isRangeType(type)) {
                 return;
             }
             noteNamedType(record);
@@ -4609,7 +4661,17 @@ class CmlPrinter {
         case TypeCode::Tuple: {
             const auto *value     = fromSlot<Tuple *>(slot);
             const auto *tupleType = static_cast<const TupleType *>(type);
-            std::string text      = "(";
+            // A `T?` holds either nothing or the `T` it was built from, and the language writes it
+            // as `null` and as that value (`let x: int? = 1`): `(1,)` is a one-element tuple and
+            // not a `T?` (design principles 3.9). The position boxes what is written, which is the
+            // conversion the graph's own value carries.
+            if (tupleType->isNullable()) {
+                if (value == nullptr) {
+                    return "null";
+                }
+                return constantText(value->get<slot_t>(0), tupleType->typeAt(0));
+            }
+            std::string text = "(";
             for (size_t i = 0; value != nullptr && i < tupleType->size(); ++i) {
                 text += (i ? ", " : "") + constantText(value->get<slot_t>(i), tupleType->typeAt(i));
             }

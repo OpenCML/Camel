@@ -11048,7 +11048,7 @@ Pass '{0}' cannot take the program: some values of it have several writings.
 **Help**
 
 ```text
-An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::cxx::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
+An earlier pass (a saturation) left values with several writings, and nothing extracts them unless the pipeline says how. Put 'rewrite::extract cost=<module>::<function>' before '{0}': it chooses one writing for every value by that cost, for example 'rewrite::extract cost=rules::nodes' (a writing costs the number of its nodes).
 ```
 
 **Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::cxx::fold std::nvm`)

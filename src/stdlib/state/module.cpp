@@ -198,6 +198,15 @@ class StateModule final : public BuiltinModule {
             ResourceSpec updates = writes;
             updates.result =
                 camel::core::sem::ResultAlias{.kind = camel::core::sem::ResultAlias::Kind::Unknown};
+            // `update` writes the box *and* runs the function it is handed (ordinary operand 1),
+            // so its declaration states both halves of the node's effect (design principles 3.3):
+            // the box, and whatever the function value's type says it touches. The parameter type
+            // is `(x: T) => T pure`, so a program can hand it only a function that touches
+            // nothing -- the union is then the box alone -- but which function it runs is the
+            // node's business, not a fact the declaration may leave out.
+            updates.functionOperand =
+                camel::core::sem::ResourceBinding{.kind = camel::core::sem::ResourceBinding::Kind::Norm,
+                                                  .index = 1};
 
             table.declareResources(
                 "state",

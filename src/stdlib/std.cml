@@ -369,12 +369,6 @@ namespace cxx {
     >
     export func algebra::<F>(f: F) => F! when is_function::<F>()
     
-    /// One writing for every value that has several, chosen by a cost model.
-    with </// The cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a
-    /// product, a product more than a sum), or one a module registered.
-    cost: string = 'weighted'>
-    export func extract::<F>(f: F) => F! when is_function::<F>()
-    
     /// Saturates the standard rules library (lib/rules/rules.cml) and leaves the program in the state
     /// where a value has several writings; nothing is extracted. The dumps that accept that
     /// state draw it: `camel f.cml std::cxx::saturate std::gir`.

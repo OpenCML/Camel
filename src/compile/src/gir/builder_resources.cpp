@@ -495,9 +495,17 @@ Builder::OperandReach Builder::readFunctionOperandReach(
     BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
     draft_node_ref_t id, const sem::ResourceBinding &where, sem::ElementShape shape) const {
     if (where.kind != sem::ResourceBinding::Kind::With) {
-        // An operator that takes the function as an ordinary operand (`:mark/isolate`) puts its
-        // other operands after it, so the callback's parameters do not line up with the node's
-        // operands here: left as the walk found it.
+        // An operator that takes the function as an ordinary operand (`:mark/isolate`,
+        // `state:update`) puts its other operands after it, so the callback's parameters do not
+        // line up with the node's operands here. What can still be read is the clause itself: one
+        // that names nothing (`pure`) has no parameter to place, so the value carries no use and
+        // the reading is the empty one -- it is placed, and it placed nothing. A clause that names
+        // something keeps the conservative answer, because a use this walk cannot place is not a
+        // use that is not there.
+        const auto at = functionValueAt(transaction, id, where);
+        if (at.has_value() && at->site.clause.has_value() && at->site.clause->pure()) {
+            return OperandReach::Placed;
+        }
         return OperandReach::CannotPlace;
     }
     if (shape == sem::ElementShape::Fold) {
@@ -732,6 +740,10 @@ bool Builder::reachOfOper(
         // read conservatively; a fold's accumulator is the initial value and not one of the
         // callback's parameters, so that shape keeps the reading this walk had before rather than
         // placing a use on the wrong operand.
+        //
+        // The operator's own accesses are read below as well: a node's effect is the union of the
+        // two statements, and an operator that touches a driver itself *and* runs the function it
+        // is handed reaches both (design principles 3.3).
         switch (readFunctionOperandReach(walk, graph, transaction, id, *spec.functionOperand,
                                          elementCalls.shape)) {
         case OperandReach::Placed:
@@ -747,7 +759,6 @@ bool Builder::reachOfOper(
             readUnknownValue(walk);
             break;
         }
-        return true;
     }
     for (const sem::ResourceAccess &access : spec.accesses) {
         if (access.binding.kind == sem::ResourceBinding::Kind::Ambient) {

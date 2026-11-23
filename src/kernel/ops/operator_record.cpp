@@ -55,6 +55,14 @@ CppRegistration::CppRegistration(std::string_view uri, bool mayFault) {
     record_.panic.byCpp = true;
 }
 
+CppRegistration::CppRegistration(std::string_view uri) {
+    record_.key = sem::OperatorKey::of(uri);
+    // A registration that states only the items its setters name, and no `panic`: the properties
+    // that are stated after the operator exists -- a target restating a cost, a pass saying what
+    // nobody had said. The operator must already be registered, and the registry's `complete`
+    // still refuses a record whose items disagree.
+}
+
 // ---- `uses` ---------------------------------------------------------------------------------
 
 CppRegistration &CppRegistration::pure() {
@@ -81,6 +89,22 @@ CppRegistration &CppRegistration::usesFunctionIn(bool isWith, size_t which) {
         isWith ? sem::ResourceBinding::Kind::With : sem::ResourceBinding::Kind::Norm,
         static_cast<uint8_t>(which)};
     record_.uses.byCpp = true;
+    return *this;
+}
+
+// ---- How dear a run of it is ----------------------------------------------------------------
+
+CppRegistration &CppRegistration::relativeCost(double cost) {
+    if (record_.relativeCost.stated()) {
+        refuseSecondStatement(record_.key.uri(), "cost");
+    }
+    if (!(cost > 0.0)) {
+        throw std::invalid_argument(
+            "The operator '" + record_.key.uri() + "' states cost = " + std::to_string(cost) +
+            "; a run costs more than nothing.");
+    }
+    record_.relativeCost.value = cost;
+    record_.relativeCost.byCpp = true;
     return *this;
 }
 

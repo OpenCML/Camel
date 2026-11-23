@@ -82,7 +82,7 @@
 <g id="node8" class="node c2">
 <title>N16</title>
 <g id="a_node8"><a xlink:title=":op/mul_l">
-<polygon fill="none" stroke="black" stroke-width="2" points="341,-352.09 292,-314.09 341,-276.09 390,-314.09 341,-352.09"/>
+<polygon fill="none" stroke="black" points="341,-352.09 292,-314.09 341,-276.09 390,-314.09 341,-352.09"/>
 <text text-anchor="middle" x="341" y="-317.89" font-family="Times,serif" font-size="14.00">:op/</text>
 <text text-anchor="middle" x="341" y="-302.89" font-family="Times,serif" font-size="14.00">mul_l</text>
 </a>
@@ -116,7 +116,7 @@
 <g id="node12" class="node c5">
 <title>N19</title>
 <g id="a_node12"><a xlink:title=":op/mul_l">
-<polygon fill="none" stroke="black" stroke-width="2" points="130,-204.09 81,-166.09 130,-128.09 179,-166.09 130,-204.09"/>
+<polygon fill="none" stroke="black" points="130,-204.09 81,-166.09 130,-128.09 179,-166.09 130,-204.09"/>
 <text text-anchor="middle" x="130" y="-169.89" font-family="Times,serif" font-size="14.00">:op/</text>
 <text text-anchor="middle" x="130" y="-154.89" font-family="Times,serif" font-size="14.00">mul_l</text>
 </a>
@@ -187,7 +187,7 @@
 <g id="node16" class="node c9">
 <title>N1C</title>
 <g id="a_node16"><a xlink:title=":op/add_l">
-<polygon fill="none" stroke="black" stroke-width="2" points="655,-352.09 608,-314.09 655,-276.09 702,-314.09 655,-352.09"/>
+<polygon fill="none" stroke="black" points="655,-352.09 608,-314.09 655,-276.09 702,-314.09 655,-352.09"/>
 <text text-anchor="middle" x="655" y="-317.89" font-family="Times,serif" font-size="14.00">:op/</text>
 <text text-anchor="middle" x="655" y="-302.89" font-family="Times,serif" font-size="14.00">add_l</text>
 </a>
@@ -235,7 +235,7 @@
 <g id="node5" class="node c1">
 <title>N14</title>
 <g id="a_node5"><a xlink:title="2">
-<ellipse fill="none" stroke="black" stroke-width="2" cx="509" cy="-442.09" rx="18" ry="18"/>
+<ellipse fill="none" stroke="black" cx="509" cy="-442.09" rx="18" ry="18"/>
 <text text-anchor="middle" x="509" y="-438.39" font-family="Times,serif" font-size="14.00">2</text>
 </a>
 </g>

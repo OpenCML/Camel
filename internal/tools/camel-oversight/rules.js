@@ -116,8 +116,12 @@ export const RULES = [
         cooldown: 60,
         check: ({ m, now, limits }) => {
             if (!readable(m.backlog)) return null
+            // A row recorded under its own id and again under the item it belongs to is named once,
+            // by the id written in the table.
+            const seen = new Set()
             const stale = [...m.backlog.entries()]
                 .filter(([, row]) => row.doing && row.updated !== null && now - row.updated > limits.staleMinutes * 60_000)
+                .filter(([, row]) => !seen.has(row) && seen.add(row))
                 .map(([id]) => id)
             if (stale.length === 0) return null
             return {

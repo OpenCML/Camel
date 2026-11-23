@@ -125,7 +125,9 @@ struct CostContext {
 
 /// What it costs to compute a value one way (graph store design 3.6). The cost of a writing is
 /// its own cost plus the costs of the values it reads, so the writing chosen for a value never
-/// reads that value itself. Replaceable: the target decides (Tiles registers one for the GPU).
+/// reads that value itself. The kernel only defines this interface: the cost itself is the
+/// target library's, supplied as a function value (`rewrite::extract cost=...`), and no model of
+/// the kernel's own is registered or consulted by name.
 class CostModel {
   public:
     virtual ~CostModel() = default;
@@ -149,16 +151,10 @@ class CostModel {
     }
 };
 
-/// The models by name: "nodes" (every node costs one), "weighted" (a division costs more than a
-/// product, which costs more than a sum; constants and parameters are nearly free), and what a
-/// module registers.
-void registerCostModel(std::string name, std::shared_ptr<const CostModel> model);
-std::shared_ptr<const CostModel> findCostModel(const std::string &name);
-
-/// The cost model the pipeline extracts by when a pass that consumes a program does not accept
-/// the state with several writings (`src/execute/pass.cpp`), and the one the dumps mark the
-/// chosen writing by: one name, so a picture shows the choice the pipeline would itself make.
-inline constexpr const char *kWritingsCostModel = "weighted";
+// There is no cost model in the kernel: no table of them by name, no built-in that judges a
+// writing dear, and no name the pipeline extracts by. What a writing costs is the cost function
+// the target library supplies (`CostModel` above, called with the cost a caller passed), and the
+// kernel only asks it for the choice (D-1123-78).
 
 /// A term of a rule (rewrite design 2.2, 2.3). On the left it is matched against the writings
 /// of the values; on the right it is built. A variable stands for a value (the same variable
@@ -192,10 +188,11 @@ Pattern patCompute(
 
 class DraftWritings;
 
-/// The classes of a graph in the state with several writings, and the writing extraction would
-/// take for each of them: what a dump draws. Everything here is read, never written: the
-/// classes come from a decoded copy of the graph, which is dropped again, and the choice comes
-/// from the one cost fixed point `extract` applies, so a dump never guesses what extraction does.
+/// The classes of a graph in the state with several writings: what a dump draws. Everything here
+/// is read, never written: the classes come from a decoded copy of the graph, which is dropped
+/// again. Nothing here says what a writing costs or which one extraction would take: that
+/// judgement is the target library's (`CostModel`), and a dump that named a cost would be naming
+/// a model the kernel does not have.
 struct GraphWritings {
     /// One entry per value that has more than one writing, by ascending smallest writing.
     struct Value {
@@ -203,38 +200,28 @@ struct GraphWritings {
         gc_node_ref_t root = kInvalidNodeRef;
         /// Every writing of the value, ascending.
         std::vector<gc_node_ref_t> writings;
-        /// The writing extraction would take, and what computing the value that way costs.
-        gc_node_ref_t chosen = kInvalidNodeRef;
-        double cost          = 0.0;
     };
     std::vector<Value> values;
     /// For a node that is a writing of one of `values`, its index in `values`.
     std::unordered_map<gc_node_ref_t, size_t> valueOf;
     /// Every node of the graph (the values with one writing too): the smallest writing of the
-    /// value it is a writing of, the model's cost of that writing itself, and the cost of
-    /// computing the value the cheapest way.
-    struct Node {
-        gc_node_ref_t root = kInvalidNodeRef;
-        double own         = 0.0;
-        double value       = 0.0;
-    };
-    std::unordered_map<gc_node_ref_t, Node> nodes;
+    /// value it is a writing of.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> nodes;
     bool empty() const { return values.empty(); }
 };
 
-/// The classes of `graph` (a graph of `program` in the state with several writings) under the
-/// cost model `model`, read without editing the program: an executable graph, or a graph whose
-/// draft cannot be decoded, has no classes and gives an empty result.
+/// The classes of `graph` (a graph of `program` in the state with several writings), read without
+/// editing the program: an executable graph, or a graph whose draft cannot be decoded, has no
+/// classes and gives an empty result.
 GraphWritings graphWritings(
-    const Program &program, const GCGraph *graph, const CostModel &model,
+    const Program &program, const GCGraph *graph,
     camel::core::context::Context *context = nullptr);
 
 /// What a cost model makes of the writings of a draft: which value every living node is a writing
 /// of, and which writing the extraction would take for it (graph store design 3.6). This is the
 /// fixed point `extract` applies — the cost of a writing is its own plus the cost of the values it
 /// reads, repeated until nothing gets cheaper, the smallest node winning a tie — so what
-/// extraction would choose is read from one place, never guessed a second time (a dump that marks
-/// the chosen writing).
+/// extraction would choose is read from one place, never guessed a second time.
 struct WritingChoice {
     /// Per node slot, the root of the class the node is a writing of (kInvalidNodeRef: no such
     /// node alive).

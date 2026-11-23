@@ -112,9 +112,11 @@ costs of the values it reads (tree cost); repeated to a fixed point, ties to the
 Because a writing's cost exceeds that of each value it reads, a writing that reads its own value
 is never chosen. Then: nodes that stay read the chosen writings of their inputs; the entry,
 exit, output, return and region results take the chosen writing; the others are erased; the
-equivalences are dropped. Cost models are replaceable and registered by name (`nodes`,
-`weighted`); the hook receives the node and a `CostContext` (draft and context) so a target can
-read facts.
+equivalences are dropped. The `CostModel` is an interface the kernel defines and never fills in:
+the cost of a writing is the function value the pipeline names (`rewrite::extract cost=...`, a
+Camel function `(n: Node, inputs: float[]) => float`), and the hook receives the node and a
+`CostContext` (draft and context) so a target can read facts. The kernel keeps no table of models
+by name, no built-in that judges a writing dear, and extracts by no name of its own (D-1123-78).
 
 **What extraction keeps** is the retention boundary of the design (graph store 3.5 and 3.6,
 design principles 3.1): extraction does not decide which side effects happen, so it keeps every
@@ -130,12 +132,12 @@ control input. A pure writing that is a candidate of a class and read by nothing
 ## 6. The pipeline
 
 Back ends and exporters keep refusing a graph with writings (`GCGraph::execPlan`,
-`RunPrograms::begin`). The pass driver asks the pass before it extracts: a pass that declares
-`acceptsWritings()` is given the program as it is — the dumps read that state, and
-`std::cxx::saturate` is the pass that produces it — and every other pass is given one writing per
-value, extracted first with the `weighted` model (visible in the `Pass` info log). A pass that
-neither consumes the program nor declares that it accepts writings gets a diagnostic instead of
-the program.
+`RunPrograms::begin`). The pass driver asks the pass before it does anything else, and it extracts
+nothing: a pass that declares `acceptsWritings()` is given the program as it is — the dumps read
+that state, and `std::cxx::saturate` is the pass that produces it — and every other pass gets the
+diagnostic `PassNeedsExtraction` instead of the program. The pipeline says how the writings are
+chosen or it stops (`rewrite::extract cost=<module>::<function>`); there is no implicit
+extraction, because the cost is the target library's judgement and the kernel has none of its own.
 
 `std::cxx::saturate` reaches that state from the command line: it runs the standard rules library
 (`lib/rules/rules.cml`) for `rounds` rounds (6 by default; `strict` keeps the laws that hold bit for
@@ -148,28 +150,27 @@ cannot drift apart.
 `std::gir`, `std::rgir` and `std::jgir` declare `acceptsWritings()` — and so do the dumps that
 share their pass, `std::gir_regions`, `std::rgir_regions`, `std::agir` and `std::argir` — so the
 driver hands them the whole state and they read it without editing it:
-`graphWritings(program, graph, model, ctx)`
-decodes a copy of the graph and asks `DraftWritings::choiceByCost`, the cost fixed point
-extraction itself applies. One implementation reads what extraction would do, so the picture and
-the pipeline cannot disagree about it. A graph with one writing per value prints none of this, so
-every existing dump is byte for byte what it was.
+`graphWritings(program, graph, ctx)` decodes a copy of the graph and reads its classes from
+`DraftWritings::build`. No cost is asked and none is printed — the cost is the target library's
+judgement, and a dump that named one would be naming a model the kernel does not have. A graph with
+one writing per value prints none of this, so every existing dump is byte for byte what it was.
 
 - Every value with more than one writing is a dashed cluster (`subgraph cluster_class_…`): a class
   node stands for the value, and one node per writing of it is inside, with `class="c<root>"`.
-- The writing extraction would take carries `chosen="true"`, and a heavier border in the styled
-  dump; the graph names the model that chose (`writings_cost="weighted"`), the model the pipeline
-  itself extracts by.
+- No writing is marked: which one a target would keep is a cost, and the dumps say nothing about a
+  cost (there is no `chosen` attribute and no `writings_cost`, not even `unknown`).
 - An input edge names a *value*, not a writing: it leaves the class node of the value the writing
   reads, keeping the label `"<out>|<in>"` of every other edge. The dumps draw the consumer as the
   source and the input as the target, where egg's `dot` draws the opposite direction; the shape of
   a class is egg's, the arrow direction is the dumps'. Control inputs and ports are untouched: a
   control input orders a node, it is not a value (design principles 3.3).
-- `std::jgir` carries the classes too, as `classes` on each graph (`id`, `writings`, `chosen`,
-  `cost`), and `std::jgir egraph=true` writes the document `egraph-serialize` reads instead:
+- `std::jgir` carries the classes too, as `classes` on each graph (`id`, `writings`), and
+  `std::jgir egraph=true` writes the document `egraph-serialize` reads instead:
   `nodes` (every writing, its operator, the classes of the values it reads, the class it belongs
-  to, its own cost), `root_eclasses` (the value each graph returns) and `class_data` (what
-  computing a value costs). That is the shape the community's `egraph-visualizer` opens; it was
-  written from that crate's documented shape, which no machine here can fetch to compare against.
+  to), `root_eclasses` (the value each graph returns) and an empty `class_data`. That is the shape
+  the community's `egraph-visualizer` opens; it was written from that crate's documented shape,
+  which no machine here can fetch to compare against, and the cost it used to carry is gone on
+  purpose.
 - The canonical document (`std::jgir canonical=true`) is a dump of one writing per value and
   carries no classes: other readers compare it byte for byte, so its shape does not move.
 
