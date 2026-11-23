@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // camel-oversight: the collaboration engine between the decision-maker (another machine) and the
 // coordinator (a session in this DSH process). Three parts:
 //

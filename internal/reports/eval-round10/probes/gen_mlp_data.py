@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Write the c2-mlp-mnist data files without numpy.
 
 `showcase/c2-mlp-mnist/make_data.py` needs numpy, and the measurement host has none (the pip

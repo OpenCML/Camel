@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The readings the watch rules are stated in, taken from the repository, the backlog, the build
 // panel's state files and the build host. Every git call is asynchronous: a synchronous `git fetch`
 // stalls the whole DSH process -- every session, the GUI, the routes -- for as long as the network

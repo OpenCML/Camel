@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The watch rules: what is checked, when it is news, and how loudly it is said.
 //
 // A rule reads the measured state and answers null (nothing to say) or an alert. The engine in

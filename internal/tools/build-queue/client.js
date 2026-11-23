@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 window.__ModuleLoader__.load({
   id: '@local/dsh-build-queue',
   factory(require) {

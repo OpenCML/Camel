@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 #!/usr/bin/env python3
 """E9 differential testing: progen programs x pipelines x back ends x collectors, against model.py.
 

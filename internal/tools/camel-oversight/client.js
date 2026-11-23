@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The GUI half of camel-oversight: what the owner sees without asking anyone.
 //
 //   a band above the composer of the coordinator's session (conversation.input.dock): lanes running,
