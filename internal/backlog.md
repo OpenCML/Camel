@@ -102,3 +102,10 @@
 | `C-1123-52` | 内核握着库的执行器：`camel/execute/executor.h`（2 include）、`graph_runtime_support.h`（2 include），`ExecutorManager` 是内核 `Context` 的成员（`context.cpp:431`），拆它要动 `context`/`pass` 归属 | todo |
 | `C-1123-53` | `scripts/check-effect-facts.mjs` 在干净 `develop` 上也 exit 2：它找 `effectSummaryOf` 紧跟 `(`，而名字是 `effectSummaryOfOperator` —— 从此没读到过任何东西 | todo |
 | `C-1123-54` | 派工判据三处量不到：`effectSummaryOfNode` 这个名字在基线不存在；「21 处读者」实测 2 处；`#include.*stdlib` 命中的是 C 标准库。判据要在基线上先量一次再写进派工 | done（教训） |
+
+## 2026-11-23 22:20 ④ 与 `D-1123-52`
+
+| 编号 | 事 | 车道 | 状态 |
+|---|---|---|---|
+| `D-1123-52①` | camel-oversight 防漂移三层 + 掉线预案 + 背压（fsh-dev `1a8da86a2`），已合 `3bc124bfd` | — | done（待重载） |
+| `D-1123-52②` | `moduleNamed` 改用类型记的**声明模块引用**（原则 5.2），不再拿名字去几个集合里搜；同一笔删掉 `declaredName_` | `lane/range-ri` | doing（排 49 前） |
