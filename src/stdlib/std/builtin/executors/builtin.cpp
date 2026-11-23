@@ -392,6 +392,9 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
 
         {"struct/range", __range__},
 
+        // The range as its own value, the record `Range` the interval `a..b` is.
+        {"range/to_range", __to_range__},
+
         {"struct/concat_arr", __concat_arr__},
 
         {"struct/append_arr", __append_arr__},
@@ -637,7 +640,8 @@ void registerBuiltinOperatorTraits() {
         // itemized elsewhere is declared by that list, not by this one (design principles 3.3).
         // Listing it here as well was a leftover of the pure word and a second statement of it: the
         // record keeps the first statement it is given (a record is never re-stated), so the two
-        // disagreed on the one operator -- `scripts/check-operator-uses.mjs` prints that disagreement.
+        // disagreed on the one operator -- `scripts/check-operator-uses.mjs` prints that
+        // disagreement.
         "op/mod",
         "op/mod_i",
         "op/mod_l",
@@ -697,6 +701,7 @@ void registerBuiltinOperatorTraits() {
         "op/tag_null_value",
         "op/tag_throw",
         "op/tag_unwrap",
+        "range/to_range",
         "str/format",
         "str/join",
         "struct/append_arr",
@@ -771,16 +776,16 @@ void registerBuiltinOperatorTraits() {
     // is written where the operator is registered.
     registry.declareShape(":op/copy", camel::ops::OperShape::Clone);
     // The record's `panic` for `:op/copy` is one entry of the same list
-    // (`src/stdlib/std/builtin/executors/builtin_semantics.cpp#declareBuiltinOperatorFaults`), where
-    // the fault table and the record are stated from one list.
-    // The three shapes plan 2.3, step 2 turns into operators (`operators/cast.cpp`,
-    // `operators/struct.cpp`). Each reads the values of its own call and writes nothing outside
-    // them, so each is pure and none is elementwise. Each may fault: a conversion checks the value
-    // when the pair's types make it unsafe, a construction checks that the template clones into the
-    // type it is made for, and a member read checks that the member is there. `mayFault` is stated
-    // per operator rather than per pair, which is the one thing the CAST arm could say and this
-    // record cannot: a conversion of a pair whose types make it safe is read as one that may fault,
-    // so a pass keeps it where it stands instead of moving it
+    // (`src/stdlib/std/builtin/executors/builtin_semantics.cpp#declareBuiltinOperatorFaults`),
+    // where the fault table and the record are stated from one list. The three shapes plan 2.3,
+    // step 2 turns into operators (`operators/cast.cpp`, `operators/struct.cpp`). Each reads the
+    // values of its own call and writes nothing outside them, so each is pure and none is
+    // elementwise. Each may fault: a conversion checks the value when the pair's types make it
+    // unsafe, a construction checks that the template clones into the type it is made for, and a
+    // member read checks that the member is there. `mayFault` is stated per operator rather than
+    // per pair, which is the one thing the CAST arm could say and this record cannot: a conversion
+    // of a pair whose types make it safe is read as one that may fault, so a pass keeps it where it
+    // stands instead of moving it
     // (`kernel/runtime/graph.cpp#nodeMayFault` asks this answer once the node is an OPER node).
     registry.set(":op/cast", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = true});
@@ -856,7 +861,8 @@ void registerBuiltinOperatorTraits() {
     // the other two forms, because a declaration belongs where the operator is registered and not
     // in its reader.
     registry.declareCallForm(
-        ":struct/append_arr_owned", {.name = "append", .minArgs = 1, .declaredByModule = true});
+        ":struct/append_arr_owned",
+        {.name = "append", .minArgs = 1, .declaredByModule = true});
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});

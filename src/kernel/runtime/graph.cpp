@@ -12,9 +12,9 @@
  */
 
 #include "camel/runtime/graph.h"
-#include "camel/facts/facts.h"
 #include "camel/facts/arrangeable.h"
 #include "camel/facts/control_regions.h"
+#include "camel/facts/facts.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/exec_plan.h"
@@ -29,15 +29,15 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
-#include "camel/core/tags.h"
-#include "camel/ops/operator_record.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
+#include "camel/ops/operator_record.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -127,8 +127,7 @@ bool nodeMayFault(
         // elementwise bit is a second item and is still read from the table.
         const std::optional<camel::core::OperatorTraits> traits =
             camel::core::OperatorTable::instance().find(oper);
-        return record->mayFault() &&
-               !(traits.has_value() && traits->elementwise && fixedShapes);
+        return record->mayFault() && !(traits.has_value() && traits->elementwise && fixedShapes);
     }
     default:
         // A call, a function, a gate, a loop: what it runs is not in this table, and nothing
@@ -3124,8 +3123,7 @@ bool GCGraph::isMacro() const {
         const GCNode *n = node(exit);
         if (n != nullptr && n->kind == GCNodeKind::Oper) {
             const GCOperBody *body = nodeBodyAs<GCOperBody>(exit);
-            if (body != nullptr &&
-                camel::core::OperatorTable::instance().isMacro(body->oper)) {
+            if (body != nullptr && camel::core::OperatorTable::instance().isMacro(body->oper)) {
                 return true;
             }
         }
@@ -3626,7 +3624,10 @@ FactSlotTable *GCGraph::slotTableFor(std::uint32_t kind) const noexcept {
         }
         FactSlotTable *expected = current;
         if (factSlots_.compare_exchange_strong(
-                expected, grown, std::memory_order_acq_rel, std::memory_order_acquire)) {
+                expected,
+                grown,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
             // The table this one replaces may already be in a reader's hands: it goes on the
             // retired list and is freed with the graph, not here.
             if (current != nullptr) {
@@ -3655,7 +3656,10 @@ FactNodeArray *GCGraph::nodeFactArrayFor(std::uint32_t kind) const noexcept {
         }
         FactNodeArray *expected = nullptr;
         if (table->nodeArrays[kind].compare_exchange_strong(
-                expected, made, std::memory_order_acq_rel, std::memory_order_acquire)) {
+                expected,
+                made,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
             keepFactNodeArray(made);
             return made;
         }
@@ -3668,7 +3672,10 @@ void GCGraph::retireFactSlotTable(FactSlotTable *table) const noexcept {
     do {
         table->next = head;
     } while (!retiredFactSlotTables_.compare_exchange_weak(
-        head, table, std::memory_order_release, std::memory_order_relaxed));
+        head,
+        table,
+        std::memory_order_release,
+        std::memory_order_relaxed));
 }
 
 void GCGraph::keepFactNodeArray(FactNodeArray *array) const noexcept {
@@ -3676,7 +3683,10 @@ void GCGraph::keepFactNodeArray(FactNodeArray *array) const noexcept {
     do {
         array->next = head;
     } while (!factNodeArrays_.compare_exchange_weak(
-        head, array, std::memory_order_release, std::memory_order_relaxed));
+        head,
+        array,
+        std::memory_order_release,
+        std::memory_order_relaxed));
 }
 
 void GCGraph::setFactSlot(std::uint32_t kind, const void *value) const noexcept {
@@ -3784,7 +3794,8 @@ GCGraph::~GCGraph() {
         freeSlotTable(table);
         table = next;
     }
-    for (FactNodeArray *array = factNodeArrays_.load(std::memory_order_acquire); array != nullptr;) {
+    for (FactNodeArray *array = factNodeArrays_.load(std::memory_order_acquire);
+         array != nullptr;) {
         FactNodeArray *next = array->next;
         freeNodeArray(array);
         array = next;

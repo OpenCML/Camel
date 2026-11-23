@@ -8,13 +8,15 @@
  * `a + b` is the call `__add__(a, b)`: the operator group `__add__` holds the built-in
  * overloads and those of the C++ modules, and a program adds its own with
  * `func operator +(a: V, b: V): V` (design principles 4.3; the notation is provisional).
+ * `for x in c` is the call `__iter__(c)` in the same way, with one parameter: the group
+ * answers with the values the loop reads, round by round.
  * This table is the one place that says which symbol is which function, which symbols can be
  * overloaded and with how many parameters, and why the others cannot: the parser takes any
  * operator token after `func operator`, the compiler checks the declaration here, the
  * resolution of a call recognises an operator by its group name, and the diagnostics and the
  * language server show the symbol instead of the reserved name.
  *
-* Not in the table as overloadable: `&&` and `||` are branches (4.2); `??` and `!!` are
+ * Not in the table as overloadable: `&&` and `||` are branches (4.2); `??` and `!!` are
  * branches on the mark of a `T?` / `T!`; `->` passes a value to a function (and carries a null
  * or an error along); `..` composes two
  * functions; `=` and the compound assignments write a variable (`a += b` is `a = a + b`, so it
@@ -51,8 +53,8 @@ inline constexpr std::string_view kAssignmentGroup = "__assn__";
 
 /// Whether `uri` names an assignment operator: `:op/assn`, `:op/assn_i`, `:op/assn_owned` and the
 /// compound families. The table's `kFamilyAssignment` bit is set from this one answer
-/// (`OperatorTable::internLocked`), so "is this operator a write" is asked one way, and the compiler
-/// layer asks it by calling this rather than comparing the prefix itself.
+/// (`OperatorTable::internLocked`), so "is this operator a write" is asked one way, and the
+/// compiler layer asks it by calling this rather than comparing the prefix itself.
 inline bool isAssignmentUri(std::string_view uri) { return uri.starts_with(":op/assn"); }
 
 /// The prefix of a name the compiler writes for a built-in operator it means itself, when the name

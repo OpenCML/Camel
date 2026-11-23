@@ -26,16 +26,17 @@ struct OverloadableForm {
     std::string_view group;
 };
 
-// The binary operators, the unary ones, and indexing (`m[i]`, `m[i, j]`: the indexed value and
-// the indices). `-` is both: one parameter is the negation, two the subtraction.
-constexpr std::array<OverloadableForm, 19> kForms = {{
-    {"+", 2, 2, "__add__"},     {"-", 2, 2, "__sub__"}, {"-", 1, 1, "__neg__"},
-    {"*", 2, 2, "__mul__"},     {"/", 2, 2, "__div__"}, {"%", 2, 2, "__mod__"},
-    {"^", 2, 2, "__pow__"},     {"@", 2, 2, "__mat__"}, {"==", 2, 2, "__eq__"},
-    {"!=", 2, 2, "__neq__"},    {"<", 2, 2, "__lt__"},  {"<=", 2, 2, "__le__"},
-    {">", 2, 2, "__gt__"},      {">=", 2, 2, "__ge__"}, {"&", 2, 2, "__and__"},
-    {"|", 2, 2, "__or__"},      {"!", 1, 1, "__not__"}, {"~", 1, 1, "__inv__"},
-    {"[]", 2, kAny, "__idx__"},
+// The binary operators, the unary ones, indexing (`m[i]`, `m[i, j]`: the indexed value and
+// the indices), and `for` (the value the loop walks: one parameter, and its answer is what the
+// loop reads round by round). `-` is both: one parameter is the negation, two the subtraction.
+constexpr std::array<OverloadableForm, 20> kForms = {{
+    {"+", 2, 2, "__add__"},     {"-", 2, 2, "__sub__"},    {"-", 1, 1, "__neg__"},
+    {"*", 2, 2, "__mul__"},     {"/", 2, 2, "__div__"},    {"%", 2, 2, "__mod__"},
+    {"^", 2, 2, "__pow__"},     {"@", 2, 2, "__mat__"},    {"==", 2, 2, "__eq__"},
+    {"!=", 2, 2, "__neq__"},    {"<", 2, 2, "__lt__"},     {"<=", 2, 2, "__le__"},
+    {">", 2, 2, "__gt__"},      {">=", 2, 2, "__ge__"},    {"&", 2, 2, "__and__"},
+    {"|", 2, 2, "__or__"},      {"!", 1, 1, "__not__"},    {"~", 1, 1, "__inv__"},
+    {"[]", 2, kAny, "__idx__"}, {"for", 1, 1, "__iter__"},
 }};
 
 /// A compound assignment `x op= y`: the group that holds its built-in overloads and the plain

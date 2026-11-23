@@ -87,8 +87,8 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     return castNode;
 }
 
-node_handle_t Builder::fillNodeOf(
-    node_handle_t tmpl, Type *type, const std::vector<node_handle_t> &values) {
+node_handle_t
+Builder::fillNodeOf(node_handle_t tmpl, Type *type, const std::vector<node_handle_t> &values) {
     // `fill::<T, ...F>(template: T, ...fields: ...F): T` says a construction is about the type it
     // makes and the values it is made of: the template comes first as an ordinary operand and the
     // values follow it in the order the target lays its components out, which is the order the call
@@ -130,8 +130,8 @@ node_handle_t Builder::fillNodeOf(
     // and it stays a FILL until the operator can say that order.
     std::vector<size_t> slots(values.size());
     std::iota(slots.begin(), slots.end(), size_t{0});
-    node_handle_t fillNode = currGraph_->addFillNode(
-        type, runtime::makeFillPayload(fillKindForType(type), slots));
+    node_handle_t fillNode =
+        currGraph_->addFillNode(type, runtime::makeFillPayload(fillKindForType(type), slots));
     linkNodes(LinkType::Norm, tmpl, fillNode);
     for (node_handle_t value : values) {
         linkNodes(LinkType::With, value, fillNode);
@@ -152,7 +152,11 @@ node_handle_t Builder::memberReadNodeOf(
         if (group != nullptr) {
             const std::vector<StaticArg> statics(2);
             const auto op = group->resolveForCall(
-                {aggregate, target}, target, {Type::Int64()}, {aggregate}, statics);
+                {aggregate, target},
+                target,
+                {Type::Int64()},
+                {aggregate},
+                statics);
             if (op.has_value()) {
                 const data_ptr_t place =
                     tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(at));
@@ -198,10 +202,14 @@ node_handle_t Builder::memberReadNodeOf(
         if (group != nullptr) {
             const std::vector<StaticArg> statics(2);
             const auto op = group->resolveForCall(
-                {aggregate, target}, target, {Type::String()}, {aggregate}, statics);
+                {aggregate, target},
+                target,
+                {Type::String()},
+                {aggregate},
+                statics);
             if (op.has_value()) {
                 const data_ptr_t name = tt::as_shared<Data>(std::make_shared<StringData>(key));
-                node_handle_t keyNode  = currGraph_->addStaticDataNode(name);
+                node_handle_t keyNode = currGraph_->addStaticDataNode(name);
                 rememberConstant(keyNode, name);
                 registerNodeOrigin(context_, keyNode, origin, "gir.data");
                 node_handle_t node = currGraph_->addOperNode(*op, 0);
@@ -402,7 +410,6 @@ std::string aggregatePartName(const Type *type, size_t index) {
     return std::to_string(index);
 }
 
-
 /// The next value of the part `step` of `value` (`value` is a struct or tuple FILL, or any value
 /// of that type). A FILL's parts are its With inputs, which is what lets an `append` among them
 /// keep growing the state's array in place; a part the FILL does not write is read from it.
@@ -553,7 +560,6 @@ std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
     }
     return index;
 }
-
 
 void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
     Type *exitType = arm->exitType();
@@ -863,9 +869,9 @@ void Builder::setArmResult(ArmBuild &arm, node_handle_t result) {
     }
     // The arm gives the GATE a sync block ends with; its value is what the GATE forwards.
     node_handle_t value = behindSyncGate(result);
-    arm.output = result;
-    arm.value  = value;
-    arm.type   = nodeTypeOf(value);
+    arm.output          = result;
+    arm.value           = value;
+    arm.type            = nodeTypeOf(value);
 }
 
 node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
@@ -985,7 +991,7 @@ node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle
         insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, call));
         ExpectedValueScope noPosition(expectedValueType_, nullptr);
         node_handle_t result = behindSyncGate(visitPipeLink(call, passed));
-        Type *type = valueTypeOf(nodeTypeOf(result));
+        Type *type           = valueTypeOf(nodeTypeOf(result));
         if (onNull) {
             resultType = type->code() == TypeCode::Void || asNullable(type) != nullptr
                              ? type
@@ -2264,7 +2270,14 @@ node_handle_t Builder::buildBranch(
     // it begins at BRCH and is complete at JOIN, and the JOIN is the version of the variable an
     // arm wrote through its own value.
     attachRegionStatement(
-        joinNode, armList, gct, brchNode, joinNode, "The branch", "an arm writes", mergeVariable);
+        joinNode,
+        armList,
+        gct,
+        brchNode,
+        joinNode,
+        "The branch",
+        "an arm writes",
+        mergeVariable);
 
     return joinNode;
 }
@@ -2336,28 +2349,10 @@ void Builder::mergeArmVariables(
     }
 }
 
-node_handle_t
-Builder::intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
-    // The interval in the sequence position of a loop is the pair of its two bounds, not the
-    // array of its elements (design principles 4.2): the pair stands where any other sequence
-    // stands — Norm input 0 of the LOOP node, one value — and a back end takes the element of the
-    // round from the bounds and the round number, so nothing of the interval's size is ever made.
-    // The interval is the `int[]` of `intervalValue` in every other position.
-    std::vector<Type *> bounds{Type::Int64(), Type::Int64()};
-    TupleType *boundsType = TupleType::create(bounds);
-    auto &draft          = currGraph_->transaction().edit();
-    const slot_t empty =
-        camel::core::rtdata::toSlot(::Tuple::create(2, camel::core::mm::autoSpace()));
-    node_handle_t source = draft.ref(draft.materializeStaticValue(empty, boundsType));
-    node_handle_t result = fillNodeOf(source, boundsType, {from, to});
-    registerNodeOrigin(context_, result, expr, "gir.loop.interval");
-    return result;
-}
-
 void Builder::attachRegionStatement(
     node_handle_t node, const std::vector<arm_ptr_t> &parts, const GCT::node_ptr_t &gct,
-    node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject,
-    const char *verb, node_handle_t versionOf) {
+    node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject, const char *verb,
+    node_handle_t versionOf) {
     std::vector<node_handle_t> capturedWrites;
     mergeArmVariables(parts, node, capturedWrites);
     if (versionOf != nullptr) {
@@ -2644,12 +2639,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 // into a value (`v.f = e`) is the whole variable's write, which this scan is not
                 // about, and the builder's own rebuilds (`Rebuilt`, `Owned`) are not the program's
                 // writes.
-                const bool nameWrite =
-                    node->type() == GCT::NodeKind::ASSIGN &&
-                    (node->assignmentForm() == GCT::AssignmentForm::Plain ||
-                     node->assignmentForm() == GCT::AssignmentForm::Compound) &&
-                    node->assignmentTarget() != nullptr &&
-                    node->assignmentTarget()->type() == GCT::NodeKind::DREF;
+                const bool nameWrite = node->type() == GCT::NodeKind::ASSIGN &&
+                                       (node->assignmentForm() == GCT::AssignmentForm::Plain ||
+                                        node->assignmentForm() == GCT::AssignmentForm::Compound) &&
+                                       node->assignmentTarget() != nullptr &&
+                                       node->assignmentTarget()->type() == GCT::NodeKind::DREF;
                 const bool plainAssign =
                     nameWrite && node->assignmentForm() == GCT::AssignmentForm::Plain;
                 const bool compoundAssign =
@@ -2735,7 +2729,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // A name the declaration built as a value is carried as a value: the
             // body's name is the port, and the head carries whatever the body wrote. Nothing of it
             // is a cell, so none of the cell questions below apply.
-            const SsaEnv::Entry *ssa = ssa_.find(nodeScope_, name);
+            const SsaEnv::Entry *ssa  = ssa_.find(nodeScope_, name);
             const node_handle_t value = ssa_.valueOf(ssa);
             const bool asValue        = ssa != nullptr && value != nullptr && !isVariable(bound);
             // A name that is still a cell is carried only when the body's block writes it and no
@@ -2808,7 +2802,6 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     node_handle_t sequence = nullptr;
     Type *elementType      = nullptr;
-    bool intervalIterates  = false;
     // The element type of a sequence a loop iterates: an array gives its own elements along its
     // first dimension, and a string and a map give theirs through the `__iter__` operator their
     // type declares (design principles 3.10, 11.1, 11.3): the code points of a string as
@@ -2827,8 +2820,18 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.
+    //
+    // One `__iter__` answers in one of two shapes, and the shape the operator answers with is what
+    // the loop does (design principles 5.4: `for` also takes a value that turns into a stream): an
+    // array, which the loop iterates as it iterates any array, or a stream (`int..`), which it
+    // walks one pull per round. A stream is a function value, so that form is written in Camel and
+    // not as a kernel: the string's and the map's `__iter__` are kernel operators, and a range's is
+    // the prelude function beside the type it belongs to (design principles 5.7). `streamed` is
+    // that value when the operator answered with a stream, and the caller builds that loop -- a
+    // `while` -- instead of the array one.
     const auto iterableElementType = [&](node_handle_t &iterable,
-                                         const GCT::node_ptr_t &expr) -> Type * {
+                                         const GCT::node_ptr_t &expr,
+                                         node_handle_t &streamed) -> Type * {
         Type *type = valueTypeOf(nodeTypeOf(iterable));
         if (type == nullptr) {
             diags_->of(SemanticDiag::LoopSequenceNotIterable)
@@ -2837,64 +2840,111 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         if (type->code() != TypeCode::Array) {
+            // A `__iter__` written in Camel, as the one call the loop makes: the overload that
+            // takes this type, chosen by the type itself. Any other shape of declaration (a
+            // generic one, or one whose parameter is another type) is not this type's answer.
+            const auto camelIterableOf = [&](const compile_graph_ptr_t &graph) -> node_handle_t {
+                FunctionType *signature = graph != nullptr ? graph->funcType() : nullptr;
+                if (signature == nullptr || signature->withTypesCount() != 0 ||
+                    signature->normTypesCount() != 1 || signature->normTypeAt(0) == nullptr ||
+                    !signature->normTypeAt(0)->assignableFrom(type)) {
+                    return nullptr;
+                }
+                node_handle_t call = createFuncDataNode(graph, false, true);
+                registerNodeOrigin(context_, call, expr, "gir.loop.iter");
+                linkNodes(LinkType::Norm, iterable, call);
+                return call;
+            };
+            const auto camelIterableOfEntity = [&](const entity &written) -> node_handle_t {
+                using camel::core::module::detail::EntityAccess;
+                if (!EntityAccess::isGraphSet(written)) {
+                    return nullptr;
+                }
+                for (const compile_graph_ptr_t &graph :
+                     *asCompileGraphSet(EntityAccess::graphSet(written))) {
+                    if (node_handle_t call = camelIterableOf(graph)) {
+                        return call;
+                    }
+                }
+                return nullptr;
+            };
+            node_handle_t elements = nullptr;
+            std::optional<oper_idx_ptr_t> resolved;
             const std::vector<StaticArg> statics(1);
-            std::optional<oper_idx_ptr_t> elements;
-            // `__iter__` is a group of several overloads (`:struct/iter_str`,
-            // `:coll/map_items`), one per iterable type: no one OperId names it, so it is still
-            // looked up by the group's name.
-            if (const auto group = importedEntity("__iter__");
-                group.has_value() && group->isOperGroup()) {
-                elements = group->operGroup()->resolve({}, {type}, statics);
+            // `__iter__` is the operator group a `for` calls (design principles 4.3), and the
+            // operator is `for`: a program declares `func operator for(v: V): T..` and it lands in
+            // this group, exactly as `func operator []` lands in `__idx__`. What it declares is
+            // taken first, as the more specific overload (4.3), from the module the loop is
+            // written in and from what it imports.
+            for (const compile_graph_ptr_t &graph : operatorOverloadsOf("__iter__").graphs) {
+                if ((elements = camelIterableOf(graph)) != nullptr) {
+                    break;
+                }
             }
-            if (!elements.has_value()) {
+            // The group's kernel members -- a string's characters, a map's pairs -- answer for
+            // their own types: several overloads with no one OperId naming them, so the group is
+            // looked up by its name.
+            if (elements == nullptr) {
+                if (const auto iter = importedEntity("__iter__"); iter.has_value()) {
+                    if (iter->isOperGroup()) {
+                        resolved = iter->operGroup()->resolve({}, {type}, statics);
+                    } else {
+                        elements = camelIterableOfEntity(*iter);
+                    }
+                }
+            }
+            if (resolved.has_value()) {
+                node_handle_t array = currGraph_->addOperNode(*resolved, 0);
+                stampPermissions(array);
+                registerNodeOrigin(context_, array, expr, "gir.loop.iter");
+                linkNodes(LinkType::Norm, iterable, array);
+                elements = array;
+            }
+            if (elements == nullptr) {
+                // A named type's own module says how to walk it (design principles 5.7), which is
+                // where a range's stream stands: the prelude declares `Range` and its `for`
+                // together, and a program that walks a range imports neither. The module is the
+                // one the type's declaration records, so nothing is searched for by name.
+                for (const auto &[module, typeName] : declaringModulesOf({}, {type})) {
+                    for (const auto &overload :
+                         exports_->exportedOperatorOverloads(*module, "__iter__")) {
+                        if ((elements = camelIterableOfEntity(overload.overloads)) != nullptr) {
+                            break;
+                        }
+                    }
+                    if (elements != nullptr) {
+                        break;
+                    }
+                }
+            }
+            if (elements == nullptr) {
                 diags_->of(SemanticDiag::LoopSequenceNotIterable)
                     .atOrigin(expr->origin())
                     .commit(sourceTextOf(expr), type->toString());
                 throw BuildAbortException();
             }
-            node_handle_t array = currGraph_->addOperNode(*elements, 0);
-            stampPermissions(array);
-            registerNodeOrigin(context_, array, expr, "gir.loop.iter");
-            linkNodes(LinkType::Norm, iterable, array);
-            iterable = array;
-            type     = valueTypeOf(nodeTypeOf(iterable));
+            Type *elementsType = valueTypeOf(nodeTypeOf(elements));
+            if (elementsType != nullptr && elementsType->code() == TypeCode::Stream) {
+                streamed = elements;
+                return tt::as_ptr<StreamType>(elementsType)->elemType();
+            }
             GUARD(
-                type != nullptr && type->code() == TypeCode::Array,
-                "The elements of an iterable must be an array.");
+                elementsType != nullptr && elementsType->code() == TypeCode::Array,
+                "The elements of an iterable must be an array or a stream.");
+            iterable = elements;
+            type     = elementsType;
         }
         return tt::as_ptr<ArrayType>(type)->firstDimensionElement();
     };
-    // `for i in a..b` (design principles 4.2: "`for i in 0..n` is fused by the compiler, without
-    // materialising an array"). The interval in the sequence position of a loop is the loop's own
-    // form: its two bounds are the loop's iterable, and a round takes `from + round`
-    // (camel::core::LoopIterableForm::Interval). In every other position `a..b` is still the
-    // `int[]` the rule gives it, and the loop iterates that value like any other sequence.
-    if (hasIterable && isIntervalExpr(gct->loopSequence())) {
-        const auto &interval = gct->loopSequence();
-        // The sequence is not the loop's value, so the position the loop stands in does not reach
-        // it (design principles 5.1): its literals have the types they are written with.
-        node_handle_t from{};
-        node_handle_t to{};
-        {
-            ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
-            from = argumentNodeOf(visit(interval->at(1)), interval->at(1));
-            to   = argumentNodeOf(visit(interval->at(2)), interval->at(2));
-        }
-        if (intervalBounds(from, to)) {
-            sequence         = intervalSequenceValue(from, to, interval);
-            elementType      = Type::Int64();
-            intervalIterates = true;
-        } else {
-            // Two operands `..` has no reading for: the refusal it gives everywhere else, built
-            // from the operands already in hand so that neither of them is built twice.
-            sequence = valueOf(functionValueOf(
-                valueNodeOf(buildCompositionWith(interval, from, to, true, "..")), interval));
-            elementType = iterableElementType(sequence, interval);
-        }
-    } else if (hasIterable) {
+    // `for i in a..b` reads the value the interval is (design principles 4.2, 5.4): the library's
+    // `Range`, which turns into a stream through its own `__iter__` -- the same road a stream
+    // written by the program takes. There is no loop form of an interval: `for i in 0..n` makes no
+    // array because the range's operator hands the integers out one round at a time.
+    if (hasIterable) {
         const auto &expr = gct->loopSequence();
         {
-            // The sequence is not the loop's value (see above).
+            // The sequence is not the loop's value, so the position the loop stands in does not
+            // reach it (design principles 5.1): its literals have the types they are written with.
             ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
             sequence = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
         }
@@ -2906,7 +2956,13 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             LEAVE("LOOP");
             return buildStreamLoop(gct, sequence, initial, stateTypes);
         }
-        elementType = iterableElementType(sequence, expr);
+        node_handle_t streamed = nullptr;
+        elementType            = iterableElementType(sequence, expr, streamed);
+        if (streamed != nullptr) {
+            // A sequence that answers with a stream is walked the same way a stream is.
+            LEAVE("LOOP");
+            return buildStreamLoop(gct, streamed, initial, stateTypes);
+        }
     }
     // The states the loop carries: the ones its head declares, and the `var`s its body writes.
     const size_t stateCount = stateTypes.size();
@@ -3119,7 +3175,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         continue;
                     }
                     node_handle_t part = memberReadNodeOf(
-                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
+                        returned,
+                        stateTypes[j],
+                        static_cast<uint32_t>(j),
+                        gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
@@ -3152,7 +3211,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         continue;
                     }
                     node_handle_t part = memberReadNodeOf(
-                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
+                        returned,
+                        stateTypes[j],
+                        static_cast<uint32_t>(j),
+                        gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
@@ -3436,7 +3498,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             const slot_t empty =
                 camel::core::rtdata::toSlot(::Tuple::create(count, camel::core::mm::autoSpace()));
             node_handle_t source = draft.ref(draft.materializeStaticValue(empty, valueType));
-            result = fillNodeOf(source, valueType, resolved);
+            result               = fillNodeOf(source, valueType, resolved);
             registerNodeOrigin(context_, result, gct->loopBody(), "gir.loop.split");
         }
         if (bodyPart->output != bodyPart->value) {
@@ -3521,12 +3583,6 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
 
     node_handle_t loopNode = currGraph_->addRegionLoopNode(kind, loopValueType);
-    if (intervalIterates) {
-        // The sequence the loop iterates is the pair of the interval's bounds, not an array
-        // (camel::core::LoopIterableForm::Interval): a back end takes the element of a round from
-        // the bounds and the round number, so nothing the size of the interval is ever made.
-        currGraph_->edit().setLoopIterableInterval(nodeIdOf(loopNode));
-    }
     if (!collected.empty()) {
         currGraph_->edit().setLoopCollectionCount(
             nodeIdOf(loopNode),
@@ -3547,8 +3603,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`).
     node_handle_t loopValue = loopNode;
     if (!collected.empty() || !carried.empty()) {
-        const std::vector<Type *> visible(
-            stateTypes.begin(), stateTypes.begin() + declaredStates);
+        const std::vector<Type *> visible(stateTypes.begin(), stateTypes.begin() + declaredStates);
         loopValue = attachVisibleLoopState(loopNode, visible, 0, gct);
     }
     // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
@@ -3565,8 +3620,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         const size_t index  = declaredStates + j;
         node_handle_t value = loopNode;
         if (stateCount > 1) {
-            value = memberReadNodeOf(
-                loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
+            value =
+                memberReadNodeOf(loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
             registerNodeOrigin(context_, value, gct, "gir.loop.value");
         }
         if (carried[j].ssa) {
@@ -3592,7 +3647,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             node_handle_t access = memberReadNodeOf(
-                loopValue, splitComponents[j]->type, static_cast<uint32_t>(j), gct);
+                loopValue,
+                splitComponents[j]->type,
+                static_cast<uint32_t>(j),
+                gct);
             registerNodeOrigin(context_, access, gct, "gir.loop.value");
             componentValues[j] = access;
         }
@@ -3609,11 +3667,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::vector<size_t> slots(count);
             std::iota(slots.begin(), slots.end(), size_t{0});
             const bool isStruct = part.type->code() == TypeCode::Struct;
-            const slot_t empty = isStruct
-                                     ? camel::core::rtdata::toSlot(
-                                           ::Struct::create(count, camel::core::mm::autoSpace()))
-                                     : camel::core::rtdata::toSlot(
-                                           ::Tuple::create(count, camel::core::mm::autoSpace()));
+            const slot_t empty  = isStruct
+                                      ? camel::core::rtdata::toSlot(
+                                            ::Struct::create(count, camel::core::mm::autoSpace()))
+                                      : camel::core::rtdata::toSlot(
+                                            ::Tuple::create(count, camel::core::mm::autoSpace()));
             node_handle_t source =
                 currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, part.type));
             node_handle_t fill = fillNodeOf(source, part.type, values);
@@ -3830,8 +3888,7 @@ node_handle_t Builder::buildStreamLoop(
                     // The element this round is about and the rest of the stream, taken out of
                     // the pull that has just answered.
                     node_handle_t pair = applyTagOperator(TagNullValue, pullTemp, gct->loopBody());
-                    node_handle_t element =
-                        memberReadNodeOf(pair, elementType, 0, gct->loopBody());
+                    node_handle_t element = memberReadNodeOf(pair, elementType, 0, gct->loopBody());
                     registerNodeOrigin(context_, element, gct->loopBody(), "gir.loop.element");
                     insertNode(gct->loopElementName(), element);
                     if (recorder_) {
@@ -3857,7 +3914,10 @@ node_handle_t Builder::buildStreamLoop(
                     } else {
                         for (size_t j = 0; j < k; ++j) {
                             node_handle_t component = memberReadNodeOf(
-                                state, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
+                                state,
+                                stateTypes[j],
+                                static_cast<uint32_t>(j),
+                                gct->loopBody());
                             registerNodeOrigin(
                                 context_,
                                 component,

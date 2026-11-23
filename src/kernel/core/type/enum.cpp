@@ -69,13 +69,13 @@ std::string EnumVariant::signature() const {
 // ---- EnumDecl ----
 
 EnumDecl *
-EnumDecl::create(const std::string &name, std::vector<std::string> params, std::string module) {
-    return new EnumDecl(name, std::move(params), std::move(module));
+EnumDecl::create(const std::string &name, std::vector<std::string> params, module::Module *module) {
+    return new EnumDecl(name, std::move(params), module);
 }
 
-EnumDecl::EnumDecl(const std::string &name, std::vector<std::string> params, std::string module)
-    : name_(name), module_(std::move(module)),
-      id_(enumDeclCounter.fetch_add(1, std::memory_order_relaxed)), params_(std::move(params)) {
+EnumDecl::EnumDecl(const std::string &name, std::vector<std::string> params, module::Module *module)
+    : name_(name), module_(module), id_(enumDeclCounter.fetch_add(1, std::memory_order_relaxed)),
+      params_(std::move(params)) {
     const Reference ref(name);
     shortName_ = ref.empty() ? name : ref.ident();
 }

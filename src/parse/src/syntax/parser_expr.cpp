@@ -14,21 +14,16 @@
  *   andExpr         &                both sides evaluated        left
  *   equalityExpr    ===  !==  ==  !=                            left
  *   relationalExpr  <  >  <=  >=                                left
- *   rangeExpr       ..                                          left; looser than `+` and `-`, tighter
- *                                                               than the comparisons: `1..n+1` is
- *                                                               `1..(n+1)`
- *   additiveExpr    +  -                                        left
- *   multiplicative  *  /  @  %                                  left
- *   powerExpr       ^                                           right
- *   nullableExpr    ??  !!           right operand: a whole dataExpr
- *   unaryExpr       postfix `as T`
- *   negExpr         prefix -  !  ~   looser than `->` and than `^`, tighter than the other binary
- *                                    operators: `-x->f` is `-(x->f)`, `!xs->is_empty()` is
- *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a) * b`
- *   linkExpr        ->                                          left
- *   annoExpr        [index]  (arguments)  <arguments>  .member   postfix, touching
- *   accessExpr      .member
- *   primaryData     name, literal, [array], {struct}, (tuple), lambda
+ *   rangeExpr       ..                                          left; looser than `+` and `-`,
+ * tighter than the comparisons: `1..n+1` is `1..(n+1)` additiveExpr    +  - left multiplicative  *
+ * /  @  %                                  left powerExpr       ^ right nullableExpr    ??  !!
+ * right operand: a whole dataExpr unaryExpr       postfix `as T` negExpr         prefix -  !  ~
+ * looser than `->` and than `^`, tighter than the other binary operators: `-x->f` is `-(x->f)`,
+ * `!xs->is_empty()` is
+ *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a)
+ * * b` linkExpr        ->                                          left annoExpr        [index]
+ * (arguments)  <arguments>  .member   postfix, touching accessExpr      .member primaryData name,
+ * literal, [array], {struct}, (tuple), lambda
  *
  * Line breaks (rule 2). Where `nl_` is set, an operator that could also start a statement does
  * not continue an expression across a line break: `+`, `-` (a negation) and `@` (an
@@ -38,8 +33,8 @@
  * taken wherever it stands, too.
  */
 
-#include "parser_impl.h"
 #include "camel/parse/ast/type_case_words.h"
+#include "parser_impl.h"
 
 #include <optional>
 
@@ -598,8 +593,7 @@ bool ParserImpl::shapeCompAhead() const {
         if (const auto closer = bracketCloser(kind); closer.has_value()) {
             // `f(x)` is a call and `(x)` a parenthesised value where a type has no call: a `(`
             // opens a type only where a type starts, never after a name or a closing bracket.
-            if (kind == TK::LParen &&
-                previous.has_value() &&
+            if (kind == TK::LParen && previous.has_value() &&
                 (*previous == TK::Identifier || *previous == TK::RParen ||
                  *previous == TK::RBracket || *previous == TK::Gt)) {
                 return false;

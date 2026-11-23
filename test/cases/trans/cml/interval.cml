@@ -1,27 +1,20 @@
-// The interval `a..b` (design principles 4.2): the `int[]` of its integers in a value position,
-// and the sequence of a `for`, which the compiler fuses — the round takes the element from the
-// two bounds and the round number, so no array of the interval's elements is ever built. A
-// printed program has to spell the interval again, not the pair of bounds the graph holds.
-func sum_to(n: int) => int {
-    return loop acc = 0 for i in 0 .. n do acc + i
-}
+// The interval `a..b` in a value position (design principles 4.2): the library's range value --
+// the three numbers that name the integers -- and not the array of the integers themselves. A
+// printed program has to spell the interval again, `a..b`, rather than the `to_range` call the
+// graph holds, so the round trip stays a round trip.
+//
+// What the integers are is `to_array`'s to answer, and a loop over a range is a stream walk since
+// the same ruling, which `std::cml` does not print yet: the loop and the printer's refusal are
+// pinned in `feat.compile.stream` (`interval_loop`, `interval_loop_cml`).
 
-func first_rounds(lo: int, hi: int) => int {
-    return loop hits = 0 for i in lo .. hi while hits < 4 do hits + 1
-}
+import { Range } from prelude
 
-func below_zero() => int {
-    return loop last = 0 for i in (-2) .. 3 do i
-}
-
-func squares(n: int) => int[] {
-    // The interval in a value position is the `int[]` of its integers; the compiler keeps it an
-    // array here, and only the sequence of a `for` is fused.
-    let span = 1 .. (n + 1)
-    return [span[0] * span[0], span[n - 1] * span[n - 1]]
+func step_of(n: int) => int {
+    let span: Range = 1 .. (n + 1)
+    return span.step
 }
 
 func main() => int sync {
-    println(sum_to(4), first_rounds(-2, 3), below_zero(), squares(3))
+    println(step_of(3), step_of(0))
     return 0
 }

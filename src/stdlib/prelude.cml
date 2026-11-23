@@ -1022,12 +1022,12 @@ export func access_key::<T, U>(x: T) => U panic
 
 // ---- arrays ----
 
-/// The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
-/// the step is 1, `range(a, b)` is the same sequence as the interval `a..b` and becomes it on the
-/// graph (design principles 4.2). `step` must move: a step of 0 is a fault, and a constant call
-/// with a step of 0 is refused where it is written. The result is empty when the step does not
-/// carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
-/// array; this call builds one.
+/// The array of the integers of a step: `start`, `start + step`, ... up to, not including, `end`;
+/// with no step the step is 1. This is the materialised form and nothing else asks for it: the
+/// interval `a..b` is the value `to_range(a, b, 1)` (design principles 4.2, 5.4), and `to_array`
+/// is the one place a range becomes an array. `step` must move: a step of 0 is a fault, and a
+/// constant call with a step of 0 is refused where it is written. The result is empty when the
+/// step does not carry `start` towards `end`.
 /// @fails fault `InvalidArgument` when the step is 0
 /// @example range(0, 10, 3)     // [0, 3, 6, 9]
 /// @example range(10, 0, -3)    // [10, 7, 4, 1]
@@ -1037,30 +1037,28 @@ export func range(start: int, end: int, step: int) => int[] panic
 // ---- ranges ----
 //
 // A range is a value of its own type, not an array (design principles 5.4): `Range` writes the
-// three numbers that name it down, and `to_array` is the one conversion from it to the integers it
-// names. Nothing else in the library is renamed or retyped here: the interval `a..b` still builds
-// the array `range(a, b, 1)`, and the functions a range shares with an `int[]` (`map`, `filter`,
-// `reduce`, `len`, `print`) are not this round's -- a function of one of those names declared
-// beside the operator group of the same name is not an overload of it, it shadows it.
+// three numbers that name it down, `to_array` is the one conversion from it to the integers it
+// names, and `to_range` is the constructor the interval `a..b` itself is built with (with a step
+// of 1). The functions a range shares with an `int[]` (`map`, `filter`, `reduce`, `len`, `print`)
+// are not here: a function of one of those names declared beside the operator group of the same
+// name is not an overload of it, it shadows it.
 //
 // These names are written by a program only after `import { ... } from prelude`: the prelude's
-// types and its functions that are not operators are not brought along unasked.
+// types and its functions that are not operators are not brought along unasked. `to_range` is an
+// operator, so it is ambient like the rest of them, and the compiler writes its name for `a..b`.
 
 /// The three numbers naming a step of integers: `start`, `start + step`, ... up to, not
 /// including, `stop`. An end is null when a range is written without it (`..b`, `a..`, `..`), and
 /// there the missing end is the axis's own where the range is a subscript of it.
 export type Range = { start: int?, stop: int?, step: int }
 
-/// The range from start up to, not including, stop, taken in steps of step: the step of
-/// `range(a, b, s)`, and 1 for the interval `a..b`.
+/// The range from start up to, not including, stop, taken in steps of step: what the interval
+/// `a..b` is, with a step of 1, and what its three numbers are. `step` must move, as the array
+/// `range(a, b, s)` requires.
+/// @fails fault `InvalidArgument` when the step is 0
 /// @example to_range(1, 5, 1)->to_array()    // [1, 2, 3, 4]
-export func to_range(start: int, stop: int, step: int) => Range {
-    // A struct literal does not put a value into a `T?` field by itself (a declaration does), so
-    // the two ends are boxed where they are bound and the literal only copies what it is given.
-    let start_boxed: int? = start
-    let stop_boxed: int? = stop
-    return { start: start_boxed, stop: stop_boxed, step: step }
-}
+#op(':range/to_range')
+export func to_range(start: int, stop: int, step: int) => Range panic
 
 /// The integers of r as an array: the conversion from a range to the array it is not, and the only
 /// one -- nothing turns an array into a range. A range whose end is left out names no array (an
@@ -1078,6 +1076,73 @@ export func to_array(r: Range) => int[] {
 /// @example to_range(3, 3, 1)->is_empty()    // true
 export func is_empty(r: Range) => bool {
     return len(to_array(r)) == 0
+}
+
+// ---- a range's stream ----
+//
+// `for i in r` asks the type of `r` how to walk it (design principles 3.10, 5.4): it calls the
+// operator group `__iter__`, exactly as `r[i]` calls `__idx__`. The operator is `for`, so a type
+// answers with `func operator for(v: V) => T..`, and a range's answer is `operator for` below. Its
+// parameters are the value to walk -- one, like `operator []`'s two -- and what it answers is a
+// stream (the loop reads it round by round), which the compiler checks when the operator is
+// declared: a `for` that answers a value has no reading in a loop.
+//
+// A range hands out its integers one round at a time instead of building the array `to_array`
+// makes: the operator is a generator (design principles 5.4), so the body runs one stretch per
+// pull and the integer a round sees is the one the pull before it stopped at.
+//
+// The loop counts towards the end the range names, and a range whose end is left out counts on:
+// that is the one form `a..b` cannot write (an interval always names both ends, design principles
+// 4.2), but the type allows it and walking it is what "count on" means.
+
+/// One round of the walk while the count has not reached stop: the integer and the walk from the
+/// next one, or null when the range has run out. A stream cannot name itself in the closure that
+/// makes it (a closure cannot capture a stream, design principles 5.4), so the round is a function
+/// of its own and the stream is the `match` over it -- the shape `unfold` has in stdlib/stream.cml.
+func upto_round(i: int, stop: int, stride: int) => (int, int..)? {
+    return if (if stride > 0 then i < stop else i > stop) then
+        (i, range_upto(i + stride, stop, stride))
+    else
+        null
+}
+
+/// The integers from i on, in steps of stride, while the count has not reached stop: a stop that
+/// does not lie past i names no integer at all (design principles 4.2).
+func range_upto(i: int, stop: int, stride: int) => int.. {
+    return func () {
+        match upto_round(i, stop, stride) {
+            case null => null
+            case pair => pair
+        }
+    }
+}
+
+/// One round of the walk without end: the integer and the walk from the next one.
+func from_round(i: int, stride: int) => (int, int..)? {
+    return (i, range_from(i + stride, stride))
+}
+
+/// The integers from i on, in steps of stride, without end.
+func range_from(i: int, stride: int) => int.. {
+    return func () {
+        match from_round(i, stride) {
+            case null => null
+            case pair => pair
+        }
+    }
+}
+
+/// The integers r names, one per round: `for i in 0..3` takes the next one each round, so a loop
+/// over a range counts instead of walking an array. This is `Range`'s `for` operator, and the
+/// compiler reads it for the type of the thing a `for` walks (design principles 4.3, 5.4, 5.7: a
+/// named type's operators go with the type, and the group `__iter__` is where `for` lands).
+/// @example loop acc = 0 for i in to_range(0, 4, 1) do acc + i    // 6
+export func operator for(r: Range) => int.. {
+    let first = r.start ?? 0
+    return match r.stop {
+        case null => range_from(first, r.step)
+        case stop => range_upto(first, stop, r.step)
+    }
 }
 
 /// The last element. An empty array has none: check len first. Negative indices are not

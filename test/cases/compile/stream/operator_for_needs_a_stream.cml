@@ -1,0 +1,15 @@
+// What `for` answers is what the loop reads round by round, so the answer is a stream `T..`
+// (design principles 5.4). An operator that answers anything else has no reading in a `for`, and
+// the declaration is refused where it is written rather than at each loop that would have used it.
+
+type Counter = {
+    n: int
+}
+
+func operator for(c: Counter) => int {
+    return c.n
+}
+
+func main() => int sync {
+    return 0
+}

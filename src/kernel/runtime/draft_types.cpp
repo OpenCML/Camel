@@ -12,8 +12,8 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/draft_writes.h"
+#include "camel/runtime/oper_shape.h"
 
 #include <algorithm>
 #include <functional>
@@ -36,7 +36,8 @@ std::vector<gc_node_ref_t> dependencyOrder(const GraphDraft &draft) {
             return;
         }
         state[id] = 1;
-        for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+        for (auto inputs :
+             {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
             for (gc_node_ref_t in : inputs) {
                 visit(in);
             }
@@ -69,7 +70,7 @@ std::optional<slot_t> staticSlotOf(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_t id) {
-    const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
+    const auto *body    = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
     const auto resolver = camel::core::OperatorTable::instance().resolver(body->oper);
     if (!resolver) {
         return std::nullopt;
@@ -189,7 +190,7 @@ std::optional<type::Type *> nodeResultType(const GraphDraft &draft, gc_node_ref_
     }
     case GCNodeKind::Func: {
         const auto *calleeGraph = draft.calleeGraphOf(id);
-        const auto *callee         = calleeGraph ? calleeGraph->funcType() : nullptr;
+        const auto *callee      = calleeGraph ? calleeGraph->funcType() : nullptr;
         if (!callee || !callee->hasExitType()) {
             return std::nullopt;
         }

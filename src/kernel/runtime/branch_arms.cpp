@@ -20,17 +20,17 @@
  * inside an arm are regions of that arm (and of a loop nested in another loop's part, regions of
  * that part), so no part of a loop is laid out outside the arm that runs the loop.
  *
- * The read rule is a rule about a graph's *regions*, not about its branches: the body of a loop is a
- * region of the graph exactly as an arm is, and it runs only while the loop does, so a graph with no
- * BRCH at all has cross-region reads too and they are asked here as well. The walk below therefore
- * does not stop at a graph that names no branch.
+ * The read rule is a rule about a graph's *regions*, not about its branches: the body of a loop is
+ * a region of the graph exactly as an arm is, and it runs only while the loop does, so a graph with
+ * no BRCH at all has cross-region reads too and they are asked here as well. The walk below
+ * therefore does not stop at a graph that names no branch.
  */
 
 #include "runtime/graph_build.h"
 
-#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/program.h"
 
 #include <array>
@@ -138,20 +138,20 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
         }
     }
 
-    // No early return when the graph names no BRCH. A graph's regions are not a branch's regions: the
-    // condition and the body of a LOOP are regions of the graph exactly as an arm is (design
+    // No early return when the graph names no BRCH. A graph's regions are not a branch's regions:
+    // the condition and the body of a LOOP are regions of the graph exactly as an arm is (design
     // principles 3.10), and a part runs only while its loop does. So a node of the function body
-    // reading a value a loop's body computes is the same read as a node of one arm reading the other
-    // arm's, and it is asked by the same walk below. Returning here made every cross-region read of a
-    // branch-less graph -- which is every read of a loop's part values -- unasked: the commit
-    // published the graph, and the back ends ran it, reading a value that was never written.
+    // reading a value a loop's body computes is the same read as a node of one arm reading the
+    // other arm's, and it is asked by the same walk below. Returning here made every cross-region
+    // read of a branch-less graph -- which is every read of a loop's part values -- unasked: the
+    // commit published the graph, and the back ends ran it, reading a value that was never written.
     //
     // The questions that *are* about a branch are the loop over `branches` below, which is empty
     // here; nothing else needed a branch to be asked.
 
-    // Every edge a node is entered from: its data and context ports and the chain that orders it, in
-    // either kind that chain is written in (docs/design/effects/edges.cn.md 1). A chain link waits
-    // on the link written before it either way, so liveness does not depend on the kind.
+    // Every edge a node is entered from: its data and context ports and the chain that orders it,
+    // in either kind that chain is written in (docs/design/effects/edges.cn.md 1). A chain link
+    // waits on the link written before it either way, so liveness does not depend on the kind.
     const auto appendInputsOf = [graph](gc_node_ref_t ref, std::vector<gc_node_ref_t> &into) {
         for (auto part : {graph->normInputsOf(ref), graph->withInputsOf(ref)}) {
             into.insert(into.end(), part.begin(), part.end());
@@ -180,12 +180,16 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
     const ControlRegions regions(*graph);
     const auto controlOf = [&](gc_node_ref_t ref) { return regions.controlOf(ref); };
     // The control region `c` lies in an arm of the BRCH `brch`.
-    const auto inArmOf = [&](uint32_t c, gc_node_ref_t brch) { return regions.armOf(c, brch) >= 0; };
+    const auto inArmOf = [&](uint32_t c, gc_node_ref_t brch) {
+        return regions.armOf(c, brch) >= 0;
+    };
     // The arm of `brch` that the control region `c` lies in, -1 for none.
     const auto armOfControl = [&](uint32_t c, gc_node_ref_t brch) {
         return regions.armOf(c, brch);
     };
-    const auto within = [&](uint32_t inner, uint32_t outer) { return regions.within(inner, outer); };
+    const auto within = [&](uint32_t inner, uint32_t outer) {
+        return regions.within(inner, outer);
+    };
 
     for (const gc_node_ref_t brch : branches) {
         if (!live[brch]) {
@@ -194,8 +198,8 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
         const auto *body         = graph->nodeBodyAs<GCBrchBody>(brch);
         const gc_node_ref_t join = body->join;
         const GCNode *joinNode   = join != kInvalidNodeRef ? graph->node(join) : nullptr;
-        if (!joinNode || joinNode->kind != GCNodeKind::Join ||
-            graph->normInputsOf(join).empty() || graph->normInputsOf(join).front() != brch) {
+        if (!joinNode || joinNode->kind != GCNodeKind::Join || graph->normInputsOf(join).empty() ||
+            graph->normInputsOf(join).front() != brch) {
             fail(
                 graph,
                 std::format(
@@ -271,7 +275,8 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
         const auto parts    = regions.loopPartsOf(ref);
         const uint32_t here = controlOf(ref);
         const std::array<std::pair<uint32_t, const char *>, 2> named{
-            std::pair{parts[0], "condition"}, std::pair{parts[1], "body"}};
+            std::pair{parts[0], "condition"},
+            std::pair{parts[1], "body"}};
         for (const auto &[part, what] : named) {
             if (part == 0) {
                 continue;
@@ -285,7 +290,8 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
             fail(
                 graph,
                 std::format(
-                    "{} is in {} but its {} region {} is a region of {}: the condition and the body "
+                    "{} is in {} but its {} region {} is a region of {}: the condition and the "
+                    "body "
                     "of a loop are regions of where the loop is",
                     describe(program, graph, ref),
                     describeControl(graph, here),
@@ -301,11 +307,11 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
         if (!live[ref]) {
             continue;
         }
-        const uint32_t here = controlOf(ref);
-        const bool isJoin   = graph->node(ref)->kind == GCNodeKind::Join;
-        const gc_node_ref_t joinOf =
-            isJoin && !graph->normInputsOf(ref).empty() ? graph->normInputsOf(ref).front()
-                                                         : kInvalidNodeRef;
+        const uint32_t here        = controlOf(ref);
+        const bool isJoin          = graph->node(ref)->kind == GCNodeKind::Join;
+        const gc_node_ref_t joinOf = isJoin && !graph->normInputsOf(ref).empty()
+                                         ? graph->normInputsOf(ref).front()
+                                         : kInvalidNodeRef;
         if (isJoin && joinOf != kInvalidNodeRef) {
             // One of the several JOINs over a BRCH (see above): a value DAG for a translator.
             size_t joinsReading = 0;
@@ -324,88 +330,85 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                 continue;
             }
 
-                const uint32_t there = controlOf(input);
-                if (there == 0) {
-                    // The JOIN of a BRCH runs after every one of its arms (the arms' results are
-                    // its with inputs), so a node inside an arm cannot read it: the arm would wait
-                    // on the join that waits on the arm. The arm is what makes the read ordinary
-                    // looking -- reading the body is allowed -- so the JOIN is named here.
-                    if (here != 0) {
-                        for (const gc_node_ref_t owner : branches) {
-                            if (!live[owner]) {
-                                continue;
-                            }
-                            const gc_node_ref_t armJoin =
-                                graph->nodeBodyAs<GCBrchBody>(owner)->join;
-                            if (input != armJoin || armJoin == kInvalidNodeRef) {
-                                continue;
-                            }
-                            const int64_t arm = regions.armOf(here, owner);
-                            if (arm < 0) {
-                                continue;
-                            }
-                            fail(
-                                graph,
-                                std::format(
-                                    "{} runs in arm {} of BRCH {} and reads its JOIN {}, which runs "
-                                    "after every arm: the arm would wait on the node that waits on "
-                                    "the arm",
-                                    describe(program, graph, ref),
-                                    arm,
-                                    owner,
-                                    describe(program, graph, input)));
+            const uint32_t there = controlOf(input);
+            if (there == 0) {
+                // The JOIN of a BRCH runs after every one of its arms (the arms' results are
+                // its with inputs), so a node inside an arm cannot read it: the arm would wait
+                // on the join that waits on the arm. The arm is what makes the read ordinary
+                // looking -- reading the body is allowed -- so the JOIN is named here.
+                if (here != 0) {
+                    for (const gc_node_ref_t owner : branches) {
+                        if (!live[owner]) {
+                            continue;
                         }
+                        const gc_node_ref_t armJoin = graph->nodeBodyAs<GCBrchBody>(owner)->join;
+                        if (input != armJoin || armJoin == kInvalidNodeRef) {
+                            continue;
+                        }
+                        const int64_t arm = regions.armOf(here, owner);
+                        if (arm < 0) {
+                            continue;
+                        }
+                        fail(
+                            graph,
+                            std::format(
+                                "{} runs in arm {} of BRCH {} and reads its JOIN {}, which runs "
+                                "after every arm: the arm would wait on the node that waits on "
+                                "the arm",
+                                describe(program, graph, ref),
+                                arm,
+                                owner,
+                                describe(program, graph, input)));
                     }
+                }
+                continue;
+            }
+            if (within(here, there)) {
+                continue;
+            }
+            // The JOIN reads the results of its arms (and what waits inside them), the LOOP
+            // those of its parts.
+            if (isJoin && inArmOf(there, joinOf)) {
+                continue;
+            }
+            if (graph->node(ref)->kind == GCNodeKind::Loop) {
+                const auto parts = regions.loopPartsOf(ref);
+                if (regions.within(there, parts[0]) && parts[0] != 0) {
                     continue;
                 }
-                if (within(here, there)) {
+                if (regions.within(there, parts[1]) && parts[1] != 0) {
                     continue;
                 }
-                // The JOIN reads the results of its arms (and what waits inside them), the LOOP
-                // those of its parts.
-                if (isJoin && inArmOf(there, joinOf)) {
-                    continue;
-                }
-                if (graph->node(ref)->kind == GCNodeKind::Loop) {
-                    const auto parts = regions.loopPartsOf(ref);
-                    if (regions.within(there, parts[0]) && parts[0] != 0) {
-                        continue;
-                    }
-                    if (regions.within(there, parts[1]) && parts[1] != 0) {
-                        continue;
-                    }
-                }
-                const GCRegion &region = *graph->region(there);
-                const int64_t theirArm = region.kind == GCRegionKind::Arm
-                                             ? static_cast<int64_t>(region.index)
-                                             : int64_t{-1};
-                const int64_t ownArm   = region.kind == GCRegionKind::Arm
-                                             ? armOfControl(here, region.owner)
-                                             : int64_t{-1};
-                if (ownArm >= 0 && ownArm != theirArm) {
-                    fail(
-                        graph,
-                        std::format(
-                            "{} runs between BRCH {} and its JOIN {} and belongs to two arms, {} and "
-                            "{}: it would run only when arm {} is taken, and arm {} reads it",
-                            describe(program, graph, input),
-                            region.owner,
-                            graph->nodeBodyAs<GCBrchBody>(region.owner)->join,
-                            theirArm,
-                            ownArm,
-                            theirArm,
-                            ownArm));
-                }
-
+            }
+            const GCRegion &region = *graph->region(there);
+            const int64_t theirArm =
+                region.kind == GCRegionKind::Arm ? static_cast<int64_t>(region.index) : int64_t{-1};
+            const int64_t ownArm =
+                region.kind == GCRegionKind::Arm ? armOfControl(here, region.owner) : int64_t{-1};
+            if (ownArm >= 0 && ownArm != theirArm) {
                 fail(
                     graph,
                     std::format(
-                        "{} runs in {} and reads {}, which lies in {}: a node reads only the values "
-                        "that run whenever it runs",
-                        describe(program, graph, ref),
-                        describeControl(graph, here),
+                        "{} runs between BRCH {} and its JOIN {} and belongs to two arms, {} and "
+                        "{}: it would run only when arm {} is taken, and arm {} reads it",
                         describe(program, graph, input),
-                        describeControl(graph, there)));
+                        region.owner,
+                        graph->nodeBodyAs<GCBrchBody>(region.owner)->join,
+                        theirArm,
+                        ownArm,
+                        theirArm,
+                        ownArm));
+            }
+
+            fail(
+                graph,
+                std::format(
+                    "{} runs in {} and reads {}, which lies in {}: a node reads only the values "
+                    "that run whenever it runs",
+                    describe(program, graph, ref),
+                    describeControl(graph, here),
+                    describe(program, graph, input),
+                    describeControl(graph, there)));
         }
     }
 }

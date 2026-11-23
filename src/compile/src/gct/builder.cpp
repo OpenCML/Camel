@@ -4,7 +4,6 @@
 // What this file owns: the lowering of a module's declarations -- its head, imports, exports, and
 // the data, tag, resource, function, type, enum and struct declarations.
 
-
 #include "builder.h"
 #include <exception>
 
@@ -48,9 +47,7 @@ namespace camel::compile::gct {
 // The resource model of a function type (design effects plan 2.2, 3.1): short, as `Type` is.
 namespace sem = camel::core::sem;
 
-
 Reference defaultImportNamespace(const std::string &path);
-
 
 pair<node_ptr_t, data_ptr_t> Builder::makeRefData(const node_ptr_t &expr) {
     const string id    = std::to_string(idIndex_++);
@@ -59,7 +56,6 @@ pair<node_ptr_t, data_ptr_t> Builder::makeRefData(const node_ptr_t &expr) {
     data_ptr_t data = make_shared<RefData>(id);
     return make_pair(refNode, data);
 }
-
 
 pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode) {
     const data_ptr_t data = extractStaticDataFromNode(node);
@@ -115,7 +111,6 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
     return make_pair(refData, dang);
 }
 
-
 void Builder::initInnerTypes() {
     typeScope_->clear();
     typeScope_->insert(Reference("i32"), Type::Int32());
@@ -147,7 +142,6 @@ void Builder::initInnerTypes() {
 /*
 Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
-
 
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ENTER("Module");
@@ -710,7 +704,6 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     return stmtNode;
 }
 
-
 Reference defaultImportNamespace(const std::string &path) {
     size_t begin = 0;
     while (begin < path.size() && path[begin] == '.') {
@@ -954,6 +947,23 @@ void Builder::checkOperatorDeclaration(
             diags_->of(SemanticDiag::OperatorOverloadInvalid)
                 .at(param->load()->tokenRange())
                 .commit(symbol, "an operator does not change its operands: no var parameters");
+            throw BuildAbortException();
+        }
+    }
+    // `for x in c` reads what the operator answers round by round, so what it answers is a
+    // stream (design principles 5.4): `func operator for(r: Range): int..`. A `for` that answers
+    // a value has no reading in a loop, and a loop that would use it cannot be the place that
+    // finds out.
+    if (symbol == "for") {
+        const AST::node_ptr_t returned = funcType->optAtAs<AST::TypeLoad>(2);
+        if (returned == nullptr ||
+            returned->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Stream) {
+            diags_->of(SemanticDiag::OperatorOverloadInvalid)
+                .at(at)
+                .commit(
+                    symbol,
+                    "what it answers is what the loop reads round by round, so its return type is "
+                    "a stream ('func operator for(r: Range): int..')");
             throw BuildAbortException();
         }
     }
@@ -1709,7 +1719,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             if (type->code() == TypeCode::Struct) {
                 const auto *structType = static_cast<camel::core::type::StructType *>(type);
                 camel::core::type::StructDecl *decl = structType->decl();
-                nominal = decl != nullptr && decl->moduleName() == module_->name() &&
+                nominal = decl != nullptr && decl->module() == module_.get() &&
                           decl->name() == typeLoad->ref().toString();
                 if (nominal) {
                     decl->setHandle();
@@ -1717,7 +1727,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             } else if (type->code() == camel::core::type::EnumType::typeCode()) {
                 const auto *enumType = static_cast<camel::core::type::EnumType *>(type);
                 camel::core::type::EnumDecl *decl = enumType->decl();
-                nominal = decl != nullptr && decl->moduleName() == module_->name() &&
+                nominal = decl != nullptr && decl->module() == module_.get() &&
                           decl->name() == typeLoad->ref().toString();
                 if (nominal) {
                     decl->setHandle();
@@ -1783,10 +1793,9 @@ std::vector<Type *> Builder::bindTypeParameters(
 }
 
 Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
-    const string name   = decl->ref().toString();
-    const auto enumLoad = ast->loadAs<AST::EnumTypeLoad>();
-    EnumDecl *declaration =
-        EnumDecl::create(name, decl->params(), module_ ? module_->name() : std::string());
+    const string name                    = decl->ref().toString();
+    const auto enumLoad                  = ast->loadAs<AST::EnumTypeLoad>();
+    EnumDecl *declaration                = EnumDecl::create(name, decl->params(), module_.get());
     const bool generic                   = !decl->params().empty();
     scope_ptr_t<Reference, Type *> outer = typeScope_;
     if (generic) {
@@ -1822,10 +1831,9 @@ Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLo
 }
 
 Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
-    const string name  = decl->ref().toString();
-    const bool generic = !decl->params().empty();
-    StructDecl *declaration =
-        StructDecl::create(name, decl->params(), module_ ? module_->name() : std::string());
+    const string name                    = decl->ref().toString();
+    const bool generic                   = !decl->params().empty();
+    StructDecl *declaration              = StructDecl::create(name, decl->params(), module_.get());
     scope_ptr_t<Reference, Type *> outer = typeScope_;
     std::vector<Type *> parameters;
     if (generic) {
@@ -1962,7 +1970,5 @@ node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
     LEAVE("UsingNamespaceDecl");
     return makeExec();
 }
-
-
 
 } // namespace camel::compile::gct

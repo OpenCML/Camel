@@ -88,9 +88,9 @@ bool declaresExternalAccess(
 }
 
 OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
-    const auto &table = camel::core::OperatorTable::instance();
+    const auto &table       = camel::core::OperatorTable::instance();
     const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
-    const auto *facts = table.semantics(oper);
+    const auto *facts       = table.semantics(oper);
     if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
         return OperandClause{};
     }
@@ -154,17 +154,17 @@ struct EffectWalk {
                 // The one reading of an operator's effect, at the node it runs at
                 // (`effectSummaryOfOperator`, which `core.operatorEffects` and a per-node reader
                 // ask as well), so this summary and those readers cannot disagree.
-                summary |= effectSummaryOfOperator(
-                    graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
+                summary |=
+                    effectSummaryOfOperator(graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
                 break;
             }
             case GCNodeKind::Call:
                 // A call through a function value: its reach is the value's clause, read the same
-                // way `Resolver::call` reads it for the footprint (design principles 3.3). `pure` is
-                // the clause that names nothing, so a call through a pure value is not an external
-                // effect. A reader that answers from no type at all calls every call "external",
-                // `pure` included, which is what makes a pure call look like a write nobody can
-                // name.
+                // way `Resolver::call` reads it for the footprint (design principles 3.3). `pure`
+                // is the clause that names nothing, so a call through a pure value is not an
+                // external effect. A reader that answers from no type at all calls every call
+                // "external", `pure` included, which is what makes a pure call look like a write
+                // nobody can name.
                 summary.external |= callClause(*graph, ref).external;
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
@@ -205,10 +205,8 @@ EffectSummary ofRegion(const Program &program, const GCGraph *graph, uint32_t re
 
 } // namespace effectwalk
 
-EffectSummary effectSummaryOfOperator(
-    camel::core::OperId oper,
-    const GCGraph *graph,
-    gc_node_ref_t ref) {
+EffectSummary
+effectSummaryOfOperator(camel::core::OperId oper, const GCGraph *graph, gc_node_ref_t ref) {
     const auto &table = camel::core::OperatorTable::instance();
     const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
     EffectSummary summary;
@@ -252,8 +250,7 @@ EffectSummary ofNode(const Program &program, const GCGraph *graph, gc_node_ref_t
     switch (graph->node(ref)->kind) {
     case GCNodeKind::Oper:
         // The one reading of an operator's effect, at this node (`effectSummaryOfOperator`).
-        summary |=
-            effectSummaryOfOperator(graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
+        summary |= effectSummaryOfOperator(graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
         break;
     case GCNodeKind::Call:
         // A call through a function value: its reach is the value's clause (design principles 3.3),

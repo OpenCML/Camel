@@ -17,6 +17,13 @@
 | D-1123-63 | 作者 fsh-dev | `editors/vscode` 已从仓库删除（`2de5b196f8`），而文档仍链它：删文档里的引用（写成自有仓库或干脆不提），主检出磁盘上的残留目录也删；之后 gate 1/5 在主检出与任一工作树读数应一致 | `lane/editor-links` | doing | 2026-11-23 23:25 | |
 | C-1123-61 | `lane/effects-declarations` 实测 | `sem::checkResources` 不许一个算子同时写自陈访问与 `functionOperand`，于是 `state:update`、`tiles:run_compiled`/`run_compiled_device`/`run_host_resident`/`run_preferred_resident` 这类「自陈访问 + 调别的图」改不成操作数子句，只能留着粗标；要放宽校验才写得下（属裁决） | — | todo | 2026-11-23 23:30 | |
 | D-1123-70 | 作者 fsh-dev | 全查所有吐出 Camel 源码的地方（打印器、格式化器、参考页生成器、gir/rgir/jgir、诊断里的修复建议、测试脚本拼的源码），找五种旧写法：`: T`、`f..g`/`?..`、`A = int`、`(x) => e`、`[a:b]`；判据是每个生成器出一段样例交给解析器编回去零失败 | `lane/range-surface` | doing | 2026-11-23 23:35 | |
+| D-1123-65 | 作者 fsh-dev | 每槽固定进程预算（构建 8/8、测试 16，合计=核数 32；独占主机 32；调用方只能往下压；登记记 jobs），由主机脚本按槽号设，不是约定 | `lane/slot-budget` | doing | 2026-11-23 23:45 | |
+| D-1123-68 | 作者 fsh-dev | 车道开到 6–8 条：视图补 JOIN 输入口、GraphView 文档与四缺口、Range 打印器与 map、名字解析合成重载集、槽表预算，不再按 load average 停派 | 多条 | done | 2026-11-23 23:50 | `72be170e8a` |
+| D-1123-71 | 作者 fsh-dev | CAST/COPY/FILL/ACCS 翻成普通 OPER 那一摞停在半路（无分支带着它）；重排车道，验收四种 kind 引用为 0 且视图不再需要两步读法 | `lane/kinds-to-oper` | doing | 2026-11-23 23:50 | |
+| D-1123-72 | 作者 fsh-dev | 补开车道；合 fsh-dev 七笔插件修复，车道少时请负责人重载 | 多条 | done | 2026-11-23 23:50 | `e492cdff07` |
+| D-1123-73 | 作者 fsh-dev | 合并脚本推送前断言两件：`git merge` 退出码为 0（不看输出文本）、`merge-base --is-ancestor <分支头> HEAD` 成立；任一不过就停、不提交、不推，并报哪条没过；合并说明附被合分支头哈希 | — | done | 2026-11-23 23:55 | `c27bcee9dc` |
+| D-1123-74 | 作者 fsh-dev | `merge-lane.ps1` 删 `index.lock` 的前提：锁超过 2 分钟**且**没有任何 git 进程在跑；有进程就停、报出它、不删（删锁而 git 仍在写会弄坏索引） | — | done | 2026-11-24 00:00 | `f63aad6ad9` |
+| C-1123-62 | CI 实测 | GitHub Actions run 45206572656 在 35 秒、一次构建都没完成的时刻 exit 1，`test/results/log/*/fail/` 无文件可收；上一次成功的 run 用了 24 分。失败步的 `##[error]` 之前只有一条 `url.parse()` 弃用警告，看不出真因，要在失败步的完整日志里找 | — | todo | 2026-11-24 00:00 | |
 | C-1123-1 | `lane/stage2-frontend-oper` 的实测 | autodiff 没有 `:op/access_key` 的导数规则：`no derivative rule for operator ':op/access_key' of type 'float[4, 2]'`，tuple 那几处梯度算成 `(0.0)`；9 处（`transpose_tuple_component` 4、`transpose_loop_escape` 2、`transpose_no_tangent.tuple_member`、`jvp_loop.struct_state_is_lifted`、`transformer_step_gradient`、`stated_extents/sum_axis_in_a_training_step`） | 待派 | open | 2026-11-23 01:20 | — |
 | C-1123-2 | 同上 | `std::cpp` 不认识 `:op/access_key`：`uses the operator ':op/access_key' on a value of type 'P', which has n…`；`entry_args/cpp_struct_refused` 与 `feat/trans` 的 `print_shape`、`enum_types`、`recursive_enum_types` 共 4 处，另 `static_expansion/` 2 处 | 待派 | open | 2026-11-23 01:20 | — |
 | C-1123-3 | 同上 | 按 kind 数成员读的校验判据要改：`Error: field accesses changed:` 与 `the caller does not project the returned tuple: 0`，`port/fill metadata: PASS` 不再出现。**起因是闸门按 family 判而非按 kind 判**，判定改窄后本该绿的项翻了 | 待派 | open | 2026-11-23 01:20 | — |
@@ -74,11 +81,11 @@
 | D-1123-34 | 作者 fsh-dev | 内核 include 标准库：`shaped_operators` 16→0，stdlib 头 12→4 行 | `lane/operator-uri` | done | 2026-11-23 22:02 | `3bc124bfdb` |
 | D-1123-36 | 作者 fsh-dev | 注释里的过程痕迹 + 检查脚本；旧认领残留可弃 | `lane/comment-traces` | doing | 2026-11-23 23:00 | |
 | D-1123-48 | 作者 fsh-dev | `moduleNamed` 到不了 prelude：判据 0→1 | `lane/range-ri` | done | 2026-11-23 22:30 | `558819d0fa` |
-| D-1123-49 | 作者 fsh-dev | `__iter__` 改 `func operator for(r: Range): int..`；7.4.5 加 `for`；两条用例 | `lane/range-ri` | todo | 2026-11-23 22:40 | |
+| D-1123-49 | 作者 fsh-dev | `__iter__` 改 `func operator for(r: Range): int..`；7.4.5 加 `for`；两条用例 | `lane/range-ri` | done | 2026-11-23 23:40 | `4d806f4776` |
 | D-1123-41(b)(c) | 作者 fsh-dev | (b) `a..b` 产生 `Range`；(c) 下标按类型分派，删掉解析器切片特例 | `lane/parser-old-spelling` | doing | 2026-11-23 23:00 | |
 | D-1123-50 | 作者 fsh-dev | 协作机制 ①②③：装 0.2、删定时任务与 camel-lanes、skill 合成 `internal/collab` | — | done | 2026-11-23 22:15 | `ae0e9501b8` |
 | D-1123-50④ | 作者 fsh-dev | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感独占、pre-push 限合并位 | `lane/host-locks` | doing | 2026-11-23 23:00 | |
-| D-1123-52② | 作者 fsh-dev | `moduleNamed` 撤名字搜索，改用类型记的声明模块引用（5.2）；`declaredName_` 删干净 | `lane/range-ri` | doing | 2026-11-23 22:40 | |
+| D-1123-52② | 作者 fsh-dev | `moduleNamed` 撤名字搜索，改用类型记的声明模块引用（5.2）；`declaredName_` 删干净 | `lane/range-ri` | done | 2026-11-23 23:15 | `ff4639e261` |
 | D-1123-53① | 作者 fsh-dev | 节点效应 = 声明访问 ∪ 操作数访问（3.3）；删参数；粗标的高阶算子改声明 | `lane/effects-declarations` | doing | 2026-11-23 22:40 | |
 | D-1123-53② | 作者 fsh-dev | `.isPure(`/`hasExternalEffect(` 读者 19→0；两个公开接口删掉 | `lane/effects-declarations` | todo | 2026-11-23 22:40 | |
 | D-1123-54 | 作者 fsh-dev | 规矩：删就删干净，历史只进提交说明 | — | done | 2026-11-23 22:40 | |
