@@ -195,8 +195,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     //     `liftTransposeKernel` below already takes of its operand), and
     //   * the operand graph's signature **is** the signature this call was resolved to answer
     //     (`ArgsView::resultType`), so the value already has the type the node promises.
-    // The walk that lifts bodies cannot ask this question: it reads a `GraphRead` face, which
-    // answers no `liftedFrom` (only a `GCGraph` does), and the two lifts belong to two different
+    // The walk that lifts bodies cannot ask this question: the two lifts belong to two different
     // builds, so no table of one build can see the other. The property is about the graph, and this
     // is the place that holds one.
     //

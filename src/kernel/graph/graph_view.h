@@ -120,9 +120,8 @@ inline constexpr RegionId kNoRegion = static_cast<RegionId>(-1);
  *   Loop                       unchanged.
  *   Gate                       unchanged, but its value is its only data input.
  *
- * Who migrates: every reader of a node's kind -- `compile/gir/graph_read.h` (`NodeFace::kind` and
- * its two subclasses), `lib/test/graph_faces.cpp`, the ~37 `switch`es section 1 counts, and the two
- * backends once they read the view instead of the payload.
+ * Who migrates: every reader of a node's kind -- `lib/test/graph_faces.cpp`, the ~37 `switch`es
+ * section 1 counts, and the two backends once they read the view instead of the payload.
  */
 enum class NodeKind : std::uint8_t {
     Data = 0,
@@ -217,7 +216,7 @@ struct RegionRecord {
 /// collects into arrays. Replaces `GCLoopRef` (the frozen payload), `GCLoopBody`, the three
 /// `loopKindOf`/`loopIterableFormOf`/`loopCollectionCountOf` accessors and `loopBodyOf`, which are
 /// four spellings of one record. Who migrates: `camel/runtime/loop.h` (`LoopView`),
-/// `LoopDraftView`, and the loop readers in `lib/transforms` and `modules`.
+/// `LoopView`, and the loop readers in `lib/transforms` and `modules`.
 struct LoopForm {
     camel::core::LoopKind kind                 = camel::core::LoopKind::While;
     camel::core::LoopIterableForm iterableForm = camel::core::LoopIterableForm::Array;
@@ -262,8 +261,7 @@ struct CalleeRef {
 
 /**
  * The graph a reader holds, whatever it is made of. Replaces, together, `GCGraph` and `GraphDraft`
- * as *read* by anything but an adapter, and `compile/gir/graph_read.h`'s `GraphRead` with both of
- * its subclasses -- that face was the first half of this one and stops at the facts the lift asks.
+ * as *read* by anything but an adapter.
  *
  * A view is a way of reading a graph, not the graph's identity: the graph is a value (`Graph`
  * above), an adapter is made on demand, and the same graph read through another adapter is still
@@ -274,8 +272,8 @@ struct CalleeRef {
  * `mayFault` here, or a node's macro-ness or constant-ness, is looking in the wrong layer (section
  * 4, and the paragraph above that says where each of the three went).
  *
- * The parameters are a virtual interface on purpose. The first readers moved onto it -- the lift,
- * the encoder's self-check, `LoopView`, `decidingRegionOf`, `ControlRegions`, `NodeRoleRegistry` --
+ * The parameters are a virtual interface on purpose. The readers on it -- the encoder's self-check,
+ * `LoopView`, `decidingRegionOf`, `ControlRegions`, `NodeRoleRegistry` --
  * are not inner loops, and the two representations are what stage 3 deletes: a seam that costs a
  * virtual call for one stage is worth less than a template that would put both representations'
  * types into every reader this stage exists to shrink. When one representation is left, the virtual
@@ -368,9 +366,9 @@ class GraphView {
     /// The region's parameters, in port order: the values it is entered with (a loop's state, an
     /// arm's arguments). Replaces `GCGraph::regionPorts` and `GCRegion::portBegin/portCount`.
     virtual std::span<const NodeRef> regionParameters(RegionId id) const = 0;
-    /// The nodes directly in the region, in node order. A vector rather than a span for the reason
-    /// `GraphRead` returns vectors: a graph stores the region *of* a node, not the nodes of a
-    /// region, so an adapter answering a span would keep a list it does not store.
+    /// The nodes directly in the region, in node order. A vector rather than a span because a graph
+    /// stores the region *of* a node, not the nodes of a region: an adapter answering a span would
+    /// keep a list it does not store.
     virtual std::vector<NodeRef> regionNodes(RegionId id) const = 0;
     /// The innermost region a node is in. Replaces `nodeRegion`/`regionOfNode`; a node that is not
     /// in the graph has no region, and is not answered as being in the body.
