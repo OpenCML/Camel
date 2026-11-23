@@ -4870,7 +4870,7 @@ class RewriteModule final : public BuiltinModule {
         camel::core::OperatorTable::instance().declareUnfoldable(
             "rewrite",
             {"rule", "rule_when", "rule_generic", "fact"});
-        // What the three operators that read a graph touch: the graph, read and never written.
+        // What the operators that read a graph touch: the graph, read and never written.
         // `saturate` reads the graphs of the rules'
         // two sides and of the function it is applied to, and hands back a new function value --
         // the graph it read is an immutable value, so no clause writes it. `check` reads the same
@@ -4878,6 +4878,13 @@ class RewriteModule final : public BuiltinModule {
         // argument and are not a resource, so no access names them. Its random sampling takes a
         // fixed stream: the samples of a rule are drawn from `seed` (default 0) and the rule's own
         // identity (`sampleStreamOf`), so the operators read no generator and no clock.
+        //
+        // The four that apply a rule set rather than examine it read the same thing: `rewrite` and
+        // `run` match the rules against the graph of the function they are handed and answer the
+        // graph they built (`rewriteKernel`, `runKernel`); `why_not` reads the node of the program
+        // a run produced and compares it with the run's (`whyNotKernel`); `check_over` reads the
+        // types of the function it is given (`checkRules` with `over`). None writes a graph, a
+        // file or the console, and none reads a clock: the sampling stream is the rule's own.
         {
             using camel::core::sem::AccessMode;
             using camel::core::sem::ambientAccess;
@@ -4885,7 +4892,13 @@ class RewriteModule final : public BuiltinModule {
             readsGraph.accesses = {ambientAccess("graph", AccessMode::Read)};
             camel::core::OperatorTable::instance().declareResources(
                 "rewrite",
-                {{"saturate", readsGraph}, {"check", readsGraph}, {"extract", readsGraph}});
+                {{"saturate", readsGraph},
+                 {"check", readsGraph},
+                 {"extract", readsGraph},
+                 {"rewrite", readsGraph},
+                 {"run", readsGraph},
+                 {"why_not", readsGraph},
+                 {"check_over", readsGraph}});
         }
         loaded_ = true;
         return true;
