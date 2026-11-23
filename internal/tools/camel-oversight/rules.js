@@ -41,10 +41,11 @@ export const RULES = [
             if (!readable(lanes) || lanes.running >= limits.minLanes) return null
             const b = readable(m.branches) && m.branches
             if (b && (b.unmerged > limits.unmerged || b.maxBehind > limits.maxBehind)) return null
+            // The host's load does not hold lanes back: every run reaches the host through a slot, so a
+            // lane added while the host is busy queues for its slot and reads and edits meanwhile. (The
+            // build host is shared; most of its load can be other people's work.)
             const h = readable(m.host) && m.host
-            const full = h && h.cores > 0 && h.load[0] / h.cores > limits.hostFull
-            if (full) return null
-            const load = h ? `构建主机负载 ${h.load[0]}/${h.cores}，` : ''
+            const load = h ? `构建主机负载 ${h.load[0]}/${h.cores}（上主机都走槽排队，不挡开车道），` : ''
             return {
                 key: String(lanes.running),
                 text: `在跑车道 ${lanes.running} 条（目标 ${limits.minLanes}–${limits.maxLanes}）。${load}当轮从 backlog 补派到 ${limits.minLanes} 条以上。`,
@@ -255,7 +256,6 @@ export const DEFAULT_LIMITS = {
     mergedLocal: 20,
     developStallMinutes: 25,
     staleMinutes: 120,
-    hostFull: 0.9,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 45,
     dayEndMinutes: 23 * 60 + 30,
