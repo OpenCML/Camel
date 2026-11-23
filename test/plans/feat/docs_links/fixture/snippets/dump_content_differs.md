@@ -5,7 +5,7 @@ every number, and calls the printing operator `:io/print` where the program reac
 The renaming is about numbers only, so this page must fail.
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

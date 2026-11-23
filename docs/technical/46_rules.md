@@ -150,7 +150,7 @@ the rewrite started from while it runs, and the rule is refused where it is writ
 a function `(f: F) => F!` (`camel prog.cml mod::pass std::nvm`):
 
 ```camel
-export func apply::<F>(p: F): F! { return p->rewrite<[add_zero, mul_one, combine]> }
+export func apply::<F>(p: F) => F! { return p->rewrite<[add_zero, mul_one, combine]> }
 ```
 
 The engines read `Rule` values from the array; no function is called to make a rule. Compiling a

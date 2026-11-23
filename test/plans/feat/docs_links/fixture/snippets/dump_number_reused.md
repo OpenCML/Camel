@@ -5,7 +5,7 @@ different nodes of one dump (the constant `1` and the printing operator). No one
 its numbers onto the dump's can make it a run of the dump, so this page must fail.
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

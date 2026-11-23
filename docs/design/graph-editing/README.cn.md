@@ -24,14 +24,14 @@
 
 ```camel
 // 改一个函数：块的值是改好的函数，或一个错误值
-export func fold_zero_adds::<F>(f: F): F! when is_function::<F>() {
+export func fold_zero_adds::<F>(f: F) => F! when is_function::<F>() {
     return edit d = f {
         nodes(d)->filter<is_add_zero>->foreach<func (n: Node) { replace(n, inputs(n)[0]) }>
     }
 }
 
 // 加了效应时，块头写出新的函数类型
-export func log_result(f: (x: float) => float): ((x: float) => float uses console)! {
+export func log_result(f: (x: float) => float) => ((x: float) => float uses console)! {
     return edit d = f {             // 结果类型取自函数的返回类型
         let out = exit_of(d)
         let w = inline(out, func (y: float) sync { println(`result = ${y}`); y }, out)
@@ -40,12 +40,12 @@ export func log_result(f: (x: float) => float): ((x: float) => float uses consol
 }
 
 // 读图：块的值是体的值，类型由体推出
-func count_muls::<F>(f: F): int when is_function::<F>() {
+func count_muls::<F>(f: F) => int when is_function::<F>() {
     return view d = f { len(nodes(d)->filter<is_mul>) }
 }
 
 // 没有"程序"这个单独的概念：编辑一个函数，就是编辑它和它可达的全部图；对 main 编辑就是整个程序
-export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
+export func strip_debug_prints::<F>(f: F) => F! when is_function::<F>() {
     return edit d = f {
         graphs(d)->foreach<func (g: Graph) { nodes(g)->filter<is_debug_print>->foreach<func (n: Node) { erase(n) }> }>
     }
@@ -284,7 +284,7 @@ view g = f { 表达式 }          // 读：值是体的值
 - **块头与 `loop` 同形**：`loop s = init …` 读作"以 `init` 为初值的状态 `s`"，`edit d = f` 读作"以 `f` 为底的草稿 `d`"；等号是引入绑定，不是赋值。`d` 只在块里可见。不用 `f as d`（`as` 在 Camel 里是类型转换，也是 `import` 的改名，块头不再借用它）。
 - **块头不写类型**：结果类型由块外的期望类型给出（`let` 标注、函数的返回类型、实参位置），与给 `loop` 的结果标类型一样；没有期望类型时就是原函数的类型。期望类型就是提交时核对的声明——改了签名或加了效应，在块外写出新类型：
   ```camel
-  func log_result(f: (x: float) => float): ((x: float) => float uses var console)! {
+  func log_result(f: (x: float) => float) => ((x: float) => float uses var console)! {
       return edit d = f { … }
   }
   ```

@@ -152,7 +152,7 @@ type Linear = { w: Tensor, b: Tensor }
 type Mlp    = { l1: Linear, l2: Linear }
 
 with <m: Mlp>
-func loss(x: Tensor, y: Tensor): float {
+func loss(x: Tensor, y: Tensor) => float {
     return mse(forward<m>(x), y)
 }
 

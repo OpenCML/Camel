@@ -15,11 +15,11 @@ Camel — including what the compiler says when the habit of another language sl
 // if is an expression; match compares a name with literal patterns.
 // Run: camel docs/tutorial/examples/04_branches.cml
 
-func sign(x: int): string {
+func sign(x: int) => string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
 }
 
-func kind(c: string): string {
+func kind(c: string) => string {
     return match c {
         case 'a' | 'e' | 'i' | 'o' | 'u' => 'vowel'
         case ' ' => 'space'
@@ -27,7 +27,7 @@ func kind(c: string): string {
     }
 }
 
-func grade(score: int): string {
+func grade(score: int) => string {
     let band = score / 10
     return match band {
         case 10 | 9 => 'A'
@@ -37,7 +37,7 @@ func grade(score: int): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sign(5), sign(-2), sign(0))
     println(kind('e'), kind(' '), kind('x'))
     println(grade(95), grade(81), grade(42))
@@ -83,7 +83,7 @@ match the expression being matched {
 // A `when` guard adds a condition to a case; the first arm that matches is taken.
 // Run: camel docs/tutorial/examples/04_guards.cml
 
-func label(n: int): string {
+func label(n: int) => string {
     return match n {
         case 1 when n > 0 => 'one, positive'
         case 1 => 'one'
@@ -91,7 +91,7 @@ func label(n: int): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(label(1), label(2), label(0))
     return 0
 }
@@ -112,7 +112,7 @@ A counter-example — this `match` lists only `1`:
 <!-- camel-snippet: counter-example: the page shows the diagnostic the compiler gives, not a program that runs -->
 
 ```cml
-func a(n: int): int {
+func a(n: int) => int {
     return match n {
         case 1 when n > 0 => 10
     }
@@ -143,17 +143,17 @@ in this trap:
 // Run: camel docs/tutorial/examples/04_block_return.cml
 
 // The `if` is a statement whose value nobody uses, so the two `return`s have no effect.
-func wrong(x: int): string {
+func wrong(x: int) => string {
     if x < 0 then { return 'negative' } else { return 'not negative' }
     return 'reached the end'
 }
 
 // The value of the `if` is what the function returns.
-func right(x: int): string {
+func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(wrong(-1))
     println(right(-1))
     return 0
@@ -206,7 +206,7 @@ The answer is [`examples/04_exercise.cml`](examples/04_exercise.cml):
 // The answer to the exercise of chapter 4: an `if` is an expression, and a `match` needs its default.
 // Run: camel docs/tutorial/examples/04_exercise.cml
 
-func describe(n: int): string {
+func describe(n: int) => string {
     return if n == 0 then 'zero'
         else if n < 0 then 'negative'
         else match n % 2 {
@@ -215,7 +215,7 @@ func describe(n: int): string {
         }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describe(0), describe(-3), describe(7), describe(8))
     return 0
 }

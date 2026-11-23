@@ -14,31 +14,31 @@ This chapter shows what that sentence looks like on the graph, and how it differ
 // Run: camel docs/tutorial/examples/09_dependency.cml
 //      camel docs/tutorial/examples/09_dependency.cml std::gir
 
-func price(n: int): int {
+func price(n: int) => int {
     return n * 3
 }
 
-func tax(n: int): int {
+func tax(n: int) => int {
     return n / 10
 }
 
 // Neither call needs the other's result, and the addition needs both.
-func total(n: int): int {
+func total(n: int) => int {
     return price(n) + tax(n)
 }
 
-func spare(n: int): int {
+func spare(n: int) => int {
     return n + 1
 }
 
 // The result of `spare` is used by nothing, so the call is not part of what this function
 // computes.
-func total_with_a_spare(n: int): int {
+func total_with_a_spare(n: int) => int {
     spare(n)
     return total(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(10), total_with_a_spare(10))
     return 0
 }
@@ -70,31 +70,31 @@ the `total` part of what `camel docs/tutorial/examples/09_dependency.cml std::gi
 // Run: camel docs/tutorial/examples/09_dependency.cml
 //      camel docs/tutorial/examples/09_dependency.cml std::gir
 
-func price(n: int): int {
+func price(n: int) => int {
     return n * 3
 }
 
-func tax(n: int): int {
+func tax(n: int) => int {
     return n / 10
 }
 
 // Neither call needs the other's result, and the addition needs both.
-func total(n: int): int {
+func total(n: int) => int {
     return price(n) + tax(n)
 }
 
-func spare(n: int): int {
+func spare(n: int) => int {
     return n + 1
 }
 
 // The result of `spare` is used by nothing, so the call is not part of what this function
 // computes.
-func total_with_a_spare(n: int): int {
+func total_with_a_spare(n: int) => int {
     spare(n)
     return total(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(10), total_with_a_spare(10))
     return 0
 }
@@ -197,25 +197,25 @@ back end whenever each element is computed on its own, without changing a charac
 //      camel examples/parallel/parallel_map.cml std::prl
 
 // Number of steps the Collatz sequence takes from `n` down to 1.
-func collatz_steps(n: int, steps: int): int {
+func collatz_steps(n: int, steps: int) => int {
     return if n == 1 then steps
         else if n % 2 == 0 then collatz_steps(n / 2, steps + 1)
         else collatz_steps(3 * n + 1, steps + 1)
 }
 
 // The start value in [lo, hi) with the longest sequence, as (start, steps).
-func longest_in(lo: int, hi: int): (int, int) {
+func longest_in(lo: int, hi: int) => (int, int) {
     return (lo..hi)->reduce<
         func (best: (int, int), n: int) => (int, int) { longer(best, (n, collatz_steps(n, 0))) },
         (lo, 0)
     >
 }
 
-func longer(a: (int, int), b: (int, int)): (int, int) {
+func longer(a: (int, int), b: (int, int)) => (int, int) {
     return if b.1 > a.1 then b else a
 }
 
-func main(): int sync {
+func main() => int sync {
     // Eight independent blocks of 2000 start values; each block is one element of the map.
     let block = 2000
     let results = (0..8)->map<func (i: int) => (int, int) { longest_in(i * block + 1, (i + 1) * block + 1) }>
@@ -260,19 +260,19 @@ Answer [`examples/09_exercise.cml`](examples/09_exercise.cml):
 // has an edge between them and they no longer stand side by side.
 // Run: camel docs/tutorial/examples/09_exercise.cml
 
-func price(n: int): int {
+func price(n: int) => int {
     return n * 3
 }
 
-func tax(n: int): int {
+func tax(n: int) => int {
     return n / 10
 }
 
-func total(n: int): int {
+func total(n: int) => int {
     return price(tax(n))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(100))
     return 0
 }

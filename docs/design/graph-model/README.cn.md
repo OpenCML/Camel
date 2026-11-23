@@ -433,7 +433,7 @@ Graph（一张图）
 | 不变量 | 入边数与算子签名一致 |
 
 ```camel
-func hyp2(a: int, b: int): int { return a * a + b * b + 1 }
+func hyp2(a: int, b: int) => int { return a * a + b * b + 1 }
 ```
 
 以上面的程序为例，`std::rgir` 的输出【实测】：
@@ -617,7 +617,7 @@ subgraph "abs" {
 `sum_to` 的例子：
 
 ```camel
-func sum_to(n: int): int {
+func sum_to(n: int) => int {
     let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
     return acc
 }
@@ -672,7 +672,7 @@ subgraph "sum_to" {
 同步块的例子【实测】：
 
 ```camel
-func twice(x: int): int sync {
+func twice(x: int) => int sync {
     println('a', x)
     println('b', x)
     return x * 2
@@ -772,7 +772,7 @@ subgraph "len_or_zero" {
 
 ```camel
 with <w: int>
-func scale(x: int): int { return x * w }
+func scale(x: int) => int { return x * w }
 let triple = scale<3>          // 值
 scale<5>(2)                    // 直接调用
 ```
@@ -802,8 +802,8 @@ N09 [OPER :op/tag_is_error]   N08 -> N09       // 接下来是 !! 的分支
 
 ```camel
 let k = 10
-func add_k(x: int): int { return x + k }
-func twice(x: int): int { return add_k(add_k(x)) }
+func add_k(x: int) => int { return x + k }
+func twice(x: int) => int { return add_k(add_k(x)) }
 ```
 
 ```
@@ -1418,7 +1418,7 @@ graph::with_graph(p: Program, g: Graph): Program!   // 用新图替换快照里�
 ```camel
 import graph
 
-func mul_one(g: Graph): Graph! {
+func mul_one(g: Graph) => Graph! {
     let hits = [n for n in graph::nodes(g)
                   if graph::oper(n) == ':op/mul_l' && graph::const_int(graph::inputs(n)[1]) == 1]
     return graph::apply(g, hits->map<func (n: Node) { graph::replace(n, graph::node(graph::inputs(n)[0])) }>)
@@ -1431,8 +1431,8 @@ func mul_one(g: Graph): Graph! {
 
 ```camel
 // x * 1 → x
-func lhs(x: int): int { return x * 1 }
-func rhs(x: int): int { return x }
+func lhs(x: int) => int { return x * 1 }
+func rhs(x: int) => int { return x }
 let mul_one = graph::rule(lhs, rhs)
 ```
 
@@ -1442,10 +1442,10 @@ let mul_one = graph::rule(lhs, rhs)
 
 ```camel
 with <f: (a: int) => int, g: (b: int) => int>
-func map_map(xs: int[]): int[] { return xs->map<f>->map<g> }
+func map_map(xs: int[]) => int[] { return xs->map<f>->map<g> }
 
 with <f: (a: int) => int, g: (b: int) => int>
-func map_fused(xs: int[]): int[] { return xs->map<func (a: int) { g(f(a)) }> }
+func map_fused(xs: int[]) => int[] { return xs->map<func (a: int) { g(f(a)) }> }
 
 // 附加条件：f 没有效应（否则"先对所有元素做 f，再做 g"与"逐个元素做 f 再做 g"可以被观察到）
 let fuse = graph::rule(map_map, map_fused, func (m: graph::Match) { graph::is_pure(m['f']) })
@@ -1454,7 +1454,7 @@ let fuse = graph::rule(map_map, map_fused, func (m: graph::Match) { graph::is_pu
 例三，一个遍：对每张图反复应用一组规则直到不变。
 
 ```camel
-export func simplify(p: Program): Program! {
+export func simplify(p: Program) => Program! {
     return graph::rewrite(p, [mul_one, fuse])       // 内建的驱动：遍历可达的图，匹配、替换、整体校验
 }
 ```
@@ -1646,8 +1646,8 @@ AST/GCT 重构 ──► 6 ──► 7 ──► 8 ──┐
 ```camel
 namespace Models {
     type Box = { x: int }
-    func mk(x: int): Box { return { x: x } }      // Box 即 Models::Box
-    func twice(b: Box): Box { return mk(b.x * 2) } // mk 即 Models::mk
+    func mk(x: int) => Box { return { x: x } }      // Box 即 Models::Box
+    func twice(b: Box) => Box { return mk(b.x * 2) } // mk 即 Models::mk
 }
 ```
 
@@ -1701,7 +1701,7 @@ println(inc(1))        // 错误：inc 既是 lib::Tools::inc 又是 lib2::Tools
 namespace Config {
     export let limit = 10
 }
-func main(): int sync { println(Config::limit); return 0 }
+func main() => int sync { println(Config::limit); return 0 }
 ```
 
 值是 root 上的一个节点，实体是 `模块::Config::limit`；与顶层的 `let` 只差名字里的路径。命名空间块不是同步块，块里的 `let` 之间没有顺序（与模块顶层一致）。`var` 可以写，不能导出（已定）。建议：在"导入值"那一步（第 7 节第 7 步）之后做。
@@ -1748,7 +1748,7 @@ let r = xs[i]          // OPER :op/idx_arr  pure, mayFault
 ### Q2 分支臂的两种形态都算合法的图
 
 ```camel
-func abs(x: int): int { return if x < 0 then 0 - x else x }
+func abs(x: int) => int { return if x < 0 then 0 - x else x }
 ```
 
 前端给出的是"每条臂一张子图"（3.5 的图）；`std::cxx::inline` 之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。两种形态今天都存在、都被校验。
@@ -1777,8 +1777,8 @@ let found = loop hit = -1 for x in xs while hit < 0 { if x > 9 then x else hit }
 ```camel
 // lib.cml                                    // main.cml
 module lib                                    import { area } from lib
-let scale = 2.0                               func main(): int sync { println(area(3.0)); return 0 }
-export func area(r: float): float {
+let scale = 2.0                               func main() => int sync { println(area(3.0)); return 0 }
+export func area(r: float) => float {
     return 3.14159 * r * r          // (A)
     // return 3.14159 * r * r * scale   (B)
 }
@@ -1837,8 +1837,8 @@ let r = 2.0
 - (3) **模式规则写成一对参数相同的函数**，左边函数的图是模式，右边的是替换，形参是模式变量：
 
 ```camel
-func lhs(x: int): int { return x * 1 }
-func rhs(x: int): int { return x }
+func lhs(x: int) => int { return x * 1 }
+func rhs(x: int) => int { return x }
 let mul_one = graph::rule(lhs, rhs)
 ```
 

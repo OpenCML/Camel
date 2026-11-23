@@ -22,22 +22,22 @@ import { check, check_text } from rewrite
 // This one holds for every `int`, so it carries no condition; chapter 18 shows a law that needs one.
 rule negate(x: int) { x * -1 => 0 - x }
 
-func negated(x: int): int {
+func negated(x: int) => int {
     return x * -1
 }
 
 // Laws the compiler's own library already knows: a sum of two scaled copies of one value is one
 // scaled copy, so this is one multiplication.
-func combined(x: int): int {
+func combined(x: int) => int {
     return x * 3 + x * 5
 }
 
 // The same value written twice: `std::cxx::saturate` keeps both writings in one class.
-func doubled(x: int): int {
+func doubled(x: int) => int {
     return x * 2 + x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     // `check` draws random instances and compares the two sides of every rule it is given.
     println(check_text([negate]->check<100, 1>))
     println(negated(7), combined(7), doubled(7))
@@ -149,11 +149,11 @@ fact nonnegative(v: int): bool match v {
 // The law holds only where the fact does: on a value that is never negative, `abs` changes nothing.
 rule abs_of_nonnegative(x: int) when nonnegative(x) { abs(x) => x }
 
-func squared(x: int): int {
+func squared(x: int) => int {
     return abs(x * x)
 }
 
-func main(): int sync {
+func main() => int sync {
     // `check` samples the law together with its premise, so the fact decides where it may fire.
     println(check_text([abs_of_nonnegative]->check<100, 1>))
     println(squared(-3))
@@ -212,7 +212,7 @@ import { check, check_text } from rewrite
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
-func main(): int sync {
+func main() => int sync {
     println(check_text([fold_scales]->check<100, 1>))
     return 0
 }

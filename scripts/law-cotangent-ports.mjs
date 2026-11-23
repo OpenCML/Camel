@@ -203,16 +203,31 @@ function matchAngles(text, start) {
     return -1
 }
 
+/// A `<` that opens a type-argument list: not the `<` of `<=` and not the first half of `<>`.
+function opensAngles(text, i) {
+    return !(text[i + 1] === '=' || text[i + 1] === '<' || text[i + 1] === '>')
+}
+
+/// A `>` that closes one: not the `>` of `>=`, of `->`/`=>`, or of `<>`.
+function closesAngles(text, i) {
+    return !(text[i + 1] === '=' || text[i - 1] === '=' || text[i - 1] === '-' || text[i + 1] === '>')
+}
+
 /// Split at top-level commas: inside `(...)`, `[...]`, `{...}` or `<...>` a comma is part of a type
-/// or of an argument list.
+/// or of an argument list. A `>=` in an argument is a comparison, not a closing angle: reading it as
+/// one puts every later comma of the call outside the call, which is how `jvp_max_axis`'s body --
+/// `sum_axis_stated(where(xs >= max<axis, true>(xs), dxs, 0.0), ...)` -- was read as handing its
+/// port to `sum_axis_stated` parameter 2.
 function splitTopLevel(text, separator = ',') {
     const parts = []
     let depth = 0
     let start = 0
     for (let i = 0; i < text.length; i += 1) {
         const c = text[i]
-        if (c === '(' || c === '[' || c === '{' || c === '<') depth += 1
-        else if (c === ')' || c === ']' || c === '}' || c === '>') depth -= 1
+        if (c === '(' || c === '[' || c === '{') depth += 1
+        else if (c === ')' || c === ']' || c === '}') depth -= 1
+        else if (c === '<' && opensAngles(text, i)) depth += 1
+        else if (c === '>' && closesAngles(text, i)) depth -= 1
         else if (c === separator && depth === 0) {
             parts.push(text.slice(start, i))
             start = i + 1
@@ -227,8 +242,10 @@ function topLevelIndexOf(text, character) {
     let depth = 0
     for (let i = 0; i < text.length; i += 1) {
         const c = text[i]
-        if (c === '(' || c === '[' || c === '{' || c === '<') depth += 1
-        else if (c === ')' || c === ']' || c === '}' || c === '>') depth -= 1
+        if (c === '(' || c === '[' || c === '{') depth += 1
+        else if (c === ')' || c === ']' || c === '}') depth -= 1
+        else if (c === '<' && opensAngles(text, i)) depth += 1
+        else if (c === '>' && closesAngles(text, i)) depth -= 1
         else if (c === character && depth === 0) return i
     }
     return -1
@@ -406,6 +423,16 @@ function parseLaws(file, source) {
         const left = block.slice(0, arrow).trim()
         let p = arrow + 2
         while (p < block.length && /\s/.test(block[p])) p += 1
+        // The right side is a lambda, and it is spelled `func (ct: T) { ... }` since the `func`
+        // spelling arrived (a block body), or `func (ct: T) => ...` when the body is one expression.
+        // The older `(ct: T) => ...` is still read, because the probes this check writes below are
+        // written that way. Reading only the old one made every law of the library invisible and
+        // the check exit 2 (`not one law in them`) instead of comparing anything.
+        let blockBody = null
+        if (block.startsWith('func', p) && !/[A-Za-z0-9_]/.test(block[p + 4] || '')) {
+            p += 4
+            while (p < block.length && /\s/.test(block[p])) p += 1
+        }
         if (block[p] !== '(') continue
         const portsEnd = matchBracket(block, p, '(', ')')
         if (portsEnd < 0) continue
@@ -415,8 +442,14 @@ function parseLaws(file, source) {
             .map((port) => ({ name: parameterName(port), type: parameterType(port) }))
         let q = portsEnd
         while (q < block.length && /\s/.test(block[q])) q += 1
-        if (!(block[q] === '=' && block[q + 1] === '>')) continue
-        const body = block.slice(q + 2)
+        if (block[q] === '{') {
+            const lambdaEnd = matchBracket(block, q, '{', '}')
+            if (lambdaEnd < 0) continue
+            blockBody = block.slice(q + 1, lambdaEnd - 1)
+        } else if (block[q] === '=' && block[q + 1] === '>') {
+            blockBody = block.slice(q + 2)
+        } else continue
+        const body = blockBody
         // A module that names no other family is read as the reverse one: a law's port is the
         // cotangent of its left side's answer unless the module says its ports are tangents (`jvp`)
         // or row batches (`vmap`). The two fixture rulesets beside the library name no family and
@@ -438,8 +471,10 @@ function findTopLevelArrow(block) {
     let depth = 0
     for (let i = 0; i < block.length; i += 1) {
         const c = block[i]
-        if (c === '(' || c === '[' || c === '{' || c === '<') depth += 1
-        else if (c === ')' || c === ']' || c === '}' || c === '>') depth -= 1
+        if (c === '(' || c === '[' || c === '{') depth += 1
+        else if (c === ')' || c === ']' || c === '}') depth -= 1
+        else if (c === '<' && opensAngles(block, i)) depth += 1
+        else if (c === '>' && closesAngles(block, i)) depth -= 1
         else if (c === '=' && block[i + 1] === '>' && depth === 0) return i
     }
     return -1

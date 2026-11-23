@@ -806,10 +806,10 @@ func pick(x: int): string { return 'wide' }
 **缺口 D：顺序边（不打印可以，不检查不行）。**
 复现：`camel probe.cml std::jgir canonical=true` 对
 ```camel
-func f(): int sync { let a = println(1)
+func f() => int sync { let a = println(1)
     let b = println(2)
     return b }
-func main(): int sync { var x = 1
+func main() => int sync { var x = 1
     x = 2
     x = 3
     println(x)

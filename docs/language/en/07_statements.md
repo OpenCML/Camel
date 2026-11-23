@@ -15,9 +15,9 @@ Any expression can be a statement. In a sync block it executes in order; outside
 <!-- camel-snippet: fragment: the body of save is elided; the four uses of a fallible value are the subject -->
 
 ```cml
-func save(path: string): int! sync { ... }
+func save(path: string) => int! sync { ... }
 
-func main(): int sync {
+func main() => int sync {
     save('a.txt')              // warning: the int! is not used
     let r = save('b.txt')      // warning: r is never used
     let _ = save('c.txt')      // dropped on purpose: no warning
@@ -63,7 +63,7 @@ var count = 0
 - To let the caller take another path on a missing or failed value without unwinding the call stack, leave it to `->` (which passes both on), or take it up at the call with `??` and `!!`.
 
 ```cml
-func check_age(age: int): int! {
+func check_age(age: int) => int! {
     if age < 0 then {
         return error('InvalidAge', 'age is negative')
     } else {
@@ -71,7 +71,7 @@ func check_age(age: int): int! {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(check_age(30) !! 0, check_age(-1) !! 0)
     println(check_age(-1))
     return 0
@@ -128,11 +128,11 @@ func hello(name: string) sync {      // no return value; a sync function body
 - An ordinary parameter may write a default, and a call may give its ordinary arguments by position or by name. The rules are the `with` rules ([7.4.2](#742-with-parameters)):
 
 ```cml
-func scale(x: int, by: int = 2, rounds: int = 1): int {
+func scale(x: int, by: int = 2, rounds: int = 1) => int {
     return x * by * rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     println(scale(3))                    // both defaults: 6
     println(scale(3, 4))                 // by by position: 12
     println(scale(3, rounds: 5))         // skip by, give rounds by name: 10
@@ -152,11 +152,11 @@ Camel distinguishes two kinds of parameter: the **inputs** a function is to proc
 
 ```cml
 with <lo: int, hi: int>
-func clamp(x: int): int {
+func clamp(x: int) => int {
     return if x < lo then lo else if x > hi then hi else x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(clamp<0, 10>(42))
     println([-5, 3, 99]->map<func (x) { x->clamp<0, 10> }>)
     return 0
@@ -174,11 +174,11 @@ A `with` parameter may write a default, and a call may give its `with` arguments
 
 ```cml
 with <rounds: int = 8, strict: bool = false>
-func repeat(x: int): int {
+func repeat(x: int) => int {
     return if strict then x * rounds else x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     println(repeat(10))                 // both defaults: 18
     println(repeat<2, true>(10))        // both by position: 20
     println(repeat<strict: true>(10))   // rounds skipped, strict by name: 80
@@ -197,10 +197,10 @@ func main(): int sync {
 Functions in the same block with the same name and different parameter types are overloads, each with its own subgraph. A call takes the one whose parameters accept the arguments and whose `when` condition holds; when more than one candidate is left it is `SemanticDiag::AmbiguousCall`, and declaration order never decides (design principles 4.4, 5.1).
 
 ```cml
-func show(x: int): string { return 'int ' + string(x) }
-func show(x: string): string { return 'string ' + x }
+func show(x: int) => string { return 'int ' + string(x) }
+func show(x: string) => string { return 'string ' + x }
 
-func main(): int sync {
+func main() => int sync {
     println(show(1), show('a'))
     return 0
 }
@@ -227,7 +227,7 @@ There are no other modifiers. A function implemented in C++ is a body-less `expo
 ### 7.4.5 Operator overloading
 
 ```
-func operator <operator>(<parameters>): <return type> { <statements> }
+func operator <operator>(<parameters>) => <return type> { <statements> }
 ```
 
 (The notation is provisional.) Operators are calls of functions (`a + b` is `__add__(a, b)`, [2.4](02_lexical.md#24-keywords)), and a program can add overloads of those functions for its own types:
@@ -236,13 +236,13 @@ func operator <operator>(<parameters>): <return type> { <statements> }
 type Vec = { x: float, y: float }
 type Mask = { bits: int }
 
-func operator +(a: Vec, b: Vec): Vec { return { x: a.x + b.x, y: a.y + b.y } }
-func operator -(a: Vec): Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }    // unary
-func operator *(k: float, v: Vec): Vec { return { x: k * v.x, y: k * v.y } }
-func operator [](v: Vec, i: int): float { return if i == 0 then v.x else v.y }
-func operator &(a: Mask, b: Mask): Mask { return { bits: a.bits * b.bits } }
+func operator +(a: Vec, b: Vec) => Vec { return { x: a.x + b.x, y: a.y + b.y } }
+func operator -(a: Vec) => Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }    // unary
+func operator *(k: float, v: Vec) => Vec { return { x: k * v.x, y: k * v.y } }
+func operator [](v: Vec, i: int) => float { return if i == 0 then v.x else v.y }
+func operator &(a: Mask, b: Mask) => Mask { return { bits: a.bits * b.bits } }
 
-func main(): int sync {
+func main() => int sync {
     let v: Vec = { x: 1.0, y: 2.0 }
     var acc: Vec = { x: 0.0, y: 0.0 }
     acc += v                         // acc = acc + v
@@ -273,19 +273,19 @@ func main(): int sync {
 A generic function declares its type parameters at its head, after its name in `::<…>`. A function with `::<…>` is generic, one without is not.
 
 ```cml
-func first::<T>(xs: T[]): T {
+func first::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func pick::<T>(c: bool, a: T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T) => T {
     return if c then a else b
 }
 
-func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1, 2, 3]), first(['a', 'b']))
     println(pick(false, 1.5, 2.5))
     println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
@@ -313,11 +313,11 @@ The types of `with` parameters use the names declared at the head too:
 
 ```cml
 with <f: (acc: U, x: T) => U, init: U>
-func my_fold::<T, U>(xs: T[]): U {
+func my_fold::<T, U>(xs: T[]) => U {
     return xs->reduce<f, init>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(['a', 'bb']->my_fold<func (acc: int, s: string) { acc + len(s) }, 0>)
     return 0
 }
@@ -330,11 +330,11 @@ func main(): int sync {
 **A generic function may stand wherever a function is expected**, also as an argument of another generic function. The compiler delays its instantiation until the type variables can be determined from the context; the delay exists at compile time only, and the graph holds the concrete instances.
 
 ```cml
-func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
-func id::<A>(x: A): A { return x }
-func pair::<A>(x: A): (A, A) { return (x, x) }
+func apply::<T, U>(f: (x: T) => U, x: T) => U { return f(x) }
+func id::<A>(x: A) => A { return x }
+func pair::<A>(x: A) => (A, A) { return (x, x) }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(id, 3), apply(pair, 'a'))   // T comes from 3: id becomes id<int>, so U = int
     println([[1, 2], [3, 4]]->map<pair>)      // handed to a built-in higher-order operator
     let f: (x: int) => int = id               // the written type chooses the instance
@@ -356,11 +356,11 @@ func main(): int sync {
 **Rest parameters**: the last parameter of a function declaration may be written `...ts`. It has no type and stands for every argument left over at a call. The fixed arguments written at the call bind the fixed parameters in order, and the remaining arguments become the elements of `ts`; `ts` is a tuple known at compile time and can be read with `indices ts`, `ts.[j]` and `...ts`.
 
 ```cml
-func sum(...ts): int {
+func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum(1, 2, 3))
     println(sum(...(4, 5)))
     return 0
@@ -383,11 +383,11 @@ func main(): int sync {
 **Constant value parameters (`constas`)**: among the ordinary parameters a declaration may write `constas n: int`. Its value is known at compile time and is part of the declaration's identity, not a runtime argument.
 
 ```cml
-func total(constas n: int, x: float[n]): float {
+func total(constas n: int, x: float[n]) => float {
     return loop acc = 0.0 for v in x do acc + v
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(3, [1.0, 2.0, 3.0]))
     println(total(5, [1.0, 2.0, 3.0, 4.0, 5.0]))
     return 0
@@ -408,7 +408,7 @@ func main(): int sync {
 - **It combines with a rest parameter.** `func column(constas n: string, ...ts)` is legal: the value is bound before the expansion and `ts` takes the arguments left over. The `column` of design note 3.1.1 can be written today as
 
   ```cml
-  func column(constas n: string, ...ts): (int, int) {
+  func column(constas n: string, ...ts) => (int, int) {
       return ( static for j in indices ts do ts.[j].[n] )
   }
   ```
@@ -426,14 +426,14 @@ Before a function declaration one can write `@name` or `@name<with arguments>`. 
 
 ```cml
 with <n: int>
-func times(f: (x: int) => int): (x: int) => int {
+func times(f: (x: int) => int) => (x: int) => int {
     return func (x: int) => int { f(x) * n }
 }
 
 @times<3>
-func inc(x: int): int { return x + 1 }
+func inc(x: int) => int { return x + 1 }
 
-func main(): int sync {
+func main() => int sync {
     println(inc(1))        // (1 + 1) * 3
     return 0
 }
@@ -448,18 +448,18 @@ A call of an annotated function is checked against the parameters of the functio
 An annotation may also stand before a block. The block is then a function of no parameters, passed to the annotation, and the function the annotation returns is called right where the block is written. Otherwise the block behaves as without the annotation: its names are not visible after it, a `return` in it gives the block's value, and when nothing takes its value, its statements run only as a block without the annotation would run them ([7.8](#78-blocks)).
 
 ```cml
-func doubled(f: () => int): () => int {
+func doubled(f: () => int) => () => int {
     return func () { f() * 2 }
 }
 
-func next_doubled(x: int): int {
+func next_doubled(x: int) => int {
     @doubled
     {
         return x + 1
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(next_doubled(4))    // (4 + 1) * 2
     return 0
 }
@@ -490,11 +490,11 @@ Numeric permissions are tags (design principles 7.2, 7.5): `#reassociate`, `#con
 import { sqrt } from math
 
 #[reassociate, contract]
-func dot(a: float, b: float, c: float, d: float): float {
+func dot(a: float, b: float, c: float, d: float) => float {
     return a * b + c * d          // may be evaluated as fma(a, b, c * d)
 }
 
-func norm(x: float, y: float): float {
+func norm(x: float, y: float) => float {
     let s = x * x
     #approx_math
     {
@@ -503,7 +503,7 @@ func norm(x: float, y: float): float {
 }
 
 #strict
-func canonical(x: float, y: float): float {
+func canonical(x: float, y: float) => float {
     return x * y + 1.0            // the canonical algorithm: no default grant, no permission used
 }
 ```
@@ -542,7 +542,7 @@ There are three forms of `#`, written before a function, a type declaration, a s
 
 ```cml
 #kernel
-func matmul(a: T, b: T): T { ... }
+func matmul(a: T, b: T) => T { ... }
 
 #width(32)
 type Packed = {
@@ -550,7 +550,7 @@ type Packed = {
     b: int,
 }
 
-func main(): int {
+func main() => int {
     #fast
     {
         // the nodes written here carry fast
@@ -569,10 +569,10 @@ A parameter may also be a function: it is declared as a type parameter with the 
 
 ```cml
 #op(':op/add_l')
-func add_kernel(a: int, b: int): int          // a body-less declaration of this module, the kernel
+func add_kernel(a: int, b: int) => int          // a body-less declaration of this module, the kernel
 
 #impl(add_kernel)
-export func add(a: int, b: int): int {
+export func add(a: int, b: int) => int {
     return a - (0 - b)                        // the semantics (the Camel definition)
 }
 ```
@@ -584,7 +584,7 @@ export func add(a: int, b: int): int {
 - **Which types a kernel covers is what the kernel declaration's own `when` says** (design principle 4.4: on a rule, `when` means "this rule applies where …"; 10.4). A kernel declaration that carries the function's own type parameters solves for every type the function can be instantiated with, so which instances it implements has to be written down separately: a `when condition` on the body-less declaration is evaluated at instantiation with the instance's argument types (they bind the declaration's type parameters, and the predicate is resolved in the declaring module). A condition that is false makes that rule inapplicable to this instance, and overload selection tries the kernel's other rules (a fixed rule is still the more specific one, design principle 4.3); when no rule applies, the instance has no executor and runs the function body — the same path as "a `T` with no executor", and `std::profile` shows which path it took just the same. A condition that cannot be answered from the types alone (it reads the declaration's own `with` parameter, it is not a compile-time query, …) is reported with the existing diagnostics (`WhenConditionNotConstant` and the rest) rather than silently taken for an arm that applies. For example:
 
   ```cml
-  func is_armed::<T>(): bool {
+  func is_armed::<T>() => bool {
       return match type T {
           case i32 => true
           case _ => false
@@ -592,24 +592,24 @@ export func add(a: int, b: int): int {
   }
 
   #op(':op/add_i')
-  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // implements the i32 instances alone
+  func add_kernel::<T>(a: T, b: T) => T when is_armed::<T>()   // implements the i32 instances alone
 
   #impl(add_kernel)
-  func add::<T>(a: T, b: T): T { return a - (0 - b) }        // an int instance has no executor: it runs the body
+  func add::<T>(a: T, b: T) => T { return a - (0 - b) }        // an int instance has no executor: it runs the body
   ```
 
   The reader of this condition is the `#impl` path that chooses the executor (`Builder::declaredRuleApplies`); elsewhere a body-less declaration is still matched by signature alone (ordinary call resolution, function values), so a kernel split into arms is chosen by arm only through its `#impl` function: a call written with the kernel's own name, or a function value taken from it, has no condition to choose between same-named kernels.
 - **Same-named kernel declarations are split into arms by `when`**: one kernel name may be declared several times, and when the conditions exclude each other the declarations are overloads, one family of types each (design principles 4.4: same-named declarations split into arms by mutually exclusive `when` conditions are overloads, which is why the run-time `switch (codeOf(norm))` in `array_reduce.cpp` is gone). One declaration per family's executor is all it takes, with no union condition and no dispatch on the type inside the body:
 
   ```cml
-  func is_armed::<T>(): bool {
+  func is_armed::<T>() => bool {
       return match type T {
           case i32 => true
           case _ => false
       }
   }
 
-  func is_f32::<T>(): bool {
+  func is_f32::<T>() => bool {
       return match type T {
           case f32 => true
           case _ => false
@@ -617,13 +617,13 @@ export func add(a: int, b: int): int {
   }
 
   #op(':op/add_i')
-  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // an i32 instance takes :op/add_i
+  func add_kernel::<T>(a: T, b: T) => T when is_armed::<T>()   // an i32 instance takes :op/add_i
 
   #op(':op/add_f')
-  func add_kernel::<T>(a: T, b: T): T when is_f32::<T>()     // an f32 instance takes :op/add_f
+  func add_kernel::<T>(a: T, b: T) => T when is_f32::<T>()     // an f32 instance takes :op/add_f
 
   #impl(add_kernel)
-  export func add::<T>(a: T, b: T): T {
+  export func add::<T>(a: T, b: T) => T {
       return a + b                                           // an instance outside both families runs this
   }
   ```
@@ -656,17 +656,17 @@ type Pair<T> = (T, T)
 type Entry<K, V> = { key: K, value: V }
 type PairList<T> = Pair<T>[]
 
-func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
+func sum_pair(p: Pair<int>) => int { return p.0 + p.1 }
 
-func swap::<T>(p: Pair<T>): Pair<T> {          // combined with the head type parameters
+func swap::<T>(p: Pair<T>) => Pair<T> {          // combined with the head type parameters
     return (p.1, p.0)
 }
 
-func key_of::<K, V>(e: Entry<K, V>): K {
+func key_of::<K, V>(e: Entry<K, V>) => K {
     return e.key
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum_pair((1, 2)), swap(('x', 'y')))
     println(key_of({ key: 'id', value: 7 }))
     return 0

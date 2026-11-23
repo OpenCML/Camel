@@ -15,9 +15,9 @@
 <!-- camel-snippet: fragment: the body of save is elided; the four uses of a fallible value are the subject -->
 
 ```cml
-func save(path: string): int! sync { ... }
+func save(path: string) => int! sync { ... }
 
-func main(): int sync {
+func main() => int sync {
     save('a.txt')              // 警告：这个 int! 没有被使用
     let r = save('b.txt')      // 警告：r 从未被使用
     let _ = save('c.txt')      // 有意丢弃：不警告
@@ -63,7 +63,7 @@ var count = 0
 - 要让调用者自己接住错误或缺失、又不展开调用栈，交给 `->`（错误与缺失都传过去），或在调用处用 `??`、`!!` 取用。
 
 ```cml
-func check_age(age: int): int! {
+func check_age(age: int) => int! {
     if age < 0 then {
         return error('InvalidAge', 'age is negative')
     } else {
@@ -71,7 +71,7 @@ func check_age(age: int): int! {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(check_age(30) !! 0, check_age(-1) !! 0)
     println(check_age(-1))
     return 0
@@ -128,11 +128,11 @@ func hello(name: string) sync {      // 没有返回值；同步的函数体
 - 普通形参可以写默认值，调用处可以按位置给，也可以按名字给。规则与 `with` 形参是同一条（[7.4.2](#742-with-形参)）：
 
 ```cml
-func scale(x: int, by: int = 2, rounds: int = 1): int {
+func scale(x: int, by: int = 2, rounds: int = 1) => int {
     return x * by * rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     println(scale(3))                    // 两个都用默认值：6
     println(scale(3, 4))                 // 按位置给 by：12
     println(scale(3, rounds: 5))         // 跳过 by，按名字给 rounds：10
@@ -152,11 +152,11 @@ Camel 区分两种参数：函数要处理的**输入**（普通形参，流过�
 
 ```cml
 with <lo: int, hi: int>
-func clamp(x: int): int {
+func clamp(x: int) => int {
     return if x < lo then lo else if x > hi then hi else x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(clamp<0, 10>(42))
     println([-5, 3, 99]->map<func (x) { x->clamp<0, 10> }>)
     return 0
@@ -174,11 +174,11 @@ func main(): int sync {
 
 ```cml
 with <rounds: int = 8, strict: bool = false>
-func repeat(x: int): int {
+func repeat(x: int) => int {
     return if strict then x * rounds else x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     println(repeat(10))                 // 两个都用默认值：18
     println(repeat<2, true>(10))        // 都按位置给出：20
     println(repeat<strict: true>(10))   // 跳过 rounds，按名字给 strict：80
@@ -197,10 +197,10 @@ func main(): int sync {
 同一个块里同名而形参类型不同的函数是重载，各有自己的子图。调用取形参接受实参、`when` 条件也成立的那一个；这样的候选不止一个时报 `SemanticDiag::AmbiguousCall`，按声明顺序取舍不是规则（设计原则 4.4、5.1）。
 
 ```cml
-func show(x: int): string { return 'int ' + string(x) }
-func show(x: string): string { return 'string ' + x }
+func show(x: int) => string { return 'int ' + string(x) }
+func show(x: string) => string { return 'string ' + x }
 
-func main(): int sync {
+func main() => int sync {
     println(show(1), show('a'))
     return 0
 }
@@ -227,7 +227,7 @@ int 1 string a
 ### 7.4.5 运算符重载
 
 ```
-func operator 运算符(形参): 返回类型 { 语句 }
+func operator 运算符(形参) => 返回类型 { 语句 }
 ```
 
 （写法暂定。）运算符是函数的调用（`a + b` 是 `__add__(a, b)`，[2.4](02_lexical.md#24-关键字)），程序可以为自己的类型添加这些函数的重载：
@@ -236,13 +236,13 @@ func operator 运算符(形参): 返回类型 { 语句 }
 type Vec = { x: float, y: float }
 type Mask = { bits: int }
 
-func operator +(a: Vec, b: Vec): Vec { return { x: a.x + b.x, y: a.y + b.y } }
-func operator -(a: Vec): Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }    // 一元
-func operator *(k: float, v: Vec): Vec { return { x: k * v.x, y: k * v.y } }
-func operator [](v: Vec, i: int): float { return if i == 0 then v.x else v.y }
-func operator &(a: Mask, b: Mask): Mask { return { bits: a.bits * b.bits } }
+func operator +(a: Vec, b: Vec) => Vec { return { x: a.x + b.x, y: a.y + b.y } }
+func operator -(a: Vec) => Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }    // 一元
+func operator *(k: float, v: Vec) => Vec { return { x: k * v.x, y: k * v.y } }
+func operator [](v: Vec, i: int) => float { return if i == 0 then v.x else v.y }
+func operator &(a: Mask, b: Mask) => Mask { return { bits: a.bits * b.bits } }
 
-func main(): int sync {
+func main() => int sync {
     let v: Vec = { x: 1.0, y: 2.0 }
     var acc: Vec = { x: 0.0, y: 0.0 }
     acc += v                         // acc = acc + v
@@ -273,19 +273,19 @@ func main(): int sync {
 泛型函数的类型参数在函数头声明，写在函数名后的 `::<…>` 里。函数名后有 `::<…>` 就是泛型，没有就不是。
 
 ```cml
-func first::<T>(xs: T[]): T {
+func first::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func pick::<T>(c: bool, a: T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T) => T {
     return if c then a else b
 }
 
-func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1, 2, 3]), first(['a', 'b']))
     println(pick(false, 1.5, 2.5))
     println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
@@ -313,11 +313,11 @@ func main(): int sync {
 
 ```cml
 with <f: (acc: U, x: T) => U, init: U>
-func my_fold::<T, U>(xs: T[]): U {
+func my_fold::<T, U>(xs: T[]) => U {
     return xs->reduce<f, init>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(['a', 'bb']->my_fold<func (acc: int, s: string) { acc + len(s) }, 0>)
     return 0
 }
@@ -330,11 +330,11 @@ func main(): int sync {
 **泛型函数可以出现在任何期望一个函数的位置**，包括传给另一个泛型函数。编译器把它的实例化延迟到类型变量能从上下文确定时；延迟只发生在编译期，图上只有具体的实例。
 
 ```cml
-func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
-func id::<A>(x: A): A { return x }
-func pair::<A>(x: A): (A, A) { return (x, x) }
+func apply::<T, U>(f: (x: T) => U, x: T) => U { return f(x) }
+func id::<A>(x: A) => A { return x }
+func pair::<A>(x: A) => (A, A) { return (x, x) }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(id, 3), apply(pair, 'a'))   // T 来自 3：id 实例化为 id<int>，于是 U = int
     println([[1, 2], [3, 4]]->map<pair>)      // 交给内建的高阶算子
     let f: (x: int) => int = id               // 写出的类型决定实例
@@ -356,11 +356,11 @@ func main(): int sync {
 **剩余参数（rest parameter）**：函数声明的最后一个形参可以写 `...ts`，它没有类型，代表调用时剩下的全部实参。调用点写出的固定实参依次绑定到固定形参，其余实参按顺序成为 `ts` 的元素；`ts` 是编译期已知的元组，可以用 `indices ts`、`ts.[j]` 和 `...ts`。
 
 ```cml
-func sum(...ts): int {
+func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum(1, 2, 3))
     println(sum(...(4, 5)))
     return 0
@@ -383,11 +383,11 @@ func main(): int sync {
 **常量值参数（`constas`）**：普通形参里可以写 `constas n: int`，它的值在编译期已知，是声明身份的一部分，而不是运行时的实参。
 
 ```cml
-func total(constas n: int, x: float[n]): float {
+func total(constas n: int, x: float[n]) => float {
     return loop acc = 0.0 for v in x do acc + v
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(3, [1.0, 2.0, 3.0]))
     println(total(5, [1.0, 2.0, 3.0, 4.0, 5.0]))
     return 0
@@ -408,7 +408,7 @@ func main(): int sync {
 - **和剩余参数一起用。** `func column(constas n: string, ...ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
 
   ```cml
-  func column(constas n: string, ...ts): (int, int) {
+  func column(constas n: string, ...ts) => (int, int) {
       return ( static for j in indices ts do ts.[j].[n] )
   }
   ```
@@ -426,14 +426,14 @@ func main(): int sync {
 
 ```cml
 with <n: int>
-func times(f: (x: int) => int): (x: int) => int {
+func times(f: (x: int) => int) => (x: int) => int {
     return func (x: int) => int { f(x) * n }
 }
 
 @times<3>
-func inc(x: int): int { return x + 1 }
+func inc(x: int) => int { return x + 1 }
 
-func main(): int sync {
+func main() => int sync {
     println(inc(1))        // (1 + 1) * 3
     return 0
 }
@@ -448,18 +448,18 @@ func main(): int sync {
 标注也可以写在块之前。这时块是一个没有形参的函数，交给标注，标注返回的函数就在写下块的地方被调用。除此之外，块的行为与不带标注时相同：块里的名字在块后不可见，块里的 `return` 给出块的值；块的值没有被使用时，其中的语句按不带标注的块那样执行（[7.8](#78-块)）。
 
 ```cml
-func doubled(f: () => int): () => int {
+func doubled(f: () => int) => () => int {
     return func () { f() * 2 }
 }
 
-func next_doubled(x: int): int {
+func next_doubled(x: int) => int {
     @doubled
     {
         return x + 1
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(next_doubled(4))    // (4 + 1) * 2
     return 0
 }
@@ -490,11 +490,11 @@ func main(): int sync {
 import { sqrt } from math
 
 #[reassociate, contract]
-func dot(a: float, b: float, c: float, d: float): float {
+func dot(a: float, b: float, c: float, d: float) => float {
     return a * b + c * d          // 可以求值为 fma(a, b, c * d)
 }
 
-func norm(x: float, y: float): float {
+func norm(x: float, y: float) => float {
     let s = x * x
     #approx_math
     {
@@ -503,7 +503,7 @@ func norm(x: float, y: float): float {
 }
 
 #strict
-func canonical(x: float, y: float): float {
+func canonical(x: float, y: float) => float {
     return x * y + 1.0            // 规范算法：没有默认许可，也不使用任何许可
 }
 ```
@@ -541,7 +541,7 @@ tag finite = [kernel, fast]                 // 标签组：成员一起生效
 
 ```cml
 #kernel
-func matmul(a: T, b: T): T { ... }
+func matmul(a: T, b: T) => T { ... }
 ```
 
 <!-- camel-snippet: fragment: the tag forms are illustrative; width is a tag a module declares -->
@@ -553,7 +553,7 @@ type Packed = {
     b: int,
 }
 
-func main(): int {
+func main() => int {
     #fast
     {
         // 块里的节点带着 fast
@@ -572,10 +572,10 @@ func main(): int {
 
 ```cml
 #op(':op/add_l')
-func add_kernel(a: int, b: int): int          // 本模块的无体声明，内核
+func add_kernel(a: int, b: int) => int          // 本模块的无体声明，内核
 
 #impl(add_kernel)
-export func add(a: int, b: int): int {
+export func add(a: int, b: int) => int {
     return a - (0 - b)                        // 语义（Camel 定义）
 }
 ```
@@ -587,7 +587,7 @@ export func add(a: int, b: int): int {
 - **内核覆盖哪些类型，由内核声明自己的 `when` 说**（设计原则 4.4：`when` 在规则里就是「这条规则在此适用于……」；10.4）。一条带函数自身类型参数的内核声明对函数能实例化出的每个类型都求解得出，所以「它实现哪些实例」必须另外写下来：在无体声明上写 `when 条件`，条件在实例化时按该实例的实参类型求值（声明的类型参数由这些类型绑定，谓词在声明所在模块里解析）。条件为假时这条规则对这个实例不适用，重载选择去试这个内核的其他规则（固定规则仍是更具体的，设计原则 4.3）；没有一条适用时这个实例就没有执行器、执行函数体——与「某个 `T` 没有执行器」是同一条路，`std::profile` 同样标出走了哪条路。条件不能只按类型回答时（读了声明自己的 `with` 形参、不是编译期查询等）报 `WhenConditionNotConstant` 等既有诊断，不会静默当成适用。例：
 
   ```cml
-  func is_armed::<T>(): bool {
+  func is_armed::<T>() => bool {
       return match type T {
           case i32 => true
           case _ => false
@@ -595,24 +595,24 @@ export func add(a: int, b: int): int {
   }
 
   #op(':op/add_i')
-  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // 只实现 i32 的实例
+  func add_kernel::<T>(a: T, b: T) => T when is_armed::<T>()   // 只实现 i32 的实例
 
   #impl(add_kernel)
-  func add::<T>(a: T, b: T): T { return a - (0 - b) }        // int 的实例没有执行器，走函数体
+  func add::<T>(a: T, b: T) => T { return a - (0 - b) }        // int 的实例没有执行器，走函数体
   ```
 
   这条条件的读者就是 `#impl` 选执行器的这条路径（`Builder::declaredRuleApplies`）；无体声明在别处（普通调用解析、函数值）仍只按签名匹配，所以按 `when` 分臂的内核只有经 `#impl` 函数调用时才按臂选择：直接写内核名调用、或取它的函数值时，同名内核之间没有条件可依据。
 - **同名内核声明按 `when` 分臂**：一个内核名字可以声明多次，条件互斥时它们是重载，各是一族类型的执行器（「同名声明按 `when` 互斥分臂就是重载……`array_reduce.cpp` 里的运行期 `switch (codeOf(norm))` 删除」）。按族的执行器各写一条声明即可，不必把两族写成一个并集条件，也不必在函数体里按类型分派：
 
   ```cml
-  func is_armed::<T>(): bool {
+  func is_armed::<T>() => bool {
       return match type T {
           case i32 => true
           case _ => false
       }
   }
 
-  func is_f32::<T>(): bool {
+  func is_f32::<T>() => bool {
       return match type T {
           case f32 => true
           case _ => false
@@ -620,13 +620,13 @@ export func add(a: int, b: int): int {
   }
 
   #op(':op/add_i')
-  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // i32 的实例走 :op/add_i
+  func add_kernel::<T>(a: T, b: T) => T when is_armed::<T>()   // i32 的实例走 :op/add_i
 
   #op(':op/add_f')
-  func add_kernel::<T>(a: T, b: T): T when is_f32::<T>()     // f32 的实例走 :op/add_f
+  func add_kernel::<T>(a: T, b: T) => T when is_f32::<T>()     // f32 的实例走 :op/add_f
 
   #impl(add_kernel)
-  export func add::<T>(a: T, b: T): T {
+  export func add::<T>(a: T, b: T) => T {
       return a + b                                           // 两族之外的实例走这里
   }
   ```
@@ -659,17 +659,17 @@ type Pair<T> = (T, T)
 type Entry<K, V> = { key: K, value: V }
 type PairList<T> = Pair<T>[]
 
-func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
+func sum_pair(p: Pair<int>) => int { return p.0 + p.1 }
 
-func swap::<T>(p: Pair<T>): Pair<T> {          // 与函数头的类型参数组合
+func swap::<T>(p: Pair<T>) => Pair<T> {          // 与函数头的类型参数组合
     return (p.1, p.0)
 }
 
-func key_of::<K, V>(e: Entry<K, V>): K {
+func key_of::<K, V>(e: Entry<K, V>) => K {
     return e.key
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum_pair((1, 2)), swap(('x', 'y')))
     println(key_of({ key: 'id', value: 7 }))
     return 0

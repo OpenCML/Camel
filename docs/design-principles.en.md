@@ -131,12 +131,12 @@ By default evaluation is driven by dependency, and there is no fixed order of ex
 A function, once compiled, yields its own subgraph. An outside call merely arranges this subgraph node in a larger graph and does not change its own structure.
 
 ```camel
-func log(x: int): int {
+func log(x: int) => int {
     println(x)          // runs: an external access is used by its region (3.1)
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = log(1)
     let b = log(a)
     return b            // returns 3, prints 1 and 2
@@ -429,10 +429,10 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **Type parameters are declared at the head of the function**: `func first::<T>(xs: T[]): T`. A function with `::<…>` after its name is generic, one without is not, so whether a function is generic is visible at its head. The declaration is spelled as an explicit type argument at a call (5.9, `first::<int>(xs)`); at a call it is usually inferred from the arguments. A name declared at the head takes precedence over a type of the same name inside the function. Rules (`rule`) and facts (`fact`) declare type parameters after their name in the same way. A rule may also have `with` parameters, written as a function's are (`with <tile: int> rule tile_matmul(...) { ... }`): whoever chooses the rule binds them once (`tile_matmul<64>`, the same spelling as a function's partial application), and the rule is then used over the whole program; they come from a different place than type parameters (decided by the matched types) and `const` parameters (decided by the matched constants). A fact (`fact`) may have `with` parameters too (an analysis's tuning, such as a widening threshold or a precision), written out where it is queried, `range<5>(x)`; different arguments are different facts. A tag has no `with` parameters: its parameters are the whole content of the fact it builds. There is no `typeas`.
 
   ```camel
-  func first::<T>(xs: T[]): T { return xs[0] }
+  func first::<T>(xs: T[]) => T { return xs[0] }
 
   with <key: (x: T) => K>
-  func keys::<T, K>(xs: T[]): K[] { return xs->map<key> }
+  func keys::<T, K>(xs: T[]) => K[] { return xs->map<key> }
   ```
 - **Dimension names still bind in place in shapes** (5.4): a dimension name is part of the shape notation (as n×k in mathematics) and is visible where it is written; it may also be declared at the head (`func dense::<n, k>(…)`), without being required.
 
@@ -454,7 +454,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
   ```camel
   type Pair<T> = (T, T)                    // sketch
-  func swap::<T>(p: Pair<T>): Pair<T>
+  func swap::<T>(p: Pair<T>) => Pair<T>
   ```
 
 - **New primitives are used only for what the main language cannot express**, and appear as marks, fixed in number: `::<T>` (type parameters declared at the head), `constas n` (a compile-time value parameter), `typeof x` (the static type of an expression), `fields T` (the field table of a type). Whatever can be computed from the primitives (such as `keyof`, which takes the field names) is written in a library, as a type function or an ordinary function, not as a keyword.

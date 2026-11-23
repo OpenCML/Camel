@@ -35,7 +35,7 @@ rule sub_self(x: int) { x - x => 0 }
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// A rule set is an array; a pass is an ordinary function that is handed one.
-export func simplify::<F>(p: F): F! {
+export func simplify::<F>(p: F) => F! {
     return p->rewrite<[sub_self, fold_scales]>
 }
 ```
@@ -55,7 +55,7 @@ export func simplify::<F>(p: F): F! {
 <!-- camel-snippet: counter-example: the condition calls a function that prints, which the compiler refuses -->
 
 ```cml
-func reports(c: float): bool sync {
+func reports(c: float) => bool sync {
     println('guard ', c)
     return c > 0.0
 }
@@ -108,7 +108,7 @@ with <scale: int = 1>
 rule mul_one_scaled(x: int) when scale > 0 { x * 1 => x }
 
 /// add_zero_tiled<1> binds tile; mul_one_scaled's parameter has a default, so its name alone is a Rule.
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[add_zero_tiled<1>, mul_one_scaled]>
 }
 ```
@@ -146,15 +146,15 @@ fact nonnegative(v: int): bool match v {
 rule abs_of_count(x: int) when nonnegative(x) { abs(x) => x }
 
 /// The rule set is handed to the pass here, and nowhere else.
-export func simplify::<F>(p: F): F! {
+export func simplify::<F>(p: F) => F! {
     return p->rewrite<[abs_of_count]>
 }
 
-func distance(a: int, b: int): int {
+func distance(a: int, b: int) => int {
     return abs(a + b)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(distance(3, 4))
     return 0
 }
@@ -202,12 +202,12 @@ import { max, min } from math
 type Interval = { lo: int, hi: int }
 
 /// The wider of two intervals: what `join` and `widen` use here.
-func hull(a: Interval, b: Interval): Interval {
+func hull(a: Interval, b: Interval) => Interval {
     return { lo: min(a.lo, b.lo), hi: max(a.hi, b.hi) }
 }
 
 /// The overlap of two intervals: what `meet` and `narrow` use here.
-func intersect(a: Interval, b: Interval): Interval {
+func intersect(a: Interval, b: Interval) => Interval {
     return { lo: max(a.lo, b.lo), hi: min(a.hi, b.hi) }
 }
 
@@ -258,7 +258,7 @@ fact mul_by_one(a: Node, b: Node): bool match (a, b) {
 
 rule mul_one_by_parts(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[mul_one_by_parts]>
 }
 ```
@@ -282,7 +282,7 @@ rule at_default(x: int) when capped(x) == 5 { x + 0 => x }
 /// The argument is written out here: this is a different fact, `capped<3>`.
 rule at_three(x: int) when capped<3>(x) == 3 { x * 1 => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[at_default, at_three]>
 }
 ```
@@ -323,7 +323,7 @@ rule sub_self(x: int) { x - x => 0 }
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
-func main(): int sync {
+func main() => int sync {
     println(check_text([sub_self]->check<100, 1>))
     println(check_text([fold_scales]->check<100, 1>))
     return 0
@@ -354,15 +354,15 @@ import { rewrite } from rewrite
 // abs(x) => x, with no condition, so the dump is about the rule firing and nothing else.
 rule drop_abs(x: int) { abs(x) => x }
 
-export func simplify::<F>(p: F): F! {
+export func simplify::<F>(p: F) => F! {
     return p->rewrite<[drop_abs]>
 }
 
-func distance(a: int, b: int): int {
+func distance(a: int, b: int) => int {
     return abs(a + b)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(distance(1, -2))
     return 0
 }

@@ -293,7 +293,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 - 红前用例（附录 A 的 t3、t9）：
   ```camel
   // t3：头部写流类型 + yield
-  func pairs(n: int): (int, int).. {
+  func pairs(n: int) => (int, int).. {
       var i = 0
       loop while i < n do
           yield (i, i + 1)

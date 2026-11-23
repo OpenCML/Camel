@@ -4,7 +4,7 @@
 /*
  * The edit record of a draft, and the two entries that write it.
  *
- * Docs/design/graph-editing/README.cn.md 8.1 is the table this file makes a fact: writing a graph
+ * docs/design/graph-editing/README.cn.md 8.1 is the table this file makes a fact: writing a graph
  * has two entries -- the named edit operators (`replace`, `erase`, `eval`, `inline`, `outline`,
  * `order`, a parameter port, the exit value) and the kernel's primitives (a node added, an operand
  * added or taken away, an operator swapped) -- and both owe the same three things:

@@ -59,13 +59,13 @@ Camel 的求值是**依赖驱动**的：一个表达式被求值，当且仅当�
 
 ```camel
 // 函数体不是同步块，println 的结果未被使用，因此不执行（设计如此）
-func f(): int {
+func f() => int {
     println("hello")
     return 1
 }
 
 // 函数体是同步块：println 执行，然后返回 1
-func g(): int sync {
+func g() => int sync {
     println("hello")
     return 1
 }

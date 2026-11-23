@@ -178,7 +178,7 @@ A shape may also name its extents (design principles 5.4). The first appearance 
 a parameter type binds the name, and later occurrences write it plainly:
 
 ```camel
-func dense(x: f32[n, 3], w: f32[3, k]): f32[n, k]
+func dense(x: f32[n, 3], w: f32[3, k]) => f32[n, k]
 ```
 
 The extents of a type are linear forms over those names: a name, an integer

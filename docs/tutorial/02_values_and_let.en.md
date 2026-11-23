@@ -17,7 +17,7 @@ it?** It ends on a rule that will follow you everywhere: **numbers are not conve
 
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let n = 42                      // int (64-bit)
     let ratio = 0.75                // float (64-bit)
     let ok = true                   // bool
@@ -85,11 +85,11 @@ is needed — `Point` in `let p: Point = ...` — because the initial value is a
 // A literal takes the type its context asks for; a variable keeps its own type.
 // Run: camel docs/tutorial/examples/02_literals.cml
 
-func scale(x: int): float {
+func scale(x: int) => float {
     return float(x) * 1.5
 }
 
-func main(): int sync {
+func main() => int sync {
     let a: float = 1 + 2.0      // the declared type is float, so both literals are read as float
     let b: f32 = 1              // the literal is read as the f32 one
     println(a, b, scale(3), 1.0 + 2)
@@ -113,7 +113,7 @@ conversion is written as `float(x) * 1.5`. Written `x * 1.5`, the compiler does 
 <!-- camel-snippet: counter-example: an int variable times a float literal, which the compiler refuses -->
 
 ```cml
-func scale(x: int): float {
+func scale(x: int) => float {
     return x * 1.5
 }
 ```
@@ -133,7 +133,7 @@ Put an `int` variable where a `float` is expected and the compiler does not conv
 <!-- camel-snippet: counter-example: the page shows the diagnostic the compiler gives, not a program that runs -->
 
 ```cml
-func scale(x: int): float {
+func scale(x: int) => float {
     let n = 3
     let y: float = n        // the declared type is float, the value is int
     return x * y
@@ -192,11 +192,11 @@ The answer is [`examples/02_exercise.cml`](examples/02_exercise.cml):
 // The answer to the exercise of chapter 2: a value of one type is not another type.
 // Run: camel docs/tutorial/examples/02_exercise.cml
 
-func to_fahrenheit(c: float): float {
+func to_fahrenheit(c: float) => float {
     return c * 9.0 / 5.0 + 32.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let c = 100.0
     println(to_fahrenheit(c))
     println(`${to_fahrenheit(37.0):.1f}`)

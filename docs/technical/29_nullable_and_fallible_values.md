@@ -327,8 +327,8 @@ when a callee is specialised on a constant argument. Any conversion of a constan
 affected, with or without the tagged forms:
 
 ```camel
-func f(x: float): float { return x + 0.5 }
-func main(): int sync {
+func f(x: float) => float { return x + 0.5 }
+func main() => int sync {
     let i = 7
     println(f(float(i)))     // 7.5; under std::opt or std::opt: 0.5
     return 0
@@ -338,7 +338,7 @@ func main(): int sync {
 With a tagged form the unconverted constant is then read as a box, and the program crashes:
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let c: int? = 7
     println(c ?? 1)            // 7; under std::opt or std::opt: segmentation fault
     return 0

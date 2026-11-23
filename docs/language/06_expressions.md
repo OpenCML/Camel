@@ -32,7 +32,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 反引号字符串 `` `...` `` 里的 `${表达式}` 是插值，可以带格式说明 `${表达式:格式说明}`（词法见 [2.5.4.1](02_lexical.md#2541-格式化字符串)）。它与 `'...'->format<...>` 是**同一棵树**：把 `${...}` 换成 `format` 的占位符（`{}` 或 `{:格式说明}`），把文字里的 `{`、`}` 写成 `{{`、`}}`，再以各插值表达式为 with 实参、以这段文字为普通实参调用 `format`。
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let name = 'Camel'
     let n = 42
     println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
@@ -75,9 +75,9 @@ func main(): int sync {
 
 ```cml
 with <factor: int>
-func scale(x: int): int { return x * factor }
+func scale(x: int) => int { return x * factor }
 
-func main(): int sync {
+func main() => int sync {
     println(scale<3>(5))        // with 实参写在尖括号里
     println(5->scale<3>)        // 管道：左边的值作实参
     return 0
@@ -107,7 +107,7 @@ func main(): int sync {
 `a->f` 把 `a` 作为 `f` 的实参：`a->f` 就是 `f(a)`，`a->f<w>` 就是 `f<w>(a)`。左结合，适合把数据流写成一条链：
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let total = (1..6)
         ->map<func (x) { x * x }>
         ->filter<func (x) { x % 2 == 1 }>
@@ -135,11 +135,11 @@ total = 35
 | `x -> f` | `T?` 或 `T!` | 不接受 `T?` / `T!` 本身的函数 | `x` 为空就得到空、出错就把错误原样传下去，否则用里面的值调用 `f`；结果是 `U?` 或 `U!`（`f` 返回 `U` 或已经是该形式的值都可以） |
 
 ```cml
-func half(x: int): int! {
+func half(x: int) => int! {
     return if x % 2 == 0 then x / 2 else { return error('Odd', 'not even') }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(parse_int('12') -> half -> half !! -1)
     println(parse_int('10') -> half -> half !! -1)
@@ -189,12 +189,12 @@ func main(): int sync {
 **`&&`、`||` 是分支，不是运算符。** `a && b` 就是 `if a then b else false`，`a || b` 就是 `if a then true else b`：右侧是一条臂，只在左侧不能决定结果时求值，否则它的效应不发生、它的故障也碰不到（`n != 0 && 10 / n > 1` 是安全的）。在图上它们就是那个 `if` 的 `BRCH`/`JOIN`，右侧是一张自己的子图。两者都是保留的，不能重载；操作数不是 `bool` 是 `SemanticDiag::LogicalOperandNotBool`。因为 `a && b` 就是那个 `if`，左侧对空值的判断会收窄右侧（[6.8.1](#681-if)）：`x != null && x > 0`。
 
 ```cml
-func noisy(tag: string, v: bool): bool sync {
+func noisy(tag: string, v: bool) => bool sync {
     println(tag)
     return v
 }
 
-func main(): int sync {
+func main() => int sync {
     println(noisy('l1', false) && noisy('r1', true))
     println(noisy('l2', false) & noisy('r2', true))
     return 0
@@ -253,7 +253,7 @@ if 条件 then 臂 else 臂
 臂的值本身是**有期望类型的位置**（设计原则 5.1）：整个 `if` 有期望类型时（带类型的声明、函数的返回位置等），臂里的字面量取那个类型，所以 `let x: float = if c then 1 else 2` 的两条臂都是 `float`。写成名字的臂值是变量，不转换；它与另一条臂的类型不符时仍按臂的类型不一致报告。
 
 ```cml
-func sign(x: int): string {
+func sign(x: int) => string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
 }
 ```
@@ -263,11 +263,11 @@ func sign(x: int): string {
 - **收窄。** 在 `if x != null then A else B` 里，`x` 在 `A` 中是 `T`；`if x == null then B else A` 同理。它与 `match x { case null => B  case v => A }` 是同一个分支：排除了空值的那条臂一开始就把值从 `x` 里取出来，臂内 `x` 这个名字指的就是这个值。
 
   ```cml
-  func len_or_zero(s: string?): int {
+  func len_or_zero(s: string?) => int {
       return if s != null then len(s) else 0
   }
 
-  func sum_or_minus(a: int?, b: int?): int {
+  func sum_or_minus(a: int?, b: int?) => int {
       return if a != null && b != null then a + b else -1
   }
   ```
@@ -286,17 +286,17 @@ func sign(x: int): string {
 
 ```cml
 // 错误的写法：if 是一条值没人用的语句，两个 return 都没有效果
-func wrong(x: int): string {
+func wrong(x: int) => string {
     if x < 0 then { return 'negative' } else { return 'not negative' }
     return 'reached the end'
 }
 
 // 正确的写法：if 的值就是函数的返回值
-func right(x: int): string {
+func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(wrong(-1))
     println(right(-1))
     return 0
@@ -337,7 +337,7 @@ match 名字 {
 - 按书写顺序取第一个匹配的分支。各臂类型必须相同。臂里的 `return` 与 `if` 的臂一样，给出的是 `match` 的值，并按臂所在的位置取类型（见 6.8.1）；臂的值本身也一样，整个 `match` 有期望类型时取那个类型。
 
 ```cml
-func kind(c: string): string {
+func kind(c: string) => string {
     return match c {
         case 'a' | 'e' | 'i' | 'o' | 'u' => 'vowel'
         case ' ' => 'space'
@@ -345,7 +345,7 @@ func kind(c: string): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind('e'), kind(' '), kind('x'))
     return 0
 }
@@ -361,21 +361,21 @@ vowel space other
 - `T!`：`case error e`（把错误绑定为 `e`，有 `e.kind`、`e.message`、`e.location`），加上 `case v` 或 `case _`。
 
 ```cml
-func show(x: int?): string {
+func show(x: int?) => string {
     return match x {
         case null => 'nothing'
         case v => 'value ' + string(v)
     }
 }
 
-func report(r: int!): string {
+func report(r: int!) => string {
     return match r {
         case error e => e.kind + ': ' + e.message
         case v => 'ok ' + string(v)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
     return 0
@@ -472,11 +472,11 @@ func first(t: (int, float)) {
 - 图与手写的展开相同：生成器本身没有节点。编译期元组的 `ts.[j]` 直接是元素结点，与手写的 `ts.[0]`、`ts.[1]` 的选择相同；运行期元组值的 `ts.[j]` 仍建一个 `ACCS`。
 
 ```cml
-func sum(t: (int, int, int)): int {
+func sum(t: (int, int, int)) => int {
     return static loop acc = 0 for j in indices t do acc + t.[j]
 }
 
-func positions(t: (int, string)): (int, int) {
+func positions(t: (int, string)) => (int, int) {
     return ( static for j in indices t do j )
 }
 ```
@@ -492,7 +492,7 @@ func positions(t: (int, string)): (int, int) {
 - 要把各轮的值折成一个结果（而不是装回同一形状），用 [6.8.5](#685-static-loop) 的 `static loop`。
 
 ```cml
-func doubled(t: {a: int, b: int}): {a: int, b: int} {
+func doubled(t: {a: int, b: int}) => {a: int, b: int} {
     return { static for n, F in fields {a: int, b: int} do t.[n] * 2 }
 }
 
@@ -528,36 +528,36 @@ static loop 名字 = 初值 (, 名字 = 初值)* for 名字 (, 名字)* in (fiel
 - 效应就是直线代码的效应：循环体是不是同步块由它自己决定（3.2），每轮的效应按字段顺序执行。
 
 ```cml
-func count::<T>(t: T): int {
+func count::<T>(t: T) => int {
     return static loop n = 0 for name, F in fields T do n + 1
 }
 
-func sum3(t: (int, int, int)): int {
+func sum3(t: (int, int, int)) => int {
     return static loop acc = 0 for i in 0..3 do acc + t.[i]
 }
 
-func total_and_max(t: {a: int, b: int}): (int, int) {
+func total_and_max(t: {a: int, b: int}) => (int, int) {
     return static loop total = 0, best = 0
         for n, F in fields {a: int, b: int} do {
             (total + t.[n], if best < t.[n] then t.[n] else best)
         }
 }
 
-func sum_to(): int {
+func sum_to() => int {
     let n = 4
     return static loop acc = 0 for i in 0..n do acc + i
 }
 
-func stepped(): int {
+func stepped() => int {
     return static loop acc = 0 for i in range(0, 10, 3) do acc + i
 }
 
-func from_array(): int {
+func from_array() => int {
     let xs = [1, 2, 3]
     return static loop acc = 0 for x in xs do acc + x
 }
 
-func sum_args(...ts): int {
+func sum_args(...ts) => int {
     return static loop acc = 0 for x in ts do acc + x
 }
 ```
@@ -619,7 +619,7 @@ func (x: int) sync { total = total + x }        // 写入被捕获的变量：�
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
   ```cml
-  func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
+  func apply_twice(f: (x: int) => int, x: int) => int { return f(f(x)) }
   apply_twice(func (x) { x + 1 }, 3)   // x: int
   ```
 
@@ -636,7 +636,7 @@ func (x: int) sync { total = total + x }        // 写入被捕获的变量：�
 - 返回值：函数的结果类型是函数类型。
 
   ```cml
-  func adder(n: int): (x: int) => int {
+  func adder(n: int) => (x: int) => int {
       return func (x) { x + n }              // x: int，返回类型也是 int
   }
   ```
@@ -644,7 +644,7 @@ func (x: int) sync { total = total + x }        // 写入被捕获的变量：�
 - `->` 后面的 lambda：形参就是接收者，所以它的类型是接收者的类型，或者从 `T?`、`T!` 里取出的值的类型（3.9 的流水线）：
 
   ```cml
-  func main(): int sync {
+  func main() => int sync {
       let a = 5 -> func (y) { y + 1 }                  // y: int
       println(a)
       return 0
@@ -659,18 +659,18 @@ func (x: int) sync { total = total + x }        // 写入被捕获的变量：�
 **函数是值。** 函数的名字可以用在任何能写值的位置：作实参、`with` 实参、`let g = f`、`return f`、数组或元组的元素、分支臂的值。
 
 ```cml
-func inc(x: int): int { return x + 1 }
-func dbl(x: int): int { return x * 2 }
+func inc(x: int) => int { return x + 1 }
+func dbl(x: int) => int { return x * 2 }
 
-func apply_twice(f: (x: int) => int, x: int): int {
+func apply_twice(f: (x: int) => int, x: int) => int {
     return f(f(x))
 }
 
-func adder(n: int): (x: int) => int {
+func adder(n: int) => (x: int) => int {
     return func (x: int) => int { x + n }          // 捕获 n
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = inc
     let add5 = adder(5)
     println(g(1), apply_twice(dbl, 3), add5(10))
@@ -700,7 +700,7 @@ func main(): int sync {
 | `xs->foreach<f>` | 无；对每个元素调用 `f` | 按元素顺序 |
 
 ```cml
-func main(): int sync {
+func main() => int sync {
     let xs = 1..6
     println(xs->map<func (x) { x * x }>)
     println(xs->filter<func (x) { x % 2 == 0 }>)
@@ -725,9 +725,9 @@ item 5
 错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值；除零、下标越界、递归过深等是故障，带位置终止程序，`!!` 接不住它。`attempt` 是**函数变换**：`attempt(f)` 得到一个函数，参数与 `f` 相同，结果类型是 `f` 的结果加上 `!`；调用它是 `attempt(f)(a, b)`。这次调用里（包括它直接或间接调用的一切）发生的故障，在边界处变成一个错误值，再用 `!!`、`->` 或 `match ... case error e` 处理。任意表达式用闭包包起来：`attempt(func () { expr })()`。这个函数值可以像别的函数值一样传递、放进尖括号：`rows->map<attempt(parse_row)>`。
 
 ```cml
-func risky(d: int): int { return 100 / d }
+func risky(d: int) => int { return 100 / d }
 
-func main(): int sync {
+func main() => int sync {
     println(attempt(risky)(4) !! -1)
     println(attempt(risky)(0) !! -1)
     println(attempt(func () { [1, 0, 4]->map<risky> })() !! [-1])
@@ -744,7 +744,7 @@ func main(): int sync {
 25
 -1
 [-1]
-DivisionByZero at main.cml:1:38
+DivisionByZero at main.cml:1:40
 ```
 
 - 类型：`f: (A...) => T` 得到 `(A...) => T!`；`f` 本身返回 `U!` 时得到 `(A...) => U!`（它自己返回的错误值原样传出）。带 `with` 参数或 `var` 参数的函数不能直接传入，用闭包。

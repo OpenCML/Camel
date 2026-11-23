@@ -15,12 +15,12 @@ order are not defaults, they are **written in the program**, and the graph has e
 // prints although nothing uses the result and the body is not a sync block (3.1).
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
 
-func greet(): int {
+func greet() => int {
     println('hello from greet')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     return 0
 }
@@ -61,12 +61,12 @@ with `greet`'s body made a sync block ([`examples/10_sync_body.cml`](examples/10
 // The same two statements as 10_unused_effect.cml, in a sync body: now both run.
 // Run: camel docs/tutorial/examples/10_sync_body.cml
 
-func greet(): int sync {
+func greet() => int sync {
     println('hello from greet')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     return 0
 }
@@ -97,14 +97,14 @@ inside it behaves as it is written: write `sync` there too if you want order the
 // body -- is ordered only if it says `sync` itself.
 // Run: camel docs/tutorial/examples/10_sync_block.cml
 
-func report(second: bool): int sync {
+func report(second: bool) => int sync {
     println('the body is a sync block')
     if second then { println('three'); println('four') }
     if second then sync { println('five'); println('six') }
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(report(true))
     return 0
 }
@@ -144,19 +144,19 @@ in. [`examples/10_var_order.cml`](examples/10_var_order.cml):
 // read takes the value of the most recent write before it, and a write nobody reads does not run.
 // Run: camel docs/tutorial/examples/10_var_order.cml
 
-func bump(var counter: int): int sync {
+func bump(var counter: int) => int sync {
     counter += 1
     return counter
 }
 
-func twice(): int sync {
+func twice() => int sync {
     var c = 0
     bump(c)
     bump(c)
     return c
 }
 
-func latest(): int sync {
+func latest() => int sync {
     var c = 1
     c = 2
     let before = c
@@ -164,7 +164,7 @@ func latest(): int sync {
     return before
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice())
     println(latest())
     return 0
@@ -207,21 +207,21 @@ read", not "this assignment has side effects"
 // the guarantee, not the value.
 // Run: camel docs/tutorial/examples/10_write_nobody_reads.cml
 
-func unordered(): int {
+func unordered() => int {
     var c = 1
     let before = c
     c = 5
     return before
 }
 
-func ordered(): int sync {
+func ordered() => int sync {
     var c = 1
     let before = c
     c = 5
     return before
 }
 
-func main(): int sync {
+func main() => int sync {
     println(unordered())
     println(ordered())
     return 0
@@ -267,7 +267,7 @@ The read below is wanted by nobody, so it does not run; `println` is a
 ```cml
 import { get_env } from env
 
-func main(): int {
+func main() => int {
     get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
     println(7)
     return 0
@@ -294,11 +294,11 @@ used (`println` returns its argument), so they happen in the order written with 
 // Two effects on the same resource (stdout) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
 
-func report(): int {
+func report() => int {
     return 5->println->println
 }
 
-func main(): int sync {
+func main() => int sync {
     println(report())
     return 0
 }
@@ -340,19 +340,19 @@ resource console = [db, stdout]
 
 #resource type Stream = { id: int }
 
-func read_id(s: Stream): int uses s {
+func read_id(s: Stream) => int uses s {
     return s.id
 }
 
-func tick(): void uses var console {
+func tick() => void uses var console {
 }
 
-func bump(var cell: int): int sync {
+func bump(var cell: int) => int sync {
     cell += 1
     return cell
 }
 
-func main(): int sync {
+func main() => int sync {
     let s: Stream = { id: 7 }
     println(read_id(s))
     tick()
@@ -436,12 +436,12 @@ writes the standard output.
 
 resource db
 
-func stamp(): int uses var db sync {
+func stamp() => int uses var db sync {
     println('x')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(stamp())
     return 0
 }
@@ -494,15 +494,15 @@ nothing, fits a `pure` parameter. `apply` in
 // argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 
-func apply(f: (x: int) => int pure, x: int): int {
+func apply(f: (x: int) => int pure, x: int) => int {
     return f(x)
 }
 
-func twice(x: int): int pure {
+func twice(x: int) => int pure {
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(twice, 4))
     return 0
 }
@@ -528,16 +528,16 @@ asks for**, and the error is raised at the call
 // parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 
-func apply(f: (x: int) => int pure, x: int): int {
+func apply(f: (x: int) => int pure, x: int) => int {
     return f(x)
 }
 
-func noisy(x: int): int sync {
+func noisy(x: int) => int sync {
     println(x)
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(noisy, 4))
     return 0
 }
@@ -607,7 +607,7 @@ The answer is [`examples/10_exercise.cml`](examples/10_exercise.cml):
 // that has to be pure.
 // Run: camel docs/tutorial/examples/10_exercise.cml
 
-func sum_upto(n: int): int sync {
+func sum_upto(n: int) => int sync {
     var total = 0
     loop i = 1 while i <= n do sync {
         total += i
@@ -616,15 +616,15 @@ func sum_upto(n: int): int sync {
     return total
 }
 
-func apply(f: (x: int) => int pure, x: int): int {
+func apply(f: (x: int) => int pure, x: int) => int {
     return f(x)
 }
 
-func square(x: int): int pure {
+func square(x: int) => int pure {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum_upto(4))
     println(apply(square, 5))
     return 0

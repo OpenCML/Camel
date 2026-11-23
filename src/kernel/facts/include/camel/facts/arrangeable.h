@@ -26,7 +26,7 @@
  *
  * The record is the only statement of the first three, and every entrance writes into it: a built-in
  * operator's declaration is copied there when the module loads
- * (`builtin_semantics.cpp#declareBuiltinOperatorUses`), and a Camel declaration states it directly.
+ * (`operator_table.h#declareSemantics`), and a Camel declaration states it directly.
  * A clause nobody stated reads as design principles 3.3 says it does -- writing the global resource
  * -- rather than as a second answer derived from the table.
  */

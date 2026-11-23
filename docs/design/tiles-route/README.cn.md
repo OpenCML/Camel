@@ -142,13 +142,13 @@ import { Tensor } from tensor
 import { Tile, tiles } from tiles
 
 // 一个块：静态形状的小张量，只能在内核里出现
-func softmax_row(x: Tile<f32, [1, constas B]>): Tile<f32, [1, B]> {
+func softmax_row(x: Tile<f32, [1, constas B]>) => Tile<f32, [1, B]> {
     let m = x->max<axis: 1>
     let e = (x - m)->exp
     return e / e->sum<axis: 1>
 }
 
-func softmax(x: Tensor<f32, const [constas n, 1024]>): Tensor<f32, const [n, 1024]> {
+func softmax(x: Tensor<f32, const [constas n, 1024]>) => Tensor<f32, const [n, 1024]> {
     // 把 x 按 [1, 1024] 切块，对每一块调用 softmax_row，按同样的切法拼回
     return x->tiles<[1, 1024]>->map<softmax_row>->untile
 }
@@ -160,7 +160,7 @@ func softmax(x: Tensor<f32, const [constas n, 1024]>): Tensor<f32, const [n, 102
 - 需要跨块循环的内核（矩阵乘的 K 维）用 `LOOP`：
 
 ```camel
-func matmul_block(a: TileRow<f32, [BM, K]>, b: TileCol<f32, [K, BN]>): Tile<f32, [BM, BN]> {
+func matmul_block(a: TileRow<f32, [BM, K]>, b: TileCol<f32, [K, BN]>) => Tile<f32, [BM, BN]> {
     return loop acc = Tile::zeros<[BM, BN]>() for k in range(0, K / BK)
         do acc + a->block<k, BK> @ b->block<k, BK>
 }
@@ -189,7 +189,7 @@ func softmax_row(x: Ptr<f32>, y: Ptr<f32>, n: int, stride: int) {
 
 ```camel
 #kernel
-func softmax_row(x: Tile<f32, [1, 1024]>): Tile<f32, [1, 1024]> {
+func softmax_row(x: Tile<f32, [1, 1024]>) => Tile<f32, [1, 1024]> {
     let m = x->max<axis: 1>
     let e = (x - m)->exp
     return e / e->sum<axis: 1>
