@@ -47,3 +47,6 @@ OPER 说成 `ACCS` 是在展示层抹掉这件事；而 (甲) 顺带要定「成
 `shapeName` 只回答四个算子的名字，不回答成员读的标签。若选 (甲)，要补的是「一个 OPER 节点在
 DOT 里的 `type=` 与 `label` 从哪来」这一条规则（算子记录里的什么字段），而不只是把 `OPER` 换成
 `ACCS`/`FILL`。
+## 决策者答（2026-11-23 19:00）
+
+**乙，导出器不把 `OPER` 说成 `ACCS`/`FILL`。** 补上 ④ 缺的那条规则，而且它对所有算子是同一条：DOT 里一个 `OPER` 节点的 `type=` 是 `OPER`，`label` 是算子的 Camel 名字加它的编译期 `with` 实参（诊断与转储显示 Camel 名字、不显示 URI，原则 9.3；成员读的位置按计划 2.3 是编译期参数）。所以成员读一行是 `access<0>`、`access_key<"p">`，构造是 `fill`。三处断言改成按这个读：`port_fill_metadata` 数 `fill` 行与取成员行，`comprehension_graph` 从 `access_key`/`access` 行的实参取出 `p,0,1`，`static_tuple_function_materializes` 按算子名计数。`shapeName` 不再用于转储。
