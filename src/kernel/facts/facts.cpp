@@ -735,28 +735,20 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
     }
     const camel::core::OperatorTable &table = camel::core::OperatorTable::instance();
     if (const camel::ops::Record *record = table.recordOf(oper); record != nullptr) {
-        // The record states the terms it was declared with, and a clause it does not state is a
-        // clause nobody wrote: reading that silence as "touches everything" would answer for
-        // every operator whose declaration predates the record -- the whole surface at once. So the
-        // record answers the terms it speaks to, and the semantics the operator was declared with
-        // answer the ones it does not. This is the one place either is read for this kind.
-        if (record->uses.stated()) {
-            terms.pure             = record->pure();
-            terms.noExternalEffect = !record->external();
-        } else {
-            terms.pure             = table.isPure(oper);
-            terms.noExternalEffect = !table.hasExternalEffect(oper);
-        }
-        terms.cannotFault = !record->mayFault();
+        // The record is the one statement of the three, and this is the only place it is read for
+        // this kind: `pure` is the empty `uses` clause, `external` the reach that clause states (a
+        // clause nobody stated reads as writing the global resource, design principles 3.3), and
+        // `panic` the fault fact. The built-in module writes its clause into every record it
+        // registers, and a Camel declaration writes its own, so a reader of this kind and a reader
+        // of the table read one statement instead of two derivations of it.
+        terms.pure             = record->pure();
+        terms.noExternalEffect = !record->external();
+        terms.cannotFault      = !record->mayFault();
     } else {
-        // An operator with no record: the semantics it was declared with are the whole statement
-        // there is, and reading them here is the same answer `OperatorTable::find` hands out. An
-        // operator nobody declared keeps both conservative readings (not pure, external), so this
-        // path never answers "freely arrangeable" for something nobody described.
-        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
-        terms.pure             = table.isPure(oper);
-        terms.noExternalEffect = !table.hasExternalEffect(oper);
-        terms.cannotFault      = traits.has_value() && !traits->mayFault;
+        // No record at all: nobody stated anything about the operator, so none of the three terms
+        // holds. The table's derived bits are not a second answer to read here -- falling back to
+        // them is the pair this kind exists to remove.
+        terms = Arrangeable{};
     }
     terms.terminates = true;
     return terms;

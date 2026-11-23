@@ -802,6 +802,36 @@ std::string checkSemantics(
 
 } // namespace
 
+namespace {
+
+/// The `uses` clause of the record `recordId` names, stated from the resource spec the table
+/// declared (`declareSemantics`). The record is interned by `internLocked` before any declaration,
+/// so a zero id is an operator the registry never saw: nothing to write there. A record that
+/// already states a clause keeps it -- that statement came from the same declaration through the
+/// Camel entrance, and two writers of one fact is the defect this removes.
+void stateUsesInRecord(
+    std::uint32_t recordId, std::string_view uri, const sem::ResourceSpec &spec) {
+    if (recordId == 0) {
+        return;
+    }
+    auto &registry = camel::ops::Registry::instance();
+    // A record the registry has not materialized yet answers nothing: `find` returns null for it
+    // and `declare` builds it from this statement. Skipping it because it is not there yet would
+    // leave every operator declared before its module's records are made without the clause --
+    // more than half the surface, measured (`camel inspect --ops`, `uses_stated`).
+    if (const camel::ops::Record *record = registry.find(recordId);
+        record != nullptr && record->uses.stated()) {
+        return;
+    }
+    camel::ops::Record statement;
+    statement.key        = sem::OperatorKey::of(uri);
+    statement.uses.value = spec;
+    statement.uses.byCpp = true;
+    registry.declare(recordId, statement);
+}
+} // namespace
+
+
 void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantics semantics) {
     std::unique_lock lock(mutex_);
     const OperId id                  = internLocked(uri);
@@ -858,6 +888,15 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
     }
     declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
     const sem::OperatorSemantics *published = declarations_.back().get();
+    // The effect this declaration states, written into the operator record it belongs to: the
+    // record is what a reader of the effect asks (`camel/ops/operator_record.h`, item `uses`), and
+    // this is where the declaration is made, so the copy is made here and at no second place. The
+    // Camel entrance writes the same clause for a declaration compiled in; a record that already
+    // states one is left as it is, because that statement came from the same source and two
+    // writers of one fact is the defect this removes.
+    if (published->resources) {
+        stateUsesInRecord(entry.record, uri, *published->resources);
+    }
     entry.facts.store(published, std::memory_order_release);
     entry.declared.store(published, std::memory_order_release);
     epoch_.fetch_add(1, std::memory_order_acq_rel);

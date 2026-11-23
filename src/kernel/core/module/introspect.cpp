@@ -261,9 +261,22 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
             const auto declared = traits.find(d.uri);
             const std::vector<sem::ResourceAccess> accesses =
                 id ? traits.accessList(*id) : std::vector<sem::ResourceAccess>{};
+            // The record's own copy of the statement: whether one exists at all, and whether it
+            // states the `uses` clause. A reader that asks the record reads this, and an operator
+            // whose two entrances both said nothing is the one to fill in -- the check
+            // `test/cases/feat/modules/oprecord_uses.py` lists them by these two fields.
+            const camel::ops::Record *record =
+                id ? traits.recordOf(*id) : nullptr;
             os << ",\"accesses\":" << accessListJson(accesses)
                << ",\"accesses_declared\":"
                << ((id && traits.declaresAccesses(*id)) ? "true" : "false")
+               << ",\"record\":" << (record != nullptr ? "true" : "false")
+               << ",\"uses_stated\":"
+               << ((record != nullptr && record->uses.stated()) ? "true" : "false")
+               // The record's own reading of the clause, beside the `purity` the declaration
+               // states: a reader that asks the record and one that asks the table are reading
+               // the same answer exactly while these two agree.
+               << ",\"clause_pure\":" << ((record != nullptr && record->pure()) ? "true" : "false")
                << ",\"external\":" << (reachOf(*id, traits) ? "true" : "false")
                << ",\"may_fault\":" << ((!declared || declared->mayFault) ? "true" : "false");
             if (d.isPrivate) {

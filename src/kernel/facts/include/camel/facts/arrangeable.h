@@ -22,11 +22,13 @@
  * (`camel/ops/operator_record.h`: `pure` is the empty `uses` clause, `external` is the reach it
  * states, `panic` is the fault fact), and from the graph the node runs when it runs one (a branch's
  * arms, a loop's regions, a callee's body); the fourth from the node's own form
- * (`camel/core/loop_kind.h` and `CalleeRef`), never from what encloses it. A record that does not
- * state `uses` -- its silence is the reading design principles 3.3 gives the *effect* of an
- * operator, and a whole operator surface reads that way today -- is answered from the semantics the
- * operator was declared with, so that this kind answers what the tree answers; the operator record
- * and the graph, and nothing else, are what this file reads either way.
+ * (`camel/core/loop_kind.h` and `CalleeRef`), never from what encloses it.
+ *
+ * The record is the only statement of the first three, and every entrance writes into it: a built-in
+ * operator's declaration is copied there when the module loads
+ * (`builtin_semantics.cpp#declareBuiltinOperatorUses`), and a Camel declaration states it directly.
+ * A clause nobody stated reads as design principles 3.3 says it does -- writing the global resource
+ * -- rather than as a second answer derived from the table.
  */
 
 #pragma once

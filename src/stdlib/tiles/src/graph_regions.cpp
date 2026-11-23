@@ -319,15 +319,15 @@ void ids(std::ostream &out, const std::vector<size_t> &values) {
 }
 } // namespace
 bool touchesNothing(core::OperId oper) {
-    const auto &table                = core::OperatorTable::instance();
-    const camel::ops::Record *record = table.recordOf(oper);
-    if (record != nullptr && record->uses.stated()) {
-        // The record speaks: the clause it states is the operator's.
-        return record->pure() && !record->external();
+    const camel::ops::Record *record = core::OperatorTable::instance().recordOf(oper);
+    // The operator record's clause, and nothing beside it: `pure` is the empty `uses` clause and
+    // `external` is the reach that clause states, so a record nobody wrote a clause for answers
+    // "it touches something outside" (design principles 3.3) instead of being answered a second
+    // way from the table's derived bits.
+    if (record == nullptr) {
+        return false;
     }
-    // A record that says nothing about what the operator touches, or no record at all: the
-    // semantics it was declared with are the statement there is.
-    return table.isPure(oper) && !table.hasExternalEffect(oper);
+    return record->pure() && !record->external();
 }
 bool deviceCapable(core::OperId oper) {
     return operations().find(oper) != operations().end() && touchesNothing(oper);
