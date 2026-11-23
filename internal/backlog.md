@@ -8,6 +8,7 @@
 | D-1123-46 | 作者 fsh-dev | 协作流程改：派工催办返工只走通道、inbox 已删、车道由通道实时读活子代理、车道读数写进合并提交说明；② 撤 camel-lanes 的 lanes.md 停滞行与两道闸、删 lanes.md；③ 写问题页并报页名 | — | done | 2026-11-23 21:45 | `6c37670c39` |
 | C-1123-56 | `lane/parser-old-spelling` 在 (b) 上量到 | `Range` 缺 `map`：`map<dbl>(1..5)` 报 `NoMatchingFunction <(x:int)=>int pure> (Range)`，候选只有 `map_arr` 的 `T[]`；原则 5.4 要 range 的 `map` | — | todo | 2026-11-23 22:50 | |
 | C-1123-57 | 同上 | `std::cml` 打印器不认 `Range`：`cannot print main: a value is a tagged, nullable or cell tuple`（区间成了带 `int?` 的 FILL）。往返是要保住的性质，打印器有缺口 | `lane/parser-old-spelling` | doing | 2026-11-23 22:50 | |
+| D-1123-82 | 作者 fsh-dev | 「`Range` 有/没有这几个函数」不是分叉：两种读法都先修重载合并，差别只在要不要额外写成 prelude 普通函数。结果见 D-1123-90（实测：写了也到不了，还差三件） | `lane/op-overload-merge` | done | 2026-11-24 01:40 | `601b89e8bb` |
 | C-1123-58 | `lane/3a-blind` 实测 | `graph_view.h` 文档说适配器对 CAST/COPY/FILL/ACCS 四种「refuse」，而两个适配器实现都答 `kNoOper`；文档与代码不符，调用者会以为查错了而不是被拒 | — | todo | 2026-11-23 23:00 | |
 | C-1123-59 | 同上 | `GraphView` 缺四项，`rewrite/fact.cpp#Source`、`module.cpp#stepsOf` 等要用：①「是不是真正的 OPER 记录」②`kernelArgumentsOf` ③图的 `name()` ④`dataIndex` 索引本身 | — | todo | 2026-11-23 23:00 | |
 | D-1123-56 | 作者 fsh-dev | 车道开到 6–8 条：range-value 组、effects-declarations、host-locks、operator-uri、3a | 六条 | done | 2026-11-23 23:10 | `4da52dd8f5` |
