@@ -730,6 +730,53 @@ array; this call builds one.
 - Example: `range(0, 10, 3)` gives `[0, 3, 6, 9]`
 - Example: `range(10, 0, -3)` gives `[10, 7, 4, 1]`
 
+### Ranges
+
+A range is a value of its own type, not an array (design principles 5.4): `Range` writes the
+three numbers that name it down, and `to_array` is the one conversion from it to the integers it
+names. Nothing else in the library is renamed or retyped here: the interval `a..b` still builds
+the array `range(a, b, 1)`, and the functions a range shares with an `int[]` (`map`, `filter`,
+`reduce`, `len`, `print`) are not this round's -- a function of one of those names declared
+beside the operator group of the same name is not an overload of it, it shadows it.
+
+These names are written by a program only after `import { ... } from prelude`: the prelude's
+types and its functions that are not operators are not brought along unasked.
+
+#### `to_range`
+
+```camel
+to_range: (start: int, stop: int, step: int) => Range
+```
+
+The range from start up to, not including, stop, taken in steps of step: the step of
+`range(a, b, s)`, and 1 for the interval `a..b`.
+
+- Example: `to_range(1, 5, 1)->to_array()` gives `[1, 2, 3, 4]`
+
+#### `to_array`
+
+```camel
+to_array: (r: Range) => int[]
+```
+
+The integers of r as an array: the conversion from a range to the array it is not, and the only
+one -- nothing turns an array into a range. A range whose end is left out names no array (an
+open end is a bound of the axis the range is a subscript of), so the call faults instead of
+inventing one.
+
+- Failure: fault `RangeWithoutEnd` when start or stop is null.
+- Example: `to_range(1, 5, 1)->to_array()` gives `[1, 2, 3, 4]`
+
+#### `is_empty`
+
+```camel
+is_empty: (r: Range) => bool
+```
+
+Whether r holds no integer.
+
+- Example: `to_range(3, 3, 1)->is_empty()` gives `true`
+
 #### `last`
 
 ```camel

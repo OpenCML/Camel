@@ -1,0 +1,12 @@
+// The type grew beside the interval, not in front of it: `1..5` is still the `int[]` that
+// `range(1, 5, 1)` builds, so `map<dbl>(1..5)` still resolves through the operator group of `map`
+// at `int[]`, in both spellings. Nothing declares `map` again beside the group, so nothing shadows
+// it -- a range's own `map` would be an operator of its own, not a function of this name.
+
+func dbl(x: int): int { return x * 2 }
+
+func main(): int sync {
+    println(map<dbl>(1..5))
+    println((1..5)->map<dbl>)
+    return 0
+}
