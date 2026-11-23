@@ -302,9 +302,32 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
     return leftEpoch < rightEpoch;
 }
 
+/// A node that copies its one operand, in **either** shape: the COPY kind the front end still
+/// builds, or the `:op/copy` call the flip builds instead.
+///
+/// A copy is not only a value with the value's type. A copy of a constant is still that constant,
+/// and a `var` declaration's copy still stands between the variable and the value it starts from,
+/// so the readers below look *through* a copy to answer two questions of their own -- whether the
+/// value is a constant, and what value a cell was made with. While both shapes exist they have to
+/// see through both; when the kind is gone this predicate loses its first arm and nothing else
+/// moves.
+inline bool isCopyNode(node_handle_t node) {
+    if (node == nullptr) {
+        return false;
+    }
+    if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
+        return true;
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return false;
+    }
+    const auto op = nodeGraphOf(node)->operTarget(node);
+    return op != nullptr && op->uri() == ":op/copy";
+}
+
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
 inline std::optional<slot_t> staticValueOf(node_handle_t node) {
-    if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
+    if (isCopyNode(node)) {
         const auto inputs = normInputsOf(node);
         if (inputs.size() != 1) {
             return std::nullopt;
@@ -321,7 +344,7 @@ inline std::optional<slot_t> staticValueOf(node_handle_t node) {
 
 /// The node behind a COPY of it (the argument of a call is copied when it is a constant).
 inline node_handle_t throughCopy(node_handle_t node) {
-    if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
+    if (isCopyNode(node)) {
         const auto inputs = normInputsOf(node);
         if (inputs.size() == 1) {
             return nodeDraftOf(node)->ref(inputs.front());

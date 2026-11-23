@@ -825,8 +825,13 @@ void Builder::dropCarriedVariableUnits() {
                     continue;
                 }
                 const camel::runtime::DraftNodeHeader *header = draft.header(id);
-                if (header == nullptr || (header->kind != camel::runtime::GCNodeKind::Gate &&
-                                          header->kind != camel::runtime::GCNodeKind::Copy)) {
+                if (header == nullptr) {
+                    continue;
+                }
+                // A copy of either shape: the block's GATEs and the copies the unit made go with
+                // the store, and the flip turns the copies into `:op/copy` calls.
+                if (header->kind != camel::runtime::GCNodeKind::Gate &&
+                    !isCopyNode(draft.ref(id))) {
                     continue;
                 }
                 bool inStoreRegion = false;
@@ -905,8 +910,9 @@ void Builder::dropCarriedVariableUnits() {
             if (inputs.size() == 1) {
                 below = inputs[0];
             }
+            // A copy in either shape, so the walk still reaches the value a copy sits on.
             if (node != cellId && header->kind != camel::runtime::GCNodeKind::Data &&
-                header->kind != camel::runtime::GCNodeKind::Copy) {
+                !isCopyNode(draft.ref(node))) {
                 break;
             }
             // The same permission asked of one node, and the same erase: the cell goes first, then

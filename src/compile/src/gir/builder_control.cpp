@@ -2711,7 +2711,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         const auto underTheCopy = [&](node_handle_t value) -> node_handle_t {
             node_handle_t start = value;
             for (size_t depth = 0; start != nullptr && depth < 16; ++depth) {
-                if (!nodeIsKind(start, runtime::GCNodeKind::Copy)) {
+                if (!isCopyNode(start)) {
                     break;
                 }
                 const auto below = normInputsOf(start);
