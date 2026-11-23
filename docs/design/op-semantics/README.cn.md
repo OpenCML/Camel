@@ -1410,6 +1410,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 
 **A.1 CPU 张量算子在 NaN 与 ±0 上的行为**（2.3、6.7、Q5、Q6）。在 `camel-lanes` 容器的 `gen` 通道里用已有的构建（构建时间 2026-10-15 06:45，未重新构建；源码为 `6bf31d1f`）运行：
 
+<!-- camel-snippet: fragment: the result type below is written loat[...], the shape-polymorphic form this page is arguing for; today's parser does not accept that spelling, so this is quoted as the proposal it is, not compiled -->
 ```camel
 import { Tensor, reshape, relu, maximum, minimum, max } from tensor
 
