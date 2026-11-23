@@ -163,6 +163,7 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
   主机 `checkout -f -B` 后叠补丁。树干净且已在那个提交上时自动跳过检出。
 - 退出码原样带回；面板状态带 `remote: "88zjwei"` 显示为 `88`，本机显示 `本机`。
 - **并发用 `-Jobs 8`**：`-Jobs 12` 下 `gpu_preference.no_device.*` 会撞 10 秒超时而假红。
+- **主机上的并行度由槽决定，不由约定决定。** 构建两槽、计划一槽、每个检出一把树锁；拿到哪把就是哪一档，拿不到就等，等不到是 `state=noslot`（没读到，不是红也不是绿）。**时间敏感的计划**（计划文件里 `time_sensitive = true`）把测试槽与两个构建槽一起拿下，跑完一起放，读数不受别人的构建干扰。每份运行登记带 `slot`、`overlapping`、`loadAtStart`/`loadAtEnd`——读数自己说明它是怎么跑的，"两条同时跑、各自红"与"一条独占主机时红"因此分得开。锁在 `internal/tools/camel-remote.ps1`，约定页（`agents/dispatch.md` §6）只指路。
 - 禁止在 agent 提示里写 `cmake --build`、`npm run build`、`node scripts/test.js`；不要跑
   stress / progen / GC-stress / PyTorch 重测试。
 

@@ -390,7 +390,13 @@ param(
 # 2026-11-16: the golden written by `-UpdateGolden` was reported missing by the run right after it).
 # Pair this with a path `.gitignore` covers (e.g. `out/trace-golden/...`), so a fetched record can
 # never be committed by accident.
-[string]$FetchFile = ''
+[string]$FetchFile = '',
+    # How long a run waits for the slot(s) it needs before it says `state=noslot` and stops, in
+    # seconds. 1800 s is the shape every wait here has had: a queue behind other lanes' builds is
+    # waiting, not a failure, and a reading that was never taken is not a red. It is a parameter
+    # because the one case worth measuring on purpose is the refusal -- a lane that wants to see
+    # `noslot` should not have to book half an hour of a shared host to read it.
+    [int]$SlotWaitSeconds = 1800
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1051,8 +1057,16 @@ $goldenCount = -1
 $goldenState = ''
 $lastRunPublish = [datetime]::MinValue
 
-# One line per run for the panel's run registry. `slot` stays null (the host does not report which
-# of the two locks it took); slots = 2 is the host layout this script itself creates below.
+# One line per run for the panel's run registry. The fields that say *how* this run was scheduled
+# are reported by the host itself and not guessed here: `slot` is the build slot the host took
+# ("1", "2", "1&2" for a run that holds both, "0" when it built nothing and held none), `testSlot`
+# is 1 when the plan slot was held, and
+# `overlapping` names the other runs that were on the host when this one started and when it
+# stopped, as `runId:phase` or `none`. `loadAtStart`/`loadAtEnd` are the host's 1-minute load at
+# the same two moments. Without them a duration is a number taken in unknown company: two runs red
+# side by side and two runs red one after the other are different readings, and only these four
+# fields tell them apart. `state` is `read` when the run was measured and `noslot` when the host
+# refused to start it because the slots it needed were taken.
 $run = @{
     runId           = "$PID-$($startedAt.ToString('yyyyMMddHHmmss'))"
     pid             = $PID
@@ -1062,8 +1076,14 @@ $run = @{
     startedAt       = $startedAt.ToString('o')
     updatedAt       = $startedAt.ToString('o')
     phase           = 'starting'
+    state           = $null
     slots           = 2
     slot            = $null
+    testSlot        = $null
+    noslotWaitedFor = $null
+    overlapping     = @{ atStart = $null; atEnd = $null }
+    loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
+    loadAtEnd       = $null
     queuedAt        = $null
     queueSeconds    = $null
     buildStartedAt  = $null
@@ -1363,6 +1383,36 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         "cd `$R/ && node scripts/test.js $planArgs --jobs $Jobs$tierArg"
     } else {
         ':'
+    }
+
+    # --- does a plan in this run declare itself time sensitive? ---------------
+    # A reading that is a duration (perf/**, a `perf_budget_*` entry, an `opt_twice`-style
+    # measurement) is only comparable to another duration taken in the same company, and the host
+    # carries every other lane's build. So the plan says so in its own file -- `time_sensitive =
+    # true` at the top level of the *.plan.toml, before any table header -- and this run then takes
+    # the plan slot and both build slots together and lets go of all three when the plan is done.
+    # The declaration is in the plan and not in a list here, because a list is a second place to
+    # forget and it drifts from the plan it names. A directory target (`smoke`, `feat/opt`) and
+    # `-Changed` carry no declaration of their own: only a named *.plan.toml can ask for the host.
+    $timeSensitivePlans = @()
+    foreach ($p in $Plan) {
+        $p = "$p".Trim()
+        if (-not $p) { continue }
+        $declared = if ([System.IO.Path]::IsPathRooted($p)) { $p } else { Join-Path $Path $p }
+        if (-not (Test-Path -LiteralPath $declared -PathType Leaf)) { continue }
+        foreach ($declLine in @(Get-Content -LiteralPath $declared)) {
+            # The document's top level ends at the first `[table]` header: a `time_sensitive`
+            # inside `[defaults]` belongs to that table and is not a declaration about the host.
+            if ($declLine -match '^\s*\[') { break }
+            if ($declLine -match '^\s*time_sensitive\s*=\s*true\s*(#.*)?$') {
+                $timeSensitivePlans += $p
+                break
+            }
+        }
+    }
+    $timeSensitive = $timeSensitivePlans.Count -gt 0
+    if ($timeSensitive) {
+        Write-Host ("[camel-remote] time sensitive: {0} -- this run takes the plan slot and both build slots together, and starts only when it has all three" -f ($timeSensitivePlans -join ', '))
     }
 
     # Markers delimit the phases for the state writer; they are consumed locally and not printed.
@@ -1869,6 +1919,34 @@ fi
 # The split the plan runner prints: unless a build runs below, this run built nothing.
 export CAMEL_GATE_BUILD_SECONDS=0
 cd "`$R" || exit 2
+# --- who else is on this host, and how loaded it was ------------------------
+# The registry on the workstation holds one line per run, but a run cannot see the other ones from
+# there: what a reading needs is the set that overlapped *this* run, reported by the machine that
+# ran it. So each run leaves a one-line note on the host while it lives, and reads the other notes
+# at its start and at its end. The note is not a lock and decides nothing -- the locks are below --
+# it is the "who else was running" half of a duration that would otherwise be unattributable
+# (load 15-42 is normal here, so a duration without its company is not comparable to another one).
+# A note left behind by a run that was killed goes stale on its own: six hours is not a co-tenant.
+RUN_NOTE_DIR=/tmp/camel-host-runs
+mkdir -p "`$RUN_NOTE_DIR"
+run_note() { printf '%s\t%s\t%s\t%s\n' '$($run.runId)' '$name' "`$1" "`$(date +%s)" > "`$RUN_NOTE_DIR/'$($run.runId)'"; }
+others_now() {
+    awk -v me='$($run.runId)' -v now="`$(date +%s)" 'NF >= 4 { if (`$1 == me) next; if (now - `$4 > 21600) next; printf "%s%s:%s", sep, `$1, `$3; sep = "," }' "`$RUN_NOTE_DIR"/* 2>/dev/null
+}
+finish_probe() {
+    echo "HOST_LOAD_END=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
+    echo "HOST_OVERLAP_END=`$(others_now)"
+    rm -f "`$RUN_NOTE_DIR/'$($run.runId)'"
+}
+# Every exit path, including a failed build and a wait that runs out: the end reading is taken on
+# the way out, so a run that never reached the plan still says how the host looked when it stopped.
+trap finish_probe EXIT
+run_note starting
+echo "HOST_LOAD_START=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
+echo "HOST_OVERLAP_START=`$(others_now)"
+# 0 means "this run held no build slot": a -NoBuild run builds nothing, and the plan slot below is
+# a slot of its own.
+echo 'HOST_BUILD_SLOT=0'
 echo '__CAMEL_REMOTE_SYNCED__'
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
@@ -1891,11 +1969,56 @@ if [ '$NoBuild' = 'True' ]; then
         echo "[camel-remote] WARNING: scripts/build-info.js is missing in this checkout; -NoBuild cannot verify out/$verifyTag (the tree predates the H149 guard)"
     fi
 fi
+# --- a time-sensitive plan takes the whole host -----------------------------
+# A plan that declares `time_sensitive = true` reads durations, and a duration measured beside
+# another lane's build is a duration of the wrong thing. So its run takes the plan slot and both
+# build slots together, before the build, and lets go of all three after the plan. All three or
+# none: a partial hold is released and retried, because two such runs polling in different orders
+# would otherwise wait on each other until the deadline. Running out of deadline is `state=noslot`
+# -- the reading was not taken, and it is neither green nor red.
+held_all=0
+if [ '$timeSensitive' = 'True' ]; then
+    ts_waited=0
+    while [ "`$held_all" = 0 ]; do
+        exec 9>/tmp/camel-host-build-1.lock
+        exec 8>/tmp/camel-host-build-2.lock
+        exec 7>/tmp/camel-host-test.lock
+        miss=
+        flock -n 9 || miss=build-1
+        if [ -z "`$miss" ]; then flock -n 8 || miss=build-2; fi
+        if [ -z "`$miss" ]; then flock -n 7 || miss=test; fi
+        if [ -z "`$miss" ]; then
+            held_all=1
+            echo '[camel-remote] time sensitive: hold taken on build-1, build-2 and test'
+        else
+            exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null; exec 7>&- 2>/dev/null
+            if [ "`$ts_waited" -ge '$SlotWaitSeconds' ]; then
+                echo "[camel-remote] noslot: waited `${ts_waited}s and the host `$miss slot is still held by another run; this plan is time sensitive, so it does not start without build-1, build-2 and test together" >&2
+                echo "HOST_NOSLOT=`$miss"
+                echo 'HOST_STATE=noslot'
+                exit 4
+            fi
+            if [ "`$((ts_waited % 30))" -eq 0 ]; then
+                echo "[camel-remote] still waiting for the host `$miss slot (a time-sensitive plan holds build-1, build-2 and test together; `${ts_waited}s)"
+            fi
+            sleep 3
+            ts_waited=`$((ts_waited + 3))
+        fi
+    done
+    echo 'HOST_BUILD_SLOT=1&2'
+    echo 'HOST_TEST_SLOT=1'
+    run_note exclusive
+fi
 if [ '$NoBuild' != 'True' ]; then
     # Two host builds at a time, twelve compile jobs each: one build alone was fine but eight
     # agents sharing one slot queued for tens of minutes, while three or more at 24 jobs each
     # thrashed the box (load 98 on 32 cores). Two slots of twelve keep the cores busy without
     # oversubscribing; the plan run afterwards is unaffected and still uses -Jobs.
+    if [ "`$held_all" = 1 ]; then
+        # Both build slots are already held by the block above, and re-opening these descriptors
+        # would drop the locks: this branch exists so the hold survives the build it covers.
+        slot='1&2'
+    else
     exec 9>/tmp/camel-host-build-1.lock
     exec 8>/tmp/camel-host-build-2.lock
     slot=
@@ -1910,7 +2033,10 @@ if [ '$NoBuild' != 'True' ]; then
             fi
         done
     fi
+    fi
     # A build that wedges must not hold a slot forever; the cap is generous.
+    echo "HOST_BUILD_SLOT=`$slot"
+    run_note "build-`$slot"
     build_started_ns=`$(date +%s%N)
     timeout 2400 $buildCmd
     code=`$?
@@ -1921,8 +2047,9 @@ if [ '$NoBuild' != 'True' ]; then
     echo "BUILD_SECONDS=`$CAMEL_GATE_BUILD_SECONDS"
     echo "BUILD_EXIT=`$code"
     # The slot is released as soon as the build ends: holding it through the plan run
-    # made one agent's tests block every other agent's build for minutes.
-    exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
+    # made one agent's tests block every other agent's build for minutes. A time-sensitive run is
+    # the exception and releases nothing here -- its hold covers the plan, which is the whole point.
+    if [ "`$held_all" = 0 ]; then exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null; fi
     if [ `$code -ne 0 ]; then echo '__CAMEL_REMOTE_BUILD_FAILED__'; exit `$code; fi
 fi
 # The AST snapshot record (only with -UpdateAstHashes): before the plan, because the plan reads the
@@ -1934,15 +2061,27 @@ $vscodeDeps
 # lock covers the plan and nothing else -- the transfer and the build are outside it, and the build
 # has its own slots -- so a full queue costs waiting time, never a wrong number. Waiting is not a
 # failure: only the plan's own exit code reaches the caller.
-exec 7>/tmp/camel-host-test.lock
-test_wait_started_ns=`$(date +%s%N)
-if ! flock -w 1800 7; then
-    echo '[camel-remote] no host test slot within 1800 s' >&2
-    exit 4
-fi
-test_wait_ms=`$(( (`$(date +%s%N) - test_wait_started_ns) / 1000000 ))
-if [ `$test_wait_ms -gt 2000 ]; then
-    echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$test_wait_ms/1000}") s for the host test slot"
+if [ "`$held_all" = 1 ]; then
+    # The plan slot was taken with the two build slots before the build. Re-opening fd 7 here would
+    # close the descriptor the hold stands on, and the lock with it: nothing is opened, nothing is
+    # waited for, and the hold lasts until the line after the plan below.
+    :
+else
+    exec 7>/tmp/camel-host-test.lock
+    test_wait_started_ns=`$(date +%s%N)
+    if ! flock -w 1800 7; then
+        echo '[camel-remote] no host test slot within 1800 s' >&2
+        exit 4
+    fi
+    test_wait_ms=`$(( (`$(date +%s%N) - test_wait_started_ns) / 1000000 ))
+    if [ `$test_wait_ms -gt 2000 ]; then
+        echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$test_wait_ms/1000}") s for the host test slot"
+    fi
+    # The plan slot is a slot of its own: a run that built nothing still holds one here, and the
+    # registry says so instead of reading slot=0 as "this reading was taken with no exclusion at
+    # all".
+    echo 'HOST_TEST_SLOT=1'
+    run_note plan
 fi
 $planMarker
 # The plan's stderr is folded into its own stdout here, on the host, before it leaves this script.
@@ -1956,8 +2095,13 @@ code=`$?
 echo "RUN_EXIT=`$code"
 $goldenStage
 $fetchStage
-# Released here, before the checkers: they read a finished run and need no exclusion.
-exec 7>&- 2>/dev/null
+# Released here, before the checkers: they read a finished run and need no exclusion. A
+# time-sensitive run lets go of all three slots here, at the same moment and for the same reason.
+if [ "`$held_all" = 1 ]; then
+    exec 7>&- 2>/dev/null; exec 8>&- 2>/dev/null; exec 9>&- 2>/dev/null
+else
+    exec 7>&- 2>/dev/null
+fi
 # --- the checkers -----------------------------------------------------------
 # One stage, one report: each checker prints its own output verbatim between a header naming it and
 # a footer naming its exit code. The stage carries the first failure out, so a red checker makes the
@@ -2089,6 +2233,73 @@ exit `$code
                 } else {
                     "[camel-remote] recording the AST snapshot failed on the host (exit $astExit)"
                 }
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            # --- how the host scheduled this run -----------------------------
+            # Four readings, all of them from the host and printed as well as recorded: a duration
+            # is only comparable to another duration when the slot it was taken in, the company it
+            # was taken with and the load at both ends travel with it. They arrive before the sync
+            # marker, so the "first line after SYNCED is the build start" rule below is untouched.
+            if ($cleanLine -match '^HOST_BUILD_SLOT=(\S+)$') {
+                # A string, not a number: "1" and "2" are the two build slots, "0" is a run that
+                # built nothing, and a time-sensitive run holds both at once ("1&2").
+                $run.slot = $Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_TEST_SLOT=(\d+)$') {
+                $run.testSlot = [int]$Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_LOAD_START=(\S+)$') {
+                $run.loadAtStart = $Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_OVERLAP_START=(.*)$') {
+                $othersAtStart = if ($Matches[1].Trim()) { $Matches[1].Trim() } else { 'none' }
+                $run.overlapping = @{ atStart = $othersAtStart; atEnd = 'not read' }
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_OVERLAP_END=(.*)$') {
+                $othersAtEnd = if ($Matches[1].Trim()) { $Matches[1].Trim() } else { 'none' }
+                if ($null -eq $run.overlapping) {
+                    $run.overlapping = @{ atStart = 'unknown'; atEnd = $othersAtEnd }
+                } else {
+                    $run.overlapping.atEnd = $othersAtEnd
+                }
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_LOAD_END=(\S+)$') {
+                $run.loadAtEnd = $Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_NOSLOT=(\S+)$') {
+                # The host refused to start: a time-sensitive plan needs build-1, build-2 and test
+                # together, and one of them was held past the deadline. `noslot` is the reading of
+                # "nothing was measured" -- not a red (no reading was taken) and not a green.
+                $run.state = 'noslot'
+                $run.noslotWaitedFor = $Matches[1]
+                $run.phase = 'noslot'
+                $run.lastLine = "[camel-remote] state=noslot: waiting for the host $($Matches[1]) slot"
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_STATE=(\S+)$') {
+                $run.state = $Matches[1]
                 Publish-Run
                 Write-Host $line
                 return
@@ -2291,6 +2502,15 @@ exit `$code
         }
     $code = $LASTEXITCODE
     $finishedAt = Get-Date
+    # The end load is taken here, not after the summaries below: this is the moment the run stopped
+    # being the thing that loaded the host, and a reading taken a minute later is a reading of other
+    # people's work. The summary further down reuses this reading instead of taking a second one.
+    if ($null -eq $loadEnd) { $loadEnd = Get-HostLoad }
+    if ($null -ne $loadEnd) { $run.loadAtEnd = "$([math]::Round($loadEnd[0], 2))" }
+    if ($null -eq $run.loadAtStart -and $null -ne $loadStart) {
+        $run.loadAtStart = "$([math]::Round($loadStart[0], 2))"
+    }
+    if ($null -eq $run.state) { $run.state = 'read' }
     $run.finishedAt = $finishedAt.ToString('o')
     $run.exit = $code
     $run.phase = if ($code -eq 0) { 'done' } else { 'fail' }
@@ -2683,7 +2903,7 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     $planEnd = if ($planStartedAt) { $finishedAt } else { $planStartedAt }
     $phases = "transfer {0:N1} s, build {1:N1} s" -f ($transferEnd - $startedAt).TotalSeconds, ($buildEnd - $transferEnd).TotalSeconds
     if ($null -ne $planStartedAt) { $phases += ", plan {0:N1} s" -f ($finishedAt - $planStartedAt).TotalSeconds }
-    $loadEnd = Get-HostLoad
+    $loadEnd = if ($null -ne $loadEnd) { $loadEnd } else { Get-HostLoad }
     if ($null -ne $loadEnd) {
         Write-Host ("[load] {0} {1} {2} (1m/5m/15m) after run" -f $loadEnd[0], $loadEnd[1], $loadEnd[2])
     }
@@ -2692,6 +2912,26 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     if ($null -ne $loadLow) { $phases += ", load (min 1m) {0}" -f $loadLow }
     if ($null -ne $loadLow -and $loadLow -gt 8) {
         Write-Host ("[load] WARNING: 1m load {0} > 8 -- readings taken now are not comparable to quiet-host readings" -f $loadLow)
+    }
+    # How this run was scheduled, on one line and next to the readings it qualifies: a duration
+    # without its slot, its company and its load is a number taken in unknown conditions, and the
+    # difference between "two runs red side by side" and "two runs red one after the other" is
+    # exactly this line. `slot=0` is a run that built nothing (it held no build slot), not a run
+    # that held no exclusion: `testSlot=1` is the plan slot.
+    $slotText = if ($null -eq $run.slot) { 'unknown' } else { "$($run.slot)" }
+    $testSlotText = if ($null -eq $run.testSlot) { '0' } else { "$($run.testSlot)" }
+    $overlapText = if ($null -eq $run.overlapping -or $null -eq $run.overlapping.atStart) {
+        'not reported'
+    } else {
+        "start [$($run.overlapping.atStart)] end [$($run.overlapping.atEnd)]"
+    }
+    Write-Host ("[camel-remote] run {0}: state={1} slot={2} testSlot={3} load {4} -> {5} (1m) overlapping {6}" -f `
+        $run.runId, $run.state, $slotText, $testSlotText,
+        $(if ($run.loadAtStart) { $run.loadAtStart } else { 'unknown' }),
+        $(if ($run.loadAtEnd) { $run.loadAtEnd } else { 'unknown' }), $overlapText)
+    if ($run.state -eq 'noslot') {
+        Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the {1} slot and gave up (-SlotWaitSeconds). A time-sensitive plan holds build-1, build-2 and test together, so a missing one is a run that was not started rather than one that failed: nothing above is a reading" -f `
+            $SlotWaitSeconds, $run.noslotWaitedFor)
     }
     Write-Host ("[camel-remote] {0} exit {1} ({2}; total {3} s)" -f `
         $name, $code, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
