@@ -28,12 +28,18 @@ timeout_ms = 180000
 # headroom half no longer decides anything now that the line carries no host term, and the docstring
 # of `test/tools/have-binding-headroom.py` still quotes the old formula; dropping that half needs a
 # macOS run to verify, so it is left as it is rather than changed blind here.
+#
+# The two questions are split now that they answer differently: whether the module exists is asked by
+# `require_artifacts`, whose absence fails the entry and names the path, and the probe keeps only the
+# host half, whose absence skips it. They used to share one exit code, and the module's absence was
+# therefore a skip -- the same number in a summary as a pass, over an entry nothing had measured.
 [[tests]]
 name = "python_binding.session"
-desc = "The whole contract in one run of the Python test: the module is found by path, the extension is imported by the package, and the addresses, the timing, the memory, the fault and the diagnostic are asserted inside the script. It skips where the extension module was not built for this interpreter (no Python development files at configure time, or another ABI)."
+desc = "The whole contract in one run of the Python test: the module is found by path, the extension is imported by the package, and the addresses, the timing, the memory, the fault and the diagnostic are asserted inside the script. A build that produced no extension module for this interpreter fails the entry, naming the path; the probe below skips only the timing line's host premise."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/feat/bindings/python_binding.py"
+require_artifacts = ["<install>/python/_camel*"]
 args = ["${case}"]
 skip_unless = ["${python}", "test/tools/have-binding-headroom.py"]
 expect_exit = 0
@@ -46,8 +52,11 @@ desc = "What crosses the Python boundary and what happens when it may not: an ar
 kind = "behavior"
 tool = "python"
 case = "../../../cases/feat/bindings/python_boundary.py"
+# The same artifact as the entry above, asked the same way: a probe would answer "not there" as a
+# skip, and this entry's whole subject is what happens across the boundary, so nothing about it can
+# be measured without the module.
+require_artifacts = ["<install>/python/_camel*"]
 args = ["${case}"]
-skip_unless = ["${python}", "-c", 'import glob, importlib.machinery, sys; sys.exit(0 if any(glob.glob("out/latest/python/_camel" + s) for s in importlib.machinery.EXTENSION_SUFFIXES) else 1)']
 expect_exit = 0
 expect_stdout_contains = ["the exported capsule is DLPack 1.0 with READ_ONLY set", "a refused float16 capsule keeps its name; its deleter ran once", "an accepted capsule is renamed used_dltensor", "the interpreter survives", "python boundary: PASS"]
 expect_output_not_contains = ["FAIL", "Traceback", "Segmentation fault", "dumped core", "[Error]"]

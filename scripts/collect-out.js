@@ -351,6 +351,29 @@ function collect(config, tag) {
         collectTools(devTools)
     }
 
+    // 测试启动的可执行文件：`tiles-plan-check` 这一类由模块自己构建、由计划直接启动的检查程序。
+    //
+    // 每个模块在生成期写一份 `build/camel-test-executables-<...>-<config>.txt`，一行一个
+    // `$<TARGET_FILE:...>`，所以这里复制的是构建系统指名的那个文件，而不是某个目录名下相信存在
+    // 的东西。启动器读安装（计划运行器把 `CAMEL_HOME/bin` 放进 PATH），不再拼 `build/` 下的路径：
+    // 目标的构建目录跟着源码目录走，布局搬过一次之后，旧拼法指向的目录再没有任何东西写入，
+    // 而启动失败读起来像检查失败——检查体根本没启动，也就既没绿过也没红过。
+    const testExecutableManifests = fs
+        .readdirSync(path.join(BASEDIR, 'build'))
+        .filter((name) => name.startsWith('camel-test-executables-') && name.endsWith(`-${config}.txt`))
+    for (const manifest of testExecutableManifests) {
+        const lines = fs.readFileSync(path.join(BASEDIR, 'build', manifest), 'utf-8')
+        for (const line of lines.split(/\r?\n/)) {
+            const listed = line.trim()
+            if (!listed) continue
+            if (!fs.existsSync(listed)) {
+                logWarn(`${manifest} names ${listed}, and this build wrote no such file`)
+                continue
+            }
+            fs.copyFileSync(listed, path.join(binDir, path.basename(listed)))
+        }
+    }
+
     const libPath = findBuiltLibcamel(config)
     if (fs.existsSync(libPath)) {
         fs.copyFileSync(libPath, path.join(libsDir, libName))
@@ -400,22 +423,47 @@ function collect(config, tag) {
     // The Python binding: the CPython extension module, next to libs/ so the runpath
     // `$ORIGIN/../libs` the build wrote finds libcamel in both layouts. Absent whenever the
     // configure found no Python development files, which is not a warning: the rest of the
-    // install is complete without it. Its build directory follows the module's source directory:
-    // `build/src/stdlib/python` since the 2026-11-22 move, `build/python` before it.
-    const pythonBuildDir = [
-        path.join(BASEDIR, 'build', 'src', 'stdlib', 'python', config),
-        path.join(BASEDIR, 'build', 'src', 'stdlib', 'python'),
-        path.join(BASEDIR, 'build', 'python', config),
-        path.join(BASEDIR, 'build', 'python')
-    ].find((dir) => fs.existsSync(dir))
-    if (pythonBuildDir !== undefined) {
-        const pythonDir = outArtifactPython(tag)
+    // install is complete without it.
+    //
+    // The file is the one the build names: src/bindings/python/CMakeLists.txt writes
+    // `$<TARGET_FILE:camel_python_ext>` into `build/camel-python-outputs-<config>.txt` at generate
+    // time, and the target's output directory is `${PROJECT_BINARY_DIR}/python` — `build/python/`.
+    //
+    // Scanning directories for it was wrong in a way no reading could show. A target's binary
+    // directory follows its source directory, and `build/src/stdlib/python` exists in every build
+    // (it holds that module's `.cmo`), so a scan that took the first directory that exists took
+    // this one, found no extension in it, and installed an empty `out/<tag>/python/`. The two
+    // binding entries then skipped for want of a module the build had produced one directory away.
+    // The scan is kept for a build tree configured before that manifest existed, and it names both
+    // spellings the layout has had.
+    const pythonDir = outArtifactPython(tag)
+    const extensionManifest = path.join(BASEDIR, 'build', `camel-python-outputs-${config}.txt`)
+    if (fs.existsSync(extensionManifest)) {
         ensureDir(pythonDir)
-        for (const f of fs.readdirSync(pythonBuildDir)) {
-            const srcPath = path.join(pythonBuildDir, f)
-            if (!fs.statSync(srcPath).isFile()) continue
-            if (!isPythonExtensionName(f)) continue
-            fs.copyFileSync(srcPath, path.join(pythonDir, f))
+        for (const line of fs.readFileSync(extensionManifest, 'utf-8').split(/\r?\n/)) {
+            const listed = line.trim()
+            if (!listed) continue
+            if (!fs.existsSync(listed)) {
+                logWarn(`${path.basename(extensionManifest)} names ${listed}, and this build wrote no such file`)
+                continue
+            }
+            fs.copyFileSync(listed, path.join(pythonDir, path.basename(listed)))
+        }
+    } else {
+        const pythonBuildDir = [
+            path.join(BASEDIR, 'build', 'src', 'stdlib', 'python', config),
+            path.join(BASEDIR, 'build', 'src', 'stdlib', 'python'),
+            path.join(BASEDIR, 'build', 'python', config),
+            path.join(BASEDIR, 'build', 'python')
+        ].find((dir) => fs.existsSync(dir))
+        if (pythonBuildDir !== undefined) {
+            ensureDir(pythonDir)
+            for (const f of fs.readdirSync(pythonBuildDir)) {
+                const srcPath = path.join(pythonBuildDir, f)
+                if (!fs.statSync(srcPath).isFile()) continue
+                if (!isPythonExtensionName(f)) continue
+                fs.copyFileSync(srcPath, path.join(pythonDir, f))
+            }
         }
     }
 

@@ -16,28 +16,22 @@ skipped where the premise is false.
 The reading is the call's fixed cost, taken with four elements: a binding that copies at 64 MiB does
 not move it, so the entry's own line stays able to fail a binding that moves the bytes.
 
+Whether the extension module exists is **not** asked here. It is the entry's own product, and the
+plan answers it with `require_artifacts`, which fails the entry and names the path; a probe can only
+answer "skip", and a skip and a pass are the same number in a summary. Two questions in one command
+meant the module's absence chose the weaker answer for both.
+
 Run: python3 test/tools/have-binding-headroom.py
 Exit 0 where the entry's yardstick can hold, 1 with the reading elsewhere.
 """
 
 import ctypes
-import glob
-import importlib.machinery
 import importlib.util
 import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-
-# The same question the entry's other precondition asks (its `skip_unless` before this one): is the
-# extension module built for this interpreter? Asking it here keeps the two in one command.
-if not any(
-    glob.glob(str(ROOT / "out" / "latest" / "python" / ("_camel" + suffix)))
-    for suffix in importlib.machinery.EXTENSION_SUFFIXES
-):
-    print("the extension module was not built for this interpreter (no out/latest/python/_camel*)")
-    sys.exit(1)
 
 # The entry's own capsule and module, so the call measured here is the call the entry measures: the
 # case is a script, and its `main` runs only under `__main__`.

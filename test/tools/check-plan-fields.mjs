@@ -57,6 +57,9 @@
  *                                              first); with no list there is nothing to compare against
  *   perf_budget_platform                       never an assertion: provenance, copied to meta.json
  *   desc / tier / args / envs / case ...       not assertions (they decide what runs, not what holds)
+ *                                              `require_artifacts` is one of these: it fails an entry
+ *                                              whose product the build did not produce, so it decides
+ *                                              whether there is a reading, not what the reading says
  *
  * Two consequences a reader should keep: `negative` and `positive` are *labels* -- the runner
  * reads exactly what it reads for `behavior`, so a `negative` entry with no `expect_exit` (or

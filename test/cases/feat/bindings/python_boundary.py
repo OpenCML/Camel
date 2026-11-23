@@ -25,7 +25,10 @@ HERE = Path(__file__).resolve()
 CASES = HERE.parent
 REPO = HERE.parents[4]
 
-sys.path.insert(0, str(REPO / "pypi" / "camel-lang" / "src"))
+# The package is a source tree, not a build product, so its directory is spelled (see
+# python_binding.py): it lives under `packaging/` and this line kept the place it had before the
+# move, which made the entry fail on `import camel` rather than on anything it asserts.
+sys.path.insert(0, str(REPO / "packaging" / "pypi" / "camel-lang" / "src"))
 os.environ.setdefault("CAMEL_HOME", str(REPO / "out" / "latest"))
 
 import camel  # noqa: E402
@@ -180,7 +183,9 @@ def main():
     probe = "\n".join(
         [
             "import os, sys",
-            f"sys.path.insert(0, {str(REPO / 'pypi' / 'camel-lang' / 'src')!r})",
+            # The child gets the same package directory the parent imported, spelled once here so
+            # the two cannot drift apart from a move again.
+            f"sys.path.insert(0, {str(REPO / 'packaging' / 'pypi' / 'camel-lang' / 'src')!r})",
             f"os.environ['CAMEL_HOME'] = {os.environ['CAMEL_HOME']!r}",
             "import camel",
             "session = camel._camel.Session(entry_dir='a' * 100000)",

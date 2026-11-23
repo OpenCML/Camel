@@ -1,14 +1,15 @@
 """Run the native CUDA module-lifetime test built by npm run build."""
-import os
-from pathlib import Path
 import subprocess
+import sys
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[4]
-# The module's build directory follows the module: `build/modules/tiles` while it lives in
-# `modules/tiles`, `build/lib/tiles` now that it lives in `lib/tiles`. Either answers, so this case
-# runs against both trees.
-build = next((p for p in (root / 'build/lib/tiles', root / 'build/modules/tiles') if p.is_dir()), root / 'build/lib/tiles')
-name = 'tiles-module-lease.exe' if os.name == 'nt' else 'tiles-module-lease'
-candidates = [build / 'Release' / name, build / name]
-binary = next((p for p in candidates if p.is_file()), candidates[0])
-subprocess.run([str(binary)], check=True)
+sys.path.insert(0, str(root / 'test' / 'tools'))
+
+from native_check import environment, resolve  # noqa: E402
+
+# The check is collected into the install's `bin/` by scripts/collect-out.js, from the list the build
+# writes; this launcher asks the install rather than spelling a build directory it would have to keep
+# in step with the layout. See test/tools/native_check.py.
+binary = resolve(root, 'tiles-module-lease.exe' if sys.platform == 'win32' else 'tiles-module-lease')
+subprocess.run([str(binary)], env=environment(root), check=True)
