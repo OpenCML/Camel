@@ -59,6 +59,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "graph_faces.capabilities"
+desc = "The five answers the face gained, each printed beside the representation's own on the same graph, so a drift in either side is a changed line: the graph's label (`name`, which a draft answers empty because a draft is not named until it is encoded), `isOperRecord` against the stored OPER count -- the same number only if the four structural kinds that fold into `NodeKind::Oper` are not counted as records -- `kernelArgumentsOf` against `runtime::kernelArgumentsOf` node by node, the static area's size off the view on both sides, and `staticIndexOf` for one constant against its `-dataIndex` with `constantOf` at that slot. Red by construction before the face answered any of them: the lines did not exist."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::graph_faces", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[GC] caps name=1 oper=1 args=1 slots=1 index=1", "[GC] name length ", " draft-empty=1", "[GC] oper real ", " stored ", " same=1", "[GC] args nodes ", "[GC] slots graph 2 view 2 same=1 draft 2 draft-view 2 draft-same=1", "[GC] static at ", " value=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "graph_faces.readings_body"
 desc = "The same readings on a graph whose body does work of its own (`arm_tail_gate_regions.cml`), after `test::regions` put its two blocks down: the plan reads the relations instead of that one graph's node numbers -- a reference five past the end answers nothing on both faces, the erased node is the last that is neither a port nor the answer, the branch is the graph's only BRCH with two arms on both, and the two faces name the same answer -- with five regions and two static slots on both."
 kind = "behavior"

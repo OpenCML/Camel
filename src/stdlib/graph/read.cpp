@@ -17,6 +17,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
+#include "camel/ops/operator_record.h"
 #include "camel/core/tags.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
@@ -541,6 +542,22 @@ camel::core::OperId operOf(const NodeView &node, const Handle *handle, const cha
         return reinterpret_cast<const GCOperBody *>(bytes.data())->oper;
     }
     return graphOf(handle, site).nodeBodyAs<GCOperBody>(handle->index())->oper;
+}
+
+/// How dear one run of the node is: the relative cost its operator states in its record, and 1.0
+/// for a node whose operator states nothing or that runs no operator (a datum, a port). It is the
+/// reading a cost function makes instead of comparing the operator's name (design principles
+/// 9.11, "the cost of an extraction"): the operator's owner says the number once, in the record,
+/// and every cost function that reads it agrees on which of two writings is dearer.
+slot_t relativeCostKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle             = norm.get<Handle *>(0);
+    const NodeView node            = viewOf(handle, "graph.relative_cost");
+    const camel::core::OperId oper = operOf(node, handle, "graph.relative_cost");
+    if (oper == camel::core::kNoOper) {
+        return toSlot<Float64>(1.0);
+    }
+    const camel::ops::Record *record = OperatorTable::instance().recordOf(oper);
+    return toSlot<Float64>(record == nullptr ? 1.0 : record->relativeCostOf());
 }
 
 /// Whether the node's operator is pure: it writes nothing, neither state of the program nor
@@ -1085,6 +1102,7 @@ const std::vector<ReadOp> &readOps() {
         {"op", opKernel},
         {"op_name", opNameKernel},
         {"is_pure", isPureKernel},
+        {"relative_cost", relativeCostKernel},
         {"may_be_recomputed", mayRecomputeKernel},
         {"may_fault", mayFaultKernel},
         {"may_be_rearranged", mayBeRearrangedKernel},

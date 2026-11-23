@@ -70,12 +70,14 @@ bool refused(std::string_view fragment, const std::function<void()> &body) {
 
 /// A graph of three nodes answered through the view: a port, the exit and an operator. It stores
 /// nothing derived, so every query is the payload's answer and the check knows what a fact should
-/// have read.
+/// have read. It has no static area and no label of its own: the check asks about facts, and a
+/// reader that asked this graph's name or its slots would be told what it does not have.
 class ThreeNodeView final : public g::GraphView {
   public:
     camel::core::type::FunctionType *funcType() const override { return nullptr; }
     std::vector<g::NodeRef> ports(g::PortGroup) const override { return {}; }
     g::NodeRef exit() const override { return 1; }
+    std::string_view name() const override { return {}; }
 
     std::uint32_t nodeSlotCount() const override { return 3; }
     bool contains(g::NodeRef ref) const override { return ref < 3; }
@@ -91,6 +93,8 @@ class ThreeNodeView final : public g::GraphView {
     }
     const camel::core::type::Type *typeOf(g::NodeRef) const override { return nullptr; }
     std::optional<::slot_t> constantOf(g::NodeRef) const override { return std::nullopt; }
+    std::optional<std::uint32_t> staticIndexOf(g::NodeRef) const override { return std::nullopt; }
+    std::uint32_t staticSlotCount() const override { return 0; }
     std::uint64_t originOf(g::NodeRef) const override { return 0; }
 
     std::span<const g::NodeRef> inputs(g::NodeRef, g::PortGroup) const override { return {}; }

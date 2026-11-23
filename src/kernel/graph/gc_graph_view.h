@@ -47,10 +47,14 @@
  *   GCGraph::exitNodeRef                     exit
  *   normPorts / withPorts / closureNodes     ports(Normal) / ports(Context) / ports(Capture)
  *   closureType                              nothing: the captures' types are ports(Capture)
- *   staticSlots                              constantOf, per DATA node (read from staticSlots)
- *   GCNode::dataIndex                        nothing: which slot a value sits in is the execution
- *                                            plan's (section 13)
+ *   staticSlots                              constantOf and staticIndexOf, per DATA node, and
+ *                                            staticSlotCount for how many there are
+ *   GCNode::dataIndex                        staticIndexOf for its negative half (the static
+ *                                            area's index, which is content); nothing for its
+ *                                            non-negative one, which is the execution plan's slot
+ *                                            (section 13)
  *   nodeOrigin                               originOf
+ *   GCGraph::name()                          name()
  *   nodePayloadBytes / nodeBodyAs            nothing: no payload bytes leave this face
  *
  * The four kinds and `operatorOf`: `kindOf` answers `NodeKind::Oper` for a CAST, a COPY, a FILL and
@@ -104,12 +108,15 @@ class FrozenGraphAdapter final : public GraphView {
     camel::core::type::FunctionType *funcType() const override;
     std::vector<NodeRef> ports(PortGroup group) const override;
     NodeRef exit() const override;
+    std::string_view name() const override;
 
     std::uint32_t nodeSlotCount() const override;
     bool contains(NodeRef ref) const override;
     NodeKind kindOf(NodeRef ref) const override;
     const camel::core::type::Type *typeOf(NodeRef ref) const override;
     std::optional<::slot_t> constantOf(NodeRef ref) const override;
+    std::optional<std::uint32_t> staticIndexOf(NodeRef ref) const override;
+    std::uint32_t staticSlotCount() const override;
     std::uint64_t originOf(NodeRef ref) const override;
 
     std::span<const NodeRef> inputs(NodeRef ref, PortGroup group) const override;
