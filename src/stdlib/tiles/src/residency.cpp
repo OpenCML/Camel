@@ -42,7 +42,6 @@
 namespace camel::tiles {
 namespace {
 
-using runtime::GCGraph;
 using runtime::GCNode;
 using runtime::gc_node_ref_t;
 using runtime::GCRegion;

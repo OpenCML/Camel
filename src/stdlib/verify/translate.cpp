@@ -12,6 +12,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/shaped_operators.h"
 #include "camel/runtime/core_facts.h"
+#include "graph/graph_view.h"
 
 #include <format>
 #include <optional>
@@ -118,7 +119,7 @@ std::string uncoveredType(const Type *type) {
 /// Why the rule's own parameters are outside the fragment, empty when they are all integer scalars.
 /// This is asked before the sides are walked, so that a rule refused by the class design 8.1 lists
 /// (a whole tensor, a floating width) says so, whatever operators stand above its parameters.
-std::string parameterRefusal(const GCGraph &graph) {
+std::string parameterRefusal(const camel::graph::GraphView &graph) {
     const auto *type = graph.funcType();
     if (type == nullptr) {
         return kUnreadable;
@@ -175,7 +176,7 @@ int64_t signedValue(const Term &term) {
 
 /// The parameter names of a rule's side: the declaration's own names, empty when the signature
 /// records none (the renderer then names the position).
-std::vector<std::string> parameterNames(const GCGraph &graph) {
+std::vector<std::string> parameterNames(const camel::graph::GraphView &graph) {
     std::vector<std::string> names;
     const auto *type = graph.funcType();
     if (type == nullptr) {
@@ -440,8 +441,8 @@ Translation translate(const camel::runtime::RuleSource &source) {
         out.reason = kNotBuilt;
         return out;
     }
-    const GCGraph *lhs = program->graph(source.lhs);
-    const GCGraph *rhs = program->graph(source.rhs);
+    const auto *lhs = program->graph(source.lhs);
+    const auto *rhs = program->graph(source.rhs);
     if (lhs == nullptr || rhs == nullptr) {
         out.reason = kUnreadable;
         return out;
@@ -449,16 +450,16 @@ Translation translate(const camel::runtime::RuleSource &source) {
     // The class the rule's own parameters belong to is asked first: a tensor law is refused as a
     // whole-tensor property and a floating law as an element type, not by whichever operator happens
     // to stand at the top of its side.
-    if (const std::string refused = parameterRefusal(*lhs); !refused.empty()) {
+    if (const std::string refused = parameterRefusal(lhs->view()); !refused.empty()) {
         out.reason = refused;
         return out;
     }
-    if (const std::string refused = parameterRefusal(*rhs); !refused.empty()) {
+    if (const std::string refused = parameterRefusal(rhs->view()); !refused.empty()) {
         out.reason = refused;
         return out;
     }
     // The names belong to the declaration, and both sides are the same declaration's two functions.
-    const std::vector<std::string> names = parameterNames(*lhs);
+    const std::vector<std::string> names = parameterNames(lhs->view());
     SideWalker left(*lhs, names);
     out.lhs = left.walk(lhs->exitNodeRef());
     if (out.lhs == nullptr) {

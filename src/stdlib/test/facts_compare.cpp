@@ -211,7 +211,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
     using namespace camel::runtime;
     ControlCounts control;
     ArrangeCounts arrange;
-    for (GCGraph *graph : collectReachableGraphs(*program)) {
+    for (auto *graph : collectReachableGraphs(*program)) {
         if (graph == nullptr) {
             continue;
         }

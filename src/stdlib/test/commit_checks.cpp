@@ -1548,7 +1548,7 @@ CommitMadeGraphOrderTestPass::apply(const camel::runtime::Program *program, std:
     // refused" would mean only "a made graph is always refused", which is a reading of neither rule.
     {
         RuntimeGraphDraftSession session(context_, current);
-        GCGraph *made =
+        auto *made =
             makeGraphWithTwoPrints(context_, /*ordered=*/true, "test$made_order_ordered", "made$ordered");
         session.noteMadeGraph(made);
         out << "commit_made_order: made graph '" << made->name()
