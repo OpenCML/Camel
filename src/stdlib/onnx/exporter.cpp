@@ -638,7 +638,7 @@ void refuseEffectsOf(
                      readsOrAssignsVariable(body->oper) ||
                      uri == ":struct/append_arr_in_place");
                 if (!onLocalVariable && !inPlaceOnLocalVariable && !lowerableBySimplification &&
-                    !core::OperatorTable::instance().isPure(body->oper)) {
+                    core::OperatorTable::instance().effectOf(body->oper) != core::sem::Effect::Pure) {
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
                         readsOrAssignsVariable(body->oper)
@@ -3901,7 +3901,7 @@ Value Evaluator::applyOper(
 
     // Simplification has evaluated every pure operator whose arguments are constants; what is
     // left is translated. Side effects have no ONNX counterpart.
-    if (!core::OperatorTable::instance().isPure(uri)) {
+    if (core::OperatorTable::instance().effectOf(uri) != core::sem::Effect::Pure) {
         unsupported(act, std::format("impure operator '{}' cannot be exported", uri));
     }
     if (allConstant(norm) && allConstant(with) && !std::ranges::any_of(norm, isDeferredClosure) &&

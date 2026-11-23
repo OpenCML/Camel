@@ -537,7 +537,6 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
 NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
     const auto &table               = core::OperatorTable::instance();
     const core::OperId id           = graph.nodeBodyAs<GCOperBody>(ref)->oper;
-    const auto traits               = table.find(id);
     const sem::OperatorSemantics *s = table.semantics(id);
     const auto norm                 = graph.normInputsOf(ref);
     const auto with                 = graph.withInputsOf(ref);
@@ -547,12 +546,16 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
     if (s != nullptr && s->resources) {
         spec = *s->resources;
     } else {
+        // The word the record states, read back the way the record answers it (design principles
+        // 3.3): `pure` is the empty access list, `Effectful` (or a clause nobody stated) is the
+        // one that reaches outside the program.
+        const sem::Effect effect = table.effectOf(id);
         spec = sem::conservativeResources(
             norm.size(),
             with.size(),
-            traits && traits->pure,
-            table.hasExternalEffect(id));
-        r.declared = traits && traits->pure;
+            effect == sem::Effect::Pure,
+            effect == sem::Effect::Effectful || effect == sem::Effect::Undeclared);
+        r.declared = effect == sem::Effect::Pure;
     }
     r.result    = spec.result;
     r.allocates = spec.allocates;

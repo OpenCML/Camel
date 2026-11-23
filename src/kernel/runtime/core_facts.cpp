@@ -285,7 +285,10 @@ std::optional<EffectSummary> computeOperatorEffects(std::span<const Anchor> anch
     if (body == nullptr) {
         return std::nullopt;
     }
-    return effectSummaryOfOperator(body->oper);
+    // The operator's effect at this node -- the union of the accesses its declaration states and
+    // the ones its function operand brings (design principles 3.3). Asking it at the node is what
+    // makes this fact and `core.nodeEffects` one answer about that node.
+    return effectSummaryOfOperator(body->oper, &graph, anchors[0].node);
 }
 
 /// The three effect kinds are read at the anchors a pass names -- the node whose effects it is

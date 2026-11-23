@@ -51,8 +51,10 @@ NodeRoleRegistry::NodeRoleRegistry() {
              if (!oper.has_value()) {
                  return std::nullopt;
              }
+             // The record's answer (`sem::Effect`); the operand's half is read below, where the value
+             // the declaration names is in hand.
              const auto &table = camel::core::OperatorTable::instance();
-             if (table.isPure(*oper)) {
+             if (table.effectOf(*oper) == core::sem::Effect::Pure) {
                  return std::nullopt;
              }
              // A higher-order operator is no effect of its own: what it touches is the function

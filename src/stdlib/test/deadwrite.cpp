@@ -37,8 +37,13 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
                 continue;
             }
             // A node that writes nothing is not what this pass reports: the judgement is about a
-            // write, and printing every operation would bury the ones it is about.
-            bool writes       = table.hasExternalEffect(body->oper);
+            // write, and printing every operation would bury the ones it is about. The record's
+            // answer is the one asked here (`Effectful` reaches outside the program, `StateOnly`
+            // is the program's own cells, and a clause nobody stated is read as the global
+            // resource's write), which is the same pair of words the pass has always judged by.
+            const auto effect = table.effectOf(body->oper);
+            bool writes       = effect == camel::core::sem::Effect::Effectful ||
+                          effect == camel::core::sem::Effect::Undeclared;
             const auto inputs = graph->normInputsOf(ref);
             for (size_t port = 0; port < inputs.size() && !writes; ++port) {
                 writes = table.writesOperand(body->oper, false, port);

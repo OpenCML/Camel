@@ -233,7 +233,12 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                 }
             }
         }
-        return table.hasExternalEffect(op->uri());
+        // The record's answer: `Effectful` is the one that reaches outside the program, and an
+        // operator nobody stated a clause for is read as one that writes the global resource
+        // (design principles 3.3).
+        const camel::core::sem::Effect effect = table.effectOf(op->uri());
+        return effect == camel::core::sem::Effect::Effectful ||
+               effect == camel::core::sem::Effect::Undeclared;
     }
     case runtime::GCNodeKind::Func: {
         // A call of a function this compiler has a body for is judged by that body first
@@ -1622,7 +1627,11 @@ bool Builder::calleeIsGeneric(const std::string &name) const {
 bool Builder::operatorGroupHasEffect(const std::string &name) const {
     const auto &table = camel::core::OperatorTable::instance();
     for (const std::string &uri : table.groupOperators(name)) {
-        if (table.hasExternalEffect(uri)) {
+        // The record's answer for each overload, as `nodeHasEffect` reads it: `Effectful` reaches
+        // outside the program and an operator nobody declared a clause for is read the same way.
+        const camel::core::sem::Effect effect = table.effectOf(uri);
+        if (effect == camel::core::sem::Effect::Effectful ||
+            effect == camel::core::sem::Effect::Undeclared) {
             return true;
         }
     }
@@ -2179,7 +2188,8 @@ void Builder::markNonRetainingReads() {
             ++users;
             lastUser               = std::max(lastUser, userId);
             const bool computation = nodeIsKind(user, runtime::GCNodeKind::Oper) &&
-                                     table.isPure(nodeGraphOf(user)->operTarget(user)->uri()) &&
+                                     table.effectOf(nodeGraphOf(user)->operTarget(user)->uri()) ==
+                                         camel::core::sem::Effect::Pure &&
                                      referenceFree(nodeTypeOf(user));
             if (!computation) {
                 keeps = keeps || !reached; // condition 3: a node reading the array itself
@@ -2246,7 +2256,11 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
         return;
     }
     const auto op = nodeGraphOf(node)->operTarget(node);
-    if (op == nullptr || !camel::core::OperatorTable::instance().isPure(op->uri())) {
+    // The record's answer (`sem::Effect`): the empty stated clause is what makes the operator a
+    // computation with no effect for the warning to be about.
+    if (op == nullptr ||
+        camel::core::OperatorTable::instance().effectOf(op->uri()) !=
+            camel::core::sem::Effect::Pure) {
         return;
     }
     GCT::node_ptr_t call = stmt;

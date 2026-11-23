@@ -344,8 +344,11 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         return NullSlot;
     }
     const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(ref).data());
+    // The record's answer for the operator (`sem::Effect`): only the empty stated clause is a
+    // computation this may evaluate, and a draft node is not something a fact can be anchored on.
     if (body == nullptr ||
-        !camel::core::OperatorTable::instance().isPure(body->oper)) {
+        camel::core::OperatorTable::instance().effectOf(body->oper) !=
+            camel::core::sem::Effect::Pure) {
         return NullSlot;
     }
     std::vector<slot_t> slots;
