@@ -239,12 +239,25 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
         return std::format("a result that is {} names its operand", resultAliasName(k));
     }
     if (spec.functionOperand) {
-        // One statement of the accesses, not two: an operator that takes them from a function
-        // operand has none of its own to itemize (design principles 3.3).
-        if (!spec.accesses.empty() || spec.externalEffect) {
-            return std::string(
-                "an operator whose accesses are a function operand's itemizes none of its own, "
-                "and declares no external effect either");
+        // A node's effect is the union of two sources (design principles 3.3): the accesses the
+        // operator declares for itself and the accesses of the function value the named operand
+        // carries -- `map` over a function that prints reaches `stdout`, and an operator that runs
+        // the program's code *and* touches a driver reaches both. The two are statements about
+        // different things, so having both is the true shape of such an operator and not a
+        // double statement; each half is checked on its own above.
+        //
+        // What no declaration can mean is an access to the very operand that carries the function:
+        // a function value has no identity (design principles 5.2), so it is not a resource, and
+        // an access bound to that operand would say the operand is one.
+        const ResourceBinding &at = *spec.functionOperand;
+        for (const ResourceAccess &access : spec.accesses) {
+            if (access.binding.kind == at.kind && access.binding.index == at.index) {
+                return std::format(
+                    "an access is bound to the {} operand {} that carries the function, and a "
+                    "function value is not a resource",
+                    at.kind == ResourceBinding::Kind::Norm ? "ordinary" : "with",
+                    at.index);
+            }
         }
     }
     return std::nullopt;
@@ -491,6 +504,16 @@ bool reachesOutside(ResourceClass cls) {
         break;
     }
     return true;
+}
+
+bool declaresOutside(const ResourceSpec &spec) {
+    if (spec.externalEffect) {
+        return true;
+    }
+    return std::any_of(
+        spec.accesses.begin(), spec.accesses.end(), [](const ResourceAccess &access) {
+            return reachesOutside(access.resource.cls);
+        });
 }
 
 bool writesForTheRegion(const ResourceSignature &signature) {
