@@ -653,7 +653,10 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         string signature = prefix + any_cast<string>(visitParentParams(parentParams));
         paramsOnePerLine = false;
         if (typeExpr) {
-            signature += ": " + any_cast<string>(visitType(typeExpr));
+            // The result type is written `=> T` (design principles 4.4): the declaration then reads
+            // like the function type it has, `(x: f32) => f32`. `:` is the older spelling and the
+            // formatter no longer writes it.
+            signature += " => " + any_cast<string>(visitType(typeExpr));
         }
         std::vector<string> clauses;
         if (const auto clause = context->get<cst::ResourceClause>()) {
@@ -1717,18 +1720,18 @@ any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(con
 
 /*
 rangeExpr
-    : additiveExpr ('..' additiveExpr)*
+    : additiveExpr (('..' | '<>') additiveExpr)*
     ;
-`..` is written without the spaces the arithmetic operators get, but never directly after a
-conversion: the type after `as` takes a `..` that stands on its line as a mark -- the stream type
-`int..` -- whatever white space is written before it, and it stops at a line break. So
-`x as int..5` is not the interval from `x as int` to `5`: it is a `..` written where a type
-stands, which SyntaxDiag::AsRightSideIsType reports (test/cases/parse/rulings/
-stream_type_as_interval.cml says why, and names the spelling `(a..b)`). An input that writes
-`let r = n as int` and `..5` on the next line is a range, and writing it back as
-`let r = n as int..5` would turn an accepted program into text the parser refuses; the input is
-test/cases/parse/rulings/dotdot_after_cast.cml. A conversion that a `..` follows is written in
-parentheses, the spelling the diagnostic names, which reads back as the same tree.
+`..` and `<>` are binary operators and are written with the spaces every binary operator gets
+(design principles 4.1, the author 2026-11-23): the spacing is what tells `a .. b` from the
+elements it binds, and the same rule writes `f <> g`. Only the `..` of a slice stays tight, and
+that one is not this node: it is `sliceIndices` inside `[ ]`, which writes its own separators
+(visitSliceIndices).
+The `..` written where a type stands -- the stream type `int..` -- is not reachable from here
+either: it is a type, and `as` prints its right side through visitType. A conversion the `..`
+follows is still parenthesized: `(x as int) .. 5` reads as the range of the conversion, which is
+what the input wrote, and the spelling the diagnostic names (test/cases/parse/rulings/
+stream_type_as_interval.cml) reads back as the same tree.
 */
 any Formatter::visitRangeExpr(cst::RangeExpr context) {
     std::string result;
@@ -1736,7 +1739,7 @@ any Formatter::visitRangeExpr(cst::RangeExpr context) {
     for (size_t i = 0; i < n; i++) {
         const syn::Child child = context.child(i);
         if (!child.isNode()) {
-            result += child.text();
+            result += " " + child.text() + " ";
             continue;
         }
         std::string operand = std::any_cast<std::string>(visit(child.node()));
@@ -2128,11 +2131,13 @@ any Formatter::visitTypeArguments(cst::TypeArguments context) {
 
 /*
 namedTypeArgument
-    : IDENTIFIER '=' typeExpr
+    : IDENTIFIER (':' | '=') typeExpr
     ;
+The named argument writes the colon (design principles 5.9): `f::<T: int>`, as a parameter or a
+field names its type. `=` is the older spelling and is still read; the formatter writes `:`.
 */
 any Formatter::visitNamedTypeArgument(cst::NamedTypeArgument context) {
-    return context->tok(TK::Identifier)->text() + " = " +
+    return context->tok(TK::Identifier)->text() + ": " +
            any_cast<string>(visitType(context->type()));
 }
 

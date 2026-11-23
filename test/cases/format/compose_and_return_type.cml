@@ -1,0 +1,21 @@
+// The notation the author gave on 2026-11-23: a result type follows `=>`, a named type argument
+// is written `A: int`, and the composition is `f <> g` (design principles 4.2, 4.4 and 5.9).
+// The formatter writes all three, spaces `..` and `<>` like every binary operator (4.1), and
+// keeps a slice's `..` tight, because that one is a separator inside `[ ]`.
+
+func inc(x:int):int { return x+1 }
+
+func dbl(x: int): int { return x * 2 }
+
+func pick::<A,B>(a:A,b:B):(A,B) { return (a,b) }
+
+func main():int {
+    let f = inc<>dbl
+    println(f(3))
+    println(pick::<A = int, B = string>(1, 's'))
+    let xs = [1, 2, 3, 4]
+    println(xs[1..3])
+    let r = 1..5
+    println(len(r))
+    return 0
+}

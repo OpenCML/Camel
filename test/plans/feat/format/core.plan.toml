@@ -139,6 +139,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "format.compose_and_return_type_snapshot"
+desc = "Formats the notation of 2026-11-23: a result type after `=>` (the input writes `:`), a named type argument as `A: int` (the input writes `=`), the composition `f <> g` (the input writes `inc<>dbl`), `..` spaced as a binary operator and a slice's `..` tight."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/compose_and_return_type.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/compose_and_return_type.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "format.match_and_type_arguments_snapshot"
 desc = "Formats a match whose arms are a literal and enum patterns, and calls with positional and named explicit type arguments (both used to crash camel-format or to have no formatting rule)."
 kind = "snapshot"

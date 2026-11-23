@@ -1,5 +1,5 @@
 func show::<T>(t: T) {
-static for n,F in fields Tdo {
+static for n,F in fields T do {
 let v: F=t.[n]
 println(n,v)
 }
