@@ -512,7 +512,7 @@ dd2ea83e194df789 ok showcase/s1-stream-fib/fib.cml
 fc2aed0ec1598cbd ok src/stdlib/array.cml
 85f7d21c5434c831 ok src/stdlib/autodiff.cml
 ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
-65634313d28ada2f ok src/stdlib/ckpt.cml
+7962d89c131ca828 ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
 aaea2379202f8a6f ok src/stdlib/graph.cml
@@ -526,13 +526,13 @@ d07e8f7a68b8a5c8 ok src/stdlib/math.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 b6a0bf171cb931bc ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-e705cdf4819dca0f ok src/stdlib/prelude.cml
+343d24b44e9b3cf1 ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
 96c238e799b75f4a ok src/stdlib/random.cml
 5a4ff6e8ce76543a ok src/stdlib/re.cml
-83c467bb9c3a449a ok src/stdlib/rewrite.cml
+00bb6a34509ce857 ok src/stdlib/rewrite.cml
 df65484d5873dc7c ok src/stdlib/rules.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 b4a9f226ac6e68db ok src/stdlib/state.cml
@@ -542,7 +542,7 @@ cb7539a8da81e513 ok src/stdlib/statistics.cml
 b95ce07d27fea622 ok src/stdlib/stream.cml
 8308cebdc691d9b6 ok src/stdlib/tensor.cml
 8f1757aa8f0cbb76 ok src/stdlib/tensor_definitions.cml
-9c5d138b5e21d0a8 ok src/stdlib/test_support.cml
+11c64a646da91fef ok src/stdlib/test_support.cml
 a3ac49ac09dcaed1 ok src/stdlib/this.cml
 e5334eb76ce03465 ok src/stdlib/tiles.cml
 facd1562ced5e6f9 ok src/stdlib/time.cml
@@ -556,7 +556,7 @@ facd1562ced5e6f9 ok src/stdlib/time.cml
 d3582110cbfba1e7 ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
-18dfc338d99bc1e0 ok src/stdlib/rulesets/transpose.cml
+99a264194a7f9462 ok src/stdlib/rulesets/transpose.cml
 a338d98395d2f704 ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 6f34daec70d7b4c4 ok src/stdlib/tiles/signatures/tiles.cml
