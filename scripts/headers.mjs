@@ -218,6 +218,10 @@ const RULES = [
 // Formats that are data or documents, never hand-written source in a language this policy names.
 // A file with one of these extensions that no rule matched is decided: not a member.
 const NOT_SOURCE = new Set([
+    // An archived patch or diff is evidence of a change, not a file to be edited: a header
+    // inside it would stop it applying, and would become part of the thing it records.
+    '.patch',
+    '.diff',
     '',
     '.md',
     '.txt',

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The readings the watch rules are stated in, taken from the repository, the backlog, the build
 // panel's state files and the build host. Every git call is asynchronous: a synchronous `git fetch`
 // stalls the whole DSH process -- every session, the GUI, the routes -- for as long as the network
@@ -10,12 +13,23 @@ import { execFile } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 
+// The watch reads the coordinator's own checkout while it merges there. `git status` refreshes the
+// index under `index.lock` by default, and a merge that runs into that lock fails with "Unable to write
+// index" (and a reader killed mid-refresh leaves the lock behind). A background reader must not take
+// optional locks: GIT_OPTIONAL_LOCKS=0 makes every read here lock-free.
 const run = (command, args, options = {}) =>
     new Promise((resolve, reject) => {
         execFile(
             command,
             args,
-            { encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024, timeout: 120_000, ...options },
+            {
+                encoding: 'utf8',
+                windowsHide: true,
+                maxBuffer: 16 * 1024 * 1024,
+                timeout: 120_000,
+                ...options,
+                env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', ...(options.env || {}) },
+            },
             (error, stdout) => (error ? reject(error) : resolve(String(stdout).trim())),
         )
     })
@@ -70,11 +84,18 @@ async function backlogOf(repo) {
     const text = await readFile(path.join(repo, 'internal', 'backlog.md'), 'utf8')
     const rows = new Map()
     for (const line of text.split('\n')) {
-        const cells = line.split('|').map((cell) => cell.trim())
-        const id = /^[DC]-\d+-\d+/.exec(cells[1] || '')
+        if (!line.trim().startsWith('|')) continue
+        // The id is in the first cell, possibly in code or bold marks; a table of any width counts.
+        const cells = line.split('|').map((cell) => cell.trim().replace(/[`*]/g, ''))
+        const id = /^([DC]-\d+-\d+)/.exec(cells[1] || '')
         if (!id) continue
-        const status = cells[5] || ''
-        const stamp = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(cells[6] || '')
+        // The documented table has seven columns (status fifth, stamp sixth); a narrower one is read
+        // by content: the status is the cell that names one, the stamp the cell that holds one.
+        const wide = cells.length >= 9
+        const statusCell = wide ? cells[5] : cells.slice(2).find((cell) => /待做|在做|卡住|完成|open|doing|todo|blocked|done|resolved/i.test(cell)) || ''
+        const status = statusCell
+        const stampCell = wide ? cells[6] : cells.slice(2).find((cell) => /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(cell)) || ''
+        const stamp = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(stampCell)
         const updated = stamp ? new Date(+stamp[1], +stamp[2] - 1, +stamp[3], +stamp[4], +stamp[5]).getTime() : null
         rows.set(id[0], {
             status,
@@ -109,7 +130,12 @@ async function buildPanelOf(repo, stateDir) {
         }
     }
     const runs = [...latest.values()]
-    const open = runs.filter((row) => !row.finishedAt)
+    // A run with no finish whose record has not been touched for a while is one whose process ended
+    // without writing it (a crash, a closed window), not one that is still going: counting it would
+    // show a busy host that is idle. The writer refreshes `updatedAt` as it goes.
+    const touched = (row) => Date.parse(row.updatedAt || row.startedAt || '') || 0
+    const open = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) < 20 * 60_000)
+    const abandoned = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) >= 20 * 60_000).length
     // The two queues the build-queue panel draws, read from the same files it reads: who holds the
     // build or test slot on this machine and who is waiting, with how long.
     const queue = async (name) => {
@@ -137,6 +163,7 @@ async function buildPanelOf(repo, stateDir) {
         buildQueue: await queue('build-state.json'),
         testQueue: await queue('test-state.json'),
         unfinished: open.length,
+        abandoned,
         total: runs.length,
         // Each run still going: where it is, which slot it holds, and how long it has waited for one.
         // A queue that is long, or two runs whose phases overlap, is read here rather than assumed.
