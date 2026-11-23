@@ -34,6 +34,13 @@ interval and what a composition used to be written with, and `:` divides a slice
 as a Python dict, so those two forms are not linted -- they are measured instead by the formatter
 fixture below, which writes all five the way the ruling writes them and fails if the formatter
 changes one.
+
+The lint reads *code positions*. A comment and a string literal are prose about the language, not
+the language: a note that says the old spelling used to be `func f(x: P): int` must keep saying it,
+and `println("(x) => y")` says nothing about how a lambda is written. Two exceptions, each because
+there the text is code nevertheless, are in `code_lines`: a `/// @example` line is the Camel the
+doc-snippet check compiles, and in a generator's own source `.cpp`/`.h` the string is what it
+prints.
 """
 
 import argparse
@@ -137,6 +144,91 @@ def parse_only(camel, text, workdir, name="sample"):
     )
 
 
+def strip_comments(line, in_block, keep_strings):
+    """One line with what is not a code position removed.
+
+    `line` and `in_block` are the line and whether a `/* */` comment is still open, which is
+    carried across lines and returned. A string literal is data -- `println("(x) => y")` says
+    nothing about the spellings of lambdas -- so its contents go too, unless `keep_strings` says
+    otherwise: in a *generator's* source (a `.cpp` of the printer, a `.mjs` of the reference) the
+    string is where the Camel is written, and removing it would stop reading the very text the
+    check exists to read.
+    """
+    out = []
+    index = 0
+    quote = ""
+    while index < len(line):
+        if in_block:
+            end = line.find("*/", index)
+            if end < 0:
+                return "".join(out), True
+            index = end + 2
+            in_block = False
+            continue
+        char = line[index]
+        if quote:
+            if char == "\\" and index + 1 < len(line):
+                if keep_strings:
+                    out.append(line[index : index + 2])
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+                out.append(char)
+            elif keep_strings:
+                out.append(char)
+            index += 1
+            continue
+        if char in "\"'":
+            quote = char
+            out.append(char)
+        elif line.startswith("//", index):
+            break
+        elif line.startswith("/*", index):
+            in_block = True
+            index += 2
+            continue
+        else:
+            out.append(char)
+        index += 1
+    return "".join(out), in_block
+
+
+def code_lines(path, text):
+    """The lines of a file that hold code, as the lint reads them.
+
+    A `.cml` file is code except where it is not: a `//` comment and a block comment are prose,
+    and a string literal is data. A `///` block is prose too -- except an `@example` line, which is
+    exactly the Camel the doc-snippet check compiles, so an old spelling written there is a defect
+    and one quoted in a comment ("this used to be `func f(x: P): int`") is not.
+    A `.cpp`/`.h` file keeps its strings: that is where the printer writes the Camel it prints.
+    A `.tsv`, `.py` or `.mjs` file is read as it stands: the diagnostic registry's help text and a
+    generator's sample are the material being measured, not the language it is written in.
+    """
+    lines = text.splitlines()
+    if path.suffix == ".tsv":
+        return lines
+    in_block = False
+    kept = []
+    for line in lines:
+        head = line.lstrip()
+        if path.suffix == ".cml":
+            if head.startswith("///"):
+                payload = head[3:].lstrip()
+                if not payload.startswith("@example"):
+                    kept.append("")
+                    continue
+                line = payload[len("@example") :]
+                kept.append(strip_comments(line.split("  //")[0] if "  //" in line else line, False, False)[0])
+                continue
+            if head.startswith("//"):
+                kept.append("")
+                continue
+        stripped, in_block = strip_comments(line, in_block, keep_strings=path.suffix != ".cml")
+        kept.append(stripped)
+    return kept
+
+
 def lint_hits():
     hits = []
     for item in LINT_FILES:
@@ -149,7 +241,7 @@ def lint_hits():
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            for number, line in enumerate(text.splitlines(), 1):
+            for number, line in enumerate(code_lines(path, text), 1):
                 for label, pattern, kinds in LINT:
                     if kinds is not None and path.suffix not in kinds:
                         continue
