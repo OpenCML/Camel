@@ -29,11 +29,19 @@
  * Four readings differ from today's graph, and every reader still using the old reading is what the
  * first migration deletes:
  *  - CAST, COPY, FILL and ACCS are not kinds: they are operators, declared in `lib/std` like any
- *    other (plan 2.3). Until 2.3 declares those operators an adapter **refuses** to answer
- *    `operatorOf` for one of them rather than answering `kNoOper`: a reader handed `kNoOper` would
- *    take the "this operator is not known" path and the semantics would change silently, where a
- *    refusal stops in the one place that has to be finished. This is the single place the
- *    transition is visible, on purpose -- a tenth kind for the gap would put it in every reader.
+ *    other (plan 2.3). Until the front end and the passes stop building those four node kinds, an
+ *    adapter folds each of them into `NodeKind::Oper` -- the graph's shape is already the target's
+ *    -- and `operatorOf` answers `kNoOper` for one of them. That answer is the literal one and it
+ *    is not the same statement as "this node is not an operator": a CAST and a COPY carry no
+ *    payload at all, and a FILL or an ACCS carries its own kind and a place, so no operator
+ *    identity sits on the node to hand out, and this face answers what the graph stores and never
+ *    a name for what it does not (the file comment above). Answering the operator that replaces
+ *    one of them instead -- `:op/cast` and its siblings, which `lib/std` does declare -- would also
+ *    invite reading the kind's body as that operator's record, which `runtime/oper_shape.h` records
+ *    as a real misread. So the two-step reading is the one a caller writes: `NodeKind::Oper` with
+ *    a `kNoOper` is one of the four. What a node *does* is `runtime::shapeOfOperation`, which
+ *    answers for both forms; this face has no counterpart yet, so a reader on it takes the two
+ *    steps itself.
  *  - JOIN does not appear: a BRCH owns one region per arm and its value is the selected arm's
  *    result, so the two paired payloads (`GCBrchBody::join`, `GCJoinBody::brch`) and the arm count
  *    each of them repeats are gone.
