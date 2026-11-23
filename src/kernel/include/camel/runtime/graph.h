@@ -1324,41 +1324,72 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
     /// dense array indexed by node id. The store is the one owner of the values -- it writes a
     /// slot when it stores a fact and clears it before it releases the value, and `~GCGraph`
     /// (which ends the facts through `facts::forgetGraph`) is the other end. A reader that has
-    /// the graph asks here: one indexed load, and null means "ask the store".
+    /// the graph asks here: one pointer load, one bound check, one slot load, and null means "ask
+    /// the store".
     ///
-    /// A kind registered after `kFactSlotCount` kinds is answered by the store alone; the slots
-    /// are a bound on the fast path, never on what can be stored.
+    /// The graph holds one pointer to its table and nothing else: a graph no fact was ever
+    /// written into has no table (a null pointer), and the table is made on the first write with a
+    /// slot for each kind registered at that moment. A kind registered later grows the table -- a
+    /// larger copy, published with one atomic store, the replaced table retired until the graph
+    /// ends (`FactSlotTable`). A kind at or past the table's capacity is therefore not "past a
+    /// limit": it is a kind this graph's table has not grown to yet, and the store answers it.
 
-    /// The elements of a Node fact's dense array: each node's value, or null where the kind has
-    /// none there. Allocated by the graph on the first Node fact of that kind.
-    using FactNodeSlots = std::atomic<const void *>;
-
+    /// The slot of a Graph fact `kind`: null when this graph's table has no slot for it.
     const void *factSlot(std::uint32_t kind) const noexcept {
-        return kind < kFactSlotCount ? factSlots_[kind].load(std::memory_order_acquire) : nullptr;
+        return factSlotIn(factSlots_.load(std::memory_order_acquire), kind);
     }
-    void setFactSlot(std::uint32_t kind, const void *value) const noexcept {
-        if (kind < kFactSlotCount) {
-            factSlots_[kind].store(value, std::memory_order_release);
-        }
+    /// The slot `kind` has in `table`, which a caller took with `factSlotTable`: the same read,
+    /// through the table as it stood at that moment. A table a growth replaced still answers --
+    /// the graph keeps it until it ends -- so a reader that took it before the growth is safe.
+    static const void *factSlotInTable(const FactSlotTable *table, std::uint32_t kind) noexcept {
+        return factSlotIn(table, kind);
     }
+    /// The table the graph's slots are in right now: null until the first fact is written into
+    /// it. A handle for a reader that wants to read the same table twice (a test that grows the
+    /// table between the two reads).
+    const FactSlotTable *factSlotTable() const noexcept {
+        return factSlots_.load(std::memory_order_acquire);
+    }
+    /// How many kinds the graph's current table has a slot for: 0 when it has none, which is a
+    /// graph no fact was written into and not a graph whose table is merely empty.
+    std::uint32_t factSlotCapacity() const noexcept {
+        const FactSlotTable *table = factSlots_.load(std::memory_order_acquire);
+        return table == nullptr ? 0 : table->capacity;
+    }
+    /// Publishes (`value` not null) or clears (null) the slot of `kind`. Clearing never makes a
+    /// table: a graph no fact was written into has nothing to clear.
+    void setFactSlot(std::uint32_t kind, const void *value) const noexcept;
+    /// The slot of a Node fact `kind` at `node`: null when the graph has no array for that kind or
+    /// the node is not one of its nodes.
     const void *nodeFactSlot(std::uint32_t kind, gc_node_ref_t node) const noexcept {
-        if (kind >= kFactSlotCount) {
+        const FactSlotTable *table = factSlots_.load(std::memory_order_acquire);
+        if (table == nullptr || kind >= table->capacity || node >= nodeCount()) {
             return nullptr;
         }
-        const FactNodeSlots *array = nodeFactSlots_[kind].load(std::memory_order_acquire);
-        if (array == nullptr || node >= nodeCount()) {
-            return nullptr;
-        }
-        return array[node].load(std::memory_order_acquire);
+        const auto *array = table->nodeArrays[kind].load(std::memory_order_acquire);
+        return array == nullptr ? nullptr : array->slots[node].load(std::memory_order_acquire);
     }
-    /// Writes one node's slot, allocating the dense array on the first Node fact of `kind`. The
+    /// Writes one node's slot, making the kind's dense array on the first Node fact of it. The
     /// store calls it under its own lock, so two threads writing different nodes of one kind do
-    /// not make two arrays.
+    /// not make two arrays; the making is still guarded by compare-exchange, because a writer that
+    /// is not the store's is not this class's to rule out.
     void setNodeFactSlot(std::uint32_t kind, gc_node_ref_t node, const void *value) const noexcept;
 
   private:
-    mutable std::atomic<const void *> factSlots_[kFactSlotCount]{};
-    mutable std::atomic<FactNodeSlots *> nodeFactSlots_[kFactSlotCount]{};
+    /// The table that has a slot for `kind`, growing the table -- and retiring the one it
+    /// replaces -- when it does not. Null when the table could not be made.
+    FactSlotTable *slotTableFor(std::uint32_t kind) const noexcept;
+    /// The dense array of `kind`, made on first use. Null when it could not be made.
+    FactNodeArray *nodeFactArrayFor(std::uint32_t kind) const noexcept;
+    /// Keeps a table a growth replaced, so that a reader that loaded it before the swap still
+    /// reads live memory. Freed with the graph.
+    void retireFactSlotTable(FactSlotTable *table) const noexcept;
+    /// The same for a Node fact's dense array, which is made once and kept for the graph's life.
+    void keepFactNodeArray(FactNodeArray *array) const noexcept;
+
+    mutable std::atomic<FactSlotTable *> factSlots_{nullptr};
+    mutable std::atomic<FactSlotTable *> retiredFactSlotTables_{nullptr};
+    mutable std::atomic<FactNodeArray *> factNodeArrays_{nullptr};
 };
 
 /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture of

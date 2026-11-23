@@ -302,7 +302,7 @@ for (const l of [
 
 [[tests]]
 name = "slots"
-desc = "test::fact_slots: the slots a frozen graph keeps for the facts about it (camel/runtime/fact_slots.h) are the answer a reader gets without asking the store, so they are the one place a read can name a value nobody owns. A Graph fact's slot and a Node fact's slot are published when the store computes, cleared when that one fact is invalidated (and the store then answers absent), and cleared again when every fact about the graph goes -- which is the call `~GCGraph` makes through `facts::forgetGraph`. Each is published once more afterwards, so a cleared slot is a slot that works. The store is left as the check found it."
+desc = "test::fact_slots: the slots a frozen graph keeps for the facts about it (camel/runtime/fact_slots.h) are the answer a reader gets without asking the store, so they are the one place a read can name a value nobody owns. A Graph fact's slot and a Node fact's slot are published when the store computes, cleared when that one fact is invalidated (and the store then answers absent), and cleared again when every fact about the graph goes -- which is the call `~GCGraph` makes through `facts::forgetGraph`. Each is published once more afterwards, so a cleared slot is a slot that works. The table itself is made by the graph's first fact: the one a compiled graph carries is smaller than the fixed thirty-two (table_smaller_than_the_fixed_thirty_two), registering more kinds does not enlarge it (table_not_grown_by_registration), a kind nobody has written has no slot (kind_without_a_fact_has_no_slot), a kind registered past thirty-two still lands in one after the growth (slot_past_thirty_two, table_covers_registered_kinds), and a reader that took the table before a growth reads it afterwards (table_grown_for_later_kind, old_table_read_after_growth). The store is left as the check found it."
 kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
 args = ["${case}", "test::fact_slots"]
@@ -314,6 +314,7 @@ const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS_SLOT graph_kind_registered ok', 'FACTS_SLOT node_kind_registered ok',
+  'FACTS_SLOT table_smaller_than_the_fixed_thirty_two ok',
   'FACTS_SLOT graph_slot_published ok', 'FACTS_SLOT graph_slot_cleared_on_invalidate ok',
   'FACTS_SLOT graph_fact_absent_after_invalidate ok', 'FACTS_SLOT graph_slot_republished ok',
   'FACTS_SLOT node_slot_published ok', 'FACTS_SLOT node_slot_cleared_on_invalidate ok',
@@ -325,6 +326,11 @@ for (const l of [
   'FACTS_SLOT graph_slot_republished_after_invalidateGraph ok',
   'FACTS_SLOT node_slot_republished_after_invalidateGraph ok',
   'FACTS_SLOT graphs_read ok',
+  'FACTS_SLOT kind_registered_past_thirty_two ok',
+  'FACTS_SLOT table_not_grown_by_registration ok',
+  'FACTS_SLOT kind_without_a_fact_has_no_slot ok',
+  'FACTS_SLOT slot_past_thirty_two ok', 'FACTS_SLOT table_covers_registered_kinds ok',
+  'FACTS_SLOT table_grown_for_later_kind ok', 'FACTS_SLOT old_table_read_after_growth ok',
 ]) line(l)
 // A run that read no graph, or one slot that still named a released value, is the red this
 // check exists for: the summary is asserted, not just the per-check lines.
