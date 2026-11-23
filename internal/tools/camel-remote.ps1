@@ -367,6 +367,14 @@ param(
     # gate's own readings without that extra sweep -- and it names what it left out, because an
     # absent line and a green one read the same from the outside.
     [switch]$NoGpuWatch,
+    # Carry one row per case back from the plan stage: `--list-known` goes to the runner, and the rows
+    # travel on this run's own stream between two markers, after the plan's output and before the
+    # checkers. The block's presence is the only sign the channel ran -- a consumer must not read a
+    # transcript without one as "no reds" -- so the markers are printed exactly when this switch is
+    # given and a plan was selected, and the run's own narration is printed unchanged either way.
+    # The rows are what `scripts/merge-readings.mjs` compares case by case; nothing in this script
+    # reads them.
+    [switch]$ListKnown,
     # Which dirty tracked files a run may carry from the MAIN checkout. The patch this script sends
     # is `git diff HEAD`, i.e. the working tree, not the commit: a file somebody edited and did not
     # commit is built and measured as part of the change. In a lane's own worktree that is the point
@@ -436,6 +444,15 @@ $remoteName = $sshHost
 $Plan = @(Split-CamelArgList -Values $Plan)
 $AstOnly = @(Split-CamelArgList -Values $AstOnly)
 $AstDrop = @(Split-CamelArgList -Values $AstDrop)
+
+# -ListKnown asks for the rows one plan run produced, so it needs a plan run: with neither -Plan nor
+# -Changed this run would build and stop, the caller would get no marker block, and the only reading
+# it could take from that is "the row channel did not run" -- which is the same sentence a broken
+# channel prints. A request that cannot be answered is refused here, where the answer is still known.
+if ($ListKnown -and $Plan.Count -eq 0 -and -not $Changed) {
+    Write-Host '[camel-remote] -ListKnown needs -Plan or -Changed: the row channel reports the cases one plan run read, and this run would start no plan.'
+    exit 2
+}
 
 # The checkers -Check knows, in the order `all` runs them. Every entry is the invocation the
 # repository already uses, so this channel cannot drift into checking something else than the gate
@@ -522,7 +539,7 @@ $checkers = [ordered]@{
     # every unit that includes a changed header, from the build's own dependency graph; a file the graph
     # cannot answer for widens it to every unit rather than narrowing it to "fast but leaky". Not in
     # `all`: it takes minutes over the whole tree, and the reading a merge needs is the change's.
-    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false }
+    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true }
     # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
     # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
     # tool `frontend.ast_snapshot` itself starts -- with the line
@@ -1068,6 +1085,13 @@ $goldenPath = ''
 $goldenBuf = $null
 $goldenCount = -1
 $goldenState = ''
+# The row channel (`-ListKnown`): whether the block is open, whether it reached its end marker, and
+# how many rows arrived inside it. Read here rather than by a later consumer, because a truncated
+# stream leaves an open block and nothing else would say so.
+$rowsChannel = $false
+$rowsOpen = $false
+$rowsEnded = $false
+$rowsSeen = 0
 $lastRunPublish = [datetime]::MinValue
 
 # One line per run for the panel's run registry. The fields that say *how* this run was scheduled
@@ -1381,6 +1405,11 @@ try {
         if ($p) { $planArgs += " '$p'" }
     }
     $tierArg = if ($Tier) { " --tier '$Tier'" } else { '' }
+    # The row channel, in all three ways a plan can be selected: `--list-known` is the runner's own
+    # word for "one line per case", and it travels in the same argument list as the targets so the
+    # three branches cannot drift into recording in one and not in another. Empty when the channel
+    # was not asked for, which is what keeps the block out of an ordinary run's output.
+    $listKnownArg = if ($ListKnown) { ' --list-known' } else { '' }
     # `-StackTrace` is the one entry point of a diagnostic build: it passes `--stack-trace` to build.js, which
 # adds `-DCAMEL_STACK_TRACE=ON` and nothing else. Leave it off for any reading that decides green or red:
 # a diagnostic build is a different build.
@@ -1392,19 +1421,19 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # the plan slot instead of a 32-wide one that oversubscribes a host whose cores are all spoken
     # for. width `$jobsBudget` (below) sets it, between the slot hold and this line.
     $runPlan = if ($UpdateGolden) {
-        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs " + "`$CAMEL_JOBS$tierArg"
+        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
     } elseif ($Changed) {
         # The list above travels with the patch: the host has the lane's commits but not the base
         # branch, so a selection made there answered "cannot read origin/develop" and the run fell
         # back to the whole fast layer. `CAMEL_TEST_BASE` stays for the sentences the runner prints
         # -- the list is the one taken against that base -- but the list is what it reads.
-        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --changed-files '$remoteScratch/changed.txt' --jobs " + "`$CAMEL_JOBS$tierArg"
+        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --changed-files '$remoteScratch/changed.txt' --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
     } elseif ($planArgs) {
         # No CAMEL_TEST_EXTRA_LIB_DIRS here any more: the install a 26888783c-or-later build writes
         # carries the toolchain's libstdc++.so.6 in its `libs/` and finds it through its own
         # `$ORIGIN` rpath (2026-11-03 15:35 ruling), so the plan step needs no extra directory --
         # and `-Changed` and `-UpdateGolden`, which never had one, now read exactly like this branch.
-        "cd `$R/ && node scripts/test.js $planArgs --jobs " + "`$CAMEL_JOBS$tierArg"
+        "cd `$R/ && node scripts/test.js $planArgs --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
     } else {
         ':'
     }
@@ -1442,6 +1471,43 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # Markers delimit the phases for the state writer; they are consumed locally and not printed.
     # The plan marker is only emitted when a plan will actually run.
     $planMarker = if ($planArgs -or $Changed) { "echo '__CAMEL_REMOTE_PLAN_START__'" } else { ':' }
+
+    # --- the plan stage, and the rows when they were asked for -------------------
+    # `-ListKnown` makes the plan stage carry one line per case back to this side, and the block
+    # below is the whole of that channel: two markers, and the runner's `{`-lines between them.
+    # Three things about it are deliberate:
+    #
+    #   * the run is piped through `tee` and not written to a file and printed afterwards. The plan
+    #     panel on this side reads this stream while the plan runs; a run whose output arrives only
+    #     when it ends is a run that looks stalled for twenty minutes, and the panel exists because
+    #     that was read as a hang;
+    #   * the exit status is `${PIPESTATUS[0]}`. After a pipeline, `$?` is `tee`'s status, so a plan
+    #     that failed would report success -- the one reading a gate must never get wrong. The
+    #     statuses of this bash are the same ones `$runPlan 2>&1` alone produced, because `cd $R/ &&
+    #     cmd | tee` is `cd $R/ && (cmd | tee)`: a failing `cd` is still the command's status;
+    #   * `grep` is allowed to match nothing. A plan set with no case in it prints no row, and that
+    #     has to arrive as "0 rows" for the consumer to refuse (exit 2); a `grep` that failed here
+    #     would turn it into a host error instead, which is a different fact about a different thing.
+    #
+    # The block is emitted only when this run really selected a plan: with no `-Plan` and no
+    # `-Changed` the stage below is the plain run, and no marker appears at all. That is the one
+    # thing a consumer may rely on -- the presence of the block is the evidence that it was asked
+    # for, and its absence is not evidence about the tree.
+    $rowsChannel = [bool]($ListKnown -and ($planArgs -or $Changed))
+    $planRunStage = if ($rowsChannel) {
+        @'
+RUNPLAN 2>&1 | tee 'TEETMP'
+code=${PIPESTATUS[0]}
+echo '__CAMEL_REMOTE_ROWS_START__'
+grep '^{' 'TEETMP' || true
+echo '__CAMEL_REMOTE_ROWS_END__'
+'@.Replace('RUNPLAN', $runPlan).Replace('TEETMP', "$remoteScratch/rows.txt")
+    } else {
+        @'
+RUNPLAN 2>&1
+code=${PIPESTATUS[0]}
+'@.Replace('RUNPLAN', $runPlan)
+    }
 
     # The width the plan is started at, decided by the slot the host script holds and not by -Jobs:
     # the plan slot allows 16, an exclusive run all 32, and -Jobs only narrows either. This is the
@@ -1598,6 +1664,24 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
     $checkBlocks = ''
     foreach ($checkName in $checkNames) {
         $entry = $checkers[$checkName]
+        # A `--changed` checker reads a diff, and a diff needs two different commits. When this
+        # checkout's HEAD is already contained in the base it compares against (a lane that has
+        # been merged once, or a checkout sitting on develop itself) that diff is empty forever, and
+        # the checker's own `units=0` would then be a green that measured nothing -- the shape this
+        # gate exists to remove. The base the host sees is useless for the question (the host's base
+        # ref is the commit this run just pushed), so the question is asked here, on the caller's
+        # checkout, before anything is transferred.
+        if ($entry.changed) {
+            $headSha = "$(& git -C $Path rev-parse HEAD 2>$null)".Trim()
+            $baseSha = "$(& git -C $Path merge-base 'origin/develop' HEAD 2>$null)".Trim()
+            if ($headSha -and $baseSha -and $headSha -eq $baseSha) {
+                Write-Host ''
+                Write-Host "[camel-remote] ${checkName}: the base and this tree are the same commit ($($headSha.Substring(0, 10))): there was no change to measure, so nothing was checked" -ForegroundColor Yellow
+                Write-Host "[camel-remote] this checkout's HEAD is already in origin/develop, so a diff against it is empty: the check can only pass by measuring nothing. Commit the change you want read (or read it against the commit it adds to) and run this again."
+                Write-Host ''
+                exit 2
+            }
+        }
         # No per-checker LD_LIBRARY_PATH prefix any more (2026-11-03 15:35 ruling): the install a
         # current build writes carries the toolchain's libstdc++.so.6 in `libs/` with a `$ORIGIN`
         # rpath, so the checker that starts the tree's binary starts it in the run's own
@@ -1635,7 +1719,7 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
         $checkBlocks += @"
 
 echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
-$shownCommand
+$shownCommand 2>&1
 c=`$?
 if [ `$c -ne 0 ] && [ `$checkfail -eq 0 ]; then checkfail=`$c; fi
 echo "[camel-remote] --- ${checkName}: exit `$c ---"
@@ -2183,8 +2267,7 @@ $planMarker
 # why -- a red that says nothing, indistinguishable from a run that measured nothing. Do not remove
 # the `2>&1`: it is what puts the reason on the same stream as RUN_EXIT, in the order it happened.
 $goldenMark
-$runPlan 2>&1
-code=`$?
+$planRunStage
 echo "RUN_EXIT=`$code"
 $goldenStage
 $fetchStage
@@ -2318,6 +2401,36 @@ exit `$code
                     Write-Host $line
                 }
                 return
+            }
+            # The row channel (`-ListKnown`): the rows arrive twice on this stream and only one copy
+            # is for a person. `--list-known` prints them inline at the end of the run, and the host
+            # then repeats them inside the marker block. The inline copy is dropped here and the
+            # block is printed verbatim, so the console reads exactly as it did before this channel
+            # existed and a caller that captures this output (the merge position does) still gets
+            # the rows, between markers it can find.
+            #
+            # Row-shaped is `{"name":` at the start of a line: that is the runner's own row
+            # (`test/tools/run-tests.mjs`, `listedName`), and it is matched only while this run asked
+            # for the channel -- an ordinary run's stream is filtered by nothing at all.
+            if ($rowsChannel) {
+                if ($line -match '__CAMEL_REMOTE_ROWS_START__') {
+                    $rowsOpen = $true
+                    $rowsSeen = 0
+                    Write-Host $line
+                    return
+                }
+                if ($line -match '__CAMEL_REMOTE_ROWS_END__') {
+                    $rowsOpen = $false
+                    $rowsEnded = $true
+                    Write-Host $line
+                    return
+                }
+                if ($rowsOpen) {
+                    $rowsSeen++
+                    Write-Host $line
+                    return
+                }
+                if ($cleanLine -match '^\{"name"') { return }
             }
             if ($line -match '^AST_UPDATE_EXIT=(\d+)\s*$') {
                 $astExit = [int]$Matches[1]

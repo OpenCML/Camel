@@ -23,17 +23,31 @@
  *   1  measured, and `new` or `changed` is not empty -- refuses the merge, and names them
  *   2  not measured (a reading is absent, unreadable, or from another rule set) -- refuses the merge
  *      and says what is missing, because "I could not measure" is not "your tree is wrong"
+ *
+ * The rows come from one of two places, and the difference is the defect that made this program
+ * unusable for a night:
+ *   --current <rows.jsonl>   the rows as their own file, which is how a baseline is measured
+ *   --transcript <console>   one run's whole console output, in which the row channel brackets the
+ *                            rows between `__CAMEL_REMOTE_ROWS_START__` and `__CAMEL_REMOTE_ROWS_END__`
+ *
+ * The second is the merge position: what a gate has there is the transcript of the run it just
+ * made, and there are three readings of it, not two. Both markers and at least one row is
+ * "measured". Both markers and no row is still "not measured" -- a plan set with no case in it and
+ * a channel that records nothing look the same from here, and neither is a green. A missing marker
+ * is "the channel did not run": the run may have been green, red, or absent, and this program has
+ * nothing to say about any of them. Zero rows is never "no reds" at this position.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { READING_NORMAL_VERSION } from '../test/tools/reading-normal.mjs'
 
-const READINGS = new Map()
+/** The two lines the plan stage brackets its rows with (`internal/tools/camel-remote.ps1`). */
+const ROWS_START = '__CAMEL_REMOTE_ROWS_START__'
+const ROWS_END = '__CAMEL_REMOTE_ROWS_END__'
 
-function readRows(file) {
-    if (!fs.existsSync(file)) die(`no readings at ${file}`)
-    const text = fs.readFileSync(file, 'utf8')
+/** The rows and the rule set they were taken under, from the text that held them. */
+function readRows(label, text) {
     const rows = new Map()
     let version = null
     for (const line of text.split('\n')) {
@@ -42,19 +56,51 @@ function readRows(file) {
         try {
             row = JSON.parse(line)
         } catch {
-            die(`${file} holds a line that is not a reading: ${line.slice(0, 120)}`)
+            die(`${label} holds a line that is not a reading: ${line.slice(0, 120)}`)
         }
         if (typeof row.name !== 'string' || typeof row.verdict !== 'string') {
-            die(`${file} holds a reading with no name or no verdict: ${line.slice(0, 120)}`)
+            die(`${label} holds a reading with no name or no verdict: ${line.slice(0, 120)}`)
         }
         if (row.reading_version !== undefined) {
             if (version === null) version = row.reading_version
-            else if (version !== row.reading_version) die(`${file} mixes normalization versions ${version} and ${row.reading_version}; two rule sets are not one baseline`)
+            else if (version !== row.reading_version) die(`${label} mixes normalization versions ${version} and ${row.reading_version}; two rule sets are not one baseline`)
         }
         rows.set(row.name, { verdict: row.verdict, reading: row.reading ?? null })
     }
-    if (rows.size === 0) die(`${file} holds no readings: an empty baseline would compare nothing and call it agreement`)
-    return { rows, version }
+    if (rows.size === 0) die(`${label} holds no readings: an empty baseline would compare nothing and call it agreement`)
+    return { rows, version, text }
+}
+
+function readRowsFile(file) {
+    if (!fs.existsSync(file)) die(`no readings at ${file}`)
+    return readRows(file, fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'))
+}
+
+/**
+ * The rows out of one run's transcript, or the reading that says why there are none.
+ *
+ * A line is a row when it starts with `{`: the channel prints the runner's `{name, verdict, reading}`
+ * lines and nothing else between its markers, and the run's own narration around them does not.
+ * The markers are matched after trimming, because the console carries them beside whatever
+ * indentation a wrapper gave them; the payload is matched as JSON, not as a shape this file
+ * invents -- a row that does not parse is `readRows`' refusal, which names it.
+ *
+ * Both refusals are exit 2 and neither says anything about the tree: a green transcript with no
+ * block is a merge position that never installed this channel, and a block with no row is a plan
+ * set that started no case or a channel that recorded none. Both are "not measured" -- the one
+ * reading a merge must never round down to "no reds".
+ */
+function rowsFromTranscript(file) {
+    if (!fs.existsSync(file)) die('the row channel did not run')
+    const lines = fs.readFileSync(file, 'utf8').split('\n').map((line) => line.replace(/\r$/, ''))
+    const start = lines.findIndex((line) => line.trim() === ROWS_START)
+    const end = start < 0 ? -1 : lines.indexOf(ROWS_END, start + 1)
+    if (start < 0 || end < 0) die('the row channel did not run')
+    const rows = lines.slice(start + 1, end).filter((line) => line.trimStart().startsWith('{'))
+    if (rows.length === 0) {
+        die('the plan produced no rows: either it has no cases or the row channel is not recording')
+    }
+    return readRows(`the row channel in ${file}`, rows.join('\n'))
 }
 
 function die(why) {
@@ -105,17 +151,20 @@ if (cacheDir) {
 }
 
 const currentFile = arg('--current')
-if (!currentFile) {
-    console.log('usage: merge-readings.mjs --current <rows.jsonl> (--baseline <rows.jsonl> | --cache <dir> --develop <sha> --plans <list> [--accept])')
+const transcriptFile = arg('--transcript')
+if (!currentFile && !transcriptFile) {
+    console.log('usage: merge-readings.mjs (--current <rows.jsonl> | --transcript <console output>) (--baseline <rows.jsonl> | --cache <dir> --develop <sha> --plans <list> [--accept])')
     process.exit(2)
 }
-const tree = readRows(currentFile)
+const tree = transcriptFile ? rowsFromTranscript(transcriptFile) : readRowsFile(currentFile)
 
 // `--accept` stores this run as the baseline for its key and stops: it is what the first merge on a
 // new develop commit runs, and it exits 0 because storing a baseline is not a judgement.
 if (storeFile && cacheKey) {
     fs.mkdirSync(path.dirname(cacheKey), { recursive: true })
-    fs.copyFileSync(currentFile, cacheKey)
+    // The rows alone, whether they arrived as their own file or out of a transcript: a cache entry
+    // that held a console transcript would be a baseline with narration inside it.
+    fs.writeFileSync(cacheKey, tree.text)
     fs.writeFileSync(`${cacheKey}.where`, JSON.stringify({
         develop,
         plans: planSetHash((fs.existsSync(planSet) ? fs.readFileSync(planSet, 'utf8').split('\n') : planSet.split(','))),
@@ -148,7 +197,7 @@ if (!baseFile) {
     console.log('merge-readings: no baseline given (--baseline or --cache): nothing to compare against')
     process.exit(2)
 }
-const base = readRows(baseFile)
+const base = readRowsFile(baseFile)
 if (base.version !== tree.version) {
     die(`the baseline was measured under normalization ${base.version} and this tree under ${tree.version}; a rule change makes two readings incomparable, so the baseline must be measured again`)
 }

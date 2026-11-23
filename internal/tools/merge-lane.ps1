@@ -16,6 +16,15 @@
     The branch head goes into the commit message as a trailer, so a later reader can check the claim
     against the history rather than against a sentence in it.
 
+    Once the merge commit exists, four stages run in order and the push is last: the header check,
+    the clang syntax check, the row readings, then the push. Every stage uses the same three-way
+    convention -- 0 means it measured and the tree is fine, 1 means it measured and the tree is not,
+    2 means it could not measure at all -- and a 2 must read as "the gate is down", never as "your
+    code is wrong", because a gate that waves a merge through while it is blind is exactly what the
+    row stage exists to stop. The row readings compare this merge's plans case by case with the
+    tree it lands on (`scripts/merge-readings.mjs`): the cases this change fixed, the cases it
+    turned red, and the cases that were red both times and fail differently now.
+
 .PARAMETER Branch
     The lane branch to merge, e.g. lane/range-ri.
 
@@ -185,11 +194,123 @@ try {
         # `build/compile_commands.json` is gone cannot be merged into at all until it is built once,
         # and that includes a merge whose purpose is to fix the gate itself.
         Write-Host '  This is not a defect in your tree: the check itself could not measure it, so nothing was pushed and nothing was learned about this change.'
-        Write-Host '  The commonest cause is that the gate checkout has no compile database (build/compile_commands.json), which only a build writes: run one on it -- internal/tools/camel-remote.ps1 -Path <that worktree>, without -NoBuild -- and merge again. The checker names the actual cause on the line above it printed; the others are a clang 19 image the host does not hold and a toolchain its compile lines cannot reach.'
+        Write-Host '  The commonest cause is that the gate checkout has no compile database (build/compile_commands.json), which only a build writes: run one on it -- internal/tools/camel-remote.ps1 -Path <that worktree>, without -NoBuild -- and merge again. The checker names the actual cause on the line above it printed; the others are a clang 19 image the host does not hold, a toolchain its compile lines cannot reach, and a commit whose first parent is the same tree (`the base and this tree are the same commit`: there is then no change to read).'
         Write-Host ''
         Write-Host 'Nothing was committed and nothing was pushed.'
         exit 2
     }
+
+    # --- the plans this merge touches, read case by case ------------------------
+    # The clang step above asks whether the merged tree compiles. This asks what it *reads*: the
+    # plans the change touches, run on the merged tree, compared case by case with the same plans
+    # on the tree the merge lands on. A count of reds cannot answer it -- "three failed before and
+    # three failed after" is what a tree that broke three new cases and fixed three old ones reads
+    # like -- so the comparison is per case and its three sets are `fixed`, `new` and `changed`,
+    # and `scripts/merge-readings.mjs` is where that judgement lives.
+    #
+    # The rows come back on camel-remote's own stream, between two markers (`-ListKnown`): that is
+    # the whole of the channel, and a block that is absent is not a green -- it means the run that
+    # was supposed to record the rows did not, and this stage refuses the merge rather than pass it
+    # while blind.
+    #
+    # Which plans: the selection `--changed` makes, asked for here with `--list` (which starts
+    # nothing). A selection that widens is refused, not measured: `--changed` widens when it can
+    # name no plan, and the widened set is the whole fast layer -- a full-suite run whose readings
+    # would then be compared against a baseline of everything, case by case, for a merge that
+    # touches a handful of files. "The change names no plan" is a fact about the change or about the
+    # selection rules, and neither is answered by running everything: it is the same zero as the
+    # clang gate's, so it gets the same answer.
+    Write-Host ''
+    Write-Host 'row readings (the plans this merge touches, case by case) ...'
+    $rowsStarted = Get-Date
+    $selectOut = @(& node (Join-Path $MainCheckout 'scripts\test.js') --changed --list 2>&1)
+    $selectExit = $LASTEXITCODE
+    $prefix = $MainCheckout.TrimEnd('\') + '\'
+    $planTargets = @($selectOut | ForEach-Object { "$_".Trim() } | Where-Object { $_ -and $_.StartsWith($prefix) } |
+        ForEach-Object { $_.Substring($prefix.Length) -replace '\\', '/' })
+    $widened = @($selectOut | Where-Object { "$_" -match '^\(the whole fast layer' }).Count -gt 0
+    $planSet = $planTargets -join ','
+    # The key is a list of plan names and not the names joined by commas: a single target spelled as
+    # one comma-list is one string that may also be a path, and `--plans` reads an existing path as a
+    # *list file* -- so a merge touching exactly one plan would key its baseline by that plan file's
+    # own content, and editing the plan would silently ask for a different baseline. One name per
+    # line has one meaning.
+    $planSetFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-plans-$PID.txt")
+    if ($planTargets.Count -gt 0) {
+        [System.IO.File]::WriteAllText($planSetFile, ($planTargets -join "`n") + "`n",
+            (New-Object System.Text.UTF8Encoding($false)))
+    }
+    if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
+        # Not a red and not a green: the selection itself did not answer, so the plans this merge
+        # touches are unknown and nothing about the change has been measured. Same shape as the
+        # clang step's exit 2, and for the same reason: `cannot select` must not read as `no reds`.
+        Write-Host ''
+        if ($planTargets.Count -eq 0 -and $widened) {
+            Write-Host 'STOPPED: this merge selects no plan (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host '  This is not a defect in your tree: `--changed` named no plan for this change, so it widened to the whole fast layer, and a whole-suite reading is not a reading about this merge. Nothing was pushed.'
+            Write-Host '  What repairs it: `node scripts/test.js --changed --list` is the selection itself and starts nothing -- read it. Either the change names no plan (then nothing about it is measured case by case, and that is a fact worth knowing before merging) or `test/plan-selection.json` has no rule for those files.'
+        } else {
+            Write-Host "STOPPED: the plans this merge touches could not be selected (exit $selectExit, no reading taken)" -ForegroundColor Yellow
+            Write-Host '  This is not a defect in your tree: the selection is what failed, so nothing was pushed and nothing was learned about this change.'
+            $selectOut | Select-Object -Last 3 | ForEach-Object { "  $_" }
+            Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; the line above is its own refusal, and the usual cause is a base branch that does not resolve in this checkout.'
+        }
+        Write-Host ''
+        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        exit 2
+    }
+
+    # One measurement, one transcript. The rows are read out of it twice -- once for the comparison
+    # and once, after the push, to store this commit's own reading as the baseline for the next
+    # merge -- so the plan runs once and both readers read the same run.
+    $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
+    $rowsRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+        -Path $MainCheckout -Changed -ListKnown -NoGpuWatch 2>&1)
+    $rowsExit = $LASTEXITCODE
+    # Byte for byte, without a BOM and with LF: the comparer splits on `\n` and matches the markers
+    # exactly, and a transcript written by `>` in PowerShell would be UTF-16.
+    [System.IO.File]::WriteAllText($transcript,
+        (($rowsRun | ForEach-Object { "$_" }) -join "`n") + "`n",
+        (New-Object System.Text.UTF8Encoding($false)))
+    $rowsCount = @($rowsRun | Where-Object { "$_".TrimStart().StartsWith('{') }).Count
+    Write-Host ("  {0} row(s) from the run, camel-remote exit {1}, {2} plan target(s){3}" -f `
+        $rowsCount, $rowsExit, $planTargets.Count, $(if ($widened) { ' (the whole fast layer)' } else { '' }))
+
+    $developTip = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
+    $compareDir = Join-Path $MainCheckout '.git\camel-readings'
+    $compare = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
+        --cache $compareDir --develop $developTip --plans $planSetFile 2>&1)
+    $compareExit = $LASTEXITCODE
+
+    # The same three-way convention as the clang step. 1 is a reading -- the cases that moved are
+    # named above, and the message says which class each is. 2 is the absence of one: the rows or
+    # the baseline were not there, and that says nothing about the tree.
+    #
+    # Both refusals say what is true at this point and not what Stop-With says: the merge commit is
+    # already made in this checkout (that is step 1 of this script), and it is the push that has not
+    # happened. A reader who acts on "nothing was committed" would look for a merge that is there.
+    if ($compareExit -eq 1) {
+        $compare | ForEach-Object { "  $_" }
+        Write-Host ''
+        Write-Host 'STOPPED: the plans this merge touches measured differently on the merged tree (exit 1: the cases are named above)' -ForegroundColor Red
+        Write-Host "  The baseline is the tree this merge lands on (develop $($developTip.Substring(0, 9))) and this merge is the only thing that moved. `newly red` was green there and is red now; `still red, failing differently` was red both times and reads differently now, which is the move a count cannot see."
+        Write-Host '  If the change makes a case fail on purpose, the merge that makes it fail that way is the one that carries the expectation with it; this one is refused until the two agree.'
+        Write-Host ''
+        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        exit 1
+    }
+    if ($compareExit -ne 0) {
+        $compare | ForEach-Object { "  $_" }
+        Write-Host ''
+        Write-Host "STOPPED: the row readings were not taken (exit $compareExit, no reading taken)" -ForegroundColor Yellow
+        Write-Host "  This is not a defect in your tree: there were no rows to compare, so nothing was learned about this change. The run that should have recorded them exited $rowsExit; the comparer's own refusal is above."
+        Write-Host "  What repairs it: the block must arrive with rows inside it. A run that selected no plan writes no block, and a plan set whose cases all start nothing writes an empty one -- re-run internal/tools/camel-remote.ps1 -Path $MainCheckout -Changed -ListKnown -NoGpuWatch and read the block it prints. If the block is there and the baseline is what is missing, measure that plan set on a checkout of develop $($developTip.Substring(0, 9)) and store it: node scripts/merge-readings.mjs --transcript <that run's output> --cache $compareDir --develop $developTip --plans '$planSet' --accept"
+        Write-Host ''
+        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        exit 2
+    }
+    Write-Host ("  measured: develop {0} against this tree, no new red and no changed failure ({1:N0} s)" -f `
+        $developTip.Substring(0, 9), ((Get-Date) - $rowsStarted).TotalSeconds)
 
     for ($i = 1; $i -le 3; $i++) {
         & git push origin develop 2>&1 | Select-Object -Last 1
@@ -204,9 +325,29 @@ try {
         Stop-With 'origin/develop is not the commit just made' "local $local, remote $remote"
     }
 
+    # The commit this merge just created is the tree those rows were measured on, so they are that
+    # commit's baseline: storing them now is what makes the next merge on it a comparison instead of
+    # a second measurement. After the push and never before -- a baseline written for a commit
+    # nothing else can see would be a key nobody asks for, and a failed push would leave one.
+    # The directory is made here because the comparer refuses a cache that is not there (that
+    # refusal is what keeps a missing baseline from reading as "every case fixed"): the first merge
+    # on a machine has no cache yet, and creating it is this script's job, not the reader's.
+    New-Item -ItemType Directory -Force -Path $compareDir | Out-Null
+    & node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
+        --cache $compareDir --develop $local --plans $planSetFile --accept 2>&1 | Select-Object -Last 1 |
+        ForEach-Object { "  $_" }
+    if ($LASTEXITCODE -ne 0) {
+        # Not a refusal: the merge is already on origin, and a merge that did land is not undone by
+        # a baseline that could not be written. The next merge on this commit measures instead of
+        # comparing, which is slower and not wrong.
+        Write-Host "  warning: the baseline for $($local.Substring(0,9)) was not stored; the next merge on that commit will measure instead of comparing"
+    }
+
     Write-Host ''
     Write-Host "merged $Branch at $head; develop is $($local.Substring(0,9))" -ForegroundColor Green
 }
 finally {
+    if ($transcript) { Remove-Item -LiteralPath $transcript -Force -ErrorAction SilentlyContinue }
+    if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
     Pop-Location
 }
