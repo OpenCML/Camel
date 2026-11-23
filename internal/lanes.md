@@ -14,7 +14,7 @@
 | lane/facts-effects | `D-1123-31` 第 3 条：`EffectSummary`、`graph.is_pure` 的读者改读 `core.effects`，7 处绕库的直接计算删掉，读数是逐节点相同 | 刚开，0 笔 | 无 | 逐节点「同/异」数 + 否决式「清掉记录 → 读者停摆报红」 | 17:20 |
 | lane/notation-corpus | `D-1123-31` 第 4 条：4,252 个 `.cml` 的旧返回类型写法与残留 `f..g` 用格式化器一次过，**然后**再删解析器旧分支；冲突时重跑格式化器 | 刚开，0 笔 | 无 | 语料改前/改后两个数 + 否决式「旧写法报语法错」 | 17:20 |
 | lane/golden-debt | 重录 `differential_equivalence.cml` 的 ast 哈希（`15457dbcd` 改注释里的脚本路径未重录） | `d9f1ea9e6`，+1/−1，`ast_hashes.txt` 只动一行 | **已合入**（`74b03ac99`）：`feat/parse` **125/126 → 126/126/0** | 已合入完成 | 17:25 |
-| lane/3a-b5 | `D-1123-31` 第 1 条：`src/compile`、`src/stdlib` 其余子目录、`src/tools`（`3a-b4` 留 `kernel/runtime`、`stdlib/std`），注意 `C-1123-17` | **没开**——等 `range-value` 与 `facts-effects` 报出它们实际改过的文件，再按实际文件划界；现在开只能靠猜 | — | 那两条报完后开 | 17:25 |
+| lane/3a-b5 | `D-1123-31` 第 1 条：`src/compile`、`src/stdlib` 其余子目录（`3a-b4` 留 `stdlib/std`、`kernel/runtime`）、`src/tools`；只减「被借来读几个字段」的局部与形参，写路径、身份键、载荷读取、按编号走的遍历不动（`C-1123-17`） | 一笔（`adde6e793` 上开）：`git grep -c 'GCGraph\|GraphDraft' -- 'src/compile' 'src/stdlib' 'src/tools'` **1576 → 1535**；逐目录 compile **34 → 33**、stdlib **1483 → 1443**（其中 `stdlib/std` 一处未动）、tools **59 → 59** | 未合 | 主机 `feat/compile` 四个数 + `smoke` + `feat/parse` | 17:55 |
 
 
 

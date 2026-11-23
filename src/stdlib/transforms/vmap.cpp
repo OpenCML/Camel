@@ -193,7 +193,7 @@ const rt::GCGraph *calleeGraphOf(
         why = "the rule's right side calls no named function";
         return nullptr;
     }
-    for (const rt::GCGraph *graph : instance.program->graphs()) {
+    for (const auto *graph : instance.program->graphs()) {
         if (graph != nullptr && graph->name() == name) {
             return graph;
         }
@@ -202,14 +202,14 @@ const rt::GCGraph *calleeGraphOf(
     // generic instance after its own name: `rulesets.vmap::vmap_mul<float>` is the graph the rule's
     // right side names by `vmap_mul`. So the leaf of the filed name, without its qualifier and its
     // type arguments, is what the rule's syntax writes.
-    for (const rt::GCGraph *graph : instance.program->graphs()) {
+    for (const auto *graph : instance.program->graphs()) {
         if (graph != nullptr && leafNameOf(graph->name()) == name) {
             return graph;
         }
     }
     std::string listed;
     size_t shown = 0;
-    for (const rt::GCGraph *graph : instance.program->graphs()) {
+    for (const auto *graph : instance.program->graphs()) {
         if (graph == nullptr || shown++ >= 12) {
             continue;
         }

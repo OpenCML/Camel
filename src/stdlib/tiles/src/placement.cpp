@@ -139,7 +139,7 @@ const runtime::GCGraph *calleeGraphOf(
     // call through it is a call to that graph, exactly as a written call to a named function is.
     // A value that is not a constant names no one graph: the run chooses the callee.
     for (const runtime::gc_node_ref_t operand : graph.withInputsOf(id)) {
-        if (const runtime::GCGraph *callee = functionGraphOf(graph, operand)) {
+        if (const auto *callee = functionGraphOf(graph, operand)) {
             return callee;
         }
     }
@@ -323,7 +323,7 @@ GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : 
     }
     // A call written in a device scope (a `#gpu` body or block) makes the callee one too, even
     // when the code around the block is the host's: that call is still a device call.
-    const auto addCall = [&](const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+    const auto addCall = [&](const auto &graph, runtime::gc_node_ref_t id) {
         if (placementOf(graph, id).fact == "cpu")
             return;
         const auto *callee = calleeGraphOf(program, graph, id);

@@ -1207,7 +1207,7 @@ bool liftGraph(
         // callee's lifted *signature* instead of the answer the callee hands on, which is a call
         // node the edge invariants refuse: a call node whose declared answer is not the answer its
         // callee hands on, with its arguments never wired.
-        auto isFunctionValueNode = [&](gc_node_ref_t ref, const camel::runtime::GCGraph &graph) {
+        auto isFunctionValueNode = [&](gc_node_ref_t ref, const auto &graph) {
             const rt::GCNode *candidate = nodeOf(function, ref);
             if (candidate == nullptr || candidate->dataType() == nullptr ||
                 candidate->dataType()->code() != camel::core::type::TypeCode::Function) {
