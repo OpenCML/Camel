@@ -1,7 +1,14 @@
 id = "compile.higher_order_clause"
 order = 344
 tier = "fast"
-tags = ["feat", "compile", "effects", "hof"]
+# `higher_order` is the spelling the GC poison sweep's `risk_tags` reads
+# (`test/plans/feat/mm/gc_poison_sweep.plan.toml`): a source plan whose tags name one of them keeps
+# three sampled copies in the fast layer, every other plan keeps one. This plan said `hof` alone --
+# the same subject in another word, matching none of those tags -- so it was sampled at one copy, and
+# a plan sampled at one copy loses the copy it had the moment the file grows a test above it: the
+# sample takes the eligible tests in declaration order. Both words stay, because `hof` is what people
+# call the subject and `higher_order` is what the sweep counts.
+tags = ["feat", "compile", "effects", "hof", "higher_order"]
 
 # The two sources of a node's effect, and the union they make (design principles 3.3; author
 # 2026-11-19): what a higher-order operator touches is what the function the program hands it
