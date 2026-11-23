@@ -10,12 +10,23 @@ import { execFile } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 
+// The watch reads the coordinator's own checkout while it merges there. `git status` refreshes the
+// index under `index.lock` by default, and a merge that runs into that lock fails with "Unable to write
+// index" (and a reader killed mid-refresh leaves the lock behind). A background reader must not take
+// optional locks: GIT_OPTIONAL_LOCKS=0 makes every read here lock-free.
 const run = (command, args, options = {}) =>
     new Promise((resolve, reject) => {
         execFile(
             command,
             args,
-            { encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024, timeout: 120_000, ...options },
+            {
+                encoding: 'utf8',
+                windowsHide: true,
+                maxBuffer: 16 * 1024 * 1024,
+                timeout: 120_000,
+                ...options,
+                env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', ...(options.env || {}) },
+            },
             (error, stdout) => (error ? reject(error) : resolve(String(stdout).trim())),
         )
     })
