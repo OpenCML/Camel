@@ -31,7 +31,13 @@
 | C-1124-3 | 队列页第 3 项 | 3a 执行车道 src/stdlib/std/prl（128 处）+ src/stdlib/std/exec（82 处）改读视图；判据同 D-1123-92 | \lane/3a-prl-exec\ | doing | 2026-11-24 03:30 | |
 | C-1124-4 | 队列页第 3 项 | 3a 执行车道 src/stdlib/std/fvm（99 处）+ src/stdlib/std/cpp（90 处）改读视图；加判据：生成的 C++ 文本逐字节比 | \lane/3a-fvm-cpp\ | doing | 2026-11-24 03:30 | |
 | C-1124-5 | 队列页第 4 项 | 3a 工具车道 std/gir（69）、std/macro（38）、src/tools；判据加「三份金标逐字节比」与「同一命令同输出」，且禁用 \--update-golden\ | \lane/3a-tools\ | doing | 2026-11-24 03:30 | |
-| C-1124-6 | extraction-cost 实测 | \docs/stdlib-reference.md\ 生成器对这棵树拒绝：81 declaration(s) carry a body，因此 \elative_cost\、\elative_cost_stated\、\ules::default\ 三条在参考页里不存在 | \lane/refgen-body\ | doing | 2026-11-24 03:30 | |
+| C-1124-6 | extraction-cost 实测 | \docs/stdlib-reference.md\ 生成器对这棵树拒绝：81 declaration(s) carry a body，因此 \
+| D-1123-105 | 作者 fsh-dev | ① 生成器全查的真缺口是判据本身，按三处补：a) 去掉 `check-doc-snippets` 的整页豁免，改在源头查 —— `.cml` 每条 `@example` 由片段编译器编一遍；b) `spelling/check.py` 读 `.cml`，`paren lambda` 认无类型的 `(x) => e`；c) `registry.tsv` 两条与 41 条 `@example` 改现写法，等参考页生成器合了再 `--write`，判据是 a) 改前红、改后绿 ② 23 条已合未删分支按四条判据清：分支已在 develop、`git status` 干净、无未推提交、无活会话 cwd 在它里面 | `lane/doc-example-gates` | doing | 2026-11-24 03:45 | |
+| C-1124-7 | 实测 | `docs/stdlib-reference.md` 生成器判据误判：81 条全是无体的 `=> R` / `=> T[]` / 带 `uses` 的声明，模板/inline/真函数体 **0** 条。判据 `bb41465a24`(10-22) 与 81 条被改 `eb20efab7b`(11-23) 相差一个月 ⇒ 这道门加上后从没跑通过；参考页最后一次真生成早于 11-23，最后一次内容改动是 `b4c0cdaf54` 手改两行 | `lane/refgen-body` | done | 2026-11-24 03:45 | 63e6487641 |
+| C-1124-8 | C-1124-7 的边界问题 | `rules` 模块从不在 `MODULES` 里，其 11 个导出函数与 4 个规则集在参考页全无条目 ⇒ `rules::default` 进不了页。这是「参考页覆盖哪些模块」的边界决定，待作者裁 | — | blocked | 2026-11-24 03:45 | |
+elative_cost\、\
+elative_cost_stated\、\
+ules::default\ 三条在参考页里不存在 | \lane/refgen-body\ | doing | 2026-11-24 03:30 | |
 | C-1123-61 | `lane/effects-declarations` 实测 | `sem::checkResources` 不许一个算子同时写自陈访问与 `functionOperand`，于是 `state:update`、`tiles:run_compiled`/`run_compiled_device`/`run_host_resident`/`run_preferred_resident` 这类「自陈访问 + 调别的图」改不成操作数子句，只能留着粗标；要放宽校验才写得下（属裁决） | — | todo | 2026-11-23 23:30 | | `D-1123-82`
 | D-1123-70 | 作者 fsh-dev | 全查所有吐出 Camel 源码的地方（打印器、格式化器、参考页生成器、gir/rgir/jgir、诊断里的修复建议、测试脚本拼的源码），找五种旧写法：`: T`、`f..g`/`?..`、`A = int`、`(x) => e`、`[a:b]`；判据是每个生成器出一段样例交给解析器编回去零失败 | `lane/range-surface` | doing | 2026-11-24 02:40 | |
 | D-1123-65 | 作者 fsh-dev | 每槽固定进程预算（构建 8/8、测试 16，合计=核数 32；独占主机 32；调用方只能往下压；登记记 jobs），由主机脚本按槽号设，不是约定 | `lane/slot-budget` | doing | 2026-11-24 03:30 | |
