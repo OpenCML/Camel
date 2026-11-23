@@ -3,14 +3,14 @@
  * parameter of neither declaration of `f`, so it names nothing there (design principles 4.4).
  */
 
-func f(a: int): int {
+func f(a: int) => int {
     return a
 }
 
-func f(a: int, b: int): int {
+func f(a: int, b: int) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(a: 1, z: 2)
 }

@@ -1,12 +1,11 @@
 // `Set<T>` is checked again when `T` is replaced: with a float it is rejected at the call.
-
-func to_set::<T>(x: T): Set<T> {
+func to_set::<T>(x: T) => Set<T> {
     return [x] as Set<T>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(to_set(3))
     println(to_set(1.5))
-    println("never printed")
+    println('never printed')
     return 0
 }

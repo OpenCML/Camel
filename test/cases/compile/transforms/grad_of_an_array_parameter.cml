@@ -15,11 +15,11 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func g(xs: float[]): float {
+func g(xs: float[]) => float {
     return xs[1] * xs[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let reading = vjp(g)([3.0, 2.0])
     let (value, pullback) = reading
     println(value)

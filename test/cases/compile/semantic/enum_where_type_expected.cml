@@ -6,10 +6,10 @@
 
 type Shape = enum { Dot, Circle(float) }
 
-func take(s: enum { Dot }): int {
+func take(s: enum { Dot }) => int {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return 0
 }

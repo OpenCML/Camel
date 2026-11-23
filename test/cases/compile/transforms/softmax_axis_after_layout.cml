@@ -34,20 +34,20 @@
  * lift either answers `1032.0` and `84.0` or it does not run.
  */
 import rulesets.jvp
-import { jvp } from transforms
 import { permute, reshape, softmax, sum } from tensor
+import { jvp } from transforms
 
-func mix(a: float[...], w: float[...]): float {
+func mix(a: float[...], w: float[...]) => float {
     let b = reshape<[8, 2, 8]>(a)
     let c = permute<[1, 0, 2]>(b)
     return sum(softmax<2>(c) * w)
 }
 
-func main(): int sync {
-    let xs = reshape<[8, 16]>([0.0 for i in 0..128] as float[])
-    let dxs = reshape<[8, 16]>([float(i) for i in 0..128] as float[])
-    let ws = reshape<[2, 8, 8]>([float(i + 1) for i in 0..128] as float[])
-    let dws = reshape<[2, 8, 8]>([0.0 for i in 0..128] as float[])
+func main() => int sync {
+    let xs = reshape<[8, 16]>([0.0 for i in 0 .. 128] as float[])
+    let dxs = reshape<[8, 16]>([float(i) for i in 0 .. 128] as float[])
+    let ws = reshape<[2, 8, 8]>([float(i + 1) for i in 0 .. 128] as float[])
+    let dws = reshape<[2, 8, 8]>([0.0 for i in 0 .. 128] as float[])
     let (value, tangent) = jvp(mix)(xs, ws, dxs, dws)
     'rules_angle_args softmax-after-layout value={} tangent={}'->format<value, tangent>->println
     return 0

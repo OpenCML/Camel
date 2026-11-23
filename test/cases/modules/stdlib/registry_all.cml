@@ -3,44 +3,36 @@
  * `camel inspect --ops` lists their operators (see stdlib_registry.plan.toml).
  */
 
+import array
+// `nn` and `autodiff` load without PyTorch, a GPU or a Python interpreter: `inspect --ops`
+// lists their operators, and the stdlib registry tests hold them to the modules' declarations
+// 
+import autodiff
+// `tiles` needs no device to load: `inspect --ops` lists its operators, and the stdlib registry
+// tests hold them to the module's purity and signature declarations.
 import bytes
 // `hash` and `env` are declaration modules (`stdlib/hash.cml`, `stdlib/env.cml`): `hash` is pure,
 // and `env` keeps its `env` resource and its effects in C++.
-import hash
+import ckpt
 import env
 import fs
 import graph
+import hash
 import io
 import json
 import math
 // `process` is a declaration module too (`stdlib/process.cml`); it keeps the `clock`/`env`
 // resources and its effects in C++, and `exit` stays the built-in operator.
-import process
+import nn
+// `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the
+// stdlib registry tests hold them to the declaration and the computed signature.
+import onnx
+// `transforms` is the module's own pass (`reinterp`) and its one value-level operator, `jvp`: the
+// operator is declared in `stdlib/transforms.cml` and its computed signature is
+// `stdlib/signatures/transforms.cml`.
 import para
 // `test_support` is the facilities of a test, not of a program: `rendezvous` and `thread_count`.
-import test_support
-import random
-import re
-import sim
-// `state` is a declaration module too (`stdlib/state.cml`): `Ref<T>` and the four operators
-// `ref`, `get`, `set` and `update` are declared there, and the module keeps the kernels, the
-// resource contract of each operator and the storage in C++.
-import state
-import statistics
-import str
-import this
-import time
-import ckpt
-import tensor
-import array
-// `nn` and `autodiff` load without PyTorch, a GPU or a Python interpreter: `inspect --ops`
-// lists their operators, and the stdlib registry tests hold them to the modules' declarations
-// 
-import nn
-import autodiff
-// `tiles` needs no device to load: `inspect --ops` lists its operators, and the stdlib registry
-// tests hold them to the module's purity and signature declarations.
-import tiles
+import process
 // `pyplot` and `python` need no display, no external Python installation, no GPU — and now no
 // interpreter at all to be listed: `import` creates nothing and the embedded CPython is created at
 // the first operator call (design principles
@@ -54,18 +46,27 @@ import python
 // in `stdlib/rewrite.cml`. Its only undeclared purity,
 // `fact`, is declared effectful; before that this probe never listed it, so no check saw it
 // 
+import random
+import re
 import rewrite
-// `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the
-// stdlib registry tests hold them to the declaration and the computed signature.
-import onnx
-// `transforms` is the module's own pass (`reinterp`) and its one value-level operator, `jvp`: the
-// operator is declared in `stdlib/transforms.cml` and its computed signature is
-// `stdlib/signatures/transforms.cml`.
+import sim
+// `state` is a declaration module too (`stdlib/state.cml`): `Ref<T>` and the four operators
+// `ref`, `get`, `set` and `update` are declared there, and the module keeps the kernels, the
+// resource contract of each operator and the storage in C++.
+import state
+import statistics
+import str
+import tensor
+import test_support
+import this
+import tiles
+import time
 import transforms
+
 // `math`, `para` and `random` have no computed signature left, and `graph` keeps
 // only the four operators of a function value: the other names of those four modules are
 // declared in `stdlib/<m>.cml`, so `inspect --ops` lists the operators their declarations name.
 
-func main(): int {
+func main() => int {
     return 0
 }

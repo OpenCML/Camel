@@ -20,16 +20,16 @@
 // repeated value rather than as a wrong one.
 //
 //     camel test/cases/compile/transforms/sum_axis_lane_derivative.cml
-import { sum } from tensor
 import rulesets.jvp
+import { sum } from tensor
 import { jvp } from transforms
 import { vjp } from vjp
 
-func lane(x: float[...]): float[...] {
+func lane(x: float[...]) => float[...] {
     return sum<0, false>(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let (value, tangent) = jvp(lane)(x, [[1.0, 1.0], [1.0, 1.0]] as float[2, 2])
     `sum<0> forward={}`->format<value>->println

@@ -6,18 +6,18 @@ import { grad } from autodiff
 // x is the first `with` parameter of each function.
 
 with <x: float>
-func through_map(): float {
+func through_map() => float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 with <x: float>
-func beside_map(): float {
+func beside_map() => float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(beside_map)<3.0>())
     println(grad(through_map)<3.0>())
     return 0

@@ -9,11 +9,11 @@
  */
 
 /// The expression this file's `typeof#0` stands for: a call that answers a `string`.
-func own(): string {
-    return "first"
+func own() => string {
+    return 'first'
 }
 
 /// `typeof#0` of this tree, in the result type of an exported generic.
-export func first_label::<P>(p: P): typeof(own()) {
+export func first_label::<P>(p: P) => typeof (own()) {
     return own()
 }

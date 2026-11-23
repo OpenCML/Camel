@@ -2,17 +2,19 @@
 // locals removed: the control for that probe's reading. If this one runs, the dependency is what the
 // red belongs to; if it does not, a generator with two locals is what is red.
 
-func gen(): int.. sync {
+func gen() => int.. sync {
     let a = 1
     let b = 2
     yield a + b
 }
 
-func drain(): int sync {
-    loop acc = 0 for v in gen() do sync { acc + v }
+func drain() => int sync {
+    loop acc = 0 for v in gen() do sync {
+        acc + v
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(drain())
     return 0
 }

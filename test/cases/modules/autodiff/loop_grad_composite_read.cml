@@ -12,22 +12,22 @@
 import { grad, with_grad } from autodiff
 
 with <w: float>
-func pair(n: int): float {
+func pair(n: int) => float {
     let s = w * 2.0
     let (i, acc) = loop i = 0, acc = 0.0 while i < n do (i + 1, acc + s)
     return acc
 }
 
 with <w: float>
-func table(): float {
-    let a  = w + 1.0
+func table() => float {
+    let a = w + 1.0
     let xs = loop xs = [0.0] while len(xs) < 3 do xs->append<a>
     return xs[1] + xs[2]
 }
 
-func main(): int sync {
+func main() => int sync {
     let vg = with_grad(pair)<2.0>(3)
-    let d  = grad(table)<2.0>()
+    let d = grad(table)<2.0>()
     'loop_grad_composite_read vg={} d={}'->format<vg, d>->println
     return 0
 }

@@ -10,7 +10,7 @@
  */
 import { mean } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let apart: f32[3] = [16777216.0, 1.0, -16777216.0]
     let narrow: bf16[3] = bf16(apart)
     println(mean<0, false>(narrow))

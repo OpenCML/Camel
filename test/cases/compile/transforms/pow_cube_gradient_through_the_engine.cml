@@ -13,11 +13,11 @@ import { grad } from autodiff
 
 /// The differentiated value is the `with` parameter: the body is a cube of it and nothing else.
 with <w: float>
-func cube(): float {
+func cube() => float {
     return w ^ 3.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let slope = grad(cube)
     let d = slope<2.0>()
     `pow engine value=8.0 dL/dw={}`->format<d>->println

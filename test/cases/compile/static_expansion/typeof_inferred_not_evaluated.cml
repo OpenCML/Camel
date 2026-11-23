@@ -5,14 +5,14 @@
  * and the inferred type is the one the value is then taken as (`a` is an `int`, `b` is an `int`).
  */
 
-func mark(tag: string): int sync {
+func mark(tag: string) => int sync {
     println(tag)
     return 1
 }
 
-func main(): int sync {
-    let a: typeof(mark('inferred')) = 7
-    let b = 3 as typeof(mark('cast'))
+func main() => int sync {
+    let a: typeof (mark('inferred')) = 7
+    let b = 3 as typeof (mark('cast'))
     println(a + b)
     return 0
 }

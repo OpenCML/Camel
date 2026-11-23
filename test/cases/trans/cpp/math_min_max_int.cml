@@ -7,12 +7,12 @@
 
 import { max, min } from math
 
-func main(): int sync {
+func main() => int sync {
     let a = -3
     let b = 5
     print(min(a, b))
     print(max(a, b))
-
+    
     let x = 9000000000
     let y = -9000000000
     print(min(x, y))

@@ -5,9 +5,13 @@
  * The test reads the number of task graphs from the scheduler's statistics: 0.
  */
 
-func main(): int sync {
-    let total = (0..2000)->reduce<func (acc: int, cur: int) => int { (acc * 31 + cur) % 1000003 }, 7>
+func main() => int sync {
+    let total = (0 .. 2000)->reduce<func (acc: int, cur: int) => int {
+        (acc * 31 + cur) % 1000003
+    }, 7>
     println(total)
-    (0..5)->foreach<func (i: int) sync { println('step', i) }>
+    (0 .. 5)->foreach<func (i: int) sync {
+        println('step', i)
+    }>
     return 0
 }

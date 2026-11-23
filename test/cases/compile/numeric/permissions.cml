@@ -6,18 +6,20 @@
  */
 
 /// No permissions: called from annotated code, it keeps none.
-func plain(a: float, b: float): float {
+func plain(a: float, b: float) => float {
     return a * b + 1.0
 }
 
 #[reassociate, contract]
-func fused(a: float, b: float, c: float, d: float): float {
+func fused(a: float, b: float, c: float, d: float) => float {
     return a * b + c * d
 }
 
 #[reassociate]
-func nested(k: float): float {
-    let f = func (v: float) { v * k + 0.5 }
+func nested(k: float) => float {
+    let f = func (v: float) {
+        v * k + 0.5
+    }
     let z = if k > 0.0 then k * 2.0 else k / 2.0
     #[contract]
     {
@@ -25,7 +27,7 @@ func nested(k: float): float {
     }
 }
 
-func blocky(x: float): float {
+func blocky(x: float) => float {
     let y = x * 3.0
     #[finite_math]
     {
@@ -33,7 +35,7 @@ func blocky(x: float): float {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(fused(1.5, 2.0, 0.25, 4.0))
     println(nested(1.25))
     println(blocky(2.0))

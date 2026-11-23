@@ -6,11 +6,11 @@
 
 import { rewrite } from rewrite
 
-func target(): int {
+func target() => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let q = target->rewrite
     return 0
 }

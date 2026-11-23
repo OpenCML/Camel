@@ -2,13 +2,13 @@
  * Verifies a simple macro function expands to a concrete arithmetic expression before runtime execution.
  */
 
-#macro func add_one(x: int): int {
+#macro
+func add_one(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let value = add_one(41)
     println(value)
     return 0
 }
-

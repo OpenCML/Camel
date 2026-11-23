@@ -4,14 +4,14 @@
  * expression. `half(n)` folds only where `n` is a constant; here `n` is known at run time.
  */
 
-func half(n: int): int {
+func half(n: int) => int {
     return n / 2
 }
 
-func at(t: (int, int, int), n: int): int {
+func at(t: (int, int, int), n: int) => int {
     return t.[half(n)]
 }
 
-func main(): int {
+func main() => int {
     return at((10, 20, 30), 4)
 }

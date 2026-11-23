@@ -6,12 +6,12 @@
  * name, not a defect of the compiler.
  */
 
-func g(): int.. sync {
+func g() => int.. sync {
     loop i = 0 while i < 3 do {
         yield i
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

@@ -12,7 +12,7 @@
  *
  * Run: camel test/cases/compile/var/loop_var.cml
  */
-func sum(n: int): int sync {
+func sum(n: int) => int sync {
     var total = 0
     let _ = loop i = 0 while i < n do {
         total = total + 1
@@ -21,7 +21,7 @@ func sum(n: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum(3))
     return 0
 }

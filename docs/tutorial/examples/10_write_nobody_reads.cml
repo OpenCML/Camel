@@ -3,21 +3,21 @@
 // the guarantee, not the value.
 // Run: camel docs/tutorial/examples/10_write_nobody_reads.cml
 
-func unordered(): int {
+func unordered() => int {
     var c = 1
     let before = c
     c = 5
     return before
 }
 
-func ordered(): int sync {
+func ordered() => int sync {
     var c = 1
     let before = c
     c = 5
     return before
 }
 
-func main(): int sync {
+func main() => int sync {
     println(unordered())
     println(ordered())
     return 0

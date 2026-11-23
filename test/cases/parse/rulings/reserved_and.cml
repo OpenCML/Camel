@@ -1,8 +1,8 @@
-func __and__(a: bool, b: bool): bool {
+func __and__(a: bool, b: bool) => bool {
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     println(true && false)
     return 0
 }

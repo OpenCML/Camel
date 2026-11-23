@@ -16,47 +16,47 @@ import { sum } from tensor
 
 // 1 element, slope 1.
 with <w: float>
-func rank_one_short(): float {
+func rank_one_short() => float {
     let xs: float[1] = [w + 1.0]
     return sum(xs)
 }
 
 // 2 elements, slopes 1 and 2.
 with <w: float>
-func rank_one_two(): float {
+func rank_one_two() => float {
     let xs: float[2] = [w + 1.0, 2.0 * w]
     return sum(xs)
 }
 
 // 3 elements, slopes 1, 2 and 3.
 with <w: float>
-func rank_one_three(): float {
+func rank_one_three() => float {
     let xs: float[3] = [w + 1.0, 2.0 * w, 3.0 * w]
     return sum(xs)
 }
 
 // The third flat position is a computed element, and it is the third in row-major order.
 with <w: float>
-func square_three(): float {
+func square_three() => float {
     let xs: float[2, 2] = [[w + 1.0, 2.0 * w], [3.0 * w, 1.0]]
     return sum(xs)
 }
 
 // Every position computed: the fourth flat position is read as well.
 with <w: float>
-func square_four(): float {
+func square_four() => float {
     let xs: float[2, 2] = [[w + 1.0, 2.0 * w], [3.0 * w, 4.0 * w]]
     return sum(xs)
 }
 
 // One rank deeper: the positions past the first row are the ones a dimension-bound check refused.
 with <w: float>
-func cube(): float {
+func cube() => float {
     let xs: float[2, 2, 2] = [[[w, 2.0 * w], [3.0 * w, 1.0]], [[1.0, 1.0], [1.0, 1.0]]]
     return sum(xs)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(rank_one_short)<0.0>())
     println(grad(rank_one_two)<0.0>())
     println(grad(rank_one_three)<0.0>())

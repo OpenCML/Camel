@@ -11,4 +11,6 @@ type T = { x: int }
 #ratio(0.25)
 type U = { y: int }
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}

@@ -15,30 +15,30 @@
  * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
  */
 
-import { relu, mean, reshape, save_npy } from tensor
 import { with_grad } from autodiff
-import { sgd, save_params } from nn
 import { get_env } from env
+import { sgd, save_params } from nn
 import { export_model } from onnx
+import { relu, mean, reshape, save_npy } from tensor
 
 type Moe = { wa1: float[...], ba1: float[...], wa2: float[...], ba2: float[...], wb: float[...], bb: float[...] }
 
 with <m: Moe>
-func loss(x: float[...]): float {
+func loss(x: float[...]) => float {
     let y = if float(mean(x)) > 0.0 then relu(x @ m.wa1 + m.ba1) @ m.wa2 + m.ba2 else x @ m.wb + m.bb
     return float(mean(y * y))
 }
 
-func fwd(m: Moe, x: float[...]): float {
+func fwd(m: Moe, x: float[...]) => float {
     return loss<m>(x)
 }
 
-func step(m: Moe, x: float[...]): (float, Moe) {
+func step(m: Moe, x: float[...]) => (float, Moe) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func load(): Moe {
+func load() => Moe {
     return {
         wa1: reshape<[3, 4]>([0.5, 1.0, -0.5, 0.25, -0.75, 0.5, 1.0, -0.5, 0.25, -1.0, 0.5, 0.75]),
         ba1: reshape<[4]>([0.1, 0.0, -0.1, 0.2]),
@@ -49,11 +49,11 @@ func load(): Moe {
     }
 }
 
-func input_a(): float[...] {
+func input_a() => float[...] {
     return reshape<[2, 3]>([1.0, 2.0, -0.5, 0.5, 1.5, 0.0])
 }
 
-func do_run(m: Moe): int sync {
+func do_run(m: Moe) => int sync {
     let dump = get_env('DUMP') ?? ''
     let xa = input_a()
     let xb = reshape<[2, 3]>([-1.0, 0.5, -2.0, -0.5, 1.0, -1.5])
@@ -75,7 +75,7 @@ func do_run(m: Moe): int sync {
     return 0
 }
 
-func do_export(m: Moe): int sync {
+func do_export(m: Moe) => int sync {
     let out = get_env('ONNX_OUT') ?? ''
     return if (get_env('WHAT') ?? '') == 'fwd' then sync {
         let r = export_model<out: out>(fwd, (m, input_a()))
@@ -104,7 +104,7 @@ func do_export(m: Moe): int sync {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = load()
     return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

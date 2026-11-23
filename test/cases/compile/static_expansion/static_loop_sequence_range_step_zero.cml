@@ -4,10 +4,10 @@
  * call is refused there, pointing at the step.
  */
 
-func sum(): int {
+func sum() => int {
     return static loop acc = 0 for i in range(0, 9, 0) do acc + i
 }
 
-func main(): int {
+func main() => int {
     return sum()
 }

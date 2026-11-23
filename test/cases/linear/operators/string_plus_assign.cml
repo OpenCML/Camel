@@ -3,12 +3,12 @@
  * (progen finding F28). Also through a `var` parameter.
  */
 
-func append(var t: string, x: string): string sync {
+func append(var t: string, x: string) => string sync {
     t += x
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     var s = 'a'
     s += 'b'
     println(s)

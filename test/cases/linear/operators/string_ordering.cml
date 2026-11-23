@@ -4,7 +4,7 @@
  * Each line: a < b, a <= b, a > b, a >= b.
  */
 
-func cmp(a: string, b: string): string {
+func cmp(a: string, b: string) => string {
     let lt = a < b
     let le = a <= b
     let gt = a > b
@@ -12,7 +12,7 @@ func cmp(a: string, b: string): string {
     return '{} {} {} {}'->format<lt, le, gt, ge>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(cmp('a', 'b'))
     println(cmp('b', 'a'))
     println(cmp('a', 'a'))

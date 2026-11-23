@@ -4,17 +4,17 @@
  * by firing it on its own left side: the rule must fire (the condition holds there) and the
  * rewritten left side must agree with the original one.
  */
-import { check, check_text } from rewrite
 import { Node, type_name, type_of } from graph
+import { check, check_text } from rewrite
 
-func isIntNode(n: Node): bool {
+func isIntNode(n: Node) => bool {
     return match type_of(n) {
         case null => false
         case t => type_name(t) == 'int'
     }
 }
 
-func isFloatNode(n: Node): bool {
+func isFloatNode(n: Node) => bool {
     return match type_of(n) {
         case null => false
         case t => type_name(t) == 'float'
@@ -27,7 +27,7 @@ rule double_float(x: float) when isFloatNode(x) { x + x => x * 2.0 }
 /// The condition holds, but the two sides do not agree: the check must still say so.
 rule wrong_guard(x: int) when isIntNode(x) { x + x => x }
 
-func main(): int sync {
+func main() => int sync {
     println(check_text([double_int, double_float]->check<100, 1>))
     println(check_text([wrong_guard]->check<100, 1>))
     return 0

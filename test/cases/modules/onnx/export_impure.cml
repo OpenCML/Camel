@@ -3,12 +3,14 @@
  * the exported function is rejected even when its arguments are constants.
  */
 
-import { reshape } from tensor
-import { next_key, normal } from random
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { next_key, normal } from random
+import { reshape } from tensor
 
-func main(): void! sync {
+func main() => void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
-    export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: float[...]) => float[...] { t + f64(next_key()->normal::<f32><shape: [2, 2]>) }, x)
+    export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: float[...]) => float[...] {
+        t + f64(next_key()->normal::<f32><shape: [2, 2]>)
+    }, x)
 }

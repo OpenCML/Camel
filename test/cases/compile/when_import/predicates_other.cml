@@ -3,7 +3,7 @@
  * that two imports bring one name and neither is chosen.
  */
 
-export func is_compound::<T>(): bool {
+export func is_compound::<T>() => bool {
     return match type T {
         case struct => false
         case _ => true

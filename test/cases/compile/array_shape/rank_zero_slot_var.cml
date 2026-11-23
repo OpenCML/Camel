@@ -5,7 +5,7 @@
 // What this case pins: the slot does not remember how a value was written -- the second write is
 // given the same type as the first, and the value reads back as the element both times.
 
-func main(): int sync {
+func main() => int sync {
     let one: f32 = 1.0
     let two: f32 = 2.5
     var written: f32[...] = 1.0

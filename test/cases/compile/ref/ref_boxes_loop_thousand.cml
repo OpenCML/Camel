@@ -8,9 +8,9 @@
 
 import state
 
-func main(): int sync {
+func main() => int sync {
     let kept = state::ref(41)
-    let total = [state::get(state::ref(i)) for i in 0..1000]
+    let total = [state::get(state::ref(i)) for i in 0 .. 1000]
     println(len(total), state::get(kept))
     return 0
 }

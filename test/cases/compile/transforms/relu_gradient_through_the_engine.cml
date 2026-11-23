@@ -22,11 +22,11 @@ import { relu, sum } from tensor
 
 /// The differentiated value is the `with` parameter (design principles 9.9): one array, masked.
 with <w: float[]>
-func total(): float {
+func total() => float {
     return sum(relu(w))
 }
 
-func main(): int sync {
+func main() => int sync {
     let slope = grad(total)
     let d = slope<[-2.0, 0.0, 3.0, -0.5] as float[]>()
     `relu engine dL/dw={}`->format<d>->println

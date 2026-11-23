@@ -13,10 +13,10 @@ rule mul_one(x: float) { x * 1.0 => x }
 #requires(reassociate)
 rule fold_reassociate(x: float) { x * 1.0 => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[mul_one]>
 }
 
-export func apply_default::<F>(p: F): F! {
+export func apply_default::<F>(p: F) => F! {
     return p->rewrite<[fold_reassociate]>
 }

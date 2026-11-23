@@ -12,38 +12,37 @@
  * prints when it runs the nodes one by one (it has no kernel for the group).
  */
 
-import { reshape, sum, to_bytes } from tensor
 import { with_grad } from autodiff
 import { to_array } from bytes
+import { reshape, sum, to_bytes } from tensor
 
 type AB = { a: f32[...], w: f32[...] }
 
 with <m: AB>
-func shared_chain(): float {
+func shared_chain() => float {
     return float(sum(m.a / m.w))
 }
 
 with <m: AB>
-func strict_shared_chain(): float {
-    #strict {
+func strict_shared_chain() => float {
+    #strict
+    {
         return float(sum(m.a / m.w))
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = reshape<[2, 3]>([1.5, -2.25, 3.0, 0.1, -7.0, 1e-8] as f32[])
     let w = reshape<[2, 3]>([3.0, 7.0, 0.1, -3.0, 1e-8, 1234567.0] as f32[])
-
+    
     let h = with_grad(shared_chain)
-    let (value, gradient) = h<{a: a, w: w}>()
-    'shared value={} sum_w={} sum_a={}'
-    ->format<value, sum(gradient.w), sum(gradient.a)>->println
+    let (value, gradient) = h<{ a: a, w: w }>()
+    'shared value={} sum_w={} sum_a={}'->format<value, sum(gradient.w), sum(gradient.a)>->println
     println(to_array(to_bytes(gradient.w)))
-
+    
     let s = with_grad(strict_shared_chain)
-    let (tight, tight_gradient) = s<{a: a, w: w}>()
-    'strict value={} sum_w={} sum_a={}'
-    ->format<tight, sum(tight_gradient.w), sum(tight_gradient.a)>->println
+    let (tight, tight_gradient) = s<{ a: a, w: w }>()
+    'strict value={} sum_w={} sum_a={}'->format<tight, sum(tight_gradient.w), sum(tight_gradient.a)>->println
     println(to_array(to_bytes(tight_gradient.w)))
     return 0
 }

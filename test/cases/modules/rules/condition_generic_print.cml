@@ -8,19 +8,25 @@ import { rewrite } from rewrite
 
 rule add_zero::<T>(x: T) when announce(x) { x + 0 => x }
 
-func announce::<T>(x: T): bool sync {
+func announce::<T>(x: T) => bool sync {
     println('announce ', x)
     return true
 }
 
-func redex(x: int): int {
+func redex(x: int) => int {
     return x * 1 + 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = redex
     return match p->rewrite<[add_zero]> {
-        case error e => sync { println('outer error value: ', e.kind); return 1 }
-        case q => sync { println('rewritten'); return 0 }
+        case error e => sync {
+            println('outer error value: ', e.kind)
+            return 1
+        }
+        case q => sync {
+            println('rewritten')
+            return 0
+        }
     }
 }

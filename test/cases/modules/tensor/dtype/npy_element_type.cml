@@ -8,7 +8,7 @@
 
 import { load_npy, numel } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let x = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
     println(numel(x))
     let labels = load_npy::<i64>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')

@@ -3,7 +3,7 @@
  * `string` result.
  */
 
-func greet(name: string): string! {
+func greet(name: string) => string! {
     if name == '' then {
         return error('Empty', 'no name')
     } else {
@@ -11,6 +11,6 @@ func greet(name: string): string! {
     }
 }
 
-func main(): string! sync {
+func main() => string! sync {
     return greet('camel')
 }

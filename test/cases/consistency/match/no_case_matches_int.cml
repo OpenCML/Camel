@@ -3,16 +3,20 @@
  * a statement of a sync body: its value is not used, and it is refused all the same.
  */
 
-func describe(k: int): string sync {
+func describe(k: int) => string sync {
     var text = 'none'
     match k {
-        case 1 | 2 => sync { text = 'small' }
-        case 3 => sync { text = 'three' }
+        case 1 | 2 => sync {
+            text = 'small'
+        }
+        case 3 => sync {
+            text = 'three'
+        }
     }
     return text
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describe(1), describe(2), describe(3))
     return 0
 }

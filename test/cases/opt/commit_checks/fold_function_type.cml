@@ -6,16 +6,16 @@
 // `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
 // so the commit that publishes this program has nothing of its own to refuse.
 
-func doubled(x: int): int {
+func doubled(x: int) => int {
     return x * 2
 }
 
-func announced(x: int): int sync {
+func announced(x: int) => int sync {
     println(x)
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     let quiet = doubled(21)
     let f = announced
     let noisy = f(3)

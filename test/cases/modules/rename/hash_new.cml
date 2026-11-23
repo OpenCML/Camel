@@ -6,13 +6,13 @@
 import { sha256 } from hash
 
 // SHA-256 applied `rounds` times, each to the hexadecimal text of the one before.
-func sha256_rounds(s: string, rounds: int): string {
+func sha256_rounds(s: string, rounds: int) => string {
     let (digest, done) = loop digest = s, done = 0 while done < rounds do (sha256(digest), done + 1)
     return digest
 }
 
-func main(): int sync {
-    println(sha256("abc"))
-    println(sha256_rounds("abc", 1) == sha256("abc"))
+func main() => int sync {
+    println(sha256('abc'))
+    println(sha256_rounds('abc', 1) == sha256('abc'))
     return 0
 }

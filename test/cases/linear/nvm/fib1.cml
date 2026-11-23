@@ -6,7 +6,7 @@ import { now } from time
 
 var cnt = 0
 
-func fibonacci(n: int): int sync {
+func fibonacci(n: int) => int sync {
     cnt += 1
     return match n {
         case 0 => 0
@@ -15,7 +15,7 @@ func fibonacci(n: int): int sync {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let idx = 10
     'Start computing fibonacci({})...'->format<idx>->println
     let start = now()

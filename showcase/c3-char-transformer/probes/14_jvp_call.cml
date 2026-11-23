@@ -7,15 +7,15 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func g(x: float): float {
+func g(x: float) => float {
     return x * x
 }
 
-func f(x: float): float {
+func f(x: float) => float {
     return g(x) + g(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, tangent) = jvp(f)(3.0, 1.0)
     println(`jvp f at 3 = ${value:.1f} and ${tangent:.1f}`)
     return 0

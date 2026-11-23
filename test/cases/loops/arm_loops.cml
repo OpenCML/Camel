@@ -8,23 +8,23 @@
 // an arm, a loop of two states, a loop followed by more statements in the same arm, an `if`
 // inside the loop's body, a loop in a `match` arm, a loop in each arm, a collecting loop, the
 // same function called twice, and a loop in an arm of the root graph.
-func then_for(flag: bool, xs: int[]): int {
+func then_for(flag: bool, xs: int[]) => int {
     if flag then loop acc = 0 for x in xs do acc + x else -1
 }
 
-func else_for(flag: bool, xs: int[]): int {
+func else_for(flag: bool, xs: int[]) => int {
     if flag then -1 else loop acc = 0 for x in xs do acc + x
 }
 
-func while_arm(flag: bool, n: int): int {
+func while_arm(flag: bool, n: int) => int {
     if flag then loop i = 0 while i < n do i + 1 else -1
 }
 
-func two_states(flag: bool, n: int): (int, int) {
+func two_states(flag: bool, n: int) => (int, int) {
     if flag then loop i = 1, acc = 0 while i <= n do (i + 1, acc + i) else (-1, -1)
 }
 
-func then_more(flag: bool, xs: int[]): int {
+func then_more(flag: bool, xs: int[]) => int {
     if flag then {
         let s = loop acc = 0 for x in xs do acc + x
         s * 10 + 1
@@ -33,26 +33,26 @@ func then_more(flag: bool, xs: int[]): int {
     }
 }
 
-func body_if(xs: int[]): int {
+func body_if(xs: int[]) => int {
     if len(xs) > 0 then loop acc = 0 for x in xs do if x % 2 == 0 then acc + x else acc else -2
 }
 
-func match_arm(k: int, xs: int[]): int {
+func match_arm(k: int, xs: int[]) => int {
     match k {
         case 1 => loop acc = 0 for x in xs do acc + x
         case _ => -1
     }
 }
 
-func two_arms(flag: bool, xs: int[]): int {
+func two_arms(flag: bool, xs: int[]) => int {
     if flag then loop acc = 0 for x in xs do acc + x else loop acc = 100 for x in xs do acc + x
 }
 
-func collecting(flag: bool, n: int): int[] {
+func collecting(flag: bool, n: int) => int[] {
     if flag then loop xs = [0] while len(xs) < n do xs->append<7> else [9]
 }
 
-func main(): int sync {
+func main() => int sync {
     println('then', then_for(true, [1, 2, 3]))
     println('then.false', then_for(false, [1, 2, 3]))
     println('else', else_for(false, [1, 2, 3]))

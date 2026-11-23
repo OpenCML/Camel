@@ -18,42 +18,41 @@
 import { grad } from autodiff
 
 #op(':op/div_d')
-func div_kernel(a: float, b: float): float
+func div_kernel(a: float, b: float) => float
 
 #impl(div_kernel)
-func t(a: float, b: float): float {
+func t(a: float, b: float) => float {
     return a * b
 }
 
-func plain(a: float, b: float): float {
+func plain(a: float, b: float) => float {
     return a * b
 }
 
 // The tagged function reached as a function value: `grad` differentiates that value, which is
 // the body graph itself. This path answers for the body on its own.
 with <a: float, b: float>
-func tagged_value(): float {
+func tagged_value() => float {
     return a * b
 }
 
 with <a: float>
-func outer(b: float): float {
+func outer(b: float) => float {
     return t(a, b)
 }
 
 with <a: float>
-func outer_plain(b: float): float {
+func outer_plain(b: float) => float {
     return plain(a, b)
 }
 
-func main(): int sync {
+func main() => int sync {
     let kernel_ran = t(4.0, 2.0)
     let body_value = plain(4.0, 2.0)
     'impl_grad_body forward kernel={} body={}'->format<kernel_ran, body_value>->println
     let d_direct = grad(outer)<4.0>(2.0)
     let d_plain = grad(outer_plain)<4.0>(2.0)
     let d_value = grad(tagged_value)<4.0, 2.0>()
-    'impl_grad_body grad direct={} plain={} value={}'
-        ->format<d_direct, d_plain, d_value>->println
+    'impl_grad_body grad direct={} plain={} value={}'->format<d_direct, d_plain, d_value>->println
     return 0
 }

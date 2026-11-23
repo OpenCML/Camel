@@ -43,11 +43,11 @@ fs.writeFileSync(
 export type Json
 
 #op('json:kind')
-export func kind_of(value: Json): string
+export func kind_of(value: Json) => string
 
 /// A name the C++ module implements, declared here because the declaration module is the
 /// module's signature: the C++ resolver is the kernel, not a second set of names.
-export func decode(text: string): Json!
+export func decode(text: string) => Json!
 
 /// A type this file adds to the module, beside the C++ module's types.
 export type Tag = { level: int, text: string }
@@ -66,7 +66,7 @@ fs.writeFileSync(
 import math
 import { kind_of } from json
 
-func main(): int sync {
+func main() => int sync {
     let kind: string = json::decode('123') -> kind_of !! 'none'
     println(kind)
     let tag: json::Tag = { level: 7, text: 'ok' }

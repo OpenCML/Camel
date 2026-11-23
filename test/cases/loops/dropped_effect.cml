@@ -1,11 +1,14 @@
 // Outside a sync block, a loop whose value nothing takes still runs when its body writes: a loop
 // is one of its region's writes (design principles 3.1, the author's ruling of 2026-11-17).
-func f(): int {
-    loop i = 0 while i < 3 do sync { println(i); i + 1 }
+func f() => int {
+    loop i = 0 while i < 3 do sync {
+        println(i)
+        i + 1
+    }
     return 5
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f())
     return 0
 }

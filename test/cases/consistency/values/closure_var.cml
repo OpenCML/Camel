@@ -7,11 +7,11 @@
  * The three lines printed are the same: 3, 24, 249.
  */
 
-func add(total: int, x: int): int sync {
+func add(total: int, x: int) => int sync {
     return total + x + x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     var total = 0
     total = add(total, 1)
     println(total)

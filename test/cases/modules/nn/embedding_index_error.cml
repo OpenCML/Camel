@@ -2,15 +2,10 @@
  * Negative case: embedding must reject out-of-range indices.
  */
 
-import {
-    reshape, sum
-} from tensor
+import { embedding } from nn
+import { reshape, sum } from tensor
 
-import {
-    embedding
-} from nn
-
-func main(): int sync {
+func main() => int sync {
     let table = reshape<[2, 2]>([0.1, 0.2, 0.3, 0.4])
     let indices = reshape<[2]>([0, 2])
     let gathered = embedding(table, indices)

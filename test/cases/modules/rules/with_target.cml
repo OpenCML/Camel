@@ -6,16 +6,22 @@
  */
 
 /// x + 0: matched by the rule when the value bound to its `with` parameter is positive.
-func left(x: int): int { return x + 0 }
+func left(x: int) => int {
+    return x + 0
+}
 
 /// x + y + 0: the same outer addition with an addend that is not a constant, so a report can tell
 /// this function from the one above.
-func right(x: int, y: int): int { return x + y + 0 }
+func right(x: int, y: int) => int {
+    return x + y + 0
+}
 
 /// x * 1: the shape of the rule whose `with` parameter has a default.
-func folded(x: int): int { return x * 1 }
+func folded(x: int) => int {
+    return x * 1
+}
 
-func main(): int sync {
+func main() => int sync {
     println(left(3), right(3, 4), folded(5))
     return 0
 }

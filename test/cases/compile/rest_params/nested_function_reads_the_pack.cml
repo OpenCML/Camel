@@ -19,11 +19,13 @@
 //
 // The guarantee itself is untouched: a link between two graphs is still an invariant violation, and
 // this program no longer asks for one.
-func outer(...xs): () => int {
-    return func () { xs.[0] }
+func outer(...xs) => () => int {
+    return func () {
+        xs.[0]
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let f = outer(4, 5)
     return f()
 }

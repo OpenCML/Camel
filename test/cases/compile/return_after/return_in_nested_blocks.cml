@@ -5,27 +5,33 @@
  * function hands on. When such a block is the body's value, its `return` is that value.
  */
 
-func after_sync_block(): int sync {
-    sync { return 1 }
+func after_sync_block() => int sync {
+    sync {
+        return 1
+    }
     return 2
 }
 
-func after_block(): int sync {
+func after_block() => int sync {
     {
         return 1
     }
     return 2
 }
 
-func only_sync_block(): int sync {
-    sync { return 1 }
+func only_sync_block() => int sync {
+    sync {
+        return 1
+    }
 }
 
-func only_block(): int sync {
-    { return 1 }
+func only_block() => int sync {
+    {
+        return 1
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(after_sync_block())
     println(after_block())
     println(only_sync_block())

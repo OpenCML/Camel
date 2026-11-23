@@ -8,7 +8,7 @@
  * so it wrote the first row's worth of elements and no shape: this program printed `[1.0, 2.0]`
  * while std::fvm printed `[[1.0, 2.0], [2.0, 2.0]]`, and `agree_with_fvm` says so byte for byte.
  */
-func main(): int sync {
+func main() => int sync {
     let x: float = 2.0
     let w: float[2, 2] = [[1.0, x], [x, 2.0]]
     println(w)

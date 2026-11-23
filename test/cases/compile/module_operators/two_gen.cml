@@ -4,6 +4,6 @@
  * `Box` has no operator either, so the instance has no candidate.
  */
 
-export func twice::<T>(x: T): T {
+export func twice::<T>(x: T) => T {
     return x + x
 }

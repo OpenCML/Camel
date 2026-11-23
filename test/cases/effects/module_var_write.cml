@@ -6,12 +6,12 @@
 
 var counter = 1
 
-func bump(): int sync {
+func bump() => int sync {
     counter = counter + 1
     return counter
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bump())
     return 0
 }

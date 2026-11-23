@@ -37,73 +37,81 @@
  */
 
 import { sum, min, max } from array
+import { to_array } from bytes
 import { is_nan, nan } from math
 import { to_bytes } from tensor
-import { to_array } from bytes
 
 /// The fold written with an f32 accumulator: every addition rounds. This is "round after every
 /// step", which is what a floating-point reduction must not do (7.3).
-func foldStep(xs: f32[]): f32 {
-    return xs->reduce<func (acc: f32, item: f32) => f32 { acc + item }, f32(0.0)>
+func foldStep(xs: f32[]) => f32 {
+    return xs->reduce<func (acc: f32, item: f32) => f32 {
+        acc + item
+    }, f32(0.0)>
 }
 
 /// The same elements in an f64 accumulator, from +0 in order: the exact sum, before the one
 /// rounding into the element type.
-func foldF64(xs: f32[]): float {
-    return xs->reduce<func (acc: float, item: f32) => float { acc + float(item) }, 0.0 as float>
+func foldF64(xs: f32[]) => float {
+    return xs->reduce<func (acc: float, item: f32) => float {
+        acc + float(item)
+    }, 0.0 as float>
 }
 
 /// The elements widened to f64: the reference of `sum` over the f64 image of the vector.
-func widened(xs: f32[]): f64[] {
-    return xs->map<func (x: f32) { float(x) }>
+func widened(xs: f32[]) => f64[] {
+    return xs->map<func (x: f32) {
+        float(x)
+    }>
 }
 
 /// The four bytes of one f32 value, through a one-element f32 tensor.
-func bitsOf(value: f32): int[] {
+func bitsOf(value: f32) => int[] {
     let one: f32[] = [value]
     return to_array(to_bytes(one))
 }
 
 /// The bytes of a one-element f32 array holding +0 or -0: the sign of a zero is not readable as a
 /// value, so the case compares the bytes.
-func zeroBits(negative: bool): int[] {
+func zeroBits(negative: bool) => int[] {
     let one: f32[] = [f32(if negative then -0.0 else 0.0)]
     return to_array(to_bytes(one))
 }
 
-func sameBits(a: int[], b: int[]): bool {
+func sameBits(a: int[], b: int[]) => bool {
     return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]
 }
 
 /// The two bytes of one bf16 value: the sign of a zero of a reduced-precision type is not readable
 /// as a value either, and this type has no comparison of its own for it.
-func bitsOfBf16(value: bf16): int[] {
+func bitsOfBf16(value: bf16) => int[] {
     let one: bf16[] = [value]
     return to_array(to_bytes(one))
 }
 
 /// The two bytes of one f16 value.
-func bitsOfF16(value: f16): int[] {
+func bitsOfF16(value: f16) => int[] {
     let one: f16[] = [value]
     return to_array(to_bytes(one))
 }
 
-func main(): int sync {
+func main() => int sync {
     // ---- the reference paths: the body of an instance, and the rules written out ----
     let bodySum: (xs: f32[...]) => f32 = sum
     let bodyMin: (xs: f32[...]) => f32 = min
     let bodyMax: (xs: f32[...]) => f32 = max
-
+    
     // 2^24 then 1025 ones: the exact sum is 16778241 and the one f32 rounding is 16778240.
-    let a = (0..1026)->map<func (i: int) { if i == 0 then f32(16777216.0) else f32(1.0) }>
+    let a = (0 .. 1026)->map<func (i: int) {
+        if i == 0 then f32(16777216.0) else f32(1.0)
+    }>
     let sumA = sum(a)
     let refA = foldF64(a)
     let onceA = sumA == f32(refA) && f32(refA) == f32(16778240.0) && sumA != foldStep(a)
-
+    
     // 2^24 and 0.5: the exact sum is a midpoint of f32 and rounds to the even 16777216.
     let halfway: f32[] = [f32(16777216.0), f32(0.5)]
     let midpoint = sum(halfway) == f32(16777216.0) && foldF64(halfway) == 16777216.5
-
+    
     // f16 and bf16: the exact sum sits on a midpoint of the element type, where a wrong
     // accumulation width or a second rounding moves the answer.
     let wideA: f16[] = [f16(32768.0), f16(1.0), f16(1.5)]
@@ -116,7 +124,7 @@ func main(): int sync {
     let bfSum: (xs: bf16[...]) => bf16 = sum
     let tieF16 = sumWideA - sumWideB == f16(0.0) && sumWideA != f16(0.0)
     let tieBf = sum(wideBf) - sum(bfB) == bf16(0.0) && sum(wideBf) == bf16(32768.0)
-
+    
     // ---- the body agrees, element type by element type (the acceptance) ----
     let small: i32[] = [1, 2, 3]
     let bodyInt: (xs: int[...]) => int = sum
@@ -128,7 +136,7 @@ func main(): int sync {
     let sameF64 = sum(widened(a)) == f64Sum(widened(a))
     let sameF16 = sumWideA == halfSum(wideA) && sumWideB == halfSum(wideB)
     let sameBf = sum(wideBf) == bfSum(wideBf)
-
+    
     // ---- min and max: NaN anywhere, -0 below +0, agreement with the body ----
     let fs: f32[] = [3.0, 9.0, 2.0]
     let withNan: f32[] = [3.0, f32(nan), 2.0]
@@ -139,7 +147,7 @@ func main(): int sync {
     // only the sign bit decides, and the bytes show which operand came out).
     let minusZeroBelow = sameBits(bitsOf(min([f32(-0.0), f32(0.0)])), zeroBits(true))
     let minusZeroAbove = sameBits(bitsOf(max([f32(-0.0), f32(0.0)])), zeroBits(false))
-
+    
     // The same statement on the reduced-precision element types, where the fold carries the
     // element's own 16-bit pattern and the two operations are not each other's: minimum of a
     // mixed pair is -0 and maximum is +0, whichever order the two sit in, and each is the same
@@ -157,63 +165,47 @@ func main(): int sync {
     let bzeroPos = bitsOfBf16(bf16(0.0))
     let fzeroNeg = bitsOfF16(-f16(0.0))
     let fzeroPos = bitsOfF16(f16(0.0))
-    let halfZeroMin = bitsOfBf16(min(bz)) == bzeroNeg &&
-        bitsOfBf16(min(bzr)) == bzeroNeg &&
-        bitsOfF16(min(fz)) == fzeroNeg &&
-        bitsOfF16(min(fzr)) == fzeroNeg
-    let halfZeroMax = bitsOfBf16(max(bz)) == bzeroPos &&
-        bitsOfBf16(max(bzr)) == bzeroPos &&
-        bitsOfF16(max(fz)) == fzeroPos &&
-        bitsOfF16(max(fzr)) == fzeroPos
-    let halfZeroBody = bitsOfBf16(bfHalfMin(bz)) == bitsOfBf16(min(bz)) &&
-        bitsOfBf16(bfHalfMax(bz)) == bitsOfBf16(max(bz)) &&
-        bitsOfF16(f16HalfMin(fzr)) == bitsOfF16(min(fzr)) &&
-        bitsOfF16(f16HalfMax(fzr)) == bitsOfF16(max(fzr))
-    let sameMin = (min(fs)) == (bodyMin(fs)) &&
-        (min(wideB)) == (halfMin(wideB))
+    let halfZeroMin = bitsOfBf16(min(bz)) == bzeroNeg && bitsOfBf16(min(bzr)) == bzeroNeg && bitsOfF16(min(fz)) == fzeroNeg && bitsOfF16(min(fzr)) == fzeroNeg
+    let halfZeroMax = bitsOfBf16(max(bz)) == bzeroPos && bitsOfBf16(max(bzr)) == bzeroPos && bitsOfF16(max(fz)) == fzeroPos && bitsOfF16(max(fzr)) == fzeroPos
+    let halfZeroBody = bitsOfBf16(bfHalfMin(bz)) == bitsOfBf16(min(bz)) && bitsOfBf16(bfHalfMax(bz)) == bitsOfBf16(max(bz)) && bitsOfF16(f16HalfMin(fzr)) == bitsOfF16(min(fzr)) && bitsOfF16(f16HalfMax(fzr)) == bitsOfF16(max(fzr))
+    let sameMin = (min(fs)) == (bodyMin(fs)) && (min(wideB)) == (halfMin(wideB))
     let sameMax = (max(fs)) == (bodyMax(fs))
-
+    
     // ---- string and bool: the arms of `min` and `max` over the two non-numeric ordered types ----
-    let words: string[] = ["pear", "fig", "apple"]
+    let words: string[] = ['pear', 'fig', 'apple']
     // Byte order (the order `math`'s `min_s`/`max_s` state) puts 'apple' first and 'pear' last.
-    let wordsOk = (min(words)) == "apple" && (max(words)) == "pear"
-    let one: string[] = ["only"]
-    let oneOk = (min(one)) == "only" && (max(one)) == "only"
+    let wordsOk = (min(words)) == 'apple' && (max(words)) == 'pear'
+    let one: string[] = ['only']
+    let oneOk = (min(one)) == 'only' && (max(one)) == 'only'
     let bools: bool[] = [false, true, false]
     let boolsOk = (min(bools)) == false && (max(bools)) == true
     let allTrue: bool[] = [true, true]
     let allTrueOk = (min(allTrue)) == true && (max(allTrue)) == true
-
+    
     // ---- the empty array ----
     let none: int[] = []
     let noneF: f32[] = []
     let emptySame = sum(none) == 0 && sum(noneF) == f32(0.0)
-
-    println("sum {}", sumA)
-    println("f64 {}", refA)
-    println("rounded {}", f32(refA))
-    println("stepwise {}", foldStep(a))
-    println("midpoint {}", foldF64(halfway))
-    println("f16 {} {}", sumWideA, sumWideB)
-    println("bf16 {}", sum(wideBf))
-    let agreed = 0 + (if sameInt then 1 else 0) + (if sameI32 then 1 else 0) +
-        (if sameF32 then 1 else 0) + (if sameF64 then 1 else 0) + (if sameF16 then 1 else 0) +
-        (if sameBf then 1 else 0)
-    println("body {}/6", agreed)
-    println("rounds-once {} {}", onceA, midpoint)
-    println("ties {} {}", tieF16, tieBf)
-    println("nan {} {}", nanMin, nanMax)
-    println("zeros {} {}", minusZeroBelow, minusZeroAbove)
-    println("halfzeros {} {} {}", halfZeroMin, halfZeroMax, halfZeroBody)
-    println("minmax {} {}", sameMin, sameMax)
-    let orderedOk = 0 + (if wordsOk then 1 else 0) + (if oneOk then 1 else 0) +
-        (if boolsOk then 1 else 0) + (if allTrueOk then 1 else 0)
-    println("ordered {}/4", orderedOk)
-    println("empty {}", emptySame)
-
-    let ok = sameInt && sameI32 && sameF32 && sameF64 && sameF16 && sameBf && onceA && midpoint &&
-        tieF16 && tieBf && nanMin && nanMax && minusZeroBelow && minusZeroAbove && sameMin &&
-        sameMax && wordsOk && oneOk && boolsOk && allTrueOk && emptySame && halfZeroMin &&
-        halfZeroMax && halfZeroBody
+    
+    println('sum {}', sumA)
+    println('f64 {}', refA)
+    println('rounded {}', f32(refA))
+    println('stepwise {}', foldStep(a))
+    println('midpoint {}', foldF64(halfway))
+    println('f16 {} {}', sumWideA, sumWideB)
+    println('bf16 {}', sum(wideBf))
+    let agreed = 0 + (if sameInt then 1 else 0) + (if sameI32 then 1 else 0) + (if sameF32 then 1 else 0) + (if sameF64 then 1 else 0) + (if sameF16 then 1 else 0) + (if sameBf then 1 else 0)
+    println('body {}/6', agreed)
+    println('rounds-once {} {}', onceA, midpoint)
+    println('ties {} {}', tieF16, tieBf)
+    println('nan {} {}', nanMin, nanMax)
+    println('zeros {} {}', minusZeroBelow, minusZeroAbove)
+    println('halfzeros {} {} {}', halfZeroMin, halfZeroMax, halfZeroBody)
+    println('minmax {} {}', sameMin, sameMax)
+    let orderedOk = 0 + (if wordsOk then 1 else 0) + (if oneOk then 1 else 0) + (if boolsOk then 1 else 0) + (if allTrueOk then 1 else 0)
+    println('ordered {}/4', orderedOk)
+    println('empty {}', emptySame)
+    
+    let ok = sameInt && sameI32 && sameF32 && sameF64 && sameF16 && sameBf && onceA && midpoint && tieF16 && tieBf && nanMin && nanMax && minusZeroBelow && minusZeroAbove && sameMin && sameMax && wordsOk && oneOk && boolsOk && allTrueOk && emptySame && halfZeroMin && halfZeroMax && halfZeroBody
     return if ok then 0 else 1
 }

@@ -7,32 +7,50 @@
  */
 
 // The exits of both arms are lost: the function returns 0 for every b.
-func safe_div(a: int, b: int): int! {
-    if b == 0 then sync { return error('DivByZero', 'the divisor is zero') } else sync { return a / b }
+func safe_div(a: int, b: int) => int! {
+    if b == 0 then sync {
+        return error('DivByZero', 'the divisor is zero')
+    } else sync {
+        return a / b
+    }
     return 0
 }
 
 // An "early return" that does not return.
-func clamp(x: int): int {
-    if x < 0 then { return 0 } else { return x }
+func clamp(x: int) => int {
+    if x < 0 then {
+        return 0
+    } else {
+        return x
+    }
     return 100
 }
 
 // The same in a match.
-func name_of(k: int): string {
+func name_of(k: int) => string {
     match k {
-        case 1 => { return 'one' }
-        case 2 | 3 => { return 'few' }
-        case _ => { return 'many' }
+        case 1 => {
+            return 'one'
+        }
+        case 2 | 3 => {
+            return 'few'
+        }
+        case _ => {
+            return 'many'
+        }
     }
     return 'unknown'
 }
 
 // The inner `if` is the last statement of an arm, and the outer `if` is the statement whose
 // value is not used: the inner exits give a value to the outer one, which drops it.
-func nested(a: int, b: int): int {
+func nested(a: int, b: int) => int {
     if a > 0 then {
-        if b > 0 then { return 1 } else { return 2 }
+        if b > 0 then {
+            return 1
+        } else {
+            return 2
+        }
     } else {
         let c = a + b
         return c
@@ -42,16 +60,18 @@ func nested(a: int, b: int): int {
 
 // A block written as a statement belongs to the body around it: an exit in it, inside an
 // arm, is an exit of that arm.
-func in_block(a: int): int {
+func in_block(a: int) => int {
     if a > 0 then {
-        { return 1 }
+        {
+            return 1
+        }
     } else 0
     return 2
 }
 
 // `return null` used to be how an arm was given no value, and was exempt. An `if` without
 // `else` needs no such thing (design principles 3.7), so it is reported like any other.
-func no_value(a: int): int sync {
+func no_value(a: int) => int sync {
     var total = 0
     if a > 0 then sync {
         total = a
@@ -60,7 +80,7 @@ func no_value(a: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     println(safe_div(6, 3) !! -1, safe_div(6, 0) !! -1)
     println(clamp(-5), clamp(5))
     println(name_of(1), name_of(3), name_of(9))

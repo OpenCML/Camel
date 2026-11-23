@@ -8,15 +8,15 @@
 resource db
 resource cache
 
-func fill(): int uses var cache {
+func fill() => int uses var cache {
     return 1
 }
 
-func stamp(): int uses var db {
+func stamp() => int uses var db {
     return fill()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(stamp())
     return 0
 }

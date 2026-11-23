@@ -13,9 +13,11 @@
  *
  * Run: camel test/cases/compile/var/write_in_branch.cml
  */
-func main(): int sync {
+func main() => int sync {
     var x = 0
-    if true then sync { x = 1 }
+    if true then sync {
+        x = 1
+    }
     println(x)
     return 0
 }

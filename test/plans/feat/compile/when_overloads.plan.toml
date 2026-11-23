@@ -38,7 +38,7 @@ case = "../../../cases/compile/when_overloads/err_none_applies.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 12
 expect_output_contains = ["when is_float::<T>()", "when is_complex::<T>()"]
 
 [[tests]]
@@ -49,7 +49,7 @@ case = "../../../cases/compile/when_overloads/err_ambiguous.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 12
 expect_output_contains = ["when fast", "when wide"]
 
 [[tests]]
@@ -60,7 +60,7 @@ case = "../../../cases/compile/when_overloads/err_overlap.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 7
 
 [[tests]]
 name = "when_overloads.same_condition"
@@ -70,7 +70,7 @@ case = "../../../cases/compile/when_overloads/err_same_condition.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 7
 
 [[tests]]
 name = "when_overloads.no_condition_is_redeclaration"
@@ -80,7 +80,7 @@ case = "../../../cases/compile/when_overloads/err_no_when.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::Redeclaration"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 7
 
 [[tests]]
 name = "when_overloads.mixed"

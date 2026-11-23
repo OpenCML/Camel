@@ -21,14 +21,14 @@
 import state
 
 /// Written and read in one body, both elements reached through the array.
-func in_one_body(): int {
+func in_one_body() => int {
     let xs = [state::ref(1), state::ref(2)]
     state::set(xs[0], 7)
     return state::get(xs[0]) * 10 + state::get(xs[1])
 }
 
 /// One box, two names: the write goes through the element, the read through the name.
-func two_names(): int {
+func two_names() => int {
     let r = state::ref(0)
     let xs = [r]
     state::set(xs[0], 5)
@@ -36,13 +36,15 @@ func two_names(): int {
 }
 
 /// The closure carries an array that holds the box, and a later call reads the element.
-func carried(): () => int {
+func carried() => () => int {
     let xs = [state::ref(0)]
     state::set(xs[0], 2)
-    return func () => int { state::get(xs[0]) }
+    return func () => int {
+        state::get(xs[0])
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = in_one_body()
     let b = two_names()
     let f = carried()

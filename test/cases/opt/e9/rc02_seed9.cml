@@ -1,10 +1,10 @@
-func q36(a37: int, a38: bool): bool sync {
-    println('q36 {}'->format<a37>);
-    return false;
+func q36(a37: int, a38: bool) => bool sync {
+    println('q36 {}'->format<a37>)
+    return false
 }
 
-func main(): int sync {
-    let n83 = q36(0, false);
-    let n87 = q36(10, if false then n83 else false);
-    return 0;
+func main() => int sync {
+    let n83 = q36(0, false)
+    let n87 = q36(10, if false then n83 else false)
+    return 0
 }

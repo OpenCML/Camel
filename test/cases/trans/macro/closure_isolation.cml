@@ -4,13 +4,14 @@
 
 type Adder = (y: int) => int
 
-#macro func make_adder(x: int): Adder {
+#macro
+func make_adder(x: int) => Adder {
     return func (y: int) => int {
         return x + y
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let add10 = make_adder(10)
     let add20 = make_adder(20)
     let lhs = add10(5)

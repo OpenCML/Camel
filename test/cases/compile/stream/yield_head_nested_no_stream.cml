@@ -3,11 +3,11 @@
  * head that writes no stream type gets SemanticDiag::YieldRequiresStreamHead at its own `yield`, not
  * a missing feature and not a report about the outer function.
  */
-func outer(): int sync {
-    func inner(): int {
+func outer() => int sync {
+    func inner() => int {
         yield 1
     }
-
+    
     inner()
     return 0
 }

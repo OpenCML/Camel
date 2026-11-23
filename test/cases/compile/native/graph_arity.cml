@@ -5,7 +5,7 @@
 
 import { graph_of } from graph
 
-func main(): int sync {
+func main() => int sync {
     println(graph_of())
     return 0
 }

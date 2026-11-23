@@ -7,32 +7,34 @@
 // are written with `foreach`, `reduce` or a tail recursion.
 // Run: camel examples/numeric/random_walk.cml
 
-import { seed, randint, next_key } from random
-import { stdev } from statistics
 import { max, mean } from array
 import { abs } from math
+import { seed, randint, next_key } from random
+import { stdev } from statistics
 
 // Position after `steps` moves of -1 or +1.
-func walk(steps: int, position: int): int sync {
-    return if steps == 0 then position
-        else walk(steps - 1, position + next_key()->randint<0, 2> * 2 - 1)
+func walk(steps: int, position: int) => int sync {
+    return if steps == 0 then position else walk(steps - 1, position + next_key()->randint<0, 2> * 2 - 1)
 }
 
 // End positions of `count` walks made one after another. The walks share one generator, so
 // the order in which they are made is part of the result: it is fixed by the recursion.
-func walks(count: int, ends: int[]): int[] sync {
-    return if count == 0 then ends
-        else walks(count - 1, concat(ends, [walk(100, 0)]))
+func walks(count: int, ends: int[]) => int[] sync {
+    return if count == 0 then ends else walks(count - 1, concat(ends, [walk(100, 0)]))
 }
 
-func main(): int sync {
+func main() => int sync {
     seed(2024)
     let no_ints: int[] = []
     let ends = walks(12, no_ints)
     println(ends)
-
-    let distances = ends->map<func (e: int) => int { abs(e) }>
-    let wide = distances->map<func (e: int) => float { float(e) }>
+    
+    let distances = ends->map<func (e: int) => int {
+        abs(e)
+    }>
+    let wide = distances->map<func (e: int) => float {
+        float(e)
+    }>
     println(format<mean(wide), stdev(wide)>('mean distance {:.2f}  stdev {:.2f}'))
     println('farthest:', max(distances))
     return 0

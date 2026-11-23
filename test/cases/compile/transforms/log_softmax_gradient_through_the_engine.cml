@@ -24,11 +24,11 @@ import { log_softmax, sum } from tensor
 
 /// The differentiated value is the `with` parameter (design principles 9.9).
 with <x: float[...]>
-func total(): float {
+func total() => float {
     return sum(log_softmax<0>(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(total)<[1.0, 2.0, 3.0] as float[]>()
     `log_softmax engine d={}`->format<d>->println
     return 0

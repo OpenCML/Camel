@@ -5,36 +5,36 @@
  * the integer one.
  */
 
-func i64_zero(x: int): int {
+func i64_zero(x: int) => int {
     return x + 0
 }
 
-func i64_also_zero(x: int): int {
+func i64_also_zero(x: int) => int {
     return x + 0
 }
 
-func i32_zero(x: i32): i32 {
+func i32_zero(x: i32) => i32 {
     return x + 0
 }
 
-func f64_minus_zero(x: float): float {
+func f64_minus_zero(x: float) => float {
     return x + -0.0
 }
 
 /// The wide addend cancels: the site a generic law whose literal is `3000000000` can be written
 /// for, since `int` holds it and `i32` does not (the rule on
 /// `literal-inside-a-generic-body`). No law but that one matches it.
-func i64_wide(x: int): int {
+func i64_wide(x: int) => int {
     return x + 3000000000 - 3000000000
 }
 
 /// A value no law touches: the string laws are not the ones under test, and a value of a type
 /// `add_minus_zero` cannot be written for is what `why_not` reports the failed attempt of.
-func greet(): string {
+func greet() => string {
     return 'generic law'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     println(i64_zero(7), i64_also_zero(8), i32_zero(9), f64_minus_zero(1.5))
     return 0

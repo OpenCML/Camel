@@ -2,17 +2,21 @@
 /// at the head (`::<...P>`), or by its first occurrence (`...A`, as a dimension name is bound by the
 /// first shape that writes it). The result type is written over it, so the function comes back
 /// with the parameters it had.
-func through(f: (...A) => int): (...A) => int {
+func through(f: (...A) => int) => (...A) => int {
     return f
 }
 
-func again::<...P>(f: (...P) => int): (...P) => int {
+func again::<...P>(f: (...P) => int) => (...P) => int {
     return f
 }
 
-func main(): int sync {
-    let add = func (x: int, y: int) => int { x + y }
-    let seven = func () => int { 7 }
+func main() => int sync {
+    let add = func (x: int, y: int) => int {
+        x + y
+    }
+    let seven = func () => int {
+        7
+    }
     println(through(add)(1, 2), through(seven)())
     println(again(add)(3, 4), again(seven)())
     return 0

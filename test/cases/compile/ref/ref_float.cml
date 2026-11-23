@@ -5,11 +5,13 @@
 
 import state
 
-func main(): int sync {
+func main() => int sync {
     let r = state::ref(1.25)
     println(state::get(r))
     state::set(r, 2.5)
     println(state::get(r))
-    println(state::update(r, func (x: float) { x * 2.0 }))
+    println(state::update(r, func (x: float) {
+        x * 2.0
+    }))
     return 0
 }

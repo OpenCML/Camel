@@ -7,15 +7,15 @@
 
 import { reshape, matmul, linear, sum } from tensor
 
-func widened(x: f32[2, 2], w: f64[2, 2]): float {
+func widened(x: f32[2, 2], w: f64[2, 2]) => float {
     return float(sum(matmul(f64(x), w)))
 }
 
-func with_bias(x: f32[2, 2], w: f32[2, 2], bias: f32[2]): float {
+func with_bias(x: f32[2, 2], w: f32[2, 2], bias: f32[2]) => float {
     return float(sum(linear(x, w, bias)))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let w64 = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f64[])
     println(widened(x, w64))

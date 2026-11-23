@@ -12,7 +12,7 @@
 
 import { ones, zeros } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(ones::<bf16>([2, 2]))
     println(zeros::<f16>([2]))
     return 0

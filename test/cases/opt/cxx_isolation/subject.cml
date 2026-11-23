@@ -23,7 +23,7 @@
 // a graph's returned value is its exit, and a node that anchors the graph cannot be replaced
 // (docs/technical/45_graph_module.md).
 
-func chain(): int sync {
+func chain() => int sync {
     let a = 2 * 3
     let b = a + 4
     let c = b * 2
@@ -31,20 +31,20 @@ func chain(): int sync {
     return 0
 }
 
-func shared(x: int): int {
+func shared(x: int) => int {
     let a = x * 7
     let b = x * 7
     return a + b
 }
 
-func work(n: int): int sync {
+func work(n: int) => int sync {
     let twice = n * 3
     let same = n * 3
     println(twice + same)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(chain())
     println(shared(3))
     println(work(5))

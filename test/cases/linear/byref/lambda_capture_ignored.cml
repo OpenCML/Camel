@@ -13,7 +13,7 @@
 
 import state
 
-func ignored(): int {
+func ignored() => int {
     let c = state::ref(0)
     let f = func () => void sync {
         state::set(c, state::get(c) + 1)
@@ -23,7 +23,7 @@ func ignored(): int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(ignored())
     return 0
 }

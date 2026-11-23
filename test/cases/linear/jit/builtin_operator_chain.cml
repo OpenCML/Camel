@@ -2,14 +2,14 @@
  * Verifies JIT execution can chain builtin collection and string helpers without breaking intermediate values.
  */
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3, 4]
     let words = ['jit', 'ops', 'ok']
     let n = len(xs)
     let has3 = xs->contains<3>
     let text = words->join<'-'>
     let msg = 'count={} text={}'->format<n, text>
-
+    
     if n != 4 then {
         return 1
     } else if has3 then sync {
@@ -25,4 +25,3 @@ func main(): int sync {
         return 4
     }
 }
-

@@ -7,7 +7,7 @@ type Point = {
     y: int
 }
 
-func move(p: Point, dir: string): Point {
+func move(p: Point, dir: string) => Point {
     return match dir {
         case 'up' => { x: p.x, y: p.y - 1 }
         case 'left' => { x: p.x - 1, y: p.y }
@@ -16,7 +16,7 @@ func move(p: Point, dir: string): Point {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let p0 = { x: 4, y: 5 }
     let p1 = move(p0, 'up')
     let p2 = move(p1, 'right')
@@ -24,4 +24,3 @@ func main(): int sync {
     'struct_match p1y={} p2x={} p3y={}'->format<p1.y, p2.x, p3.y>->println
     return 0
 }
-

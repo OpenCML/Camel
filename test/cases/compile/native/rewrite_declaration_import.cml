@@ -12,11 +12,11 @@ import { nodes as sizeCost } from rules
 export rule int_add_zero(x: int) { x + 0 => x }
 
 /// The function the engines are applied to: the program itself would be a recursive reference.
-func target(): int {
+func target() => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = target
     let rules = [int_add_zero]
     let a = p->rewrite<rules>

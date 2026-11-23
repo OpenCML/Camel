@@ -10,17 +10,17 @@
  * the program writes them.
  */
 
-func report(tag: string): int sync {
+func report(tag: string) => int sync {
     println(tag)
     return 0
 }
 
-func quiet(tag: string): int {
+func quiet(tag: string) => int {
     report(tag)
     return 4
 }
 
-func main(): int sync {
+func main() => int sync {
     println(quiet('never printed'))
     return 0
 }

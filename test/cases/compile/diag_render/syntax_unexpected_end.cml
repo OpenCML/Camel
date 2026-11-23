@@ -1,2 +1,2 @@
-func main(): int {
+func main() => int {
     let x = 1

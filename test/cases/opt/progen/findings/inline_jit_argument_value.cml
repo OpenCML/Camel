@@ -13,20 +13,20 @@ import { get_env } from env
 
 type P = { x: int, y: int }
 
-func r1(a2: int, a3: int): int {
-    return if (a2 <= 0) then 12 * 2 else r1(a2 - 1, 31);
+func r1(a2: int, a3: int) => int {
+    return if (a2 <= 0) then 12 * 2 else r1(a2 - 1, 31)
 }
 
-func main(): int sync {
-    let n20 = int(get_env('PROGEN_I1') ?? '');
-    func g34(a35: int): int sync {
-        println('L8 {} {} {}'->format<0, 0, a35>);
-        return 31;
-    };
+func main() => int sync {
+    let n20 = int(get_env('PROGEN_I1') ?? '')
+    func g34(a35: int) => int sync {
+        println('L8 {} {} {}'->format<0, 0, a35>)
+        return 31
+    }
     let n52 = if 'm' != '' then sync {
-        let n51 = r1(n20, 4);
-        return '';
-    } else 'a';
-    let n53 = g34(r1(4, 0));
-    return 0;
+        let n51 = r1(n20, 4)
+        return ''
+    } else 'a'
+    let n53 = g34(r1(4, 0))
+    return 0
 }

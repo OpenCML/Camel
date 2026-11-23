@@ -6,9 +6,11 @@
 
 import state
 
-func main(): int sync {
+func main() => int sync {
     let k = 7
-    let r = state::ref(func (x: int) => int { x + k })
+    let r = state::ref(func (x: int) => int {
+        x + k
+    })
     let f = state::get(r)
     println(f(35))
     return 0

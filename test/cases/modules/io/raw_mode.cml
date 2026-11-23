@@ -7,14 +7,14 @@
 
 import { set_terminal_raw_mode } from io
 
-func outcome(enabled: bool): string {
+func outcome(enabled: bool) => string {
     return match set_terminal_raw_mode(enabled) {
         case error e => e.kind
         case _ => 'ok'
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(outcome(false))
     println(outcome(true))
     return 0

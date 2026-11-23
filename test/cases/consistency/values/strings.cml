@@ -2,11 +2,17 @@
  * String comparison and concatenation.
  */
 
-func cat(a: string, b: string): string { return a + b }
-func lt(a: string, b: string): bool { return a < b }
-func eq(a: string, b: string): bool { return a == b }
+func cat(a: string, b: string) => string {
+    return a + b
+}
+func lt(a: string, b: string) => bool {
+    return a < b
+}
+func eq(a: string, b: string) => bool {
+    return a == b
+}
 
-func main(): int sync {
+func main() => int sync {
     println(cat('ab', 'cd'))
     println(cat('', ''))
     println(len(cat('abc', 'de')))

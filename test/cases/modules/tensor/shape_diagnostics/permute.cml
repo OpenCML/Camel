@@ -5,7 +5,7 @@
 
 import { zeros, permute } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let r = permute<[0, 0]>(zeros::<f32>([2, 3]))
     println('unreachable')
     return 0

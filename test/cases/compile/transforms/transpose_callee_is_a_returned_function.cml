@@ -20,15 +20,17 @@
 import rulesets.transpose
 import { transpose } from transforms
 
-func mk(x: float): (y: float) => float {
-    return func (y: float) { x * y }
+func mk(x: float) => (y: float) => float {
+    return func (y: float) {
+        x * y
+    }
 }
 
-func f(x: float): float {
+func f(x: float) => float {
     return mk(x)(2.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(3.0))
     // The paper answer: (2.0).
     println(transpose(f)(1.0))

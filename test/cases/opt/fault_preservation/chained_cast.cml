@@ -3,14 +3,13 @@
  * `sync` block it runs where it is written, with or without a pass.
  */
 
-
 import { zeros } from tensor
 
-func shaped(rows: int, cols: int): f32[...] {
+func shaped(rows: int, cols: int) => f32[...] {
     return zeros::<f32>([rows, cols])
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     let unused = shaped(3, 2) as f32[2, 3]
     println('not reached')

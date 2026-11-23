@@ -19,24 +19,24 @@
 
 var total = 0
 
-func add(x: int): int sync {
+func add(x: int) => int sync {
     total = total + x
     return total
 }
 
 /// Not a sync block, and nothing depends on the call through the parameter: the body's `GATE` reads
 /// it because the call's callee writes, so the call runs and the write lands.
-func dropped(f: (x: int) => int): int {
+func dropped(f: (x: int) => int) => int {
     f(1)
     return 0
 }
 
 /// A sync block: the call through the parameter runs, so the write lands.
-func guarded(f: (x: int) => int): int sync {
+func guarded(f: (x: int) => int) => int sync {
     return f(1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let g: (x: int) => int = add
     let dropped_ = dropped(g)
     let afterDropped = total

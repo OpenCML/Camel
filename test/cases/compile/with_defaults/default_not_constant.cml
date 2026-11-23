@@ -5,10 +5,10 @@
  */
 
 with <a: int = 1, b: int = a + 1>
-func f(x: int): int {
+func f(x: int) => int {
     return x + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }

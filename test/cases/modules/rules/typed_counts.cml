@@ -1,33 +1,39 @@
 /** The operator counts of the typed target, by element type (design 7: the counts are the test). */
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func nodesOf::<F>(p: F, function: string) => Node[] spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    return len(nodesOf(p, function)->filter<func (n: Node) => bool { opText(n) == operator }>)
+func countOf::<F>(p: F, function: string, operator: string) => int spelling {
+    return len(nodesOf(p, function)->filter<func (n: Node) => bool {
+        opText(n) == operator
+    }>)
 }
 
 /// add, sub, mul, div, neg counts of the element type with this suffix.
 func show::<F>(p: F, function: string, suffix: string) spelling {
-    println('f ' + function,
+    println(
+        'f ' + function,
         countOf(p, function, ':op/add_' + suffix),
         countOf(p, function, ':op/sub_' + suffix),
         countOf(p, function, ':op/mul_' + suffix),
         countOf(p, function, ':op/div_' + suffix),
-        countOf(p, function, ':op/neg_' + suffix))
+        countOf(p, function, ':op/neg_' + suffix)
+    )
 }
 
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     show(p, 'i32_neutral', 'i')
     show(p, 'i32_mul_one', 'i')
     show(p, 'i32_mul_zero', 'i')

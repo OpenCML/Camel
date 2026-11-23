@@ -7,11 +7,11 @@ import { is_plain } from types
 
 type Named = { name: string, n: int }
 
-func take::<T>(v: T): string when is_plain::<T>() {
+func take::<T>(v: T) => string when is_plain::<T>() {
     return 'plain'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(take({ name: 'x', n: 1 }))
     return 0
 }

@@ -2,10 +2,14 @@
  * Integer division and modulo with negative operands.
  */
 
-func div(a: int, b: int): int { return a / b }
-func rem(a: int, b: int): int { return a % b }
+func div(a: int, b: int) => int {
+    return a / b
+}
+func rem(a: int, b: int) => int {
+    return a % b
+}
 
-func main(): int sync {
+func main() => int sync {
     println(div(7, 2))
     println(div(-7, 2))
     println(div(7, -2))

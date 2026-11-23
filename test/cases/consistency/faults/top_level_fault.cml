@@ -5,7 +5,7 @@
 let ZERO = 0
 let BAD = 10 / ZERO
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(BAD)
     println('not reached')

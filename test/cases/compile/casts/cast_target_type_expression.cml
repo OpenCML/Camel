@@ -6,11 +6,11 @@
 
 import { Tangent } from types
 
-func tangent_of::<T>(x: T): Tangent<T> {
+func tangent_of::<T>(x: T) => Tangent<T> {
     return x as Tangent<T>
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: (float, ()) = (1.0, ())
     println(v as Tangent<(float, int)>)
     println(tangent_of::<(float, float)>((2.0, 3.0)))

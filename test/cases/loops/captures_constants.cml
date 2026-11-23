@@ -7,19 +7,19 @@
 // read by its condition) and one constant left out (the body's `k`); constants_only has no
 // capture and the same one constant. Both loops compute what they did before, so the graph
 // shape and the run are checked together.
-func with_runtime(n: int): int {
+func with_runtime(n: int) => int {
     let k = 7
     let xs = [1, 2, 3, 4]
     return loop acc = 0 for x in xs while acc < n do acc + x * k
 }
 
-func constants_only(): int {
+func constants_only() => int {
     let k = 7
     let xs = [1, 2, 3, 4]
     return loop acc = 0 for x in xs do acc + x * k
 }
 
-func main(): int sync {
+func main() => int sync {
     println(with_runtime(20), constants_only())
     return 0
 }

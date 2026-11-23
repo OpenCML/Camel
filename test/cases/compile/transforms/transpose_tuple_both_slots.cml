@@ -8,15 +8,15 @@
 // two answers add up here. A channel keyed by the read would give one cotangent per read and have to
 // decide which read owns the tuple -- and a channel that let the second read overwrite the first would
 // answer 2, while one that took only the first would answer 1.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func both(x: float): float {
+func both(x: float) => float {
     let t = (x, 2.0 * x)
     return t.0 + t.1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(both(1.0))
     let back = transpose(both)
     println(back(1.0))

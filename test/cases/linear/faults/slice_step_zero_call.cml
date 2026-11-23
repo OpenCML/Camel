@@ -5,7 +5,7 @@
  * wrote, and the program after it does not run (design principles 5.4, 3.9).
  */
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3, 4, 5, 6]
     println(slice(xs, 0, 0, 6, 0))
     println('not reached')

@@ -1,7 +1,7 @@
 // Fixture of test/tools/selftest/run.mjs: the program the sweep fixtures run again under an
 // extra environment. It only has to succeed; the self-test counts the sampled copies.
 
-func main(): int sync {
+func main() => int sync {
     println('sweep probe')
     return 0
 }

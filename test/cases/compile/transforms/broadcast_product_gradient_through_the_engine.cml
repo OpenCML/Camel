@@ -20,14 +20,13 @@ import { grad } from autodiff
 import { numel, sum } from tensor
 
 with <w: float[2, 2, 3]>
-func total(): float {
+func total() => float {
     return sum(w * ([1.0, 2.0, 3.0] as float[3]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let slope = grad(total)
     let d = slope<[[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]] as float[2, 2, 3]>()
-    `broadcast engine numel={} d000={:.1f} d001={:.1f} d002={:.1f} d11_2={:.1f}`
-        ->format<numel(d), d[0][0][0], d[0][0][1], d[0][0][2], d[1][1][2]>->println
+    `broadcast engine numel={} d000={:.1f} d001={:.1f} d002={:.1f} d11_2={:.1f}`->format<numel(d), d[0][0][0], d[0][0][1], d[0][0][2], d[1][1][2]>->println
     return 0
 }

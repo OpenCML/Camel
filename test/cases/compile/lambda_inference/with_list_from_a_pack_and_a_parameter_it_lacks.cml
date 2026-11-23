@@ -7,15 +7,17 @@
 // `with` parameter and no ordinary ones, so `<w, ...rest> (x) => ...` has nowhere to put `x`.
 import { WithOf, ParamsOf } from types
 
-type GradientAux<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)
+type GradientAux<F> = <...WithOf<F>>(...ParamsOf<F>) => (float, float)
 
 with <w: float>
-func loss(): float {
+func loss() => float {
     return w
 }
 
-func main(): int sync {
-    let g: GradientAux<<w: float> () => float> = func <w, ...rest> (x) { (x, 1.0) }
+func main() => int sync {
+    let g: GradientAux<<w: float>() => float> = func <w, ...rest>(x) {
+        (x, 1.0)
+    }
     println(`g ${g<2.0>()}`)
     return 0
 }

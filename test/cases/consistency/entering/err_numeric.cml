@@ -1,5 +1,7 @@
-func f(x: float?): float { return x ?? 0.0 }
-func main(): int sync {
+func f(x: float?) => float {
+    return x ?? 0.0
+}
+func main() => int sync {
     let n = 5
     println(f(n))
     return 0

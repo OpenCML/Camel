@@ -1,6 +1,6 @@
 import mi_values
 
-func main(): int sync {
+func main() => int sync {
     println(mi_values::pi)
     return 0
 }

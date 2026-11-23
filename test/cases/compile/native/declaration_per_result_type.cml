@@ -3,15 +3,15 @@
  * principles 10.2): two Camel functions of one name and one signature in the module that writes
  * them are a redeclaration at the second, and differing bodies do not make them two rules.
  */
-func decode(shape: int[]): int[] {
+func decode(shape: int[]) => int[] {
     return shape
 }
 
-func decode(shape: int[]): int {
+func decode(shape: int[]) => int {
     return len(shape)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(decode([1, 2, 3]))
     return 0
 }

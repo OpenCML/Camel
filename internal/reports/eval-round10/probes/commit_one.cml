@@ -25,7 +25,7 @@ import { add_constant, commit, graph_of, open } from graph
 import { is_function } from types
 
 /// Opens a transaction, adds one constant node, and commits.
-export func poke::<F>(p: F): F! when is_function::<F>() sync {
+export func poke::<F>(p: F) => F! when is_function::<F>() sync {
     let t = open(p)
     let g = graph_of(p)
     let _ = add_constant(t, g, 7)

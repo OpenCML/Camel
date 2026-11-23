@@ -11,29 +11,29 @@ type Derived<T> = { value: T }
 type Pair<A, B> = { first: A, second: B }
 
 func generic_value::<P>(p: P) {
-    let derived: Derived<typeof(p)> = { value: p }
+    let derived: Derived<typeof (p)> = { value: p }
     return derived
 }
 
-func ordinary_value(p: int): int {
-    let derived: Derived<typeof(p)> = { value: p }
+func ordinary_value(p: int) => int {
+    let derived: Derived<typeof (p)> = { value: p }
     return derived.value
 }
 
-func element_value::<P>(p: P[]): P {
-    let derived: Derived<ElementOf<typeof(p)>> = { value: p[0] }
+func element_value::<P>(p: P[]) => P {
+    let derived: Derived<ElementOf<typeof (p)>> = { value: p[0] }
     return derived.value
 }
 
-func tangent_pair::<P, Q>(p: P, q: Q): bool {
-    return is_same::<Tangent<Pair<P, typeof(q)>>, { first: Tangent<P>, second: float }>()
+func tangent_pair::<P, Q>(p: P, q: Q) => bool {
+    return is_same::<Tangent<Pair<P, typeof (q)>>, { first: Tangent<P>, second: float }>()
 }
 
-func tangent_signature::<P, Q>(p: P, q: Q): Tangent<Pair<P, typeof(q)>> {
+func tangent_signature::<P, Q>(p: P, q: Q) => Tangent<Pair<P, typeof (q)>> {
     return { first: (), second: q }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(generic_value(3).value)
     println(ordinary_value(4))
     println(element_value([6, 7]))

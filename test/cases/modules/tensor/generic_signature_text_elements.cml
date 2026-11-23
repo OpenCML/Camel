@@ -1,8 +1,7 @@
 /// A scalar has no dimensions, so `shape` answers the empty list (design principles 5.4).
-
 import { shape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let scalar = 3
     println(shape(scalar))
     return 0

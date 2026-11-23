@@ -1,3 +1,5 @@
 namespace Tools {
-    export func inc(x: int): int { return x + 100 }
+    export func inc(x: int) => int {
+        return x + 100
+    }
 }

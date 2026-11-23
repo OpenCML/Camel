@@ -17,7 +17,7 @@
  * entry had nothing left to pin and went with this migration.
  */
 
-func build(n: int): int sync {
+func build(n: int) => int sync {
     var out: int[] = []
     var total = 0
     loop i = 0 while i < n do {
@@ -28,7 +28,7 @@ func build(n: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     println(build(20000))
     return 0
 }

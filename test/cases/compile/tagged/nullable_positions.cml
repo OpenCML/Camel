@@ -8,20 +8,24 @@
  */
 
 // The return under a declared `int?`: `null` is the constant of that type, not a computed value.
-func maybe(b: bool): int? {
-    if b then { return 1 } else { return null }
+func maybe(b: bool) => int? {
+    if b then {
+        return 1
+    } else {
+        return null
+    }
 }
 
 // A `with` parameter of a nullable type, defaulted to the null of it.
 with <p: int? = null>
-func twice(x: int?): int? {
+func twice(x: int?) => int? {
     return match x {
         case null => p
         case v => v
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     // The declared type is the literal's: the constant `null` of `int?`.
     let none: int? = null
     println(none)

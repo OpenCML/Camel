@@ -20,15 +20,15 @@
  */
 import { vjp } from vjp
 
-func sf(x: f32): f32 {
+func sf(x: f32) => f32 {
     return x * x + x * 5.0
 }
 
-func sd(x: float): float {
+func sd(x: float) => float {
     return x * x + x * 5.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let (vf, pf) = vjp(sf)(3.0)
     'scalar f32   value={} dfdx={}'->format<vf, pf(1.0).0>->println
     'scalar f32   x=3 ct=2 -> {}'->format<pf(2.0).0>->println

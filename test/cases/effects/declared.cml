@@ -9,25 +9,25 @@
 resource db
 resource console = [db, stdout]
 
-#resource type Stream = { id: int }
+#resource
+type Stream = { id: int }
 
 /// The body touches nothing; the clause says a call writes the handle it is given.
-func consume(s: Stream): int uses var s {
+func consume(s: Stream) => int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses var console {
-}
+func tick() => void uses var console {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.
-func bump(var t: int): int sync {
+func bump(var t: int) => int sync {
     t += 1
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     let s: Stream = { id: 7 }
     consume(s)
     consume(s)

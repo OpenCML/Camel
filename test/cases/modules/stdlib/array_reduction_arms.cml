@@ -21,20 +21,20 @@
 
 import { sum } from array
 
-func main(): int sync {
+func main() => int sync {
     // The integer declaration's executor: `array:sum_i`.
     let small: i32[] = [1, 2, 3]
-    println("i32 {}", sum(small))
-
+    println('i32 {}', sum(small))
+    
     // The float declaration's executor: `array:sum_d`.
     let reals: float[] = [1.5, 2.5]
-    println("float {}", sum(reals))
-
+    println('float {}', sum(reals))
+    
     // Neither condition holds for `c64`: no executor, so the body answers, and its complex arm is
     // what makes the sum of two complex numbers.
     let z0: c64 = 1 + 2i
     let z1: c64 = 3 + 4i
     let complex: c64[] = [z0, z1]
-    println("complex {}", sum(complex))
+    println('complex {}', sum(complex))
     return 0
 }

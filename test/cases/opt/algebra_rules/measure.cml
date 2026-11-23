@@ -10,46 +10,85 @@
 
 import { Node, Graph, nodes, inputs, with_inputs, sync_inputs, order_inputs, op, op_name, name, graphs_of } from graph
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func opsOf(g: Graph): string[] spelling {
-    return nodes(g)->map<func (n: Node) => string { opText(n) }>->filter<func (s: string) => bool { s != '' }>
+func opsOf(g: Graph) => string[] spelling {
+    return nodes(g)->map<func (n: Node) => string {
+        opText(n)
+    }>->filter<func (s: string) => bool {
+        s != ''
+    }>
 }
 
-func countOf(ops: string[], which: string): int {
-    return len(ops->filter<func (s: string) => bool { s == which }>)
+func countOf(ops: string[], which: string) => int {
+    return len(ops->filter<func (s: string) => bool {
+        s == which
+    }>)
 }
 
 /// The edges of the graph: every input of every node is one edge, of one of the three kinds.
-func edgesOf(g: Graph): int {
+func edgesOf(g: Graph) => int {
     return loop total = 0 for n in nodes(g) do total + len(inputs(n)) + len(with_inputs(n)) + len(sync_inputs(n)) + len(order_inputs(n))
 }
 
 func line(g: Graph) spelling {
     let ops = opsOf(g)
     println(
-        name(g), 'nodes', len(nodes(g)), 'edges', edgesOf(g),
-        'add_l', countOf(ops, ':op/add_l'), 'add_i', countOf(ops, ':op/add_i'),
-        'sub_l', countOf(ops, ':op/sub_l'), 'sub_i', countOf(ops, ':op/sub_i'),
-        'mul_l', countOf(ops, ':op/mul_l'), 'mul_i', countOf(ops, ':op/mul_i'),
-        'div_l', countOf(ops, ':op/div_l'), 'div_i', countOf(ops, ':op/div_i'),
-        'neg_l', countOf(ops, ':op/neg_l'), 'neg_i', countOf(ops, ':op/neg_i'),
-        'add_d', countOf(ops, ':op/add_d'), 'sub_d', countOf(ops, ':op/sub_d'),
-        'mul_d', countOf(ops, ':op/mul_d'), 'div_d', countOf(ops, ':op/div_d'),
-        'neg_d', countOf(ops, ':op/neg_d'),
-        'println', countOf(ops, ':io/println'),
-        'tensor_add', countOf(ops, 'tensor:add'), 'tensor_mul', countOf(ops, 'tensor:multiply'))
+        name(g),
+        'nodes',
+        len(nodes(g)),
+        'edges',
+        edgesOf(g),
+        'add_l',
+        countOf(ops, ':op/add_l'),
+        'add_i',
+        countOf(ops, ':op/add_i'),
+        'sub_l',
+        countOf(ops, ':op/sub_l'),
+        'sub_i',
+        countOf(ops, ':op/sub_i'),
+        'mul_l',
+        countOf(ops, ':op/mul_l'),
+        'mul_i',
+        countOf(ops, ':op/mul_i'),
+        'div_l',
+        countOf(ops, ':op/div_l'),
+        'div_i',
+        countOf(ops, ':op/div_i'),
+        'neg_l',
+        countOf(ops, ':op/neg_l'),
+        'neg_i',
+        countOf(ops, ':op/neg_i'),
+        'add_d',
+        countOf(ops, ':op/add_d'),
+        'sub_d',
+        countOf(ops, ':op/sub_d'),
+        'mul_d',
+        countOf(ops, ':op/mul_d'),
+        'div_d',
+        countOf(ops, ':op/div_d'),
+        'neg_d',
+        countOf(ops, ':op/neg_d'),
+        'println',
+        countOf(ops, ':io/println'),
+        'tensor_add',
+        countOf(ops, 'tensor:add'),
+        'tensor_mul',
+        countOf(ops, 'tensor:multiply')
+    )
 }
 
 /// The table of `p`, in graph order, with the root graph (`__root__`) left out: it holds the entry
 /// call alone and is the same on both sides.
-export func report::<F>(p: F): F! spelling sync {
-    let gs = graphs_of(p)->filter<func (g: Graph) => bool { name(g) != '__root__' }>
+export func report::<F>(p: F) => F! spelling sync {
+    let gs = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) != '__root__'
+    }>
     let _ = loop n = 0 for g in gs do sync {
         line(g)
         return n + 1

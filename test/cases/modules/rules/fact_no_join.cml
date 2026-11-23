@@ -7,9 +7,9 @@ import { max } from math
 
 fact sign(v: int): int match v {
     case const c => c
-    case _       => 0
+    case _ => 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

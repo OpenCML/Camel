@@ -4,15 +4,15 @@
  * conversion (line 12); it was exported as if the conversion were not there.
  */
 
-import { reshape, tanh } from tensor
 import { export_model } from onnx
+import { reshape, tanh } from tensor
 
-func f(x: f32[...]): f32[...] {
+func f(x: f32[...]) => f32[...] {
     let y = tanh(x) as f32[3, 2]
     return y * 2.0
 }
 
-func main(): void! sync {
+func main() => void! sync {
     let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[])
     export_model<out: 'tmp/test/onnx/refusal_as_always_fails.onnx'>(f, ex)
 }

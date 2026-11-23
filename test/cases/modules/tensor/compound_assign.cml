@@ -6,12 +6,12 @@
 
 import { ones, sum } from tensor
 
-func bump(var w: f32[], d: f32): float sync {
+func bump(var w: f32[], d: f32) => float sync {
     w += d
     return float(sum(w))
 }
 
-func main(): int sync {
+func main() => int sync {
     var t = ones::<f32>([2])
     let a = t
     let u = ones::<f32>([2])

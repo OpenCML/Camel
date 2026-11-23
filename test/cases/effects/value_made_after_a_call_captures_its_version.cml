@@ -9,13 +9,17 @@
 
 var counter = 1
 
-func run(f: () => void): int {
+func run(f: () => void) => int {
     f()
-    let read = func () { counter }
+    let read = func () {
+        counter
+    }
     return read()
 }
 
-func main(): int sync {
-    println(run(func () { counter = 5 }))
+func main() => int sync {
+    println(run(func () {
+        counter = 5
+    }))
     return 0
 }

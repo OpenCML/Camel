@@ -5,15 +5,15 @@
  * program computes at run time is not a constant, and no law reads it).
  */
 
-func scal(x: float): float {
+func scal(x: float) => float {
     return x * 1.5 + x
 }
 
-func whole(x: int): int {
+func whole(x: int) => int {
     return x * 3 + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(scal(3.0), whole(4))
     return 0
 }

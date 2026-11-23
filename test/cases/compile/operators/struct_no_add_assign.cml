@@ -5,7 +5,7 @@
 
 type P = { v: int }
 
-func main(): int sync {
+func main() => int sync {
     var a: P = { v: 1 }
     let b: P = { v: 2 }
     a += b

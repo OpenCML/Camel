@@ -1,7 +1,7 @@
 // An imported value nothing uses is not evaluated (its initializer prints when it runs).
 import { pi } from geometry
 
-func main(): int sync {
+func main() => int sync {
     println(pi)
     return 0
 }

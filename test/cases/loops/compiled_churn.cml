@@ -5,12 +5,12 @@
 
 import { get_env } from env
 
-func churn(n: int): int {
+func churn(n: int) => int {
     let (total, s) = loop total = 0, s = '' while total < n do (total + 1, string(total))
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = int(get_env('N') ?? '')
     println(churn(n))
     println('done')

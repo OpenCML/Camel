@@ -19,48 +19,50 @@
  * refuses the three-word call at all (exit 1), or a result's type is not the one its parameter
  * states (the call needs an explicit conversion).
  */
-import { reshape, sum } from tensor
 import { grad } from autodiff
+import { reshape, sum } from tensor
 
-func row(a: f32[2]): float {
+func row(a: f32[2]) => float {
     return float(sum(a))
 }
 
-func table(a: f32[2, 2]): float {
+func table(a: f32[2, 2]) => float {
     return float(sum(a))
 }
 
 /// The position 0 on axis 1 of a rank-2 value: the column, an `f32[2]`.
-func firstColumn(m: f32[2, 2]): float {
+func firstColumn(m: f32[2, 2]) => float {
     return row(m[.., 0])
 }
 
 /// The positions the integer array names on axis 1, a repeated index among them: an `f32[2, 2]`.
-func columnTake(m: f32[2, 2], idx: int[2]): float {
+func columnTake(m: f32[2, 2], idx: int[2]) => float {
     return table(m[.., idx])
 }
 
 with <x: f32[...]>
-func columnSum(): float {
+func columnSum() => float {
     return firstColumn(reshape<[2, 2]>(x))
 }
 
 with <x: f32[...]>
-func repeatedSum(): float {
+func repeatedSum() => float {
     return columnTake(reshape<[2, 2]>(x), [1, 1])
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let g = grad(columnSum)<x>()
     let h = grad(repeatedSum)<x>()
     'column value={:.1f} grad_sum={:.1f} grad_dot={:.1f}'->format<
         columnSum<x>(),
         sum(g),
-        sum(g * reshape<[2, 2]>([1.0, 0.0, 1.0, 0.0] as f32[]))>->println
+        sum(g * reshape<[2, 2]>([1.0, 0.0, 1.0, 0.0] as f32[]))
+    >->println
     'take value={:.1f} grad_sum={:.1f} grad_dot={:.1f}'->format<
         repeatedSum<x>(),
         sum(h),
-        sum(h * reshape<[2, 2]>([0.0, 2.0, 0.0, 2.0] as f32[]))>->println
+        sum(h * reshape<[2, 2]>([0.0, 2.0, 0.0, 2.0] as f32[]))
+    >->println
     return 0
 }

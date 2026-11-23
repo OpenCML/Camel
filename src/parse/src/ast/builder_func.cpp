@@ -39,7 +39,7 @@ inline void appendParameterParts(
 } // namespace
 
 /*
-funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
+funcData   : modifiers? angledParams? parentParams ('=>' typeExpr)? '=>' blockExpr ;
 */
 Value Builder::visitFuncData(cst::FuncData context) {
     ENTER("FuncData");
@@ -190,9 +190,9 @@ funcDecl   :
         funcAnno*
         (WITH angledParams)?
         EXPORT? modifiers?
-        FUNC identRef parentParams (('=>' | ':') typeExpr)? stmtBlock ;
-The result type is written `=> T` (design principles 4.4); `: T` is the
-older spelling and is still read while the corpus is written that way.
+        FUNC identRef parentParams ('=>' typeExpr)? stmtBlock ;
+The result type is written `=> T` (design principles 4.4); a `:` there introduces no type and
+is refused at the `:`.
 */
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");

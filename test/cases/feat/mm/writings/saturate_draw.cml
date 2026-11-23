@@ -6,11 +6,11 @@
 // leaves the program in that state; `std::gir`, `std::rgir` and `std::jgir` draw it; a pass that
 // consumes the program extracts one writing per value, so every pipeline prints 42.
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = twice(21)
     println(v)
     return 0

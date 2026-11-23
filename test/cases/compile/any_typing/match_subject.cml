@@ -3,7 +3,7 @@ import { Json, decode } from json
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
 // bit, a string by address, so `'ab'` fell to `case _`. It
 // is a `Json` now, and a case has the type of the value matched.
-func check(v: Json): int sync {
+func check(v: Json) => int sync {
     let r = match v {
         case 1 => 'one'
         case 'ab' => 'ab'
@@ -13,6 +13,6 @@ func check(v: Json): int sync {
     return 0
 }
 
-func main(): int sync {
-    return decode('"ab"') -> check !! 1
+func main() => int sync {
+    return decode('"ab"')->check !! 1
 }

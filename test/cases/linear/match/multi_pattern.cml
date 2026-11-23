@@ -3,7 +3,7 @@
  * first used to be read). A wildcard among the alternatives makes the case the default.
  */
 
-func kind(c: string): string {
+func kind(c: string) => string {
     return match c {
         case 'a' | 'e' | 'i' | 'o' | 'u' => 'vowel'
         case 'y' => 'both'
@@ -12,14 +12,14 @@ func kind(c: string): string {
     }
 }
 
-func small(n: int): int {
+func small(n: int) => int {
     return match n {
         case 1 | 2 | 3 => n * 10
         case 4 | _ => 0 - 1
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind('a'))
     println(kind('e'))
     println(kind('u'))

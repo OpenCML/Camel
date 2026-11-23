@@ -10,7 +10,7 @@ func show(v: f32[...]) {
     println(v)
 }
 
-func main(): int sync {
+func main() => int sync {
     show(1.0)
     show(2.5)
     return 0

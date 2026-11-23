@@ -5,7 +5,7 @@
  */
 
 // The default of a nullable parameter: the null of `int?`.
-func pick(p: int? = null, fallback: int = 7): int {
+func pick(p: int? = null, fallback: int = 7) => int {
     return match p {
         case null => fallback
         case v => v
@@ -13,14 +13,14 @@ func pick(p: int? = null, fallback: int = 7): int {
 }
 
 // A nullable parameter after the defaulted one, so a call can give the value to `p` instead.
-func only(p: int? = null): string {
+func only(p: int? = null) => string {
     return match p {
         case null => 'none'
         case v => format<v>('some {}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     // Left out: the declaration's null.
     println(pick())
     // The default overridden by a value, and by a value the call computes.

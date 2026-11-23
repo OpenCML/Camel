@@ -17,18 +17,17 @@
  * parameter `filename?: string` either, which is why the two arities are separate.
  */
 
-
 /// Draws the values of `data` and writes the image to `filename` (`plot.png` when it is omitted).
 /// `data` may be an `i32`, `int`, `f32` or `float` array; an empty array is drawn as an empty
 /// plot. matplotlib is used when it is importable, and an SVG file is written otherwise.
 /// @effect writes an image file
 /// @example plot([1.0, 2.0, 3.0], "myplot.png")
 #op('pyplot:plot')
-export func plot(data: i32[]): void panic
-export func plot(data: int[]): void panic
-export func plot(data: f32[]): void panic
-export func plot(data: float[]): void panic
-export func plot(data: i32[], filename: string): void panic
-export func plot(data: int[], filename: string): void panic
-export func plot(data: f32[], filename: string): void panic
-export func plot(data: float[], filename: string): void panic
+export func plot(data: i32[]) => void panic
+export func plot(data: int[]) => void panic
+export func plot(data: f32[]) => void panic
+export func plot(data: float[]) => void panic
+export func plot(data: i32[], filename: string) => void panic
+export func plot(data: int[], filename: string) => void panic
+export func plot(data: f32[], filename: string) => void panic
+export func plot(data: float[], filename: string) => void panic

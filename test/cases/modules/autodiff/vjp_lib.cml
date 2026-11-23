@@ -9,11 +9,11 @@
 
 import { vjp } from prelude
 
-func scale_rule(x: float, dy: float): float {
+func scale_rule(x: float, dy: float) => float {
     return 10.0 * dy
 }
 
 #vjp(scale_rule)
-export func scale(x: float): float {
+export func scale(x: float) => float {
     return x * x
 }

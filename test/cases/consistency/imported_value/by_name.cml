@@ -7,10 +7,14 @@
 
 import { twice, area } from lib
 
-func apply(f: (x: int) => int, x: int): int { return f(x) }
-func pick(): (x: int) => int { return twice }
+func apply(f: (x: int) => int, x: int) => int {
+    return f(x)
+}
+func pick() => (x: int) => int {
+    return twice
+}
 
-func main(): int sync {
+func main() => int sync {
     println([1, 2, 3]->map<twice>)
     let f = twice
     println(f(4), apply(twice, 5), pick()(6))

@@ -10,11 +10,11 @@
  * would compile and print the value it started with.
  */
 
-func bump(var p: int): void {
+func bump(var p: int) => void {
     p = p + 10
 }
 
-func main(): int sync {
+func main() => int sync {
     var x = 1
     let g = func () sync {
         bump(x)

@@ -10,7 +10,7 @@
 
 import { encode } from bytes
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     println(xs->contains<3>, xs->contains<4>, ([] as int[])->contains<0>)
     println('abc'->contains<'bc'>, 'abc'->contains<'z'>, 'abc'->contains<''>)

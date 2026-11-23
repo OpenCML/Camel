@@ -20,39 +20,39 @@
 // order `main` calls them in.
 var v = 1
 
-func bump(var c: int): int sync {
-    c = c + 1;
-    return c;
+func bump(var c: int) => int sync {
+    c = c + 1
+    return c
 }
 
-func firstArm(): int sync {
-    v = 1;
+func firstArm() => int sync {
+    v = 1
     let lam = func (p: int) => int sync {
-        let n = bump(v);
-        return if n > 0 then v else v;
-    };
-    return lam(0);
+        let n = bump(v)
+        return if n > 0 then v else v
+    }
+    return lam(0)
 }
 
-func secondArm(): int sync {
-    v = 1;
+func secondArm() => int sync {
+    v = 1
     let lam = func (p: int) => int sync {
-        let n = bump(v);
-        return if n < 0 then v else v;
-    };
-    return lam(0);
+        let n = bump(v)
+        return if n < 0 then v else v
+    }
+    return lam(0)
 }
 
-func callInArm(flag: bool): int sync {
-    v = 1;
+func callInArm(flag: bool) => int sync {
+    v = 1
     let lam = func (p: int) => int sync {
-        let n = bump(v);
-        return if flag then v + n else v * 10 + n;
-    };
-    return lam(0);
+        let n = bump(v)
+        return if flag then v + n else v * 10 + n
+    }
+    return lam(0)
 }
 
-func main(): int sync {
-    println(firstArm(), secondArm(), callInArm(true), callInArm(false));
-    return 0;
+func main() => int sync {
+    println(firstArm(), secondArm(), callInArm(true), callInArm(false))
+    return 0
 }

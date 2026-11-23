@@ -6,21 +6,21 @@ import { grad } from autodiff
 import { sum } from tensor
 
 with <w: float>
-func scaled(scale: float): float {
+func scaled(scale: float) => float {
     return w * float(int(scale))
 }
 
 with <w: f64[...]>
-func weighted(labels: i64[...]): float {
-    let ids  = int(labels)
+func weighted(labels: i64[...]) => float {
+    let ids = int(labels)
     let data = float(ids)
     return float(sum(data * w))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(scaled<2.0>(3.0))
     println(grad(scaled)<2.0>(3.0))
-
+    
     let labels = [[0, 1, 0]] as int[1, 3]
     let w = [[1.0, 2.0, 3.0]] as float[1, 3]
     println(weighted<w>(labels))

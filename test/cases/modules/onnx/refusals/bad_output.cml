@@ -3,11 +3,13 @@
  * string is refused at the export_model call (line 11).
  */
 
-import { reshape } from tensor
 import { export_model } from onnx
+import { reshape } from tensor
 
-func main(): int sync {
-    let r = export_model<out: 'tmp/test/onnx/refusal_output.onnx'>(func (t: float[...]) => string { 'text' }, reshape<[2]>([1.0, 2.0]))
+func main() => int sync {
+    let r = export_model<out: 'tmp/test/onnx/refusal_output.onnx'>(func (t: float[...]) => string {
+        'text'
+    }, reshape<[2]>([1.0, 2.0]))
     return match r {
         case error e => sync {
             println(e)

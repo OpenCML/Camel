@@ -1,18 +1,18 @@
 // Item A's first rewrite of the e2e program: the closure's body lifted into a named declaration, so
 // the lambda only calls it. It must print the same five lines as e2e/program.cml.
 
-func closure_body(base: int, label: string, x: int): int sync {
+func closure_body(base: int, label: string, x: int) => int sync {
     let weight = base + 1
     let value = weight + x
     '{} {} -> {}'->format<label, x, weight + x>->println
     return value
 }
 
-func apply(f: (x: int) => int, x: int): int sync {
+func apply(f: (x: int) => int, x: int) => int sync {
     return f(x)
 }
 
-func run(n: int, base: int): int sync {
+func run(n: int, base: int) => int sync {
     let label = 'step'
     let twice = base * 2
     let thrice = base * 3
@@ -27,7 +27,7 @@ func run(n: int, base: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = run(3, 10)
     return 0
 }

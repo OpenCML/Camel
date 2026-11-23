@@ -18,11 +18,11 @@
 // nothing else.
 import { vjp } from vjp
 
-func f(x: float, y: float): float {
+func f(x: float, y: float) => float {
     return x * x * y
 }
 
-func main(): int sync {
+func main() => int sync {
     let value = f(3.0, 2.0)
     let (pair_value, pullback) = vjp(f)(3.0, 2.0)
     let (dx, dy) = pullback(1.0)

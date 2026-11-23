@@ -7,11 +7,11 @@
 
 import { ones } from tensor
 
-func count(t: Tensor): int {
+func count(t: Tensor) => int {
     return len(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     let ints: int[3] = [1, 2, 3]
     let floats: f32[2, 3] = ones::<f32>([2, 3])
     println(count(ints))

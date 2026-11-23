@@ -4,10 +4,14 @@
  * operands). The call is ambiguous.
  */
 
-func operator +::<T>(a: T[], b: T[]): T[] { return concat(a, b) }
-func operator +::<T, U>(a: T[], b: U[]): T[] { return a }
+func operator +::<T>(a: T[], b: T[]) => T[] {
+    return concat(a, b)
+}
+func operator +::<T, U>(a: T[], b: U[]) => T[] {
+    return a
+}
 
-func main(): int sync {
+func main() => int sync {
     println(['x'] + ['y'])
     return 0
 }

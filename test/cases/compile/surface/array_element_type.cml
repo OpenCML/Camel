@@ -1,5 +1,9 @@
-func main(): int sync {
-    println([1, 2,
-        'x', 4])
+func main() => int sync {
+    println([
+        1,
+        2,
+        'x',
+        4
+    ])
     return 0
 }

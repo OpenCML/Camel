@@ -16,15 +16,15 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func halfBrain(x: bf16): bf16 {
+func halfBrain(x: bf16) => bf16 {
     return x ^ 2.0
 }
 
-func halfPlain(x: f16): f16 {
+func halfPlain(x: f16) => f16 {
     return x ^ 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let (brainValue, brainTangent) = jvp(halfBrain)(0.0 - 3.0, 1.0)
     `bf16 value={} tangent={}`->format<brainValue, brainTangent>->println
     let (plainValue, plainTangent) = jvp(halfPlain)(0.0 - 3.0, 1.0)

@@ -3,7 +3,7 @@
  * reason when the context gives it `float`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x: float = 1e-9999
     println(x)
     return 0

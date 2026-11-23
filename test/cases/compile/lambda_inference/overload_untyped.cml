@@ -5,11 +5,17 @@
  * silent `any` and not a pick of one overload.
  */
 
-func over(f: (x: int) => int, v: int): int { return f(v) + 1 }
+func over(f: (x: int) => int, v: int) => int {
+    return f(v) + 1
+}
 
-func over(f: (x: float) => float, v: float): float { return f(v) + 0.5 }
+func over(f: (x: float) => float, v: float) => float {
+    return f(v) + 0.5
+}
 
-func main(): int sync {
-    println(over(func (x) { x * 2 }, 20))
+func main() => int sync {
+    println(over(func (x) {
+        x * 2
+    }, 20))
     return 0
 }

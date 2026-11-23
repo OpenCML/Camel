@@ -1,19 +1,25 @@
 /**
  * Refused: the variable is assigned in branch arms, outside the function body that declares it.
  */
-import { reshape, sum } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, sum } from tensor
 
-func forward(x: float[...]): float[...] sync {
+func forward(x: float[...]) => float[...] sync {
     var acc = x * 2.0
-    if sum(x) > 0.0 then sync { acc = acc + 1.0 } else sync { acc = acc - 1.0 }
+    if sum(x) > 0.0 then sync {
+        acc = acc + 1.0
+    } else sync {
+        acc = acc - 1.0
+    }
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0])
-    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] { forward(x) }, x)
+    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] {
+        forward(x)
+    }, x)
     return match r {
         case error e => sync {
             println(e)

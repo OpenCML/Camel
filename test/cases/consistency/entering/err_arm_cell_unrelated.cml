@@ -8,13 +8,17 @@
 // Each arm is the value of a `sync` block, which is the cell its write returned: nothing here
 // is a `var` read out by the position, so what the join sees is the cell unless the arm merge
 // reads it out.
-func bad(c: bool): int sync {
+func bad(c: bool) => int sync {
     var x: int = 1
     var s: string = 'a'
-    return if c then sync { x = x + 1 } else sync { s = s + 'b' }
+    return if c then sync {
+        x = x + 1
+    } else sync {
+        s = s + 'b'
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bad(true))
     return 0
 }

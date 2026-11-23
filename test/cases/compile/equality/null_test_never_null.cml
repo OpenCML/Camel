@@ -3,7 +3,7 @@
 // work out that the branch behind it is dead. The program still runs -- it is a warning, and the
 // value is not evaluated -- so the test also pins that the fixed answer is used.
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 5
     if x == null then println('never') else println('always')
     return 0

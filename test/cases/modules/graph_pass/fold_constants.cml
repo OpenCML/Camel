@@ -1,21 +1,23 @@
 import { flat_map } from array
 import { any } from array
-import { starts_with } from str
 import { Graph, Node, Txn, nodes, inputs, constant, add_constant, open, commit, replace, op, op_name, graphs_of } from graph
+import { starts_with } from str
 
-func allNodes::<F>(p: F): Node[] {
-    return graphs_of(p)->flat_map<func (g: Graph) => Node[] { nodes(g) }>
+func allNodes::<F>(p: F) => Node[] {
+    return graphs_of(p)->flat_map<func (g: Graph) => Node[] {
+        nodes(g)
+    }>
 }
 
-func valueAt(n: Node): int {
+func valueAt(n: Node) => int {
     return constant::<int>(n) ?? -1
 }
 
-func hasInt(n: Node): bool {
+func hasInt(n: Node) => bool {
     return constant::<int>(n) != null
 }
 
-func isIntAdd(n: Node): bool {
+func isIntAdd(n: Node) => bool {
     return match op(n) {
         case null => false
         case o => op_name(o)->starts_with<':op/add'>
@@ -24,7 +26,7 @@ func isIntAdd(n: Node): bool {
 
 /// Folds `a + b` of two int constants: makes the sum a static value of the graph (the new value
 /// a transaction may create) and replaces the add by it.
-func foldAdd::<F>(t: Txn<F>, g: Graph, n: Node): bool sync {
+func foldAdd::<F>(t: Txn<F>, g: Graph, n: Node) => bool sync {
     let ins = inputs(n)
     return if isIntAdd(n) && hasInt(ins[0]) && hasInt(ins[1]) then sync {
         let c = add_constant(t, g, valueAt(ins[0]) + valueAt(ins[1]))
@@ -33,26 +35,34 @@ func foldAdd::<F>(t: Txn<F>, g: Graph, n: Node): bool sync {
     } else false
 }
 
-func churn(rounds: int): string {
+func churn(rounds: int) => string {
     let (i, acc) = loop i = 0, acc = '' while i < rounds do (i + 1, acc + 'h36-churn-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
     return acc
 }
 
-func isGolden(n: Node): bool {
+func isGolden(n: Node) => bool {
     return match constant::<string>(n) {
         case null => false
         case s => s == 'h36-golden'
     }
 }
 
-export func fold::<F>(p: F): F! sync {
+export func fold::<F>(p: F) => F! sync {
     let t = open(p)
-    graphs_of(p)->foreach<func (g: Graph) { nodes(g)->foreach<func (n: Node) { foldAdd(t, g, n) }> }>
+    graphs_of(p)->foreach<func (g: Graph) {
+        nodes(g)->foreach<func (n: Node) {
+            foldAdd(t, g, n)
+        }>
+    }>
     let g0 = graphs_of(p)[0]
     let golden = add_constant(t, g0, 'h36-golden')
     let junk = churn(200)
     let next = commit(t) !! p
     let left = len(allNodes(next)->filter<isIntAdd>)
     let ok = allNodes(next)->any<isGolden>
-    if ok && left == 0 then { return next } else { return error('FoldBroken', 'a constant did not survive the transaction') }
+    if ok && left == 0 then {
+        return next
+    } else {
+        return error('FoldBroken', 'a constant did not survive the transaction')
+    }
 }

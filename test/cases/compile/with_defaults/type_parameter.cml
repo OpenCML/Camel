@@ -5,10 +5,10 @@
  */
 
 with <v: T = 1>
-func first::<T>(x: T): T {
+func first::<T>(x: T) => T {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return first::<int>(1)
 }

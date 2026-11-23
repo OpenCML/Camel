@@ -11,21 +11,31 @@ import rulesets.transpose
 import { grad } from vjp
 
 with <x: float>
-func times_three(): float { return x * 3.0 }
+func times_three() => float {
+    return x * 3.0
+}
 
 with <x: float>
-func less_one(): float { return x - 1.0 }
+func less_one() => float {
+    return x - 1.0
+}
 
 with <x: float>
-func negated(): float { return -x }
+func negated() => float {
+    return -x
+}
 
 with <x: float>
-func divided_by_four(): float { return x / 4.0 }
+func divided_by_four() => float {
+    return x / 4.0
+}
 
 with <x: float>
-func four_over(): float { return 4.0 / x }
+func four_over() => float {
+    return 4.0 / x
+}
 
-func main(): int sync {
+func main() => int sync {
     println(grad(times_three)<1.0>())
     println(grad(less_one)<1.0>())
     println(grad(negated)<1.0>())

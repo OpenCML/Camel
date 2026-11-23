@@ -8,35 +8,35 @@
 
 import { get_env } from env
 
-func churn(n: int, acc: int): int {
+func churn(n: int, acc: int) => int {
     return if n == 0 then acc else churn(n - 1, acc + len(string(n) + 'x'))
 }
 
-func ping(n: int, acc: int): int {
+func ping(n: int, acc: int) => int {
     return if n == 0 then acc else pong(n - 1, acc + n % 7)
 }
 
-func pong(n: int, acc: int): int {
+func pong(n: int, acc: int) => int {
     return if n == 0 then acc else ping(n - 1, acc + 1)
 }
 
-func build(n: int, acc: int[]): int[] {
+func build(n: int, acc: int[]) => int[] {
     return if n == 0 then acc else build(n - 1, concat(acc, [n % 10]))
 }
 
-func total(xs: int[], i: int, acc: int): int {
+func total(xs: int[], i: int, acc: int) => int {
     return if i == len(xs) then acc else total(xs, i + 1, acc + xs[i])
 }
 
-func digits(n: int): int {
+func digits(n: int) => int {
     return len(string(n))
 }
 
-func digit_sum(n: int, acc: int): int {
+func digit_sum(n: int, acc: int) => int {
     return if n == 0 then acc else digit_sum(n - 1, acc + digits(n))
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = int(get_env('N') ?? '')
     println(churn(n, 0))
     println(ping(n, 0))

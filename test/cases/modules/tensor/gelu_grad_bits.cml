@@ -25,17 +25,17 @@
  * one element.
  */
 
-import { gelu, sum, to_bytes } from tensor
-import { next_key, seed, uniform } from random
 import { grad } from autodiff
 import { sha256 } from hash
+import { next_key, seed, uniform } from random
+import { gelu, sum, to_bytes } from tensor
 
 with <x: f32[...]>
-func loss(): float {
+func loss() => float {
     return float(sum(gelu(x)))
 }
 
-func main(): int sync {
+func main() => int sync {
     seed(29)
     let ffn = (next_key()->uniform::<f32><shape: [16, 32, 512]> * 16.0 - 8.0)
     'gelu_grad_bits ffn={}'->format<sha256(to_bytes(grad(loss)<ffn>()))>->println

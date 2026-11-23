@@ -1,17 +1,17 @@
 // `sync` in the function body position orders its statements; a body without it still runs its writes.
 // Run: camel docs/tutorial/examples/06_sync_body.cml
 
-func f(): int {
-    println('f')        // runs: the body is a region
+func f() => int {
+    println('f') // runs: the body is a region
     return 1
 }
 
-func g(): int sync {
-    println('g')        // runs, and in order with its neighbours
+func g() => int sync {
+    println('g') // runs, and in order with its neighbours
     return 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f() + g())
     return 0
 }

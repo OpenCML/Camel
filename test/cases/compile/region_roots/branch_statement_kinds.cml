@@ -21,17 +21,23 @@
 
 import state
 
-func kinds(): int {
+func kinds() => int {
     let cell = state::ref(0)
-    if true then { state::set(cell, 5) }
+    if true then {
+        state::set(cell, 5)
+    }
     var v = 1
-    if true then { v = 2 }
-    if true then { 1 + 2 }
+    if true then {
+        v = 2
+    }
+    if true then {
+        1 + 2
+    }
     println(state::get(cell), v)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     kinds()
     return 0
 }

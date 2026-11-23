@@ -22,43 +22,59 @@
  * Output: `then`, `a`, `b`, `two`, `deep`, `1 2` -- nothing from `untaken`.
  */
 
-func taken(): int {
-    if true then { println("then") }
-    return 0
-}
-
-func untaken(): int {
-    if false then { println("never") }
-    return 0
-}
-
-func one_of(which: bool): int {
-    if which then { println("a") } else { println("b") }
-    return 0
-}
-
-func picked(k: int): int {
-    match k {
-        case 1 => { println("one") }
-        case 2 => { println("two") }
-        case _ => { println("many") }
-    }
-    return 0
-}
-
-func nested(): int {
+func taken() => int {
     if true then {
-        if true then { println("deep") }
+        println('then')
     }
     return 0
 }
 
-func value_used(c: bool): int {
+func untaken() => int {
+    if false then {
+        println('never')
+    }
+    return 0
+}
+
+func one_of(which: bool) => int {
+    if which then {
+        println('a')
+    } else {
+        println('b')
+    }
+    return 0
+}
+
+func picked(k: int) => int {
+    match k {
+        case 1 => {
+            println('one')
+        }
+        case 2 => {
+            println('two')
+        }
+        case _ => {
+            println('many')
+        }
+    }
+    return 0
+}
+
+func nested() => int {
+    if true then {
+        if true then {
+            println('deep')
+        }
+    }
+    return 0
+}
+
+func value_used(c: bool) => int {
     let x = if c then 1 else 2
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     taken()
     untaken()
     one_of(true)

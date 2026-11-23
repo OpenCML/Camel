@@ -13,16 +13,16 @@ import { sum } from tensor
 import { regions } from tiles
 
 #gpu
-func double_bf16(x: bf16[3]): bf16[3] {
+func double_bf16(x: bf16[3]) => bf16[3] {
     return x * 2.0
 }
 
 #gpu
-func double_f16(x: f16[3]): f16[3] {
+func double_f16(x: f16[3]) => f16[3] {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(regions<double_bf16>())
     println(regions<double_f16>())
     let halves: bf16[3] = [0.5, -1.5, 2.0]

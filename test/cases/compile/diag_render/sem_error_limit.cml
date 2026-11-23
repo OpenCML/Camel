@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     println(u0)
     println(u1)
     println(u2)

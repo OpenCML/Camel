@@ -1,6 +1,6 @@
 /// A line that starts with '+' ends the statement of the line above.
 
-func main(): int {
+func main() => int {
     let x = 1
     + x
     return 0

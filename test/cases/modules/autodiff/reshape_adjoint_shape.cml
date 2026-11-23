@@ -21,18 +21,18 @@
  * Run as `camel reshape_adjoint_shape.cml std::macro std::nvm` or `... std::macro std::jgir`.
  */
 
-import { reshape, sum } from tensor
 import { grad } from autodiff
+import { reshape, sum } from tensor
 
 with <w: float[]>
-func loss(): float {
+func loss() => float {
     let s = reshape<[3, 2]>(w)
     let d = reshape<[2, 3]>(s)
     return float(sum(d * d))
 }
 
-func main(): int sync {
-    let w  = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+func main() => int sync {
+    let w = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
     let gw = grad(loss)<w>()
     'reshape_adjoint_shape {}'->format<gw>->println
     return 0

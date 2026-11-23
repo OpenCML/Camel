@@ -10,13 +10,13 @@
  */
 
 with <var total: int>
-func add(x: int): int sync {
+func add(x: int) => int sync {
     total = total + x
     return total
 }
 
 /// 1: `t` is 0 before the call and 1 after it.
-func guarded(): int sync {
+func guarded() => int sync {
     var t = 0
     let g = add<t>
     let before = t
@@ -26,14 +26,14 @@ func guarded(): int sync {
 }
 
 /// 0: the call is outside a sync block and its result is taken by nothing.
-func ignored(): int {
+func ignored() => int {
     var t = 0
     let g = add<t>
     g(1)
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     println(guarded(), ignored())
     return 0
 }

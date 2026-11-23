@@ -13,11 +13,11 @@
 import { graph_of, nodes } from graph
 import { Graph, Node } from graph
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     let g: Graph = graph_of(main)
     let other: Graph = graph_of(twice)
     let ns: Node[] = nodes(g)

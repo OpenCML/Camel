@@ -3,11 +3,13 @@
  * export_model call (line 11).
  */
 
-import { reshape } from tensor
 import { export_model } from onnx
+import { reshape } from tensor
 
-func main(): int sync {
-    let r = export_model<out: 'package.json/refusal_path.onnx'>(func (t: float[...]) => float[...] { t * 2.0 }, reshape<[2]>([1.0, 2.0]))
+func main() => int sync {
+    let r = export_model<out: 'package.json/refusal_path.onnx'>(func (t: float[...]) => float[...] {
+        t * 2.0
+    }, reshape<[2]>([1.0, 2.0]))
     return match r {
         case error e => sync {
             println(e)

@@ -13,7 +13,7 @@ import { Tangent, is_same } from types
 
 /// The tangent space of one value, by its type: a float is its own tangent space, everything
 /// else carries no data.
-func zero_of::<F>(x: F): Tangent<F> {
+func zero_of::<F>(x: F) => Tangent<F> {
     return match type F {
         case float => 0.0
         case _ => ()
@@ -21,16 +21,16 @@ func zero_of::<F>(x: F): Tangent<F> {
 }
 
 /// `Tangent<(float, int)>` is `(float, ())`: each member's tangent has the member's place.
-func zeros(x: (float, int)): Tangent<(float, int)> {
+func zeros(x: (float, int)) => Tangent<(float, int)> {
     return Tangent<(float, int)> { static for n, F in fields (float, int) do zero_of(x.[n]) }
 }
 
 /// The tangent space of two floats is the same two floats, so the rounds give floats.
-func pair_zero(x: (float, float)): Tangent<(float, float)> {
+func pair_zero(x: (float, float)) => Tangent<(float, float)> {
     return Tangent<(float, float)> { static for n, F in fields (float, float) do 0.0 }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(is_same::<Tangent<(float, int)>, (float, ())>())
     println(zeros((1.0, 7)))
     println(pair_zero((3.0, 4.0)))

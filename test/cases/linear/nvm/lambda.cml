@@ -12,43 +12,43 @@ let HEIGHT = 10
 // an outer name (the ruling of 2026-11-15, design principles 3.5), and `filter` calls the predicate
 // once per element, in order.
 with <predicate: (p: Point) => bool>
-func my_filter(points: Point[]): Point[] sync {
+func my_filter(points: Point[]) => Point[] sync {
     return points->filter<predicate>
 }
 
 // Filter out points that fall outside the visible board.
-func valid_points(points: Point[]): Point[] {
+func valid_points(points: Point[]) => Point[] {
     return points->my_filter<func (p: Point) => bool {
         return p.x >= 0 && p.x < WIDTH && p.y >= 0 && p.y < HEIGHT
     }>
 }
 
 // Render only the points that remain after validation.
-func render(snake: Point[]): void sync {
+func render(snake: Point[]) => void sync {
     let cleaned = valid_points(snake)
-    let rows = 0..HEIGHT
-
+    let rows = 0 .. HEIGHT
+    
     rows->foreach<func (y: int) sync {
-        let cols = 0..WIDTH
+        let cols = 0 .. WIDTH
         cols->map<func (x: int) => string {
             let p = { x: x, y: y }
             return if cleaned->contains<p> then 'O' else '.'
         }>->join<''>->println
     }>
-
+    
     println('')
 }
 
 // Provide a snake with both valid and invalid points.
-func main(): int sync {
+func main() => int sync {
     let snake = [
         { x: 5, y: 5 },
         { x: 5, y: 6 },
         { x: 5, y: 7 },
-        { x: -1, y: 0 },   // invalid
-        { x: 10, y: 10 }   // invalid
+        { x: -1, y: 0 }, // invalid
+        { x: 10, y: 10 } // invalid
     ]
-
+    
     render(snake)
     return 0
 }

@@ -3,7 +3,7 @@
  * column 21). The later value used to be dropped, silently.
  */
 
-func main(): int sync {
+func main() => int sync {
     let s = { x: 1, x: 2 }
     println('never printed')
     println(s)

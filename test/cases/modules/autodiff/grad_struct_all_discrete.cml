@@ -16,12 +16,12 @@ import { with_grad } from autodiff
 type Plain = { n: int, flag: bool }
 
 with <p: Plain>
-func loss(x: float): float {
+func loss(x: float) => float {
     return float(p.n) * (if p.flag then 2.0 else 1.0) * x
 }
 
-func main(): int sync {
-    let (value, gradient) = with_grad(loss)<{n: 3, flag: true}>(2.0)
+func main() => int sync {
+    let (value, gradient) = with_grad(loss)<{ n: 3, flag: true }>(2.0)
     let g: Plain = gradient
     println(value)
     println(g.n)

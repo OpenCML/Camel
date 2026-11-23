@@ -13,16 +13,52 @@
 // a literal's construction has no ordering at all (its only effect is the allocation itself) and
 // may fall on either side of a measurement window. The windows below therefore measure only the
 // writes.
-func make_array(): int[] {
+func make_array() => int[] {
     return [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
     ]
 }
 
-func main(): int sync {
+func main() => int sync {
     var v = make_array()
     let s0 = std::mem::blocks()
     v[0] = 1
@@ -37,14 +73,14 @@ func main(): int sync {
     let s3 = std::mem::blocks()
     println(s1.allocs - s0.allocs, s2.allocs - s1.allocs, s3.allocs - s2.allocs)
     println(v[0], v[1], v[29], v[39])
-
+    
     let before = std::mem::blocks()
-    let kept   = v
+    let kept = v
     v[0] = 100
     let after = std::mem::blocks()
     println(after.allocs - before.allocs)
     println(kept[0], v[0])
-
+    
     // The control: a read of the variable in every round takes the array out of the cell's
     // keeping, so every round's write copies. The counter is not always zero — the numbers
     // above mean what they say.

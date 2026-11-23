@@ -4,12 +4,12 @@
 // be refused, not read as an optimisation.
 import { println } from std
 
-func noisy(): int sync {
-    println("noisy")
+func noisy() => int sync {
+    println('noisy')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = noisy() + 1
     println(v)
     return 0

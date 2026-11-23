@@ -4,10 +4,12 @@
 
 tag rule(f: (x: int) => int) on field
 
-func twice_float(x: float): float { return x + x }
-
-type Box = {
-    #rule(twice_float) scaled: int,
+func twice_float(x: float) => float {
+    return x + x
 }
 
-func main(): int sync { return 0 }
+type Box = { #rule(twice_float) scaled: int }
+
+func main() => int sync {
+    return 0
+}

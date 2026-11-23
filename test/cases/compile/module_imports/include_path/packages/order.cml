@@ -1,5 +1,4 @@
 /// reached through `CAMEL_PACKAGES`; `-I` wins when both roots hold this name.
-
-export func value(): int {
+export func value() => int {
     return 200
 }

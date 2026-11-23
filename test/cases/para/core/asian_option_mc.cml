@@ -2,28 +2,30 @@
  * Parallel Monte Carlo pricing workload used to stress independent worker scheduling over a compute-heavy finance kernel.
  */
 
-import { now } from time
 import { asian_call_price } from sim
+import { now } from time
 
-func main(): int sync {
+func main() => int sync {
     let workers = 50
     let paths_per_worker = 200000
     let steps = 256
     let base_seed = 20260309
-
+    
     'Launching {} independent option-pricing workers...'->format<workers>->println
     'Paths per worker: {}, steps per path: {}'->format<paths_per_worker, steps>->println
-
+    
     let start = now()
-    let prices = (0..workers)
-        ->map<func (i: int) => float { asian_call_price(paths_per_worker, steps, base_seed + i * 7919) }>
-    let total = prices->reduce<func (acc: float, cur: float) => float { acc + cur }, 0.0>
+    let prices = (0 .. workers)->map<func (i: int) => float {
+        asian_call_price(paths_per_worker, steps, base_seed + i * 7919)
+    }>
+    let total = prices->reduce<func (acc: float, cur: float) => float {
+        acc + cur
+    }, 0.0>
     let duration = now() - start
     let price = total / float(workers)
-
+    
     'Worker prices (first 8 shown) = {}'->format<prices[0..8]>->println
     'Estimated Asian call price = {:.6f}'->format<price>->println
     'Asian option Monte Carlo completed in {:.2f} seconds'->format<duration>->println
     return 0
 }
-

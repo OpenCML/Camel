@@ -5,15 +5,15 @@
  * The `with` argument and the ordinary one are one reading, not two.
  */
 
-func stop(m: string): never {
+func stop(m: string) => never {
     return fail<'Stopped'>(m)
 }
 
 with <rounds: int>
-func repeat(x: int): int {
+func repeat(x: int) => int {
     return x + rounds
 }
 
-func main(): int[] sync {
+func main() => int[] sync {
     return repeat<rounds: stop('no rounds by name')>(3)
 }

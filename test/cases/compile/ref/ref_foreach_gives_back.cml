@@ -23,8 +23,10 @@
 
 import state
 
-func main(): int {
+func main() => int {
     let r = state::ref(1)
-    [1, 2, 3]->foreach<func (x: int) => void { println(state::get(r) + x) }>
+    [1, 2, 3]->foreach<func (x: int) => void {
+        println(state::get(r) + x)
+    }>
     return 0
 }

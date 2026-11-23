@@ -6,27 +6,31 @@
 
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func nodesOf::<F>(p: F, function: string) => Node[] spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    return len(nodesOf(p, function)->filter<func (n: Node) => bool { opText(n) == operator }>)
+func countOf::<F>(p: F, function: string, operator: string) => int spelling {
+    return len(nodesOf(p, function)->filter<func (n: Node) => bool {
+        opText(n) == operator
+    }>)
 }
 
 func line::<F>(p: F, function: string) spelling {
     println(function, countOf(p, function, 'math:log_d'), countOf(p, function, 'math:log1p_d'))
 }
 
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     line(p, 'plain')
     line(p, 'licensed')
     line(p, 'guarded')

@@ -8,28 +8,30 @@
 
 import stream
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func firstOf(p: (int, int..)?): int {
+func firstOf(p: (int, int..)?) => int {
     return match p {
         case null => 0
         case v => v.0
     }
 }
 
-func twice(s: int..): int {
+func twice(s: int..) => int {
     let (left, right) = stream::tee<2>(s)
     let whole = loop acc = 0 for x in left do acc + x
     return whole + firstOf(right())
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(count(3)))
     return 0
 }

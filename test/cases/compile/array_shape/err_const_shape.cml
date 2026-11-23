@@ -1,10 +1,10 @@
 // A shape is written without `const`: the extents of an array type are expressions, so a `const`
 // in front of one is the retired spelling and the parser refuses the word there.
 
-func bad(x: f32[const 3]): int {
+func bad(x: f32[const 3]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

@@ -15,27 +15,27 @@ resource acc
 resource console = [stdout]
 
 /// A read of the resource: the entry carries no `var`.
-func reads(): int uses scale {
+func reads() => int uses scale {
     return 3
 }
 
 /// A write of the resource: the entry carries `var`.
-func writes(): int uses var acc {
+func writes() => int uses var acc {
     return 5
 }
 
 /// `var` says the entry may write, not that the body must.
-func maybe(): int uses var scale {
+func maybe() => int uses var scale {
     return 1
 }
 
 /// The group expands to `stdout`, which every call to this writes: the entry carries `var`.
-func shout(): int uses var console sync {
+func shout() => int uses var console sync {
     println('shout')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(reads())
     println(writes())
     println(maybe())

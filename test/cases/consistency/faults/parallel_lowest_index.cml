@@ -3,12 +3,16 @@
  * fault of element 0, on every run and on every back end.
  */
 
-func tbl(): int[] { return [1, 2, 3] }
-func bad(x: int): int { return tbl()[x + 10] }
+func tbl() => int[] {
+    return [1, 2, 3]
+}
+func bad(x: int) => int {
+    return tbl()[x + 10]
+}
 
-func main(): int sync {
+func main() => int sync {
     println('before')
-    println((0..64)->map<bad>)
+    println((0 .. 64)->map<bad>)
     println('not reached')
     return 0
 }

@@ -1,7 +1,7 @@
-func bad(...ts: int): int {
+func bad(...ts: int) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }

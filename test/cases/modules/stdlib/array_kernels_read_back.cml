@@ -8,7 +8,7 @@
 
 import { argsort, sort, merge_sorted, sum, min, max, dim } from array
 
-func main(): int sync {
+func main() => int sync {
     let xs = [30, 10, 20, 10]
     println(argsort(xs))
     println(sort(xs))

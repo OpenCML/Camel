@@ -6,7 +6,7 @@
 
 import { numel } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let t = [[1.0, 2.0]] as f32[1, 2]
     println(numel(t, 2))
     return 0

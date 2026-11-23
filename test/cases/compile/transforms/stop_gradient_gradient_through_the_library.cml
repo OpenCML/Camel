@@ -14,17 +14,17 @@
 // the backward half, because the tangent depends on no input.
 //
 //     camel test/cases/compile/transforms/stop_gradient_gradient_through_the_library.cml
+import { stop_gradient } from autodiff
 import rulesets.jvp
 import rulesets.transpose
-import { stop_gradient } from autodiff
 import { vjp } from vjp
 
 /// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
-func cut(x: float): float {
+func cut(x: float) => float {
     return stop_gradient(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(cut)(4.0)
     let cotangents = pullback(1.0)
     `stop_gradient library value={} dL/dx={}`->format<value, cotangents.0>->println

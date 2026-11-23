@@ -7,7 +7,7 @@
 
 import { plot } from pyplot
 
-func main(): int sync {
-    plot([1.0, 2.0], "out.png", 3)
+func main() => int sync {
+    plot([1.0, 2.0], 'out.png', 3)
     return 0
 }

@@ -7,25 +7,27 @@
 
 import stream
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
 /// The tuple itself: the two streams are the items of one value, which this signature takes and
 /// gives as one value.
-func sides(s: int.., n: int): (int.., int..) {
+func sides(s: int.., n: int) => (int.., int..) {
     return stream::tee<n>(s)
 }
 
-func total(s: int..): int {
+func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (left, right) = sides(count(3), 2)
     println(total(left))
     println(total(right))

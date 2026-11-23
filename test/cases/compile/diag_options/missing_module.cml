@@ -6,8 +6,10 @@
 import { thing } from no_such_module_a
 import { other } from no_such_module_b
 
-func f(a: thing): int { return 1 }
+func f(a: thing) => int {
+    return 1
+}
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

@@ -3,29 +3,39 @@
 
 import state
 
-func inc(x: int): int { return x + 1 }
-func dbl(x: int): int { return x * 2 }
+func inc(x: int) => int {
+    return x + 1
+}
+func dbl(x: int) => int {
+    return x * 2
+}
 
-func apply_twice(f: (x: int) => int, x: int): int {
+func apply_twice(f: (x: int) => int, x: int) => int {
     return f(f(x))
 }
 
-func adder(n: int): (x: int) => int {
-    return func (x: int) => int { x + n }
+func adder(n: int) => (x: int) => int {
+    return func (x: int) => int {
+        x + n
+    }
 }
 
-func main(): int sync {
-    let g = inc                              // a function name is a value
+func main() => int sync {
+    let g = inc // a function name is a value
     println(g(1), apply_twice(dbl, 3))
-
-    let add5 = adder(5)                      // a closure that captured n
+    
+    let add5 = adder(5) // a closure that captured n
     println(add5(10))
-
-    let ops = [inc, dbl]                     // functions in an array
-    println(ops->map<func (f: (x: int) => int) => int { f(10) }>)
-
-    let total = state::ref(0)                // shared state: a handle a closure may capture
-    [1, 2, 3]->foreach<func (x) sync { state::set(total, state::get(total) + x) }>
+    
+    let ops = [inc, dbl] // functions in an array
+    println(ops->map<func (f: (x: int) => int) => int {
+        f(10)
+    }>)
+    
+    let total = state::ref(0) // shared state: a handle a closure may capture
+    [1, 2, 3]->foreach<func (x) sync {
+        state::set(total, state::get(total) + x)
+    }>
     println(state::get(total))
     return 0
 }

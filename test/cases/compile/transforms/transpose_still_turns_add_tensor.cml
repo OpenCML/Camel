@@ -17,15 +17,15 @@
 //
 //     camel test/cases/compile/transforms/transpose_still_turns_add_tensor.cml
 import rulesets.transpose
-import { transpose } from transforms
 import { sum } from tensor
+import { transpose } from transforms
 
 /// `(a, b) ↦ Σ(a + b)`: two laws, `add_tensor_t` and the sum's, and nothing else.
-func f_pair(a: float[3], b: float[3]): float {
+func f_pair(a: float[3], b: float[3]) => float {
     return float(sum(a + b))
 }
 
-func main(): int sync {
+func main() => int sync {
     let (da, db) = transpose(f_pair)(1.0)
     `pair ct=1.0 da={} db={}`->format<da, db>->println
     return 0

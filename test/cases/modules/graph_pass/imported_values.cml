@@ -7,7 +7,7 @@ import { pi, sqrt } from math
 let half = pi / 2.0
 let root = sqrt(16.0)
 
-export func show::<F>(p: F): F! sync {
+export func show::<F>(p: F) => F! sync {
     println(pi)
     println(half, root)
     return p

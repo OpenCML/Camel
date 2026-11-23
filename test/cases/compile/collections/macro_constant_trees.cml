@@ -7,7 +7,7 @@
 // The macro evaluator has a depth limit and no loop, so the collections are put together by
 // halving: the depth is the logarithm of the size.
 
-func span_labels(lo: int, hi: int): Map<int, string> {
+func span_labels(lo: int, hi: int) => Map<int, string> {
     if hi - lo <= 1 then {
         return [((lo * 7) % 1009, 'v' + string(lo))] as Map<int, string>
     } else {
@@ -15,7 +15,7 @@ func span_labels(lo: int, hi: int): Map<int, string> {
     }
 }
 
-func span_words(lo: int, hi: int): Set<string> {
+func span_words(lo: int, hi: int) => Set<string> {
     if hi - lo <= 1 then {
         return ['w' + string((lo * 13) % 997)] as Set<string>
     } else {
@@ -23,7 +23,12 @@ func span_words(lo: int, hi: int): Set<string> {
     }
 }
 
-func span_operations(lo: int, hi: int, inc: (x: int) => int, double: (x: int) => int): Map<int, (x: int) => int> {
+func span_operations(
+    lo: int,
+    hi: int,
+    inc: (x: int) => int,
+    double: (x: int) => int
+) => Map<int, (x: int) => int> {
     if hi - lo <= 1 then {
         return [(lo, if lo % 3 == 0 then double else inc)] as Map<int, (x: int) => int>
     } else {
@@ -31,30 +36,41 @@ func span_operations(lo: int, hi: int, inc: (x: int) => int, double: (x: int) =>
     }
 }
 
-#macro func labels(n: int): Map<int, string> {
+#macro
+func labels(n: int) => Map<int, string> {
     return span_labels(0, n)
 }
 
-#macro func words(n: int): Set<string> {
+#macro
+func words(n: int) => Set<string> {
     return span_words(0, n)
 }
 
-#macro func operations(n: int): Map<int, (x: int) => int> {
-    let inc = func (x: int) => int { x + 1 }
-    let double = func (x: int) => int { x * 2 }
+#macro
+func operations(n: int) => Map<int, (x: int) => int> {
+    let inc = func (x: int) => int {
+        x + 1
+    }
+    let double = func (x: int) => int {
+        x * 2
+    }
     return span_operations(0, n, inc, double)
 }
 
-func apply(ops: Map<int, (x: int) => int>, k: int, x: int): int {
-    let f = ops[k] ?? (func (y: int) => int { 0 - y })
+func apply(ops: Map<int, (x: int) => int>, k: int, x: int) => int {
+    let f = ops[k] ?? (func (y: int) => int {
+        0 - y
+    })
     return f(x)
 }
 
-func digest(m: Map<int, string>): int {
-    return items(m)->reduce<func (acc: int, kv: (int, string)) => int { (acc * 31 + kv.0 * 7 + len(kv.1)) % 1000003 }, len(m)>
+func digest(m: Map<int, string>) => int {
+    return items(m)->reduce<func (acc: int, kv: (int, string)) => int {
+        (acc * 31 + kv.0 * 7 + len(kv.1)) % 1000003
+    }, len(m)>
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = labels(400)
     println(len(t), digest(t), t[7] ?? '?', t[(399 * 7) % 1009] ?? '?', t[1008] ?? '?')
     let grown = t->put<1008, 'last'>->remove<0>->put<-5, 'first'>
@@ -65,6 +81,10 @@ func main(): int sync {
     println(len(w), w->contains<'w13'>, w->contains<'zzz'>, len(more), more->contains<'w0'>, len(intersect(w, more)), len(difference(w, more)), difference(w, more))
     let ops = operations(300)
     println(len(ops), apply(ops, 0, 21), apply(ops, 1, 21), apply(ops, 299, 21), apply(ops, 300, 21))
-    println(len(ops->put<300, (func (x: int) => int { x * x })>), apply(ops->put<300, (func (x: int) => int { x * x })>, 300, 21))
+    println(len(ops->put<300, (func (x: int) => int {
+        x * x
+    })>), apply(ops->put<300, (func (x: int) => int {
+        x * x
+    })>, 300, 21))
     return 0
 }

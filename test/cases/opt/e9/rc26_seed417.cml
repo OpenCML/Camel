@@ -1,10 +1,10 @@
-func q31(a32: int, a33: bool): bool sync {
-    println('');
-    return false;
+func q31(a32: int, a33: bool) => bool sync {
+    println('')
+    return false
 }
 
-func main(): int sync {
-    q31(0, if true then true else false);
-    println('L4 {} {}'->format<0, 0>);
-    return 0;
+func main() => int sync {
+    q31(0, if true then true else false)
+    println('L4 {} {}'->format<0, 0>)
+    return 0
 }

@@ -4,16 +4,16 @@
 // puts `x` into that form, see compile/tagged/nullable.cml. A return type of `any` used to be
 // listed too; `any` is not a type a program can write any more, see
 // compile/any_typing/written_return.cml.)
-func a(x: int): int {
+func a(x: int) => int {
     return x
 }
 func c(x: int) {
     return x + 1
 }
-func d(x: int): void {
+func d(x: int) => void {
     return x + 1
 }
-func main(): int sync {
+func main() => int sync {
     println(a(2))
     println(c(2))
     d(2)

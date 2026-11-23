@@ -4,43 +4,43 @@
  * the first `with` parameter.
  */
 
-import { reshape, take, one_hot, shape, sum, abs } from tensor
-import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { grad } from autodiff
+import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
+import { reshape, take, one_hot, shape, sum, abs } from tensor
 
 with <w: f32[...]>
-func row_sum(): float {
+func row_sum() => float {
     return float(sum(take(w, [0, 0, 1])))
 }
 
-func main(): int sync {
-    let t = reshape<[4, 3]>(0..12)
+func main() => int sync {
+    let t = reshape<[4, 3]>(0 .. 12)
     let rows = take(t, [2, 0, 2])
     'take rows={} shape={} sum={}'->format<rows, shape(rows), sum(f32(rows))>->println
-
+    
     let index_tensor = int([3, 1])
     let picked = take(t, index_tensor)
     'take tensor shape={} sum={}'->format<shape(picked), sum(f32(picked))>->println
-
+    
     let picked32 = take(t, i32([3, 1]))
     'take int32 sum={}'->format<sum(f32(picked32))>->println
-
+    
     let none = take(t, [])
     'take empty shape={}'->format<shape(none)>->println
-
+    
     let logits = reshape<[2, 3]>([1.0, 2.0, 3.0, 0.5, -1.0, 0.0])
     let labels = [1, 0]
     let hot = one_hot(labels, 3)
     'one_hot={} shape={}'->format<hot, shape(hot)>->println
     'one_hot empty shape={}'->format<shape(one_hot([], 3))>->println
-
+    
     let onehot_loss = softmax_cross_entropy(logits, hot)
     let labels_loss = softmax_cross_entropy(logits, labels)
     let onehot_grad = softmax_cross_entropy_grad(logits, hot, 1.0)
     let labels_grad = softmax_cross_entropy_grad(logits, labels, 1.0)
     'sce onehot={} labels={} diff={} grad_diff={}'->format<onehot_loss, labels_loss, onehot_loss - labels_loss, sum(abs(onehot_grad - labels_grad))>->println
-
-    let weights = f32(reshape<[2, 3]>(0..6))
+    
+    let weights = f32(reshape<[2, 3]>(0 .. 6))
     let repeated = grad(row_sum)<weights>()
     'take grad={}'->format<repeated>->println
     return 0

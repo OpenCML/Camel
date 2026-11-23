@@ -2,17 +2,17 @@
 // after, and the way a program writes that is a mask: `where(cond, a, b)` on the scores, or a
 // constant added to them. Without a rule for `where` the mask is not part of the differentiated
 // program at all.
-import { ones, sum, where } from tensor
 import rulesets.jvp
+import { ones, sum, where } from tensor
 import { jvp } from transforms
 
-func masked(x: float[...]): float {
+func masked(x: float[...]) => float {
     let keep = [[true, false], [true, true]] as bool[2, 2]
     let hidden = where(keep, x, x - 10.0)
     return sum(hidden * hidden)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let (value, tangent) = jvp(masked)(x, ones::<float>([2, 2]))
     println(`value = ${value:.6f}`)

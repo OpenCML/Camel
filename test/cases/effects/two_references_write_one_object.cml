@@ -13,13 +13,15 @@
 
 var counter = 0
 
-func twice(f: (x: int) => void, v: int): int sync {
-    counter = 1     // The first reference: recorded in the writer table.
-    f(v)            // The second reference: `f` captured `counter`, not visible here.
-    return counter  // Whichever write the read takes.
+func twice(f: (x: int) => void, v: int) => int sync {
+    counter = 1 // The first reference: recorded in the writer table.
+    f(v) // The second reference: `f` captured `counter`, not visible here.
+    return counter // Whichever write the read takes.
 }
 
-func main(): int sync {
-    println(twice(func (y: int) { counter = y }, 3))
+func main() => int sync {
+    println(twice(func (y: int) {
+        counter = y
+    }, 3))
     return 0
 }

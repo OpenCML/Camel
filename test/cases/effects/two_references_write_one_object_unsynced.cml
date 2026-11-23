@@ -7,13 +7,15 @@
 
 var counter = 0
 
-func twice(f: (x: int) => void, v: int): int {
+func twice(f: (x: int) => void, v: int) => int {
     counter = 1
     f(v)
     return counter
 }
 
-func main(): int sync {
-    println(twice(func (y: int) { counter = y }, 3))
+func main() => int sync {
+    println(twice(func (y: int) {
+        counter = y
+    }, 3))
     return 0
 }

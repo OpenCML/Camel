@@ -3,7 +3,7 @@
 // it stays `void`, and `v ?? 0` is refused ("its left side has type 'void', which is not a
 // 'T?'"). State that has to be typed is therefore not carried in a `null`-valued `var`.
 
-func main(): int sync {
+func main() => int sync {
     var v = null
     v = 5
     println(v ?? 0)

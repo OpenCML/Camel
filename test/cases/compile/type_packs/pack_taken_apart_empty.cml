@@ -10,12 +10,14 @@
  */
 import { WithOf } from types
 
-type Head<P> = match type P { case (W, ...Rest) => W }
+type Head<P> = match type P {
+    case (W,...Rest) => W
+}
 
 // A function with no `with` parameter: the pack of `with` parameters is the empty one.
 type Plain = (x: float) => float
 
-func main(): int sync {
+func main() => int sync {
     let head: Head<WithOf<Plain>> = 1.0
     return 0
 }

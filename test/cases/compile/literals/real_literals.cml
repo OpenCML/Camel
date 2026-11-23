@@ -13,7 +13,7 @@
  * true and `0.1 + 0.2 == 0.30000000000000004` is false; they were the other way round before.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('{:.17g}'->format<0.7747>)
     println('{:.17g}'->format<0.6906>)
     println('{:.17g}'->format<0.1>)

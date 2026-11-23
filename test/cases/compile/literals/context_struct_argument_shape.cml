@@ -6,9 +6,11 @@
 
 type Point = { x: f32, y: f32 }
 
-func norm(p: Point): f32 { return p.x * p.x + p.y * p.y }
+func norm(p: Point) => f32 {
+    return p.x * p.x + p.y * p.y
+}
 
-func main(): int sync {
+func main() => int sync {
     println(norm({ x: 1.0 }))
     return 0
 }

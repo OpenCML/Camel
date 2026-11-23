@@ -7,14 +7,14 @@
  */
 
 #op(':op/add_l')
-func kernel(a: int, b: int): int
+func kernel(a: int, b: int) => int
 
 #impl(kernel)
-func add(a: int, b: int..): int {
+func add(a: int, b: int..) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(0)
     return 0
 }

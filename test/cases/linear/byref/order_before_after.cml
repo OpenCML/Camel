@@ -10,24 +10,24 @@
  * gives `B 1` and 10010, and the three lines change places.
  */
 
-func before(x: int): int sync {
+func before(x: int) => int sync {
     println('A {}'->format<x>)
     return x * 10
 }
 
-func after(x: int): int sync {
+func after(x: int) => int sync {
     println('B {}'->format<x>)
     return x * 10
 }
 
-func modify(var x: int): int sync {
+func modify(var x: int) => int sync {
     println('modify')
     x += 1
     return 0
 }
 
 // A sync body: the three calls are ordered by the writing order of its statements.
-func run(): int sync {
+func run() => int sync {
     var i = 1
     let a = before(i)
     modify(i)
@@ -35,7 +35,7 @@ func run(): int sync {
     return a * 1000 + b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(run())
     return 0
 }

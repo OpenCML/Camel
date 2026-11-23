@@ -5,7 +5,7 @@ let area = pi * r * r
 let pi = 3.14159
 let r = 2.0
 
-func main(): int sync {
+func main() => int sync {
     println(area, twice(), offset())
     return 0
 }
@@ -16,7 +16,7 @@ func twice() {
 
 let k = 21
 
-func offset(): int {
+func offset() => int {
     return k + later
 }
 

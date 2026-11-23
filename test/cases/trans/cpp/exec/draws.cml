@@ -3,7 +3,7 @@
 /// (`shuffle`, `sample`, `permutation`) are not translated yet.
 import { seed, next_key, rand, key, split, uniform } from random
 
-func main(): int sync {
+func main() => int sync {
     seed(7)
     println(rand(), rand(), next_key())
     let (a, b) = split(key(7))

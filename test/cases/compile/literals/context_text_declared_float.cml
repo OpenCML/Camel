@@ -3,7 +3,7 @@
  * (design principles 5.1, no implicit text-to-number conversion).
  */
 
-func main(): int sync {
+func main() => int sync {
     let x: float = '1.5'
     println(x)
     return 0

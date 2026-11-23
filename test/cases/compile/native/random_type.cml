@@ -6,7 +6,7 @@
 
 import { seed } from random
 
-func main(): int sync {
+func main() => int sync {
     seed('forty-two')
     return 0
 }

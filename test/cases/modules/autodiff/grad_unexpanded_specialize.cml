@@ -11,27 +11,27 @@ import { grad, with_grad } from autodiff
 import { get_env } from env
 
 with <w: float>
-func cell(h: float): float {
+func cell(h: float) => float {
     return h * w + 1.0
 }
 
 /// Runs the recurrence over steps [t, steps).
 with <w: float>
-func run(t: int, steps: int, h: float): float {
+func run(t: int, steps: int, h: float) => float {
     return if t >= steps then h else run<w>(t + 1, steps, cell<w>(h))
 }
 
 with <w: float>
-func loss(x: float, steps: int): float {
+func loss(x: float, steps: int) => float {
     let h = run<w>(0, steps, x)
     return h * h
 }
 
-func step(w: float, x: float, steps: int): (float, float) {
+func step(w: float, x: float, steps: int) => (float, float) {
     return with_grad(loss)<w>(x, steps)
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before grad')
     // Not a constant of the program: the recursion cannot be unrolled (run with STEPS=3).
     let steps = int(get_env('STEPS') ?? '')

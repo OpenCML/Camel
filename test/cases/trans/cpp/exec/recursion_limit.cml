@@ -2,11 +2,11 @@
 /// position): 999 levels below main run, the next call is a fault at the call, reported as
 /// the schedulers report it (it had no limit, design principles 10.6).
 
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(depth(999))
     println(depth(1000))
     println('not reached')

@@ -5,19 +5,25 @@
 tag rule::<F>(f: F) on field when is_function::<F>()
 tag vjp::<F>(rule: F) on func when is_function::<F>()
 
-func twice(x: int): int { return x + x }
-func twice_rule(dy: int): int { return dy }
+func twice(x: int) => int {
+    return x + x
+}
+func twice_rule(dy: int) => int {
+    return dy
+}
 
 type Box = {
     #rule(twice) scaled: int,
-    plain: int,
+    plain: int
 }
 
 #vjp(twice_rule)
-func label(x: int): int { return twice(x) }
+func label(x: int) => int {
+    return twice(x)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(label(21))
-    println({scaled: 3, plain: 5}.plain)
+    println({ scaled: 3, plain: 5 }.plain)
     return 0
 }

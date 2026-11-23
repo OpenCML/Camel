@@ -21,7 +21,7 @@ type NumericAgain<T> = match type T {
     case _ => int[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     // ① the first question about each of these two types is asked here.
     println(is_same::<NumericOnce<int>, int[1]>(), is_same::<NumericOnce<float>, int[1]>())
     // ② the same two questions, asked by another type function: answered from the cache.

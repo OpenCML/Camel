@@ -6,14 +6,14 @@
  * reported at the `@` with both inner extents.
  */
 
-import { zeros, ones } from tensor
 import { get_env } from env
+import { zeros, ones } from tensor
 
-func pick(flag: bool): f32[...] {
+func pick(flag: bool) => f32[...] {
     return if flag then zeros::<f32>([2, 3]) else ones::<f32>([3, 2])
 }
 
-func main(): int sync {
+func main() => int sync {
     let w = ones::<f32>([3, 4])
     println(pick((get_env('FLAG') ?? '') == 'true') @ w)
     return 0

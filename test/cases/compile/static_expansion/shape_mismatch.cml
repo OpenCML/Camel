@@ -1,13 +1,12 @@
 /** The generator walks `B`, but the comprehension fills `A`: the two shapes differ. */
-
-type A = {a: int}
-type B = {b: int, c: int}
+type A = { a: int }
+type B = { b: int, c: int }
 
 func build(u: B) {
     return A { static for n, F in fields B do u.[n] }
 }
 
-func main(): int sync {
-    println(build({b: 1, c: 2}))
+func main() => int sync {
+    println(build({ b: 1, c: 2 }))
     return 0
 }

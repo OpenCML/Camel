@@ -1,29 +1,29 @@
 import { flatten } from array
-import { is_function } from types
 import { Node, Graph, nodes, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit, graphs_of } from graph
+import { is_function } from types
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func typeText(n: Node): string {
+func typeText(n: Node) => string {
     return match type_of(n) {
         case null => ''
         case t => type_name(t)
     }
 }
 
-func isInt(n: Node, value: int): bool {
+func isInt(n: Node, value: int) => bool {
     return match constant::<int>(n) {
         case null => false
         case v => v == value
     }
 }
 
-func isInt32(n: Node, value: int): bool {
+func isInt32(n: Node, value: int) => bool {
     let zero: i32 = 0
     let one: i32 = 1
     let wanted: i32 = if value == 0 then zero else one
@@ -33,59 +33,75 @@ func isInt32(n: Node, value: int): bool {
     }
 }
 
-func isAdd(text: string): bool { return text == ':op/add_l' || text == ':op/add_i' }
-func isSub(text: string): bool { return text == ':op/sub_l' || text == ':op/sub_i' }
-func isMul(text: string): bool { return text == ':op/mul_l' || text == ':op/mul_i' }
+func isAdd(text: string) => bool {
+    return text == ':op/add_l' || text == ':op/add_i'
+}
+func isSub(text: string) => bool {
+    return text == ':op/sub_l' || text == ':op/sub_i'
+}
+func isMul(text: string) => bool {
+    return text == ':op/mul_l' || text == ':op/mul_i'
+}
 
 /// Whether the constant node `n` is the neutral element `value` (0 or 1) of an operation on
 /// numbers of the type `type`.
-func neutral(n: Node, ty: string, value: int): bool {
+func neutral(n: Node, ty: string, value: int) => bool {
     return if ty == 'int' then isInt(n, value) else (ty == 'i32' && isInt32(n, value))
 }
 
 /// The operand that stays when the operation x + 0, 0 + x, x - 0, x * 1 or 1 * x is replaced
 /// by it, or the node itself when the operation is none of them. A subtraction is neutral on
 /// its right only; when both operands are neutral the left one stays.
-func keptOf(n: Node, ins: Node[]): Node {
+func keptOf(n: Node, ins: Node[]) => Node {
     let text = opText(n)
     let ty = typeText(n)
     let rightNeutral = (isAdd(text) && neutral(ins[1], ty, 0)) || (isSub(text) && neutral(ins[1], ty, 0)) || (isMul(text) && neutral(ins[1], ty, 1))
     let leftNeutral = (isAdd(text) && neutral(ins[0], ty, 0)) || (isMul(text) && neutral(ins[0], ty, 1))
     let sameTypes = typeText(ins[0]) == ty && typeText(ins[1]) == ty
-    return if !sameTypes then n else if rightNeutral then ins[0] else if leftNeutral then ins[1] else n
+    return if !sameTypes then n
+    else if rightNeutral then ins[0]
+    else if leftNeutral then ins[1] else n
 }
 
-func kept(n: Node): Node {
+func kept(n: Node) => Node {
     let ins = inputs(n)
     return if len(ins) == 2 && len(with_inputs(n)) == 0 && !is_anchor(n) && !is_written_slot(n) && !is_written_slot(ins[0]) && !is_written_slot(ins[1]) then keptOf(n, ins) else n
 }
 
-func isHit(n: Node): bool {
+func isHit(n: Node) => bool {
     return kept(n) != n
 }
 
 /// The hits whose kept operand is not itself a hit of the round: replacing them together is
 /// sound. The rest are the hits of the next round.
-func independent(hits: Node[]): Node[] {
-    return hits->filter<func (n: Node) => bool { len(hits->filter<func (m: Node) => bool { m == kept(n) }>) == 0 }>
+func independent(hits: Node[]) => Node[] {
+    return hits->filter<func (n: Node) => bool {
+        len(hits->filter<func (m: Node) => bool {
+            m == kept(n)
+        }>) == 0
+    }>
 }
 
-func allNodes::<F>(p: F): Node[] {
-    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] { nodes(g) }>)
+func allNodes::<F>(p: F) => Node[] {
+    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] {
+        nodes(g)
+    }>)
 }
 
-func replaceHits::<F>(p: F, hits: Node[]): F! sync {
+func replaceHits::<F>(p: F, hits: Node[]) => F! sync {
     let t = open(p)
-    independent(hits)->foreach<func (n: Node) { replace(t, n, kept(n)) }>
+    independent(hits)->foreach<func (n: Node) {
+        replace(t, n, kept(n))
+    }>
     return commit(t)
 }
 
-func settle::<F>(p: F): F! when is_function::<F>() sync {
+func settle::<F>(p: F) => F! when is_function::<F>() sync {
     let hits = allNodes(p)->filter<isHit>
-    return if len(hits) == 0 then p else replaceHits(p, hits) -> settle
+    return if len(hits) == 0 then p else replaceHits(p, hits)->settle
 }
 
 /// x + 0, 0 + x, x - 0, x * 1 and 1 * x of the integers, replaced by x.
-export func integers::<F>(p: F): F! {
+export func integers::<F>(p: F) => F! {
     return settle(p)
 }

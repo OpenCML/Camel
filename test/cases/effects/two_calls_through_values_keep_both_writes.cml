@@ -13,14 +13,18 @@
 
 var counter = 0
 
-func run(a: () => void, b: () => void): int {
+func run(a: () => void, b: () => void) => int {
     counter = 1
     a()
     b()
     return counter
 }
 
-func main(): int sync {
-    println(run(func () { counter = counter + 1 }, func () { counter = counter + 10 }))
+func main() => int sync {
+    println(run(func () {
+        counter = counter + 1
+    }, func () {
+        counter = counter + 10
+    }))
     return 0
 }

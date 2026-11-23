@@ -4,15 +4,15 @@
  * declaration order.
  */
 
-func pick(xs: f32[]): f32 {
+func pick(xs: f32[]) => f32 {
     return xs[0]
 }
 
-func pick(xs: float[]): float {
+func pick(xs: float[]) => float {
     return xs[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick([1]))
     println('never printed')
     return 0

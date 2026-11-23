@@ -8,15 +8,15 @@
 
 import stream
 
-func down(n: int): (int, int)? {
+func down(n: int) => (int, int)? {
     return if n > 0 then (n, n - 1) else null
 }
 
-func total(s: int..): int {
+func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(stream::unfold(3, down)))
     println(total(stream::unfold(0, down)))
     return 0

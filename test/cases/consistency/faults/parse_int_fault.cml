@@ -2,9 +2,11 @@
  * int('abc'): the conversion of a string that is not a number.
  */
 
-func conv(s: string): int { return int(s) }
+func conv(s: string) => int {
+    return int(s)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(conv('42'))
     println(conv('abc'))
     println('not reached')

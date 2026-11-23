@@ -6,10 +6,10 @@
 
 import { zeros, reshape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let no: int[] = []
-    let s  = reshape<no>(zeros::<f32>([1]))
-    let n  = loop c = 0 for x in s do c + 1
+    let s = reshape<no>(zeros::<f32>([1]))
+    let n = loop c = 0 for x in s do c + 1
     println(n)
     return 0
 }

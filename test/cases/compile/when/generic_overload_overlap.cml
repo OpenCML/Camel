@@ -8,29 +8,29 @@
  * an ordinary `Redeclaration`, which is what a pair that writes no answerable `when` still gets.
  */
 
-func is_integer::<T>(): bool {
+func is_integer::<T>() => bool {
     return match type T {
         case int | i32 => true
         case _ => false
     }
 }
 
-func is_numeric::<T>(): bool {
+func is_numeric::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 | c64 | c128 => true
         case _ => false
     }
 }
 
-func both::<T>(x: T): string when is_integer::<T>() {
+func both::<T>(x: T) => string when is_integer::<T>() {
     return 'integer'
 }
 
-func both::<T>(x: T): string when is_numeric::<T>() {
+func both::<T>(x: T) => string when is_numeric::<T>() {
     return 'numeric'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(both(1))
     return 0
 }

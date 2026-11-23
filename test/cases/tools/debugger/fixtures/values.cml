@@ -1,12 +1,12 @@
-func risky(d: int): int {
+func risky(d: int) => int {
     return 100 / d
 }
 
-func pick(flag: bool, v: int): int? {
+func pick(flag: bool, v: int) => int? {
     return if flag then v as int? else null as int?
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = 42
     let ratio = 2.5
     let ok = true
@@ -21,8 +21,8 @@ func main(): int sync {
     let good = attempt(risky)(4)
     let bad = attempt(risky)(0)
     let table = [('a', 1), ('b', 2)] as Map<string, int>
-    let later = n + 1                // mark:later
-    println(xs)                      // mark:stop
+    let later = n + 1 // mark:later
+    println(xs) // mark:stop
     println(pair)
     println(point)
     println(counter)

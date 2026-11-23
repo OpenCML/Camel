@@ -3,7 +3,7 @@
 /// fails; it does not read the Python file as source and report a syntax error from inside it.
 import { value } from thing
 
-func main(): int sync {
+func main() => int sync {
     println(value)
     return 0
 }

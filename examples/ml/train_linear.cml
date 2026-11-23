@@ -3,8 +3,8 @@
 // Run: camel examples/ml/train_linear.cml
 
 import { grad } from autodiff
-import { reshape, shape, sum } from tensor
 import { sgd } from nn
+import { reshape, shape, sum } from tensor
 
 type Linear = { weight: f32[...] }
 
@@ -12,28 +12,33 @@ type Linear = { weight: f32[...] }
 // parameter, so `grad` differentiates it; the targets are captured `with` data and stay
 // constant.
 with <layer: Linear, y: f32[...]>
-func mse_loss(X: f32[...]): float {
+func mse_loss(X: f32[...]) => float {
     let errors = X @ layer.weight - y
     return float(sum(errors * errors)) / float(shape(X)[0])
 }
 
-func train(layer: Linear, X: f32[...], y: f32[...], rate: float, steps: int): Linear {
+func train(
+    layer: Linear,
+    X: f32[...],
+    y: f32[...],
+    rate: float,
+    steps: int
+) => Linear {
     let loss_grad = grad(mse_loss)
-    let grads = loss_grad<layer, y>(X)       // a Linear: the gradient of the first `with` parameter
-    return if steps == 0 then layer
-        else train(sgd(layer, grads, rate), X, y, rate, steps - 1)
+    let grads = loss_grad<layer, y>(X) // a Linear: the gradient of the first `with` parameter
+    return if steps == 0 then layer else train(sgd(layer, grads, rate), X, y, rate, steps - 1)
 }
 
-func init(): Linear {
+func init() => Linear {
     return { weight: reshape<[2, 1]>([0.0, 0.0] as f32[]) }
 }
 
-func main(): int sync {
+func main() => int sync {
     // Four samples of y = 2 * x1 - 1 * x2.
     let X = reshape<[4, 2]>([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[])
     let y = reshape<[4, 1]>([2.0, -1.0, 1.0, 3.0] as f32[])
     let start = init()
-
+    
     println(format<mse_loss<start, y>(X)>('loss before training: {:.4f}'))
     let after10 = train(start, X, y, 0.1, 10)
     println(format<mse_loss<after10, y>(X)>('loss after 10 steps:  {:.4f}'))

@@ -3,30 +3,40 @@
 // graph that called it. The keys and values (strings, arrays, function values, other maps)
 // must be carried over with the table.
 
-#macro func table(n: int): Map<int, string> {
+#macro
+func table(n: int) => Map<int, string> {
     return ([(1, 'one'), (2, 'two')] as Map<int, string>)->put<n, 'more'>
 }
 
-#macro func names(): Set<string> {
+#macro
+func names() => Set<string> {
     return (['beta', 'alpha'] as Set<string>)->add<'gamma'>
 }
 
-#macro func nested(): Map<string, Map<string, int[]>> {
+#macro
+func nested() => Map<string, Map<string, int[]>> {
     return [('outer', [('xs', [1, 2, 3])] as Map<string, int[]>)] as Map<string, Map<string, int[]>>
 }
 
-#macro func operations(): Map<string, (x: int) => int> {
-    let double = func (x: int) => int { x * 2 }
-    let negate = func (x: int) => int { 0 - x }
+#macro
+func operations() => Map<string, (x: int) => int> {
+    let double = func (x: int) => int {
+        x * 2
+    }
+    let negate = func (x: int) => int {
+        0 - x
+    }
     return [('double', double), ('negate', negate)] as Map<string, (x: int) => int>
 }
 
-func apply(ops: Map<string, (x: int) => int>, name: string, x: int): int {
-    let f = ops[name] ?? (func (y: int) => int { y })
+func apply(ops: Map<string, (x: int) => int>, name: string, x: int) => int {
+    let f = ops[name] ?? (func (y: int) => int {
+        y
+    })
     return f(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = table(4)
     println(t, t[2] ?? '?', len(t))
     println(names(), names()->contains<'alpha'>, names()->contains<'delta'>)

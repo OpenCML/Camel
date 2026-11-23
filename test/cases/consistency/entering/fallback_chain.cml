@@ -5,14 +5,18 @@
  * `??` is one branch on the graph.
  */
 
-func look(tag: string, x: int?): int? sync {
+func look(tag: string, x: int?) => int? sync {
     println('look ' + tag)
     return x
 }
-func parse(s: string): int! { return parse_int(s) }
-func plain(x: int): int { return x }
+func parse(s: string) => int! {
+    return parse_int(s)
+}
+func plain(x: int) => int {
+    return x
+}
 
-func main(): int sync {
+func main() => int sync {
     let none: int? = null
     let some: int? = 4
     let other: int? = 5

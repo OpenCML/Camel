@@ -17,19 +17,23 @@
 
 import state
 
-func in_the_untaken_arm(): int {
+func in_the_untaken_arm() => int {
     let c = state::ref(0)
-    if false then { state::set(c, 1) }
+    if false then {
+        state::set(c, 1)
+    }
     return state::get(c)
 }
 
-func arm(flag: bool): int {
+func arm(flag: bool) => int {
     let c = state::ref(0)
-    if flag then { state::set(c, 9) }
+    if flag then {
+        state::set(c, 9)
+    }
     return state::get(c)
 }
 
-func main(): int sync {
+func main() => int sync {
     let r2 = in_the_untaken_arm()
     let r2b = arm(false)
     println(`r2=${r2} r2b=${r2b}`)

@@ -5,7 +5,7 @@
 
 type Point = { x: float, y: float }
 
-func main(): int sync {
+func main() => int sync {
     let n: int = 1
     let p: Point = { x: n, y: 2.0 }
     println(p)

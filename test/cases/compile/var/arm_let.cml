@@ -10,12 +10,12 @@
  *
  * Run: camel test/cases/compile/var/arm_let.cml
  */
-func pick(c: bool): int sync {
+func pick(c: bool) => int sync {
     let x = if c then 1 else 2
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true))
     return 0
 }

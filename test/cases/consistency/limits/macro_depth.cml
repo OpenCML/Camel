@@ -3,11 +3,12 @@
  * default limit of the evaluator allows, fine with --max-macro-depth 200.
  */
 
-#macro func count(n: int): int {
+#macro
+func count(n: int) => int {
     return if n == 0 then 0 else 1 + count(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count(100))
     return 0
 }

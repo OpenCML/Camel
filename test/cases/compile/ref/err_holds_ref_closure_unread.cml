@@ -8,14 +8,18 @@
 
 import state
 
-func make(f: () => int): int sync {
-    let g = func () => int { f() }
+func make(f: () => int) => int sync {
+    let g = func () => int {
+        f()
+    }
     let box = state::ref(g)
     let call = state::get(box)
     return call()
 }
 
-func main(): int sync {
+func main() => int sync {
     let k = 42
-    return make(func () => int { k })
+    return make(func () => int {
+        k
+    })
 }

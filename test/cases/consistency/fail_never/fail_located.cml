@@ -5,11 +5,11 @@
  * chose and its own message, and what was printed before it stays on standard output.
  */
 
-func limit(q: float): float {
+func limit(q: float) => float {
     return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(limit(-1.0))
     println('not reached')

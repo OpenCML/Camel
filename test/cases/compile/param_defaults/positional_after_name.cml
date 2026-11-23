@@ -3,10 +3,10 @@
  * the named arguments come after the positional ones, so `2` here has no place to go.
  */
 
-func f(a: int, b: int = 0): int {
+func f(a: int, b: int = 0) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(a: 1, 2)
 }

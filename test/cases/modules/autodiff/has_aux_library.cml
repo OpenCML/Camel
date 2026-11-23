@@ -17,23 +17,23 @@
  *
  * `has_aux` named at a `vjp` call is refused, by name: test/cases/modules/autodiff/has_aux_vjp_named.cml.
  */
-import { vjp } from vjp
 import { with_grad } from autodiff
+import { vjp } from vjp
 
 with <w: float>
-func loss(): (float, float) {
+func loss() => (float, float) {
     return (w * w, w + 10.0)
 }
 
-func value_of(x: float): float {
+func value_of(x: float) => float {
     return x * x
 }
 
-func aux_of(x: float): float {
+func aux_of(x: float) => float {
     return x + 10.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let stepped = with_grad(loss, has_aux: true)<3.0>()
     let inner = stepped.0
     let engine_value = inner.0

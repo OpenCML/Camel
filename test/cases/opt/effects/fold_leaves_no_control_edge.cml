@@ -13,7 +13,7 @@
  * the taken arm's.
  */
 
-func main(): int {
+func main() => int {
     let x1 = (if ((if (4 <= 7) then 2 else 2) < 8) then println(8) else println(8))
     let x2 = 3
     return (if ((if (x2 <= x1) then x2 else 3) > 3) then x2 else println(x1))

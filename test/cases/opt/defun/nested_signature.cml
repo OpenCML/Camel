@@ -16,23 +16,23 @@
  * The program prints the same line with and without the pass.
  */
 
-func inc(x: int): int {
+func inc(x: int) => int {
     return x + 1
 }
 
-func apply(f: (x: int) => int, x: int): int {
+func apply(f: (x: int) => int, x: int) => int {
     return f(x)
 }
 
-func apply_twice(f: (x: int) => int, x: int): int {
+func apply_twice(f: (x: int) => int, x: int) => int {
     return f(f(x))
 }
 
-func twice(h: (f: (x: int) => int, x: int) => int, x: int): int {
+func twice(h: (f: (x: int) => int, x: int) => int, x: int) => int {
     return h(inc, x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let h: (f: (x: int) => int, x: int) => int = apply_twice
     let k: (h: (f: (x: int) => int, x: int) => int, x: int) => int = twice
     'NESTED {} {} {} {}'->format<apply(inc, 2), twice(h, 3), k(apply, 4), twice(apply_twice, 5)>->println

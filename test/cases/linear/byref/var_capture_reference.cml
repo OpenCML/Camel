@@ -28,9 +28,9 @@
  *     take this file for complete coverage of the legal half.
  */
 
-func nested(): int sync {
+func nested() => int sync {
     var v = 3
-    func lift(by: int): int sync {
+    func lift(by: int) => int sync {
         v += by
         return v
     }
@@ -38,7 +38,7 @@ func nested(): int sync {
     return v
 }
 
-func through(var out: int): int sync {
+func through(var out: int) => int sync {
     let add = func (x: int) => int sync {
         out += x
         return out
@@ -48,7 +48,7 @@ func through(var out: int): int sync {
     return b
 }
 
-func counted(): int sync {
+func counted() => int sync {
     var total = 0
     [1, 2, 3]->foreach<func (x: int) sync {
         total += x
@@ -56,7 +56,7 @@ func counted(): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     var o = 0
     println(nested())
     println(through(o))

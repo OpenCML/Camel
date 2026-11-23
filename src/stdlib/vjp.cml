@@ -58,8 +58,8 @@
 
 import rulesets.jvp
 import rulesets.transpose
-import { is_function, GradientOf, Vjp } from types
 import { first_with_as_param, jvp, split, transpose } from transforms
+import { is_function, GradientOf, Vjp } from types
 
 /// The reverse transform, in JAX's order: `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
@@ -127,9 +127,9 @@ import { first_with_as_param, jvp, split, transpose } from transforms
 /// hole, or the `std::macro` stage evaluating the cut where the graph *is* in hand.
 /// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
 #macro
-export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
+export func vjp::<F>(f: F) => Vjp<F> when is_function::<F>() {
     let forward = split(jvp(f))
-    return func <...ws> (...xs) {
+    return func <...ws>(...xs) {
         let (y, lin) = forward<...ws>(...xs)
         (y, transpose(lin))
     }
@@ -181,9 +181,9 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 /// -- `transforms: jvp has no forward transform for this function`, at this body's `jvp` line. The
 /// numbers are pinned against that wall and not against the call form.
 #macro
-export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
+export func grad::<F>(f: F) => GradientOf<F> when is_function::<F>() {
     let forward = split(jvp(first_with_as_param(f)))
-    return func <w, ...ws> (...xs) {
+    return func <w, ...ws>(...xs) {
         let (value, lin) = forward<...ws>(w, ...xs)
         let _ = value
         let cotangents = transpose(lin)(1.0)
@@ -234,7 +234,9 @@ export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
 /// that shape until then.
 /// @example-fragment `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let step = has_aux(loss)
-export func has_aux(f: (w: float) => (float, float)): (w: float) => ((float, float), float) {
+export func has_aux(
+    f: (w: float) => (float, float)
+) => (w: float) => ((float, float), float) {
     let lifted = jvp(f)
     return func (w: float) {
         let (pair, tangent) = lifted(w, 1.0)

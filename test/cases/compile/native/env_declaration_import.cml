@@ -6,7 +6,7 @@
 
 import { get_env, get_cwd } from env
 
-func main(): int sync {
+func main() => int sync {
     let value: string = get_env('H163_ENV_VALUE') ?? ''
     let cwd: string = get_cwd() !! ''
     println(value)

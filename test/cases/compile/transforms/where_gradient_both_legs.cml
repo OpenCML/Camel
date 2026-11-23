@@ -22,27 +22,27 @@
 //
 //     camel test/cases/compile/transforms/where_gradient_both_legs.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, sum, where } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling of `d/da`: the branch under measurement is the `with` parameter.
 with <a: float[...]>
-func total_a(b: float[]): float {
+func total_a(b: float[]) => float {
     return sum(where(a > 0.0, a, b))
 }
 
 /// The same for `d/db`: the other branch is the `with` parameter.
 with <b: float[...]>
-func total_b(a: float[]): float {
+func total_b(a: float[]) => float {
     return sum(where(a > 0.0, a, b))
 }
 
 /// The library's spelling: both branches are ordinary parameters.
-func total_plain(a: float[], b: float[]): float {
+func total_plain(a: float[], b: float[]) => float {
     return sum(where(a > 0.0, a, b))
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = [-2.0, 3.0, 0.5, 1.5] as float[]
     let b = [3.0, -2.0, 2.0, 0.0] as float[]
     let engine_a = grad(total_a)<[-2.0, 3.0, 0.5, 1.5] as float[]>([3.0, -2.0, 2.0, 0.0] as float[])

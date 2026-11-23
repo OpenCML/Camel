@@ -25,55 +25,55 @@ var q = 0
 var n = 0
 var m = 0
 
-func two_writes(): int sync {
+func two_writes() => int sync {
     p += 1
     q += 10
     return 7
 }
 
-func bump_void(): void sync {
+func bump_void() => void sync {
     n += 1
 }
 
-func plain(): int {
+func plain() => int {
     return 3
 }
 
-func unused(): int sync {
+func unused() => int sync {
     m += 5
     return 9
 }
 
-func two_case(): int sync {
+func two_case() => int sync {
     p = 0
     q = 0
     let a = two_writes()
     return a * 1000 + p * 100 + q
 }
 
-func void_case(): int sync {
+func void_case() => int sync {
     n = 0
     bump_void()
     return n * 10 + 2
 }
 
-func plain_case(): int {
+func plain_case() => int {
     return plain() * 10
 }
 
-func unused_case(): int sync {
+func unused_case() => int sync {
     m = 0
     unused()
     return m * 10 + 4
 }
 
-func used_case(): int sync {
+func used_case() => int sync {
     m = 0
     let r = unused()
     return r * 10 + m
 }
 
-func main(): int sync {
+func main() => int sync {
     println(two_case())
     println(void_case())
     println(plain_case())

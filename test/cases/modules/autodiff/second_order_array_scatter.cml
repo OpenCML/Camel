@@ -14,7 +14,7 @@
 import { grad } from autodiff
 
 with <w: float>
-func f(): float {
+func f() => float {
     let xs = [w, w * 2.0, w * 3.0]
     let i = int(w)
     let a = xs[i]
@@ -22,11 +22,11 @@ func f(): float {
 }
 
 with <v: float>
-func df(): float {
+func df() => float {
     return grad(f)<v>()
 }
 
-func main(): int sync {
+func main() => int sync {
     let value = f<2.0>()
     let g = grad(f)<2.0>()
     let h = grad(df)<2.0>()

@@ -4,11 +4,11 @@
  * array and is in range.
  */
 
-func part(xs: int[], a: int, b: int): int[] {
+func part(xs: int[], a: int, b: int) => int[] {
     return xs[a..b]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3, 4, 5]
     println(part(xs, 1, 5))
     println(part(xs, 3, 9))

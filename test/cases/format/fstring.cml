@@ -1,6 +1,6 @@
-func main(): int sync {
-    let name='Camel'
-    let n=1+2
+func main() => int sync {
+    let name = 'Camel'
+    let n = 1 + 2
     println(`hello, ${name}!`)
     println(`sum ${ n+1 } and ${n:5d}`)
     return 0

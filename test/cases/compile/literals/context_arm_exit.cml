@@ -6,19 +6,27 @@
  * is the arm's position, so `2` there is a float, though the function returns an int.
  */
 
-func free(c: bool): float sync {
-    let v = if c then { return 2; } else { 3 };
+func free(c: bool) => float sync {
+    let v = if c then {
+        return 2
+    } else {
+        3
+    }
     println(v)
     return float(v)
 }
 
-func positioned(c: bool): int sync {
-    let v: float = if c then { return 2; } else { 2.0 };
+func positioned(c: bool) => int sync {
+    let v: float = if c then {
+        return 2
+    } else {
+        2.0
+    }
     println(v)
     return int(v)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(free(true), free(false))
     println(positioned(true), positioned(false))
     return 0

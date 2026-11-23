@@ -2,17 +2,17 @@
  * functions have different parameter names, so the front end keeps two signature objects where
  * the other file keeps one; the canonical type table must not see the difference. */
 
-func inc(y: int): int {
+func inc(y: int) => int {
     let delta = y + 1
     return delta
 }
 
-func inc2(z: int): int {
+func inc2(z: int) => int {
     let doubled = z * 2
     return doubled
 }
 
-func main(): int sync {
+func main() => int sync {
     println(inc(1), inc2(2))
     return 0
 }

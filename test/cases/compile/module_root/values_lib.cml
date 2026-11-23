@@ -6,22 +6,22 @@
 let base = 10
 let scale = base * 3
 
-func helper(x: int): int {
+func helper(x: int) => int {
     return x * scale
 }
 
-export func bump(x: int): int {
+export func bump(x: int) => int {
     return x + base
 }
 
-export func indirect(x: int): int {
+export func indirect(x: int) => int {
     return helper(x) + 1
 }
 
-export func biased::<T>(x: T): int {
+export func biased::<T>(x: T) => int {
     return base + len([x])
 }
 
-export func apply_all(xs: int[]): int[] {
+export func apply_all(xs: int[]) => int[] {
     return xs->map<bump>
 }

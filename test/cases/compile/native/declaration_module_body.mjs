@@ -45,7 +45,7 @@ fs.writeFileSync(
         `
 /// Twice the number of bytes in the binary value, written in Camel over an operator this same
 /// file declares, to_array, which the C++ module implements.
-export func twice(content: Bytes): int {
+export func twice(content: Bytes) => int {
     return len(to_array(content)) + len(to_array(content))
 }
 `,
@@ -54,7 +54,7 @@ fs.writeFileSync(
     path.join(SCRATCH, 'main.cml'),
     `import bytes
 
-func main(): int sync {
+func main() => int sync {
     let text = bytes::encode('abc')
     bytes::twice(text)->println
     return 0

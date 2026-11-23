@@ -13,7 +13,7 @@
 
 var c: int = 0
 
-func probe(x: int): int sync {
+func probe(x: int) => int sync {
     let h = func () => int sync {
         println(c)
         return c
@@ -23,7 +23,7 @@ func probe(x: int): int sync {
     return w + p.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(probe(7))
     return 0
 }

@@ -5,19 +5,18 @@
  * the empty array (not a fault).
  */
 
-func nothing(): void {
-}
+func nothing() => void {}
 
-func pick(c: bool): int? {
+func pick(c: bool) => int? {
     // the else arm is a call that returns nothing
     return if c then 7 else nothing()
 }
 
-func pick_block(c: bool): string? {
+func pick_block(c: bool) => string? {
     return if c then {} else 'b'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true) ?? -1, pick(false) ?? -1)
     println(pick_block(true) ?? 'none', pick_block(false) ?? 'none')
     let xs = [1, 2, 3]

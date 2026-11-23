@@ -14,7 +14,7 @@
  *   a abb    a value type, not an int: the read before the loop keeps the old string
  */
 
-func while_loop(): int sync {
+func while_loop() => int sync {
     var z = 0
     let before = z
     loop i = 0 while i < 2 do sync {
@@ -25,10 +25,10 @@ func while_loop(): int sync {
     return 0
 }
 
-func interval_loop(): int sync {
+func interval_loop() => int sync {
     var z = 0
     let before = z
-    loop i = 0 for k in 0..3 do sync {
+    loop i = 0 for k in 0 .. 3 do sync {
         z = z + 1
         i + 1
     }
@@ -36,7 +36,7 @@ func interval_loop(): int sync {
     return 0
 }
 
-func arm(): int sync {
+func arm() => int sync {
     var v = 0
     let before = v
     let r = if true then sync {
@@ -47,7 +47,7 @@ func arm(): int sync {
     return 0
 }
 
-func nothing_written(): int sync {
+func nothing_written() => int sync {
     var n = 7
     let before = n
     loop i = 0 while i < 2 do sync {
@@ -57,18 +57,18 @@ func nothing_written(): int sync {
     return 0
 }
 
-func text(): int sync {
-    var s = "a"
+func text() => int sync {
+    var s = 'a'
     let before = s
     loop i = 0 while i < 2 do sync {
-        s = s + "b"
+        s = s + 'b'
         i + 1
     }
     println(before, s)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     while_loop()
     interval_loop()
     arm()

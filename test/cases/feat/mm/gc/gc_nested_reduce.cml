@@ -7,29 +7,39 @@
  * while the arrays built in the element function are still in use.
  */
 
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
-func sums(n: int, k: int): int[] {
-    return (0..n)->map<func (i: int) => int { (0..n)->map<func (j: int) => int { i + j + k }>->reduce<func (acc: int, x: int) => int { add(acc, x) }, 0> }>
+func sums(n: int, k: int) => int[] {
+    return (0 .. n)->map<func (i: int) => int {
+        (0 .. n)->map<func (j: int) => int {
+            i + j + k
+        }>->reduce<func (acc: int, x: int) => int {
+            add(acc, x)
+        }, 0>
+    }>
 }
 
-func shifted(n: int, k: int): int[] {
-    return (0..n)->reduce<func (acc: int[], i: int) => int[] { acc->map<func (x: int) => int { add(x, i + k) }> }, 0..n>
+func shifted(n: int, k: int) => int[] {
+    return (0 .. n)->reduce<func (acc: int[], i: int) => int[] {
+        acc->map<func (x: int) => int {
+            add(x, i + k)
+        }>
+    }, 0 .. n>
 }
 
-func total_of(xs: int[]): int {
-    return xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+func total_of(xs: int[]) => int {
+    return xs->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
 }
 
-func repeat(n: int, left: int, total: int): int {
-    return if left == 0
-        then total
-        else repeat(n, left - 1, total + total_of(sums(n, left)) + total_of(shifted(n, left)))
+func repeat(n: int, left: int, total: int) => int {
+    return if left == 0 then total else repeat(n, left - 1, total + total_of(sums(n, left)) + total_of(shifted(n, left)))
 }
 
-func main(reps: int): int sync {
+func main(reps: int) => int sync {
     println('gc_nested_reduce total={}'->format<repeat(128, reps, 0)>)
     return 0
 }

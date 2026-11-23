@@ -8,11 +8,11 @@
 // `REINTERP remat` line, and its value is the same 18.0.
 import { remat } from transforms
 
-func h(x: float, y: float): float {
+func h(x: float, y: float) => float {
     return x * x * y
 }
 
-func main(): int sync {
+func main() => int sync {
     'remat_mark plain value={}'->format<h(3.0, 2.0)>->println
     let marked = remat(h)
     'remat_mark marked value={}'->format<marked(3.0, 2.0)>->println

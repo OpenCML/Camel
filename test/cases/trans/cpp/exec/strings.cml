@@ -2,11 +2,11 @@
 /// held in a local and returned (it did not compile, design principles 10.6),
 /// `match` on strings (it compared addresses, D3) and format specifications.
 
-func greet(name: string, n: int): string {
+func greet(name: string, n: int) => string {
     return 'hello, ' + name + ' #' + string(n)
 }
 
-func kind(c: string): string {
+func kind(c: string) => string {
     return match c {
         case 'a' => 'vowel'
         case 'e' => 'vowel'
@@ -14,11 +14,11 @@ func kind(c: string): string {
     }
 }
 
-func build(i: int, acc: string): string {
+func build(i: int, acc: string) => string {
     return if i == 0 then acc else build(i - 1, acc + string(i % 10))
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = greet('camel', 1)
     println(greet(a, 2))
     println(kind('a'), kind('e'), kind('x'))

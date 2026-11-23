@@ -2,24 +2,24 @@
  * Effects in sync blocks happen in the order written, across calls, branches and recursion.
  */
 
-func show(tag: string, x: int): int sync {
+func show(tag: string, x: int) => int sync {
     println(tag, x)
     return x + 1
 }
 
-func countdown(n: int): int sync {
+func countdown(n: int) => int sync {
     println('down', n)
     return if n == 0 then 0 else countdown(n - 1)
 }
 
-func nested(n: int): int sync {
+func nested(n: int) => int sync {
     println('in', n)
     let r = if n == 0 then 0 else nested(n - 1) + 1
     println('out', n)
     return r
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = show('a', 1)
     let b = show('b', a)
     if b > 2 then sync {

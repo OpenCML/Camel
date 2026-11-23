@@ -2,7 +2,7 @@ func count::<T>(xs: T[], i: int) {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count([1, 2], 0))
     return 0
 }

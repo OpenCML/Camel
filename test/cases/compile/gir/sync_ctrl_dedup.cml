@@ -6,7 +6,7 @@
  * principles 5.1), and the add node this checks would not be in the graph.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a: int = 40
     let total = a + 2
     total->println

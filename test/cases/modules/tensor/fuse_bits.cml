@@ -6,10 +6,10 @@
  * two runs of the same program are bit-identical (7.6).
  */
 
-import { reshape, relu, to_bytes, sum } from tensor
 import { to_array } from bytes
+import { reshape, relu, to_bytes, sum } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[])
     let b = reshape<[2]>([5.0, -0.2] as f32[])

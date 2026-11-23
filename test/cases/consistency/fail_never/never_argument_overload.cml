@@ -6,13 +6,17 @@
  * the result is `never`, and an `int[]` position takes it.
  */
 
-func pick(x: int): int { return x }
-func pick(x: string): string { return x }
+func pick(x: int) => int {
+    return x
+}
+func pick(x: string) => string {
+    return x
+}
 
-func stop(m: string): never {
+func stop(m: string) => never {
     return fail<'Stopped'>(m)
 }
 
-func main(): int[] sync {
+func main() => int[] sync {
     return pick(stop('no value to pick'))
 }

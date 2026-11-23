@@ -9,11 +9,11 @@
 
 import { sum } from tensor
 
-func total(x: f32[...]): float {
+func total(x: f32[...]) => float {
     return loop s = 0.0 for v in x do s + float(sum(v))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: f32[] = [1.0, 2.0, 3.0]
     println(total(x))
     return 0

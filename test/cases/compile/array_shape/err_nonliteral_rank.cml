@@ -4,7 +4,7 @@
 // source whose own nesting already gives the shape -- a nested literal, a constant a folded
 // `reshape` names -- is read as the shape the position states. Nothing is reshaped to fit.
 
-func main(): int sync {
+func main() => int sync {
     let flat: f32[] = [1.0, 2.0, 3.0, 4.0]
     let one = flat as f32[4]
     let b: f32[2, 2] = one

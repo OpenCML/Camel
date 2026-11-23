@@ -6,7 +6,7 @@
 
 import { sqrt } from math
 
-func main(): int sync {
+func main() => int sync {
     println(sqrt('9'))
     return 0
 }

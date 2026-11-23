@@ -29,11 +29,11 @@
 import { grad } from vjp
 
 with <x: float>
-func cube(): float {
+func cube() => float {
     return x * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let inner = grad(cube)
     let outer = grad(inner)
     println('nested_grad_through_a_binding second={}'->format<outer<2.0>()>)

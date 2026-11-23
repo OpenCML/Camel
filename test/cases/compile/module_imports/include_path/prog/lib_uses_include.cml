@@ -3,6 +3,6 @@
 
 import dep
 
-export func value(): int {
+export func value() => int {
     return dep::value() + 1
 }

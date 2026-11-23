@@ -11,7 +11,7 @@
 
 import lib
 
-func main(): int sync {
+func main() => int sync {
     // the decorated `bump`: twice its body
     println(lib::bump(3))
     // the plain `bump`: the overload the argument's type chooses

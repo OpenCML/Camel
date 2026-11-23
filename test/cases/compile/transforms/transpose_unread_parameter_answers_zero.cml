@@ -2,14 +2,14 @@
 // f(x, y) = x * 2.0 does not depend on y, so the cotangent of y is 0.0. Measured rather than
 // reasoned -- the first version of this case expected a refusal and the run answered `(2.0, 0.0)`
 // with exit 0. Pinned here so the behaviour cannot drift into a refusal without a red.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func f(x: float, y: float): float {
+func f(x: float, y: float) => float {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(f)
     println(back(1.0))
     return 0

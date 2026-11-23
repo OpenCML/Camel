@@ -1,8 +1,8 @@
-func parse(text: string): int! {
-    return error('BadInput', 'not a number: ' + text)    // mark:error
+func parse(text: string) => int! {
+    return error('BadInput', 'not a number: ' + text) // mark:error
 }
 
-func main(): int! sync {
+func main() => int! sync {
     println('start')
-    return parse('x')                                    // mark:return
+    return parse('x') // mark:return
 }

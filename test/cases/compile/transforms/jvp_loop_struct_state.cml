@@ -22,26 +22,26 @@ import { jvp } from transforms
 
 type Pair = { a: float, b: float }
 
-func identity(s: Pair): Pair {
+func identity(s: Pair) => Pair {
     return loop x = s for k in [1.0, 10.0] do x
 }
 
-func swap(s: Pair): Pair {
+func swap(s: Pair) => Pair {
     return loop x = s for k in [1.0, 10.0] do { a: x.b, b: x.a + x.b * k }
 }
 
-func main(): int sync {
+func main() => int sync {
     let flat = jvp(identity)
     let (value, d1) = flat({ a: 1.0, b: 2.0 }, { a: 1.0, b: 0.0 })
-    println("identity value= ", value.a, " ", value.b)
-    println("identity d1=", d1.a, " ", d1.b)
+    println('identity value= ', value.a, ' ', value.b)
+    println('identity d1=', d1.a, ' ', d1.b)
     let (_, d2) = flat({ a: 1.0, b: 2.0 }, { a: 0.0, b: 1.0 })
-    println("identity d2=", d2.a, " ", d2.b)
+    println('identity d2=', d2.a, ' ', d2.b)
     let lifted = jvp(swap)
     let (w, e1) = lifted({ a: 1.0, b: 2.0 }, { a: 1.0, b: 0.0 })
-    println("swap value= ", w.a, " ", w.b)
-    println("swap d1=", e1.a, " ", e1.b)
+    println('swap value= ', w.a, ' ', w.b)
+    println('swap d1=', e1.a, ' ', e1.b)
     let (_, e2) = lifted({ a: 1.0, b: 2.0 }, { a: 0.0, b: 1.0 })
-    println("swap d2=", e2.a, " ", e2.b)
+    println('swap d2=', e2.a, ' ', e2.b)
     return 0
 }

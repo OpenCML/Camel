@@ -4,6 +4,6 @@
  * through the type (design principles 5.7).
  */
 
-export func operator +(a: { v: int }, b: { v: int }): { v: int } {
+export func operator +(a: { v: int }, b: { v: int }) => { v: int } {
     return { v: a.v + b.v }
 }

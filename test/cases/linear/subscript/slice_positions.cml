@@ -12,26 +12,26 @@
  * them.
  */
 
-import { reshape } from tensor
 import { get_env } from env
+import { reshape } from tensor
 
 /// Every second position from 1 up to 7: 1, 3, 5 (the end is one past the last one taken).
-func window(x: f32[8]): f32[...] {
+func window(x: f32[8]) => f32[...] {
     return x[range(1, 7, 2)]
 }
 
 /// Backwards from 6 down to 0, a step of -1: 6, 5, 4, 3, 2, 1.
-func backward(x: f32[8]): f32[...] {
+func backward(x: f32[8]) => f32[...] {
     return x[range(6, 0, -1)]
 }
 
 /// Bounds only the run knows: the declaration states the interval they are accepted in, not
 /// their values.
-func range_of(x: f32[8], a: int, b: int): f32[...] {
+func range_of(x: f32[8], a: int, b: int) => f32[...] {
     return x[a..b]
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[8]>([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] as f32[]) as f32[8]
     // SLICE_FAULT=1 slices with a bound the axis cannot hold: the run faults with the interval
     // the declaration states for a bound only the run knows.

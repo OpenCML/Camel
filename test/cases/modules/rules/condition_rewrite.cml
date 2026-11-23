@@ -8,22 +8,33 @@ import { rewrite } from rewrite
 rule add_zero(x: int) when publish_now() { x + 0 => x }
 rule drop_one(x: int) when true { x * 1 => x }
 
-func publish_now(): bool {
+func publish_now() => bool {
     let p = redex
     return match p->rewrite<[drop_one]> {
-        case error e => sync { println('inner error value: ', e.kind); return false }
-        case q => sync { return true }
+        case error e => sync {
+            println('inner error value: ', e.kind)
+            return false
+        }
+        case q => sync {
+            return true
+        }
     }
 }
 
-func redex(x: int): int {
+func redex(x: int) => int {
     return x * 1 + 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = redex
     return match p->rewrite<[add_zero]> {
-        case error e => sync { println('outer error value: ', e.kind); return 1 }
-        case q => sync { println('rewritten'); return 0 }
+        case error e => sync {
+            println('outer error value: ', e.kind)
+            return 1
+        }
+        case q => sync {
+            println('rewritten')
+            return 0
+        }
     }
 }

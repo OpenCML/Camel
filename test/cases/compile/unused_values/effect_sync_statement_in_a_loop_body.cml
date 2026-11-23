@@ -8,7 +8,7 @@
  * does not run. 3.1's rule is about the *region*, and a block is not one.
  */
 
-func main(): int sync {
+func main() => int sync {
     let total = loop i = 0 while i < 3 do {
         sync {
             println(i)

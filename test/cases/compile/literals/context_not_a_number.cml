@@ -2,7 +2,7 @@
  * a text literal converted to a number says the text is not a number.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x = int('12abc')
     println(x)
     return 0

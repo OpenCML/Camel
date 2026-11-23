@@ -11,35 +11,42 @@
  * whose element type nobody wrote is what a parameter with no element type cannot state.
  */
 
-import { reshape, relu, zeros, shape, load_npy, save_npy } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, relu, zeros, shape, load_npy, save_npy } from tensor
 
-func gate(t: f32[...]): f32[...] {
+func gate(t: f32[...]) => f32[...] {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
 }
 
-func forward(x: f32[...], w: f32[...]): f32[...] {
+func forward(x: f32[...], w: f32[...]) => f32[...] {
     let n = shape(x)[0]
     let h = zeros::<f32>([n, shape(w)[1]]) + x @ w
     return reshape<[n * shape(w)[1]]>(h)
 }
 
-func main(): int! sync {
-let x = load_npy::<f32>(get_env('X') ?? '')
+func main() => int! sync {
+    let x = load_npy::<f32>(get_env('X') ?? '')
     let w = reshape<[2, 3]>([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[])
     let isGate = (get_env('MODEL') ?? '') == 'gate'
     let y = if isGate then gate(x) else forward(x, w)
     save_npy(y, get_env('Y') ?? '')
     let out = get_env('ONNX_OUT') ?? ''
-    return if out == '' then 0 else if isGate then sync {
+    return if out == '' then 0
+    else if isGate then sync {
         match export_model<out: out>(gate, x) {
-            case error e => { return e }
+            case error e => {
+                return e
+            }
             case v => 0
         }
     } else sync {
-        match export_model<out: out, dynamic_axes: [0]>(func (t: f32[...]) => f32[...] { forward(t, w) }, x) {
-            case error e => { return e }
+        match export_model<out: out, dynamic_axes: [0]>(func (t: f32[...]) => f32[...] {
+            forward(t, w)
+        }, x) {
+            case error e => {
+                return e
+            }
             case v => 0
         }
     }

@@ -16,24 +16,24 @@
 
 import { rendezvous } from test_support
 
-func left(timeout: float): int sync {
+func left(timeout: float) => int sync {
     return rendezvous(2, timeout)
 }
 
-func right(timeout: float): int sync {
+func right(timeout: float) => int sync {
     return rendezvous(2, timeout)
 }
 
 // Not a sync block: nothing orders the two calls. They meet at one `unordered` resource, so the
 // builder writes no order edge between them either (design principles 3.3), and a plan is free to
 // start both before either waits.
-func both(timeout: float): int {
+func both(timeout: float) => int {
     let a = left(timeout)
     let b = right(timeout)
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     println('calls that met a peer: {}'->format<both(3.0) - 2>)
     return 0
 }

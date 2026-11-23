@@ -30,31 +30,31 @@
  * not share the program's stdout).
  */
 
-import { grad, vjp } from vjp
 import { first_with_as_param } from transforms
+import { grad, vjp } from vjp
 
 with <x: float>
-func weighted(y: float): float {
+func weighted(y: float) => float {
     return x * y + x
 }
 
 with <x: float>
-func squared(y: float): float {
+func squared(y: float) => float {
     return x * y * y
 }
 
-func main(): int sync {
+func main() => int sync {
     // d/dx = y + 1 = 3.0 and d/dy = x = 3.0: the coincidence the next line breaks.
     let (value, pullback) = vjp(first_with_as_param(weighted))(3.0, 2.0)
     let (dw, dy) = pullback(1.0)
     'weighted value={} weight={} y={}'->format<value, dw, dy>->println
-
+    
     // d/dx = y*y = 4.0 and d/dy = 2*x*y = 12.0: two different numbers, so the members say which
     // parameter each cotangent belongs to.
     let (squaredValue, squaredPullback) = vjp(first_with_as_param(squared))(3.0, 2.0)
     let (sdw, sdy) = squaredPullback(1.0)
     'squared value={} weight={} y={}'->format<squaredValue, sdw, sdy>->println
-
+    
     // The same 4.0 through the library's `grad`, which takes the first cotangent: 12.0 here would be
     // the second member, and 3.0 would be the weight's value. `grad` is called the way `squared` is
     // called -- the weight in the angle brackets -- because it puts the weight back where the move

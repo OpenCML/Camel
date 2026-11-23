@@ -3,12 +3,11 @@
  * ran `a / b`, and a division by zero is part of what it does (design principles 3.4, 9.7).
  */
 
-
-func scaled(a: int, b: int): int {
+func scaled(a: int, b: int) => int {
     return (a / b) * 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(scaled(5, 0))
     println('not reached')

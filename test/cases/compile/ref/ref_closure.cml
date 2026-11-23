@@ -6,11 +6,15 @@
 
 import state
 
-func main(): int sync {
-    let r = state::ref(func (x: int) => int { x + 1 })
+func main() => int sync {
+    let r = state::ref(func (x: int) => int {
+        x + 1
+    })
     let add = state::get(r)
     println(add(41))
-    state::set(r, func (x: int) => int { x * 2 })
+    state::set(r, func (x: int) => int {
+        x * 2
+    })
     let twice = state::get(r)
     println(twice(21))
     return 0

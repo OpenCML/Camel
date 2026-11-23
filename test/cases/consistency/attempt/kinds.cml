@@ -4,27 +4,37 @@
  * diagnostic's message and whose location is the place the diagnostic points at.
  */
 
-func div(a: int, b: int): int { return a / b }
-func rem(a: int, b: int): int { return a % b }
-func fdiv(a: float, b: float): float { return a / b }
-func at(xs: int[], i: int): int { return xs[i] }
-func number(s: string): int { return int(s) }
+func div(a: int, b: int) => int {
+    return a / b
+}
+func rem(a: int, b: int) => int {
+    return a % b
+}
+func fdiv(a: float, b: float) => float {
+    return a / b
+}
+func at(xs: int[], i: int) => int {
+    return xs[i]
+}
+func number(s: string) => int {
+    return int(s)
+}
 
-func show(r: int!): string {
+func show(r: int!) => string {
     return match r {
         case error e => e.kind + ' | ' + e.message + ' | ' + e.location
         case v => format<v>('value {}')
     }
 }
 
-func show_f(r: float!): string {
+func show_f(r: float!) => string {
     return match r {
         case error e => e.kind + ' | ' + e.location
         case v => format<v>('value {}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(show(attempt(div)(7, 2)))
     println(show(attempt(div)(7, 0)))
     println(show(attempt(rem)(7, 0)))

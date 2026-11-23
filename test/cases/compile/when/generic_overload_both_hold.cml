@@ -8,29 +8,29 @@
  * accepted; the call is where the overlap shows, and the call site is the authority.
  */
 
-func is_second_int::<U>(): bool {
+func is_second_int::<U>() => bool {
     return match type U {
         case int => true
         case _ => false
     }
 }
 
-func is_first_i32::<T>(): bool {
+func is_first_i32::<T>() => bool {
     return match type T {
         case i32 => true
         case _ => false
     }
 }
 
-func dual::<T, U>(a: T, b: U): string when is_second_int::<U>() {
+func dual::<T, U>(a: T, b: U) => string when is_second_int::<U>() {
     return 'second'
 }
 
-func dual::<T, U>(a: T, b: U): string when is_first_i32::<T>() {
+func dual::<T, U>(a: T, b: U) => string when is_first_i32::<T>() {
     return 'first'
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: i32 = 19
     let y: int = 23
     println(dual(x, y))

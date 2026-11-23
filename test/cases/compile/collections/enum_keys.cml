@@ -6,7 +6,7 @@ type Color = enum { Red, Green, Blue }
 
 type Value = enum { Unit, Pair(int, int), Named { x: int, y: int } }
 
-func main(): int sync {
+func main() => int sync {
     // No payload: a map key.
     let colors = [(Color::Blue, 3), (Color::Red, 1), (Color::Green, 2)] as Map<Color, int>
     println(colors)
@@ -27,16 +27,16 @@ func main(): int sync {
     println(bag->union([Color::Blue, Color::Red] as Set<Color>))
     // A payload: the variants in declaration order, then the fields, field by field.
     let payloads = [
-        (Value::Named { x: 1, y: 2 }, 'n'),
+        (Value::Named{ x: 1, y: 2 }, 'n'),
         (Value::Pair(2, 3), 'b'),
         (Value::Unit, 'u'),
         (Value::Pair(1, 9), 'a'),
-        (Value::Pair(2, 2), 'c'),
+        (Value::Pair(2, 2), 'c')
     ] as Map<Value, string>
     println(payloads)
     println(keys(payloads))
     println(payloads[Value::Pair(2, 3)] ?? '?', payloads[Value::Pair(3, 2)] ?? '?')
-    println(payloads[Value::Named { x: 1, y: 2 }] ?? '?')
+    println(payloads[Value::Named{ x: 1, y: 2 }] ?? '?')
     let deduped = [Value::Pair(1, 2), Value::Pair(1, 2), Value::Unit, Value::Unit] as Set<Value>
     println(deduped, len(deduped))
     return 0

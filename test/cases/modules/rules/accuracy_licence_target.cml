@@ -8,21 +8,21 @@
 
 import { log } from math
 
-func plain(x: float): float {
+func plain(x: float) => float {
     return log(1.0 + x)
 }
 
 #[refine_accuracy]
-func licensed(x: float): float {
+func licensed(x: float) => float {
     return log(1.0 + x)
 }
 
 #[strict, refine_accuracy]
-func guarded(x: float): float {
+func guarded(x: float) => float {
     return log(1.0 + x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(plain(1e-30), licensed(1e-30), guarded(1e-30))
     return 0
 }

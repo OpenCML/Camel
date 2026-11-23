@@ -5,7 +5,7 @@
 
 import { zeros, linear } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let r = linear(zeros::<f32>([2, 3]), zeros::<f32>([4, 5]), zeros::<f32>([5]))
     println('unreachable')
     return 0

@@ -7,7 +7,7 @@
 
 import { Tangent } from types
 
-func zeros::<T>(x: T): Tangent<T> {
+func zeros::<T>(x: T) => Tangent<T> {
     return match type T {
         case struct | tuple => Tangent<T> { static for n, _ in fields T do zeros(x.[n]) }
         case float => 0.0
@@ -15,7 +15,7 @@ func zeros::<T>(x: T): Tangent<T> {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(zeros((1.0, 7)))
     println(zeros({ a: 1.0, b: 2.0 }))
     return 0

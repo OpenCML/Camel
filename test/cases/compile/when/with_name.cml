@@ -4,14 +4,14 @@
  */
 
 with <on: bool>
-func add(x: int): int when on {
+func add(x: int) => int when on {
     return x + 1
 }
 
-func caller(on: bool): int {
+func caller(on: bool) => int {
     return add<on>(41)
 }
 
-func main(): int sync {
+func main() => int sync {
     return caller(true)
 }

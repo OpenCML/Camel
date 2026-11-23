@@ -11,15 +11,15 @@
  * so the rounding happens once, on the stored element.
  */
 
-import { reshape, sum, to_bytes } from tensor
 import { to_array } from bytes
+import { reshape, sum, to_bytes } from tensor
 
 #[change_precision]
-func narrow(x: f32[...]): bf16[...] {
+func narrow(x: f32[...]) => bf16[...] {
     return bf16(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let rows: f32[] = [16777216.0, 1.0, -16777216.0, 3.0, 0.0078125, 0.0]
     let matrix = reshape<[2, 3]>(narrow(rows))
     let reduced = sum<1, true>(matrix)

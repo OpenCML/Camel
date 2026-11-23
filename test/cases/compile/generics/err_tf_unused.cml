@@ -1,9 +1,9 @@
 type Tag<T> = int
 
-func f::<T>(p: Tag<T>): int {
+func f::<T>(p: Tag<T>) => int {
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

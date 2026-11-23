@@ -3,23 +3,23 @@
  * argument, and each set of types is one subgraph of concrete types.
  */
 
-func or_else::<T>(x: T?, d: T): T {
+func or_else::<T>(x: T?, d: T) => T {
     return x ?? d
 }
 
-func some::<T>(x: T): T? {
+func some::<T>(x: T) => T? {
     return x
 }
 
-func recover::<T>(r: T!, d: T): T {
+func recover::<T>(r: T!, d: T) => T {
     return r !! d
 }
 
-func ok::<T>(x: T): T! {
+func ok::<T>(x: T) => T! {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(or_else(some(3), 0))
     println(or_else(null as int?, 4))
     println(or_else(some('a'), 'z'))

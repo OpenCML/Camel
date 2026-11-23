@@ -1,10 +1,11 @@
 import { reshape } from tensor
 import { source } from tiles
-func noisy(x: f32[...]): f32[...] sync {
-    println("BODY MUST NOT EXECUTE")
+
+func noisy(x: f32[...]) => f32[...] sync {
+    println('BODY MUST NOT EXECUTE')
     return x + x
 }
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(source<noisy>(x))
     return 0

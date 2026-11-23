@@ -5,7 +5,7 @@
  * error that must not be reported while the case is not selected.
  */
 
-func shape::<T>(t: T): string {
+func shape::<T>(t: T) => string {
     return match type T {
         case struct => 'struct'
         case tuple => 'tuple'
@@ -27,7 +27,7 @@ func fallback::<T>(t: T) {
     }
 }
 
-func selected::<T>(t: T): int {
+func selected::<T>(t: T) => int {
     return match type T {
         case struct => 1
         case tuple => len(1)
@@ -35,19 +35,19 @@ func selected::<T>(t: T): int {
     }
 }
 
-func main(): int sync {
-    println(shape({a: 1, b: 2.0}))
+func main() => int sync {
+    println(shape({ a: 1, b: 2.0 }))
     println(shape((1, 2.0)))
     println(shape(42))
     let maybe: int? = 5
     println(shape(maybe))
     println(shape([1, 2, 3]))
-    println(composite({a: 1}))
+    println(composite({ a: 1 }))
     println(composite((1, 2)))
     println(composite(3))
-    println(fallback({a: 1}))
+    println(fallback({ a: 1 }))
     println(fallback(3))
-    println(selected({a: 1}))
+    println(selected({ a: 1 }))
     println(selected(2))
     return 0
 }

@@ -4,15 +4,15 @@
 // laws of the rules library applies to these forms, so both implementations must leave the same
 // surviving graph.
 
-func keep(v: int): int {
+func keep(v: int) => int {
     return v
 }
 
-func keep32(v: i32): i32 {
+func keep32(v: i32) => i32 {
     return v
 }
 
-func five64(a: int, b: int): int {
+func five64(a: int, b: int) => int {
     let p = a + 0
     let q = 0 + b
     let r = p - 0
@@ -21,7 +21,7 @@ func five64(a: int, b: int): int {
     return keep(t + q)
 }
 
-func five32(a: i32, b: i32): i32 {
+func five32(a: i32, b: i32) => i32 {
     let p = a + 0
     let q = 0 + b
     let r = p - 0
@@ -30,7 +30,7 @@ func five32(a: i32, b: i32): i32 {
     return keep32(t + q)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(five64(3, 4))
     println(five32(3, 4))
     println(five64(9223372036854775807, -1))

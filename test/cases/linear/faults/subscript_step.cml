@@ -5,11 +5,11 @@
  * the position before the first.
  */
 
-func every(xs: int[], a: int, b: int, s: int): int[] {
+func every(xs: int[], a: int, b: int, s: int) => int[] {
     return xs[range(a, b, s)]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3, 4, 5]
     println(every(xs, 0, 5, 2))
     println(every(xs, 4, 0, -2))

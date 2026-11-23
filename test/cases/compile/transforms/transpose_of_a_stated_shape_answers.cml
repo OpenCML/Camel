@@ -15,16 +15,16 @@
 // together say the declaration decides -- not the compiler, and not the body.
 //
 //     camel test/cases/compile/transforms/transpose_of_a_stated_shape_answers.cml
-import { transpose } from transforms
 import rulesets.transpose
 import { sum } from tensor
+import { transpose } from transforms
 
 /// The declaration states the extents the law reads.
-func total(x: float[2, 3]): float {
+func total(x: float[2, 3]) => float {
     return sum(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(total)
     `total transpose={}`->format<back(1.0)>->println
     return 0

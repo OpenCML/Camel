@@ -5,23 +5,25 @@
  * a generic function, and this pins the reading on its own).
  */
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func same::<T>(s: T..): T.. {
+func same::<T>(s: T..) => T.. {
     return s
 }
 
-func total(s: int..): int {
+func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(same(count(3))))
     return 0
 }

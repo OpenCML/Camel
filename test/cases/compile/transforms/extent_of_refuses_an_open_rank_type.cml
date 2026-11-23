@@ -22,11 +22,11 @@
 // The refusal is at the call, where the type is in hand: `[4]` (a rank whose length is stated) is
 // answered by `extent_of::<float[4]>()` in `extent_of_answers_a_parameter_type.cml`.
 
-func open_rank(t: float[...]): int[] {
+func open_rank(t: float[...]) => int[] {
     return extent_of::<float[...]>()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(open_rank([1.0, 2.0]))
     return 0
 }

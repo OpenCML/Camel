@@ -3,11 +3,11 @@
 
 import { sqrt, abs, floor } from math
 
-func wrap(x: int): int {
+func wrap(x: int) => int {
     return x * 1000000007 * 1000000007
 }
 
-func main(): int sync {
+func main() => int sync {
     // The values are reached at run time: an expression of literals only is computed exactly
     // (design principles 5.1), so it has no room to wrap, and `max + 1` written with the
     // literal would be an error, as it is in Go.

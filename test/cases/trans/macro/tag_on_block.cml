@@ -1,8 +1,9 @@
 // #macro is declared for function declarations (on func). A block is a node position: the tag
 // may not be written there, and the compiler says so instead of ignoring it.
 
-func main(): int sync {
-    #macro {
+func main() => int sync {
+    #macro
+    {
         println('this block is not a macro')
     }
     return 0

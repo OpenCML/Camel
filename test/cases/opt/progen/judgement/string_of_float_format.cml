@@ -4,7 +4,7 @@
  * See README.md, "For the owner to decide", J3.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(1.5)
     println(string(1.5))
     return 0

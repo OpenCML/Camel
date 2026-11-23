@@ -10,7 +10,7 @@
  */
 import { max } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let none: f32[0] = []
     println(max(none))
     return 0

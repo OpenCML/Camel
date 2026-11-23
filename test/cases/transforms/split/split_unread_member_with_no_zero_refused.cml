@@ -19,14 +19,14 @@ import { vjp } from vjp
 
 type Point = { a: float, b: float }
 
-func g(q: (Point, float)): float {
+func g(q: (Point, float)) => float {
     return q.1 * 4.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let (y, pullback) = vjp(g)(({ a: 1.0, b: 2.0 }, 3.0))
     // Unreachable while the refusal stands: the answer here would be `({ a: 0.0, b: 0.0 }, 4.0)`,
     // which is what a composite zero would give -- and what no code path builds today.
-    println("answered y=", y, " dq=", pullback(1.0))
+    println('answered y=', y, ' dq=', pullback(1.0))
     return 0
 }

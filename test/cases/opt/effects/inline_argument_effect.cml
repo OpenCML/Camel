@@ -4,10 +4,10 @@
  * parameter. Inlining the call may not drop the effect with the port nothing read (9.7).
  */
 
-func first(a: int, b: int): int {
+func first(a: int, b: int) => int {
     return a
 }
 
-func main(): int {
+func main() => int {
     return first(5, println(9))
 }

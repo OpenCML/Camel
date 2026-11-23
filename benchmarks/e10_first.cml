@@ -7,13 +7,19 @@
 import { grad } from autodiff
 import { relu, mean, reshape } from tensor
 
-func fwd(w1: float[...], b1: float[...], w2: float[...], b2: float[...], x: float[...]): float[...] {
+func fwd(
+    w1: float[...],
+    b1: float[...],
+    w2: float[...],
+    b2: float[...],
+    x: float[...]
+) => float[...] {
     let h = relu(x @ w1 + b1)
     return h @ w2 + b2
 }
 
 with <t: float>
-func loss_s(): float {
+func loss_s() => float {
     let w1 = reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25])
     let b1 = reshape<[3]>([0.1, 0.0, -0.1])
     let w2 = reshape<[3, 1]>([1.0, -1.0, 0.5])
@@ -23,7 +29,7 @@ func loss_s(): float {
     return float(mean(y * y))
 }
 
-func main(): int sync {
+func main() => int sync {
     let d1 = grad(loss_s)<1.0>()
     'd1={}'->format<d1>->println
     return 0

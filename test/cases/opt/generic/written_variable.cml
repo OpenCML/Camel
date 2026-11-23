@@ -7,7 +7,7 @@
 //   2 7          reread: the same expression before and after the write
 
 // The tuple is built from a non-constant element, reassigned, then projected.
-func reassigned(a: int): int sync {
+func reassigned(a: int) => int sync {
     var t = (a, 2)
     t = (a + 2, 7)
     println(t.0)
@@ -17,7 +17,7 @@ func reassigned(a: int): int sync {
 // Called with a constant: once the argument is bound, the first tuple is built from constants
 // only. Folding it into a constant would make the assignment write that constant, which every
 // call shares.
-func refilled(a: int): int sync {
+func refilled(a: int) => int sync {
     var t = (a, 2)
     println(t.1)
     t = (a + 2, 7)
@@ -27,7 +27,7 @@ func refilled(a: int): int sync {
 }
 
 // `x + 1` is written twice, with a write to x in between.
-func reread(a: int): int sync {
+func reread(a: int) => int sync {
     var x = a
     let p = x + 1
     println(p)
@@ -38,7 +38,7 @@ func reread(a: int): int sync {
 }
 
 // The results are used, so that every call stays ordered when the calls are inlined.
-func main(): int sync {
+func main() => int sync {
     let a = reassigned(1)
     let b = refilled(1) + a
     let c = refilled(1) + b

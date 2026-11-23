@@ -27,72 +27,69 @@
 // declared leg on its own: green, and evidence rather than the road.
 //
 //     camel test/cases/compile/transforms/matmul_transpose_vector_rhs.cml
-import { matmul, sum } from tensor
-import { vjp } from vjp
 import { with_grad } from autodiff
 import { abs, max } from math
+import { matmul, sum } from tensor
+import { vjp } from vjp
 
 /// The product under a sum, both operands ordinary parameters.
-func sum_of_product(x: float[2, 2], u: float[]): float {
+func sum_of_product(x: float[2, 2], u: float[]) => float {
     return sum(matmul(x, u))
 }
 
 /// The same product with the extent written in the declaration: the control leg beside the `float[]`
 /// one. Its answer has to be the same three numbers, and `max_abs_diff` at the end says so.
-func sum_of_product_declared(x: float[2, 2], u: float[2]): float {
+func sum_of_product_declared(x: float[2, 2], u: float[2]) => float {
     return sum(matmul(x, u))
 }
 
 /// The same for the engine's pullback over `x`.
 with <x: float[2, 2]>
-func product_with_x(u: float[]): float {
+func product_with_x(u: float[]) => float {
     return sum(matmul(x, u))
 }
 
 /// And once over `u`, the rank-one half.
 with <u: float[]>
-func product_with_u(x: float[2, 2]): float {
+func product_with_u(x: float[2, 2]) => float {
     return sum(matmul(x, u))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let u = [0.5, 0.25]
-
+    
     let (value, pullback) = vjp(sum_of_product)(x, u)
     let (dx, du) = pullback(1.0)
     `matmul_t vector_rhs value={} dL/dx={} dL/du={}`->format<value, dx, du>->println
-
-    let (engine_value_x, engine_x) =
-        with_grad(product_with_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>(u)
+    
+    let (engine_value_x, engine_x) = with_grad(product_with_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>(u)
     let (engine_value_u, engine_u) = with_grad(product_with_u)<[0.5, 0.25]>(x)
-    `matmul_t vector_rhs engine value={} dL/dx={} dL/du={}`
-        ->format<engine_value_x, engine_x, engine_u>->println
+    `matmul_t vector_rhs engine value={} dL/dx={} dL/du={}`->format<engine_value_x, engine_x, engine_u>->println
     `matmul_t vector_rhs engine_u value={}`->format<engine_value_u>->println
-
+    
     let dvalue = abs(value - engine_value_x)
     let dx00 = abs(dx[0][0] - engine_x[0][0])
     let dx01 = abs(dx[0][1] - engine_x[0][1])
     let dx10 = abs(dx[1][0] - engine_x[1][0])
     let dx11 = abs(dx[1][1] - engine_x[1][1])
     let dx_diff = max(max(dx00, dx01), max(dx10, dx11))
-    `matmul_t vector_rhs max_abs_diff_library_vs_engine u={:.12e} x={:.12e} value={:.12e}`
-        ->format<max(abs(du[0] - engine_u[0]), abs(du[1] - engine_u[1])), dx_diff, dvalue>->println
-
+    `matmul_t vector_rhs max_abs_diff_library_vs_engine u={:.12e} x={:.12e} value={:.12e}`->format<max(abs(du[0] - engine_u[0]), abs(du[1] - engine_u[1])), dx_diff, dvalue>->println
+    
     // The control leg: the same two numbers, handed to a function whose declaration writes the
     // extent. Its answer must be the same three numbers as the `float[]` leg's.
-    let (declared_value, declared_pullback) =
-        vjp(sum_of_product_declared)(x, [0.5, 0.25] as float[2])
+    let (declared_value, declared_pullback) = vjp(sum_of_product_declared)(x, [0.5, 0.25] as float[2])
     let (dx_declared, du_declared) = declared_pullback(1.0)
-    `matmul_t vector_rhs declared value={} dL/dx={} dL/du={}`
-        ->format<declared_value, dx_declared, du_declared>->println
+    `matmul_t vector_rhs declared value={} dL/dx={} dL/du={}`->format<declared_value, dx_declared, du_declared>->println
     let ddx00 = abs(dx_declared[0][0] - dx[0][0])
     let ddx01 = abs(dx_declared[0][1] - dx[0][1])
     let ddx10 = abs(dx_declared[1][0] - dx[1][0])
     let ddx11 = abs(dx_declared[1][1] - dx[1][1])
     let ddx_diff = max(max(ddx00, ddx01), max(ddx10, ddx11))
-    `matmul_t vector_rhs max_abs_diff_declared_vs_unstated du={:.12e} dx={:.12e} value={:.12e}`
-        ->format<max(abs(du_declared[0] - du[0]), abs(du_declared[1] - du[1])), ddx_diff,
-                  abs(declared_value - value)>->println
+    `matmul_t vector_rhs max_abs_diff_declared_vs_unstated du={:.12e} dx={:.12e} value={:.12e}`->format<
+        max(abs(du_declared[0] - du[0]), abs(du_declared[1] - du[1])),
+        ddx_diff,
+        abs(declared_value - value)
+    >->println
     return 0
 }

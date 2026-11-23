@@ -2,21 +2,21 @@
  * Parallel bootstrap workload used to stress repeated sampling plus concurrent sort-heavy reductions.
  */
 
-import { now } from time
-import { seed, shuffle, sample, next_key } from random
 import { sort, mean } from array
+import { seed, shuffle, sample, next_key } from random
 import { stdev } from statistics
+import { now } from time
 
-func main(): int sync {
+func main() => int sync {
     let source_size = 200000
     let sample_size = 40000
     let replicas = 8
     let s = 20260309
-
+    
     seed(s)
     'Generating {} source values...'->format<source_size>->println
-    let source = (0..source_size)->shuffle<next_key()>
-
+    let source = (0 .. source_size)->shuffle<next_key()>
+    
     println('Preparing bootstrap samples sequentially...')
     let prep_start = now()
     let b0 = source->sample<next_key(), sample_size>
@@ -28,7 +28,7 @@ func main(): int sync {
     let b6 = source->sample<next_key(), sample_size>
     let b7 = source->sample<next_key(), sample_size>
     let prep_duration = now() - prep_start
-
+    
     'Sorting {} sampled arrays in parallel...'->format<replicas>->println
     let sort_start = now()
     let medians = [b0, b1, b2, b3, b4, b5, b6, b7]->map<func (arr: int[]) => int {
@@ -36,8 +36,10 @@ func main(): int sync {
         return sarr[len(sarr) / 2]
     }>
     let sort_duration = now() - sort_start
-
-    let wide = medians->map<func (m: int) => float { float(m) }>
+    
+    let wide = medians->map<func (m: int) => float {
+        float(m)
+    }>
     'medians = {}'->format<medians>->println
     'mean = {:.2f}'->format<mean(wide)>->println
     'stdev = {:.2f}'->format<stdev(wide)>->println
@@ -45,4 +47,3 @@ func main(): int sync {
     'parallel sorting stage took {:.2f} seconds'->format<sort_duration>->println
     return 0
 }
-

@@ -4,7 +4,8 @@
  */
 import { mk } from base
 import { zero } from plus_a
-func main(): int sync {
+
+func main() => int sync {
     let s = mk(1) + mk(10)
     println(s.x, (-s).x, (s + zero()).x, [1, 2] == 2, [1, 2] == 5, 1 == 1)
     return 0

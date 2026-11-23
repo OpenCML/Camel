@@ -13,21 +13,29 @@
  * Output: `pos`, `neg`, `positive`, `not`.
  */
 
-func positive(x: int): bool {
+func positive(x: int) => bool {
     return x > 0
 }
 
-func compared(x: int): int {
-    if x > 0 then { println("pos") } else { println("neg") }
+func compared(x: int) => int {
+    if x > 0 then {
+        println('pos')
+    } else {
+        println('neg')
+    }
     return 0
 }
 
-func called(x: int): int {
-    if positive(x) then { println("positive") } else { println("not") }
+func called(x: int) => int {
+    if positive(x) then {
+        println('positive')
+    } else {
+        println('not')
+    }
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     compared(1)
     compared(-1)
     called(1)

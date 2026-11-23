@@ -1,6 +1,8 @@
-func add(a: int, b: int): int { return a + b }
+func add(a: int, b: int) => int {
+    return a + b
+}
 
-func main(): int sync {
+func main() => int sync {
     let r = add(nope, 2)
     let s = add(r, r)
     let t = s + 1

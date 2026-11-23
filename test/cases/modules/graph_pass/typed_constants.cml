@@ -5,32 +5,42 @@
 import { flat_map } from array
 import { Graph, Node, Txn, nodes, constant, add_constant, open, commit, graphs_of } from graph
 
-func allNodes::<F>(p: F): Node[] {
-    return graphs_of(p)->flat_map<func (g: Graph) => Node[] { nodes(g) }>
+func allNodes::<F>(p: F) => Node[] {
+    return graphs_of(p)->flat_map<func (g: Graph) => Node[] {
+        nodes(g)
+    }>
 }
 
-func churn(rounds: int): string {
+func churn(rounds: int) => string {
     let (i, acc) = loop i = 0, acc = '' while i < rounds do (i + 1, acc + 'h36b-churn-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
     return acc
 }
 
-func countInt(ns: Node[], v: int): int {
-    return ns->filter<func (n: Node) => bool { (constant::<int>(n) ?? -1) == v }>->len()
+func countInt(ns: Node[], v: int) => int {
+    return ns->filter<func (n: Node) => bool {
+        (constant::<int>(n) ?? -1) == v
+    }>->len()
 }
 
-func countFloat(ns: Node[], v: f64): int {
-    return ns->filter<func (n: Node) => bool { (constant::<float>(n) ?? -1.0) == v }>->len()
+func countFloat(ns: Node[], v: f64) => int {
+    return ns->filter<func (n: Node) => bool {
+        (constant::<float>(n) ?? -1.0) == v
+    }>->len()
 }
 
-func countBool(ns: Node[], v: bool): int {
-    return ns->filter<func (n: Node) => bool { (constant::<bool>(n) ?? false) == v }>->len()
+func countBool(ns: Node[], v: bool) => int {
+    return ns->filter<func (n: Node) => bool {
+        (constant::<bool>(n) ?? false) == v
+    }>->len()
 }
 
-func countString(ns: Node[], v: string): int {
-    return ns->filter<func (n: Node) => bool { (constant::<string>(n) ?? '') == v }>->len()
+func countString(ns: Node[], v: string) => int {
+    return ns->filter<func (n: Node) => bool {
+        (constant::<string>(n) ?? '') == v
+    }>->len()
 }
 
-export func make::<F>(p: F): F! sync {
+export func make::<F>(p: F) => F! sync {
     let t = open(p)
     let g = graphs_of(p)[0]
     let i = add_constant(t, g, 12345)

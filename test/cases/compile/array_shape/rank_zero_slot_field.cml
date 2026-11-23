@@ -8,7 +8,7 @@
 
 type Box = { v: f32[...] }
 
-func main(): int sync {
+func main() => int sync {
     let one: f32 = 1.0
     let two: f32 = 2.5
     let writtenLow: Box = { v: 1.0 }

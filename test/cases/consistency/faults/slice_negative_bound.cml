@@ -3,9 +3,11 @@
  * to count from the end).
  */
 
-func last_two(xs: int[], n: int): int[] { return xs[n..len(xs)] }
+func last_two(xs: int[], n: int) => int[] {
+    return xs[n..len(xs)]
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = [10, 20, 30]
     println(last_two(xs, 1))
     println(last_two(xs, 0 - 2))

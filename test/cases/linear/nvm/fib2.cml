@@ -5,12 +5,12 @@
  * 3.5), while a handle is a value it may capture.
  */
 
-import { now } from time
 import state
+import { now } from time
 
-func fib(idx: int): int sync {
+func fib(idx: int) => int sync {
     let cnt = state::ref(0)
-    func fibonacci(n: int): int sync {
+    func fibonacci(n: int) => int sync {
         state::set(cnt, state::get(cnt) + 1)
         return if n <= 1 then n else sync {
             fibonacci(n - 1) + fibonacci(n - 2)
@@ -21,7 +21,7 @@ func fib(idx: int): int sync {
     return res
 }
 
-func main(): int sync {
+func main() => int sync {
     let idx = 10
     'Start computing fibonacci({})...'->format<idx>->println
     let start = now()

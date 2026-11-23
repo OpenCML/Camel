@@ -2,10 +2,14 @@
  * The one integer division that overflows: the smallest int divided by -1, and its modulo.
  */
 
-func div(a: int, b: int): int { return a / b }
-func rem(a: int, b: int): int { return a % b }
+func div(a: int, b: int) => int {
+    return a / b
+}
+func rem(a: int, b: int) => int {
+    return a % b
+}
 
-func main(): int sync {
+func main() => int sync {
     let half = 4611686018427387904
     let min = 0 - half - half
     println('before')

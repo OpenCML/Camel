@@ -4,7 +4,7 @@
  * still in the grammar; the parser read the nesting so that the compiler could say so.
  */
 
-func main(): int sync {
+func main() => int sync {
     let s = { x: 1 }
     let r = match s {
         case { x: 1 } => 1

@@ -140,7 +140,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.compose_and_return_type_snapshot"
-desc = "Formats the notation of 2026-11-23: a result type after `=>` (the input writes `:`), a named type argument as `A: int` (the input writes `=`), the composition `f <> g` (the input writes `inc<>dbl`), `..` spaced as a binary operator and a slice's `..` tight."
+desc = "Formats the notation of 2026-11-23 and writes it back unchanged: a result type after `=>`, a named type argument as `A: int`, the composition `f <> g`, `..` spaced as a binary operator and a slice's `..` tight. The return type's older spelling is refused by the parser now, so the input already writes the arrow."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/compose_and_return_type.cml"

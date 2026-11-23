@@ -17,45 +17,47 @@
 // library's `grad` is declared for `(x: float) => float` only. Those four places are met in the order
 // they are listed.
 import { grad, with_grad } from autodiff
-import { vjp } from vjp
 import { abs } from math
+import { vjp } from vjp
 
 // The library's spelling: everything the loss reads is an ordinary parameter.
-func loss_plain(w: float, b: float): float {
+func loss_plain(w: float, b: float) => float {
     let err = 1.5 * w + b - 2.0
     return 0.5 * err * err
 }
 
 // The engine's spelling: the same arithmetic, the weight first among the `with` parameters.
 with <w: float, b: float>
-func loss_with(x: float, t: float): float {
+func loss_with(x: float, t: float) => float {
     let err = x * w + b - t
     return 0.5 * err * err
 }
 
-func main(): int sync {
+func main() => int sync {
     // The library's leg: `vjp` answers (value, pullback), and the pullback at the seed 1 is the
     // gradient of the parameters.
     let (library_value, pullback) = vjp(loss_plain)(0.5, 0.75)
     let (library_w, library_b) = pullback(1.0)
-
+    
     // The engine's leg: `with_grad` gives the value and the first `with` parameter's gradient, and
     // the bias is moved to the front by a lambda to be differentiated in its turn.
     let (engine_value, engine_w) = with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)
-    let engine_b = grad(func <bb: float> (ww: float) => float { loss_with<ww, bb>(1.5, 2.0) })<0.75>(0.5)
-
+    let engine_b = grad(func <bb: float>(ww: float) => float {
+        loss_with<ww, bb>(1.5, 2.0)
+    })<0.75>(0.5)
+    
     println(`library value={:.17f} w={:.17f} b={:.17f}`->format<library_value, library_w, library_b>)
     println(`engine  value={:.17f} w={:.17f} b={:.17f}`->format<engine_value, engine_w, engine_b>)
     // Element by element, not "close": the two paths agree exactly or this line is not zero.
-    println(
-        `diff    w={:.3e} b={:.3e} value={:.3e}`->format<
-            abs(library_w - engine_w),
-            abs(library_b - engine_b),
-            abs(library_value - engine_value)>)
-    println(
-        `same_w={} same_b={} same_value={}`->format<
-            library_w == engine_w,
-            library_b == engine_b,
-            library_value == engine_value>)
+    println(`diff    w={:.3e} b={:.3e} value={:.3e}`->format<
+        abs(library_w - engine_w),
+        abs(library_b - engine_b),
+        abs(library_value - engine_value)
+    >)
+    println(`same_w={} same_b={} same_value={}`->format<
+        library_w == engine_w,
+        library_b == engine_b,
+        library_value == engine_value
+    >)
     return 0
 }

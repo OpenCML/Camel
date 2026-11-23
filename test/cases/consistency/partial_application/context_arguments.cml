@@ -7,17 +7,23 @@
  */
 
 with <k: f32>
-func scale(x: f32): f32 { return x * k }
+func scale(x: f32) => f32 {
+    return x * k
+}
 
 with <xs: f32[]>
-func at(i: int): f32 { return xs[i] }
+func at(i: int) => f32 {
+    return xs[i]
+}
 
 type Point = { x: f32, y: f32 }
 
 with <p: Point>
-func offset(dx: f32): f32 { return p.x + dx }
+func offset(dx: f32) => f32 {
+    return p.x + dx
+}
 
-func main(): int sync {
+func main() => int sync {
     let s = scale<2>
     let a = at<[7.0, 8.0]>(1)
     let o = offset<{ x: 1, y: 2 }>

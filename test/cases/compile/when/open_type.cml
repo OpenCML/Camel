@@ -4,17 +4,17 @@
  * false (design principles 4.4).
  */
 
-func is_numeric::<T>(): bool {
+func is_numeric::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 | c64 | c128 => true
         case _ => false
     }
 }
 
-func bad::<T>(x: int): int when is_numeric::<T>() {
+func bad::<T>(x: int) => int when is_numeric::<T>() {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }

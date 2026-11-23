@@ -3,11 +3,11 @@
  * 3.9, 5.4): SliceOutOfRange at the bracket, with both bounds and the length.
  */
 
-func part(xs: int[], a: int, b: int): int[] {
+func part(xs: int[], a: int, b: int) => int[] {
     return xs[a..b]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3, 4, 5]
     println(part(xs, 1, 3))
     println(part(xs, -1, 3))

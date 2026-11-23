@@ -6,18 +6,20 @@
  * is what the read takes its value from, and the value printed is the one the callback wrote.
  */
 
-var counter = 0;
+var counter = 0
 
 func apply(f: (x: int) => void, v: int) {
     f(v)
 }
 
-func add(x: int): int {
-    apply(func (y: int) { counter = y }, x)
+func add(x: int) => int {
+    apply(func (y: int) {
+        counter = y
+    }, x)
     return counter
 }
 
-func main(): int sync {
+func main() => int sync {
     println(add(3))
     return 0
 }

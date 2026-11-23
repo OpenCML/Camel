@@ -9,50 +9,106 @@ import { to_lower } from str
 
 type Person = { name: string, age: int }
 
-func is_even(x: int): bool {
+func is_even(x: int) => bool {
     return x % 2 == 0
 }
 
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
-func label(w: string, n: int): string {
+func label(w: string, n: int) => string {
     return w + string(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
     let none = [0][1..]
     let words = ['pear', 'Apple', 'fig', 'apple', 'Fig']
-
-    println(xs->find<is_even> ?? -1, xs->find<func (x: int) { x > 4 }> ?? -1, xs->find<func (x: int) { x > 9 }> ?? -1, none->find<is_even> ?? -1)
-    println(words->find<func (w: string) { len(w) == 3 }> ?? '?', words->find<func (w: string) { len(w) > 9 }> ?? '?')
-    println(xs->any<is_even>, xs->any<func (x: int) { x > 9 }>, none->any<is_even>)
-    println(xs->all<func (x: int) { x > 0 }>, xs->all<is_even>, none->all<is_even>)
-    println(xs->count<is_even>, xs->count<func (x: int) { x > 100 }>, none->count<is_even>, words->count<func (w: string) { len(w) == 5 }>)
-
-    println(xs->flat_map<func (x: int) { [x, x * 10] }>->len, [1, 2, 3]->flat_map<func (x: int) { 0..x }>)
-    println(words->flat_map<func (w: string) { [w, to_lower(w)] }>->len, none->flat_map<func (x: int) { [x] }>)
-    println([1, 2]->flat_map<func (x: int) { [x][1..] }>)
-
-    println(xs->sort_by<func (x: int) { x }>, xs->sort_by<func (x: int) { -x }>, none->sort_by<func (x: int) { x }>)
+    
+    println(xs->find<is_even> ?? -1, xs->find<func (x: int) {
+        x > 4
+    }> ?? -1, xs->find<func (x: int) {
+        x > 9
+    }> ?? -1, none->find<is_even> ?? -1)
+    println(words->find<func (w: string) {
+        len(w) == 3
+    }> ?? '?', words->find<func (w: string) {
+        len(w) > 9
+    }> ?? '?')
+    println(xs->any<is_even>, xs->any<func (x: int) {
+        x > 9
+    }>, none->any<is_even>)
+    println(xs->all<func (x: int) {
+        x > 0
+    }>, xs->all<is_even>, none->all<is_even>)
+    println(xs->count<is_even>, xs->count<func (x: int) {
+        x > 100
+    }>, none->count<is_even>, words->count<func (w: string) {
+        len(w) == 5
+    }>)
+    
+    println(xs->flat_map<func (x: int) {
+        [x, x * 10]
+    }>->len, [1, 2, 3]->flat_map<func (x: int) {
+        0 .. x
+    }>)
+    println(words->flat_map<func (w: string) {
+        [w, to_lower(w)]
+    }>->len, none->flat_map<func (x: int) {
+        [x]
+    }>)
+    println([1, 2]->flat_map<func (x: int) {
+        [x][1..]
+    }>)
+    
+    println(xs->sort_by<func (x: int) {
+        x
+    }>, xs->sort_by<func (x: int) {
+        -x
+    }>, none->sort_by<func (x: int) {
+        x
+    }>)
     // stable: equal keys keep their order
-    println(words->sort_by<func (w: string) { len(w) }>)
-    println(words->sort_by<func (w: string) { to_lower(w) }>)
-    println(words->sort_by<func (w: string) { w }>)
-    println([2.5, -1.0, 0.0]->sort_by<func (x: float) { x }>, [true, false, true]->sort_by<func (b: bool) { b }>)
+    println(words->sort_by<func (w: string) {
+        len(w)
+    }>)
+    println(words->sort_by<func (w: string) {
+        to_lower(w)
+    }>)
+    println(words->sort_by<func (w: string) {
+        w
+    }>)
+    println([2.5, -1.0, 0.0]->sort_by<func (x: float) {
+        x
+    }>, [true, false, true]->sort_by<func (b: bool) {
+        b
+    }>)
     let people = [{ name: 'Ann', age: 31 }, { name: 'Bob', age: 25 }, { name: 'Cy', age: 31 }, { name: 'Di', age: 25 }]
-    println(people->sort_by<func (p: Person) { p.age }>->map<func (p: Person) { p.name }>)
-    println(people->sort_by<func (p: Person) { p.name }>->sort_by<func (p: Person) { -p.age }>->map<func (p: Person) { p.name }>)
-
+    println(people->sort_by<func (p: Person) {
+        p.age
+    }>->map<func (p: Person) {
+        p.name
+    }>)
+    println(people->sort_by<func (p: Person) {
+        p.name
+    }>->sort_by<func (p: Person) {
+        -p.age
+    }>->map<func (p: Person) {
+        p.name
+    }>)
+    
     // one call with with-arguments per statement: `f<a>(x), g<b>(y)` in one argument list
     // is read as comparisons
     println(zip_with<add>([1, 2, 3], [10, 20, 30]))
     println(zip_with<label>(['a', 'b'], [1, 2]))
     println(zip_with<add>(none, none))
-
+    
     // chained
-    println(xs->filter<is_even>->sort_by<func (x: int) { -x }>->map<func (x: int) { x * x }>)
+    println(xs->filter<is_even>->sort_by<func (x: int) {
+        -x
+    }>->map<func (x: int) {
+        x * x
+    }>)
     return 0
 }

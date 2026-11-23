@@ -5,7 +5,7 @@
  * numbers would wrap to the smallest `int` instead (`let m: int = 9223372036854775807` then
  * `m + 1`).
  */
-func main(): int sync {
+func main() => int sync {
     let a: int = 9223372036854775807 + 1
     println(a)
     return 0

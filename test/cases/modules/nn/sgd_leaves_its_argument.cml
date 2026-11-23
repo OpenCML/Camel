@@ -14,19 +14,19 @@
  */
 
 import { grad } from autodiff
-import { ones, sum, zeros } from tensor
 import { sgd } from nn
+import { ones, sum, zeros } from tensor
 
 type Linear = { weight: f32[...] }
 
 with <layer: Linear, y: f32[...]>
-func mse_loss(X: f32[...]): float {
+func mse_loss(X: f32[...]) => float {
     let pred = X @ layer.weight
     let errors = pred - y
     return float(sum(errors * errors))
 }
 
-func main(): int sync {
+func main() => int sync {
     let X = ones::<f32>([4, 2])
     let y = ones::<f32>([4, 1])
     let p: Linear = { weight: zeros::<f32>([2, 1]) }

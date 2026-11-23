@@ -32,19 +32,19 @@
 // is a number, and a wrong one.
 //
 //     camel test/cases/compile/transforms/max_min_axis_lane_tangent.cml
-import { max, min } from tensor
 import rulesets.jvp
+import { max, min } from tensor
 import { jvp } from transforms
 
-func lane_max(x: float[...]): float[...] {
+func lane_max(x: float[...]) => float[...] {
     return max<1, false>(x)
 }
 
-func lane_min(x: float[...]): float[...] {
+func lane_min(x: float[...]) => float[...] {
     return min<1, false>(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let tied = [[2.0, 2.0], [1.0, 3.0]] as float[2, 2]
     let e00 = [[1.0, 0.0], [0.0, 0.0]] as float[2, 2]
@@ -52,7 +52,7 @@ func main(): int sync {
     let e10 = [[0.0, 0.0], [1.0, 0.0]] as float[2, 2]
     let e11 = [[0.0, 0.0], [0.0, 1.0]] as float[2, 2]
     let ones = [[1.0, 1.0], [1.0, 1.0]] as float[2, 2]
-
+    
     let (max_value, max_00) = jvp(lane_max)(x, e00)
     let (_mv1, max_01) = jvp(lane_max)(x, e01)
     let (_mv2, max_10) = jvp(lane_max)(x, e10)
@@ -62,7 +62,7 @@ func main(): int sync {
     `max<1> no-tie d/dx[0][1]={}`->format<max_01>->println
     `max<1> no-tie d/dx[1][0]={}`->format<max_10>->println
     `max<1> no-tie d/dx[1][1]={}`->format<max_11>->println
-
+    
     let (max_tied_value, max_tied_ones) = jvp(lane_max)(tied, ones)
     let (_mt1, max_tied_00) = jvp(lane_max)(tied, e00)
     let (_mt2, max_tied_10) = jvp(lane_max)(tied, e10)
@@ -70,7 +70,7 @@ func main(): int sync {
     `max<1> tie d/dx=ones {}`->format<max_tied_ones>->println
     `max<1> tie d/dx[0][0]={}`->format<max_tied_00>->println
     `max<1> tie d/dx[1][0]={}`->format<max_tied_10>->println
-
+    
     let (min_value, min_00) = jvp(lane_min)(x, e00)
     let (_nv1, min_01) = jvp(lane_min)(x, e01)
     let (_nv2, min_10) = jvp(lane_min)(x, e10)
@@ -80,7 +80,7 @@ func main(): int sync {
     `min<1> no-tie d/dx[0][1]={}`->format<min_01>->println
     `min<1> no-tie d/dx[1][0]={}`->format<min_10>->println
     `min<1> no-tie d/dx[1][1]={}`->format<min_11>->println
-
+    
     let (min_tied_value, min_tied_ones) = jvp(lane_min)(tied, ones)
     let (_nt1, min_tied_00) = jvp(lane_min)(tied, e00)
     let (_nt2, min_tied_10) = jvp(lane_min)(tied, e10)

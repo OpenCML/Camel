@@ -19,7 +19,7 @@
 // reading of the extents.
 import rulesets.transpose
 
-func main(): int sync {
+func main() => int sync {
     let extents: int[] = extent_of::<float[]>()
     println(extents)
     return 0

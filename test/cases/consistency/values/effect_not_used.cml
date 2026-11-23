@@ -8,12 +8,12 @@
  * nothing outside does not run.
  */
 
-func log(x: int): int {
+func log(x: int) => int {
     println(x)
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = log(1)
     let b = log(a)
     println(b)

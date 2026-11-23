@@ -2,11 +2,13 @@
 import { grad } from autodiff
 
 with <f: (x: float) => float>
-func applied(x: float): float {
+func applied(x: float) => float {
     return f(x)
 }
 
-func main(): int sync {
-    println(grad(applied)<func (x: float) => float { x * x }>(2.0))
+func main() => int sync {
+    println(grad(applied)<func (x: float) => float {
+        x * x
+    }>(2.0))
     return 0
 }

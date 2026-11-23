@@ -4,11 +4,11 @@
  */
 
 with <rounds: int = 8>
-func f(x: int): int {
+func f(x: int) => int {
     return x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = f<rounds: 2>
     return g(1)
 }

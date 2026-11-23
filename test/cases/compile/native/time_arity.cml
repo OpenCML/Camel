@@ -5,7 +5,7 @@
 
 import { strftime } from time
 
-func main(): int sync {
+func main() => int sync {
     println(strftime<'%Y'>(0.0, 1.0))
     return 0
 }

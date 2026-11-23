@@ -4,18 +4,18 @@
 // `float(n)` is the constant 20 at x = 2 and the gradient is 20, not a refusal.
 import { grad } from autodiff
 
-func side(x: float): int sync {
+func side(x: float) => int sync {
     println('side')
     return int(x * 10.0)
 }
 
 with <x: float>
-func f(): float {
+func f() => float {
     let n = side(x)
     return x * float(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(f)<2.0>())
     return 0
 }

@@ -5,11 +5,11 @@
 import { reshape } from tensor
 import { source } from tiles
 
-func twice(a: f32[...]): f32[...] {
+func twice(a: f32[...]) => f32[...] {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(twice(x))
     println(source<twice>(x))

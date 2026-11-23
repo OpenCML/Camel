@@ -13,13 +13,13 @@
 var calls: int = 0
 
 with <w: float>
-func f(x: float): float sync {
+func f(x: float) => float sync {
     println('f body runs')
     calls = calls + 1
     return w * w * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f<3.0>(1.0))
     println(calls)
     return 0

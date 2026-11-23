@@ -4,12 +4,14 @@
  * graph with a diagnostic at the `attempt`; std::cpp translates it (a C++ try around the call).
  */
 
-func risky(x: float): float { return 6.0 / x }
+func risky(x: float) => float {
+    return 6.0 / x
+}
 
-func safe(x: float): float {
+func safe(x: float) => float {
     return attempt(risky)(x) !! 0.0
 }
 
-func main(): float {
+func main() => float {
     return safe(2.0)
 }

@@ -4,22 +4,21 @@
  * overload does not apply and the choice goes on to the others.
  */
 
-
 import { is_float, is_complex, is_integer } from types
 
-func kind::<T>(x: T): string when is_float::<T>() {
+func kind::<T>(x: T) => string when is_float::<T>() {
     return 'float'
 }
 
-func kind::<T>(x: T): string when is_complex::<T>() {
+func kind::<T>(x: T) => string when is_complex::<T>() {
     return 'complex'
 }
 
-func kind::<T>(x: T): string when is_integer::<T>() {
+func kind::<T>(x: T) => string when is_integer::<T>() {
     return 'integer'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind(1.5), kind(f32(2.0)), kind(1.0 + 2.0i), kind(3), kind(i32(4)))
     return 0
 }

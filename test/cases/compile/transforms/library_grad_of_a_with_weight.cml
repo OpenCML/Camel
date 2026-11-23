@@ -36,36 +36,38 @@
  * value, so it pins the order alone: `mulxy(3.0, 2.0) = 6.0`, `d/dx = y = 2.0`, `d/dy = x = 3.0`.
  */
 
+import { with_grad } from autodiff
 import { first_with_as_param } from transforms
 import { grad, vjp } from vjp
-import { with_grad } from autodiff
 
 // `d/dy (x*y + x) = x`, so the engine answers 3.0 at a weight of 3.0.
 with <x: float>
-func weighted(y: float): float {
+func weighted(y: float) => float {
     return x * y + x
 }
 
-func mulxy(x: float, y: float): float {
+func mulxy(x: float, y: float) => float {
     return x * y
 }
 
-func main(): int sync {
+func main() => int sync {
     // The engine's leg, for the number the library's leg has to match.
     let (engine_value, engine_gradient) = with_grad(weighted)<3.0>(2.0)
-
+    
     // The library's leg: the weight where `weighted` reads it, which is where `grad` puts it back
     // after `first_with_as_param` moved it for the differentiation.
     let library = grad(weighted)<3.0>(2.0)
     'weighted engine={} value={} grad={}'->format<engine_gradient, engine_value, library>->println
-
+    
     // The same call with the number on an ordinary parameter too: one member per source of
     // derivative, and the two members differ.
     let (both, bothPullback) = vjp(first_with_as_param(weighted))(3.0, 5.0)
     'both value={} pullback={}'->format<both, bothPullback(1.0)>->println
-
+    
     // A call of a two-parameter function inside a lifted body.
-    let (twoValue, twoPullback) = vjp(func (rr: float, ss: float) => float { mulxy(rr, ss) })(3.0, 2.0)
+    let (twoValue, twoPullback) = vjp(func (rr: float, ss: float) => float {
+        mulxy(rr, ss)
+    })(3.0, 2.0)
     'twoparam value={} pullback={}'->format<twoValue, twoPullback(1.0)>->println
     return 0
 }

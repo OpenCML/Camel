@@ -22,7 +22,6 @@
 // seed argument, which is why both are registered pure and may be folded, merged or run
 // concurrently.
 
-
 /// Draws `samples` points uniformly from the square [-1, 1]^2 with a generator seeded by `seed`
 /// and returns how many fall inside the unit circle. The estimate of pi is `4 * hits / samples`;
 /// a negative sample count is a fault.
@@ -30,7 +29,7 @@
 /// @fails fault `RuntimeError` when `samples` is negative
 /// @example pi_hits(10000, 42)    // 7863
 #op('sim:pi_hits')
-export func pi_hits(samples: int, seed: int): int panic
+export func pi_hits(samples: int, seed: int) => int panic
 
 /// Prices a one-year Asian call on a geometric random walk with `paths` simulated paths of
 /// `steps` steps each, using the fixed parameters S0 = 100, K = 100, r = 0.05 and sigma = 0.2,
@@ -40,4 +39,4 @@ export func pi_hits(samples: int, seed: int): int panic
 /// @fails fault `RuntimeError` when `paths` is negative or `steps` is not positive
 /// @example asian_call_price(2000, 128, 42)    // 5.894325529519635
 #op('sim:asian_call_price')
-export func asian_call_price(paths: int, steps: int, seed: int): float panic
+export func asian_call_price(paths: int, steps: int, seed: int) => float panic

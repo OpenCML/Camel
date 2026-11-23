@@ -8,7 +8,7 @@ type Tree = { value: int, children: Tree[] }
 type State = { board: int[], to_move: int }
 type Node = { state: State, children: Node[] }
 
-func total(tree: Tree): int sync {
+func total(tree: Tree) => int sync {
     var acc = tree.value
     let _ = loop i = 0 while i < len(tree.children) do sync {
         acc += total(tree.children[i])
@@ -17,7 +17,7 @@ func total(tree: Tree): int sync {
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     // The empty array at the field, with a value beside it.
     let leaf: Tree = { value: 4, children: [] }
     let tree: Tree = { value: 1, children: [leaf, { value: 3, children: [leaf] }] }

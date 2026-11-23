@@ -1,8 +1,12 @@
-func f1(b: bool, g: (p: float) => int, h: (p: string, q: int) => bool): bool {
-    return if b then g(1.0) == 0 else h('x', 1);
+func f1(b: bool, g: (p: float) => int, h: (p: string, q: int) => bool) => bool {
+    return if b then g(1.0) == 0 else h('x', 1)
 }
 
-func main(): int {
-    println('r {}'->format<f1(false, func (p: float) => int { 1 }, func (p: string, q: int) => bool { true })>);
-    return 0;
+func main() => int {
+    println('r {}'->format<f1(false, func (p: float) => int {
+        1
+    }, func (p: string, q: int) => bool {
+        true
+    })>)
+    return 0
 }

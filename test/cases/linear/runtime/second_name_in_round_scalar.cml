@@ -10,7 +10,7 @@
 // three writes made. Before the keeper the name was the carried port itself and every use of it
 // read the round's value where the use stood, so it printed the write (1, 2, 3).
 
-func main(): int sync {
+func main() => int sync {
     var n: int = 0
     let _ = loop i = 0 while i < 3 do sync {
         let kept = n

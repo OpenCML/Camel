@@ -26,16 +26,20 @@
 import rulesets.transpose
 import { transpose } from transforms
 
-func mk(x: float): (y: float) => float {
-    return func (y: float) { x * y }
+func mk(x: float) => (y: float) => float {
+    return func (y: float) {
+        x * y
+    }
 }
 
-func f(x: float): float {
-    let h = func (a: (y: float) => float, b: float) { a(b) * x }
+func f(x: float) => float {
+    let h = func (a: (y: float) => float, b: float) {
+        a(b) * x
+    }
     return h(mk(x), 2.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(3.0))
     // The paper answer: (12.0,). No forward line prints 12, so the claim is about the transpose.
     println(transpose(f)(1.0))

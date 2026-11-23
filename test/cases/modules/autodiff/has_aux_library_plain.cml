@@ -17,16 +17,16 @@
  */
 import { vjp, grad } from vjp
 
-func cube(x: float): float {
+func cube(x: float) => float {
     return x * x * x
 }
 
 with <x: float>
-func cube_at(): float {
+func cube_at() => float {
     return cube(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (y, pullback) = vjp(cube)(2.0)
     let cotangents = pullback(1.0)
     let g = grad(cube_at)<2.0>()

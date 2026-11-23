@@ -8,17 +8,17 @@
 import { grad } from autodiff
 
 with <w: float>
-func sum_losses(n: int): float {
-    let losses = loop acc = [] for i in 0..n do acc->append<float(i) * w>
+func sum_losses(n: int) => float {
+    let losses = loop acc = [] for i in 0 .. n do acc->append<float(i) * w>
     return losses[0] + losses[n - 1]
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum_losses<2.0>(4))
     println(grad(sum_losses)<2.0>(4))
     let before = std::mem::blocks()
-    let value  = sum_losses<2.0>(1000)
-    let after  = std::mem::blocks()
+    let value = sum_losses<2.0>(1000)
+    let after = std::mem::blocks()
     println(value)
     println(after.allocs - before.allocs)
     return 0

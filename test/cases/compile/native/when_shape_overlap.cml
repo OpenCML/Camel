@@ -13,13 +13,13 @@
  * all. `is_callable` says the same thing about the type it is given.
  */
 
-func always::<T>(): bool {
+func always::<T>() => bool {
     return match type T {
         case _ => true
     }
 }
 
-func is_callable::<T>(): bool {
+func is_callable::<T>() => bool {
     return match type T {
         case func => true
         case _ => false
@@ -27,11 +27,11 @@ func is_callable::<T>(): bool {
 }
 
 #op(':op/add_i')
-func arms_kernel::<T>(a: T, b: T): T when always::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when always::<T>()
 
 #op(':op/sub_i')
-func arms_kernel::<T>(a: T, b: T): T when is_callable::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_callable::<T>()
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

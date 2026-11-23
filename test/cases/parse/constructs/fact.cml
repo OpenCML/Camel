@@ -9,15 +9,17 @@ import { rewrite } from rewrite
 
 fact sign: int match v {
     case const c: int => c
-    case _       => 0
-} join max
+    case _ => 0
+}
+join max
 
 fact depth: int match v {
     case const c: int => 1
-    case x + y   => max(depth(x), depth(y)) + 1
-    case _       => 0
-} join max
+    case x + y => max(depth(x), depth(y)) + 1
+    case _ => 0
+}
+join max
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

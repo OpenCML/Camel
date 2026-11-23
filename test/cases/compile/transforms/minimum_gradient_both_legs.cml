@@ -12,27 +12,27 @@
 //
 //     camel test/cases/compile/transforms/minimum_gradient_both_legs.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, minimum, sum } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling of `d/dx`: the differentiated value is the `with` parameter.
 with <x: float[...]>
-func total_x(w: float[]): float {
+func total_x(w: float[]) => float {
     return sum(minimum(x, w))
 }
 
 /// The same for `d/dw`: the other operand is the `with` parameter.
 with <w: float[...]>
-func total_w(x: float[]): float {
+func total_w(x: float[]) => float {
     return sum(minimum(x, w))
 }
 
 /// The library's spelling: both operands are ordinary parameters.
-func total_plain(x: float[], w: float[]): float {
+func total_plain(x: float[], w: float[]) => float {
     return sum(minimum(x, w))
 }
 
-func main(): int sync {
+func main() => int sync {
     let xa = [-2.0, 0.0, 3.0, -0.5] as float[]
     let wa = [1.0, 0.0, 1.0, 2.0] as float[]
     let engine_dx = grad(total_x)<[-2.0, 0.0, 3.0, -0.5] as float[]>([1.0, 0.0, 1.0, 2.0] as float[])

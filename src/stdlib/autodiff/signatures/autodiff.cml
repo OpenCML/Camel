@@ -48,7 +48,7 @@
 /// result with respect to its first `with` parameter, in the type of that parameter.
 /// @example-fragment `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let loss_grad = grad(loss)
-export func grad::<F>(f: F): Gradient<F> when is_function::<F>()
+export func grad::<F>(f: F) => Gradient<F> when is_function::<F>()
 
 /// The same over a function whose result is the pair `(value, aux)`: the first element is
 /// differentiated and the second is handed back unchanged, so the gradient function gives
@@ -57,13 +57,13 @@ export func grad::<F>(f: F): Gradient<F> when is_function::<F>()
 /// @example-fragment the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let loss_grad = grad(loss, has_aux: true)
 #op('autodiff:grad_aux')
-export func grad::<F>(f: F, has_aux: bool): GradientAndAux<F> when is_function::<F>()
+export func grad::<F>(f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 
 /// The value and the gradient together: the function it gives returns `(result of f, gradient)`,
 /// the pair a training step needs from one evaluation. The same compile-time refusals as `grad`.
 /// @example-fragment `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let step = with_grad(loss)
-export func with_grad::<F>(f: F): ValueAndGradient<F> when is_function::<F>()
+export func with_grad::<F>(f: F) => ValueAndGradient<F> when is_function::<F>()
 
 /// The value, the auxiliary value and the gradient of a function whose result is `(value, aux)`:
 /// the pair the function gives is returned whole, followed by the gradient --
@@ -71,4 +71,5 @@ export func with_grad::<F>(f: F): ValueAndGradient<F> when is_function::<F>()
 /// @example-fragment the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let step = with_grad(loss, has_aux: true)
 #op('autodiff:with_grad_aux')
-export func with_grad::<F>(f: F, has_aux: bool): ValueAndGradientAndAux<F> when is_function::<F>()
+export func with_grad::<F>(f: F, has_aux: bool) => ValueAndGradientAndAux<F>
+    when is_function::<F>()

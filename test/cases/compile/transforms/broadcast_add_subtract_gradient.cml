@@ -35,30 +35,30 @@ import { numel } from tensor
 import { transpose } from transforms
 
 /// `x + b` on a `float[2, 3]` and a `float[3]`: the sum broadcasts `b` over the two rows.
-func total_add(x: float[2, 3], b: float[3]): float[...] {
+func total_add(x: float[2, 3], b: float[3]) => float[...] {
     return x + b
 }
 
 /// `x - b`: the same broadcast through the difference, whose `b`'s cotangent is negated.
-func total_sub(x: float[2, 3], b: float[3]): float[...] {
+func total_sub(x: float[2, 3], b: float[3]) => float[...] {
     return x - b
 }
 
-func main(): int sync {
+func main() => int sync {
     let weighted = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
-    let plain    = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] as float[2, 3]
-
+    let plain = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] as float[2, 3]
+    
     let (dx_w, db_w) = transpose(total_add)(weighted)
     `add weighted dL/db numel={} dL/db={}`->format<numel(db_w), db_w>->println
     `add weighted dL/dx={}`->format<dx_w>->println
-
+    
     let (_, db_p) = transpose(total_add)(plain)
     `add plain dL/db numel={} dL/db={}`->format<numel(db_p), db_p>->println
-
+    
     let (sdx_w, sdb_w) = transpose(total_sub)(weighted)
     `sub weighted dL/db numel={} dL/db={}`->format<numel(sdb_w), sdb_w>->println
     `sub weighted dL/dx={}`->format<sdx_w>->println
-
+    
     let (_, sdb_p) = transpose(total_sub)(plain)
     `sub plain dL/db numel={} dL/db={}`->format<numel(sdb_p), sdb_p>->println
     return 0

@@ -5,9 +5,11 @@
  */
 
 with <xs: f32[]>
-func at(i: int): f32 { return xs[i] }
+func at(i: int) => f32 {
+    return xs[i]
+}
 
-func main(): int sync {
+func main() => int sync {
     let a = at<[1.0, 1e40]>
     println(a(0))
     return 0

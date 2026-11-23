@@ -35,19 +35,19 @@
 
 import state
 
-func reader_of(r: state::Ref<int>): int {
+func reader_of(r: state::Ref<int>) => int {
     return state::get(r)
 }
 
 /// The write and the read are in one body, and nothing takes the write's value: `p`.
-func p(): int {
+func p() => int {
     let c = state::ref(0)
     state::set(c, 1)
     return state::get(c)
 }
 
 /// The write is in an arm whose value IS taken, so the value it answers is the arm's value.
-func branch_value(flag: bool): int {
+func branch_value(flag: bool) => int {
     let c = state::ref(0)
     let x = if flag then {
         state::set(c, 7)
@@ -59,48 +59,50 @@ func branch_value(flag: bool): int {
 }
 
 /// The reader is the callee, in another graph.
-func written_here(): int {
+func written_here() => int {
     let c = state::ref(0)
     state::set(c, 4)
     return reader_of(c)
 }
 
 /// The box escapes through `return`, and the caller reads it.
-func escaped_box(): state::Ref<int> {
+func escaped_box() => state::Ref<int> {
     let c = state::ref(0)
     state::set(c, 3)
     return c
 }
 
-func read_in_the_caller(): int {
+func read_in_the_caller() => int {
     let c = escaped_box()
     return state::get(c)
 }
 
 /// A closure carries the box, and a later call reads it.
-func carried_box(): () => int {
+func carried_box() => () => int {
     let c = state::ref(0)
     state::set(c, 2)
-    return func () => int { state::get(c) }
+    return func () => int {
+        state::get(c)
+    }
 }
 
-func read_on_a_later_call(): int {
+func read_on_a_later_call() => int {
     let f = carried_box()
     return f()
 }
 
 /// Two names of one box: the write through one is what the other reads (3.3, the written order).
-func write_one_read_the_other(a: state::Ref<int>, b: state::Ref<int>): int {
+func write_one_read_the_other(a: state::Ref<int>, b: state::Ref<int>) => int {
     state::set(a, 6)
     return state::get(b)
 }
 
-func two_names(): int {
+func two_names() => int {
     let c = state::ref(0)
     return write_one_read_the_other(c, c)
 }
 
-func main(): int sync {
+func main() => int sync {
     let r1b = branch_value(true)
     let r5 = written_here()
     let r6 = read_in_the_caller()

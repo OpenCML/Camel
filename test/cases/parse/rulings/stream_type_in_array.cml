@@ -7,7 +7,7 @@
  * the spelling is read that way at all, and its tree is locked by feat/parse/frontend.
  */
 
-func main(): int sync {
+func main() => int sync {
     let s: int..[3] = [1, 2, 3]
     return 0
 }

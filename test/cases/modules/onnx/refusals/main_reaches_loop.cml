@@ -6,20 +6,20 @@
  * call was left instead of asking for the pass.
  */
 
-import { reshape } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape } from tensor
 
-func double(t: float[...]): float[...] {
+func double(t: float[...]) => float[...] {
     return t * 2.0
 }
 
-func countdown(remaining: int): int sync {
+func countdown(remaining: int) => int sync {
     println(remaining)
     return if remaining <= 0 then 0 else countdown(remaining - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     // The refusal is what this case measures, and binding it would change the size the inliner
     // reads, so the value stays unbound: the compiler reports that with its own warning.
     export_model<out: 'tmp/test/onnx/refusal_reaches_loop.onnx'>(double, reshape<[2]>([1.0, 2.0]))

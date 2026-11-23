@@ -1,10 +1,10 @@
-func main(): int sync {
-    var v = 5;
+func main() => int sync {
+    var v = 5
     if false then sync {
         if false then sync {
-            v = 7;
-        };
-    };
-    println("L6 {}"->format<v>);
-    return 0;
+            v = 7
+        }
+    }
+    println('L6 {}'->format<v>)
+    return 0
 }

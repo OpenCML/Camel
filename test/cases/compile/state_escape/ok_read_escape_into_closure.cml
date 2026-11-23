@@ -12,13 +12,17 @@
  * `err_escape_into_closure`, whose `inner` assigns `acc`.
  */
 
-func make(base: int): (y: int) => int {
+func make(base: int) => (y: int) => int {
     var acc = base * 3
-    let inner = func (x: int) => int { acc + x }
-    return func (y: int) => int { inner(y) + 1 }
+    let inner = func (x: int) => int {
+        acc + x
+    }
+    return func (y: int) => int {
+        inner(y) + 1
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = make(7)
     println(g(1))
     return 0

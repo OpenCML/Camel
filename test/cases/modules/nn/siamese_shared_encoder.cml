@@ -5,65 +5,61 @@
  */
 
 import { grad, with_grad } from autodiff
-import { full, sum, tanh, zeros } from tensor
 import { sgd } from nn
+import { full, sum, tanh, zeros } from tensor
 
 type Encoder = {
     weight: f32[...],
     bias: f32[...]
 }
 
-type Siamese = {
-    encoder: Encoder
-}
+type Siamese = { encoder: Encoder }
 
 with <encoder: Encoder>
-func linear(x: f32[...]): f32[...] {
+func linear(x: f32[...]) => f32[...] {
     return (x @ encoder.weight) + encoder.bias
 }
 
 with <encoder: Encoder>
-func encode(x: f32[...]): f32[...] {
+func encode(x: f32[...]) => f32[...] {
     return tanh(x->linear<encoder>)
 }
 
-func pair_loss(za: f32[...], zb: f32[...]): float {
+func pair_loss(za: f32[...], zb: f32[...]) => float {
     let diff = za - zb
     return float(sum(diff * diff))
 }
 
 with <model: Siamese>
-func siamese_loss(xa: f32[...], xb: f32[...]): float {
+func siamese_loss(xa: f32[...], xb: f32[...]) => float {
     let za = xa->encode<model.encoder>
     let zb = xb->encode<model.encoder>
     return pair_loss(za, zb)
 }
 
-func init(): Siamese {
-    return {
-        encoder: {
-            weight: full([2, 2], f32(0.1)),
-            bias: zeros::<f32>([2])
-        }
-    }
+func init() => Siamese {
+    return { encoder: {
+        weight: full([2, 2], f32(0.1)),
+        bias: zeros::<f32>([2])
+    } }
 }
 
-func train(model: Siamese, xa: f32[...], xb: f32[...], steps: int): Siamese {
+func train(model: Siamese, xa: f32[...], xb: f32[...], steps: int) => Siamese {
     return if steps == 0 then model else train(sgd(model, grad(siamese_loss)<model>(xa, xb), 0.2), xa, xb, steps - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let model = init()
     let xa = full([1, 2], f32(1.0))
     let xb = full([1, 2], f32(0.5))
-
+    
     let before = siamese_loss<model>(xa, xb)
     let vg = with_grad(siamese_loss)<model>(xa, xb)
     let stepped = sgd(model, vg.1, 0.2)
     let after = siamese_loss<stepped>(xa, xb)
     let trained = train(model, xa, xb, 10)
     let after_train = siamese_loss<trained>(xa, xb)
-
+    
     'siamese_shared_encoder metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'siamese_shared_encoder weight={}'->format<stepped.encoder.weight>->println
     'siamese_shared_encoder bias={}'->format<stepped.encoder.bias>->println

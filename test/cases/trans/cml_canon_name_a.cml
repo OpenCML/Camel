@@ -3,17 +3,17 @@
  * end interns their signatures into one type object; the other file does not, and the canonical
  * type table must still be the same. */
 
-func bump(x: int): int {
+func bump(x: int) => int {
     let step = x + 1
     return step
 }
 
-func bump2(x: int): int {
+func bump2(x: int) => int {
     let step = x * 2
     return step
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bump(1), bump2(2))
     return 0
 }

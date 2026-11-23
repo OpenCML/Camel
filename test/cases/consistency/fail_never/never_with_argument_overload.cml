@@ -7,19 +7,19 @@
  */
 
 with <n: int>
-func pick(x: int): int {
+func pick(x: int) => int {
     return x + n
 }
 
 with <s: string>
-func pick(x: int): string {
+func pick(x: int) => string {
     return s
 }
 
-func stop(m: string): never {
+func stop(m: string) => never {
     return fail<'Stopped'>(m)
 }
 
-func main(): int[] sync {
+func main() => int[] sync {
     return pick<stop('no value to pick')>(3)
 }

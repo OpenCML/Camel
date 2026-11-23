@@ -2,7 +2,7 @@
 // nothing to bind. Refused at the name, with both forms that would fix it -- `= <value>` or
 // `: <type> = <value>` -- in the message.
 
-func main(): int sync {
+func main() => int sync {
     let x
     return 0
 }

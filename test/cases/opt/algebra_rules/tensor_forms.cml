@@ -10,31 +10,31 @@ import { reshape } from tensor
 
 type Vec = f32[3]
 
-func array_combine(x: Vec): Vec sync {
+func array_combine(x: Vec) => Vec sync {
     let a = x * 3.0 + x * 5.0
     println(a)
     return x
 }
 
-func array_fold(x: Vec): Vec sync {
+func array_fold(x: Vec) => Vec sync {
     let a = (x * 3.0) * 2.0
     println(a)
     return x
 }
 
-func array_double(x: Vec): Vec sync {
+func array_double(x: Vec) => Vec sync {
     let a = x + x
     println(a)
     return x
 }
 
-func tensor_zero(x: Vec): Vec sync {
+func tensor_zero(x: Vec) => Vec sync {
     let a = x * 0.0
     println(a)
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(array_combine(v))
     println(array_fold(v))

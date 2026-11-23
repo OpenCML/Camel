@@ -2,7 +2,7 @@
 // brings (`len` here is lib2's), the module's own before both.
 import { len } from lens
 
-func main(): int sync {
+func main() => int sync {
     println(len([1, 2, 3]))
     return 0
 }

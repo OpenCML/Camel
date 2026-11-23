@@ -9,18 +9,26 @@
  */
 
 /// x * 2: matched by the pattern `x * tile` when the rule is bound to 2, at the first of two sites.
-func wide(x: int): int { return x * 2 }
+func wide(x: int) => int {
+    return x * 2
+}
 
 /// x * 2 at a second site: the same instance serves both.
-func again(x: int): int { return x * 2 }
+func again(x: int) => int {
+    return x * 2
+}
 
 /// x * 3: the shape of the same rule bound to 3, which is another instance.
-func thrice(x: int): int { return x * 3 }
+func thrice(x: int) => int {
+    return x * 3
+}
 
 /// x * 0: the shape of the same rule bound to 0, whose condition then refuses to fire.
-func zeroed(x: int): int { return x * 0 }
+func zeroed(x: int) => int {
+    return x * 0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(wide(3), again(4), thrice(5), zeroed(6))
     return 0
 }

@@ -22,11 +22,11 @@
 // model there (an empty string writes nothing).  The thread count is the command line's `-t 1`;
 // the program itself reads no environment variable.
 
-import { argmax, exp, gelu, log, mean, one_hot, permute, reshape, shape, sqrt as tensor_sqrt, sum, transpose } from tensor
-import { next_key, normal, seed } from random
-import { sqrt as scalar_sqrt } from math
 import { with_grad } from autodiff
+import { sqrt as scalar_sqrt } from math
 import { adam, adam_state, save_params } from nn
+import { next_key, normal, seed } from random
+import { argmax, exp, gelu, log, mean, one_hot, permute, reshape, shape, sqrt as tensor_sqrt, sum, transpose } from tensor
 import { now } from time
 
 let batch = 8
@@ -75,26 +75,24 @@ type Model = {
 }
 
 // RMSNorm over the last axis.  The epsilon is the usual one, not a numerical trick.
-func rmsnorm(x: TokenStates, gain: f32[64]): TokenStates {
+func rmsnorm(x: TokenStates, gain: f32[64]) => TokenStates {
     let scale = mean<-1, true>(x * x)
     return x / tensor_sqrt(scale + 1e-6) * gain
 }
 
 /// [B, S, D] -> [B, H, S, D / H]: head i owns the feature columns [i * Dh, (i + 1) * Dh).
-func split_heads(t: TokenStates): HeadStates {
-    return permute<[0, 2, 1, 3]>(reshape<[batch, sequence, n_heads, d_head]>(t))
-        as HeadStates
+func split_heads(t: TokenStates) => HeadStates {
+    return permute<[0, 2, 1, 3]>(reshape<[batch, sequence, n_heads, d_head]>(t)) as HeadStates
 }
 
 /// [B, H, S, Dh] -> [B, S, H * Dh].
-func merge_heads(t: HeadStates): TokenStates {
-    return reshape<[batch, sequence, d_model]>(permute<[0, 2, 1, 3]>(t))
-        as TokenStates
+func merge_heads(t: HeadStates) => TokenStates {
+    return reshape<[batch, sequence, d_model]>(permute<[0, 2, 1, 3]>(t)) as TokenStates
 }
 
 // One pre-norm block: attention with three separate projections, then the MLP.  The softmax is
 // the textbook definition, with no maximum subtracted.
-func block_forward(b: Block, x: TokenStates): TokenStates {
+func block_forward(b: Block, x: TokenStates) => TokenStates {
     let h = rmsnorm(x, b.norm1)
     let q = split_heads(h @ b.wq)
     let k = split_heads(h @ b.wk)
@@ -110,7 +108,7 @@ func block_forward(b: Block, x: TokenStates): TokenStates {
 
 // The logits of every position: every block in turn, a final RMSNorm and a projection to the
 // vocabulary.  The loop walks the blocks array; no block is named in this function.
-func logits(m: Model, x: TokenStates): Logits {
+func logits(m: Model, x: TokenStates) => Logits {
     let h = loop h = x for b in m.blocks do block_forward(b, h)
     return rmsnorm(h, m.norm_f) @ m.head
 }
@@ -118,7 +116,7 @@ func logits(m: Model, x: TokenStates): Logits {
 // The textbook cross-entropy: normalise exp(logits), take log of the result, and read the true
 // class.  No log_softmax and no gather; the one-hot product does the reading.
 with <m: Model>
-func loss(x: TokenStates, labels: i64[8, 16]): float {
+func loss(x: TokenStates, labels: i64[8, 16]) => float {
     let z = logits(m, x)
     let p = exp(z) / sum<-1, true>(exp(z))
     // one_hot reads a rank-1 index tensor, so flatten the labels and restore the position grid.
@@ -130,7 +128,7 @@ func loss(x: TokenStates, labels: i64[8, 16]): float {
     return -float(mean(picked))
 }
 
-func init_block(std: float): Block {
+func init_block(std: float) => Block {
     return {
         norm1: (next_key()->normal::<f32><shape: [d_model]> * 0.0 + 1.0) as f32[64],
         wq: (next_key()->normal::<f32><shape: [d_model, d_model]> * f32(std)) as f32[64, 64],
@@ -145,7 +143,7 @@ func init_block(std: float): Block {
     }
 }
 
-func init_model(): Model {
+func init_model() => Model {
     let std = 0.02
     return {
         blocks: [init_block(std), init_block(std)],
@@ -156,52 +154,44 @@ func init_model(): Model {
 
 // The parameter count is read from the model's own shapes, not repeated as a formula at the
 // print site.
-func count_block(b: Block): int {
-    return shape(b.norm1)[0] + shape(b.wq)[0] * shape(b.wq)[1] +
-        shape(b.wk)[0] * shape(b.wk)[1] + shape(b.wv)[0] * shape(b.wv)[1] +
-        shape(b.wo)[0] * shape(b.wo)[1] + shape(b.norm2)[0] +
-        shape(b.w1)[0] * shape(b.w1)[1] + shape(b.b1)[0] +
-        shape(b.w2)[0] * shape(b.w2)[1] + shape(b.b2)[0]
+func count_block(b: Block) => int {
+    return shape(b.norm1)[0] + shape(b.wq)[0] * shape(b.wq)[1] + shape(b.wk)[0] * shape(b.wk)[1] + shape(b.wv)[0] * shape(b.wv)[1] + shape(b.wo)[0] * shape(b.wo)[1] + shape(b.norm2)[0] + shape(b.w1)[0] * shape(b.w1)[1] + shape(b.b1)[0] + shape(b.w2)[0] * shape(b.w2)[1] + shape(b.b2)[0]
 }
 
-func param_count(m: Model): int {
-    return loop n = shape(m.norm_f)[0] + shape(m.head)[0] * shape(m.head)[1]
-        for b in m.blocks do n + count_block(b)
+func param_count(m: Model) => int {
+    return loop n = shape(m.norm_f)[0] + shape(m.head)[0] * shape(m.head)[1] for b in m.blocks do n + count_block(b)
 }
 
-func main(bench: bool, init_dir: string, final_dir: string): int sync {
+func main(bench: bool, init_dir: string, final_dir: string) => int sync {
     // One fixed seed drives the starting weights and the data.  The labels are the largest of the
     // first `vocab` features of each position, so the task is deterministic and learnable.
     seed(42)
     let model = init_model()
     let x: TokenStates = next_key()->normal::<f32><shape: [batch, sequence, d_model]> as TokenStates
     let labels: i64[8, 16] = argmax<-1>(slice(x, 2, 0, vocab))
-
+    
     if init_dir != '' then {
         save_params({ model: model, x: x, labels: labels }, init_dir)
     }
-
+    
     let before = loss<model>(x, labels)
     let params = param_count(model)
-    `naive config batch=${batch} sequence=${sequence} d_model=${d_model} heads=${n_heads} d_ff=${d_ff} vocab=${vocab} blocks=2 params=${params}`
-        ->println
+    `naive config batch=${batch} sequence=${sequence} d_model=${d_model} heads=${n_heads} d_ff=${d_ff} vocab=${vocab} blocks=2 params=${params}`->println
     `naive init loss=${before:.9f}`->println
-
+    
     let loss_grad = with_grad(loss)
-    let (trained, state, done) = loop m = model, st = adam_state(model), i = 0
-        while i < steps
-        do sync {
-            let start = if bench then now() else 0.0
-            let (value, gradient) = loss_grad<m>(x, labels)
-            let next = adam(m, gradient, st, lr)
-            let elapsed = if bench then now() - start else 0.0
-            if bench && i >= warmup then {
-                `naive bench step=${i} ms=${elapsed * 1000.0:.6f}`->println
-            }
-            `naive step=${i} loss=${value:.9f}`->println
-            return (next.0, next.1, i + 1)
+    let (trained, state, done) = loop m = model, st = adam_state(model), i = 0 while i < steps do sync {
+        let start = if bench then now() else 0.0
+        let (value, gradient) = loss_grad<m>(x, labels)
+        let next = adam(m, gradient, st, lr)
+        let elapsed = if bench then now() - start else 0.0
+        if bench && i >= warmup then {
+            `naive bench step=${i} ms=${elapsed * 1000.0:.6f}`->println
         }
-
+        `naive step=${i} loss=${value:.9f}`->println
+        return (next.0, next.1, i + 1)
+    }
+    
     let after = loss<trained>(x, labels)
     `naive final steps=${done} loss=${after:.9f}`->println
     if final_dir != '' then {

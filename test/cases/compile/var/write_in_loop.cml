@@ -11,7 +11,7 @@
  *
  * Run: camel test/cases/compile/var/write_in_loop.cml
  */
-func main(): int sync {
+func main() => int sync {
     var x = 0
     let _ = loop i = 0 while i < 3 do sync {
         x = x + 1

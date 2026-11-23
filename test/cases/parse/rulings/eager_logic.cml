@@ -1,11 +1,11 @@
 // `&` and `|` evaluate both sides; `&` binds tighter than `|`, both tighter than `&&` and
 // looser than the comparisons.
-func noisy(name: string, value: bool): bool sync {
+func noisy(name: string, value: bool) => bool sync {
     println(name)
     return value
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = 1
     let b = 2
     println(a == 1 & b == 2, a == 2 | b == 2, true | false & false, false & true | true)

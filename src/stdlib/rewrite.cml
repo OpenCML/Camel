@@ -107,7 +107,7 @@ export type CheckReport = { rows: CheckRow[] }
 /// @example f->rewrite<rules>
 #op('rewrite:rewrite')
 with <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false>
-export func rewrite::<F>(f: F): F! panic when is_function::<F>()
+export func rewrite::<F>(f: F) => F! panic when is_function::<F>()
 
 /// Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
 /// every writing the saturation found; `extract` chooses among them. `protect_faults` selects
@@ -122,7 +122,7 @@ export func rewrite::<F>(f: F): F! panic when is_function::<F>()
 /// @example f->saturate<rules, rounds: 20>
 #op('rewrite:saturate')
 with <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false>
-export func saturate::<F>(f: F): F! panic when is_function::<F>()
+export func saturate::<F>(f: F) => F! panic when is_function::<F>()
 
 /// Chooses one writing of every value that has several, the one of least total cost. The cost of
 /// a writing is `cost(o, inputs)`: the operator and the costs of the writings of its inputs.
@@ -130,7 +130,7 @@ export func saturate::<F>(f: F): F! panic when is_function::<F>()
 /// @example f->extract<rules::nodes>
 #op('rewrite:extract')
 with <cost: (o: Op, inputs: float[]) => float>
-export func extract::<F>(f: F): F! when is_function::<F>()
+export func extract::<F>(f: F) => F! when is_function::<F>()
 
 /// Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
 /// what the application cost. This is `rewrite` with the round budget explicit and the cost kept.
@@ -143,7 +143,7 @@ export func extract::<F>(f: F): F! when is_function::<F>()
 /// @example f->run<rules, rounds: 8, explain: true>
 #op('rewrite:run')
 with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false>
-export func run::<F>(f: F): Run<F>! panic when is_function::<F>()
+export func run::<F>(f: F) => Run<F>! panic when is_function::<F>()
 
 // ---- checking rules ----
 
@@ -157,7 +157,7 @@ export func run::<F>(f: F): Run<F>! panic when is_function::<F>()
 /// @example rules->check<samples: 1000, seed: 7>
 #op('rewrite:check')
 with <samples: int = 100, seed: int = 0>
-export func check(rules: Rule[]): CheckReport panic
+export func check(rules: Rule[]) => CheckReport panic
 
 /// The same, with the law also checked at the types of the values `over` has, each once, in the
 /// order its graphs write them. `over` is an ordinary argument, not a `with` one, so that both
@@ -173,12 +173,14 @@ export func check(rules: Rule[]): CheckReport panic
 /// @example rules->check((x: int) => x + 1)
 #op('rewrite:check_over')
 with <samples: int = 100, seed: int = 0>
-export func check::<F>(rules: Rule[], over: F): CheckReport panic when is_function::<F>()
+export func check::<F>(rules: Rule[], over: F) => CheckReport
+    panic
+    when is_function::<F>()
 
 /// The report's fixed rendering, one line per row, for a caller that wants it as a value.
 /// @example-fragment `report` is the report a check gives back: the example writes what reads it, and a doc example has no check to run
 /// @example check_text(report)    // 'sampled add_zero: proposition equality, evidence samples 100, ...'
-export func check_text(r: CheckReport): string
+export func check_text(r: CheckReport) => string
 
 /// The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
 /// widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
@@ -200,7 +202,7 @@ export let coverage_table: string
 /// @example r->explain<a, b>
 #op('rewrite:explain')
 with <a: Node, b: Node>
-export func explain::<F>(r: Run<F>): Proof!
+export func explain::<F>(r: Run<F>) => Proof!
 
 /// Every rewrite of the run `r`, in the order it made them, each naming the rule, the round, the
 /// graph and the nodes that matched, were produced and were erased. This is the full record
@@ -209,7 +211,7 @@ export func explain::<F>(r: Run<F>): Proof!
 /// @example-fragment a run comes from the caller
 /// @example explain_all(r)
 #op('rewrite:explain_all')
-export func explain_all::<F>(r: Run<F>): Proof!
+export func explain_all::<F>(r: Run<F>) => Proof!
 
 /// Why the rule `rule` did not fire at the value `v` of the run `r`: the first place the left side
 /// fails to match, the value the pattern wanted there and the value the program has, a missing
@@ -220,7 +222,7 @@ export func explain_all::<F>(r: Run<F>): Proof!
 /// @example r->why_not<target, v>
 #op('rewrite:why_not')
 with <rule: Rule, v: Node>
-export func why_not::<F>(r: Run<F>): string! panic
+export func why_not::<F>(r: Run<F>) => string! panic
 
 // ---- reading a rule ----
 
@@ -228,22 +230,22 @@ export func why_not::<F>(r: Run<F>): string! panic
 /// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_name(r)    // 'int_add_zero'
 #op('rewrite:name')
-export func rule_name(r: Rule): string
+export func rule_name(r: Rule) => string
 
 /// Whether the rule `r` may also be applied from right to left.
 /// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_two_way(r)    // false
 #op('rewrite:two_way')
-export func rule_two_way(r: Rule): bool
+export func rule_two_way(r: Rule) => bool
 
 /// How many rewrites the rule `r` needs before it may fire.
 /// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_needs(r)    // 0
 #op('rewrite:needs')
-export func rule_needs(r: Rule): int
+export func rule_needs(r: Rule) => int
 
 /// How many constants the rule `r` adds to the function.
 /// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_consts(r)    // 0
 #op('rewrite:consts')
-export func rule_consts(r: Rule): int
+export func rule_consts(r: Rule) => int

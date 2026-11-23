@@ -10,9 +10,9 @@
 //         --arg batch=32 --arg lr=0.1 --arg log_every=20 --arg threads=1 std::macro std::nvm
 
 // == imports ==
-import { abs, exp, load_npy, log, mean, numel, relu, set_num_threads, shape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
+import { abs, exp, load_npy, log, mean, numel, relu, set_num_threads, shape } from tensor
 import { now } from time
 
 // == model ==
@@ -23,7 +23,7 @@ type Model = {
 }
 
 with <m: Model>
-func predict(x: f32[...]): f32[...] {
+func predict(x: f32[...]) => f32[...] {
     return x @ m.w + m.b
 }
 
@@ -32,7 +32,7 @@ func predict(x: f32[...]): f32[...] {
 // form `relu(z) - z*y + log(1 + exp(-|z|))`, which never evaluates exp of a large positive
 // number; `y` is 0 or 1.
 with <m: Model>
-func loss(x: f32[...], y: f32[...], kind: int): float {
+func loss(x: f32[...], y: f32[...], kind: int) => float {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = z - y
@@ -43,7 +43,7 @@ func loss(x: f32[...], y: f32[...], kind: int): float {
 }
 
 // == data ==
-func load_model(data: string): Model {
+func load_model(data: string) => Model {
     let init = data + '/init'
     return { w: load_npy::<f32>(init + '/w.npy'), b: load_npy::<f32>(init + '/b.npy') }
 }
@@ -51,7 +51,7 @@ func load_model(data: string): Model {
 // == evaluate ==
 // The first number is the validation loss, the second the metric that fits the problem: mean
 // absolute error for regression, accuracy for classification.
-func evaluate(m: Model, x: f32[...], y: f32[...], kind: int): (float, float) {
+func evaluate(m: Model, x: f32[...], y: f32[...], kind: int) => (float, float) {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = abs(z - y)
@@ -67,17 +67,23 @@ func evaluate(m: Model, x: f32[...], y: f32[...], kind: int): (float, float) {
     }
 }
 
-func count_params(m: Model): int {
+func count_params(m: Model) => int {
     return numel(m.w) + numel(m.b)
 }
 
 // == entry ==
 func main(
-    data: string, model: string, steps: int, batch: int, lr: float, log_every: int, threads: int
-): int sync {
+    data: string,
+    model: string,
+    steps: int,
+    batch: int,
+    lr: float,
+    log_every: int,
+    threads: int
+) => int sync {
     set_num_threads(threads)
     let kind = if model == 'linear' then 0 else 1
-
+    
     // == data ==
     let train_x = load_npy::<f32>(data + '/train_x.npy')
     let train_y = load_npy::<f32>(data + '/train_y.npy')
@@ -88,27 +94,25 @@ func main(
     let before = evaluate(initial, val_x, val_y, kind)
     `c1 config model=${model} steps=${steps} batch=${batch} lr=${lr} threads=${threads} params=${count_params(initial)} batches=${batches}`->println
     `c1 init loss=${before.0:.9f} metric=${before.1:.9f}`->println
-
+    
     // == train ==
     // The loop carries the model and the step counter.  `with_grad` gives the loss and the
     // gradient of the same tree; the pair is taken apart by destructuring.  `sgd` returns a
     // model of the same type, so the loop state needs no casts.
     let started = now()
     let loss_with_grad = with_grad(loss)
-    let (trained, finished) = loop m = initial, step = 0
-        while step < steps
-        do sync {
-            let start = (step % batches) * batch
-            let x = slice(train_x, 0, start, start + batch)
-            let y = slice(train_y, 0, start, start + batch)
-            let (value, gradient) = loss_with_grad<m>(x, y, kind)
-            if step % log_every == 0 then {
-                `c1 step=${step} loss=${value:.9f}`->println
-            }
-            return (sgd(m, gradient, lr), step + 1)
+    let (trained, finished) = loop m = initial, step = 0 while step < steps do sync {
+        let start = (step % batches) * batch
+        let x = slice(train_x, 0, start, start + batch)
+        let y = slice(train_y, 0, start, start + batch)
+        let (value, gradient) = loss_with_grad<m>(x, y, kind)
+        if step % log_every == 0 then {
+            `c1 step=${step} loss=${value:.9f}`->println
         }
+        return (sgd(m, gradient, lr), step + 1)
+    }
     let elapsed = now() - started
-
+    
     // == evaluate ==
     let after = evaluate(trained, val_x, val_y, kind)
     `c1 trained steps=${steps} seconds=${elapsed:.6f} loss=${after.0:.9f} metric=${after.1:.9f}`->println

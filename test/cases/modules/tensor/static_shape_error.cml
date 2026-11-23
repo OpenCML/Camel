@@ -5,7 +5,7 @@
 
 import { zeros, matmul } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let a = zeros::<f32>([2, 3])
     let b = zeros::<f32>([4, 5])
     let c = matmul(a, b)

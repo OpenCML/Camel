@@ -6,7 +6,7 @@
 
 import { exec } from python
 
-func main(): int sync {
-    exec("x = 1", "y = 2")
+func main() => int sync {
+    exec('x = 1', 'y = 2')
     return 0
 }

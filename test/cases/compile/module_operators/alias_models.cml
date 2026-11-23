@@ -6,6 +6,6 @@
 
 export type Count = int
 
-export func count(n: int): Count {
+export func count(n: int) => Count {
     return n
 }

@@ -5,8 +5,8 @@
  */
 
 import { grad, with_grad } from autodiff
-import { full, shape, sum, tanh, zeros } from tensor
 import { sgd } from nn
+import { full, shape, sum, tanh, zeros } from tensor
 
 type TinyRnn = {
     wxh: f32[...],
@@ -17,7 +17,7 @@ type TinyRnn = {
 }
 
 with <model: TinyRnn>
-func rnn_loss(x0: f32[...], x1: f32[...], target: f32[...]): float {
+func rnn_loss(x0: f32[...], x1: f32[...], target: f32[...]) => float {
     let h0 = zeros::<f32>([1, 2])
     let h1 = tanh((x0 @ model.wxh) + (h0 @ model.whh) + model.b)
     let h2 = tanh((x1 @ model.wxh) + (h1 @ model.whh) + model.b)
@@ -27,7 +27,7 @@ func rnn_loss(x0: f32[...], x1: f32[...], target: f32[...]): float {
     return float(sum(squared)) / float(shape(pred)[0])
 }
 
-func init(): TinyRnn {
+func init() => TinyRnn {
     return {
         wxh: full([2, 2], f32(0.1)),
         whh: full([2, 2], f32(0.1)),
@@ -37,23 +37,29 @@ func init(): TinyRnn {
     }
 }
 
-func train(model: TinyRnn, x0: f32[...], x1: f32[...], target: f32[...], steps: int): TinyRnn {
+func train(
+    model: TinyRnn,
+    x0: f32[...],
+    x1: f32[...],
+    target: f32[...],
+    steps: int
+) => TinyRnn {
     return if steps == 0 then model else train(sgd(model, grad(rnn_loss)<model>(x0, x1, target), 0.05), x0, x1, target, steps - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let model = init()
     let x0 = full([1, 2], f32(1.0))
     let x1 = full([1, 2], f32(0.5))
     let target = full([1, 1], f32(1.0))
-
+    
     let before = rnn_loss<model>(x0, x1, target)
     let vg = with_grad(rnn_loss)<model>(x0, x1, target)
     let stepped = sgd(model, vg.1, 0.05)
     let after = rnn_loss<stepped>(x0, x1, target)
     let trained = train(model, x0, x1, target, 10)
     let after_train = rnn_loss<trained>(x0, x1, target)
-
+    
     'tiny_rnn metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'tiny_rnn wxh={}'->format<stepped.wxh>->println
     'tiny_rnn whh={}'->format<stepped.whh>->println

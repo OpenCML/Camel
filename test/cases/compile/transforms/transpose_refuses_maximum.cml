@@ -8,14 +8,14 @@
 //
 //     camel test/cases/compile/transforms/transpose_refuses_maximum.cml
 import rulesets.transpose
-import { transpose } from transforms
 import { maximum, sum } from tensor
+import { transpose } from transforms
 
-func f_max(x: float[3]): float {
+func f_max(x: float[3]) => float {
     return float(sum(maximum(x, [1.0, 2.0, 3.0])))
 }
 
-func main(): int sync {
+func main() => int sync {
     let cotangent = transpose(f_max)(1.0)
     `max  ct=1.0  {}`->format<cotangent>->println
     return 0

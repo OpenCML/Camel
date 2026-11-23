@@ -7,35 +7,26 @@
  * The step is a loop of `steps` rounds, so the step numbers are exercised too.
  */
 
-
-import { sum, zeros } from tensor
 import { with_grad } from autodiff
+import { sum, zeros } from tensor
 
-type Model = {
-    w: f32[...]
-}
+type Model = { w: f32[...] }
 
 with <m: Model>
-func loss(x: f32[...]): float {
+func loss(x: f32[...]) => float {
     let scaled = x * m.w
     return float(sum(scaled * scaled))
 }
 
-func main(steps: int): int sync {
+func main(steps: int) => int sync {
     let x = zeros::<f32>([64]) + 0.25
-    let model: Model = {
-        w: zeros::<f32>([64]) + 1.5
-    }
+    let model: Model = { w: zeros::<f32>([64]) + 1.5 }
     let grad = with_grad(loss)
-    let (trained, done) = loop m = model, step = 0
-        while step < steps
-        do {
-            let (value, gradient) = grad<m>(x)
-            let next = {
-                w: m.w - 0.1 * gradient.w
-            }
-            (next, step + 1)
-        }
+    let (trained, done) = loop m = model, step = 0 while step < steps do {
+        let (value, gradient) = grad<m>(x)
+        let next = { w: m.w - 0.1 * gradient.w }
+        (next, step + 1)
+    }
     'none steps={} w={} value={}'->format<done, sum(trained.w), sum(x)>->println
     return 0
 }

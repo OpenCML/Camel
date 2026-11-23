@@ -4,8 +4,8 @@
 
 import { reshape, ones, zeros, matmul, linear, layer_norm, permute, slice, unsqueeze, transpose, shape, sum, dim } from tensor
 
-func main(): int sync {
-    let a = reshape<[2, 3, 4]>(f32(0..24))
+func main() => int sync {
+    let a = reshape<[2, 3, 4]>(f32(0 .. 24))
     let b = ones::<f32>([4, 5])
     let c = a @ b
     let w = ones::<f32>([4, 2])

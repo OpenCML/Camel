@@ -7,7 +7,7 @@
  * other way, `b as f32`, is refused for the same reason; the conversion is `f32(b)`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x: f32 = 0.1
     let y = x as bf16
     println(y)

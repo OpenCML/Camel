@@ -3,11 +3,20 @@
  * evaluated earlier are held while later calls reach safepoints.
  */
 
-#macro func table(n: int): (int, string)[] { return concat([(1, 'one')], [(n, 'more')]) }
-#macro func names(): string[] { return concat(['beta'], ['gamma']) }
-#macro func nested(): string[][] { return [names(), concat(names(), ['delta'])] }
+#macro
+func table(n: int) => (int, string)[] {
+    return concat([(1, 'one')], [(n, 'more')])
+}
+#macro
+func names() => string[] {
+    return concat(['beta'], ['gamma'])
+}
+#macro
+func nested() => string[][] {
+    return [names(), concat(names(), ['delta'])]
+}
 
-func main(): int sync {
+func main() => int sync {
     println(table(4), names())
     println(nested())
     println(table(7)[1], len(names()))

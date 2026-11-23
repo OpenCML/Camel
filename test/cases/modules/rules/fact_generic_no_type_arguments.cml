@@ -10,19 +10,22 @@ import { max } from math
 
 fact literal_of::<T>(v: T): int match v {
     case const c: T => 1
-    case _          => 0
-} join max
+    case _ => 0
+}
+join max
 
-func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func nodesOf::<F>(p: F, function: string) => Node[] spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return nodes(found[0])
 }
 
 /// The type argument is left out: the declaration is the report.
-func literals(p: () => int, function: string): int spelling {
+func literals(p: () => int, function: string) => int spelling {
     return loop total = 0 for n in nodesOf(p, function) do total + literal_of(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

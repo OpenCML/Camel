@@ -2,6 +2,6 @@
 /// import is a dependency of the program, so the failure is the imported module's.
 import bad
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

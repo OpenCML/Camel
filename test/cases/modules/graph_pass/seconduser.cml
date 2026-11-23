@@ -2,7 +2,7 @@
 // two programs (and the program being transformed) each use their own exported entities.
 import { bump as plusOne, twice as doubled } from sharedvals
 
-export func run::<F>(p: F): F! sync {
+export func run::<F>(p: F) => F! sync {
     println(plusOne(19))
     println(doubled(4))
     return p

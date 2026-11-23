@@ -27,32 +27,32 @@
 
 import state
 
-func read_then_write(a: state::Ref<int>, b: state::Ref<int>): int {
-    let t = state::get(b)      // The read is written first.
-    let w = state::set(a, 2)   // The write is written second.
+func read_then_write(a: state::Ref<int>, b: state::Ref<int>) => int {
+    let t = state::get(b) // The read is written first.
+    let w = state::set(a, 2) // The write is written second.
     return t * 10 + w
 }
 
-func write_then_read(a: state::Ref<int>, b: state::Ref<int>): int {
-    let w = state::set(a, 2)   // The write is written first.
-    let t = state::get(b)      // The read is written second.
+func write_then_read(a: state::Ref<int>, b: state::Ref<int>) => int {
+    let w = state::set(a, 2) // The write is written first.
+    let t = state::get(b) // The read is written second.
     return t * 10 + w
 }
 
-func same_sync(a: state::Ref<int>, b: state::Ref<int>): int sync {
+func same_sync(a: state::Ref<int>, b: state::Ref<int>) => int sync {
     let t = state::get(b)
     state::set(a, 2)
     return t
 }
 
-func param_and_fresh(a: state::Ref<int>): int {
-    let b = state::ref(1)      // A box this body makes: not the box `a` names.
+func param_and_fresh(a: state::Ref<int>) => int {
+    let b = state::ref(1) // A box this body makes: not the box `a` names.
     let t = state::get(b)
     let w = state::set(a, 2)
     return t * 10 + w
 }
 
-func main(): int sync {
+func main() => int sync {
     let r = state::ref(1)
     println(read_then_write(r, r))
     state::set(r, 1)

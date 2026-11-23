@@ -4,15 +4,15 @@
 
 import type_lib
 
-func swap::<T>(p: type_lib::Pair<T>): type_lib::Pair<T> {
+func swap::<T>(p: type_lib::Pair<T>) => type_lib::Pair<T> {
     return (p.1, p.0)
 }
 
-func size::<K, V>(t: type_lib::Table<K, V>): int {
+func size::<K, V>(t: type_lib::Table<K, V>) => int {
     return len(t.keys)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(swap((1, 2)))
     println(swap(('x', 'y')))
     println(size({ keys: ['a', 'b'], values: [1.0, 2.0] }))

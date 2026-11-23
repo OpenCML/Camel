@@ -2,4 +2,6 @@
 /// replaced it (design principles 7.2 made numeric permissions tags).
 
 @numeric(contract)
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}

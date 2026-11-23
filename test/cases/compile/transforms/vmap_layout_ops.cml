@@ -22,53 +22,53 @@
  * The two that read the batch's own shape: `concat<1>` of a 2x2 row with itself is a 2x4 row, and
  * `dim<1>` is one extent per row, because every row of a batch has the same extent.
  */
-import { vmap } from transforms
 import rulesets.vmap
 import { concat, dim, permute, reshape, transpose, unsqueeze } from tensor
+import { vmap } from transforms
 
-func to_matrix(r: float[4]): float[2, 2] {
+func to_matrix(r: float[4]) => float[2, 2] {
     return reshape<[2, 2]>(r)
 }
 
-func to_cube(r: float[4]): float[2, 2, 1] {
+func to_cube(r: float[4]) => float[2, 2, 1] {
     return reshape<[2, 2, 1]>(r)
 }
 
-func widen(r: float[3]): float[1, 3] {
+func widen(r: float[3]) => float[1, 3] {
     return unsqueeze<0>(r)
 }
 
-func widen_end(r: float[3]): float[3, 1] {
+func widen_end(r: float[3]) => float[3, 1] {
     return unsqueeze<-1>(r)
 }
 
-func swap(r: float[2, 2]): float[2, 2] {
+func swap(r: float[2, 2]) => float[2, 2] {
     return transpose(r)
 }
 
-func flip(r: float[2, 2]): float[2, 2] {
+func flip(r: float[2, 2]) => float[2, 2] {
     return permute<[1, 0]>(r)
 }
 
-func join(r: float[2, 2]): float[2, 4] {
+func join(r: float[2, 2]) => float[2, 4] {
     return concat<1>(r, r)
 }
 
-func width(r: float[2, 2]): int {
+func width(r: float[2, 2]) => int {
     return dim<1>(r)
 }
 
-func main(): int sync {
+func main() => int sync {
     let rows: float[3, 4] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 1.0, 2.0, 3.0]]
     println(vmap(to_matrix)(rows))
     println(vmap(to_cube)(rows))
     let first: float[4] = [1.0, 2.0, 3.0, 4.0]
     println(reshape<[2, 2]>(first))
-
+    
     let tri: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
     println(vmap(widen)(tri))
     println(vmap(widen_end)(tri))
-
+    
     let planes: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
     println(vmap(swap)(planes))
     println(vmap(flip)(planes))

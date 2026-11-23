@@ -14,22 +14,22 @@
  * a consequence of `!=` being built from `==`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let zeroBf: bf16 = bf16(0.0)
     let twoBf: bf16 = bf16(2.0)
     let zeroF6: f16 = f16(0.0)
     let oneF6: f16 = f16(1.5)
-
+    
     // `a != b` and `!(a == b)` are the same answer, at both types.
     println(twoBf != zeroBf)
     println(!(twoBf == zeroBf))
     println(twoBf != twoBf)
     println(!(twoBf == twoBf))
-
+    
     println(oneF6 != zeroF6)
     println(!(oneF6 == zeroF6))
     println(oneF6 != oneF6)
     println(!(oneF6 == oneF6))
-
+    
     return 0
 }

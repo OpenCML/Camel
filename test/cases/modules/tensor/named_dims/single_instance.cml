@@ -1,10 +1,11 @@
 import { ones } from tensor
+
 // Dimension names are for checking only: `dense` is one graph, called with two different
 // shapes, and no instance name carries an extent (design principles 5.4).
-func dense(x: f32[n, 3], w: f32[3, k]): f32[n, k] {
+func dense(x: f32[n, 3], w: f32[3, k]) => f32[n, k] {
     return x @ w
 }
-func main(): int sync {
+func main() => int sync {
     println(dense(ones::<f32>([2, 3]), ones::<f32>([3, 4])))
     println(dense(ones::<f32>([5, 3]), ones::<f32>([3, 2])))
     return 0

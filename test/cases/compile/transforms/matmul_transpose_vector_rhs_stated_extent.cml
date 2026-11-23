@@ -24,50 +24,47 @@
 // `matmul_transpose_vector_rhs.cml`; that one stays red until they land.
 //
 //     camel test/cases/compile/transforms/matmul_transpose_vector_rhs_stated_extent.cml
-import { matmul, sum } from tensor
-import { vjp } from vjp
 import { with_grad } from autodiff
 import { abs, max } from math
+import { matmul, sum } from tensor
+import { vjp } from vjp
 
 /// The product under a sum, both operands ordinary parameters.
-func sum_of_product(x: float[2, 2], u: float[2]): float {
+func sum_of_product(x: float[2, 2], u: float[2]) => float {
     return sum(matmul(x, u))
 }
 
 /// The same for the engine's pullback over `x`.
 with <x: float[2, 2]>
-func product_with_x(u: float[]): float {
+func product_with_x(u: float[]) => float {
     return sum(matmul(x, u))
 }
 
 /// And once over `u`, the rank-one half.
 with <u: float[]>
-func product_with_u(x: float[2, 2]): float {
+func product_with_u(x: float[2, 2]) => float {
     return sum(matmul(x, u))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let u = [0.5, 0.25] as float[2]
-
+    
     let (value, pullback) = vjp(sum_of_product)(x, u)
     let (dx, du) = pullback(1.0)
     `matmul_t vector_rhs value={} dL/dx={} dL/du={}`->format<value, dx, du>->println
-
-    let (engine_value_x, engine_x) =
-        with_grad(product_with_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>(u)
+    
+    let (engine_value_x, engine_x) = with_grad(product_with_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>(u)
     let (engine_value_u, engine_u) = with_grad(product_with_u)<[0.5, 0.25]>(x)
-    `matmul_t vector_rhs engine value={} dL/dx={} dL/du={}`
-        ->format<engine_value_x, engine_x, engine_u>->println
+    `matmul_t vector_rhs engine value={} dL/dx={} dL/du={}`->format<engine_value_x, engine_x, engine_u>->println
     `matmul_t vector_rhs engine_u value={}`->format<engine_value_u>->println
-
+    
     let dvalue = abs(value - engine_value_x)
     let dx00 = abs(dx[0][0] - engine_x[0][0])
     let dx01 = abs(dx[0][1] - engine_x[0][1])
     let dx10 = abs(dx[1][0] - engine_x[1][0])
     let dx11 = abs(dx[1][1] - engine_x[1][1])
     let dx_diff = max(max(dx00, dx01), max(dx10, dx11))
-    `matmul_t vector_rhs max_abs_diff_library_vs_engine u={:.12e} x={:.12e} value={:.12e}`
-        ->format<max(abs(du[0] - engine_u[0]), abs(du[1] - engine_u[1])), dx_diff, dvalue>->println
+    `matmul_t vector_rhs max_abs_diff_library_vs_engine u={:.12e} x={:.12e} value={:.12e}`->format<max(abs(du[0] - engine_u[0]), abs(du[1] - engine_u[1])), dx_diff, dvalue>->println
     return 0
 }

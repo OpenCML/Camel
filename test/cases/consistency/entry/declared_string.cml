@@ -4,6 +4,6 @@
  * then written as the result.
  */
 
-func main(): string sync {
+func main() => string sync {
     println('a')
 }

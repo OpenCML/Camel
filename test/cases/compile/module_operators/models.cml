@@ -5,14 +5,14 @@
 
 export type Box = { v: int }
 
-export func operator +(a: Box, b: Box): Box {
+export func operator +(a: Box, b: Box) => Box {
     return { v: a.v + b.v }
 }
 
-export func operator ==(a: Box, b: Box): bool {
+export func operator ==(a: Box, b: Box) => bool {
     return a.v == b.v
 }
 
-export func mk(n: int): Box {
+export func mk(n: int) => Box {
     return { v: n }
 }

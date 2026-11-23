@@ -8,29 +8,28 @@ tag width(w: int) on field
 
 type Box = {
     #width(8) low: int,
-    high: int,
+    high: int
 }
 
-func comprehension_total::<P>(p: P): int {
+func comprehension_total::<P>(p: P) => int {
     let readings = (static for n, F, tags in fields P do {
         let value: F = p.[n]
-        match type typeof(tags) {
-            case { width: { w: int } } => value + tags.width.w
+        match type typeof (tags) {
+            case {width:{w:int}} => value + tags.width.w
             case _ => value
         }
     })
     return readings.0 + readings.1
 }
 
-func loop_total::<P>(p: P): int {
-    return static loop acc = 0 for n, F, tags in fields P do
-        acc + p.[n] + (match type typeof(tags) {
-            case { width: { w: int } } => tags.width.w
-            case _ => 0
-        })
+func loop_total::<P>(p: P) => int {
+    return static loop acc = 0 for n, F, tags in fields P do acc + p.[n] + (match type typeof (tags) {
+        case {width:{w:int}} => tags.width.w
+        case _ => 0
+    })
 }
 
-func main(): int sync {
+func main() => int sync {
     let box: Box = { low: 1, high: 2 }
     println(comprehension_total(box))
     println(loop_total(box))

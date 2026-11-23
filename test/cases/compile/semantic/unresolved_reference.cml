@@ -2,9 +2,8 @@
  * Ensures semantic name resolution reports unresolved identifiers before code generation begins.
  */
 
-func main(): int sync {
+func main() => int sync {
     let value = missing_name + 1
     println(value)
     return 0
 }
-

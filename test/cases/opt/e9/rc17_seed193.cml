@@ -1,7 +1,7 @@
-func main(): int sync {
+func main() => int sync {
     let n68 = [(1.0, 0)]->map<func (p65: (float, int)) => (float, int) {
-        let n67 = len([0 for q66 in [0] if true]);
-        return (if true then null else (1.0, 0)) ?? (1.0, 0);
-    }>;
-    return 0;
+        let n67 = len([0 for q66 in [0] if true])
+        return (if true then null else (1.0, 0)) ?? (1.0, 0)
+    }>
+    return 0
 }

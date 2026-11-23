@@ -6,21 +6,21 @@ type Point = { x: int, y: int }
 let WIDTH = 10
 let HEIGHT = 10
 
-func render(snake: Point[]): void sync {
-    let rows = 0..HEIGHT
-
+func render(snake: Point[]) => void sync {
+    let rows = 0 .. HEIGHT
+    
     rows->foreach<func (y: int) sync {
-        let cols = 0..WIDTH
+        let cols = 0 .. WIDTH
         cols->map<func (x: int) => string {
-            let p = {x: x, y: y}
-            return if snake->contains<p> then "O" else "."
-        }>->join<"">->println
+            let p = { x: x, y: y }
+            return if snake->contains<p> then 'O' else '.'
+        }>->join<''>->println
     }>
-
-    println("")
+    
+    println('')
 }
 
-func main(): int sync {
-    render([{x: 5, y: 5}, {x: 5, y: 6}, {x: 5, y: 7}])
+func main() => int sync {
+    render([{ x: 5, y: 5 }, { x: 5, y: 6 }, { x: 5, y: 7 }])
     return 0
 }

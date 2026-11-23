@@ -17,13 +17,13 @@ import { constant, adam, init, sgd, update } from optim
 
 type Model = { w: float }
 
-func main(): int sync {
+func main() => int sync {
     let m: Model = { w: 1.0 }
     let g: Model = { w: 0.5 }
     let rate = constant(0.5)
     let betas = adam(rate, beta1: 0.5, beta2: 0.25, eps: 0.0001)
     var failures = 0
-
+    
     // Adam, by name, and the same call positionally.
     let a_state = init(opt: betas, params: m)
     let a_next = update(opt: betas, params: m, grads: g, state: a_state)
@@ -32,7 +32,7 @@ func main(): int sync {
     if a_state.m.w != 0.0 || a_state.v.w != 0.0 then failures = failures + 1
     if a_next.1.step != 1 then failures = failures + 1
     if a_next.0.w != a_plain.0.w then failures = failures + 1
-
+    
     // Sgd, by name, the same call positionally, and the names written in another order.
     let sgd_opt = sgd(rate)
     let s_state = init(opt: sgd_opt, params: m)
@@ -42,9 +42,7 @@ func main(): int sync {
     if s_next.0.w != s_plain.0.w then failures = failures + 1
     if s_reordered.0.w != s_next.0.w then failures = failures + 1
     if s_next.1.step != 1 then failures = failures + 1
-
-    'optim named_args sgd={} sgd_step={} adam={} adam_m={} adam_v={} adam_step={} mismatches={}'
-    ->format<s_next.0.w, s_next.1.step, a_next.0.w, a_next.1.m.w, a_next.1.v.w, a_next.1.step, failures>
-    ->println
+    
+    'optim named_args sgd={} sgd_step={} adam={} adam_m={} adam_v={} adam_step={} mismatches={}'->format<s_next.0.w, s_next.1.step, a_next.0.w, a_next.1.m.w, a_next.1.v.w, a_next.1.step, failures>->println
     return failures
 }

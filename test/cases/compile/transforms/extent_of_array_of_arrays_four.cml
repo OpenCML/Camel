@@ -5,15 +5,15 @@
 // the rank-3 list, is refused here by name.
 import { shape } from array
 
-func pair(): float[2] {
+func pair() => float[2] {
     return [1.0, 2.0]
 }
 
-func triple(): float[2][3] {
+func triple() => float[2][3] {
     return [pair(), pair(), pair()]
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: float[2][3][4] = [triple(), triple(), triple(), triple()]
     let outside = extent_of::<float[2][3][4]>()
     println(outside)

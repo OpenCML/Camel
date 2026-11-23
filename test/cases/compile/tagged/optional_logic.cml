@@ -6,11 +6,15 @@
  * still apply to the whole expression: that is what makes each value nullable.
  */
 
-func maybe(x: int): int! { return x }
+func maybe(x: int) => int! {
+    return x
+}
 
-func fail(): int! { return error('Probe', 'always') }
+func fail() => int! {
+    return error('Probe', 'always')
+}
 
-func main(): int sync {
+func main() => int sync {
     let o: bool? = true || false
     let p: bool? = false && true
     let q: bool? = !(true || false)
@@ -25,7 +29,11 @@ func main(): int sync {
     let g: int = maybe(4) !! 0
     let h: int = fail() !! (if 1 < 2 then 5 else 6)
     let w: bool? = true
-    let f: float? = if false then 4.75 else sync { let n = (if true then null else 'b') ?? 'ab'; println(n); -1.5 }
+    let f: float? = if false then 4.75 else sync {
+        let n = (if true then null else 'b') ?? 'ab'
+        println(n)
+        -1.5
+    }
     println(o)
     println(p)
     println(q)

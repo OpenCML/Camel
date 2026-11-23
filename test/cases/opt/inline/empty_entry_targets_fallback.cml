@@ -2,14 +2,12 @@
  * Verifies the inliner tolerates tiny callees whose entry node has no meaningful outgoing targets after simplification.
  */
 
-func literal(): int {
+func literal() => int {
     return 42
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = literal()
     'inline_empty_entry_targets_fallback v={}'->format<v>->println
     return 0
 }
-
-

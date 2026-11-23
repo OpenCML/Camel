@@ -24,23 +24,23 @@ rule add_zero::<T>(x: T) when is_integer::<T>() {
     x + 0 => x
 }
 
-func writes(path: string): unit uses var fs {
+func writes(path: string) => unit uses var fs {
     return null
 }
 
-func pure_only(x: int): int pure {
+func pure_only(x: int) => int pure {
     return x
 }
 
-func clamped(x: int): int uses var fs when is_ready() {
+func clamped(x: int) => int uses var fs when is_ready() {
     return x
 }
 
-func operator +(a: int, b: int): int {
+func operator +(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func pick(v: int!): int {
+func pick(v: int!) => int {
     return match v {
         case error e => 0
         case _ => 1

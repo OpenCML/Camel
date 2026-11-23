@@ -12,24 +12,30 @@
  * a number where this case prints an error.
  */
 
-func literal(): int!.. sync {
+func literal() => int!.. sync {
     yield 1
     yield error('Boom', 'bad')
 }
 
-func fromCall(): int!.. sync {
+func fromCall() => int!.. sync {
     yield pick(1)
     yield pick(-1)
 }
 
-func pick(x: int): int! {
+func pick(x: int) => int! {
     return if x > 0 then x else error('Bad', 'no')
 }
 
-func main(): int sync {
-    loop acc = 0 for v in literal() do sync { let _ = println(v); acc + 1 }
-    println("-")
-    loop acc = 0 for v in fromCall() do sync { let _ = println(v); acc + 1 }
-    println("end")
+func main() => int sync {
+    loop acc = 0 for v in literal() do sync {
+        let _ = println(v)
+        acc + 1
+    }
+    println('-')
+    loop acc = 0 for v in fromCall() do sync {
+        let _ = println(v)
+        acc + 1
+    }
+    println('end')
     return 0
 }

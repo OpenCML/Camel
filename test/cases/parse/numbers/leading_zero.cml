@@ -3,7 +3,7 @@
  * `0` and `77`, which hid the mistake. The diagnostic covers the whole written run.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a = 077
     return a
 }

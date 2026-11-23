@@ -18,17 +18,17 @@
 import rulesets.transpose
 import { transpose } from transforms
 
-func identity3(a: f32, b: f32, c: f32): f32[3] {
+func identity3(a: f32, b: f32, c: f32) => f32[3] {
     return [a, b, c]
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(identity3)
     let ct: f32[3] = [1.5, 2.5, 7.25]
     let g = back(ct)
-    println("identity3_pullback=", g)
-    println("a=", g.0)
-    println("b=", g.1)
-    println("c=", g.2)
+    println('identity3_pullback=', g)
+    println('a=', g.0)
+    println('b=', g.1)
+    println('c=', g.2)
     return 0
 }

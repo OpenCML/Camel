@@ -15,7 +15,7 @@
  */
 import { mean, shape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let ints: int[3] = [1, 2, 4]
     println(mean<0, false>(ints))
     println(shape(mean<0, false>(ints)))

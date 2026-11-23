@@ -7,10 +7,10 @@
  * product on a library GEMM (7.3); gemm_canonical.library pins the licence bound for that path.
  */
 
-import { sum, abs, relu, linear } from tensor
 import { next_key, seed, uniform } from random
+import { sum, abs, relu, linear } from tensor
 
-func main(): int sync {
+func main() => int sync {
     seed(5)
     let a = (next_key()->uniform::<f32><shape: [33, 600]> * 2.0 - 1.0)
     let b = (next_key()->uniform::<f32><shape: [600, 29]> * 2.0 - 1.0)

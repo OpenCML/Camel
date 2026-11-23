@@ -17,21 +17,21 @@
 import { grad } from autodiff
 import { vjp } from prelude
 
-func pick_rule(xs: float[], i: int, dy: float): f32 {
+func pick_rule(xs: float[], i: int, dy: float) => f32 {
     return f32(0.0)
 }
 
 #vjp(pick_rule)
-func pick(xs: float[], i: int): float {
+func pick(xs: float[], i: int) => float {
     return xs[i]
 }
 
 with <xs: float[]>
-func loss(): float {
+func loss() => float {
     return pick(xs, 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = grad(loss)<[1.0, 2.0, 3.0]>()
     'refuse_gradient_element_type_rule grad={}'->format<g>->println
     return 0

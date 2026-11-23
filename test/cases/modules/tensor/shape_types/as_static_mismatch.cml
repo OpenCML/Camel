@@ -1,5 +1,6 @@
 import { ones, sum, load_npy } from tensor
-func main(): int sync {
+
+func main() => int sync {
     println('ran')
     let t = ones::<f32>([3])
     let u = t as f32[4]

@@ -11,7 +11,7 @@
  * loop's carried state or a `fold`, or hold it in a `Ref`.
  */
 
-func make(): (x: int) => int {
+func make() => (x: int) => int {
     var acc = 0
     return func (x: int) => int sync {
         acc = acc + x
@@ -19,7 +19,7 @@ func make(): (x: int) => int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = make()
     println(g(1))
     return 0

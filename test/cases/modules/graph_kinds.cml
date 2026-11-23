@@ -1,19 +1,23 @@
 import { name, nodes, kind, graphs_of } from graph
 import { Graph, Node, NodeKind } from graph
 
-func pick(a: int, b: int): int {
+func pick(a: int, b: int) => int {
     return if a > b then a - b else b - a
 }
 
-func total(xs: int[]): int {
-    return xs->map<func (x: int) => int { pick(x, 3) }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+func total(xs: int[]) => int {
+    return xs->map<func (x: int) => int {
+        pick(x, 3)
+    }>->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
 }
 
-func kinds(g: Graph): NodeKind[] {
+func kinds(g: Graph) => NodeKind[] {
     return nodes(g)->map<kind>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total([1, 5, 9]))
     let all = graphs_of(main)
     println(all->map<name>)

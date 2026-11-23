@@ -16,18 +16,22 @@
  */
 import state
 
-var counter = 7;
+var counter = 7
 
 func apply(f: (x: int) => void, v: int) {
     f(v)
 }
 
-func main(): int sync {
+func main() => int sync {
     let local = state::ref(1)
     let localBefore = state::get(local)
     let counterBefore = counter
-    apply(func (x: int) { state::set(local, x * 10) }, 4)
-    apply(func (x: int) { counter = x * 10 }, 5)
+    apply(func (x: int) {
+        state::set(local, x * 10)
+    }, 4)
+    apply(func (x: int) {
+        counter = x * 10
+    }, 5)
     println(localBefore, state::get(local))
     println(counterBefore, counter)
     return 0

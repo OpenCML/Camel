@@ -6,13 +6,13 @@
  * the report is the one a `T?` match that does not list `case null` gets.
  */
 
-func f(x: int?): int {
+func f(x: int?) => int {
     return match x {
         case null when false => 1
         case v => v
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(null)
 }

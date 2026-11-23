@@ -6,31 +6,31 @@
 //
 // `three` is the shape a call would get for free if the count were the brackets', which is why this
 // case pins all three counts and not only the one the bug happened to break.
-func one(a: float): float {
+func one(a: float) => float {
     return a
 }
 
-func two(a: float, b: float): float {
+func two(a: float, b: float) => float {
     return a + b
 }
 
-func three(a: float, b: float, c: float): float {
+func three(a: float, b: float, c: float) => float {
     return a + b + c
 }
 
-rule one_rule(a: float) {
-    one(a) => func (ba: float) { one(ba) }
-}
+rule one_rule(a: float) { one(a) => func (ba: float) {
+    one(ba)
+} }
 
-rule two_rule(a: float, b: float) {
-    two(a, b) => func (ba: float, bb: float) { two(ba, bb) }
-}
+rule two_rule(a: float, b: float) { two(a, b) => func (ba: float, bb: float) {
+    two(ba, bb)
+} }
 
-rule three_rule(a: float, b: float, c: float) {
-    three(a, b, c) => func (ba: float, bb: float, bc: float) { three(ba, bb, bc) }
-}
+rule three_rule(a: float, b: float, c: float) { three(a, b, c) => func (ba: float, bb: float, bc: float) {
+    three(ba, bb, bc)
+} }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

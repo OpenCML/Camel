@@ -1,7 +1,7 @@
-func r1(a2: int, a3: int): int {
-    return if a2 <= 0 then loop s4 = (if false then -2 else 0) for q5 in [1.0] do if true then s4 else 0 else 0;
+func r1(a2: int, a3: int) => int {
+    return if a2 <= 0 then loop s4 = (if false then -2 else 0) for q5 in [1.0] do if true then s4 else 0 else 0
 }
 
-func main(): int sync {
-    return 0;
+func main() => int sync {
+    return 0
 }

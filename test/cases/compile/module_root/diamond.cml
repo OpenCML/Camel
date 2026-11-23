@@ -3,7 +3,7 @@
 import { left } from diamond_a
 import { right } from diamond_b
 
-func main(): int sync {
+func main() => int sync {
     println('main starts')
     println(left(), right())
     return 0

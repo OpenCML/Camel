@@ -11,12 +11,16 @@ type MB = { n: int, v: f32[2] }
 
 // `n` is a float and the field is an int: the field is reported, and the tuple of literals
 // beside it stays a `(float, float)` rather than becoming an `(f32, f32)`.
-func wrongSibling(n: float): MA { return { n: n, t: (1.0, 2.0) } }
+func wrongSibling(n: float) => MA {
+    return { n: n, t: (1.0, 2.0) }
+}
 
 // `v` is a computed `f64[]` where the field is an `f32[2]`: the field is reported.
-func computedArray(v: f64[]): MB { return { n: 1, v: v } }
+func computedArray(v: f64[]) => MB {
+    return { n: 1, v: v }
+}
 
-func main(): int {
+func main() => int {
     println(wrongSibling(1.0).n)
     println(computedArray([1.0]).n)
     return 0

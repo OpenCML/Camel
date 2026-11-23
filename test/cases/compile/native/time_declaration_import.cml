@@ -6,7 +6,7 @@
 
 import { now, strftime, strptime } from time
 
-func main(): int sync {
+func main() => int sync {
     let t: float = now()
     println(t > 0.0)
     let text: string = 0.0->strftime<'%Y-%m-%d'>

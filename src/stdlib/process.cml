@@ -13,7 +13,7 @@
 /// @fails fault `InvalidArgument` when seconds is negative or not a number
 /// @example sleep(0.1)
 #op('process:sleep')
-export func sleep(seconds: float): void panic
+export func sleep(seconds: float) => void panic
 
 /// The process as a resource: ending it is an effect on it, and a test that reads the number of its
 /// threads (`test_support::thread_count`) reads it too.
@@ -23,15 +23,15 @@ export resource process
 /// external resources are released. Nothing that is written after the call runs. It gives no
 /// value at all: its type is the bottom type `never` (design principles 3.9).
 /// @example exit(2)
-export func exit(code: int): never uses var process
+export func exit(code: int) => never uses var process
 
 /// The name of the user the process runs as.
 /// @effect reads the environment
 /// @fails error value `NotFound` when the system has no name for the user
 /// @example user_name() !! 'unknown'    // 'alice'
-export func user_name(): string!
+export func user_name() => string!
 
 /// The number of hardware threads, at least 1.
 /// @effect reads the machine
 /// @example cpu_count()    // 8
-export func cpu_count(): int
+export func cpu_count() => int

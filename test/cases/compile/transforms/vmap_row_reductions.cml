@@ -16,40 +16,40 @@
  * principles 7.7), so one pass over the flattened row and a fold axis by axis answer the same bits:
  * -0 stays below +0, a NaN anywhere stays beyond every number, in either shape.
  */
-import { vmap } from transforms
+import { nan } from math
 import rulesets.vmap
 import { max, min, sum } from tensor
-import { nan } from math
+import { vmap } from transforms
 
-func rowmax(r: float[3]): float {
+func rowmax(r: float[3]) => float {
     return max(r)
 }
 
-func rowmin(r: float[3]): float {
+func rowmin(r: float[3]) => float {
     return min(r)
 }
 
-func rowsum(r: float[3]): float {
+func rowsum(r: float[3]) => float {
     return sum(r)
 }
 
-func plane_max(r: float[2, 3]): float {
+func plane_max(r: float[2, 3]) => float {
     return max(r)
 }
 
-func plane_min(r: float[2, 3]): float {
+func plane_min(r: float[2, 3]) => float {
     return min(r)
 }
 
-func rowmax_i(r: int[3]): int {
+func rowmax_i(r: int[3]) => int {
     return max(r)
 }
 
-func rowmin_i(r: int[3]): int {
+func rowmin_i(r: int[3]) => int {
     return min(r)
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[3, 3] = [[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]
     println(vmap(rowmax)(xs))
     println(vmap(rowmin)(xs))

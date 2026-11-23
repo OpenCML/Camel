@@ -4,11 +4,11 @@
 import values_lib
 import { bump } from values_lib
 
-func twice(f: (x: int) => int, x: int): int {
+func twice(f: (x: int) => int, x: int) => int {
     return f(f(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bump(1), values_lib::indirect(2), values_lib::biased('a'))
     println(twice(bump, 1), [1, 2]->map<bump>, values_lib::apply_all([5]))
     return 0

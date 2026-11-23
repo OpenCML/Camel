@@ -5,10 +5,9 @@
  *   11 11     an assignment from the importing module, then a bump and a read
  */
 
-
 import { count, bump } from counter_lib
 
-func main(): int sync {
+func main() => int sync {
     println(bump(), bump(), count)
     count = 10
     println(bump(), count)

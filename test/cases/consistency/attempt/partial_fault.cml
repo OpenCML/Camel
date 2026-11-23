@@ -15,9 +15,11 @@
 
 import { sleep } from process
 
-func tbl(): int[] { return [1, 2, 3] }
+func tbl() => int[] {
+    return [1, 2, 3]
+}
 
-func probe(x: int): int sync {
+func probe(x: int) => int sync {
     println(format<x>('start {}'))
     // The element that faults reads the table before it waits, so its fault is raised while the
     // elements below it are still queued.
@@ -27,8 +29,10 @@ func probe(x: int): int sync {
     return q
 }
 
-func main(): int sync {
-    let r = attempt(func () { (0..64)->map<probe> })()
+func main() => int sync {
+    let r = attempt(func () {
+        (0 .. 64)->map<probe>
+    })()
     println(match r {
         case error e => e.message
         case v => 'no fault'

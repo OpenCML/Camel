@@ -14,19 +14,19 @@
  * not have, which is why the refusal is a fault and not a quiet fallback (`[3.0, 5.0, 7.0]` for
  * `[1, 2, 3]` doubled plus one).
  */
-import rulesets.vmap
 import { vmap as row_vmap } from array
+import rulesets.vmap
 import { vmap } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     return x * 2.0
 }
 
-func g(x: float): float {
+func g(x: float) => float {
     return f(x) + 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(row_vmap(g)(xs))
     println(vmap(g)(xs))

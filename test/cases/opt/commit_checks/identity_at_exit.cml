@@ -9,15 +9,15 @@
 // happens. `test::commit_exit_region` makes the same edit with the draft API, moving the exit onto a
 // node of the true arm, and the commit refuses it.
 
-func not(b: bool): bool {
+func not(b: bool) => bool {
     return !b
 }
 
-func f(b: bool): bool {
+func f(b: bool) => bool {
     let y = if b then not(b) else false
     return not(y)
 }
 
-func main(): int {
+func main() => int {
     return 48
 }

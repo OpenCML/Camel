@@ -1,13 +1,13 @@
-func double(x: int): int {
+func double(x: int) => int {
     return x * 2
 }
 
-func next(x: int): int {
+func next(x: int) => int {
     let unused = x + 100
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = 3
     let a = double(x)
     let b = next(x)

@@ -1,18 +1,17 @@
-
 import { graph_of, nodes, inputs, op, op_name, open, replace, commit, abort, Node } from graph
 
-func plus_zero(x: int): int {
+func plus_zero(x: int) => int {
     return (x + 0) * 2
 }
 
-func is_add(n: Node): bool {
+func is_add(n: Node) => bool {
     return match op(n) {
         case null => false
         case o => op_name(o) == ':op/add_l'
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = open(plus_zero)
     let adds = nodes(graph_of(plus_zero))->filter<is_add>
     println(len(adds))

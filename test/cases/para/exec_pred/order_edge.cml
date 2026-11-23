@@ -7,19 +7,19 @@
  * to ignore the order edge and the two lines could come out in either order, and every back end now
  * prints them as they are written.
  */
-func mark(tag: string, n: int): int sync {
+func mark(tag: string, n: int) => int sync {
     println(tag)
     return n
 }
 
 // Not a sync block: nothing but the console orders the two calls.
-func two(): int {
-    let a = mark("order 1", 10)
-    let b = mark("order 2", 20)
+func two() => int {
+    let a = mark('order 1', 10)
+    let b = mark('order 2', 20)
     return a + b
 }
 
-func main(): int sync {
-    println("order", two())
+func main() => int sync {
+    println('order', two())
     return 0
 }

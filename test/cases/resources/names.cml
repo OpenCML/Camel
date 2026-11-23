@@ -17,6 +17,6 @@ import test_support
 import tiles
 import time
 
-func main(): int {
+func main() => int {
     return 0
 }

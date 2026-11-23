@@ -35,15 +35,15 @@ import { vjp } from vjp
 
 /// The differentiated value is the `with` parameter (design principles 9.9).
 with <w: float[]>
-func stated(): float {
+func stated() => float {
     return sum(mean_axis_stated(w, 0, true, [4]))
 }
 
-func through_library(x: float[]): float {
+func through_library(x: float[]) => float {
     return mean<0, false>(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let engine = grad(stated)<[1.0, 2.0, 3.0, 4.0] as float[]>()
     let (value, pullback) = vjp(through_library)([1.0, 2.0, 3.0, 4.0] as float[])
     let fromLibrary = pullback(1.0).0

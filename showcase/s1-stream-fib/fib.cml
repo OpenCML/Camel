@@ -13,15 +13,18 @@
  * carried values, or wrote them in the wrong order, prints another sequence.
  */
 
-func fib(limit: int): int.. sync {
+func fib(limit: int) => int.. sync {
     loop a = 0, b = 1 while a < limit do {
         yield a
         (b, a + b)
     }
 }
 
-func main(): int sync {
-    loop n = 0 for v in fib(50) do sync { println(v); n + 1 }
+func main() => int sync {
+    loop n = 0 for v in fib(50) do sync {
+        println(v)
+        n + 1
+    }
     println(loop total = 0 for v in fib(50) do total + v)
     return 0
 }

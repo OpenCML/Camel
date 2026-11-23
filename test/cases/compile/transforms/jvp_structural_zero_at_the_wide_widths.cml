@@ -19,15 +19,15 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func wide(x: float): float {
+func wide(x: float) => float {
     return x ^ 2.0
 }
 
-func narrow(x: f32): f32 {
+func narrow(x: f32) => f32 {
     return x ^ 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let (wideValue, wideTangent) = jvp(wide)(0.0 - 3.0, 1.0)
     `float value={} tangent={}`->format<wideValue, wideTangent>->println
     let (narrowValue, narrowTangent) = jvp(narrow)(0.0 - 3.0, 1.0)

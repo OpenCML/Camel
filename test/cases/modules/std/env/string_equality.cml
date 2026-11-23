@@ -5,21 +5,21 @@
 
 import { get_env } from env
 
-func unsetArm(): int sync {
+func unsetArm() => int sync {
     println('arm unset')
     return 1
 }
 
-func setArm(): int sync {
+func setArm() => int sync {
     println('arm set')
     return 2
 }
 
-func pick(value: string): int {
+func pick(value: string) => int {
     return if value == '' then unsetArm() else setArm()
 }
 
-func main(): int sync {
+func main() => int sync {
     let unset = get_env('CAMEL_TEST_SURELY_UNSET_VARIABLE') ?? ''
     let set = get_env('CAMEL_TEST_STRING_EQ') ?? ''
     'eq_empty={} ne_empty={} eq_value={}'->format<unset == '', unset != '', set == 'abc'>->println

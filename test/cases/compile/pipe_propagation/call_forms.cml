@@ -6,14 +6,19 @@
  */
 import { abs } from math
 import { split } from str
-func bump(): int sync {
+
+func bump() => int sync {
     println('bump')
     return 1
 }
-func add(x: int, y: int): int { return x + y }
+func add(x: int, y: int) => int {
+    return x + y
+}
 with <k: int>
-func scale(x: int): int { return x * k }
-func main(): int sync {
+func scale(x: int) => int {
+    return x * k
+}
+func main() => int sync {
     let a: int? = 1
     let b: int? = null
     println(a->add(bump()) ?? -1)
@@ -23,7 +28,9 @@ func main(): int sync {
     println(f->abs ?? 0.0)
     let s: string? = 'a,b'
     println(s->split<','> ?? ['none'])
-    let q = a->func (x: int) => int { x + 10 }
+    let q = a->func (x: int) => int {
+        x + 10
+    }
     println(q ?? -1)
     return 0
 }

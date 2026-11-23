@@ -5,7 +5,7 @@
 
 import { string } from prelude
 
-func main(): int sync {
+func main() => int sync {
     println(string(42))
     return 0
 }

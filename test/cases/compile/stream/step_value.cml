@@ -7,15 +7,17 @@
  * its own, and the same closure called twice answers the same element.
  */
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func total(s: int.., acc: int): int {
+func total(s: int.., acc: int) => int {
     let pull = s as (() => (int, int..)?)
     return match pull() {
         case null => acc
@@ -23,7 +25,7 @@ func total(s: int.., acc: int): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(count(3), 0))
     return 0
 }

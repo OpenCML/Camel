@@ -6,9 +6,9 @@
  */
 
 #op(':op/sub_l')
-func sub_kernel(a: int, b: int): int
+func sub_kernel(a: int, b: int) => int
 
 #impl(sub_kernel)
-export func add(a: int, b: int): int {
+export func add(a: int, b: int) => int {
     return a + b
 }

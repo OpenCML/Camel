@@ -12,7 +12,7 @@ import { is_function } from types
 
 // What a node runs and what type it carries, or `-` where it has none. `op(n)` is the module's own
 // answer to "is this an operator node", so no rendered text is compared to decide it.
-func looks(n: Node): string {
+func looks(n: Node) => string {
     let operator = match op(n) {
         case null => '-'
         case o => op_name(o)
@@ -25,7 +25,7 @@ func looks(n: Node): string {
 }
 
 // Whether the node is a constant carrying the type named.
-func constant_of(n: Node, wanted: string): bool {
+func constant_of(n: Node, wanted: string) => bool {
     let carried = match type_of(n) {
         case null => '-'
         case t => type_name(t)
@@ -34,7 +34,7 @@ func constant_of(n: Node, wanted: string): bool {
 }
 
 // Whether the node runs the printing operator.
-func is_print(n: Node): bool {
+func is_print(n: Node) => bool {
     return match op(n) {
         case null => false
         case o => op_name(o) == ':io/println'
@@ -44,58 +44,68 @@ func is_print(n: Node): bool {
 // Every node of every graph the entry function value reaches. A program is a root graph whose one
 // call goes to the entry function, so its graphs are reached by following calls, never by comparing
 // a graph name.
-func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
+func all_nodes::<F>(p: F) => Node[] when is_function::<F>() {
     return flatten(graphs_of(p)->map<nodes>)
 }
 
 // The `float` constants of one graph.
-func floats_in(g: Graph): Node[] {
-    return nodes(g)->filter<func (n: Node) => bool { constant_of(n, 'float') }>
+func floats_in(g: Graph) => Node[] {
+    return nodes(g)->filter<func (n: Node) => bool {
+        constant_of(n, 'float')
+    }>
 }
 
 // The constants of type `Linear` in one graph.
-func models_in(g: Graph): Node[] {
-    return nodes(g)->filter<func (n: Node) => bool { constant_of(n, 'Linear') }>
+func models_in(g: Graph) => Node[] {
+    return nodes(g)->filter<func (n: Node) => bool {
+        constant_of(n, 'Linear')
+    }>
 }
 
 // Whether one graph holds both of the constants the rewrite pairs, each exactly once.
-func holds_the_pair(g: Graph): bool {
+func holds_the_pair(g: Graph) => bool {
     return len(floats_in(g)) == 1 && len(models_in(g)) == 1
 }
 
 // The one graph of the list, or nothing when the count is not one.
-func one_graph(found: Graph[]): Graph? {
+func one_graph(found: Graph[]) => Graph? {
     return if len(found) == 1 then found[0] else null
 }
 
 // The one node of the list, or nothing when the count is not one.
-func one_node(found: Node[]): Node? {
+func one_node(found: Node[]) => Node? {
     return if len(found) == 1 then found[0] else null
 }
 
 // Erases the nodes given and commits: the changed function is the answer.
-func erased::<F>(p: F, hits: Node[]): F! sync {
+func erased::<F>(p: F, hits: Node[]) => F! sync {
     let t = open(p)
-    hits->foreach<func (n: Node) => void { erase(t, n) }>
+    hits->foreach<func (n: Node) => void {
+        erase(t, n)
+    }>
     return commit(t)
 }
 
 // Puts `new` in the place of `old` and commits.
-func swapped::<F>(p: F, old: Node, new: Node): F! sync {
+func swapped::<F>(p: F, old: Node, new: Node) => F! sync {
     let t = open(p)
     replace(t, old, new)
     return commit(t)
 }
 
 /// Lists every node the program is made of: the operator each one runs, and the type it carries.
-export func list::<F>(p: F): F! sync {
-    all_nodes(p)->foreach<func (n: Node) { println(looks(n)) }>
+export func list::<F>(p: F) => F! sync {
+    all_nodes(p)->foreach<func (n: Node) {
+        println(looks(n))
+    }>
     return p
 }
 
 /// Drops every printing call of the program: a rewrite that loses an effect.
-export func drop_print::<F>(p: F): F! sync {
-    let prints = all_nodes(p)->filter<func (n: Node) => bool { is_print(n) }>
+export func drop_print::<F>(p: F) => F! sync {
+    let prints = all_nodes(p)->filter<func (n: Node) => bool {
+        is_print(n)
+    }>
     return if len(prints) == 0 then p else erased(p, prints)
 }
 
@@ -112,7 +122,7 @@ export func drop_print::<F>(p: F): F! sync {
 /// the whole cost of this rewrite: the program runs unchanged, exit 0, and the reading the pass
 /// existed to make is simply gone. Silence costs more than a refusal -- a refusal names the type and
 /// the place, and a rewrite that quietly declines to pick names nothing at all.
-export func break_rate::<F>(p: F): F! sync {
+export func break_rate::<F>(p: F) => F! sync {
     let where = graphs_of(p)->filter<holds_the_pair>
     return match one_graph(where) {
         case null => p

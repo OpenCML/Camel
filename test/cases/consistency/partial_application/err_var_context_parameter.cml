@@ -11,12 +11,12 @@
 var total: int = 0
 
 with <var acc: int>
-func add(x: int): int sync {
+func add(x: int) => int sync {
     acc = acc + x
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = add<total>
     println(g(1), total)
     return 0

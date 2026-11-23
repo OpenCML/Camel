@@ -8,23 +8,23 @@
 
 import { grad, with_grad, stop_gradient } from autodiff
 
-func sq(x: float): float {
+func sq(x: float) => float {
     return x * x
 }
 
 // d/dx (x^2 * y + x / y - y) = 2xy + 1/y.
 with <x: float>
-func f(y: float): float {
+func f(y: float) => float {
     return sq(x) * y + x / y - y
 }
 
 // x used three times; the stopped branch contributes nothing.
 with <x: float>
-func g(): float {
+func g() => float {
     return x * x * x + stop_gradient(x * 10.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let df = grad(f)<3.0>(2.0)
     let vg = with_grad(f)<3.0>(2.0)
     let dg = grad(g)<2.0>()

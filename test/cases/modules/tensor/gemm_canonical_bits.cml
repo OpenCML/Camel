@@ -10,20 +10,20 @@
  * error is small. `gemm_canonical.cml` and `gemm_consistency.cml` remain the numeric cases.
  */
 
-import { to_bytes } from tensor
-import { next_key, seed, uniform } from random
 import { sha256 } from hash
+import { next_key, seed, uniform } from random
+import { to_bytes } from tensor
 
-func main(): int sync {
+func main() => int sync {
     seed(5)
     let a1 = (next_key()->uniform::<f32><shape: [256, 256]> * 2.0 - 1.0)
     let b1 = (next_key()->uniform::<f32><shape: [256, 64]> * 2.0 - 1.0)
     'gemm_bits small_n={}'->format<sha256(to_bytes(a1 @ b1))>->println
-
+    
     let a2 = (next_key()->uniform::<f32><shape: [512, 256]> * 2.0 - 1.0)
     let b2 = (next_key()->uniform::<f32><shape: [256, 512]> * 2.0 - 1.0)
     'gemm_bits two_blocks={}'->format<sha256(to_bytes(a2 @ b2))>->println
-
+    
     let a3 = (next_key()->uniform::<f32><shape: [300, 600]> * 2.0 - 1.0)
     let b3 = (next_key()->uniform::<f32><shape: [600, 130]> * 2.0 - 1.0)
     'gemm_bits edges={}'->format<sha256(to_bytes(a3 @ b3))>->println

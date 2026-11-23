@@ -7,11 +7,11 @@
 type A = { v: int }
 type B = { v: int }
 
-func operator +(a: A, b: A): B {
+func operator +(a: A, b: A) => B {
     return { v: a.v + b.v }
 }
 
-func main(): int sync {
+func main() => int sync {
     var a: A = { v: 1 }
     let b: A = { v: 2 }
     a += b

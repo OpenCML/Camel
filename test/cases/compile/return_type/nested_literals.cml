@@ -6,31 +6,31 @@
  * an inner array could not be inserted into the outer one.
  */
 
-func pairs(a: int, b: float): ((int, float), (float, int)) {
+func pairs(a: int, b: float) => ((int, float), (float, int)) {
     return ((a, b), (b, a))
 }
 
-func mixed(h: float, k: int, e: float): ((float, int), (float, bool)) {
+func mixed(h: float, k: int, e: float) => ((float, int), (float, bool)) {
     return ((h, k), (e, k >= 6))
 }
 
-func deep(a: int, b: int): (((int, int), int), int) {
+func deep(a: int, b: int) => (((int, int), int), int) {
     return (((a, b), a), 7)
 }
 
-func rows(a: int, b: int): int[][] {
+func rows(a: int, b: int) => int[][] {
     return [[a, b], [b, a], [1, 2]]
 }
 
-func record(a: int, b: float): { p: (int, float), q: { x: float, y: int } } {
+func record(a: int, b: float) => { p: (int, float), q: { x: float, y: int } } {
     return { p: (a, b), q: { x: b, y: a } }
 }
 
-func every(a: int, b: int): ((int, int), int[], { x: int }) {
+func every(a: int, b: int) => ((int, int), int[], { x: int }) {
     return ((a, 1), [b, 2], { x: a })
 }
 
-func main(): int sync {
+func main() => int sync {
     let (p, q) = pairs(3, 0.5)
     println('pairs {} {} {} {}'->format<p.0, p.1, q.0, q.1>)
     let (m, n) = mixed(1.5, 6, 0.25)

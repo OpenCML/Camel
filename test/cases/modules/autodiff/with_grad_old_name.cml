@@ -2,7 +2,7 @@
 // ordinary unresolved reference, not an alias and not a "retired, use with_grad" diagnostic.
 import { grad } from autodiff
 
-func main(): int sync {
+func main() => int sync {
     let vg = value_and_grad(2.0)
     println(vg)
     return 0

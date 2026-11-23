@@ -1,21 +1,21 @@
-func q(a: int): bool sync {
-    println("P {}"->format<a>);
-    return false;
+func q(a: int) => bool sync {
+    println('P {}'->format<a>)
+    return false
 }
 
-func main(): int sync {
-    let k = 0;
-    var v = 0;
+func main() => int sync {
+    let k = 0
+    var v = 0
     if 0 <= 12 then sync {
-        v = 0;
+        v = 0
         let n = match k {
             case 3 => 0
             case _ => sync {
-                q(5);
-                return 0;
+                q(5)
+                return 0
             }
-        };
-        null;
-    };
-    return 0;
+        }
+        null
+    }
+    return 0
 }

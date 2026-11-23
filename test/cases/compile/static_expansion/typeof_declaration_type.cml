@@ -5,12 +5,12 @@
  * placeholder would say.
  */
 
-func text(): string {
+func text() => string {
     return 's'
 }
 
-func main(): int sync {
-    let a: typeof(text()) = 7
+func main() => int sync {
+    let a: typeof (text()) = 7
     println(a)
     return 0
 }

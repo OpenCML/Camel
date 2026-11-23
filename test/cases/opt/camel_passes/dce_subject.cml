@@ -8,19 +8,19 @@
 // expression reads is never built, so the pass needs a pass before it — `std::cxx::inline` here —
 // to leave values nobody reads.
 
-func ignore(a: int): int {
+func ignore(a: int) => int {
     return 5
 }
 
-func chain(x: int): int {
+func chain(x: int) => int {
     return ignore(x * 2)
 }
 
-func kept(x: int): int {
+func kept(x: int) => int {
     return (x * 2) + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(chain(3))
     println(kept(5))
     return 0

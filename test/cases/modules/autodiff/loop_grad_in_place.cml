@@ -11,20 +11,20 @@
 import { grad, with_grad } from autodiff
 
 with <w: float>
-func growLiteral(): float {
+func growLiteral() => float {
     let xs = loop xs = [0.0] while len(xs) < 3 do xs->append<w>
     return xs[1] + xs[2]
 }
 
 with <w: float>
-func growSeed(seed: float[]): float {
+func growSeed(seed: float[]) => float {
     let xs = loop xs = seed while len(xs) < 3 do xs->append<w>
     return xs[1] + xs[2]
 }
 
-func main(): int sync {
-    let a  = grad(growLiteral)<2.0>()
-    let b  = grad(growSeed)<2.0>([0.0])
+func main() => int sync {
+    let a = grad(growLiteral)<2.0>()
+    let b = grad(growSeed)<2.0>([0.0])
     let va = with_grad(growLiteral)<2.0>()
     'loop_grad_in_place a={} b={} va={}'->format<a, b, va>->println
     return 0

@@ -17,15 +17,15 @@
  * the call that converts it is never visited.
  */
 
-import { reshape, sum } from tensor
 import { grad } from autodiff
+import { reshape, sum } from tensor
 
 with <xs: float[][]>
-func loss(): float {
+func loss() => float {
     return float(sum(reshape<[4]>(xs)))
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[][] = [[1.0, 2.0], [3.0, 4.0]]
     println('refuse_container_reshape g={}'->format<grad(loss)<xs>()>)
     return 0

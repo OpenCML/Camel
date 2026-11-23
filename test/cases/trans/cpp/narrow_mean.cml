@@ -12,7 +12,7 @@
  */
 import { mean as array_mean } from array
 
-func main(): int sync {
+func main() => int sync {
     let xs: bf16[] = [0.5, -1.5, 2.0]
     println(array_mean(xs))
     let hs: f16[] = [0.1, 0.2, 0.3]
