@@ -40,3 +40,4 @@
   2. `lane/facts-tools`：`camel inspect --facts` 接线、`computeAll` 给它与测试用；每个已落地的 kind 配一条"事实答案与旧算法逐项对照"的用例；调试器 `regionOuter` 改读 `ControlRegions`（问题页 `who-holds-the-facts-store` 的答复）。
   3. `lane/exec-plan-kind`：执行计划作为 `std::exec` 登记的事实 kind，不可变的计划进事实、fvm 的可变状态留在 fvm；删 `GCGraph::execPlan_`（同一页答复的 ③④）。与 `facts-b3` 分文件：`facts-b3` 做内核框架侧，本车道只动 `src/stdlib/std/{exec,nvm,fvm,prl}`。
   4. `lane/cleanup`：`C-1123-33` 剩余的旧切片写法、25 个真沉默算子逐个补 `uses`/`pure` 声明、`:op/` 以外的其余小欠账。
+- **D-1123-30（新车道 `lane/range-value`）** 范围改成值：`Range` 是标准库的命名类型，下标逐维按类型分派，`for` 接受能转成流的值，删掉解析器与建图器里按 `range` 名字的特例。原则 5.4 已改，计划与验收见 `internal/plans/2026-11-23-range-value.cn.md`。反向切片那页的修法并进这条车道做。
