@@ -23,7 +23,7 @@
 
 
 
-| lane/facts-b3 | 阶段 3 计划 3b 的余下五样：效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取。**只做了一样**：`ControlRegions`；其余四样各有一份「改前」读数与不挪的理由，见 `internal/lanes.md` 下方的说明与车道报告 | 首笔（本行同笔）：`ControlRegions` 构造 13 处不变、**计算 13 → 1**（事实层 kind `core.controlRegions`），emitter 的按图缓存 `regions_` 删除，`ControlRegions` 只剩薄读；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` 2669/2664/0（known 5）、整层 fast 9844/9644/**135**/skip 24/known 41（红集中在本笔不碰的 docs/lsp/grammar/capacity/记号解析与主机缺 `build/lib/tiles` 二进制；**基线未取**：15:07 起 `ssh 10.126.62.88:22` 超时，基线那一跑没送出去）；事实层无回落：全树只有 `facts:control_regions.cpp#buildControlRegionTree` 会建树，`ControlRegions` 造不出来，构造时拿不到树即抛 | 未合 | 效应汇总（`core.effects` 在旧事实库 + 7 处直接调 compute，8 处入口）是下一笔，卡在「新事实框架没有 owner/create 一个 Store」的形状 | 2026-11-23 15:05 |
+| lane/facts-b3 | 阶段 3 计划 3b 的余下五样：效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取。**只做了一样**：`ControlRegions`；其余四样各有一份「改前」读数与不挪的理由 | 首笔 **`38d24c183`**：`ControlRegions` 构造 13 处不变、**计算 13 → 1**（事实层 kind `core.controlRegions`），emitter 的按图缓存 `regions_` 删除，`ControlRegions` 只剩薄读；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` **2669/2664/0（known 5）是本轮唯一站得住的读数**（选择集内、可复现）；整层 fast 报 `9844/9644/135` skip 24，**这 135 是孤立数、不作读数引用**（基线那一跑 15:07 起主机超时，没送出去；按类看在本笔不碰的 docs/lsp/grammar/capacity/记号解析，另 2 个 gpu 红是主机 checkout 缺 `build/lib/tiles/Release/*`，与 `plan_validation` 同因）；事实层无回落：全树只有 `facts:control_regions.cpp#buildControlRegionTree` 会建树，`ControlRegions` 造不出来，拿不到树即抛 | 未合 | 第二笔（本行同笔）：形状先于第二样——`internal/questions/2026-11-23-who-owns-a-store.cn.md` 立四个问题（Store 生命周期 / `--facts` 接不接线 / 模块不在时报什么红 / 可变值与不可变表要不要拆 kind），头文件草案 `src/kernel/facts/include/camel/facts/store_owner.h` 只有声明、无 `.cpp`、无人 include，交作者裁；四件不裁，3b 其余四样一件也挪不动 | 2026-11-23 15:35 |
 
 ## 没开车道的一件
 
