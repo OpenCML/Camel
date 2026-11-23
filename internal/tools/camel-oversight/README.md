@@ -72,3 +72,13 @@ lost the stream reconnects with `/oversee/events?since=<ms>` and receives what i
 client adds `client=dm` to its requests; after `dmOfflineMinutes` (45) without one, the coordinator is told
 to carry on without waiting. With no claim, a session working in the repository is told in its prompt that
 the coordinator claims first. The full contingency table is in `internal/collab/SKILL.md`.
+
+## Back-pressure
+
+A backlog worked through in order makes anything newer or more urgent wait behind stale messages, so each
+direction has a limit and past it the sender reorganizes. `/oversee/say` refuses a dispatch with `429` once
+`queueLimit` (3) unread dispatches sit in the coordinator's queue; a dispatch with `"supersedes": [ids]`
+takes those still unread out of the queue (`agent.inbox.remove`) before it is delivered, and reports which
+it withdrew and which were already read. `/oversee/state` lists `queuedDispatches`. The plugin's own
+messages replace their unread predecessor of the same kind. A reader back after more than five missed
+events gets one `missed` summary instead of a replay.

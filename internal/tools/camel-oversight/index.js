@@ -54,6 +54,8 @@ const DEFAULTS = {
     buildProbe: 'cat /proc/loadavg; nproc; pgrep -fc "ctest|camel" || true',
     rulesFile: 'internal/collab/rules.md',
     rulesRefreshMinutes: 30,
+    // Unread dispatches the coordinator may have queued before a new one is refused with 'reorganize'.
+    queueLimit: 3,
     // A tool call in the claimed session that has not returned after blockWarnMinutes is reported;
     // after blockCancelMinutes the turn is cancelled (queued messages kept) and the coordinator told why.
     blockWarnMinutes: 10,
@@ -112,6 +114,7 @@ export function apply(ctx, rawConfig) {
     // ---- durable log: deliveries and acknowledgements survive a restart ----------------------
     const delivered = new Map() // id -> {id, at, mode, text}
     const acks = new Map() // id -> {id, at, status, note}
+    const superseded = new Map() // id -> the id of the dispatch that replaced it before it was read
     let claimed = null // the session that called oversight_claim last
     let dmLastSeen = null // the last request the decision-maker's client made
     const promptReach = { target: 0, other: 0, none: 0 } // whom the prompt context was assembled for
@@ -131,6 +134,7 @@ export function apply(ctx, rawConfig) {
                 const entry = JSON.parse(line)
                 if (entry.kind === 'say') delivered.set(entry.id, entry)
                 if (entry.kind === 'ack') acks.set(entry.id, entry)
+                if (entry.kind === 'superseded') superseded.set(entry.id, entry.by)
                 if (entry.kind === 'claim') claimed = entry.session
                 if (entry.kind === 'tell') tells.push(entry)
             } catch {
@@ -262,7 +266,20 @@ export function apply(ctx, rawConfig) {
             }),
         )
 
-    const pending = () => [...delivered.values()].filter((entry) => !acks.has(entry.id)).map((entry) => entry.id)
+    const pending = () => [...delivered.values()].filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id)).map((entry) => entry.id)
+
+    // Whether a message is still waiting in the agent's queue, unread.
+    const stillQueued = (agent, messageId) => {
+        const inbox = agent && agent.inbox
+        if (!inbox) return false
+        return [...(inbox.nextTurn || []), ...(inbox.nextStep || [])].some((message) => message && message.id === messageId)
+    }
+    // The dispatches the coordinator has not read yet, oldest first.
+    const queuedDispatches = (agent) =>
+        [...delivered.values()]
+            .filter((entry) => entry.messageId && !superseded.has(entry.id) && stillQueued(agent, entry.messageId))
+            .sort((a, b) => a.at - b.at)
+            .map((entry) => entry.id)
 
     // ---- the push half: a server-sent event stream ----------------------------------------------
     // What the coordinator says back (an acknowledgement, a message of its own, the claimed session
@@ -346,13 +363,20 @@ export function apply(ctx, rawConfig) {
     const backlogOpen = () =>
         reading && reading.backlog instanceof Map ? [...reading.backlog.values()].filter((row) => !row.done).length : 0
 
-    const sendToTarget = (agent, level, text) => {
+    // The plugin's own messages never pile up: a reminder or a rules refresh that is still unread when
+    // the next one of its kind is sent is replaced by it, since the newer one is computed from fresher
+    // readings and says everything the older one did.
+    const lastOfKind = new Map() // 'reminder' | 'rules' -> message id still possibly queued
+    const sendToTarget = (agent, level, text, kind = 'reminder') => {
         const message = Object.freeze({
             id: randomUUID(),
             role: 'user',
             source: Object.freeze({ kind: 'user' }),
             content: Object.freeze([Object.freeze({ type: 'text', text })]),
         })
+        const previous = lastOfKind.get(kind)
+        if (previous && stillQueued(agent, previous)) agent.inbox.remove(previous)
+        lastOfKind.set(kind, message.id)
         if (level === 'urgent') return agent.steer(message), 'steer'
         if (level === 'wake' && agent.status !== 'running') return agent.followup(message), 'followup'
         return agent.inject(message), 'inject'
@@ -412,7 +436,7 @@ export function apply(ctx, rawConfig) {
         const active = tail.length > 0 && now - tail[tail.length - 1].time < 60 * 60_000
         if (!force && !active) return
         lastRefresh = now
-        sendToTarget(agent, 'quiet', `[oversight · 铁律复读]\n${rulesText}`)
+        sendToTarget(agent, 'quiet', `[oversight · 铁律复读]\n${rulesText}`, 'rules')
         const entry = { kind: 'reminder', at: now, level: 'quiet', mode: 'inject', rules: ['rules-refresh'], text: '铁律复读' }
         record(entry)
         reminders.push(entry)
@@ -595,6 +619,7 @@ export function apply(ctx, rawConfig) {
             sessions: sessionsNow(),
             recentTurns: id ? recentTurns(id, config.turnsInState) : [],
             unacknowledged: pending(),
+            queuedDispatches: agent ? queuedDispatches(agent) : [],
             decisionMaker: { lastSeen: dmLastSeen },
             promptReach,
             blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
@@ -622,7 +647,16 @@ export function apply(ctx, rawConfig) {
         res.write(`: open, target ${claimed ?? 'none'}\n\n`)
         const after = Number(url.searchParams.get('since'))
         if (Number.isFinite(after) && after > 0) {
-            for (const event of replayable) if (event.at > after) res.write(`data: ${JSON.stringify({ ...event, replayed: true })}\n\n`)
+            const missed = replayable.filter((event) => event.at > after)
+            if (missed.length > 5) {
+                // A reader back from a long absence gets one summary, not a flood it would work through
+                // one by one; the details are a read of /oversee/acks away.
+                const kinds = {}
+                for (const event of missed) kinds[event.kind] = (kinds[event.kind] || 0) + 1
+                res.write(`data: ${JSON.stringify({ kind: 'missed', at: missed[missed.length - 1].at, count: missed.length, kinds, read: '/oversee/acks' })}\n\n`)
+            } else {
+                for (const event of missed) res.write(`data: ${JSON.stringify({ ...event, replayed: true })}\n\n`)
+            }
         }
         streams.add(res)
         const beat = setInterval(() => res.write(': ping\n\n'), 25_000)
@@ -642,6 +676,33 @@ export function apply(ctx, rawConfig) {
         if (delivered.has(id)) return answer(res, 200, { id, duplicate: true, deliveredAt: delivered.get(id).at })
         const agent = target(typeof body.session === 'string' ? body.session : '')
         if (!agent) return answer(res, 409, { error: 'no session has claimed the channel (oversight_claim), and the request names none', sessions: sessionsNow() })
+        // A newer dispatch may replace older ones the coordinator has not read yet: they are taken out of
+        // its queue before it reaches them, so it acts on the reorganized message, not on a backlog of
+        // stale ones. One already read cannot be taken back; it stays and is reported as such.
+        const supersedes = Array.isArray(body.supersedes) ? body.supersedes.filter((x) => typeof x === 'string') : []
+        const withdrawn = []
+        const alreadyRead = []
+        for (const old of supersedes) {
+            const entry = delivered.get(old)
+            if (!entry || superseded.has(old)) continue
+            if (entry.messageId && stillQueued(agent, entry.messageId) && agent.inbox.remove(entry.messageId)) {
+                superseded.set(old, id)
+                record({ kind: 'superseded', id: old, by: id, at: Date.now() })
+                withdrawn.push(old)
+            } else {
+                alreadyRead.push(old)
+            }
+        }
+        // Back-pressure: past queueLimit unread dispatches the coordinator would work through a backlog
+        // in order, behind which anything newer or more urgent waits. The sender is told to reorganize
+        // them into one message (with `supersedes`), not to keep adding.
+        const queued = queuedDispatches(agent)
+        if (mode !== 'steer' && queued.length >= config.queueLimit) {
+            return answer(res, 429, {
+                error: `the coordinator has ${queued.length} unread dispatches queued (limit ${config.queueLimit}); reorganize them into one message and send it with "supersedes"`,
+                queued,
+            })
+        }
         const message = Object.freeze({
             id: randomUUID(),
             role: 'user',
@@ -651,10 +712,10 @@ export function apply(ctx, rawConfig) {
         if (mode === 'steer') agent.steer(message)
         else agent.followup(message)
         const from = req.headers['tailscale-user-login'] || null
-        const entry = { kind: 'say', id, at: Date.now(), mode, text, session: String(agent.id), from }
+        const entry = { kind: 'say', id, at: Date.now(), mode, text, session: String(agent.id), from, messageId: message.id, supersedes: withdrawn }
         delivered.set(id, entry)
         record(entry)
-        answer(res, 202, { id, mode, session: String(agent.id), status: agent.status })
+        answer(res, 202, { id, mode, session: String(agent.id), status: agent.status, withdrawn, alreadyRead, queued: queued.length + 1 })
     })
 
     // ---- the model's side ------------------------------------------------------------------------
