@@ -16,6 +16,7 @@
 #include "camel/core/trace.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/effects.h"
 #include "camel/runtime/graph_exit_type.h"
@@ -961,18 +962,18 @@ bool programContentChanged(
 }
 
 /// Whether the node runs an effect. The answer is the node's effect fact
-/// (`camel::runtime::effectSummaryOfNode`): an effect is a write -- of a resource outside the
-/// program or of state the program owns -- and a read is a dependency rather than an effect
-/// (design principles 3.3). This is the tree's one judgement of it; a second reading of the
-/// operator table here would be a second model to keep in step with that one.
+/// (`core.nodeEffects`): an effect is a write -- of a resource outside the program or of state the
+/// program owns -- and a read is a dependency rather than an effect (design principles 3.3). This is
+/// the tree's one judgement of it; a second reading of the operator table here would be a second
+/// model to keep in step with that one.
 bool nodeHasEffect(
-    const camel::runtime::Program &program, const GCGraph &graph,
-    camel::runtime::gc_node_ref_t ref) {
+    camel::runtime::fact::FactStore &facts, const camel::runtime::Program &program,
+    const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     const camel::runtime::GCNode *node = graph.node(ref);
     if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
         return false;
     }
-    return !camel::runtime::effectSummaryOfNode(program, &graph, ref).pure();
+    return !camel::runtime::fact::nodeEffects(facts, program, graph, ref).pure();
 }
 
 /// The call whose body a node was copied into, when a pass inlined one around it: the source origin
@@ -1166,7 +1167,7 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
 
 /// The effects of `program`: every effect node of every graph of it, each at its position in one
 /// topological order of its graph and each with the ambient resources it names.
-ProgramEffects collectEffects(const camel::runtime::Program &program) {
+ProgramEffects collectEffects(camel::runtime::fact::FactStore &facts, const camel::runtime::Program &program) {
     using camel::runtime::gc_node_ref_t;
     ProgramEffects effects;
     for (GCGraph *graph : program.graphs()) {
@@ -1187,7 +1188,7 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
         }
         for (size_t position = 0; position < order.nodes.size(); ++position) {
             const gc_node_ref_t ref = order.nodes[position];
-            if (!nodeHasEffect(program, *graph, ref)) {
+            if (!nodeHasEffect(facts, program, *graph, ref)) {
                 continue;
             }
             EffectSite site;
@@ -1637,9 +1638,9 @@ std::vector<std::string> portDeclarationViolation(const camel::runtime::Program 
 /// about *effects* rather than about every node: without it the invariant would ask a pure
 /// operation for a credential it never needs, and the first graph a program builds would fail it.
 bool nodeRunsForItsEffect(
-    const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
-    camel::runtime::gc_node_ref_t ref) {
-    if (!nodeHasEffect(program, graph, ref)) {
+    camel::runtime::fact::FactStore &facts, const camel::runtime::Program &program,
+    const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+    if (!nodeHasEffect(facts, program, graph, ref)) {
         return false;
     }
     const camel::runtime::NodeResources resources =
@@ -1685,6 +1686,12 @@ struct EffectCredentialViolation {
 
 EffectCredentialViolation
 effectCredentialViolation(const camel::runtime::Program &program, const context_ptr_t &context) {
+    if (context == nullptr) {
+        // The credential is read through the facts of the run's store, and without a context there
+        // is none to ask. The caller that has no context reports no diagnostic either, so there is
+        // nothing this reading would be the evidence of.
+        return {};
+    }
     for (const camel::runtime::GCGraph *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
@@ -1696,7 +1703,7 @@ effectCredentialViolation(const camel::runtime::Program &program, const context_
             // A removed node leaves a record of kind `Dead` and no inputs (graph.h, GCNodeKind); it
             // is not part of the graph a pass returned.
             if (node == nullptr || node->kind == camel::runtime::GCNodeKind::Dead ||
-                !nodeRunsForItsEffect(program, *graph, ref) ||
+                !nodeRunsForItsEffect(context->facts(), program, *graph, ref) ||
                 effectStandsOnSomething(*graph, ref)) {
                 continue;
             }
@@ -1858,7 +1865,7 @@ std::string effectContainmentText(
 bool passBoundaryViolation(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
     const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true) {
-    const ProgramEffects effectsAfter = collectEffects(program);
+    const ProgramEffects effectsAfter = collectEffects(ctx->facts(), program);
     const std::vector<std::pair<size_t, size_t>> pairs =
         matchedEffects(effectsBefore, effectsAfter);
     const std::string violation = effectOrderViolation(effectsBefore, effectsAfter, pairs);
@@ -2100,9 +2107,12 @@ PassRunResult applyRegisteredPass(
         return {nullptr, true};
     }
     // The program this pass is given, read before it runs: the boundary check below compares the
-    // effects of the two, and the program a pass returns is not read once it has returned.
-    const ProgramEffects effectsBefore =
-        program != nullptr ? collectEffects(*program) : ProgramEffects{};
+    // effects of the two, and the program a pass returns is not read once it has returned. With no
+    // context there is no store to ask and no diagnostic to report a violation with (the check
+    // below is skipped in that case), so the effects are not read either.
+    const ProgramEffects effectsBefore = program != nullptr && ctx != nullptr
+                                             ? collectEffects(ctx->facts(), *program)
+                                             : ProgramEffects{};
     const camel::runtime::Program *produced = pass->apply(program, os);
     if (pass->hasErrorValue()) {
         if (caller != nullptr) {
@@ -2156,7 +2166,7 @@ PassRunResult applyRegisteredPass(
 bool checkPassBoundary(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &before,
     const camel::runtime::Program &after) {
-    return passBoundaryViolation(ctx, spec, after, collectEffects(before), true);
+    return passBoundaryViolation(ctx, spec, after, collectEffects(ctx->facts(), before), true);
 }
 
 namespace {
@@ -2542,7 +2552,7 @@ PassApplyResult applyPassesDetailed(
             // runs: the effects on one resource keep that order through every pass (design
             // principles 3.3), and the end of this iteration compares. Read here rather than after
             // the pass because the program the pass is given is not read once it has returned.
-            const ProgramEffects effectsBefore = collectEffects(*program);
+            const ProgramEffects effectsBefore = collectEffects(ctx->facts(), *program);
             try {
                 program = pass->apply(program, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {

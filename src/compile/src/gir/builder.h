@@ -3781,6 +3781,35 @@ class Builder {
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
     node_handle_t
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The same conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
+    /// node whose written type arguments are the operand's type and the target, and whose result
+    /// type is the target. Falls back to `castNodeTo` where no declaration answers, so a pair the
+    /// operator's rule does not cover keeps the node kind it had instead of disappearing.
+    node_handle_t conversionNodeOf(
+        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// A construction written as the operator it is (`fill::<T, ...F>` of the prelude): an OPER node
+    /// whose ordinary operands are the template the compiler made and then the values, in component
+    /// order. Nothing about a construction configures the call -- `with` is what says which function
+    /// this is -- so the whole call is ordinary parameters: the declaration says so, and the order
+    /// the components are written in is the operand order. `target` is the type being made and the
+    /// values' types are the declaration's `...F`. Falls back to `addFillNode` where no declaration
+    /// answers, so a construction the rule does not cover keeps the node kind it had.
+    node_handle_t fillNodeOf(
+        node_handle_t tmpl, camel::core::type::Type *target,
+        const std::vector<node_handle_t> &values);
+    /// A member read written as the operator it is (`access::<T, U>` by place, `access_key::<T, U>`
+    /// by name, of the prelude): an OPER node whose first ordinary operand is the place or the name
+    /// -- a constant of the program, so a DATA node -- and whose second is the value it reads,
+    /// which is the order the declaration writes. `target` is the member's type and the value's type
+    /// is the aggregate's; the two are the call's written type arguments. Falls back to
+    /// `addAccsNode` where no declaration answers, so a read the rule does not cover keeps the node
+    /// kind it had instead of disappearing.
+    node_handle_t memberReadNodeOf(
+        node_handle_t value, camel::core::type::Type *target, uint32_t at,
+        const GCT::node_ptr_t &origin = nullptr);
+    node_handle_t memberReadNodeOf(
+        node_handle_t value, camel::core::type::Type *target, const std::string &key,
+        const GCT::node_ptr_t &origin = nullptr);
     /// `node` where a value of type `target` is expected (design principles 5.5): `node`
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of

@@ -681,25 +681,26 @@ holds the construction under.
 #### `access`
 
 ```camel
-access: (at: int, x: T) => U panic
+access: <at: int> (x: T) => U panic
 ```
 
 A member read as an ordinary operator: the ACCS node kind written as a call of the operator
 that does the same thing (plan 2.3, step 2). The position is a compile-time parameter of the
-node and an ordinary operand of the call: an `int` for the element of a tuple, a `string` for
-the field of a struct. It comes first because the compiler makes the node before it links the
-value the node reads (`lib/std/builtin/operators/struct.cpp`).
+operator and a `with` argument of the call: an `int` for the element of a tuple, a `string`
+for the field of a struct. The value the read reads is the call's one ordinary operand; the
+compiler puts the member in `with` and links the value as the call's operand
+(`lib/std/builtin/operators/struct.cpp`).
 
 A program writes a member read as `t[0]` or `s.x`, and those reach this operator through the
 language's own rules; the call form is the name a graph holds the read under.
 
 - Pure.
-- Example: `access::<(int, int), int>(0, (1, 2))` gives `1`
+- Example: `access::<(int, int), int><0>((1, 2))` gives `1`
 
 #### `access_key`
 
 ```camel
-access_key: (key: string, x: T) => U panic
+access_key: <key: string> (x: T) => U panic
 ```
 
 The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
@@ -709,7 +710,7 @@ it holds -- the operand's type would answer the same question, but a rule that h
 the type to know what it does is what the node kinds were.
 
 - Pure.
-- Example: `access_key::<{ x: int, y: int }, int>('y', { x: 1, y: 2 })` gives `2`
+- Example: `access_key::<{ x: int, y: int }, int><'y'>({ x: 1, y: 2 })` gives `2`
 
 ### Arrays
 

@@ -51,6 +51,21 @@ expand_axis	engine-autodiff	a spread along an axis, written by the engine's own 
 cast_like	engine-autodiff	an element-type change between two rules' nodes, written by the engine
 permute_inverse	engine-autodiff	the inverse permutation a permute's adjoint needs, written by the engine
 
+# ---- 乙: the operators the front end introduces (no source construct of that name) --------------
+#
+# The three the shape flip put in front of a differentiated value: a member read (`.x`, `.0`) and a
+# conversion (`as`) are written as source constructs of *other* names, and the front end hands each
+# of them to the engine as an operator of its own (`:op/access`, `:op/access_key`, `:op/cast`). The
+# library's forward half files a `jvp_<op>` law per operator a program writes; no program writes one
+# of these, so there is nothing for it to file and its table legitimately answers none of the three.
+# The reverse question is still asked, because a differentiated value passes *through* such a node
+# (design principles 9.9): `memberReadVjp` and `castVjp` (src/stdlib/std/builtin/operators/
+# derivative.cpp) are the engine's own rules for them, and the engine's leg is the only leg there is.
+
+access	engine-autodiff	the member read by place the front end introduces (`:op/access`); no source operator of that name exists, so the law half files nothing and the engine's `memberReadVjp` is the rule
+access_key	engine-autodiff	the same read by name (`:op/access_key`): the field is the front end's operand, not a source construct, so no `jvp_` law can be filed; the engine's `memberReadVjp` is the rule
+cast	engine-autodiff	the conversion the front end introduces (`:op/cast`); the destination is a fact of the node, and no source operator names it, so the engine's `castVjp` is the reverse rule
+
 # ---- 乙: locally constant, or a value with no tangent space -----------------------------------
 #
 # `design principles 9.9`: a reading of a shape, a comparison and a label are locally constant in

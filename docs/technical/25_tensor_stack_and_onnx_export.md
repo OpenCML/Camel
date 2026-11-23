@@ -338,6 +338,20 @@ Every node evaluates to either a constant or a symbolic tensor:
 - `tensor:take` lowers to `Gather(axis = 0)`; constant `int[]` indices become an i64 initializer
   (the same mapping `nn:embedding` uses). `take`'s reverse is the internal `tensor:take_grad`,
   which has no ONNX lowering.
+- A conversion, a copy, a construction and a member read (`:op/cast`, `:op/copy`, `:op/fill`,
+  `:op/access`, `:op/access_key`) are not in that table, and must not be put in it. A tuple or a
+  struct is an export-time aggregate with no ONNX value of its own (`onnx/value.h`), so reading a
+  member out of one, or making one from a template, chooses or assembles the ONNX values that
+  already exist; a node for it would stand for a value ONNX does not have, and a lowering that
+  emitted one over a tensor would read the wrong thing while the model still type-checks. They are
+  read by the operation the node names, both writings alike
+  (`camel/execute/shaped_operators.h`): a member read of an aggregate is that element (of a
+  constant tuple or struct, the element's constant); a construction is the aggregate of its
+  template and its fields, and an array of model-dependent elements is a `Concat` of them; a
+  conversion between two structs of one layout is the same aggregate under the target type, a
+  conversion of a model-dependent number is ONNX `Cast`, and one whose asserted shape or element
+  type the export cannot prove is refused rather than left out; a copy is its source.
+  `:op/access_key` names a struct field, so it has no ONNX node to be at any opset.
 - `FUNC` and `CALL` nodes are inlined. Recursion driven by constants (for
   example the GRU time-step loop) unrolls. A recursion whose depth depends on
   the model input is exported as ONNX `Loop`s when it is a loop: a tail

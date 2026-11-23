@@ -36,6 +36,7 @@
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/operator_instance.h"
+#include "src/stdlib/transforms/node_operator.h"
 
 #include <algorithm>
 #include <deque>
@@ -1196,29 +1197,38 @@ bool foldStaticAccess(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t constantBudget) {
     auto &draft        = transaction.edit();
     const auto sources = draft.normInputsOf(id);
-    if (sources.size() != 1) {
+    if (sources.empty()) {
         return false;
     }
-    const auto source  = staticValueOf(transaction, sources[0]);
+    // The read is asked of `memberReadOf`, which answers an ACCS node and a `:op/access` call
+    // alike and names the value it reads: one ordinary operand, with the place or the name as the
+    // call's `with` argument (`__access_value__`, builtin/operators/struct.cpp). Asking for one
+    // input's worth of a call said "not an access" about every read the front end writes, and a
+    // call's payload bytes are its record, not a position. Measured on this tree the fold is
+    // reached 39061 times, all of them ACCS nodes, so widening the reader changes nothing it folds
+    // today.
+    const auto read = camel::transforms::memberReadOf(draft, id);
+    if (!read.has_value()) {
+        return false;
+    }
+    const auto source  = staticValueOf(transaction, read->value);
     type::Type *result = draft.header(id)->dataType;
     if (!source || !source->second || !result || source->first == NullSlot) {
         return false;
     }
-    const auto *body =
-        reinterpret_cast<const camel::runtime::GCAccsBody *>(draft.payloadOf(id).data());
     slot_t value = NullSlot;
-    if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex &&
+    if (read->kind == camel::runtime::GCAccsKind::TupleIndex &&
         source->second->code() == type::TypeCode::Tuple) {
         auto *tuple = camel::core::rtdata::fromSlot<::Tuple *>(source->first);
-        if (body->value >= tuple->size()) {
+        if (read->place >= tuple->size()) {
             return false;
         }
-        value = tuple->get<slot_t>(body->value);
+        value = tuple->get<slot_t>(read->place);
     } else if (
-        body->accsKind == camel::runtime::GCAccsKind::StructKey &&
+        read->kind == camel::runtime::GCAccsKind::StructKey &&
         source->second->code() == type::TypeCode::Struct) {
         auto *object = camel::core::rtdata::fromSlot<::Struct *>(source->first);
-        value        = object->get<slot_t>(std::string(body->key()), source->second);
+        value        = object->get<slot_t>(read->key, source->second);
     } else {
         return false;
     }

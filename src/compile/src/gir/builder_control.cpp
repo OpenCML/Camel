@@ -51,10 +51,181 @@ namespace camel::compile::gir {
 
 node_handle_t
 Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+    // A conversion is an ordinary operator, so a conversion the compiler makes is a call of it
+    // like any other: the operator's rule is the conversion the CAST node ran, and the value is
+    // the same either way (design principles 5.1: the target type is a type name applied to a
+    // value, and `cast` is the operator that name is).
+    return conversionNodeOf(value, target, origin);
+}
+
+node_handle_t
+Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+    // `cast::<T, U>` says a conversion is about a pair of types: the source is the type of the
+    // value it reads and the target is the call's result type. Both are known here, which is why
+    // the call is resolved with them as the written type arguments and the expected result.
+    Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (source != nullptr && target != nullptr) {
+        const oper_group_ptr_t group = importedOperatorGroupNamed("cast");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(1);
+            const auto op = group->resolveForCall({source, target}, target, {}, {source}, statics);
+            if (op.has_value()) {
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::Norm, value, node);
+                registerNodeOrigin(context_, node, origin, "gir.cast");
+                return node;
+            }
+        }
+    }
+    // No declaration answered: the CAST node is what the graph gets, and it is the same
+    // conversion. A pair the operator's rule does not cover says so here rather than building a
+    // node the rule cannot name.
     node_handle_t castNode = currGraph_->addCastNode(target);
     linkNodes(LinkType::Norm, value, castNode);
     registerNodeOrigin(context_, castNode, origin, "gir.cast");
     return castNode;
+}
+
+node_handle_t Builder::fillNodeOf(
+    node_handle_t tmpl, Type *type, const std::vector<node_handle_t> &values) {
+    // `fill::<T, ...F>(template: T, ...fields: ...F): T` says a construction is about the type it
+    // makes and the values it is made of: the template comes first as an ordinary operand and the
+    // values follow it in the order the target lays its components out, which is the order the call
+    // is built with. Nothing here configures the call -- `with` is what says which function this
+    // is -- so the whole call is ordinary parameters, and the two facts the FILL payload used to
+    // carry are the type (the result and the first type argument) and the order (the operand
+    // order). The values' types are the written `...F`, so the call is resolved with the list it is
+    // linked with.
+    if (type != nullptr) {
+        std::vector<Type *> types;
+        types.reserve(values.size() + 1);
+        types.push_back(type);
+        bool complete = true;
+        for (node_handle_t value : values) {
+            Type *valueType =
+                nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+            complete = complete && valueType != nullptr;
+            types.push_back(valueType);
+        }
+        const oper_group_ptr_t group = importedOperatorGroupNamed("fill");
+        if (group != nullptr && complete) {
+            const std::vector<StaticArg> statics(types.size());
+            const auto op = group->resolveForCall(types, type, {}, types, statics);
+            if (op.has_value()) {
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::Norm, tmpl, node);
+                for (node_handle_t value : values) {
+                    linkNodes(LinkType::Norm, value, node);
+                }
+                registerNodeOrigin(context_, node, nullptr, "gir.fill");
+                return node;
+            }
+        }
+    }
+    // No declaration answered: the FILL node is what the graph gets, and it is the same
+    // construction. Its payload is also where the order is stated, so a construction that fills
+    // components in another order than the target lays them out is one no call of `fill` names,
+    // and it stays a FILL until the operator can say that order.
+    std::vector<size_t> slots(values.size());
+    std::iota(slots.begin(), slots.end(), size_t{0});
+    node_handle_t fillNode = currGraph_->addFillNode(
+        type, runtime::makeFillPayload(fillKindForType(type), slots));
+    linkNodes(LinkType::Norm, tmpl, fillNode);
+    for (node_handle_t value : values) {
+        linkNodes(LinkType::With, value, fillNode);
+    }
+    registerNodeOrigin(context_, fillNode, nullptr, "gir.fill");
+    return fillNode;
+}
+
+node_handle_t Builder::memberReadNodeOf(
+    node_handle_t value, Type *target, uint32_t at, const GCT::node_ptr_t &origin) {
+    // `access::<T, U><at>(x: T): U` reads a member by place: the aggregate's type is the value's
+    // and the member's type is the result, which are the call's two written type arguments, and
+    // the place -- a constant the program wrote -- is the operator's compile-time parameter, so it
+    // goes into the call's `with` list and the value is the call's one ordinary operand.
+    Type *aggregate = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (aggregate != nullptr && target != nullptr) {
+        const oper_group_ptr_t group = importedOperatorGroupNamed("access");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(2);
+            const auto op = group->resolveForCall(
+                {aggregate, target}, target, {Type::Int64()}, {aggregate}, statics);
+            if (op.has_value()) {
+                const data_ptr_t place =
+                    tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(at));
+                node_handle_t placeNode = currGraph_->addStaticDataNode(place);
+                rememberConstant(placeNode, place);
+                registerNodeOrigin(context_, placeNode, origin, "gir.data");
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::With, placeNode, node);
+                linkNodes(LinkType::Norm, value, node);
+                // A member read's operands are what its declaration says: one value as the
+                // ordinary operand and the member as the `with` argument. A node that says
+                // `:op/access` and carries another count is refused here, where the node is
+                // built, rather than at execution.
+                const auto *signature = (*op)->funcType();
+                GUARD(
+                    signature != nullptr &&
+                        normInputsOf(node).size() == signature->normTypesCount() &&
+                        withInputsOf(node).size() == signature->withTypesCount(),
+                    std::format(
+                        "a '{}' member read takes one value and its member as a with argument, "
+                        "as its declaration says",
+                        (*op)->uri()));
+                return node;
+            }
+        }
+    }
+    // No declaration answered: the ACCS node is what the graph gets, and it is the same read.
+    node_handle_t accsNode = currGraph_->addAccsNode(target, at);
+    linkNodes(LinkType::Norm, value, accsNode);
+    return accsNode;
+}
+
+node_handle_t Builder::memberReadNodeOf(
+    node_handle_t value, Type *target, const std::string &key, const GCT::node_ptr_t &origin) {
+    // `access_key::<T, U><key>(x: T): U` reads the same member by name. The name is a constant of
+    // the program for the same reason the place is, it is the operator's compile-time parameter,
+    // and it is a different operator rather than a second rule of `access` because a graph that
+    // holds the URI has said which of the two reads it is (prelude.cml says why).
+    Type *aggregate = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (aggregate != nullptr && target != nullptr) {
+        const oper_group_ptr_t group = importedOperatorGroupNamed("access_key");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(2);
+            const auto op = group->resolveForCall(
+                {aggregate, target}, target, {Type::String()}, {aggregate}, statics);
+            if (op.has_value()) {
+                const data_ptr_t name = tt::as_shared<Data>(std::make_shared<StringData>(key));
+                node_handle_t keyNode  = currGraph_->addStaticDataNode(name);
+                rememberConstant(keyNode, name);
+                registerNodeOrigin(context_, keyNode, origin, "gir.data");
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::With, keyNode, node);
+                linkNodes(LinkType::Norm, value, node);
+                // See the by-place builder above: the operand count is checked where the node is
+                // built, against the declaration that answered the call.
+                const auto *signature = (*op)->funcType();
+                GUARD(
+                    signature != nullptr &&
+                        normInputsOf(node).size() == signature->normTypesCount() &&
+                        withInputsOf(node).size() == signature->withTypesCount(),
+                    std::format(
+                        "a '{}' member read takes one value and its member as a with argument, "
+                        "as its declaration says",
+                        (*op)->uri()));
+                return node;
+            }
+        }
+    }
+    node_handle_t accsNode = currGraph_->addAccsNode(target, key);
+    linkNodes(LinkType::Norm, value, accsNode);
+    return accsNode;
 }
 
 namespace {
@@ -226,47 +397,6 @@ std::string aggregatePartName(const Type *type, size_t index) {
     return std::to_string(index);
 }
 
-/// The part of `type` an ACCS node reads, when it reads one: `s.x` of a struct, `t.0` of a
-/// tuple, of exactly the part's type.
-std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
-    if (!nodeIsKind(node, runtime::GCNodeKind::Accs) || type == nullptr) {
-        return std::nullopt;
-    }
-    const auto norm = normInputsOf(node);
-    if (norm.size() != 1) {
-        return std::nullopt;
-    }
-    const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
-    if (payload.size() < sizeof(runtime::GCAccsBody)) {
-        return std::nullopt;
-    }
-    const auto *body = reinterpret_cast<const runtime::GCAccsBody *>(payload.data());
-    size_t index     = 0;
-    if (type->code() == TypeCode::Struct) {
-        if (body->accsKind != runtime::GCAccsKind::StructKey) {
-            return std::nullopt;
-        }
-        const auto field = tt::as_ptr<const StructType>(type)->findField(body->key());
-        if (!field.has_value()) {
-            return std::nullopt;
-        }
-        index = *field;
-    } else if (type->code() == TypeCode::Tuple) {
-        if (body->accsKind != runtime::GCAccsKind::TupleIndex ||
-            body->value >= tt::as_ptr<const TupleType>(type)->size()) {
-            return std::nullopt;
-        }
-        index = body->value;
-    } else {
-        return std::nullopt;
-    }
-    Type *part = aggregatePartType(type, index);
-    Type *read = valueTypeOf(nodeTypeOf(node));
-    if (part == nullptr || read == nullptr || (read != part && !read->equals(part))) {
-        return std::nullopt;
-    }
-    return index;
-}
 
 /// The next value of the part `step` of `value` (`value` is a struct or tuple FILL, or any value
 /// of that type). A FILL's parts are its With inputs, which is what lets an `append` among them
@@ -303,21 +433,15 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
         }
         break;
     }
-    if (nodeIsKind(source, runtime::GCNodeKind::Fill)) {
-        const auto payload = nodeDraftOf(source)->payloadOf(nodeIdOf(source));
-        if (payload.size() >= sizeof(runtime::GCFillBody)) {
-            const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-            const bool structFill =
-                fill->fillKind == runtime::GCFillKind::Struct && type->code() == TypeCode::Struct;
-            const bool tupleFill =
-                fill->fillKind == runtime::GCFillKind::Tuple && type->code() == TypeCode::Tuple;
-            if (structFill || tupleFill) {
-                const auto slots = fill->slots();
-                const auto with  = withInputsOf(source);
-                for (size_t i = 0; i < slots.size() && i < with.size(); ++i) {
-                    if (slots[i] == step) {
-                        return nodeDraftOf(source)->ref(with[i]);
-                    }
+    if (const auto kind = constructionKindOf(source, type); kind.has_value()) {
+        const bool structFill =
+            *kind == runtime::GCFillKind::Struct && type->code() == TypeCode::Struct;
+        const bool tupleFill =
+            *kind == runtime::GCFillKind::Tuple && type->code() == TypeCode::Tuple;
+        if (structFill || tupleFill) {
+            for (const auto &[component, componentValue] : constructionValuesOf(source)) {
+                if (component == step) {
+                    return componentValue;
                 }
             }
         }
@@ -326,6 +450,104 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
 }
 
 } // namespace
+
+// A reader of a member read that sits outside this file asks it too (`builder_refs.cpp`), so it
+// is defined after the helpers it stands on rather than beside them.
+/// The part of `type` a member read reads, when it reads one: `s.x` of a struct, `t.0` of a
+/// tuple, of exactly the part's type.
+///
+/// A member read is an operator now (`:op/access_key` by name, `:op/access` by place): the member
+/// is the operator's compile-time parameter and the call's `with` argument, a constant the builder
+/// wrote there, and the value it reads is the call's one ordinary operand -- the shape the
+/// declaration states (`__access_value__`, `builtin/operators/struct.cpp`: `norm.size() == 1`,
+/// `with.size() == 1`). The node-kind spelling says the same thing from its payload, with the value
+/// as its one ordinary input -- a graph built before the read was an operator still reads that way,
+/// and the two faces this lane reads (`GCGraph`, `GraphDraft`) both carry such graphs. Both
+/// spellings answer the same question, and the value operand is the ordinary one either way, which
+/// is what tells the caller the read is of the value it asked about.
+std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
+    if (type == nullptr || node == nullptr) {
+        return std::nullopt;
+    }
+    const bool structType = type->code() == TypeCode::Struct;
+    const bool tupleType  = type->code() == TypeCode::Tuple;
+    if (!structType && !tupleType) {
+        return std::nullopt;
+    }
+    size_t index = 0;
+    if (nodeIsKind(node, runtime::GCNodeKind::Accs)) {
+        const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
+        if (payload.size() < sizeof(runtime::GCAccsBody) || normInputsOf(node).size() != 1) {
+            return std::nullopt;
+        }
+        const auto *body  = reinterpret_cast<const runtime::GCAccsBody *>(payload.data());
+        const bool byName = body->accsKind == runtime::GCAccsKind::StructKey;
+        if (byName != structType) {
+            return std::nullopt;
+        }
+        if (byName) {
+            const std::string_view key = body->key();
+            const auto field = tt::as_ptr<const StructType>(type)->findField(std::string(key));
+            if (!field.has_value()) {
+                return std::nullopt;
+            }
+            index = *field;
+        } else {
+            index = body->value;
+            if (static_cast<uint64_t>(index) >= tt::as_ptr<const TupleType>(type)->size()) {
+                return std::nullopt;
+            }
+        }
+    } else if (nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
+        if (op == nullptr) {
+            return std::nullopt;
+        }
+        const std::string_view uri = op->uri();
+        const bool byName          = uri == ":op/access_key";
+        if (!byName && uri != ":op/access") {
+            return std::nullopt;
+        }
+        if (byName != structType) {
+            return std::nullopt;
+        }
+        const auto norm = normInputsOf(node);
+        const auto with = withInputsOf(node);
+        if (norm.size() != 1 || with.size() != 1) {
+            return std::nullopt;
+        }
+        const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(with.front()));
+        if (!member.has_value()) {
+            return std::nullopt;
+        }
+        if (byName) {
+            const auto *key = camel::core::rtdata::fromSlot<String *>(*member);
+            if (key == nullptr) {
+                return std::nullopt;
+            }
+            const auto field =
+                tt::as_ptr<const StructType>(type)->findField(std::string(key->view()));
+            if (!field.has_value()) {
+                return std::nullopt;
+            }
+            index = *field;
+        } else {
+            const int64_t at = camel::core::rtdata::fromSlot<int64_t>(*member);
+            if (at < 0 || static_cast<uint64_t>(at) >= tt::as_ptr<const TupleType>(type)->size()) {
+                return std::nullopt;
+            }
+            index = static_cast<size_t>(at);
+        }
+    } else {
+        return std::nullopt;
+    }
+    Type *part = aggregatePartType(type, index);
+    Type *read = valueTypeOf(nodeTypeOf(node));
+    if (part == nullptr || read == nullptr || (read != part && !read->equals(part))) {
+        return std::nullopt;
+    }
+    return index;
+}
 
 
 void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
@@ -2118,17 +2340,11 @@ Builder::intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::
     // The interval is the `int[]` of `intervalValue` in every other position.
     std::vector<Type *> bounds{Type::Int64(), Type::Int64()};
     TupleType *boundsType = TupleType::create(bounds);
-    const std::vector<size_t> slots{0, 1};
     auto &draft          = currGraph_->transaction().edit();
-    node_handle_t result = currGraph_->addFillNode(
-        boundsType,
-        runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
     const slot_t empty =
         camel::core::rtdata::toSlot(::Tuple::create(2, camel::core::mm::autoSpace()));
     node_handle_t source = draft.ref(draft.materializeStaticValue(empty, boundsType));
-    linkNodes(LinkType::Norm, source, result);
-    linkNodes(LinkType::With, from, result);
-    linkNodes(LinkType::With, to, result);
+    node_handle_t result = fillNodeOf(source, boundsType, {from, to});
     registerNodeOrigin(context_, result, expr, "gir.loop.interval");
     return result;
 }
@@ -2224,28 +2440,22 @@ node_handle_t Builder::attachVisibleLoopState(
     const size_t count  = states.size();
     node_handle_t value = nullptr;
     if (count == 1) {
-        value = currGraph_->addAccsNode(states.front(), firstState);
-        linkNodes(LinkType::Norm, loopNode, value);
+        value = memberReadNodeOf(loopNode, states.front(), firstState);
     } else {
         Type *valueType = static_cast<Type *>(TupleType::create(states));
-        std::vector<size_t> slots(count);
-        std::iota(slots.begin(), slots.end(), size_t{0});
-        value = currGraph_->addFillNode(
-            valueType,
-            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
         const slot_t empty =
             camel::core::rtdata::toSlot(::Tuple::create(count, camel::core::mm::autoSpace()));
         // Two steps, because the two halves are not the same side: writing the static value is an
         // edit, and reading the node it produced is a view.
         const auto emptyNode = currGraph_->edit().materializeStaticValue(empty, valueType);
         node_handle_t source = currGraph_->view().ref(emptyNode);
-        linkNodes(LinkType::Norm, source, value);
+        std::vector<node_handle_t> parts;
+        parts.reserve(count);
         for (size_t j = 0; j < count; ++j) {
-            node_handle_t component =
-                currGraph_->addAccsNode(states[j], static_cast<uint32_t>(firstState + j));
-            linkNodes(LinkType::Norm, loopNode, component);
-            linkNodes(LinkType::With, component, value);
+            parts.push_back(
+                memberReadNodeOf(loopNode, states[j], static_cast<uint32_t>(firstState + j)));
         }
+        value = fillNodeOf(source, valueType, parts);
     }
     registerNodeOrigin(context_, value, gct, "gir.loop.value");
     return value;
@@ -2872,39 +3082,28 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (declaredStates == 1) {
             components[0] = returned;
         } else if (declaredStates > 1) {
-            // The declared states' next values are the tuple the body gave: a FILL whose payload
+            // The declared states' next values are the tuple the body gave: a construction that
             // says which component each value fills (a constant component has no value node).
             bool fromFill = false;
-            if (returned != nullptr && nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
-                const auto withIns = withInputsOf(returned);
-                const auto payload = nodeDraftOf(returned)->payloadOf(nodeIdOf(returned));
-                if (payload.size() >= sizeof(runtime::GCFillBody)) {
-                    const auto *fill =
-                        reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-                    const auto slots = fill->slots();
-                    if (fill->fillKind == runtime::GCFillKind::Tuple &&
-                        slots.size() == withIns.size()) {
-                        fromFill = true;
-                        for (size_t i = 0; i < slots.size(); ++i) {
-                            const size_t slot = static_cast<size_t>(slots[i]);
-                            if (slot >= declaredStates) {
-                                fromFill = false;
-                                break;
-                            }
-                            components[slot] = nodeDraftOf(returned)->ref(withIns[i]);
-                        }
-                        // A fill names a component only when that component is one of its
-                        // with-inputs: a component its static template already holds -- the
-                        // constant of `(xs, 0.25)`, as opposed to the value of `(xs, y)` -- has no
-                        // value node and therefore no slot, so its table is shorter than the
-                        // states. One it leaves out is read out of the tuple below, which is how a
-                        // body that gave no fill at all is read: the state's next value is the
-                        // tuple's component in both shapes, and the loop's next state is not
-                        // missing it. What the fill does name keeps the value it hands on, so a
-                        // state the body handed on in place is still that value.
-                        readFromFill = fromFill;
+            if (const auto kind = constructionKindOf(returned, nodeTypeOf(returned));
+                kind.has_value() && *kind == runtime::GCFillKind::Tuple) {
+                fromFill = true;
+                for (const auto &[slot, component] : constructionValuesOf(returned)) {
+                    if (slot >= declaredStates) {
+                        fromFill = false;
+                        break;
                     }
+                    components[slot] = component;
                 }
+                // A construction names a component only when that component is one of its
+                // values: a component its static template already holds -- the constant of
+                // `(xs, 0.25)`, as opposed to the value of `(xs, y)` -- has no value node, so its
+                // table is shorter than the states. One it leaves out is read out of the tuple
+                // below, which is how a body that gave no construction at all is read: the state's
+                // next value is the tuple's component in both shapes, and the loop's next state is
+                // not missing it. What the construction does name keeps the value it hands on, so a
+                // state the body handed on in place is still that value.
+                readFromFill = fromFill;
             }
             if (!fromFill) {
                 // A body that gives its states as something else than a tuple written there: each
@@ -2915,9 +3114,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         components[j] = at < bodyPart->ports.size() ? bodyPart->ports[at] : nullptr;
                         continue;
                     }
-                    node_handle_t part =
-                        currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                    linkNodes(LinkType::Norm, returned, part);
+                    node_handle_t part = memberReadNodeOf(
+                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
@@ -2949,26 +3147,21 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                     if (components[j] != nullptr) {
                         continue;
                     }
-                    node_handle_t part =
-                        currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                    linkNodes(LinkType::Norm, returned, part);
+                    node_handle_t part = memberReadNodeOf(
+                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
             }
-            result = currGraph_->addFillNode(
-                nextType,
-                runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
             const slot_t empty = camel::core::rtdata::toSlot(
                 ::Tuple::create(stateCount, camel::core::mm::autoSpace()));
             node_handle_t source = bodyDraft.ref(bodyDraft.materializeStaticValue(empty, nextType));
-            linkNodes(LinkType::Norm, source, result);
-            for (node_handle_t component : components) {
+            for (node_handle_t &component : components) {
                 GUARD(
                     component != nullptr,
                     "A loop state's next value is missing from the body's value.");
-                linkNodes(LinkType::With, component, result);
             }
+            result = fillNodeOf(source, nextType, components);
             bodyDraft.setInsertRegion(outerRegion);
             registerNodeOrigin(context_, result, gct->loopBody(), "gir.loop.state");
         }
@@ -3033,9 +3226,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         Type *partType = aggregatePartType(type, step);
         node_handle_t access =
             type->code() == TypeCode::Struct
-                ? currGraph_->addAccsNode(partType, aggregatePartName(type, step))
-                : currGraph_->addAccsNode(partType, static_cast<uint32_t>(step));
-        linkNodes(LinkType::Norm, value, access);
+                ? memberReadNodeOf(value, partType, aggregatePartName(type, step), gct)
+                : memberReadNodeOf(value, partType, static_cast<uint32_t>(step), gct);
         registerNodeOrigin(context_, access, gct, "gir.loop.split");
         return access;
     };
@@ -3085,8 +3277,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         }
                         const auto index = accessedPartOf(user, part.type);
                         const auto norms = normInputsOf(user);
-                        if (!index.has_value() || norms.size() != 1 ||
-                            nodeDraftOf(user)->ref(norms.front()) != source) {
+                        // The value is the last ordinary operand of a member read: the only one
+                        // when the read had a node kind of its own, the second when it is the
+                        // operator (the member is the first).
+                        if (!index.has_value() || norms.empty() ||
+                            nodeDraftOf(user)->ref(norms.back()) != source) {
                             return true;
                         }
                         const uint32_t region = draft.nodeRegion(nodeIdOf(user));
@@ -3234,16 +3429,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             const size_t count = resolved.size();
             std::vector<size_t> slots(count);
             std::iota(slots.begin(), slots.end(), size_t{0});
-            result = currGraph_->addFillNode(
-                valueType,
-                runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
             const slot_t empty =
                 camel::core::rtdata::toSlot(::Tuple::create(count, camel::core::mm::autoSpace()));
             node_handle_t source = draft.ref(draft.materializeStaticValue(empty, valueType));
-            linkNodes(LinkType::Norm, source, result);
-            for (node_handle_t value : resolved) {
-                linkNodes(LinkType::With, value, result);
-            }
+            result = fillNodeOf(source, valueType, resolved);
             registerNodeOrigin(context_, result, gct->loopBody(), "gir.loop.split");
         }
         if (bodyPart->output != bodyPart->value) {
@@ -3372,8 +3561,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         const size_t index  = declaredStates + j;
         node_handle_t value = loopNode;
         if (stateCount > 1) {
-            value = currGraph_->addAccsNode(stateTypes[index], static_cast<uint32_t>(index));
-            linkNodes(LinkType::Norm, loopNode, value);
+            value = memberReadNodeOf(
+                loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
             registerNodeOrigin(context_, value, gct, "gir.loop.value");
         }
         if (carried[j].ssa) {
@@ -3398,9 +3587,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 componentValues[j] = loopValue;
                 continue;
             }
-            node_handle_t access =
-                currGraph_->addAccsNode(splitComponents[j]->type, static_cast<uint32_t>(j));
-            linkNodes(LinkType::Norm, loopValue, access);
+            node_handle_t access = memberReadNodeOf(
+                loopValue, splitComponents[j]->type, static_cast<uint32_t>(j), gct);
             registerNodeOrigin(context_, access, gct, "gir.loop.value");
             componentValues[j] = access;
         }
@@ -3417,11 +3605,6 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::vector<size_t> slots(count);
             std::iota(slots.begin(), slots.end(), size_t{0});
             const bool isStruct = part.type->code() == TypeCode::Struct;
-            node_handle_t fill  = currGraph_->addFillNode(
-                part.type,
-                runtime::makeFillPayload(
-                    isStruct ? runtime::GCFillKind::Struct : runtime::GCFillKind::Tuple,
-                    slots));
             const slot_t empty = isStruct
                                      ? camel::core::rtdata::toSlot(
                                            ::Struct::create(count, camel::core::mm::autoSpace()))
@@ -3429,10 +3612,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                                            ::Tuple::create(count, camel::core::mm::autoSpace()));
             node_handle_t source =
                 currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, part.type));
-            linkNodes(LinkType::Norm, source, fill);
-            for (node_handle_t value : values) {
-                linkNodes(LinkType::With, value, fill);
-            }
+            node_handle_t fill = fillNodeOf(source, part.type, values);
             registerNodeOrigin(context_, fill, gct, "gir.loop.split");
             return fill;
         };
@@ -3529,17 +3709,11 @@ node_handle_t Builder::buildStreamLoop(
     const auto machineStateOf = [&](const std::vector<node_handle_t> &components) {
         std::vector<size_t> slots(components.size());
         std::iota(slots.begin(), slots.end(), size_t{0});
-        node_handle_t fill = currGraph_->addFillNode(
-            machineType,
-            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
         const slot_t empty = camel::core::rtdata::toSlot(
             ::Tuple::create(components.size(), camel::core::mm::autoSpace()));
         node_handle_t source =
             currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, machineType));
-        linkNodes(LinkType::Norm, source, fill);
-        for (node_handle_t component : components) {
-            linkNodes(LinkType::With, component, fill);
-        }
+        node_handle_t fill = fillNodeOf(source, machineType, components);
         registerNodeOrigin(context_, fill, gct, "gir.loop.state");
         return fill;
     };
@@ -3652,15 +3826,14 @@ node_handle_t Builder::buildStreamLoop(
                     // The element this round is about and the rest of the stream, taken out of
                     // the pull that has just answered.
                     node_handle_t pair = applyTagOperator(TagNullValue, pullTemp, gct->loopBody());
-                    node_handle_t element = currGraph_->addAccsNode(elementType, 0);
-                    linkNodes(LinkType::Norm, pair, element);
+                    node_handle_t element =
+                        memberReadNodeOf(pair, elementType, 0, gct->loopBody());
                     registerNodeOrigin(context_, element, gct->loopBody(), "gir.loop.element");
                     insertNode(gct->loopElementName(), element);
                     if (recorder_) {
                         recordDeclaration(gct->loopElementName(), element, gct->loopBody());
                     }
-                    node_handle_t rest = currGraph_->addAccsNode(stream, 1);
-                    linkNodes(LinkType::Norm, pair, rest);
+                    node_handle_t rest = memberReadNodeOf(pair, stream, 1, gct->loopBody());
                     registerNodeOrigin(context_, rest, gct->loopBody(), "gir.loop.rest");
 
                     // What the program's body gives is the state of the next round.
@@ -3679,9 +3852,8 @@ node_handle_t Builder::buildStreamLoop(
                         next.push_back(state);
                     } else {
                         for (size_t j = 0; j < k; ++j) {
-                            node_handle_t component =
-                                currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                            linkNodes(LinkType::Norm, state, component);
+                            node_handle_t component = memberReadNodeOf(
+                                state, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
                             registerNodeOrigin(
                                 context_,
                                 component,
@@ -3987,24 +4159,16 @@ std::vector<Type *> Builder::collectLoopAppends(
         if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
             return {};
         }
-        const auto withIns = withInputsOf(returned);
-        const auto payload = nodeDraftOf(returned)->payloadOf(nodeIdOf(returned));
-        if (payload.size() < sizeof(runtime::GCFillBody)) {
+        const auto components = constructionValuesOf(returned);
+        const auto kind       = constructionKindOf(returned, nodeTypeOf(returned));
+        if (!kind.has_value() || *kind != runtime::GCFillKind::Tuple) {
             return {};
         }
-        const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-        if (fill->fillKind != runtime::GCFillKind::Tuple) {
-            return {};
-        }
-        const auto slots = fill->slots();
-        if (slots.size() != withIns.size()) {
-            return {};
-        }
-        for (size_t i = 0; i < slots.size(); ++i) {
-            if (static_cast<size_t>(slots[i]) >= stateCount) {
+        for (const auto &[slot, component] : components) {
+            if (slot >= stateCount) {
                 return {};
             }
-            next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
+            next[slot] = component;
         }
     }
     std::vector<Type *> collected;
@@ -4132,32 +4296,20 @@ void Builder::markLoopStateInPlace(
     }
     std::vector<std::vector<node_handle_t>> nexts(stateCount);
     for (node_handle_t arm : arms) {
-        if (arm == nullptr || !nodeIsKind(arm, runtime::GCNodeKind::Fill)) {
-            return;
-        }
-        const Type *returnType = valueTypeOf(nodeTypeOf(arm));
+        const Type *returnType = arm != nullptr ? valueTypeOf(nodeTypeOf(arm)) : nullptr;
         if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
             return;
         }
-        const auto withIns = withInputsOf(arm);
-        const auto payload = nodeDraftOf(arm)->payloadOf(nodeIdOf(arm));
-        if (payload.size() < sizeof(runtime::GCFillBody)) {
-            return;
-        }
-        const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-        if (fill->fillKind != runtime::GCFillKind::Tuple) {
-            return;
-        }
-        const auto slots = fill->slots();
-        if (slots.size() != withIns.size()) {
+        const auto fillKind = constructionKindOf(arm, const_cast<Type *>(returnType));
+        if (!fillKind.has_value() || *fillKind != runtime::GCFillKind::Tuple) {
             return;
         }
         std::vector<node_handle_t> next(stateCount, nullptr);
-        for (size_t i = 0; i < slots.size(); ++i) {
-            if (static_cast<size_t>(slots[i]) >= stateCount) {
+        for (const auto &[slot, component] : constructionValuesOf(arm)) {
+            if (slot >= stateCount) {
                 return;
             }
-            next[slots[i]] = nodeDraftOf(arm)->ref(withIns[i]);
+            next[slot] = component;
         }
         for (size_t j = 0; j < stateCount; ++j) {
             nexts[j].push_back(next[j]);

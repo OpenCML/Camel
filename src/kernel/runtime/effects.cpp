@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The effect summary of a graph (camel/runtime/effects.h).
+ * The effect summary of a graph (camel/runtime/effects.h): the value, the operator clause, and the
+ * one computation of it that the fact layer registers (`effect_walk.h`).
  */
 
 #include "camel/runtime/effects.h"
+
+#include "effect_walk.h"
 
 #include "camel/runtime/effect_liveness.h"
 
@@ -172,11 +175,13 @@ struct EffectWalk {
 
 } // namespace
 
-EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph) {
+namespace effectwalk {
+
+EffectSummary ofGraph(const Program &program, const GCGraph *graph) {
     return EffectWalk{program}.of(graph);
 }
 
-EffectSummary effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region) {
+EffectSummary ofRegion(const Program &program, const GCGraph *graph, uint32_t region) {
     if (graph == nullptr || region == 0) {
         return {};
     }
@@ -184,6 +189,8 @@ EffectSummary effectSummaryOfRegion(const Program &program, const GCGraph *graph
     walk.active.insert(graph);
     return walk.ofNodes(graph, region);
 }
+
+} // namespace effectwalk
 
 EffectSummary effectSummaryOfOperator(camel::core::OperId oper) {
     const auto &table = camel::core::OperatorTable::instance();
@@ -203,7 +210,9 @@ EffectSummary effectSummaryOfOperator(camel::core::OperId oper) {
     return summary;
 }
 
-EffectSummary effectSummaryOfNode(const Program &program, const GCGraph *graph, gc_node_ref_t ref) {
+namespace effectwalk {
+
+EffectSummary ofNode(const Program &program, const GCGraph *graph, gc_node_ref_t ref) {
     EffectSummary summary;
     if (graph == nullptr || graph->node(ref) == nullptr) {
         return summary;
@@ -237,7 +246,7 @@ EffectSummary effectSummaryOfNode(const Program &program, const GCGraph *graph, 
         summary.mayNotTerminate = true;
         break;
     case GCNodeKind::Func:
-        return effectSummaryOf(program, program.calleeOf(*graph, ref));
+        return ofGraph(program, program.calleeOf(*graph, ref));
     case GCNodeKind::Loop:
         summary.mayFault        = true;
         summary.mayNotTerminate = true;
@@ -249,6 +258,8 @@ EffectSummary effectSummaryOfNode(const Program &program, const GCGraph *graph, 
     }
     return summary;
 }
+
+} // namespace effectwalk
 
 EffectStanding effectStandingOf(const EffectLivenessFacts &facts) {
     // 3.1's two: a value of it is read, or it is a statement of a `sync` block. A read written

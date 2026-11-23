@@ -131,15 +131,14 @@ void printRuleUris(
                     if (node == nullptr) {
                         continue;
                     }
-                    // The construction this graph builds, read as the operator it is becoming
-                    // (`node_operator.h`): `fillBodyOf` answers the payload of a construction and
-                    // nullptr for any other node, so the kind is not asked here.
-                    const auto *body = camel::transforms::fillBodyOf(*graph, ref);
-                    if (body == nullptr ||
-                        body->fillKind != camel::runtime::GCFillKind::FunctionClosure) {
+                    // The construction this graph builds, read as the operator it is
+                    // (`node_operator.h`): `fillPayloadOf` answers the payload of a construction
+                    // and nullopt for any other node, so the kind is not asked here.
+                    const auto body = camel::transforms::fillPayloadOf(*graph, ref);
+                    if (!body || body->fillKind != camel::runtime::GCFillKind::FunctionClosure) {
                         continue;
                     }
-                    closure = "fill=FunctionClosure slots=" + std::to_string(body->slotCount);
+                    closure = "fill=FunctionClosure slots=" + std::to_string(body->slots.size());
                     if (auto *fnType =
                             dynamic_cast<camel::core::type::FunctionType *>(node->dataType())) {
                         closure += " type=" + fnType->toString();

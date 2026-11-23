@@ -2491,9 +2491,7 @@ node_handle_t Builder::visitLinkNode(
                 if (nodeTypeOf(cell)->equals(wanted)) {
                     return cell;
                 }
-                node_handle_t converted = currGraph_->addCastNode(wanted);
-                linkNodes(LinkType::Norm, cell, converted);
-                registerNodeOrigin(context_, converted, arg.expr, "gir.cast");
+                node_handle_t converted = conversionNodeOf(cell, wanted, arg.expr);
                 return converted;
             };
             if (takesVariables) {
