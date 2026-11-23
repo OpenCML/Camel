@@ -23,7 +23,6 @@
 
 | lane/tooling | 工具欠账三条（`C-1123-15` 远端只带回一份基准、`C-1123-16` 构建戳不标识构建、`C-1123-7` `-AstOnly` 参数绑定），作者说这是「一个读数不可信，有三种不可信的方式」 | 首笔 `bf11b50cb`；①`-UpdateGolden` 改前：主机重录了 1 份、本地仍是旧的那份（`git diff --numstat` 1 行），改后：`goldens: 2 rewritten on the host, 1 written here, 1 already identical, 0 left stale`，`annotated_dump` 不带 `-UpdateGolden` 再跑 3/3 绿；②`node scripts/check-build-stamp.mjs` 对旧规则 3 项红（`261123_040107` 无内容标签、同内容两次全新配置戳不同、不同内容戳区分不出），新规则全绿，主机 `-Check build-stamp` 1 run 0 failed；③`-AstOnly 'a,b'` 旧脚本红（`--only selected none of the tree's 4256 .cml file(s)`）、新脚本 `re-hashed 229 / kept 4254` 且记录 sha256 与整批重录逐字节相同，`feat/parse` 两次 126/126/0 | 未合 | 等点名 | 2026-11-23 12:04 |
 | lane/flip-consumers | 五层迁移的栈顶（建图器、C++、autodiff、优化、下游读者） | 32 笔，刷到 17a11804d（已合 91a3fd5cc 的 96 笔），未推未合 | smoke 0、eat/parse 0、eat/compile 11 红 | **卡在:栈上剩 5 条红,根在 72df5049c（成员读写成 ccess）—— 即作者那条裁定的**后半**。**等:位置被搬进 with（oper-identity-write 做完了读者那一半,3 条已绿） | 2026-11-23 11:20 |
-| lane/packed-view-lifetime | 修「一个闭包被当成 cell 塞进 ar int 槽」那族（C-1123-24） | 31 笔，5ae19df7，未推未合 | 旧症状全消失（不再 70.0/1046.0、不再 materializeAggregate、12 次逐字相同）。根因链已交:问题页 2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup.cn.md，**作者已答**（d56dc52ef） | **卡在:整条栈能否落地** —— 它不是独立的一笔（`C-1123-30`）。**等:栈上红降到能当轮修完**（`oper-identity-write` 已 94 → 86、`onnx-lowering` 已把 55 清零）。`D-1123-23` 允许这样写清而不强合 | 2026-11-23 10:30 |
 
 | lane/facts-arrangeable | 作者裁 `6fe8c9bbb`：「可自由安排」是一件事（四项合取，终止按节点判），事实层给 `core.arrangeable`，各处改问它；续裁：读 `:var` 是依赖不是效应，效应声明一律写进 `Record::uses`，事实层只读记录、删回落 | 15 处改问事实层（`is_chain_statement`、`nodeHasEffect`、`--ops` 的 `external`、tiles 四处放置判断、`graph.is_pure`）；检查器 33 处拼答案 → **0**（18 处只读一个原子）；`stateUsesInRecord` 在 `OperatorTable::declareSemantics` 里把声明过的 `ResourceSpec` 写进记录（`builtin_semantics.cpp` 的建内算子也在内）；`camel inspect --ops` 加 `record`/`uses_stated`/`clause_pure`，`test/cases/feat/modules/oprecord_uses.py` 把两个读法扣在一起；读数：814 个算子全部有记录、**349 个记录里写了 `uses`**、465 个仍沉默，其中 **440 个表里声明了 accesses 却没进记录**；smoke 10/10/0、feat/parse 126/126/0、op_record 2/2（138/138/0）；gpu 层 17 红（13 已记录，4 未记录：`module_lease`、`async_native_submissions` 是本机缺 `build/lib/tiles/Release/tiles-module-lease` 与 `tiles-async-check`；`nofallback.*` 两条是改后新增） | ① 那 13 处 `:var/get` 的答案变化是纠正，写进报告与提交信息；② `TILES_OUTLINED` 一处读到 12（原 10），`nofallback.*` 两条新增红：有算子按记录判成可上设备而设备层没有它的程序，落在诊断列表里 —— 这是「答案变了」，按规矩停在这里，等作者说读记录还是读表 | 2026-11-23 11:55（裁 `6fe8c9bbb`） |
 
@@ -56,3 +55,9 @@
 ## 只作证据（不在分支上，在标签上）
 
 `with-param-audit` 与 `data-arg-migration` 的内容存在标签 `evidence/with-param-audit`、`evidence/data-arg-migration` 上，分支已删。理由：两条都不会合（一条作者撤回、一条前提被推翻），而它们每一笔 `develop` 都让「最落后分支」这个闸门读数涨一格 —— 那个数从此只描述它们，不描述任何一条会被合的车道。试过让它们跟上：`with-param-audit` 那 2 笔是另一代的 WIP，与今天的 `src/stdlib` 全冲突，合不进去。标签保住内容、不进分支计数，于是闸门重新描述真在飞的四条。
+
+`packed-view-lifetime` 也在标签 `evidence/packed-view-lifetime` 上：它的 31 笔全部含在 `lane/oper-identity-write` 里（`merge-base --is-ancestor` 为真），是一条栈内路标，不是一条独立车道。读数留在 `internal/backlog.md` 与 `C-1123-24`。
+
+## 那条栈现在是两个头
+
+`lane/flip-consumers` ⊂ `lane/onnx-lowering`，`lane/packed-view-lifetime` ⊂ `lane/oper-identity-write`，而这两条互不相含 —— 所以栈要落得合**两次**：一次 `onnx-lowering`（迁移 + ONNX lowering + 视图），一次 `oper-identity-write`（成员读的位置进 `with` 的读者那一半）。合成一次合入会把两批交付条件不同的笔压成一笔。
