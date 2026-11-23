@@ -1,0 +1,12 @@
+/**
+ * The imported name still refuses a call that fits nothing, and the message lists the candidates
+ * of the whole set: widening what a module exports of one name must not turn a mismatch into a
+ * match, nor hide the overloads the caller could have written.
+ */
+
+import { pick } from op_body_lib
+
+func main() => int sync {
+    println(pick(1.5))
+    return 0
+}

@@ -195,6 +195,11 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
     std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
     for (const auto &imported : exports_->importedOperatorOverloads(*module_, group)) {
         const auto &ent = imported.overloads;
+        const std::string moduleName = imported.mod != nullptr ? imported.mod->name() : std::string();
+        // One entity may carry the whole set -- the rules of the name's operator group and the
+        // functions of the name a module also declares with a body -- so each form it carries is
+        // a candidate, not only the first one. A module that declares the name both ways used to
+        // arrive as one of the two, and the other was not a candidate at all.
         if (ent.isOperGroup()) {
             if (const auto &ops = ent.operGroup()) {
                 for (const auto &overload : ops->resolvers()) {
@@ -206,19 +211,30 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
                     }
                 }
             }
-        } else if (camel::core::module::detail::EntityAccess::isGraphSet(ent)) {
+        }
+        if (camel::core::module::detail::EntityAccess::isGraphSet(ent)) {
             for (const auto &graph :
                  *asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(ent))) {
                 if (std::ranges::find(set.graphs, graph) == set.graphs.end()) {
                     set.graphs.push_back(graph);
-                    set.moduleOf[graph.get()] = imported.mod->name();
+                }
+                // The merge that brings the ambient layer first does not know which module a
+                // function came from; the module that exported it does, and its name is what a
+                // diagnostic writes beside the overload.
+                std::string &origin = set.moduleOf[graph.get()];
+                if (origin.empty()) {
+                    origin = moduleName;
                 }
             }
-        } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(ent)) {
+        }
+        if (camel::core::module::detail::EntityAccess::isGenericTemplate(ent)) {
             for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(ent)) {
                 if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
                     set.templates.push_back(tmpl);
-                    set.moduleOf[tmpl.get()] = imported.mod->name();
+                }
+                std::string &origin = set.moduleOf[tmpl.get()];
+                if (origin.empty()) {
+                    origin = moduleName;
                 }
             }
         }

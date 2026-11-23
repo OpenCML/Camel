@@ -43,8 +43,18 @@ class Entity {
     /// parentheses, and a constant of the graph where it is used (design principles 10.1).
     /// Its type is the type of the data.
     explicit Entity(camel::core::data::data_ptr_t value) : storage_(std::move(value)) {}
-    bool isOperGroup() const { return std::holds_alternative<oper_group_ptr_t>(storage_); }
-    const oper_group_ptr_t &operGroup() const { return std::get<oper_group_ptr_t>(storage_); }
+    bool isOperGroup() const {
+        if (const auto *set = std::get_if<overload_set_payload_t>(&storage_)) {
+            return set->ops != nullptr;
+        }
+        return std::holds_alternative<oper_group_ptr_t>(storage_);
+    }
+    const oper_group_ptr_t &operGroup() const {
+        if (const auto *set = std::get_if<overload_set_payload_t>(&storage_)) {
+            return set->ops;
+        }
+        return std::get<oper_group_ptr_t>(storage_);
+    }
     bool isValue() const { return std::holds_alternative<camel::core::data::data_ptr_t>(storage_); }
     const camel::core::data::data_ptr_t &value() const {
         return std::get<camel::core::data::data_ptr_t>(storage_);
@@ -83,9 +93,26 @@ class Entity {
         graph_payload_t decorated;
         graph_set_ptr_t overloads;
     };
+    /// One name, one overload set: the whole of what a module exports under a name it declares
+    /// both as a body-less operator declaration and with a body (design principles 6.4). The
+    /// rules of the operator group and the functions of the name are the candidates of one call,
+    /// so an importing module receives them together -- `isOperGroup` and the function forms each
+    /// answer true of this entity and each accessor gives its half, exactly as
+    /// `decorated_overloads_payload_t` above carries a decorated function with its overloads.
+    /// `ops` is null for a name that is several function forms at once and no operator.
+    struct overload_set_payload_t {
+        oper_group_ptr_t ops;
+        /// The functions of the name, in declaration order; null when it declares none plain.
+        graph_set_ptr_t graphs;
+        /// The decorated function of the name; null when none of its declarations is decorated.
+        graph_payload_t decorated;
+        /// The generic functions of the name (a `generic_payload_t`'s list); null when none.
+        std::shared_ptr<void> tmpls;
+    };
     using storage_t = std::variant<
         node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t,
-        camel::core::data::data_ptr_t, tag_payload_t, decorated_overloads_payload_t>;
+        camel::core::data::data_ptr_t, tag_payload_t, decorated_overloads_payload_t,
+        overload_set_payload_t>;
 
     explicit Entity(node_payload_t node) : storage_(node) {}
     explicit Entity(tag_payload_t tag) : storage_(tag) {}
@@ -93,6 +120,7 @@ class Entity {
     explicit Entity(graph_payload_t graph) : storage_(std::move(graph)) {}
     explicit Entity(generic_payload_t generic) : storage_(std::move(generic)) {}
     explicit Entity(decorated_overloads_payload_t overloads) : storage_(std::move(overloads)) {}
+    explicit Entity(overload_set_payload_t set) : storage_(std::move(set)) {}
 
     storage_t storage_;
 };

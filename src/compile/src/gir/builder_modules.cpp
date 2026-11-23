@@ -506,7 +506,7 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         }
         if (claimed) {
             // Nothing is exported: the name is the built-in operator's own.
-            unit_->passDeclarations.insert(name);
+            unit_->operatorOnlyNames.insert(name);
             return;
         }
     }
@@ -783,7 +783,7 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
                 entity->operGroup()->addRule(ruleUri, std::move(rule));
             }
             // The name is the built-in group's own: the module exports nothing under it.
-            unit_->passDeclarations.insert(group.name);
+            unit_->operatorOnlyNames.insert(group.name);
             group.rules.clear();
             continue;
         }
@@ -1355,6 +1355,15 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
             // resolves the kernel by module and name. It is not an entity the module exports.
             continue;
         }
+        if (unit_->operatorOnlyNames.contains(name) && !graphsAt(name).has_value() &&
+            !templateScope_->get(name).has_value()) {
+            // A name whose rules are the built-in operator's own, and nothing else of the module's
+            // (the prelude's `#op` declarations): the module exports no entity under it. A name it
+            // also declares with a body is one overload set (design principles 6.4), so the
+            // functions of the name are exported below like any other name's -- skipping them here
+            // exported the built-in group alone and the functions were lost on import.
+            continue;
+        }
         if (isDecorated(name) != decorated) {
             continue;
         }
@@ -1407,8 +1416,14 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         }
         if (module_->getNativeEntity(ref).has_value()) {
             // A body-less declaration: its operator group is the module's own entity, exported
-            // when the declarations of the module were read (step 1).
-            continue;
+            // when the declarations of the module were read (step 1). A name that is also
+            // declared with a body is one overload set (design principles 6.4), so it does not
+            // stop here: the functions of the name are exported below, into the same name, and
+            // ProgramExports::exportedEntity answers an importer with the whole set. Stopping
+            // here exported the group alone, and the functions of the name were lost on import.
+            if (!graphsAt(name).has_value() && !templateScope_->get(name).has_value()) {
+                continue;
+            }
         }
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {
             TopLevelDeclaration &declaration = *value->second;

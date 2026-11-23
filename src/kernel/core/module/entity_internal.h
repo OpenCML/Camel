@@ -31,6 +31,20 @@ class EntityAccess {
         return Entity(Entity::decorated_overloads_payload_t{
             std::move(decorated), std::move(overloads)});
     }
+    /// One name's whole overload set: the rules of its operator group and the functions of the
+    /// name it also declares with a body (design principles 6.4). The three function forms are
+    /// optional and may be null; `ops` is not. Exported and imported as one entity for the same
+    /// reason as `makeDecoratedOverloads` above.
+    static Entity makeOverloadSet(
+        oper_group_ptr_t ops, graph_set_ptr_t graphs, graph_handle_t decorated,
+        std::shared_ptr<void> tmpls) {
+        return Entity(Entity::overload_set_payload_t{
+            std::move(ops), std::move(graphs), std::move(decorated), std::move(tmpls)});
+    }
+    /// The payload of an overload set, or null when this entity is one form only.
+    static const Entity::overload_set_payload_t *overloadSetOf(const Entity &entity) {
+        return std::get_if<Entity::overload_set_payload_t>(&entity.storage_);
+    }
     /// A tag declared by the module (design principles 6.2): its id, later resolved through
     /// camel/core/tags.h.
     static Entity makeTag(uint32_t tag) { return Entity(tag); }
@@ -49,10 +63,16 @@ class EntityAccess {
             Entity::generic_payload_t{std::make_shared<generic_template_list_t>(tmpls)});
     }
     static bool isGenericTemplate(const Entity &entity) {
+        if (const auto *set = overloadSetOf(entity)) {
+            return set->tmpls != nullptr;
+        }
         return std::holds_alternative<Entity::generic_payload_t>(entity.storage_);
     }
     /// The templates the entity carries, in declaration order.
     static const generic_template_list_t &genericTemplates(const Entity &entity) {
+        if (const auto *set = overloadSetOf(entity)) {
+            return *std::static_pointer_cast<generic_template_list_t>(set->tmpls);
+        }
         return *std::static_pointer_cast<generic_template_list_t>(
             std::get<Entity::generic_payload_t>(entity.storage_).tmpls);
     }
@@ -68,10 +88,16 @@ class EntityAccess {
         return std::holds_alternative<node_handle_t>(entity.storage_);
     }
     static bool isGraphSet(const Entity &entity) {
+        if (const auto *set = overloadSetOf(entity)) {
+            return set->graphs != nullptr;
+        }
         return std::holds_alternative<graph_set_ptr_t>(entity.storage_) ||
                std::holds_alternative<Entity::decorated_overloads_payload_t>(entity.storage_);
     }
     static bool isDecoratedGraph(const Entity &entity) {
+        if (const auto *set = overloadSetOf(entity)) {
+            return set->decorated != nullptr;
+        }
         return std::holds_alternative<graph_handle_t>(entity.storage_) ||
                std::holds_alternative<Entity::decorated_overloads_payload_t>(entity.storage_);
     }
@@ -79,12 +105,18 @@ class EntityAccess {
         return std::get<node_handle_t>(entity.storage_);
     }
     static const graph_set_ptr_t &graphSet(const Entity &entity) {
+        if (const auto *set = overloadSetOf(entity)) {
+            return set->graphs;
+        }
         if (const auto *pair = std::get_if<Entity::decorated_overloads_payload_t>(&entity.storage_)) {
             return pair->overloads;
         }
         return std::get<graph_set_ptr_t>(entity.storage_);
     }
     static const graph_handle_t &decoratedGraph(const Entity &entity) {
+        if (const auto *set = overloadSetOf(entity)) {
+            return set->decorated;
+        }
         if (const auto *pair = std::get_if<Entity::decorated_overloads_payload_t>(&entity.storage_)) {
             return pair->decorated;
         }

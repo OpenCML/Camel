@@ -1,0 +1,12 @@
+/**
+ * Helper module: one name declared both as a body-less `#op` declaration and with a body. The two
+ * declarations are one overload set (design principles 6.4), so what this module exports under the
+ * name is the whole set, not the first form it happened to declare.
+ */
+
+#op(':op/idx_arr')
+export func pick::<T>(xs: T[], i: int) => T
+
+export func pick(s: string) => string {
+    return 'body ' + s
+}
