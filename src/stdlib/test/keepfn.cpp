@@ -25,7 +25,7 @@ const camel::runtime::Program *
 KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
     GCGraph *largest = nullptr;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (largest == nullptr || graph->nodeCount() > largest->nodeCount()) {
             largest = graph;
         }
@@ -40,7 +40,7 @@ KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     blankNode(first.edit(largest));
     const Program *middle = first.commit();
     context_->settleRuntimeGraphs(middle);
-    GCGraph *edited = middle->graph(largest->id());
+    auto *edited    = middle->graph(largest->id());
 
     auto &heap = camel::core::mm::autoSpace();
     auto *emptyClosure =
@@ -55,7 +55,7 @@ KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     context_->collectRuntimeGraphs();
 
     const auto *kept = held.getAs<::Function>();
-    const GCGraph *graph = kept->graph();
+    const auto *graph    = kept->graph();
     const bool alive = camel::core::mm::graphSpace().isAllocated(
                            const_cast<Program *>(kept->program())) &&
                        graph != nullptr && kept->program()->contains(graph);

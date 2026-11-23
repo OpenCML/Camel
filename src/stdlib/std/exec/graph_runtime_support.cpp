@@ -44,7 +44,7 @@ void RunPrograms::begin(
     camel::core::context::Context &context, const camel::runtime::Program *main) {
     end();
     if (main != nullptr) {
-        for (const camel::runtime::GCGraph *graph : main->graphs()) {
+        for (const auto *graph : main->graphs()) {
             if (!graph->executable()) {
                 throw std::logic_error(
                     "Graph '" + graph->name() +

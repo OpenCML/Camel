@@ -351,7 +351,7 @@ UndoSelfCheckTestPass::apply(const camel::runtime::Program *program, std::ostrea
     // The target: the case's own function, whose body holds a port, an operator and a result, so
     // every class has something to write.
     GCGraph *target = nullptr;
-    for (GCGraph *candidate : program->graphs()) {
+    for (auto *candidate : program->graphs()) {
         if (candidate != nullptr && candidate->name() == "integer_chain") {
             target = candidate;
             break;

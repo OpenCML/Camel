@@ -119,7 +119,7 @@ slot_t rematKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (function == nullptr || function->graph() == nullptr) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: remat needs a function value");
     }
-    const rt::GCGraph *source = function->graph();
+    const auto *source        = function->graph();
     if (source->recomputesOnBackward()) {
         // Marking a graph twice is marking it once: the value it already is answers the call.
         return toSlot<::Function *>(function);
@@ -166,7 +166,7 @@ slot_t rematKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         draft.setFlags(static_cast<uint8_t>(source->flags() | rt::kGraphFlagRecomputeBackward));
     }
     group.encode();
-    const rt::GCGraph *marked = group.encoded(made);
+    const auto *marked        = group.encoded(made);
     if (marked == nullptr) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,

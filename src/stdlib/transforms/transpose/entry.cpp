@@ -54,7 +54,7 @@ TransposeGraph buildTransposeGraph(
         return TransposeGraph{state.refusal};
     }
     group.encode();
-    const camel::runtime::GCGraph *made = group.encoded(member);
+    const auto *made                    = group.encoded(member);
     // The graph must take exactly what the operator's own type says it takes. `transpose(f)` is
     // resolved by `transposeOperatorSignature`, which reads `f`'s type and no body, so the call
     // site is told `(ct) => (cotangents)` -- one port, the cotangent. A member that needs a value

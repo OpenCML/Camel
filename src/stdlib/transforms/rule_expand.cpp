@@ -478,7 +478,7 @@ struct RuleRightSide {
 bool findRuleRightSide(
     const camel::compile::gir::GenericRuleInstance &instance, RuleRightSide &found,
     std::string &why) {
-    const rt::GCGraph *rhs = instance.rhs;
+    const auto *rhs        = instance.rhs;
     // The exit node is the graph's value-producing node; a gate may stand in front of it when the
     // value is carried out of a block.
     // The walk is camel::runtime::valueBehindGates (camel/runtime/graph.h): a gate's first input
@@ -722,7 +722,7 @@ gc_node_ref_t expandRuleRightSide(
     // callee through this program's table: the graphs the rule was instantiated into belong to the
     // program this lift builds on, the way a callee the lifted function calls does.
     group.adopt(*instance.program);
-    const rt::GCGraph *body = right.body;
+    const auto *body        = right.body;
     // Which node of the body is *this* answer. A rule's left side names N values, and its right
     // side answers N cotangents: a tuple, in the order the left side writes them. Position `i` is
     // that tuple's i-th component, and only the nodes that component needs are copied -- so a

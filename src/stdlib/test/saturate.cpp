@@ -191,7 +191,7 @@ void printOperatorCounts(
     std::ostream &os) {
     for (const auto &[name, id] : done) {
         size_t adds = 0, muls = 0, waits = 0;
-        const GCGraph *graph = next->graph(id);
+        const auto *graph    = next->graph(id);
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             if (graph->node(ref)->kind != GCNodeKind::Oper) {
                 continue;
@@ -223,7 +223,7 @@ const Program *saturateProgram(
     const std::vector<Rule> rules = corpusRules();
     RuntimeGraphDraftSession session(ctx, program);
     std::vector<std::pair<std::string, GraphId>> done;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!targets.contains(graph->name())) {
             continue;
         }
@@ -280,7 +280,7 @@ const Program *saturateProgramChecked(
     std::vector<std::pair<SaturateStats, SaturateStats>> probe;
     {
         RuntimeGraphDraftSession session(ctx, program);
-        for (GCGraph *graph : program->graphs()) {
+        for (auto *graph : program->graphs()) {
             if (!kCorpusTargets.contains(graph->name())) {
                 continue;
             }
@@ -299,7 +299,7 @@ const Program *saturateProgramChecked(
     std::vector<std::pair<std::string, GraphId>> done;
     size_t saturated = 0, fixpoint = 0, stable = 0;
     size_t run = 0;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!kCorpusTargets.contains(graph->name())) {
             continue;
         }

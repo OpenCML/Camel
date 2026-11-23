@@ -125,7 +125,7 @@ void printRuleUris(
             // FunctionClosure kind. Its signature says what the replacement still has to supply.
             std::string closure;
             {
-                const camel::runtime::GCGraph *graph = instance.rhs;
+                const auto *graph                    = instance.rhs;
                 for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
                     const camel::runtime::GCNode *node = graph->node(ref);
                     if (node == nullptr) {
@@ -213,7 +213,7 @@ class ReinterpPass : public RuntimeGraphRewritePass {
         // simply not visited.
         for (size_t i = 0; i <= program->tableSize(); ++i) {
             const camel::runtime::GraphId id = static_cast<camel::runtime::GraphId>(i);
-            camel::runtime::GCGraph *function  = program->graph(id);
+            auto *function                     = program->graph(id);
             if (function == nullptr) {
                 continue;
             }
@@ -246,7 +246,7 @@ class ReinterpPass : public RuntimeGraphRewritePass {
                 draft.setReturnNode(port, camel::runtime::GCReturnKind::Self);
             }
             group.encode();
-            const camel::runtime::GCGraph *encoded = group.encoded(made);
+            const auto *encoded                    = group.encoded(made);
             os << "REINTERP target=" << function->name() << " primitives=" << primitives
                << " other=" << other << " graph=" << camel::runtime::toValue(made)
                << " nodes=" << (encoded != nullptr ? encoded->nodeCount() : 0) << '\n';
