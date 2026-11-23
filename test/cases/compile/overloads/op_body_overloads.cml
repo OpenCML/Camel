@@ -1,0 +1,18 @@
+/**
+ * A `#op` declaration and a declaration with a body of one name are one overload set, not one
+ * hiding the other: a call whose arguments take the declaration reaches the operator, and a
+ * call whose arguments take the body reaches the body.
+ */
+
+#op(':op/idx_arr')
+export func pick::<T>(xs: T[], i: int) => T
+
+export func pick(s: string) => string {
+    return 'body ' + s
+}
+
+func main() => int sync {
+    println(pick([10, 20, 30], 1))
+    println(pick('text'))
+    return 0
+}

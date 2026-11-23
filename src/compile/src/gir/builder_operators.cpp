@@ -136,6 +136,54 @@ Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group
     return set;
 }
 
+std::optional<Builder::OperatorOverloads> Builder::mergedOverloadsNamed(const std::string &name) {
+    // A name a body-less declaration and a declaration with a body both write is one overload
+    // set, at the one layer both are reachable from. `operatorOverloadsOf` already gathers the
+    // rules of the name's operator group and the functions of the name this module and its
+    // imports declare (design principles 10.2), so the set is what that returns. What it does
+    // not ask is whether the name has a body at all, and a name with no body keeps the
+    // resolution it had: this answers nullopt for it, and the lookup goes on as before.
+    const ModuleUnit *unit = currentModuleUnit();
+    // A name has a body at the module's top level when one of its declaration tables holds it
+    // (`graphScope` for a function with a body, `templateScope` for a generic one).
+    const bool declaredHere = unit != nullptr && declaredAtTopLevel(*unit, name);
+    const bool importedHere = module_ != nullptr && importedEntity(Reference(name)).has_value();
+    if (!declaredHere && !importedHere) {
+        return std::nullopt;
+    }
+    OperatorOverloads set = operatorOverloadsOf(name);
+    // A generic declaration with a body is a template, not a graph, and `operatorOverloadsOf`
+    // collects templates only for the names a program can overload (`__add__`). A name whose
+    // body is generic is one of these: the templates visible here are the functions of the
+    // name too, and a call chooses among them and the rules alike.
+    std::vector<generic_template_ptr_t> templates;
+    for (template_scope_ptr_t scope = templateScope_; scope; scope = scope->outer()) {
+        const auto found = scope->get(name, false);
+        if (!found.has_value()) {
+            continue;
+        }
+        if (GenericGroup *group = genericGroupOf(found.value()); group != nullptr) {
+            for (const auto &tmpl : *group) {
+                if (std::ranges::find(templates, tmpl) == templates.end()) {
+                    templates.push_back(tmpl);
+                }
+            }
+        }
+    }
+    for (const auto &tmpl : templates) {
+        if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+            set.templates.push_back(tmpl);
+        }
+    }
+    if (set.ops == nullptr || set.ops->resolvers().empty() ||
+        (set.graphs.empty() && set.templates.empty())) {
+        // No operator group of the name to merge with, or no body of the name to merge into it:
+        // the name keeps the resolution it had.
+        return std::nullopt;
+    }
+    return set;
+}
+
 const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std::string &group) {
     const auto key = std::make_pair(static_cast<const void *>(module_.get()), group);
     if (auto it = importedOperators_.find(key); it != importedOperators_.end()) {
@@ -432,10 +480,10 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     const OperatorOverloads &set, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call, const std::function<bool(FunctionType *, bool)> &accepts) {
-    if (!withTypes.empty()) {
-        return nullptr; // an operator is never given with-arguments; the group reports it
-    }
-    const char *symbol = operatorSymbolOf(set.ops->name());
+    // The name the reports use: `operator +` for a symbol, the name itself for a name a call
+    // reaches without a symbol (`map` is an operator group the prelude declares, and a call of
+    // it is written like any other call).
+    const std::string display = camel::core::displayNameOf(set.ops->name());
     std::vector<StaticArg> statics;
     for (const Argument &input : normInputs) {
         statics.push_back(staticArgOf(input.node));
@@ -514,16 +562,16 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
             for (const auto &graph : graphs) {
                 overloads.push_back(
                     std::format(
-                        "operator {}: {}{}",
-                        symbol,
+                        "{}: {}{}",
+                        display,
                         graph->funcType()->toString(),
                         where(graph.get())));
             }
             for (const auto &tmpl : templates) {
                 overloads.push_back(
                     std::format(
-                        "operator {}: {}{}",
-                        symbol,
+                        "{}: {}{}",
+                        display,
                         tmpl->funcType->toString(),
                         where(tmpl.get())));
             }
@@ -540,7 +588,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
             }
             // At the operator: the origin of a binary call is its right operand.
             rejectAmbiguousCall(
-                symbol,
+                display,
                 strutil::join(normTypes, ", ", [](Type *t) { return t->toString(); }),
                 overloads,
                 call->at(0));
