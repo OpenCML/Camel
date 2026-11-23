@@ -338,7 +338,7 @@ void FactStore::checkType(KindId kind, const std::type_info &type) {
 
 Stamp FactStore::stampNow(const KindInfo &kind, std::span<const Anchor> anchors, uint64_t targetHash) {
     Stamp stamp;
-    for (const GCGraph *graph : graphsOf(anchors)) {
+    for (const auto *graph : graphsOf(anchors)) {
         stamp.graphs.emplace_back(graph->id(), closureRevisionOf(anchors, graph));
     }
     if (kind.dependency == Dependency::Node) {
@@ -595,7 +595,7 @@ void computeFacts(FactStore &store, const Program &program) {
         if (!info.compute || info.cls == FactClass::GraphContent) {
             continue;
         }
-        for (const GCGraph *graph : graphs) {
+        for (const auto *graph : graphs) {
             for (const std::vector<Anchor> &anchors : anchorsOf(info, program, *graph)) {
                 (void)store.obtainValue(kind, anchors);
             }
@@ -611,7 +611,7 @@ void dumpFacts(
     };
     const std::vector<GCGraph *> graphs = collectReachableGraphs(program);
     std::unordered_map<GraphId, const GCGraph *> byId;
-    for (const GCGraph *graph : graphs) {
+    for (const auto *graph : graphs) {
         byId.emplace(graph->id(), graph);
     }
 
@@ -650,7 +650,7 @@ void dumpFacts(
         if (info.cls != FactClass::GraphContent) {
             continue;
         }
-        for (const GCGraph *graph : graphs) {
+        for (const auto *graph : graphs) {
             for (const std::vector<Anchor> &anchors : anchorsOf(info, program, *graph)) {
                 if (Value value = info.compute(anchors)) {
                     os << "FACT " << factJson(info, anchors, value.get(), nullptr) << "\n";

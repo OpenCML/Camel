@@ -372,7 +372,7 @@ class CmlPrinter {
           bigConstants_(bigConstants) {}
 
     void run() {
-        GCGraph *root = program_.root();
+        auto *root = program_.root();
         if (root == nullptr) {
             return;
         }
@@ -390,7 +390,7 @@ class CmlPrinter {
         checkNamedTypeNames();
         orderNamedTypes();
         collectMatchPatterns();
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             validateGraph(graph, graph == root);
         }
         scanBigConstants();
@@ -411,7 +411,7 @@ class CmlPrinter {
         }
 
         std::vector<GCGraph *> functions;
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             if (graph != root && !lambdaGraphs_.contains(graph)) {
                 functions.push_back(graph);
             }
@@ -429,7 +429,7 @@ class CmlPrinter {
                 }
                 return false;
             });
-        for (GCGraph *graph : functions) {
+        for (auto *graph : functions) {
             printFunction(graph);
         }
 
@@ -594,7 +594,7 @@ class CmlPrinter {
         }
         // The names the file will declare: `func <name>`, in the spelling `printFunction` writes
         // (the part after the last `::`).
-        for (const GCGraph *graph : graphs_) {
+        for (const auto *graph : graphs_) {
             const std::string name = printedNameOf(graph);
             if (name.empty()) {
                 continue;
@@ -615,7 +615,7 @@ class CmlPrinter {
     /// are printed from the callee's graph, see `expression` of a function constant).
     void assignFunctionNames() {
         std::unordered_set<std::string> taken;
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             if (lambdaGraphs_.contains(graph) || graph == program_.root()) {
                 continue;
             }
@@ -687,7 +687,7 @@ class CmlPrinter {
             return;
         }
         entrySkip_.insert(ref);
-        GCGraph *callee = program_.calleeOf(*root, ref);
+        auto *callee = program_.calleeOf(*root, ref);
         if (callee == nullptr) {
             return;
         }
@@ -723,12 +723,12 @@ class CmlPrinter {
     }
 
     void classifyLambdas() {
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             if (isLambdaName(graph->name())) {
                 lambdaGraphs_.insert(graph);
             }
         }
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
                 const camel::runtime::GCNode *node = *it;
                 if (node->kind == camel::runtime::GCNodeKind::Data) {
@@ -1225,7 +1225,7 @@ class CmlPrinter {
         bool changed = true;
         while (changed) {
             changed = false;
-            for (GCGraph *candidate : graphs_) {
+            for (auto *candidate : graphs_) {
                 if (effectful_[candidate]) {
                     continue;
                 }
@@ -1257,7 +1257,7 @@ class CmlPrinter {
                         } else if (
                             node->kind == camel::runtime::GCNodeKind::Func ||
                             node->kind == camel::runtime::GCNodeKind::Call) {
-                            GCGraph *callee = program_.calleeOf(*candidate, ref);
+                            auto *callee = program_.calleeOf(*candidate, ref);
                             // A call through a function value has no graph the printer can read,
                             // so nothing here can call it pure: it counts as an effect, because
                             // dropping it is a false print (A7's
@@ -1361,7 +1361,7 @@ class CmlPrinter {
         }
         case camel::runtime::GCNodeKind::Func:
         case camel::runtime::GCNodeKind::Call: {
-            GCGraph *callee = program_.calleeOf(*graph_, ref);
+            auto *callee = program_.calleeOf(*graph_, ref);
             // A call through a function value: no graph to read, so it is an effect (see
             // `isEffectful` for why -- printing it away loses the write it makes).
             return callee == nullptr || isEffectful(callee);
@@ -1719,7 +1719,7 @@ class CmlPrinter {
     /// `let cml1: f32[...][2] = [[], []]` for the skeleton of `[one, two]`, and no spelling of an
     /// open-rank element is `[]` (`DimensionMismatch` at that position).
     void collectConstructionTemplates() {
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
                 const camel::runtime::GCNode *node = *it;
                 if (node->kind != camel::runtime::GCNodeKind::Fill) {
@@ -1814,7 +1814,7 @@ class CmlPrinter {
     /// `int[]` outside that module (design principles 5.1). So a module operator written with a
     /// sign imports the module, and one written as a call imports only the name.
     void collectImports() {
-        for (const GCGraph *graph : graphs_) {
+        for (const auto *graph : graphs_) {
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
                 if ((*it)->kind != camel::runtime::GCNodeKind::Oper) {
                     continue;
@@ -2021,7 +2021,7 @@ class CmlPrinter {
     }
 
     void collectNamedTypes() {
-        for (const GCGraph *graph : graphs_) {
+        for (const auto *graph : graphs_) {
             const FunctionType *type = graph->funcType();
             if (type != nullptr) {
                 for (size_t i = 0; i < type->withTypesCount(); ++i) {
@@ -2043,7 +2043,7 @@ class CmlPrinter {
     /// The constants the arms of a `match` test, collected before anything is printed: no `let` may
     /// be written for one of them, because the pattern position has to be the literal itself.
     void collectMatchPatterns() {
-        for (const GCGraph *graph : graphs_) {
+        for (const auto *graph : graphs_) {
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
                 if ((*it)->kind != camel::runtime::GCNodeKind::Brch) {
                     continue;
@@ -4319,7 +4319,7 @@ class CmlPrinter {
     /// one over the limit is refused as a whole and every oversized constant is listed, not just
     /// the first the printer would meet.
     void scanBigConstants() {
-        for (GCGraph *graph : graphs_) {
+        for (auto *graph : graphs_) {
             for (const gc_node_ref_t ref : graph->execPlan().topo) {
                 const camel::runtime::GCNode *node = graph->node(ref);
                 if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Data ||

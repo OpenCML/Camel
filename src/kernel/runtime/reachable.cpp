@@ -29,7 +29,7 @@ void forEachReachableGraph(
     worklist.push(root);
 
     while (!worklist.empty()) {
-        GCGraph *graph = worklist.front();
+        auto *graph = worklist.front();
         worklist.pop();
         if (!graph || !visited.insert(graph).second) {
             continue;
@@ -48,7 +48,7 @@ uint64_t closureRevision(const Program &program, GCGraph *root) {
     uint64_t h = 0xcbf29ce484222325ULL;
     const auto mix = [&h](uint64_t v) { h = (h ^ v) * 0x100000001b3ULL; };
     mix(toValue(root->id()));
-    for (const GCGraph *graph : graphs) {
+    for (const auto *graph : graphs) {
         mix(toValue(graph->id()));
         mix(graph->revision());
     }

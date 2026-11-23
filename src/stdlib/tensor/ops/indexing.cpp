@@ -396,22 +396,29 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     // the end also the position one past the last (the end is one past the last taken). A
     // backward start must be a position the axis has.
     const ExprId startUpper = backwards ? b.x().sub(nP, b.x().constant(1)) : nP;
+    // The lower end of that interval: a position of the axis, except at the end of a backward walk,
+    // where the walk stops on the position before the first element without taking it. A bound is
+    // the end of an integer sequence and not a position (design principles 5.4), so that -1 is
+    // legal there and nowhere else -- `t[-1..2]` starts on a position the axis does not have.
+    const ExprId endLower = backwards ? b.x().constant(-1) : zero;
 
     struct Bound {
         ExprId expr = kNoExpr;
         std::optional<int64_t> value;
     };
     // One bound: the value the program wrote, or the position the node's own reading stands for
-    // when it wrote none. `limit` is that interval's upper end where the extent fixes it.
+    // when it wrote none. `lower` and `upper` are that interval's ends; `limit` is the upper one
+    // where the extent fixes it.
     const auto bound = [&](size_t index, const char *name, bool wrote, const Bound &unwritten,
-                           const ExprId upper, const std::optional<int64_t> &limit)
+                           const ExprId lower, int64_t lowerValue, const ExprId upper,
+                           const std::optional<int64_t> &limit)
         -> std::optional<Bound> {
         if (!wrote) {
             return unwritten;
         }
         const auto raw = ctx.constInt(index);
-        if (raw && *raw < 0) {
-            return std::nullopt; // a bound is a position of the axis: a negative one is the fault
+        if (raw && *raw < lowerValue) {
+            return std::nullopt; // outside the interval: the fault the kernel raises
         }
         if (raw && limit && *raw > *limit) {
             return std::nullopt; // the fault the kernel raises (SliceOutOfRange)
@@ -420,7 +427,7 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
             return Bound{b.constant(name, index, *raw), *raw};
         }
         const ExprId param = raw ? b.constant(name, index, *raw) : b.runtime(name, index);
-        b.check(index, param, zero, upper);
+        b.check(index, param, lower, upper);
         return Bound{param, raw};
     };
     const auto start = bound(
@@ -430,6 +437,8 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
         backwards ? Bound{b.x().sub(nP, b.x().constant(1)),
                           extent ? std::optional(*extent - 1) : std::nullopt}
                   : Bound{zero, 0},
+        zero,
+        0,
         startUpper,
         extent ? std::optional(*extent - (backwards ? 1 : 0)) : std::nullopt);
     const auto end = bound(
@@ -437,6 +446,8 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
         "end",
         wroteEnd,
         backwards ? Bound{b.x().constant(-1), -1} : Bound{nP, extent},
+        endLower,
+        backwards ? -1 : 0,
         nP,
         extent ? std::optional(*extent) : std::nullopt);
     if (!start || !end) {
@@ -466,7 +477,7 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
         b.require(start->expr, Rel::Le, startUpper);
     }
     if (wroteEnd) {
-        b.require(zero, Rel::Le, end->expr);
+        b.require(endLower, Rel::Le, end->expr);
         b.require(end->expr, Rel::Le, nP);
     }
     b.require(zero, Rel::Le, lenP);

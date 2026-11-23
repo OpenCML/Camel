@@ -3401,7 +3401,7 @@ aaa0664bf53da8f6 ok test/cases/modules/rules/condition_println.cml
 f8ec43e1d9c51e1b no test/cases/modules/rules/const_param_unbound.cml
 590649d4bf9433c7 ok test/cases/modules/rules/const_type.cml
 e25761ce3a6cc4d8 ok test/cases/modules/rules/counts.cml
-c0d4322670c4f107 ok test/cases/modules/rules/differential_equivalence.cml
+4457bea0d868e420 ok test/cases/modules/rules/differential_equivalence.cml
 f75fc51262b95b0b no test/cases/modules/rules/err_requires_empty.cml
 94f71b43f298b8c4 no test/cases/modules/rules/err_requires_not_permission.cml
 0184fde9849d542b ok test/cases/modules/rules/err_requires_on_func.cml

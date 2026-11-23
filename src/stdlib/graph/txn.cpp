@@ -179,7 +179,7 @@ draftOf(TxnState &state, const Handle *node, const char *site) {
     }
     // A node of the program is in a graph the program holds; a node of the draft is in a graph the
     // session works on, which is the program's until an edit makes one of its own.
-    GCGraph *graph = made ? state.session.work().graph(node->graph())
+    auto *graph = made ? state.session.work().graph(node->graph())
                           : state.base->graph(node->graph());
     if (graph == nullptr || (!made && !graph->containsNodeRef(node->index()))) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node is not in its graph");
@@ -201,7 +201,7 @@ draftOf(TxnState &state, const Handle *node, const char *site) {
 /// Its closure is the opened function's, so the values it captured are captured still and a
 /// function that captures values commits like one that does not.
 slot_t functionOf(TxnState &state, const Program *program, const TupleType *resultType) {
-    const GCGraph *graph = program->root();
+    const auto *graph = program->root();
     if (graph == nullptr || state.function == nullptr) {
         return makeError("GraphInvalid", "the committed program has no root function", "<graph::commit>");
     }
@@ -384,7 +384,7 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     } catch (...) {
         return NullSlot; // the failure is reported when the program runs, as the C++ fold leaves it
     }
-    GCGraph *graph = state.base->graph(norm.get<Handle *>(1)->graph());
+    auto *graph = state.base->graph(norm.get<Handle *>(1)->graph());
     if (graph == nullptr) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
@@ -835,7 +835,7 @@ slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
         }
         group.push_back(handle->index());
     }
-    GCGraph *graph = state.base->graph(graphId);
+    auto *graph = state.base->graph(graphId);
     if (graph == nullptr) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
@@ -937,7 +937,7 @@ slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
             site,
             "the graph belongs to another program than the transaction");
     }
-    GCGraph *graph = state.base->graph(handle->graph());
+    auto *graph = state.base->graph(handle->graph());
     if (graph == nullptr) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }

@@ -75,7 +75,7 @@ void Program::updateRefs(
 void Program::note(GCGraph *graph) { manager_->noteGraph(graph); }
 
 void Program::noteAll() {
-    for (GCGraph *graph : byId_) {
+    for (auto *graph : byId_) {
         if (graph != nullptr) {
             manager_->noteGraph(graph);
         }
@@ -113,7 +113,7 @@ const Program *makeProgram(
         *program = *base;
     }
     program->makeSatellite();
-    for (GCGraph *graph : graphs) {
+    for (auto *graph : graphs) {
         program->bindOwn(graph->id(), graph);
     }
     if (!graphs.empty()) {
@@ -144,7 +144,7 @@ void GCGraphManager::forget(GCGraph *graph) {
 
 void Program::abandonConstruction(std::span<GCGraph *const> unconstructed) {
     if (manager_ != nullptr) {
-        for (GCGraph *graph : unconstructed) {
+        for (auto *graph : unconstructed) {
             manager_->forget(graph);
         }
     }
@@ -489,7 +489,7 @@ void GCGraphManager::sweepMarked() {
         }
     }
     std::vector<GCGraph *> deadGraphs;
-    for (GCGraph *graph : graphs_) {
+    for (auto *graph : graphs_) {
         // A graph a rewrite encoded and no program bound yet is only reachable from the session
         // that encoded it: it is freed once that pass is over (settle).
         if (unbound_.contains(graph)) {
@@ -504,7 +504,7 @@ void GCGraphManager::sweepMarked() {
 
 void GCGraphManager::freeDead(
     const std::vector<Program *> &deadPrograms, const std::vector<GCGraph *> &deadGraphs) {
-    for (GCGraph *graph : deadGraphs) {
+    for (auto *graph : deadGraphs) {
         graphs_.erase(graph);
         freeGraph(graph);
     }
@@ -520,7 +520,7 @@ void GCGraphManager::freeDead(
 GCGraphManager::~GCGraphManager() {
     std::lock_guard lock(mutex_);
     gcRoots_.clear();
-    for (GCGraph *graph : graphs_) {
+    for (auto *graph : graphs_) {
         freeGraph(graph);
     }
     graphs_.clear();

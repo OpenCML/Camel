@@ -2926,7 +2926,7 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
         if (!node || node->kind != GCNodeKind::Func) {
             continue;
         }
-        const GCGraph *callee = program.calleeOf(*graph, it.ref());
+        const auto *callee = program.calleeOf(*graph, it.ref());
         if (!callee || !callee->hasNodePayload()) {
             throw std::runtime_error(
                 std::format(
@@ -2976,7 +2976,7 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
         const auto refs = graph->refs();
         for (GraphId ref : referenced) {
             if (std::find(refs.begin(), refs.end(), ref) == refs.end()) {
-                const GCGraph *named = program.graph(ref);
+                const auto *named = program.graph(ref);
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has a function constant of graph '{}', which is not in "
@@ -3379,7 +3379,7 @@ GCStaticFunctionAnswer GCGraph::staticFunctionGraphOf(gc_node_ref_t ref) const {
     if (value == nullptr) {
         return {.reason = "no-function-value"};
     }
-    const GCGraph *callee = value->graph();
+    const auto *callee = value->graph();
     if (callee == nullptr) {
         return {.reason = "function-names-no-graph"};
     }

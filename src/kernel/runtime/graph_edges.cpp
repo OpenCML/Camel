@@ -873,7 +873,7 @@ class EdgeChecker {
     void checkCall(
         gc_node_ref_t ref, const GCNode &node, std::span<const gc_node_ref_t> norm,
         std::span<const gc_node_ref_t> with) {
-        const GCGraph *callee = program_.calleeOf(graph_, ref);
+        const auto *callee = program_.calleeOf(graph_, ref);
         if (!callee) {
             return;
         }

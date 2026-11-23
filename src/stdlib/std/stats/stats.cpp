@@ -104,7 +104,7 @@ GraphStats collectGraphStats(const camel::runtime::Program &program, GCGraph *ro
     if (!root) {
         return stats;
     }
-    for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, root)) {
+    for (auto *graph : camel::runtime::collectReachableGraphs(program, root)) {
         ++stats.graphs;
         // The graph the walk already holds, and its own derived answer: `isMacro` is a fact of the
         // GCGraph (camel/runtime/graph.h#GCGraph::isMacro), not of a view or of a flag kept beside

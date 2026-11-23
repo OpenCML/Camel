@@ -310,19 +310,21 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
-// The positions a slice takes along the one axis it names. The bounds follow the rules of the
-// slice function (design principles 3.9 and 5.4): a position from 0 to the extent, the end one
-// past the last element taken, a negative bound a fault rather than a count from the end (`last(t)`
-// names the last element, 5.4: "不支持负数下标（负数是故障），最后一个元素用 last(t)"), and an end
-// before the start the empty range. A negative step runs backwards: the start defaults to the last
-// position and the end, left out, stands for the position before the first. Any non-zero step is
-// accepted; the constant 0 is refused where it is written (the static check in
-// `src/builtin/modules/globals.cpp`) and is a fault when only the run knows it.
+// The positions a slice takes along the one axis it names. The ends follow the rules of the slice
+// function (design principles 3.9 and 5.4): the first and the last position the walk takes must be
+// on the axis, and the ends are the bounds of an integer sequence rather than positions --
+// `range(3, -1, -1)` is 3, 2, 1, 0, so a -1, written or left out, is the position before the first
+// element and the walk never takes it (`last(t)` names the last element). A negative step runs
+// backwards: the start defaults to the last position and the end, left out, to that position
+// before the first. Any non-zero step is accepted; the constant 0 is refused where it is written
+// (the static check in `src/stdlib/std/builtin/modules/globals.cpp`) and is a fault when only the
+// run knows it. A bound past the axis is still a fault, so an empty range names a place the axis
+// has.
 //
 // The step and which of the start and the end the program wrote come with the call as a two-bit
 // mask (bit 0 end, bit 1 start), which is exactly the lowering the subscript writes
-// (`src/compile/gct/builder.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`). The
-// two spellings of a slice -- the subscript `t[a:b]` and the call `slice(t, axis, a, b, s)` -- are
+// (`src/compile/src/gct/builder_expr.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`). The
+// two spellings of a slice -- the subscript `t[a..b]` and the call `slice(t, axis, a, b, s)` -- are
 // one node with one parameter table, and the function form fills the mask "both written" (3),
 // which is the value that same lowering gives a subscript that writes both bounds.
 //
@@ -343,23 +345,23 @@ SliceRange sliceRange(
         throwRuntimeFault(RuntimeDiag::InvalidArgument, "[]", "a slice step must not be 0");
     }
     SliceRange range;
-    range.step = step;
-    if (step > 0) {
-        range.start     = wroteStart ? startRaw : 0;
-        const Int64 end = wroteEnd ? endRaw : extent;
-        if (range.start < 0 || range.start > extent || end < 0 || end > extent) {
-            throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
-        }
-        range.count = range.start < end ? (end - range.start + step - 1) / step : 0;
-        return range;
-    }
-    range.start     = wroteStart ? startRaw : extent - 1;
-    const Int64 end = wroteEnd ? endRaw : -1;
-    if ((wroteStart && (range.start < 0 || range.start >= extent)) ||
-        (wroteEnd && (end < 0 || end > extent))) {
+    range.step  = step;
+    range.start = wroteStart ? startRaw : (step > 0 ? 0 : extent - 1);
+    const Int64 end = wroteEnd ? endRaw : (step > 0 ? extent : -1);
+    range.count     = step > 0 ? (range.start < end ? (end - range.start + step - 1) / step : 0)
+                               : (range.start > end ? (range.start - end - step - 1) / (-step) : 0);
+    const auto outOfRange = [&]() {
         throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
+    };
+    if (range.start > extent || end > extent) {
+        outOfRange();
     }
-    range.count = range.start > end ? (range.start - end + (-step) - 1) / (-step) : 0;
+    if (range.count > 0) {
+        const Int64 last = range.start + (range.count - 1) * step;
+        if (range.start < 0 || last < 0 || last >= extent) {
+            outOfRange();
+        }
+    }
     return range;
 }
 

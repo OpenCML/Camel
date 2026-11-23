@@ -143,7 +143,7 @@ placeOf(const GCGraph &graph, gc_node_ref_t ref, const camel::source::SourceCont
 void dumpStorageReuse(
     const Program &program, std::ostream &os, const camel::source::SourceContext *sources) {
     const auto &table = camel::core::OperatorTable::instance();
-    for (GCGraph *graph : program.graphs()) {
+    for (auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }

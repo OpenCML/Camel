@@ -1302,11 +1302,11 @@ GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializatio
     if (!work_->specializations().find(programKey, specializedId)) {
         return nullptr;
     }
-    GCGraph *specialized = work_->graph(specializedId);
+    auto *specialized = work_->graph(specializedId);
     if (specialized == nullptr) {
         return nullptr; // the program no longer holds that graph: make the specialization again
     }
-    GCGraph *base = work_->graph(programKey.baseGraph);
+    auto *base = work_->graph(programKey.baseGraph);
     if (base == nullptr || base != key.baseGraph || base->revision() != programKey.baseRevision) {
         return nullptr; // the callee has another version now; the entry was made for that one
     }
@@ -1343,7 +1343,7 @@ size_t RuntimeGraphDraftSession::typeSpecializationCount(GraphId root) {
         // Earlier sessions (and earlier passes) leave their specializations in the program; the
         // bound is on what the program holds, so it is read from the program, not remembered.
         typeSpecializationCountsReady_ = true;
-        for (const GCGraph *graph : collectCommitClosure()) {
+        for (const auto *graph : collectCommitClosure()) {
             if (isValid(graph->typeSpecializationRoot())) {
                 ++typeSpecializationCounts_[graph->typeSpecializationRoot()];
             }
@@ -1388,7 +1388,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     // The graph an id names: in the work program, else (a function value of another program)
     // in the program the function was made in, which the session then adopts.
     const auto resolve = [&](GraphId id, const Program *home) -> GCGraph * {
-        GCGraph *found = work_->graph(id);
+        auto *found = work_->graph(id);
         if (found == nullptr && home != nullptr) {
             adoptProgram(*home);
             found = work_->graph(id);
@@ -1400,7 +1400,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     // draft is `f`, the graphs `f` reaches, and the graphs this edit made). They are seeded before
     // the walk so that what they call is reached like anything else -- a made graph stands in the
     // program it is delivered into, and its callees have to be there beside it.
-    for (const GCGraph *made : madeGraphs_) {
+    for (const auto *made : madeGraphs_) {
         reach(made->id());
     }
     for (size_t head = 0; head < queue.size(); ++head) {
@@ -1434,7 +1434,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     }
     closure.reserve(queue.size());
     for (const GraphId id : queue) {
-        GCGraph *graph = work_->graph(id);
+        auto *graph = work_->graph(id);
         closure.push_back(graph != nullptr ? graph : runtimeRoot_);
     }
 
@@ -1506,7 +1506,7 @@ std::vector<GraphId> RuntimeGraphDraftSession::conflictsWithProgram(const Progra
     for (const auto &[graph, entry] : drafts_) {
         compare(graph->id());
     }
-    for (GCGraph *graph : edited_) {
+    for (auto *graph : edited_) {
         compare(graph->id());
     }
     return differing;
@@ -1578,7 +1578,7 @@ const Program *RuntimeGraphDraftSession::commitChecked() {
     if (!differing.empty()) {
         std::string names;
         for (GraphId id : differing) {
-            const GCGraph *graph = program_->graph(id);
+            const auto *graph = program_->graph(id);
             names +=
                 (names.empty() ? "'" : ", '") + (graph ? graph->name() : std::string("?")) + "'";
         }
@@ -1611,7 +1611,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     // what makes that promise keepable -- the graph has to exist in order to be judged.
     validateDraftPorts();
 
-    GCGraph *oldRuntimeRoot = runtimeRoot_;
+    auto *oldRuntimeRoot = runtimeRoot_;
 
     // A session replaces the context's program only if it is one of that program's: opened over
     // the program the context held then (`mayPublish_`: it may have been overtaken since, and
@@ -1643,14 +1643,14 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts;
         drafts.reserve(drafts_.size());
         for (auto &[graph, entry] : drafts_) {
-            GCGraph *held = current->graph(graph->id());
+            auto *held = current->graph(graph->id());
             drafts.emplace(held != nullptr ? held : graph, std::move(entry));
         }
         drafts_ = std::move(drafts);
         std::unordered_set<GCGraph *> edited;
         edited.reserve(edited_.size());
-        for (GCGraph *graph : edited_) {
-            GCGraph *held = current->graph(graph->id());
+        for (auto *graph : edited_) {
+            auto *held = current->graph(graph->id());
             edited.insert(held != nullptr ? held : graph);
         }
         edited_ = std::move(edited);
@@ -1666,7 +1666,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         RuntimeSpecializationTable ownSpecializations = std::move(work_->specializations());
         *work_                                        = *current;
         work_->specializations().adoptMissingFrom(ownSpecializations);
-        for (GCGraph *graph : own) {
+        for (auto *graph : own) {
             if (work_->graph(graph->id()) == nullptr) {
                 work_->bind(graph->id(), graph);
             }
@@ -1679,7 +1679,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
 
     const std::vector<GCGraph *> closure = collectCommitClosure();
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
-    for (GCGraph *graph : closure) {
+    for (auto *graph : closure) {
         // Rewrites may leave gates that wait on nothing; they are plain forwarding. A graph
         // nobody has edited since a commit looked at its gates is not decoded again.
         const bool drafted = drafts_.contains(graph);
@@ -1740,7 +1740,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     if (merging) {
         *committed = *current;
     }
-    for (GCGraph *graph : closure) {
+    for (auto *graph : closure) {
         if (committed->graph(graph->id()) == nullptr) {
             committed->bind(graph->id(), graph);
         }
@@ -1755,7 +1755,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         ensureDraft(graph);
         const DraftEntry &entry = *drafts_.at(graph);
         const size_t bytes      = draftGraphBytes(context_, *entry.transaction, graph);
-        GCGraph *copy = allocateGraph(context_, entry.identity, *entry.transaction, bytes);
+        auto *copy = allocateGraph(context_, entry.identity, *entry.transaction, bytes);
         fresh.emplace(graph, copy);
         allocatedBytes.emplace(graph, bytes);
         order.push_back(graph);
@@ -1776,7 +1776,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     const auto heldBefore = [&](GCGraph *graph) { return program_->graph(graph->id()) == graph; };
 
     std::vector<GCGraph *> first;
-    for (GCGraph *graph : closure) {
+    for (auto *graph : closure) {
         // `edited_` is what the draft said: a rewrite wrote into it, or the commit's own closing of
         // it did (the loop above). A graph the draft holds as the graph it was decoded from is not
         // one of them, and keeps the version it has.
@@ -1799,7 +1799,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     // `sameContent` still answers the other question -- whether the version needs a new revision
     // (`changed`, below) -- and `verifyDraftDelivery` checks the encoding against the draft itself.
     std::vector<GCGraph *> replaced;
-    for (GCGraph *graph : first) {
+    for (auto *graph : first) {
         if (!heldBefore(graph)) {
             continue;
         }
@@ -1816,7 +1816,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // function values of the closure.
         constexpr uint32_t kNone = UINT32_MAX;
         uint32_t maxId           = 0;
-        for (GCGraph *graph : closure) {
+        for (auto *graph : closure) {
             maxId = std::max(maxId, static_cast<uint32_t>(toValue(graph->id())));
         }
         std::vector<uint32_t> indexOf(static_cast<size_t>(maxId) + 1, kNone);
@@ -1828,7 +1828,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         };
         constexpr uint8_t kRoles = kGraphRefCallee | kGraphRefStatic | kGraphRefRule;
         std::vector<uint32_t> first(closure.size() + 1, 0), callers;
-        for (GCGraph *graph : closure) {
+        for (auto *graph : closure) {
             for (size_t r = 0; r < graph->refs().size(); ++r) {
                 if (graph->refRoles(r) & kRoles) {
                     if (const uint32_t to = indexOfId(graph->refs()[r]); to != kNone) {
@@ -1843,7 +1843,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         callers.resize(first.back());
         std::vector<uint32_t> fill(first.begin(), first.end() - 1);
         for (size_t from = 0; from < closure.size(); ++from) {
-            const GCGraph *graph = closure[from];
+            const auto *graph = closure[from];
             for (size_t r = 0; r < graph->refs().size(); ++r) {
                 if (graph->refRoles(r) & kRoles) {
                     if (const uint32_t to = indexOfId(graph->refs()[r]); to != kNone) {
@@ -1854,7 +1854,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         }
         std::vector<uint8_t> reaches(closure.size(), 0);
         std::vector<uint32_t> work;
-        for (GCGraph *graph : replaced) {
+        for (auto *graph : replaced) {
             const uint32_t at = indexOfId(graph->id());
             if (at != kNone && !reaches[at]) {
                 reaches[at] = 1;
@@ -1871,7 +1871,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
                 }
             }
         }
-        for (GCGraph *holder : closure) {
+        for (auto *holder : closure) {
             if (fresh.contains(holder)) {
                 continue;
             }
@@ -1914,12 +1914,12 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         return staged_.get();
     }
 
-    for (GCGraph *graph : order) {
+    for (auto *graph : order) {
         if (auto it = fresh.find(graph); it != fresh.end()) {
             validateRuntimeGraphPayload(*committed, it->second);
         }
     }
-    for (GCGraph *graph : order) {
+    for (auto *graph : order) {
         if (auto it = fresh.find(graph); it != fresh.end()) {
             validateRuntimeGraphCalls(*committed, it->second, graphState_);
         }
@@ -1930,7 +1930,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     // is wrong from the moment it is made is exactly what a check placed on republished graphs
     // misses -- which is how the compiler's own specializations carried a shifted port list unseen
     // until a check was pointed at them.
-    for (GCGraph *graph : order) {
+    for (auto *graph : order) {
         if (auto it = fresh.find(graph); it != fresh.end()) {
             validateRuntimeGraphPortTypes(*committed, it->second, graphState_);
         }
@@ -1948,17 +1948,17 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     if (draftDeliveryCheckEnabled()) {
         std::vector<GCGraph *> delivered(first);
         std::unordered_set<GCGraph *> seen(first.begin(), first.end());
-        for (GCGraph *graph : order) {
+        for (auto *graph : order) {
             if (seen.insert(graph).second) {
                 delivered.push_back(graph);
             }
         }
-        for (GCGraph *graph : delivered) {
+        for (auto *graph : delivered) {
             const auto draft = drafts_.find(graph);
             if (draft == drafts_.end() || draft->second->transaction == nullptr) {
                 continue;
             }
-            const GCGraph *installed = committed->graph(graph->id());
+            const auto *installed = committed->graph(graph->id());
             if (installed == nullptr) {
                 continue;
             }
@@ -2060,11 +2060,11 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     // needs another makes that one again. Nothing here binds a graph the closure does not reach,
     // so a specialization nothing calls is collected with the snapshot it was in.
     committed->specializations().eraseIf([&](const ProgramSpecializationKey &key, GraphId id) {
-        const GCGraph *specialized = committed->graph(id);
+        const auto *specialized = committed->graph(id);
         if (specialized == nullptr) {
             return false;
         }
-        const GCGraph *base = committed->graph(key.baseGraph);
+        const auto *base = committed->graph(key.baseGraph);
         return base != nullptr && base->revision() == key.baseRevision;
     });
 
@@ -2106,7 +2106,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     }
     // A graph left as it was names, in its function values, the program before: they name the
     // program this commit produced, which holds the same versions of everything they reach.
-    for (GCGraph *graph : closure) {
+    for (auto *graph : closure) {
         if (!fresh.contains(graph) && graph->hasStaticGraphRefs()) {
             retargetFunctions(graph, *committed);
         }
@@ -2199,7 +2199,7 @@ void GraphDraftGroup::encode() {
     }
     for (GraphId id : order_) {
         const Member &m = member(id);
-        GCGraph *graph = encodeDraftGraph(
+        auto *graph = encodeDraftGraph(
             context_,
             m.identity,
             *m.transaction,
