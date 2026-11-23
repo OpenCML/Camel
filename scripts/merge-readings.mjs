@@ -420,8 +420,24 @@ if (probeOnly) {
         )
         process.exit(2)
     }
-    const meta = readWhere(found.key)
-    const where = meta ? `, ${meta.cases} case(s), tree ${(meta.tree || 'not recorded').slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}` : ''
+const meta = readWhere(found.key)
+    if (!meta || typeof meta.tree !== 'string' || !meta.tree) {
+        // An entry with no recorded tree is not a baseline this program can use: every comparison
+        // against it would be refused later, after a full run -- and that refusal is right, because
+        // nothing proves the reading is not of the tree being compared. The probe answers the
+        // question its caller has ("can I compare against this?"), so a stale entry is a miss here
+        // and the caller measures instead of spending a run to discover the refusal.
+        //
+        // This is about the entry the superset search settled on, not about `cacheKey`: an exact
+        // entry with no tree is no better than a superset entry with none, and the caller cannot
+        // tell the two apart from an exit code.
+        console.log(
+            `merge-readings: cache-miss: ${path.basename(found.key)} was stored without the tree it was measured on ` +
+                '(it predates --tree), so nothing proves it is not the tree being compared; measure it again'
+        )
+        process.exit(2)
+    }
+    const where = `, ${meta.cases} case(s), tree ${meta.tree.slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}`
     const how = found.exact
         ? ''
         : ` (a superset: measured across ${found.plans.length} target(s), covers the ${requestedTargets().length} this selection names)`
