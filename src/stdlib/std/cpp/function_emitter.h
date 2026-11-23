@@ -172,8 +172,7 @@ class FunctionEmitter {
     /// rounds in a `for (;;)`. The nodes of its regions are in `order`, before the LOOP node.
     void lowerLoop(
         Frame &frame, gc_node_ref_t loop, const std::vector<gc_node_ref_t> &order, Block &out);
-    /// The control regions of `graph`, made once.
-    const camel::runtime::ControlRegions &controlRegionsOf(const GCGraph *graph);
+    
     void lowerCall(
         Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
         bool &handled);
@@ -243,7 +242,6 @@ class FunctionEmitter {
     size_t nextValue_ = 1;
     bool loops_       = false; // a tail call jumps back: the body is a loop
     std::unordered_map<const GCGraph *, std::vector<gc_node_ref_t>> orders_;
-    std::unordered_map<const GCGraph *, std::unique_ptr<camel::runtime::ControlRegions>> regions_;
     std::unordered_map<const GCGraph *, std::unordered_map<gc_node_ref_t, size_t>> uses_;
 };
 

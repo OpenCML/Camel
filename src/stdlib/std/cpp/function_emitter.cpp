@@ -452,14 +452,6 @@ Block FunctionEmitter::lowerSequence(
     return out;
 }
 
-const camel::runtime::ControlRegions &FunctionEmitter::controlRegionsOf(const GCGraph *graph) {
-    auto &held = regions_[graph];
-    if (!held) {
-        held = std::make_unique<camel::runtime::ControlRegions>(*graph);
-    }
-    return *held;
-}
-
 Block FunctionEmitter::lowerSequenceBody(
     Frame &frame, const std::vector<gc_node_ref_t> &order, gc_node_ref_t result, Tail tail) {
     Block out;
@@ -471,8 +463,8 @@ Block FunctionEmitter::lowerSequenceBody(
         if (frame.graph->node(loop)->kind != GCNodeKind::Loop) {
             continue;
         }
-        const auto &regions = controlRegionsOf(frame.graph);
-        const auto parts    = regions.loopPartsOf(loop);
+        const camel::runtime::ControlRegions regions(*frame.graph);
+        const auto parts = regions.loopPartsOf(loop);
         for (gc_node_ref_t n : order) {
             for (uint32_t part : parts) {
                 if (part != 0 && regions.within(regions.controlOf(n), part)) {
@@ -1220,7 +1212,7 @@ void FunctionEmitter::lowerLoop(
     const bool iterates            = camel::core::loopHasIterable(g->loopKindOf(loop));
     const auto norm                = g->normInputsOf(loop);
     const size_t k                 = norm.size() - (iterates ? 1 : 0);
-    const auto &regions            = controlRegionsOf(g);
+    const camel::runtime::ControlRegions regions(*g);
     const auto parts               = regions.loopPartsOf(loop);
     const auto results             = g->withInputsOf(loop);
     const bool hasCond             = parts[0] != 0;
