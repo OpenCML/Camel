@@ -699,6 +699,9 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
     // Where each operator of the graph reads its arguments, and room for the operator itself
     // once it has been resolved (executePreparedOperator).
     plan->opers.resize(graph->nodeCount());
+    // The function each operator node was resolved to, once it has run: the scheduler's own table,
+    // kept for this graph version rather than in the plan, which is an immutable fact of the graph.
+    plan->resolvedOpers = std::make_unique<std::atomic<operator_t>[]>(graph->nodeCount());
     for (gc_node_ref_t ref : plan->topo) {
         if (ref >= plan->opers.size() || requireNode(graph, ref)->kind != GCNodeKind::Oper) {
             continue;
@@ -2190,7 +2193,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         plan != nullptr && nodeRef < plan->opers.size() && plan->opers[nodeRef].prepared;
     if (prepared) {
         if (const operator_t resolved =
-                plan->shared->resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
+                plan->resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
             const PreparedOper &oper = plan->opers[nodeRef];
             const data_arr_t wargs{
                 plan->operArgs.data() + oper.withBegin,
@@ -2234,7 +2237,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
             nodeRef);
     }
     if (prepared) {
-        plan->shared->resolvedOpers[nodeRef].store(
+        plan->resolvedOpers[nodeRef].store(
             camel::profile::profiledOperator(uri, *opFunc),
             std::memory_order_release);
     }

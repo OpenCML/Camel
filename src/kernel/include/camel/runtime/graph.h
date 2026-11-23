@@ -1155,7 +1155,10 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
     /// (the frozen block stores each edge once, as an input). Thread-safe.
     const GCUseIndex &uses() const;
     /// How to run this version: the order of its nodes, its branches and calls (exec_plan.h).
-    /// Built the first time it is asked for and kept with the graph. Thread-safe.
+    /// The plan is a fact of the module that reads it (`std.execPlan`), so this asks the fact
+    /// store through `execPlanOf` and keeps nothing of its own: the graph has no field for a
+    /// plan, and a reader that finds no kind is told so rather than given a plan computed here.
+    /// Thread-safe.
     const class ExecPlan &execPlan() const;
     std::span<const gc_node_ref_t> normOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
@@ -1312,8 +1315,6 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
     ::Tuple *staticArea_ = nullptr;
     // Built by uses() on first demand, owned by the graph.
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
-    // Built by execPlan() on first demand, owned by the graph.
-    mutable std::atomic<class ExecPlan *> execPlan_{nullptr};
 };
 
 /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture of
