@@ -38,10 +38,10 @@
 #include "camel/runtime/effects.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
-#include "src/stdlib/transforms/node_operator.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/number_text.h"
+#include "src/stdlib/transforms/node_operator.h"
 
 #include <algorithm>
 #include <cctype>
@@ -1305,14 +1305,14 @@ class CmlPrinter {
                camel::core::sem::Effect::Pure;
     }
 
-    /// Whether the one user of `ref` is a `GATE` slot the gate does not hand on. A gate answers with
-    /// its *first* ordinary input (`camel::runtime::forwardedInputOf`); the slots after it are the
-    /// statements of the region the gate closes, and the printed text of a gate is the value alone,
-    /// so a statement standing in one of those slots is written nowhere unless it is written where
-    /// it stands. `linear/runtime/order_edges_regions.cml` is the shape: the first arm's gate is
-    /// `GATE(<the value the arm leaves>, println(1), println(2))`, and the printed arm was
-    /// `sync { println(2) }` -- `println(1)` had no line, the printed program ran no first print, and
-    /// the round trip read `9 0 1 2` against the origin's `9 1 2 0 1` (design principles 3.4: a
+    /// Whether the one user of `ref` is a `GATE` slot the gate does not hand on. A gate answers
+    /// with its *first* ordinary input (`camel::runtime::forwardedInputOf`); the slots after it are
+    /// the statements of the region the gate closes, and the printed text of a gate is the value
+    /// alone, so a statement standing in one of those slots is written nowhere unless it is written
+    /// where it stands. `linear/runtime/order_edges_regions.cml` is the shape: the first arm's gate
+    /// is `GATE(<the value the arm leaves>, println(1), println(2))`, and the printed arm was `sync
+    /// { println(2) }` -- `println(1)` had no line, the printed program ran no first print, and the
+    /// round trip read `9 0 1 2` against the origin's `9 1 2 0 1` (design principles 3.4: a
     /// computation that may fault, and an effect, stay where the source wrote them).
     bool sitsInAGateSlotWithNoText(gc_node_ref_t ref) const {
         const auto users = graph_->normOutputsOf(ref);
@@ -1393,7 +1393,8 @@ class CmlPrinter {
             }
             // The arms' effects are one fact at the node that owns the regions
             // (`core.regionEffects`): a region is not an anchor of its own.
-            return !camel::runtime::fact::regionEffectsOf(facts(), program_, *graph_, ref).arms.pure();
+            return !camel::runtime::fact::regionEffectsOf(facts(), program_, *graph_, ref)
+                        .arms.pure();
         }
         case camel::runtime::GCNodeKind::Loop: {
             const camel::runtime::fact::RegionEffects regions =
@@ -1406,9 +1407,9 @@ class CmlPrinter {
     }
 
     /// Whether this node is a control region the printed text runs as a whole where it stands: the
-    /// `JOIN` that spells an `if`/`match`, and the `LOOP`. A region's effects happen when it runs, so
-    /// its text cannot be lifted into the expression that reads its value -- `nodeEffect` has already
-    /// said the region has effects, and this says the node is the region.
+    /// `JOIN` that spells an `if`/`match`, and the `LOOP`. A region's effects happen when it runs,
+    /// so its text cannot be lifted into the expression that reads its value -- `nodeEffect` has
+    /// already said the region has effects, and this says the node is the region.
     static bool regionRunsWhereItStands(const camel::runtime::GCNode *node) {
         return node != nullptr && (node->kind == camel::runtime::GCNodeKind::Join ||
                                    node->kind == camel::runtime::GCNodeKind::Loop);
@@ -2324,12 +2325,12 @@ class CmlPrinter {
         if (!isRoot_ && tail != camel::runtime::kInvalidNodeRef && !tailPrintedAsStatement) {
             const Type *type = graph_->node(tail)->dataType();
             if (type != nullptr && type->code() != TypeCode::Void) {
-                // A branch that hands on a cell's version is not the block's value: the cell is, and
-                // the branch is the statement the source wrote (`joinEntryCell` says how one is
+                // A branch that hands on a cell's version is not the block's value: the cell is,
+                // and the branch is the statement the source wrote (`joinEntryCell` says how one is
                 // recognised). It has to stand where it stands, and the value is read after it --
                 // `if c then {...} else {...}` and then `return t`, which is the shape the builder
-                // folded the read into. Written as `return if ...` each arm has to spell a value the
-                // source never wrote, and no spelling of it rebuilds the shared `COPY`.
+                // folded the read into. Written as `return if ...` each arm has to spell a value
+                // the source never wrote, and no spelling of it rebuilds the shared `COPY`.
                 if (const gc_node_ref_t entryCell = joinEntryCell(tail);
                     entryCell != camel::runtime::kInvalidNodeRef) {
                     branchAsStatement_     = true;
@@ -2496,9 +2497,9 @@ class CmlPrinter {
     /// *created* with (`cellOfValue_`). Such a branch had no value of its own in the source: an arm
     /// that answers "the value this `var` was made with" and wrote nothing has no spelling as an
     /// arm value (a name there is a `:var/get`, and the literal is a second `DATA`), so the source
-    /// wrote the branch as a statement and read the cell after it, and the builder's version mapping
-    /// is what carries that read into the arms. `kInvalidNodeRef` otherwise, and for a JOIN whose
-    /// type is `void` (`ifWithoutElse` already says what that one is).
+    /// wrote the branch as a statement and read the cell after it, and the builder's version
+    /// mapping is what carries that read into the arms. `kInvalidNodeRef` otherwise, and for a JOIN
+    /// whose type is `void` (`ifWithoutElse` already says what that one is).
     ///
     /// Printing such a branch as a value is what made `arm_read` red on
     /// `trans/cml.plan.toml#print_and_recompile`: `picked`'s `if c then { ... t += 1 ... } else
@@ -2546,7 +2547,7 @@ class CmlPrinter {
             }
             // An arm's result is the GATE that waits on the arm's last statement; the value it
             // hands on is that gate's first normal input.
-            gc_node_ref_t value = region->result;
+            gc_node_ref_t value                  = region->result;
             const camel::runtime::GCNode *result = graph_->node(value);
             if (result != nullptr && result->kind == camel::runtime::GCNodeKind::Gate) {
                 const auto slots = graph_->normInputsOf(value);
@@ -2924,16 +2925,17 @@ class CmlPrinter {
                 // A region whose arms or body have effects runs where the source wrote it, and its
                 // value has a name from there on. Left to the expression that reads the value, it
                 // would run where that expression runs: `linear/runtime/order_edges_regions.cml`
-                // printed `println(9)`, the loop, and then the first `if` inside the `return`, so the
-                // loop's `0 1` came out before the arm's `1 2` (design principles 3.1: a region runs
-                // as a whole with the node that owns it, and the node is where the source put it).
+                // printed `println(9)`, the loop, and then the first `if` inside the `return`, so
+                // the loop's `0 1` came out before the arm's `1 2` (design principles 3.1: a region
+                // runs as a whole with the node that owns it, and the node is where the source put
+                // it).
                 //
                 // The block's own tail is the exception, and only for the region: `return <region>`
                 // is the form the source wrote when the region is what the function answers, and a
                 // `let` of it followed by `return` of the name is that graph spelled twice
-                // (`trans/cml/arm_write.cml`: `picked_sync` printed `let cml3 = if ... else ...` and
-                // `return cml3`, and the checker's marker `return cml` -- "not the returned name" --
-                // is what said so). A region read twice keeps its name whatever it is.
+                // (`trans/cml/arm_write.cml`: `picked_sync` printed `let cml3 = if ... else ...`
+                // and `return cml3`, and the checker's marker `return cml` -- "not the returned
+                // name" -- is what said so). A region read twice keeps its name whatever it is.
                 const Expr value       = expression(ref);
                 const std::string name = freshName();
                 declared_[ref]         = name;
@@ -2957,8 +2959,9 @@ class CmlPrinter {
             // The result needs no name here: the write that follows names the variable, not the
             // call's version, so the statement form is the whole of it.
             //
-            // A statement standing on a gate's waiting slot is the same shape: the gate's text is the
-            // value it forwards and nothing else, so the statement has to be written here or nowhere
+            // A statement standing on a gate's waiting slot is the same shape: the gate's text is
+            // the value it forwards and nothing else, so the statement has to be written here or
+            // nowhere
             // (`sitsInAGateSlotWithNoText`).
             else if (feedsVersionPlumbing(ref) || sitsInAGateSlotWithNoText(ref)) {
                 branchAsStatement_     = true;
@@ -3311,15 +3314,15 @@ class CmlPrinter {
             }
             // A gate hands on its *first* ordinary input (`camel::runtime::forwardedInputOf`: "the
             // ordinary input a gate forwards is a node", and `blockValueWrite` reads the exit chain
-            // as `GATE(<value>, sync <- write)`). The slots after it are what the gate waits on, and
-            // they are written where they stand (see `sitsInAGateSlotWithNoText`). Reading the last
-            // slot made an arm's value the count of its own last `println`
-            // (`linear/runtime/order_edges_regions.cml`: the arm's value is 4, the gate's last slot is
-            // `println(2)` and prints 2, which the round trip read as rc 54 against the origin's 56).
-            // A `COPY` is the graph's own copy of one value, so it has one slot and either reading
-            // answers the same node.
-            return expression(node->kind == camel::runtime::GCNodeKind::Gate ? inputs.front()
-                                                                           : inputs.back());
+            // as `GATE(<value>, sync <- write)`). The slots after it are what the gate waits on,
+            // and they are written where they stand (see `sitsInAGateSlotWithNoText`). Reading the
+            // last slot made an arm's value the count of its own last `println`
+            // (`linear/runtime/order_edges_regions.cml`: the arm's value is 4, the gate's last slot
+            // is `println(2)` and prints 2, which the round trip read as rc 54 against the origin's
+            // 56). A `COPY` is the graph's own copy of one value, so it has one slot and either
+            // reading answers the same node.
+            return expression(
+                node->kind == camel::runtime::GCNodeKind::Gate ? inputs.front() : inputs.back());
         }
         case camel::runtime::GCNodeKind::Cast:
             return castExpression(ref);
@@ -3476,9 +3479,9 @@ class CmlPrinter {
             // array exists (design principles 4.2: a `for` over an interval is fused): the source
             // form is the interval itself, not the pair of bounds, so the printed program compiles
             // back to the same graph.
-            const bool interval = graph_->loopIterableFormOf(view.node()) ==
-                                  camel::core::LoopIterableForm::Interval;
-            const auto bounds   = interval ? graph_->intervalBoundsOf(sequence) : std::nullopt;
+            const bool interval =
+                graph_->loopIterableFormOf(view.node()) == camel::core::LoopIterableForm::Interval;
+            const auto bounds = interval ? graph_->intervalBoundsOf(sequence) : std::nullopt;
             if (bounds.has_value()) {
                 iterable = std::format(
                     "{}..{}",
@@ -3702,7 +3705,8 @@ class CmlPrinter {
         // `compile/array_shape/rank_zero_parameter_slot` printed `(v as f32)` in the body and
         // `elem((cml1 as f32[...]))` at the call, and neither cast is in the source.
         if (from != nullptr && camel::core::type::isRankZeroEdge(
-                                   const_cast<Type *>(node->dataType()), const_cast<Type *>(from))) {
+                                   const_cast<Type *>(node->dataType()),
+                                   const_cast<Type *>(from))) {
             return inner;
         }
         if (from != nullptr && from->code() == TypeCode::Struct &&
@@ -3769,9 +3773,9 @@ class CmlPrinter {
         if (!baseText.empty() && baseText.front() == '{') {
             baseText = "(" + baseText + ")";
         }
-        const std::string member =
-            read->kind == camel::runtime::GCAccsKind::StructKey ? read->key
-                                                                 : std::to_string(read->place);
+        const std::string member = read->kind == camel::runtime::GCAccsKind::StructKey
+                                       ? read->key
+                                       : std::to_string(read->place);
         if (member.empty()) {
             fail(
                 ref,
@@ -3817,7 +3821,8 @@ class CmlPrinter {
                 fail(
                     ref,
                     std::format(
-                        "a member read of a name that is not a source identifier ('{}')", member));
+                        "a member read of a name that is not a source identifier ('{}')",
+                        member));
             }
         } else {
             const std::optional<int64_t> at = constantIntOf(with.front());
@@ -4113,12 +4118,11 @@ class CmlPrinter {
             }
             return {std::format("{}[{}{}]", parenthesize(base, 90), axes, index.text), 90};
         }
-        if (uri == ":struct/range") {
-            // The interval `a..b` (design principles 4.2) is the one spelling of the integers from
-            // `a` to `b - 1`, and it lowers to this operator's call with its step written out,
-            // `range(a, b, 1)`: the rule takes exactly three arguments and the two-argument
-            // spelling is gone. A step of one is that interval and is written back as it, which is
-            // what keeps the round trip a round trip; any other step stays the call it is.
+        if (uri == ":range/to_range") {
+            // The interval `a..b` is this call with its step of 1 written out (design principles
+            // 4.2, 5.4), so a step of one is written back as the interval it is: that keeps the
+            // round trip a round trip. Any other step stays the call it is, under the name its
+            // declaration gives it.
             if (inputs.size() == 3) {
                 const Expr step = expression(inputs[2]);
                 if (step.text == "1") {
@@ -4129,15 +4133,28 @@ class CmlPrinter {
                             intervalOperand(expression(inputs[1]), kIntervalPrecedence + 1)),
                         kIntervalPrecedence};
                 }
-                // The stepped range `range(a, b, step)`: written back as the call it is, so the
-                // program the printer writes reads the way the program it prints did (design
-                // principles 4.2).
+                return {
+                    std::format(
+                        "to_range({}, {}, {})",
+                        expression(inputs[0]).text,
+                        expression(inputs[1]).text,
+                        step.text),
+                    100};
+            }
+            fail(ref, "a range without its bounds");
+        }
+        if (uri == ":struct/range") {
+            // The array of the integers of a step: `a..b` is the range value now and not this
+            // array (design principles 4.2, 5.4), so the array is written as the call it is --
+            // printing it `a..b` would print a program of another type. A step of one is no
+            // exception: `range(a, b, 1)` is the array.
+            if (inputs.size() == 3) {
                 return {
                     std::format(
                         "range({}, {}, {})",
                         expression(inputs[0]).text,
                         expression(inputs[1]).text,
-                        step.text),
+                        expression(inputs[2]).text),
                     100};
             }
             fail(ref, "a range without its bounds");
@@ -4165,19 +4182,17 @@ class CmlPrinter {
         // writes `+` wherever it is -- not `__add__`, which is the group's internal name. The test
         // is who owns the name, not whether a symbol exists and not how the name was derived.
         const bool languageOwned =
-            builtin &&
-            camel::core::operatorSymbolOf(camel::core::OperatorTable::instance().groupOf(uri)) !=
-                nullptr;
-        const bool writable =
-            !languageOwned && callForm.has_value() &&
-            (callForm->declaredByModule || callForm->exported || builtin) &&
-            // The name has to mean the same thing in the printed file. A program
-            // that declares a function of that name shadows the module's, and a
-            // bare `map<f>(xs)` would then call the program's own `map`: measured
-            // on `consistency/comprehension/shadowed.cml`, whose `map` returns a
-            // string and where the printed call only failed because the argument
-            // types happened not to fit.
-            !writtenFunctionNames_.contains(callForm->name);
+            builtin && camel::core::operatorSymbolOf(
+                           camel::core::OperatorTable::instance().groupOf(uri)) != nullptr;
+        const bool writable = !languageOwned && callForm.has_value() &&
+                              (callForm->declaredByModule || callForm->exported || builtin) &&
+                              // The name has to mean the same thing in the printed file. A program
+                              // that declares a function of that name shadows the module's, and a
+                              // bare `map<f>(xs)` would then call the program's own `map`: measured
+                              // on `consistency/comprehension/shadowed.cml`, whose `map` returns a
+                              // string and where the printed call only failed because the argument
+                              // types happened not to fit.
+                              !writtenFunctionNames_.contains(callForm->name);
         if (writable) {
             // A module operator is written qualified (`tensor::sum`), which is the only spelling
             // that names one operator without depending on what else the printed file imports: a
@@ -4749,11 +4764,17 @@ class CmlPrinter {
     [[noreturn]] void fail(gc_node_ref_t ref, std::string reason) {
         const uint64_t origin =
             ref != camel::runtime::kInvalidNodeRef ? graph_->nodeOrigin(ref) : 0;
-        throw Refusal(
-            ref,
-            origin,
-            graph_ != nullptr ? graph_->name() : std::string("<program>"),
-            std::move(reason));
+        // The name a refusal says is the one a program can write (design principles 4.3): an
+        // operator's graph is named by its reserved group, which no program spells, and the table
+        // turns that into the sign the language does spell -- `prelude::__iter__` reads
+        // `prelude::operator for`. A name that is not a group is left as it is.
+        std::string name       = graph_ != nullptr ? graph_->name() : std::string("<program>");
+        const size_t lastColon = name.rfind(':');
+        name                   = lastColon == std::string::npos
+                                     ? camel::core::displayNameOf(name)
+                                     : name.substr(0, lastColon + 1) +
+                                           camel::core::displayNameOf(name.substr(lastColon + 1));
+        throw Refusal(ref, origin, std::move(name), std::move(reason));
     }
 };
 

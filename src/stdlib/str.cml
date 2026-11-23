@@ -117,7 +117,10 @@ func cut(s: string, sep: string) => string[] {
 with <sep: string>
 export func split(s: string) => string[] {
     let n = len(sep)
-    return if n == 0 then [s[i] for i in 0 .. len(s)] else cut(s, sep)
+    // `to_array` here is a debt, not the answer: a comprehension walks something that has elements,
+    // and a range will have them once `operator for` lands as the iterator of `Range` (ruling
+    // D-1123-49); then the source goes back to `0 .. len(s)`.
+    return if n == 0 then [s[i] for i in to_array(0 .. len(s))] else cut(s, sep)
 }
 
 /// The lines of s, cut at a line feed or a carriage return followed by a line feed. A line
@@ -141,7 +144,8 @@ export func replace(s: string) => string {
 #impl(repeat_kernel)
 with <count: int>
 export func repeat(s: string) => string {
-    return [s for i in 0 .. count]->join<''>
+    // The same debt as in `split`: the source goes back to `0 .. count` once a range walks itself.
+    return [s for i in to_array(0 .. count)]->join<''>
 }
 
 // ---- white space ----

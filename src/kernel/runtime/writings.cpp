@@ -4,19 +4,19 @@
 // DraftWritings: what makes two nodes one writing, and the index that answers it.
 
 #include "camel/runtime/writings.h"
-#include "writings_internal.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/reachable.h"
+#include "writings_internal.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
-#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/runtime/oper_shape.h"
 
 #include <algorithm>
 #include <chrono>
@@ -315,8 +315,7 @@ bool shapeTakesPart(
     // A conversion and an access compute their value from what they read and change nothing (the
     // same question asked of them by their shape, not their kind).
     const camel::ops::OperShape oper = camel::runtime::shapeOfKind(kind);
-    if (oper == camel::ops::OperShape::Conversion ||
-        oper == camel::ops::OperShape::Access) {
+    if (oper == camel::ops::OperShape::Conversion || oper == camel::ops::OperShape::Access) {
         return true;
     }
     switch (kind) {

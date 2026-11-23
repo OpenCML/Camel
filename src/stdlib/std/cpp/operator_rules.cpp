@@ -1542,6 +1542,20 @@ Rules buildRules() {
         },
         false,
     };
+    r[":range/to_range"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            // The range as its own value (design principles 4.2, 5.4): a record of the three
+            // numbers, made by the one helper that writes the record's shape (record.h). The array
+            // of the same integers is `:struct/range` right below, and it is another value.
+            return std::format(
+                "rt::makeRange<{}>({}, {}, {})",
+                c.cppType(c.resultType()),
+                c.norm(0).text,
+                c.norm(1).text,
+                c.normCount() > 2 ? c.norm(2).text : std::string("1"));
+        },
+        false,
+    };
     r[":struct/range"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             return std::format(

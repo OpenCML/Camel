@@ -1,0 +1,13 @@
+// A range is not an array, and the functions an array shares with it are not declared at the type
+// yet (design principles 5.4): `map` resolves through its operator group, and no member of the
+// group takes a `Range`, so the call is an ordinary no-match. This is the reading the overload set
+// of a name has today; a range's own `map` would be a member of that group and is not this round's.
+
+func dbl(x: int) => int {
+    return x * 2
+}
+
+func main() => int sync {
+    println(map<dbl>(1 .. 5))
+    return 0
+}

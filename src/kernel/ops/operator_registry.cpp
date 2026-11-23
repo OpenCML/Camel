@@ -36,15 +36,15 @@
  * Items whose value carries a `std::function` cannot be compared (`TypeFolder`, `InstantiateFn`,
  * `AttrGrant::value`, `CallSpec::checkFormat`, `BinaryLaws::elementOf`, and the type rule is a
  * `shared_ptr` that compares by pointer, not by rule). For those the first statement stands and a
- * second one is not refused: **待审** -- whether the record needs a comparable spelling of them (or a
- * `Stated`-style witness) is a question for the interface's review, and it is not decided here.
+ * second one is not refused: **待审** -- whether the record needs a comparable spelling of them (or
+ * a `Stated`-style witness) is a question for the interface's review, and it is not decided here.
  *
  * --- the kernel -------------------------------------------------------------
  * `kernel(void *)` is not a record item ("a target registers its own implementations against the
  * same OperId and they do not enter the record"), so the pointer is kept beside the record, per
- * OperId, inside this registry, and `Registry::kernel(OperId)` (**待审**, added by this lane) is its
- * reader. It is not a side table: `registerOperator` is the only writer, and the registry is the
- * only owner.
+ * OperId, inside this registry, and `Registry::kernel(OperId)` (**待审**, added by this lane) is
+ * its reader. It is not a side table: `registerOperator` is the only writer, and the registry is
+ * the only owner.
  *
  * --- what this file does not settle -----------------------------------------
  * 1. `find` answers a record that is not `complete`d; the completed flag only refuses a later
@@ -168,8 +168,11 @@ Slot *chunkOf(std::uint32_t id) {
 Slot *chunkFor(Store &s, std::uint32_t id) {
     const std::uint32_t index = id >> kChunkShift;
     if (index >= kChunkCount) {
-        throw std::length_error(std::format(
-            "the operator registry is full: id {} is past its {} records", id, kChunkCount * kChunkSize - 1));
+        throw std::length_error(
+            std::format(
+                "the operator registry is full: id {} is past its {} records",
+                id,
+                kChunkCount * kChunkSize - 1));
     }
     Slot *chunk = s.chunks[index].load(std::memory_order_acquire);
     if (chunk == nullptr) {
@@ -189,9 +192,7 @@ Record *mutableRecord(Store &s, OperId id) {
     return s.records[id - 1].get();
 }
 
-const std::string &uriText(Store &s, OperId id) {
-    return *s.texts[id - 1];
-}
+const std::string &uriText(Store &s, OperId id) { return *s.texts[id - 1]; }
 
 [[noreturn]] void refuseStatement(OperId id, std::string_view item, std::string_view why) {
     throw std::invalid_argument(std::format("operator {}: \"{}\" {}", id, item, why));
@@ -202,12 +203,8 @@ const std::string &uriText(Store &s, OperId id) {
 /// A `Stated<T>` item: merged when the other entrance has not spoken, compared when it has.
 template <typename T, typename Equal, typename Describe>
 void mergeStated(
-    std::string_view uri,
-    std::string_view item,
-    Stated<T> &into,
-    const Stated<T> &from,
-    Equal equal,
-    Describe describe) {
+    std::string_view uri, std::string_view item, Stated<T> &into, const Stated<T> &from,
+    Equal equal, Describe describe) {
     if (!from.stated()) {
         return;
     }
@@ -216,12 +213,13 @@ void mergeStated(
         return;
     }
     if (!equal(into.value, from.value)) {
-        throw std::invalid_argument(std::format(
-            "{}: \"{}\" is stated differently by the two entrances ({} and {})",
-            uri,
-            item,
-            describe(into.value),
-            describe(from.value)));
+        throw std::invalid_argument(
+            std::format(
+                "{}: \"{}\" is stated differently by the two entrances ({} and {})",
+                uri,
+                item,
+                describe(into.value),
+                describe(from.value)));
     }
     into.byCamel |= from.byCamel;
     into.byCpp |= from.byCpp;
@@ -234,13 +232,8 @@ void mergeStated(
  */
 template <typename T, typename Equal, typename Describe>
 void mergeItem(
-    std::string_view uri,
-    std::string_view item,
-    T &into,
-    const T &from,
-    const T &unstated,
-    Equal equal,
-    Describe describe) {
+    std::string_view uri, std::string_view item, T &into, const T &from, const T &unstated,
+    Equal equal, Describe describe) {
     if (equal(from, unstated)) {
         return; // the statement says nothing about this item
     }
@@ -249,12 +242,13 @@ void mergeItem(
         return;
     }
     if (!equal(into, from)) {
-        throw std::invalid_argument(std::format(
-            "{}: \"{}\" is stated differently by the two entrances ({} and {})",
-            uri,
-            item,
-            describe(into),
-            describe(from)));
+        throw std::invalid_argument(
+            std::format(
+                "{}: \"{}\" is stated differently by the two entrances ({} and {})",
+                uri,
+                item,
+                describe(into),
+                describe(from)));
     }
 }
 
@@ -292,12 +286,16 @@ void mergeRecord(Record &into, const Record &from) {
 
     if (from.key.name != 0 &&
         (from.key.protocol != into.key.protocol || from.key.name != into.key.name)) {
-        throw std::invalid_argument(std::format(
-            "{}: a statement of {} was merged into its record", uri, from.key.uri()));
+        throw std::invalid_argument(
+            std::format("{}: a statement of {} was merged into its record", uri, from.key.uri()));
     }
     if (from.id != kNoOper && from.id != into.id) {
-        throw std::invalid_argument(std::format(
-            "{}: a statement carries id {} and the record is {}", uri, from.id, into.id));
+        throw std::invalid_argument(
+            std::format(
+                "{}: a statement carries id {} and the record is {}",
+                uri,
+                from.id,
+                into.id));
     }
 
     // ---- the properties keywords state ------------------------------------------------------
@@ -328,7 +326,9 @@ void mergeRecord(Record &into, const Record &from) {
         },
         [](const Signature &v) {
             return std::format(
-                "fallible={}, type={}", v.fallible, v.type != nullptr ? std::string_view("stated") : std::string_view("none"));
+                "fallible={}, type={}",
+                v.fallible,
+                v.type != nullptr ? std::string_view("stated") : std::string_view("none"));
         });
 
     mergeStated(
@@ -338,7 +338,8 @@ void mergeRecord(Record &into, const Record &from) {
         from.resolver,
         [](const type::resolver_ptr_t &a, const type::resolver_ptr_t &b) { return a == b; },
         [](const type::resolver_ptr_t &v) {
-            return v != nullptr ? std::string_view("a type rule") : std::string_view("no type rule");
+            return v != nullptr ? std::string_view("a type rule")
+                                : std::string_view("no type rule");
         });
 
     // A `TypeFolder` is a `std::function`: the first statement stands (file header, paragraph 3).
@@ -386,7 +387,9 @@ void mergeRecord(Record &into, const Record &from) {
             return !a.has_value() || a->onlyOutsideArrays == b->onlyOutsideArrays;
         },
         [](const std::optional<HandsOnValue> &v) {
-            return v.has_value() ? std::string(v->onlyOutsideArrays ? "outside arrays only" : "a value an operand holds")
+            return v.has_value() ? std::string(
+                                       v->onlyOutsideArrays ? "outside arrays only"
+                                                            : "a value an operand holds")
                                  : std::string("none");
         });
 
@@ -403,12 +406,11 @@ void mergeRecord(Record &into, const Record &from) {
             return !a.has_value() || (a->source == b->source && a->target == b->target);
         },
         [](const std::optional<ConversionTypes> &v) {
-            return v.has_value()
-                       ? std::format(
-                             "type {} -> type {}",
-                             static_cast<int>(v->source),
-                             static_cast<int>(v->target))
-                       : std::string("none");
+            return v.has_value() ? std::format(
+                                       "type {} -> type {}",
+                                       static_cast<int>(v->source),
+                                       static_cast<int>(v->target))
+                                 : std::string("none");
         });
 
     mergeItem(
@@ -443,8 +445,9 @@ void mergeRecord(Record &into, const Record &from) {
                     a->formatWithArg == b->formatWithArg && a->formatNormArg == b->formatNormArg);
         },
         [](const std::optional<CallSpec> &v) {
-            return v.has_value() ? std::format("format at {} of the with-arguments", v->formatWithArg)
-                                 : std::string("none");
+            return v.has_value()
+                       ? std::format("format at {} of the with-arguments", v->formatWithArg)
+                       : std::string("none");
         });
 
     mergeItem(
@@ -459,8 +462,7 @@ void mergeRecord(Record &into, const Record &from) {
             }
             return !a.has_value() ||
                    (a->name == b->name && a->minArgs == b->minArgs &&
-                    a->withCount == b->withCount &&
-                    a->declaredByModule == b->declaredByModule &&
+                    a->withCount == b->withCount && a->declaredByModule == b->declaredByModule &&
                     a->kernelDeclaration == b->kernelDeclaration && a->exported == b->exported);
         },
         [](const std::optional<CallForm> &v) {
@@ -469,7 +471,8 @@ void mergeRecord(Record &into, const Record &from) {
 
     // ---- what it computes -------------------------------------------------------------------
 
-    // An `InstantiateFn` is a `std::function`: the first statement stands (file header, paragraph 3).
+    // An `InstantiateFn` is a `std::function`: the first statement stands (file header, paragraph
+    // 3).
     if (from.indexing && !into.indexing) {
         into.indexing = from.indexing;
     }
@@ -619,10 +622,10 @@ OperId internLocked(Store &s, const sem::OperatorKey &key) {
     }
     Slot *chunk = chunkFor(s, id);
 
-    auto record = std::make_unique<Record>();
-    record->id   = id;
-    record->key  = key;
-    auto text    = std::make_unique<std::string>(uri);
+    auto record             = std::make_unique<Record>();
+    record->id              = id;
+    record->key             = key;
+    auto text               = std::make_unique<std::string>(uri);
     const Record *published = record.get();
 
     s.records.push_back(std::move(record));
@@ -651,9 +654,7 @@ OperId Registry::intern(const sem::OperatorKey &key) {
     return internLocked(s, key);
 }
 
-OperId Registry::intern(std::string_view uri) {
-    return intern(sem::OperatorKey::of(uri));
-}
+OperId Registry::intern(std::string_view uri) { return intern(sem::OperatorKey::of(uri)); }
 
 std::optional<OperId> Registry::lookup(const sem::OperatorKey &key) const {
     Store &s = store();
@@ -724,12 +725,14 @@ void Registry::declare(OperId id, const Record &statement) {
     std::lock_guard lock(s.mutex);
     Record *record = mutableRecord(s, id);
     if (record == nullptr) {
-        throw std::invalid_argument(std::format("operator {}: the registry has no such record", id));
+        throw std::invalid_argument(
+            std::format("operator {}: the registry has no such record", id));
     }
     if (s.completed[id - 1]) {
-        throw std::invalid_argument(std::format(
-            "{}: the record is completed, and a completed record is never changed again",
-            record->uri()));
+        throw std::invalid_argument(
+            std::format(
+                "{}: the record is completed, and a completed record is never changed again",
+                record->uri()));
     }
     mergeRecord(*record, statement);
 }
@@ -739,7 +742,8 @@ void Registry::stateShape(OperId id, OperShape shape) {
     std::lock_guard lock(s.mutex);
     Record *record = mutableRecord(s, id);
     if (record == nullptr) {
-        throw std::invalid_argument(std::format("operator {}: the registry has no such record", id));
+        throw std::invalid_argument(
+            std::format("operator {}: the registry has no such record", id));
     }
     if (record->shape == shape) {
         return; // a statement of the answer the record already holds is a repetition
@@ -747,11 +751,12 @@ void Registry::stateShape(OperId id, OperShape shape) {
     if (s.completed[id - 1]) {
         // A completed record is never changed again, and the shape is read by walks that run while
         // graphs are already being analysed: a second answer is refused, not taken.
-        throw std::invalid_argument(std::format(
-            "{}: \"shape\" is completed as \"{}\" and this statement says \"{}\"",
-            record->uri(),
-            camel::ops::shapeName(record->shape),
-            camel::ops::shapeName(shape)));
+        throw std::invalid_argument(
+            std::format(
+                "{}: \"shape\" is completed as \"{}\" and this statement says \"{}\"",
+                record->uri(),
+                camel::ops::shapeName(record->shape),
+                camel::ops::shapeName(shape)));
     }
     record->shape = shape;
 }
@@ -768,12 +773,14 @@ OperId Registry::registerOperator(CppRegistration &registration) {
     std::lock_guard lock(s.mutex);
     Record *record = mutableRecord(s, id);
     if (record == nullptr) {
-        throw std::invalid_argument(std::format("operator {}: the registry has no such record", id));
+        throw std::invalid_argument(
+            std::format("operator {}: the registry has no such record", id));
     }
     if (s.completed[id - 1]) {
-        throw std::invalid_argument(std::format(
-            "{}: the record is completed, and a completed record is never changed again",
-            record->uri()));
+        throw std::invalid_argument(
+            std::format(
+                "{}: the record is completed, and a completed record is never changed again",
+                record->uri()));
     }
     mergeRecord(*record, statement);
 
@@ -792,7 +799,8 @@ void Registry::complete(OperId id) {
     std::lock_guard lock(s.mutex);
     Record *record = mutableRecord(s, id);
     if (record == nullptr) {
-        throw std::invalid_argument(std::format("operator {}: the registry has no such record", id));
+        throw std::invalid_argument(
+            std::format("operator {}: the registry has no such record", id));
     }
     if (s.completed[id - 1]) {
         return; // published already: a completion states nothing new, so it moves no epoch
@@ -811,15 +819,17 @@ void Registry::complete(OperId id) {
 
     // The in-place form against its plain operator: the form is an operator of its own and its own
     // entry names the operator it computes the result of.
-    const std::string_view form = record->inPlace.has_value() ? record->inPlace->form
-                                                             : std::string_view{};
+    const std::string_view form =
+        record->inPlace.has_value() ? record->inPlace->form : std::string_view{};
     if (!form.empty()) {
         if (form == uri) {
             refuseStatement(id, "inPlace", "names the operator itself as its form");
         }
         if (!record->inPlace->plain.empty() && record->inPlace->plain != uri) {
             refuseStatement(
-                id, "inPlace", std::format("is the form of {}, not of this operator", record->inPlace->plain));
+                id,
+                "inPlace",
+                std::format("is the form of {}, not of this operator", record->inPlace->plain));
         }
 
         const OperId formId = internLocked(s, sem::OperatorKey::of(form));
@@ -833,7 +843,8 @@ void Registry::complete(OperId id) {
                         id,
                         "inPlace",
                         std::format(
-                            "names {} as its form, and that record is completed and names no operator",
+                            "names {} as its form, and that record is completed and names no "
+                            "operator",
                             form));
                 }
                 // The form's own entry: its own URI, and the operator it computes the result of.
@@ -854,8 +865,6 @@ void Registry::complete(OperId id) {
     s.epoch.fetch_add(1, std::memory_order_acq_rel);
 }
 
-std::uint64_t Registry::epoch() const {
-    return store().epoch.load(std::memory_order_acquire);
-}
+std::uint64_t Registry::epoch() const { return store().epoch.load(std::memory_order_acquire); }
 
 } // namespace camel::ops

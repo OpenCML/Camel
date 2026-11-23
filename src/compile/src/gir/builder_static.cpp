@@ -544,7 +544,7 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             const uint16_t patterns = caseNode->typeCasePatterns();
             // A guarded `_` or `#leaf` selects the types its predicate holds for, not every type,
             // so a case written after it is reachable (design principles 5.5).
-            const bool guarded      = tree_->caseGuardOf(caseNode) != nullptr;
+            const bool guarded = tree_->caseGuardOf(caseNode) != nullptr;
             const bool catchesAll =
                 !guarded && (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
                                          typeCaseBit(GCT::TypeCaseKind::Wildcard))) != 0;
@@ -755,7 +755,7 @@ node_handle_t Builder::staticFieldTagsNode(
     StructDataFactory tags;
     if (subject != nullptr && subject->code() == TypeCode::Struct && module_ != nullptr) {
         const StructDecl *decl = tt::as_ptr<StructType>(subject)->decl();
-        if (decl != nullptr && decl->moduleName() == module_->name()) {
+        if (decl != nullptr && decl->module() == module_.get()) {
             camel::core::attr::AttrSetId facts = module_->fieldTags(Reference(decl->name()), index);
             if (facts == camel::core::attr::kNoAttrs && !decl->shortName().empty() &&
                 decl->shortName() != decl->name()) {
@@ -1433,8 +1433,8 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             // type, so the next round reads the state's type and the same rule applies.
             for (size_t j = 0; j < k; ++j) {
                 Type *componentType = tuple->typeAt(j);
-                node_handle_t component = memberReadNodeOf(
-                    valueOf(value), componentType, static_cast<uint32_t>(j), body);
+                node_handle_t component =
+                    memberReadNodeOf(valueOf(value), componentType, static_cast<uint32_t>(j), body);
                 registerNodeOrigin(context_, component, body, "gir.static.loop.state");
                 node_handle_t stateValue = stateTypes[j]->assignableFrom(componentType)
                                                ? component

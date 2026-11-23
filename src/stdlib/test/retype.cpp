@@ -54,9 +54,8 @@ GraphShape shapeOf(const GCGraph &graph) {
     shape.types.resize(graph.nodeCount());
     for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
         const camel::runtime::GCNode &node = **it;
-        shape.types[it.ref()]                  = node.typeId;
-        shape.edges += graph.normInputsOf(it.ref()).size() +
-                       graph.withInputsOf(it.ref()).size() +
+        shape.types[it.ref()]              = node.typeId;
+        shape.edges += graph.normInputsOf(it.ref()).size() + graph.withInputsOf(it.ref()).size() +
                        graph.ctrlInputsOf(it.ref()).size();
     }
     shape.edges += graph.orderEdges().size() + graph.syncEdges().size();
@@ -107,8 +106,7 @@ bool mentions(const Type *type, TypeId id, int depth = 0) {
 /// signature, the closure and the form ports of the regions -- and, unless `includeStatics` is
 /// false, the static area's layout, which `leaveStaticObjects` deliberately leaves alone.
 bool graphMentions(const GCGraph &graph, TypeId id, bool includeStatics = true) {
-    if (mentions(graph.funcType(), id) ||
-        mentions(graph.runtimeDataType(), id) ||
+    if (mentions(graph.funcType(), id) || mentions(graph.runtimeDataType(), id) ||
         (includeStatics && mentions(graph.staticDataType(), id)) ||
         mentions(graph.closureType(), id)) {
         return true;
@@ -176,14 +174,14 @@ const Program *RetypeTrivialTestPass::apply(const Program *program, std::ostream
     // held stays the version it holds. This is the assertion that a rebuild adds nothing of its
     // own -- no renumbered node, no reordered edge, no rewritten region -- which is what "only the
     // types change" has to mean.
-    bool identitySameVersion = false;
+    bool identitySameVersion     = false;
     const Program *afterIdentity = nullptr;
     {
         RuntimeGraphDraftSession session(context_, program);
         ProgramRetypeReport identity;
         afterIdentity = retypeProgram(session, GraphTypeSubstitution{}, {}, &identity);
-        identitySameVersion = afterIdentity != nullptr &&
-                              afterIdentity->graph(sourceRoot->id()) == sourceRoot;
+        identitySameVersion =
+            afterIdentity != nullptr && afterIdentity->graph(sourceRoot->id()) == sourceRoot;
         os << "RETYPE identity_changed="
            << (identity.retypedNodes != 0 || identity.rebuilt != 0 ? 1 : 0)
            << " identity_same_version=" << (identitySameVersion ? 1 : 0) << "\n";
@@ -195,7 +193,7 @@ const Program *RetypeTrivialTestPass::apply(const Program *program, std::ostream
     // The source graph survived a whole decode/encode round trip as the same version, with the
     // records and the inputs it had.
     const GraphShape sourceAfterIdentity = shapeOf(*sourceRoot);
-    const bool sourceSurvived = sameShape(sourceAfterIdentity, sourceShape);
+    const bool sourceSurvived            = sameShape(sourceAfterIdentity, sourceShape);
 
     // (2) float -> int, on every graph the program reaches.
     GraphTypeSubstitution types;
@@ -238,9 +236,8 @@ const Program *RetypeTrivialTestPass::apply(const Program *program, std::ostream
     os << "RETYPE graphs=" << report.graphs << " rebuilt=" << report.rebuilt
        << " nodes=" << nodesNow << " edges=" << edgesNow << " retyped=" << report.retypedNodes
        << "\n";
-    os << "RETYPE counts_same=" << (topologySame ? 1 : 0)
-       << " f64_before=" << f64Before << " f64_after=" << (f64After ? 1 : 0)
-       << " int_nodes=" << retypedNow << "\n";
+    os << "RETYPE counts_same=" << (topologySame ? 1 : 0) << " f64_before=" << f64Before
+       << " f64_after=" << (f64After ? 1 : 0) << " int_nodes=" << retypedNow << "\n";
     os << "RETYPE source_unchanged=" << (sourceSurvived && sourceUnchanged ? 1 : 0) << "\n";
     return next;
 }
@@ -261,14 +258,15 @@ ty::TupleType *findPairType(const Program &program) {
                 continue;
             }
             auto *tuple = static_cast<ty::TupleType *>(nodeType);
-            if (tuple->size() < 2 || tuple->isCell() || tuple->isNullable() || tuple->isFallible()) {
+            if (tuple->size() < 2 || tuple->isCell() || tuple->isNullable() ||
+                tuple->isFallible()) {
                 continue;
             }
             bool hasFloat = false, hasFunction = false;
             for (Type *member : tuple->types()) {
-                hasFloat    = hasFloat || (member != nullptr && member->code() == TypeCode::Float64);
-                hasFunction = hasFunction ||
-                              (member != nullptr && member->code() == TypeCode::Function);
+                hasFloat = hasFloat || (member != nullptr && member->code() == TypeCode::Float64);
+                hasFunction =
+                    hasFunction || (member != nullptr && member->code() == TypeCode::Function);
             }
             if (hasFloat && hasFunction) {
                 return tuple;
@@ -292,8 +290,9 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
 
     // The enum the pair becomes: one variant carrying exactly that tuple. Its variant set is
     // decided here, once, before the rebuilt graphs are encoded -- the order the design page
-    // requires ("先定变体集合"), in miniature.
-    ty::EnumDecl *decl = ty::EnumDecl::create("PullbackValue", {}, "test::retype");
+    // requires ("先定变体集合"), in miniature. No module declares it (the probe builds it in a
+    // pass, not in a module), so it is named by its own name alone.
+    ty::EnumDecl *decl = ty::EnumDecl::create("PullbackValue", {});
     ty::EnumVariant variant;
     variant.name       = "Pair";
     variant.shape      = ty::VariantShape::Tuple;
@@ -314,7 +313,7 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
     GraphRetypeOptions options;
     options.leaveStaticObjects = true;
 
-    const auto *sourceRoot      = program->root();
+    const auto *sourceRoot       = program->root();
     const GraphShape sourceShape = shapeOf(*sourceRoot);
     const size_t pairBefore      = countNodesTyped(*program, pairId);
 
@@ -337,7 +336,7 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
     // background names -- two arms and the JOIN built for two types -- and the reason the swap
     // has to reach every place the type occurs at once.
     size_t joins = 0, armsChecked = 0;
-    bool armsAgree = true;
+    bool armsAgree    = true;
     const auto &table = ty::TypeTable::instance();
     for (const auto *graph : next->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
@@ -353,8 +352,8 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
             const gc_node_ref_t brch = inputs.front();
             for (gc_cnt_t r = 0; r < graph->regionCount(); ++r) {
                 const camel::runtime::GCRegion *region = graph->region(r);
-                if (region == nullptr || region->kind != GCRegionKind::Arm || region->owner != brch ||
-                    region->result == kInvalidNodeRef) {
+                if (region == nullptr || region->kind != GCRegionKind::Arm ||
+                    region->owner != brch || region->result == kInvalidNodeRef) {
                     continue;
                 }
                 const GCNode *result = graph->node(region->result);

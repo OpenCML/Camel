@@ -410,10 +410,8 @@ size_t Module::replaceTypeQualifiedAliases(const std::string &ident, const entit
             return;
         }
         const auto &aliasResolvers = other.operGroup()->resolvers();
-        const bool same             = std::any_of(
-            resolvers.begin(),
-            resolvers.end(),
-            [&](const auto &resolver) {
+        const bool same =
+            std::any_of(resolvers.begin(), resolvers.end(), [&](const auto &resolver) {
                 return std::any_of(
                     aliasResolvers.begin(),
                     aliasResolvers.end(),
@@ -430,9 +428,8 @@ size_t Module::replaceTypeQualifiedAliases(const std::string &ident, const entit
 }
 
 void Module::inheritExportsFrom(const Module &other) {
-    other.exportedTypeNS_->forEach([&](const Reference &ref, Type *type) {
-        exportedTypeNS_->insert(ref, type);
-    });
+    other.exportedTypeNS_->forEach(
+        [&](const Reference &ref, Type *type) { exportedTypeNS_->insert(ref, type); });
     other.nativeEntityNS_->forEach(
         [&](const Reference &ref, const entity &ent) { exportEntity(ref, ent); });
     for (const auto &[ident, tag] : other.declaredTags_) {
@@ -464,14 +461,14 @@ bool Module::exportTag(const std::string &qualifiedName) {
     if (!id.has_value()) {
         return false;
     }
-    const size_t sep         = qualifiedName.rfind("::");
-    const std::string ident  = sep == std::string::npos ? qualifiedName
-                                                       : qualifiedName.substr(sep + 2);
+    const size_t sep = qualifiedName.rfind("::");
+    const std::string ident =
+        sep == std::string::npos ? qualifiedName : qualifiedName.substr(sep + 2);
     addDeclaredTag(ident, *id);
     // Like an operator group, a tag is exported under its name: an import binds it by name,
     // and a module prefix resolves to it through the module it names.
-    const bool exported = exportEntity(
-        Reference(ident), detail::EntityAccess::makeTag(static_cast<uint32_t>(*id)));
+    const bool exported =
+        exportEntity(Reference(ident), detail::EntityAccess::makeTag(static_cast<uint32_t>(*id)));
     // A tag is written `#name`, not used as a value, so a program does not import it by name:
     // it comes with the module that declares it, as the module's operator groups do.
     exportDefaultImportRef(Reference(ident));
@@ -501,10 +498,11 @@ std::optional<Type *> Module::getImportedType(const Reference &ref, ImportLayer 
 }
 
 std::string Module::qualifiedName(const Reference &ref) const {
-    if (declaredName_.empty() && context_ && context_->mainModule().get() == this) {
+    // The main module's names are the program's own: they are written unqualified.
+    if (context_ && context_->mainModule().get() == this) {
         return ref.toString();
     }
-    return (declaredName_.empty() ? name_ : declaredName_) + "::" + ref.toString();
+    return name_ + "::" + ref.toString();
 }
 
 std::optional<std::pair<std::shared_ptr<Module>, Reference>>
@@ -719,9 +717,7 @@ std::optional<uint32_t> Module::declaredTag(const std::string &ident) const {
     return it->second;
 }
 
-void Module::addDeclaredTag(const std::string &ident, uint32_t tag) {
-    declaredTags_[ident] = tag;
-}
+void Module::addDeclaredTag(const std::string &ident, uint32_t tag) { declaredTags_[ident] = tag; }
 
 camel::core::attr::AttrSetId Module::declarationTags(const Reference &name) const {
     const auto it = declarationTags_.find(name.toString());
@@ -770,7 +766,8 @@ sem::PermissionMask Module::declarationPermissions(const Reference &name) const 
     return all;
 }
 
-sem::PermissionMask Module::declarationPermissions(const Reference &name, std::string_view signature) const {
+sem::PermissionMask
+Module::declarationPermissions(const Reference &name, std::string_view signature) const {
     const auto outer = declarationPermissions_.find(name.toString());
     if (outer == declarationPermissions_.end()) {
         return 0;
@@ -784,7 +781,7 @@ void Module::setDeclarationPermissions(
     // The permissions of a declaration are the union of everything written on it; a second
     // record (an instance built after the template) must not lose the first.
     sem::PermissionMask &slot = declarationPermissions_[name.toString()][std::string(signature)];
-    slot          = static_cast<sem::PermissionMask>(slot | permissions);
+    slot                      = static_cast<sem::PermissionMask>(slot | permissions);
 }
 
 camel::core::attr::AttrSetId Module::fieldTags(const Reference &typeName, size_t index) const {
@@ -794,13 +791,9 @@ camel::core::attr::AttrSetId Module::fieldTags(const Reference &typeName, size_t
 
 void Module::setFieldTags(
     const Reference &typeName, size_t index, camel::core::attr::AttrSetId tags) {
-    const auto key = std::make_pair(typeName.toString(), index);
-    const auto it  = fieldTags_.find(key);
-    fieldTags_[key] =
-        it == fieldTags_.end() ? tags : camel::core::attr::unite(it->second, tags);
+    const auto key  = std::make_pair(typeName.toString(), index);
+    const auto it   = fieldTags_.find(key);
+    fieldTags_[key] = it == fieldTags_.end() ? tags : camel::core::attr::unite(it->second, tags);
 }
 
 } // namespace camel::core::module
-
-
-

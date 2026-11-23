@@ -134,9 +134,7 @@ class UnaryExprLoad : public DataLoad {
   public:
     UnaryExprLoad(UnaryDataOp op) : DataLoad(DataType::UnaryExpr), op_(op) {}
 
-    const std::string toString() const override {
-        return "UnaryExpr: " + to_string(op_);
-    }
+    const std::string toString() const override { return "UnaryExpr: " + to_string(op_); }
 
     UnaryDataOp op() const { return op_; }
     const std::string geneCode() const override;
@@ -149,9 +147,7 @@ class BinaryExprLoad : public DataLoad {
   public:
     BinaryExprLoad(BinaryDataOp op) : DataLoad(DataType::BinaryExpr), op_(op) {}
 
-    const std::string toString() const override {
-        return "BinaryExpr: " + to_string(op_);
-    }
+    const std::string toString() const override { return "BinaryExpr: " + to_string(op_); }
 
     BinaryDataOp op() const { return op_; }
     const std::string geneCode() const override;
@@ -164,9 +160,7 @@ class ReservedExprLoad : public DataLoad {
   public:
     ReservedExprLoad(ReservedDataOp op) : DataLoad(DataType::ReservedExpr), op_(op) {}
 
-    const std::string toString() const override {
-        return "ReservedExpr: " + to_string(op_);
-    }
+    const std::string toString() const override { return "ReservedExpr: " + to_string(op_); }
 
     ReservedDataOp op() const { return op_; }
     const std::string geneCode() const override;
@@ -177,9 +171,7 @@ class ReservedExprLoad : public DataLoad {
     void setPositionalAfterNamed(camel::source::origin_id_t origin) {
         positionalAfterNamed_ = origin;
     }
-    camel::source::origin_id_t positionalAfterNamed() const {
-        return positionalAfterNamed_;
-    }
+    camel::source::origin_id_t positionalAfterNamed() const { return positionalAfterNamed_; }
 
     /// A call written with the pipe `x -> f` (design principles 3.9): when `x` is a `T?` or a `T!`
     /// that no overload of `f` takes as it is, the call takes the value out of it.
@@ -271,8 +263,8 @@ class StaticForLoad : public DataLoad {
         std::string valueName, std::string typeName, std::string tagsName = {},
         bool byIndices = false, size_t nameCount = 0)
         : DataLoad(DataType::StaticFor), valueName_(std::move(valueName)),
-          typeName_(std::move(typeName)), tagsName_(std::move(tagsName)),
-          byIndices_(byIndices), nameCount_(nameCount) {}
+          typeName_(std::move(typeName)), tagsName_(std::move(tagsName)), byIndices_(byIndices),
+          nameCount_(nameCount) {}
 
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
@@ -292,8 +284,8 @@ class StaticForLoad : public DataLoad {
     std::string valueName_;
     std::string typeName_;
     std::string tagsName_;
-    bool byIndices_     = false;
-    size_t nameCount_   = 0;
+    bool byIndices_   = false;
+    size_t nameCount_ = 0;
 };
 
 /// `static loop s1 = a1, ..., sk = ak for i in <序列> do body` (`in fields T`, `in indices ts`,
@@ -332,8 +324,8 @@ class StaticLoopLoad : public DataLoad {
     std::string valueName_;
     std::string typeName_;
     std::string tagsName_;
-    bool byIndices_  = false;
-    bool bySequence_ = false;
+    bool byIndices_   = false;
+    bool bySequence_  = false;
     size_t nameCount_ = 0;
 };
 
@@ -486,9 +478,7 @@ class FuncDataLoad : public DataLoad {
     FuncDataLoad() : DataLoad(DataType::Func) {} // anonymous function
     FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
 
-    const std::string toString() const override {
-        return "FuncData: " + ref_.toString();
-    }
+    const std::string toString() const override { return "FuncData: " + ref_.toString(); }
 
     const Reference &ref() const { return ref_; }
     /// The declaration's applicability condition: the expression after `when`, or null. It is
@@ -511,9 +501,7 @@ class RefDataLoad : public DataLoad {
   public:
     RefDataLoad(const Reference &ref) : DataLoad(DataType::Ref), ref_(ref) {}
 
-    const std::string toString() const override {
-        return "RefData: " + ref_.toString();
-    }
+    const std::string toString() const override { return "RefData: " + ref_.toString(); }
 
     const Reference &ref() const { return ref_; }
     const std::string geneCode() const override;
@@ -529,9 +517,7 @@ class ConstAsLoad : public DataLoad {
   public:
     ConstAsLoad(const Reference &ref) : DataLoad(DataType::ConstAs), ref_(ref) {}
 
-    const std::string toString() const override {
-        return "ConstAsData: " + ref_.toString();
-    }
+    const std::string toString() const override { return "ConstAsData: " + ref_.toString(); }
     const Reference &ref() const { return ref_; }
     const std::string geneCode() const override;
 
@@ -546,9 +532,7 @@ class SliceLoad : public DataLoad {
   public:
     SliceLoad() : DataLoad(DataType::Slice) {}
 
-    const std::string toString() const override {
-        return "DataLoad: " + to_string(dataType());
-    }
+    const std::string toString() const override { return "DataLoad: " + to_string(dataType()); }
     const std::string geneCode() const override;
 };
 
@@ -573,9 +557,7 @@ class EnumPatternLoad : public DataLoad {
     std::vector<EnumPatternField> &fields() { return fields_; }
     const std::vector<EnumPatternField> &fields() const { return fields_; }
 
-    const std::string toString() const override {
-        return "EnumPattern: " + ref_.toString();
-    }
+    const std::string toString() const override { return "EnumPattern: " + ref_.toString(); }
     const std::string geneCode() const override;
 
   private:

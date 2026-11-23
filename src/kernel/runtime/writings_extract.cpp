@@ -12,11 +12,11 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
-#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/runtime/oper_shape.h"
 
 #include <algorithm>
 #include <chrono>
@@ -338,8 +338,8 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
                 }
                 // What the member carries: the wait it has, and whether it sits on a block's chain.
                 // A structural reading, written where it is read -- `EffectLivenessFacts`
-                // carries no wait field (camel/runtime/effect_liveness.h says why). Only the wait is
-                // moved; the member's place on a block's chain is not, so it is not read here
+                // carries no wait field (camel/runtime/effect_liveness.h says why). Only the wait
+                // is moved; the member's place on a block's chain is not, so it is not read here
                 // either (assigned and never used, it was one more reason the
                 // field was a bag rather than an answer).
                 const bool memberCarriesWait = !draft_.ctrlInputsOf(member).empty();

@@ -37,6 +37,10 @@
  * An explicit conversion matches fields by name; where that would reorder the fields it is not
  * a no-op and the builder lowers it to a copy (see camel/compile).
  */
+namespace camel::core::module {
+class Module;
+}
+
 namespace camel::core::type {
 
 // Forward declarations.
@@ -120,15 +124,19 @@ class StructDecl {
     /// `name` is the name as written, qualified by its namespaces; `params` are the type
     /// parameters of a generic declaration (empty otherwise). `module` is the module that
     /// declares the type: an operator on a value of the type is looked for there as well
-    /// (design principles 5.7), so the declaration keeps the module it belongs to.
+    /// (design principles 5.7), so the declaration keeps the module it belongs to. A module
+    /// outlives every declaration it makes (the context holds it for the whole run), so the
+    /// declaration keeps it without owning it.
     static StructDecl *create(
-        const std::string &name, std::vector<std::string> params,
-        std::string module = std::string());
+        const std::string &name, std::vector<std::string> params, module::Module *module = nullptr);
 
     const std::string &name() const { return name_; }
-    /// The name the declaring module is loaded under (`models`), empty when the declaration was
-    /// made outside a module. Not part of the type's identity: the declaration is.
-    const std::string &moduleName() const { return module_; }
+    /// The module that declares this type, or nullptr when the declaration was made outside a
+    /// module. It is the module itself, not a name of it: a named type's identity is the
+    /// declaration (design principles 5.2), and the one thing a reader needs from it -- which
+    /// module's operators a value of the type goes to (5.7) -- is answered without searching
+    /// any collection for a name.
+    module::Module *module() const { return module_; }
     /// The last segment of the name (`Point` for `models::Point`), for messages that already
     /// name the namespace.
     const std::string &shortName() const { return shortName_; }
@@ -153,11 +161,11 @@ class StructDecl {
     StructDecl &operator=(const StructDecl &) = delete;
 
   private:
-    StructDecl(const std::string &name, std::vector<std::string> params, std::string module);
+    StructDecl(const std::string &name, std::vector<std::string> params, module::Module *module);
 
     std::string name_;
     std::string shortName_;
-    std::string module_;
+    module::Module *module_;
     std::vector<std::string> params_;
     std::vector<std::pair<std::string, Type *>> fields_;
     uint32_t id_;
@@ -217,8 +225,7 @@ class StructType : public CompositeType {
     /// interned while it is incomplete; completeFields() publishes it. Only a non-generic
     /// declaration is declared this way.
     static StructType *declare(
-        StructDecl *decl, std::span<Type *const> args,
-        const std::vector<std::string> &fieldNames);
+        StructDecl *decl, std::span<Type *const> args, const std::vector<std::string> &fieldNames);
 
     /// Fills the field types of a type made by declare(), in declaration order, and publishes
     /// it in the named-instance table. Called once, after StructDecl::define().

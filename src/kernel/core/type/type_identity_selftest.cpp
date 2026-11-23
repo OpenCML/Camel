@@ -524,26 +524,26 @@ std::string debugRunTypeIdentitySelfTest() {
         // A named struct: one declaration asked twice is one type, and two declarations that spell
         // one name are two (struct.cpp, `declaredKey`).
         Type *integer           = Type::Int64();
-        StructDecl *declaration = StructDecl::create("IdentitySelftestNamed", {}, "selftest");
+        StructDecl *declaration = StructDecl::create("IdentitySelftestNamed", {});
         StructType *named       = StructType::declare(declaration, {}, {"a"});
         declaration->define({{"a", integer}});
         named->completeFields({{"a", integer}});
         require(
             StructType::get(declaration, {}) == named,
             "one declaration asked twice is two struct types: " + show(named));
-        StructDecl *repeated     = StructDecl::create("IdentitySelftestNamed", {}, "selftest");
+        StructDecl *repeated     = StructDecl::create("IdentitySelftestNamed", {});
         StructType *repeatedType = StructType::declare(repeated, {}, {"a"});
         require(
             repeatedType != named,
             "two declarations that spell one name are one struct type: " + show(named));
 
         // An enum: the same reading, and a declaration's own prototype is one type.
-        EnumDecl *enumDeclaration = EnumDecl::create("IdentitySelftestEnum", {}, "selftest");
+        EnumDecl *enumDeclaration = EnumDecl::create("IdentitySelftestEnum", {});
         EnumType *enumType        = enumDeclaration->prototype();
         require(
             enumDeclaration->prototype() == enumType,
             "one enum declaration asked twice is two enum types: " + show(enumType));
-        EnumDecl *enumRepeated     = EnumDecl::create("IdentitySelftestEnum", {}, "selftest");
+        EnumDecl *enumRepeated     = EnumDecl::create("IdentitySelftestEnum", {});
         EnumType *enumRepeatedType = enumRepeated->prototype();
         require(
             enumRepeatedType != enumType,

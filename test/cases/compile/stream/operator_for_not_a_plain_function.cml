@@ -1,0 +1,36 @@
+// A plain function called `iter` is a name like any other, and it does not stand where the
+// operator stands: `for x in c` calls `__iter__` (design principles 4.3), and a function named
+// `iter` is called only where a program writes its name. What the operator of the type answers is
+// what the loop reads; the ordinary function beside it changes nothing.
+//
+// Naming `Range` in the signature is what makes this a fair test: the function is declared for the
+// very type the loop below walks, so if a `for` took a plain function by name, this one would be
+// the one it took.
+import { Range } from prelude
+
+func iter_round(i: int, hi: int) => (int, int..)? {
+    return if i < hi then (i, iter_upto(i + 1, hi)) else null
+}
+
+func iter_upto(i: int, hi: int) => int.. {
+    return func () {
+        match iter_round(i, hi) {
+            case null => null
+            case pair => pair
+        }
+    }
+}
+
+// Ten rounds whatever range it is given: if a loop took this function for `Range`'s operator, the
+// loop below over `0 .. 3` would print the sum of 100 to 109.
+func iter(r: Range) => int.. {
+    return iter_upto(100, 110)
+}
+
+func main() => int sync {
+    // The range's own operator answers: the rounds are 0, 1, 2.
+    println(loop acc = 0 for i in 0 .. 3 do acc * 10 + i)
+    // The ordinary function is called where it is written, and only there.
+    println(loop s = 0 for i in iter(0 .. 0) do s + i)
+    return 0
+}

@@ -28,10 +28,10 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
-#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -580,8 +580,8 @@ bool onCallCycle(const Program &program, const GCGraph *graph) {
 /// stopped at the JOIN -- the only way into an arm such a walk has is the ctrl edge the builder
 /// draws from the BRCH to the arm's first node. That edge is a position the regions already carry,
 /// and the answer here decides something else: whether binding constants into a call may unroll a
-/// recursion (collectDirectFuncSpecializations). Reading it off the edge would mean that deleting the
-/// edge lets a guarded recursion unroll one level per rewriting round.
+/// recursion (collectDirectFuncSpecializations). Reading it off the edge would mean that deleting
+/// the edge lets a guarded recursion unroll one level per rewriting round.
 bool insideBranchArm(const GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
     if (!draft.alive(id)) {
@@ -957,7 +957,10 @@ void setRenumberedClause(GraphDraft &draft, const sem::ResourceSignature &clause
             factory.addWithConstasArg(name, type->withTypeAt(i));
         } else {
             factory.addWithArg(
-                name, type->withTypeAt(i), type->withIsVarAt(i), type->withNeedsValueAt(i));
+                name,
+                type->withTypeAt(i),
+                type->withIsVarAt(i),
+                type->withNeedsValueAt(i));
         }
     }
     for (size_t i = 0; i < type->normTypesCount(); ++i) {
