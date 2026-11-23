@@ -54,3 +54,31 @@ DSH conventions this plugin depends on: a tool's `render(args, value)` returns c
 (`[{ type: 'text', text }]`); `agent.inject` / `followup` / `steer` take a user message
 (`{ id, role: 'user', source: { kind: 'user' }, content }`); client components register into slots with
 `ctx.slots.inject(name, () => ctx.slots.register({ name, id }, Component))`.
+
+## Keeping the coordinator from drifting
+
+A long session forgets its skill. Three layers keep the standing rules (`internal/collab/rules.md`) in
+front of it, each measurable: the rules are part of the claimed session's prompt context at every step
+(`promptReach` in `/oversee/state` counts whom the prompt was assembled for); they are injected every
+`rulesRefreshMinutes` (30) and right after a claim; and on sight -- a call to a question tool, or a turn
+that ends by asking the owner, is answered with a reminder at once; a tool call that blocks the claimed
+session is reported at `blockWarnMinutes` (10) and its turn cancelled at `blockCancelMinutes` (30), queued
+messages kept (`blockExempt` lists tool names that may run long).
+
+## When a side drops
+
+Every acknowledgement, message and reminder is kept (and rebuilt from the log at load), so a reader that
+lost the stream reconnects with `/oversee/events?since=<ms>` and receives what it missed. The decision-maker's
+client adds `client=dm` to its requests; after `dmOfflineMinutes` (45) without one, the coordinator is told
+to carry on without waiting. With no claim, a session working in the repository is told in its prompt that
+the coordinator claims first. The full contingency table is in `internal/collab/SKILL.md`.
+
+## Back-pressure
+
+A backlog worked through in order makes anything newer or more urgent wait behind stale messages, so each
+direction has a limit and past it the sender reorganizes. `/oversee/say` refuses a dispatch with `429` once
+`queueLimit` (3) unread dispatches sit in the coordinator's queue; a dispatch with `"supersedes": [ids]`
+takes those still unread out of the queue (`agent.inbox.remove`) before it is delivered, and reports which
+it withdrew and which were already read. `/oversee/state` lists `queuedDispatches`. The plugin's own
+messages replace their unread predecessor of the same kind. A reader back after more than five missed
+events gets one `missed` summary instead of a replay.
