@@ -170,6 +170,20 @@ export const RULES = [
         },
     },
     {
+        id: 'index-lock',
+        level: 'wake',
+        hold: 0,
+        cooldown: 15,
+        check: ({ m }) => {
+            const lock = m.indexLock
+            if (!lock || lock.unreadable || lock.ageSeconds <= 120) return null
+            return {
+                key: String(Math.floor(lock.ageSeconds / 600)),
+                text: `主检出的 .git/index.lock 已存在 ${Math.round(lock.ageSeconds / 60)} 分钟：合并都会失败。用 scripts/check-index-lock.mjs 看是谁持有——先找那个只读的后台程序（git 面板补丁是否被更新覆盖：internal/tools/patches/），别怪合并；确认没有 git 进程在用再删锁文件。`,
+            }
+        },
+    },
+    {
         id: 'fetch-failed',
         level: 'quiet',
         hold: 10,
