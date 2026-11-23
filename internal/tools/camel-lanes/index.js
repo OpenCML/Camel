@@ -558,7 +558,7 @@ export function apply(ctx, rawConfig) {
                     required: ['result'],
                     additionalProperties: false,
                 },
-                render: (_args, value) => value.result,
+                render: (_args, value) => [{ type: 'text', text: value.result }],
             },
             async execute({ gate, minutes }) {
                 silence(gate, minutes)
@@ -592,7 +592,7 @@ export function apply(ctx, rawConfig) {
                     required: ['readings'],
                     additionalProperties: false,
                 },
-                render: (_args, value) => value.readings,
+                render: (_args, value) => [{ type: 'text', text: value.readings }],
             },
             async execute() {
                 state = read()

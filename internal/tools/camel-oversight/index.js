@@ -341,7 +341,7 @@ export function apply(ctx, rawConfig) {
             parameters: { type: 'object', properties: {}, additionalProperties: false },
             output: {
                 schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
-                render: (_args, value) => value.result,
+                render: (_args, value) => [{ type: 'text', text: value.result }],
             },
             async execute() {
                 const agent = ctx.agents.currentInitiator()
@@ -370,7 +370,7 @@ export function apply(ctx, rawConfig) {
             },
             output: {
                 schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
-                render: (_args, value) => value.result,
+                render: (_args, value) => [{ type: 'text', text: value.result }],
             },
             async execute({ id, status, note }) {
                 const entry = { kind: 'ack', id, at: Date.now(), status, note: note || '' }
@@ -398,7 +398,7 @@ export function apply(ctx, rawConfig) {
             },
             output: {
                 schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
-                render: (_args, value) => value.result,
+                render: (_args, value) => [{ type: 'text', text: value.result }],
             },
             async execute({ text, urgent }) {
                 const entry = { kind: 'tell', at: Date.now(), urgent: urgent === true, text: String(text), session: claimed }
