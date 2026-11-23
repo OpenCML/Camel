@@ -1076,6 +1076,51 @@ export func is_empty(r: Range) => bool {
     return len(to_array(r)) == 0
 }
 
+// The functions a range shares with an `int[]` are ordinary functions of the same names, declared
+// beside the operators of those names: the two declarations of one name are one overload set, and
+// the type of the argument chooses between them. What each does is the array's own, on the array
+// the range names -- a range is a value and `to_array` is the one conversion from it, so a range
+// gets no second implementation of these.
+//
+// A program writes them after `import { ... } from prelude` like the rest of the prelude's
+// functions that are not operators.
+
+/// f applied to every integer r names; the calls have no order among them, and the result is by
+/// position, as `map` on the array the range names.
+/// @example (0 .. 3)->map<func (x: int) => int { x * 2 }>    // [0, 2, 4]
+with <f: (item: int) => U>
+export func map::<U>(r: Range) => U[] {
+    return to_array(r)->map<f>
+}
+
+/// The integers of r for which f is true, in order; the calls of f have no order among them.
+/// @example (0 .. 5)->filter<func (x: int) => bool { x % 2 == 0 }>    // [0, 2, 4]
+with <f: (item: int) => bool>
+export func filter(r: Range) => int[] {
+    return to_array(r)->filter<f>
+}
+
+/// The integers of r combined from left to right with initial:
+/// f(...f(f(initial, start), start + step)..., the last one). Both are written in the angle
+/// brackets, as `reduce` on an array writes them.
+/// @example (0 .. 3)->reduce<func (acc: int, x: int) => int { acc + x }, 0>    // 3
+with <f: (acc: U, item: int) => U, initial: U>
+export func reduce::<U>(r: Range) => U {
+    return to_array(r)->reduce<f, initial>
+}
+
+/// How many integers r names.
+/// @example (0 .. 5)->len()    // 5
+export func len(r: Range) => int {
+    return len(to_array(r))
+}
+
+/// The integers of r, written as the array they are.
+/// @example (0 .. 3)->print()    // [0, 1, 2]
+export func print(r: Range) => void {
+    return println(to_array(r))
+}
+
 // ---- a range's stream ----
 //
 // `for i in r` asks the type of `r` how to walk it (design principles 3.10, 5.4): it calls the

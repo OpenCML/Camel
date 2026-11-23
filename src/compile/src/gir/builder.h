@@ -3635,13 +3635,23 @@ class Builder {
     std::string operatorSearchScopeText(
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
-    /// Whether the generic overload `tmpl` accepts the arguments `normInputs` of the types
-    /// `normTypes`: its type variables bind and every argument then fits its parameter
-    /// (resolveGenericCall without the diagnostics). An argument that is a composite literal
-    /// enters its parameter's type, as it does in a call (design principles 5.1).
-    bool genericOperatorAccepts(
-        const generic_template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
-        const camel::core::type::type_vec_t &normTypes);
+    /// Whether the generic overload `tmpl` takes this call: its `with` parameters are supplied
+    /// (or defaulted), its type variables bind to the arguments' types, every argument then fits
+    /// its parameter, and its own `when` holds for the types those arguments bind
+    /// (`chooseGenericOverload`'s rule, without the diagnostics). An argument that is a composite
+    /// literal enters its parameter's type, as it does in a call (design principles 5.1).
+    ///
+    /// A false `when` makes this candidate inapplicable, not the call erroneous: the caller drops
+    /// it and goes on to the others (design principles 4.4). The conditions it could not meet are
+    /// appended to `unmetConditions`, which a caller that ends up with no candidate at all reports
+    /// as what it filtered, rather than as a call that had none.
+    bool genericCandidateBinds(
+        const generic_template_ptr_t &tmpl, const std::vector<Argument> &withInputs,
+        const std::vector<Argument> &normInputs, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes,
+        std::vector<std::string> *unmetConditions);
+    /// A candidate as a report names it: its name, its type, and the condition it wrote.
+    std::string describeGenericCandidate(const generic_template_ptr_t &tmpl);
     /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
     /// parameter types a built-in, C++ module or imported overload of it takes.
     void rejectOperatorConflict(

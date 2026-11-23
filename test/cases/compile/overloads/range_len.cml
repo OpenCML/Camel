@@ -1,0 +1,13 @@
+/**
+ * How many integers a range names: `len` is an ordinary function of the prelude declared beside
+ * the operator of the same name, and the two are one overload set.
+ */
+
+import { Range, len } from prelude
+
+func main() => int sync {
+    let r: Range = 0 .. 5
+    println(r->len())
+    println(len(r))
+    return 0
+}
