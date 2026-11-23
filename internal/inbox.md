@@ -46,3 +46,7 @@
   2. `lane/facts-tools`：`D-1123-29` 第 2 条，至今未开（`inspect --facts` 接线、每个 kind 一条与旧算法逐项对照的用例、调试器 `regionOuter` 改读 `ControlRegions`）。
   3. `lane/facts-effects`：`EffectSummary`、`graph.is_pure` 的读者改读 `core.effects`，删掉并行的旧计算；读数是改前后逐节点相同。
   4. `lane/notation-corpus`：语料里的旧返回类型写法（4,252 个 `.cml`）与残留的 `f..g` 用格式化器一次改写，然后从解析器删掉旧写法；与其他车道冲突时重跑格式化器，不手工解冲突。
+- **D-1123-32（催 `D-1123-30`、`D-1123-31`）** 两条派工合走已 50 分钟，车道表里仍没有 `range-value`、`3a-b5`、`facts-tools`、`facts-effects`、`notation-corpus` 五行；而 `cleanup`、`facts-b3`、`exec-plan-kind` 已合入还挂着。请开车道并改表；某条暂时开不了，在表里写明卡在哪。
+- **D-1123-35（每日审查，并进 `range-value`）切片规则有四份。** 取到哪些位置的算术在 `struct.cpp#sliceRange`、`globals.cpp#staticSliceRange`（静态检查）、`tensor/ops/indexing.cpp:457`（形状）各写一遍，`onnx/lowering.cpp:537` 另把 `-1` 特判。改法：一个函数回答"范围在长度为 n 的一维上取哪些位置"（首个、个数、步长），四处都调它。顺带：`array.cml#reverse` 的注释说"切片拒绝负界"，现已不成立；改成 `Range` 后直接写 `xs[range(len(xs) - 1, -1, -1)]`。补用例：`t[-1..2]` 静态拒绝、`A: int` 按名字给类型实参（现 0 个用例）。
+- **D-1123-37（收工）** 今天收工时请合并位跑一轮 GitHub Actions，读数写进车道表末尾。
+- **D-1123-43（通道测试，经 camel-oversight 同时送达）** 合 `fsh-dev` 后重载 DSH：两个插件的工具 `render` 都改成 `(参数, 值)` 两参（DSH 的调用约定，原先取到 undefined 才报 non-lossless）；`camel-oversight` 的机器本地值移到 `%USERPROFILE%\.camel-oversight\config.json`（写 `{"buildHost": "88zjwei", "logFile": "..."}`），profile 那层重复的 insert 删掉，只挂一处。重载后重新认领，用 `oversight_ack` 回执本条。

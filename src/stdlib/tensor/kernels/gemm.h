@@ -51,6 +51,15 @@ void sgemmLibrary(
     bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
     int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc);
 
+/// The f64 counterpart of `sgemm`: the same signature, the same canonical algorithm (a chain of
+/// multiply-adds in ascending k from +0, then alpha and beta), one plain loop instead of the f32
+/// kernel's packed register-tiled path. It exists because an f64 tensor is computed in f64 and
+/// never narrowed to f32 (dtype.h): the f32 kernel is the fast one, this one is the reference one,
+/// which is what an f64 product gets. There is no library arm: `sgemmLibrary` is f32.
+void dgemm(
+    bool transA, bool transB, int64_t M, int64_t N, int64_t K, double alpha, const double *A,
+    int64_t lda, const double *B, int64_t ldb, double beta, double *C, int64_t ldc);
+
 std::string_view gemmBackendName();
 std::string_view libraryGemmName();
 

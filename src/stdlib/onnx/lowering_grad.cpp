@@ -733,9 +733,11 @@ Value lowerConv2dInputGrad(const LowerContext &ctx) {
     const int64_t rW      = (staticExtent(x, 3, ctx.uri(), "input width") + 2 * padding -
                              staticExtent(w, 3, ctx.uri(), "kernel width")) %
                             stride;
+    // The element type the call computes in: the adjoint of an f64 convolution exports in f64.
+    const auto f = ctx.elementDtype();
     return ctx.emit(
         "ConvTranspose",
-        {ctx.input(2, TypeCode::Float32), ctx.input(1, TypeCode::Float32)},
+        {ctx.input(2, f), ctx.input(1, f)},
         {Attribute::makeInts("strides", {stride, stride}),
          Attribute::makeInts("pads", {padding, padding, padding, padding}),
          Attribute::makeInts("output_padding", {rH, rW})});
@@ -753,7 +755,12 @@ Value lowerConv2dKernelGrad(const LowerContext &ctx) {
     const int64_t stride  = ctx.constInt(3, 1);
     const int64_t padding = ctx.constInt(4, 0);
     const int64_t perm[]  = {1, 0, 2, 3};
-    const std::string xt  = e.node(
+    const TypeCode f      = *ctx.elementDtype();
+    // Conv is the one node here the export target has no f64 kernel for
+    // (capabilities/onnxruntime-cpu.json: `Conv` -> no_kernel.float64), so the correlation and the
+    // two transposes that feed it are the f32 island, and its result comes back at the call's
+    // element type before the final transpose and crop.
+    const std::string xt = e.node(
         "Transpose",
         {ctx.input(0, TypeCode::Float32)},
         {Attribute::makeInts("perm", std::vector<int64_t>(perm, perm + 4))});
@@ -767,6 +774,9 @@ Value lowerConv2dKernelGrad(const LowerContext &ctx) {
         {Attribute::makeInts("strides", {1, 1}),
          Attribute::makeInts("dilations", {stride, stride}),
          Attribute::makeInts("pads", {padding, padding, padding, padding})});
+    if (f != TypeCode::Float32) {
+        dw = e.node("Cast", {dw}, {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(f)))});
+    }
     dw = e.node(
         "Transpose",
         {dw},
@@ -794,7 +804,7 @@ Value lowerConv2dBiasGrad(const LowerContext &ctx) {
     if (ctx.rank(1) != 4) {
         throw ExportError(std::format("{}: expects a rank-4 dy", ctx.uri()));
     }
-    const std::string dy = ctx.input(1, TypeCode::Float32);
+    const std::string dy = ctx.input(1, ctx.elementDtype());
     return ctx.result(reduce(ctx.emitter(), "ReduceSum", dy, {0, 2, 3}, false));
 }
 
@@ -804,7 +814,7 @@ Value lowerConv2dBiasGrad(const LowerContext &ctx) {
 // dx = gamma*inv * (dy - mean(dy) - xhat*mean(dy*xhat)) per channel.
 Value lowerBatchNormTrainGrad(const LowerContext &ctx) {
     Emitter &e        = ctx.emitter();
-    const auto f      = TypeCode::Float32;
+    const auto f      = ctx.elementDtype();
     const size_t rank = ctx.rank(0);
     if (rank < 2) {
         throw ExportError(std::format("{}: expects input of rank >= 2", ctx.uri()));
@@ -830,7 +840,7 @@ Value lowerBatchNormTrainGrad(const LowerContext &ctx) {
     const std::string xc   = e.node("Sub", {x, mu1});
     const std::string var1 = reduce(e, "ReduceMean", e.node("Mul", {xc, xc}), axes, true);
     const std::string inv1 =
-        e.node("Reciprocal", {e.node("Sqrt", {e.node("Add", {var1, floatConst(e, eps)})})});
+        e.node("Reciprocal", {e.node("Sqrt", {e.node("Add", {var1, floatConst(e, eps, f)})})});
     const std::string xhat    = e.node("Mul", {xc, inv1});
     const std::string dyXh    = e.node("Mul", {dy, xhat});
     const std::string dbeta   = reduce(e, "ReduceSum", dy, axes, false);
@@ -880,12 +890,13 @@ Value lowerMaxPool2dGrad(const LowerContext &ctx) {
         Attribute::makeInts("kernel_shape", {kernel, kernel}),
         Attribute::makeInts("strides", {stride, stride}),
         Attribute::makeInts("pads", {padding, padding, padding, padding})};
+    const auto f = ctx.elementDtype();
     const auto [pooled, indices] =
-        e.node2("MaxPool", {ctx.input(0, TypeCode::Float32)}, window, ElemType::Int64);
+        e.node2("MaxPool", {ctx.input(0, f)}, window, ElemType::Int64);
     (void)pooled; // only the indices feed MaxUnpool
     return ctx.emit(
         "MaxUnpool",
-        {ctx.input(1, TypeCode::Float32), indices, shapeOperand(ctx, 0)},
+        {ctx.input(1, f), indices, shapeOperand(ctx, 0)},
         window);
 }
 

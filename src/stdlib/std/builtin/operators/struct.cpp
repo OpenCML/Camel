@@ -9,6 +9,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/tagged.h"
+#include "camel/core/slice.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -21,6 +22,7 @@
 #include "ops.h"
 #include <format>
 #include <numeric>
+#include <optional>
 #include <vector>
 
 namespace mm = camel::core::mm;
@@ -292,12 +294,10 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 stop));
     }
 
-    size_t count = 0;
-    if ((step > 0 && start < stop) || (step < 0 && start > stop)) {
-        count = static_cast<size_t>((stop - start + step - (step > 0 ? 1 : -1)) / step);
-        if (step < 0) // correction for negative step and integer division
-            count = static_cast<size_t>((start - stop - 1) / (-step) + 1);
-    }
+    // How many integers the range names: the one slice rule's count, on the integer sequence the
+    // two ends bound (`camel/core/slice.h`).
+    const auto positions = camel::core::slicePositions(std::nullopt, start, stop, step);
+    const size_t count   = positions ? static_cast<size_t>(positions->count) : 0;
 
     auto *intArrayType = ArrayType::create(Type::Int64());
     Array *result      = Array::create(mm::autoSpace(), intArrayType, count);
@@ -347,16 +347,11 @@ slot_t __to_range__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
-// The positions a slice takes along the one axis it names. The ends follow the rules of the slice
-// function (design principles 3.9 and 5.4): the first and the last position the walk takes must be
-// on the axis, and the ends are the bounds of an integer sequence rather than positions --
-// `range(3, -1, -1)` is 3, 2, 1, 0, so a -1, written or left out, is the position before the first
-// element and the walk never takes it (`last(t)` names the last element). A negative step runs
-// backwards: the start defaults to the last position and the end, left out, to that position
-// before the first. Any non-zero step is accepted; the constant 0 is refused where it is written
-// (the static check in `src/stdlib/std/builtin/modules/globals.cpp`) and is a fault when only the
-// run knows it. A bound past the axis is still a fault, so an empty range names a place the axis
-// has.
+// The positions a slice takes along the one axis it names, as the run reads them: the rule is
+// `camel::core::slicePositions` (design principles 3.9 and 5.4), and what this function adds is
+// the fault the run gives -- a step of 0 names no walk at all, and a position the axis does not
+// have is `SliceOutOfRange`. A bound past the axis is still a fault, so an empty range names a
+// place the axis has.
 //
 // The step and which of the start and the end the program wrote come with the call as a two-bit
 // mask (bit 0 end, bit 1 start), which is exactly the lowering the subscript writes
@@ -367,11 +362,7 @@ namespace {
 //
 // The forward slice and the range scatter of its gradient both read the range here, so the
 // adjoint puts each element's gradient back where the forward took the element.
-struct SliceRange {
-    Int64 start = 0; // the first position taken
-    Int64 count = 0; // how many positions the slice takes
-    Int64 step  = 1; // the distance between two positions taken
-};
+using SliceRange = camel::core::SlicePositions;
 
 SliceRange sliceRange(
     Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written,
@@ -381,23 +372,15 @@ SliceRange sliceRange(
     if (step == 0) {
         throwRuntimeFault(RuntimeDiag::InvalidArgument, "[]", "a slice step must not be 0");
     }
-    SliceRange range;
-    range.step  = step;
-    range.start = wroteStart ? startRaw : (step > 0 ? 0 : extent - 1);
-    const Int64 end = wroteEnd ? endRaw : (step > 0 ? extent : -1);
-    range.count     = step > 0 ? (range.start < end ? (end - range.start + step - 1) / step : 0)
-                               : (range.start > end ? (range.start - end - step - 1) / (-step) : 0);
-    const auto outOfRange = [&]() {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
-    };
-    if (range.start > extent || end > extent) {
-        outOfRange();
-    }
-    if (range.count > 0) {
-        const Int64 last = range.start + (range.count - 1) * step;
-        if (range.start < 0 || last < 0 || last >= extent) {
-            outOfRange();
-        }
+    // The extent is the axis the call reads, so both ends stand for something here and the answer
+    // is the positions this axis has.
+    const SliceRange range = *camel::core::slicePositions(
+        extent,
+        wroteStart ? std::optional<int64_t>(startRaw) : std::nullopt,
+        wroteEnd ? std::optional<int64_t>(endRaw) : std::nullopt,
+        step);
+    if (range.outside) {
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, range.stop, what, extent);
     }
     return range;
 }

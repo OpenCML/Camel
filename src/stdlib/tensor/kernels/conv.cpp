@@ -4,6 +4,12 @@
 /*
  * Convolution, pooling, and batch-norm kernels (see conv.h).
  *
+ * Each kernel is one source instantiated for the element type its call states: f32 and f64.
+ * `computableElementType` reads that one type off the call's tensors (a call whose tensors state
+ * two element types has no arm to take -- there is no implicit conversion between numeric types,
+ * design principles 5.1), refuses an element type no instance exists for, and `forElementType`
+ * picks the instance. So an f64 convolution is not a second implementation; it is this one.
+ *
  * Forward convolution and the input gradient parallelize over images; each
  * worker owns its column buffer, and the GEMMs inside run serially because
  * they execute within a parallel region. With a single image the GEMM itself
@@ -22,7 +28,10 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <optional>
+#include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace camel::tensor::kernels {
@@ -75,35 +84,99 @@ ConvGeometry geometry(
     return g;
 }
 
-/// The convolution, pooling and batch-norm kernels compute in f32 only. Every tensor they read
-/// is checked here: an f64 or integer tensor is refused with the operator, the argument type and
-/// the supported set, never narrowed to f32 (design principles 5.1; 13.1). This is each
-/// kernel's declaration of what it computes; it is a fault at the call site, not a conversion.
-void requireF32(const char *op, std::initializer_list<const Array *> tensors) {
-    for (const Array *t : tensors) {
-        if (t != nullptr && t->dtype() != TypeCode::Float32) {
-            refuseTensorElementType(op, t, {TypeCode::Float32});
+/// The element type a call computes in: the one every tensor of the call states.
+///
+/// A call whose tensors state two element types has no arm to take: a tensor operator computes in
+/// one element type and there is no implicit conversion between numeric types (design principles
+/// 5.1), so it is refused here rather than read at a type the program did not write. A null tensor
+/// (an absent bias) states nothing.
+TypeCode oneElementType(const char *op, std::initializer_list<const Array *> tensors) {
+    std::optional<TypeCode> code;
+    for (const Array *tensor : tensors) {
+        if (tensor == nullptr) {
+            continue;
         }
+        if (!code.has_value()) {
+            code = tensor->dtype();
+        } else if (*code != tensor->dtype()) {
+            throw std::invalid_argument(
+                std::string(op) + ": the two operands have different element types ('" +
+                elementTypeSpelling(*code) + "' and '" + elementTypeSpelling(tensor->dtype()) +
+                "'): a tensor operator computes in one element type, and there is no implicit "
+                "conversion between numeric types");
+        }
+    }
+    return code.value_or(TypeCode::Float32);
+}
+
+/// The element type these kernels compute in, refusing every other one: the kernels are
+/// instantiated for f32 and f64 (`forElementType`), and an integer, bool, bf16 or f16 tensor is
+/// refused with the operator, the argument type and the supported set, never narrowed to f32
+/// (design principles 5.1; 13.1). This is each kernel's declaration of what it computes; it is a
+/// fault at the call site, not a conversion.
+TypeCode computableElementType(const char *op, std::initializer_list<const Array *> tensors) {
+    const TypeCode code = oneElementType(op, tensors);
+    if (code == TypeCode::Float32 || code == TypeCode::Float64) {
+        return code;
+    }
+    for (const Array *tensor : tensors) {
+        if (tensor != nullptr) {
+            refuseTensorElementType(op, tensor, {TypeCode::Float32, TypeCode::Float64});
+        }
+    }
+    throw std::invalid_argument(noTensorElement(code, ElementSubject::Kernels));
+}
+
+/// Runs `fn` instantiated for the element type the call computes in. The two instances are the
+/// storage types of the two element types these kernels state (dtype.h, `StorageOf`), so a kernel
+/// body is written once and compiled twice. `dispatchDType` would instantiate all seven storage
+/// types, which is the wrong question here: these kernels multiply, so only floating types have
+/// an implementation at all.
+template <typename Fn> decltype(auto) forElementType(TypeCode code, Fn &&fn) {
+    switch (code) {
+    case TypeCode::Float32:
+        return fn.template operator()<float>();
+    case TypeCode::Float64:
+        return fn.template operator()<double>();
+    default:
+        break;
+    }
+    // computableElementType refused every other element type, so no call reaches this.
+    throw std::invalid_argument(noTensorElement(code, ElementSubject::Kernels));
+}
+
+/// The product the convolution is built on, in the element type of its tensors: `sgemm` (the
+/// canonical f32 kernel, gemm.h) for f32, and its f64 counterpart `dgemm` (the same signature and
+/// summation order) for f64.
+template <typename T>
+void spatialGemm(
+    bool transA, bool transB, int64_t M, int64_t N, int64_t K, T alpha, const T *A, int64_t lda,
+    const T *B, int64_t ldb, T beta, T *C, int64_t ldc) {
+    if constexpr (std::is_same_v<T, float>) {
+        sgemm(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+    } else {
+        static_assert(std::is_same_v<T, double>, "a spatial kernel multiplies in f32 or f64");
+        dgemm(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
     }
 }
 
 /// Unfolds one image [C, H, W] into cols [C*KH*KW, OH*OW] (zero padding).
-void im2col(const ConvGeometry &g, const float *image, float *cols) {
+template <typename T> void im2col(const ConvGeometry &g, const T *image, T *cols) {
     for (int64_t c = 0; c < g.C; ++c) {
         for (int64_t kh = 0; kh < g.KH; ++kh) {
             for (int64_t kw = 0; kw < g.KW; ++kw) {
-                float *row = cols + ((c * g.KH + kh) * g.KW + kw) * g.spatial();
+                T *row = cols + ((c * g.KH + kh) * g.KW + kw) * g.spatial();
                 for (int64_t oh = 0; oh < g.OH; ++oh) {
                     const int64_t ih = oh * g.stride - g.pad + kh;
-                    float *dst       = row + oh * g.OW;
+                    T *dst          = row + oh * g.OW;
                     if (ih < 0 || ih >= g.H) {
-                        std::fill_n(dst, g.OW, 0.0f);
+                        std::fill_n(dst, g.OW, T(0));
                         continue;
                     }
-                    const float *src = image + (c * g.H + ih) * g.W;
+                    const T *src = image + (c * g.H + ih) * g.W;
                     for (int64_t ow = 0; ow < g.OW; ++ow) {
                         const int64_t iw = ow * g.stride - g.pad + kw;
-                        dst[ow]          = (iw >= 0 && iw < g.W) ? src[iw] : 0.0f;
+                        dst[ow]          = (iw >= 0 && iw < g.W) ? src[iw] : T(0);
                     }
                 }
             }
@@ -112,17 +185,17 @@ void im2col(const ConvGeometry &g, const float *image, float *cols) {
 }
 
 /// Adds cols [C*KH*KW, OH*OW] back into one image gradient [C, H, W].
-void col2im(const ConvGeometry &g, const float *cols, float *image) {
+template <typename T> void col2im(const ConvGeometry &g, const T *cols, T *image) {
     for (int64_t c = 0; c < g.C; ++c) {
         for (int64_t kh = 0; kh < g.KH; ++kh) {
             for (int64_t kw = 0; kw < g.KW; ++kw) {
-                const float *row = cols + ((c * g.KH + kh) * g.KW + kw) * g.spatial();
+                const T *row = cols + ((c * g.KH + kh) * g.KW + kw) * g.spatial();
                 for (int64_t oh = 0; oh < g.OH; ++oh) {
                     const int64_t ih = oh * g.stride - g.pad + kh;
                     if (ih < 0 || ih >= g.H) {
                         continue;
                     }
-                    float *dst = image + (c * g.H + ih) * g.W;
+                    T *dst = image + (c * g.H + ih) * g.W;
                     for (int64_t ow = 0; ow < g.OW; ++ow) {
                         const int64_t iw = ow * g.stride - g.pad + kw;
                         if (iw >= 0 && iw < g.W) {
@@ -144,49 +217,37 @@ void requireDy(const ConvGeometry &g, const Array *dy) {
     }
 }
 
-} // namespace
+// Each kernel below is one instantiation per element type; the public entry point beside it reads
+// the element type off the call and picks the instance.
 
-Shape conv2dShape(
-    std::span<const int64_t> input, std::span<const int64_t> kernel, int64_t stride,
-    int64_t padding) {
-    const ConvGeometry g = geometry(input, kernel, stride, padding);
-    return {g.N, g.O, g.OH, g.OW};
-}
-
-Array *conv2d(
-    const Array *input, const Array *kernel, const Array *bias, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
-    const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
-    if (bias && !(bias->rank() == 1 && bias->dim(0) == g.O)) {
-        throw ShapeError(
-            "conv2d bias must have shape [" + std::to_string(g.O) + "], got " +
-            dims(bias->shapeSpan()));
-    }
-    requireF32("conv2d", {input, kernel, bias});
+template <typename T>
+Array *conv2dIn(
+    const ConvGeometry &g, const Array *input, const Array *kernel, const Array *bias,
+    mm::IAllocator &allocator) {
     const int64_t outShape[] = {g.N, g.O, g.OH, g.OW};
-    Array *out        = createTensor(TypeCode::Float32, outShape, allocator);
-    const float *px = input->dataAs<float>(), *pw = kernel->dataAs<float>();
-    float *py = out->dataAs<float>();
+    Array *out               = createTensor(dtypeOf<T>(), outShape, allocator);
+    const T *px = input->dataAs<T>(), *pw = kernel->dataAs<T>();
+    const T *pb = bias != nullptr ? bias->dataAs<T>() : nullptr;
+    T *py       = out->dataAs<T>();
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
-        std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
+        std::vector<T> cols(static_cast<size_t>(g.ckk() * g.spatial()));
         for (int64_t n = begin; n < end; ++n) {
             im2col(g, px + n * g.C * g.H * g.W, cols.data());
-            float *y   = py + n * g.O * g.spatial();
-            float beta = 0.0f;
-            if (bias) {
+            T *y   = py + n * g.O * g.spatial();
+            T beta = T(0);
+            if (pb != nullptr) {
                 for (int64_t o = 0; o < g.O; ++o) {
-                    std::fill_n(
-                        y + o * g.spatial(), g.spatial(), bias->dataAs<float>()[o]);
+                    std::fill_n(y + o * g.spatial(), g.spatial(), pb[o]);
                 }
-                beta = 1.0f;
+                beta = T(1);
             }
-            sgemm(
+            spatialGemm(
                 false,
                 false,
                 g.O,
                 g.spatial(),
                 g.ckk(),
-                1.0f,
+                T(1),
                 pw,
                 g.ckk(),
                 cols.data(),
@@ -199,137 +260,124 @@ Array *conv2d(
     return out;
 }
 
-Array *conv2dInputGrad(
-    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
-    const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
-    requireDy(g, dy);
-    requireF32("conv2d_input_grad", {kernel, dy});
-    Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator, true);
+template <typename T>
+Array *conv2dInputGradIn(
+    const ConvGeometry &g, const Array *input, const Array *kernel, const Array *dy,
+    mm::IAllocator &allocator) {
+    const T *pw = kernel->dataAs<T>(), *pdy = dy->dataAs<T>();
+    Array *dx = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator, true);
+    T *pdx    = dx->dataAs<T>();
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
-        std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
+        std::vector<T> cols(static_cast<size_t>(g.ckk() * g.spatial()));
         for (int64_t n = begin; n < end; ++n) {
             // cols = W^T [CKK x O] @ dy[n] [O x OHOW]
-            sgemm(
+            spatialGemm(
                 true,
                 false,
                 g.ckk(),
                 g.spatial(),
                 g.O,
-                1.0f,
-                kernel->dataAs<float>(),
+                T(1),
+                pw,
                 g.ckk(),
-                dy->dataAs<float>() + n * g.O * g.spatial(),
+                pdy + n * g.O * g.spatial(),
                 g.spatial(),
-                0.0f,
+                T(0),
                 cols.data(),
                 g.spatial());
-            col2im(g, cols.data(), dx->dataAs<float>() + n * g.C * g.H * g.W);
+            col2im(g, cols.data(), pdx + n * g.C * g.H * g.W);
         }
     });
     return dx;
 }
 
-Array *conv2dKernelGrad(
-    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
-    const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
-    requireDy(g, dy);
-    requireF32("conv2d_kernel_grad", {input, dy});
-    Array *dw =
-        createTensor(TypeCode::Float32, kernel->shapeSpan(), allocator, true);
-    std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
+template <typename T>
+Array *conv2dKernelGradIn(
+    const ConvGeometry &g, const Array *input, const Array *kernel, const Array *dy,
+    mm::IAllocator &allocator) {
+    const T *px = input->dataAs<T>(), *pdy = dy->dataAs<T>();
+    Array *dw = createTensor(dtypeOf<T>(), kernel->shapeSpan(), allocator, true);
+    T *pdw    = dw->dataAs<T>();
+    std::vector<T> cols(static_cast<size_t>(g.ckk() * g.spatial()));
     for (int64_t n = 0; n < g.N; ++n) {
-        im2col(g, input->dataAs<float>() + n * g.C * g.H * g.W, cols.data());
+        im2col(g, px + n * g.C * g.H * g.W, cols.data());
         // dW [O x CKK] += dy[n] [O x OHOW] @ cols^T [OHOW x CKK]
-        sgemm(
+        spatialGemm(
             false,
             true,
             g.O,
             g.ckk(),
             g.spatial(),
-            1.0f,
-            dy->dataAs<float>() + n * g.O * g.spatial(),
+            T(1),
+            pdy + n * g.O * g.spatial(),
             g.spatial(),
             cols.data(),
             g.spatial(),
-            1.0f,
-            dw->dataAs<float>(),
+            T(1),
+            pdw,
             g.ckk());
     }
     return dw;
 }
 
-Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator) {
-    if (dy->rank() != 4) {
-        throw ShapeError("conv2d bias gradient expects a rank-4 dy, got " + dims(dy->shapeSpan()));
-    }
-    requireF32("conv2d_bias_grad", {dy});
+template <typename T> Array *conv2dBiasGradIn(const Array *dy, mm::IAllocator &allocator) {
     const int64_t N = dy->dim(0), O = dy->dim(1), S = dy->dim(2) * dy->dim(3);
     const int64_t shape[] = {O};
-    Array *db      = createTensor(TypeCode::Float32, shape, allocator);
+    Array *db             = createTensor(dtypeOf<T>(), shape, allocator);
+    T *pdb                = db->dataAs<T>();
+    const T *pdy          = dy->dataAs<T>();
     for (int64_t o = 0; o < O; ++o) {
+        // The sum over the batch and the spatial axes accumulates in double for both element
+        // types and is rounded once when it is stored, the rule the reductions follow
+        // (dtype.h: accumulate in f64, round once, answer in the element type).
         double acc = 0.0;
         for (int64_t n = 0; n < N; ++n) {
-            const float *plane = dy->dataAs<float>() + (n * O + o) * S;
+            const T *plane = pdy + (n * O + o) * S;
             for (int64_t s = 0; s < S; ++s) {
-                acc += plane[s];
+                acc += static_cast<double>(plane[s]);
             }
         }
-        db->dataAs<float>()[o] = static_cast<float>(acc);
+        pdb[o] = static_cast<T>(acc);
     }
     return db;
 }
 
-Shape pool2dShape(std::span<const int64_t> input, const Window2d &window) {
-    if (input.size() != 4) {
-        throw ShapeError("pool2d expects NCHW input, got " + dims(input));
-    }
-    if (window.kernelH <= 0 || window.kernelW <= 0 || window.strideH <= 0 || window.strideW <= 0 ||
-        window.padH < 0 || window.padW < 0) {
-        throw std::invalid_argument(
-            "pool2d requires positive kernel/stride and non-negative padding");
-    }
-    if (input[2] + 2 * window.padH < window.kernelH ||
-        input[3] + 2 * window.padW < window.kernelW) {
-        throw ShapeError("pool2d window does not fit input " + dims(input));
-    }
-    return {input[0], input[1], window.outH(input[2]), window.outW(input[3])};
-}
-
-Array *pool2d(
-    PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator) {
-    const Shape outShape  = pool2dShape(input->shapeSpan(), window);
-    requireF32("pool2d", {input});
-    Array *out     = createTensor(TypeCode::Float32, outShape, allocator);
+template <typename T>
+Array *pool2dIn(
+    PoolKind kind, const Array *input, const Window2d &window, const Shape &outShape,
+    mm::IAllocator &allocator) {
+    Array *out    = createTensor(dtypeOf<T>(), outShape, allocator);
+    const T *psrc = input->dataAs<T>();
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
+    T *pdst              = out->dataAs<T>();
     parallelFor(planes, 4, [&](int64_t begin, int64_t end) {
         for (int64_t p = begin; p < end; ++p) {
-            const float *src = input->dataAs<float>() + p * H * W;
-            float *dst       = out->dataAs<float>() + p * OH * OW;
+            const T *src = psrc + p * H * W;
+            T *dst       = pdst + p * OH * OW;
             for (int64_t oh = 0; oh < OH; ++oh) {
                 for (int64_t ow = 0; ow < OW; ++ow) {
                     // Max pooling is a maximum reduction over the window's inside elements
                     // (IEEE maximum from its identity -inf: a NaN in the window gives NaN).
-                    float best = maximumIdentity<float>();
+                    T best     = maximumIdentity<T>();
                     double sum = 0.0;
                     for (int64_t kh = 0; kh < window.kernelH; ++kh) {
                         const int64_t ih = oh * window.strideH - window.padH + kh;
                         for (int64_t kw = 0; kw < window.kernelW; ++kw) {
                             const int64_t iw  = ow * window.strideW - window.padW + kw;
                             const bool inside = ih >= 0 && ih < H && iw >= 0 && iw < W;
-                            const float v     = inside ? src[ih * W + iw] : 0.0f;
+                            const T v         = inside ? src[ih * W + iw] : T(0);
                             if (inside) {
                                 best = maximum(best, v);
                             }
-                            sum += v; // zero padding counts toward the average (count_include_pad)
+                            sum += static_cast<double>(
+                                v); // zero padding counts toward the average (count_include_pad)
                         }
                     }
                     dst[oh * OW + ow] =
                         kind == PoolKind::Max
                             ? best
-                            : static_cast<float>(
+                            : static_cast<T>(
                                   sum / static_cast<double>(window.kernelH * window.kernelW));
                 }
             }
@@ -338,30 +386,27 @@ Array *pool2d(
     return out;
 }
 
-Array *pool2dGrad(
+template <typename T>
+Array *pool2dGradIn(
     PoolKind kind, const Array *input, const Array *dy, const Window2d &window,
-    mm::IAllocator &allocator) {
-    const Shape outShape = pool2dShape(input->shapeSpan(), window);
-    if (dy->rank() != 4 || !std::equal(outShape.begin(), outShape.end(), dy->shape())) {
-        throw ShapeError(
-            "pool2d gradient expects dy of shape " + dims(outShape) + ", got " +
-            dims(dy->shapeSpan()));
-    }
-    requireF32("pool2d_grad", {input, dy});
-    Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator, true);
+    const Shape &outShape, mm::IAllocator &allocator) {
+    Array *dx     = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator, true);
+    const T *psrc = input->dataAs<T>();
+    const T *pdy  = dy->dataAs<T>();
+    T *pdx         = dx->dataAs<T>();
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
-    const float scale    = 1.0f / static_cast<float>(window.kernelH * window.kernelW);
+    const T scale = T(1) / static_cast<T>(window.kernelH * window.kernelW);
     parallelFor(planes, 4, [&](int64_t begin, int64_t end) {
         for (int64_t p = begin; p < end; ++p) {
-            const float *src = input->dataAs<float>() + p * H * W;
-            const float *g   = dy->dataAs<float>() + p * OH * OW;
-            float *dst       = dx->dataAs<float>() + p * H * W;
+            const T *src = psrc + p * H * W;
+            const T *g   = pdy + p * OH * OW;
+            T *dst       = pdx + p * H * W;
             for (int64_t oh = 0; oh < OH; ++oh) {
                 for (int64_t ow = 0; ow < OW; ++ow) {
-                    const float grad  = g[oh * OW + ow];
+                    const T grad      = g[oh * OW + ow];
                     int64_t bestIndex = -1;
-                    float best        = -std::numeric_limits<float>::infinity();
+                    T best            = -std::numeric_limits<T>::infinity();
                     for (int64_t kh = 0; kh < window.kernelH; ++kh) {
                         const int64_t ih = oh * window.strideH - window.padH + kh;
                         for (int64_t kw = 0; kw < window.kernelW; ++kw) {
@@ -387,6 +432,134 @@ Array *pool2dGrad(
     return dx;
 }
 
+template <typename T>
+Array *batchNormIn(
+    const Array *input, const Array *mean, const Array *var, const Array *gamma,
+    const Array *beta, double eps, mm::IAllocator &allocator) {
+    Array *out = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator);
+    int64_t inner = 1;
+    for (size_t d = 2; d < input->rank(); ++d) {
+        inner *= input->dim(d);
+    }
+    const int64_t C = input->dim(1), N = input->dim(0);
+    const T *px     = input->dataAs<T>();
+    const T *pgamma = gamma->dataAs<T>(), *pbeta = beta->dataAs<T>();
+    const T *pmean = mean->dataAs<T>(), *pvar = var->dataAs<T>();
+    T *pdst        = out->dataAs<T>();
+    parallelFor(
+        N * C,
+        std::max<int64_t>(1, 16384 / std::max<int64_t>(inner, 1)),
+        [&](int64_t begin, int64_t end) {
+            for (int64_t plane = begin; plane < end; ++plane) {
+                const int64_t c   = plane % C;
+                const T scale     = pgamma[c] / std::sqrt(pvar[c] + static_cast<T>(eps));
+                const T shift     = pbeta[c] - pmean[c] * scale;
+                const T *src      = px + plane * inner;
+                T *dst            = pdst + plane * inner;
+                for (int64_t i = 0; i < inner; ++i) {
+                    dst[i] = src[i] * scale + shift;
+                }
+            }
+        });
+    return out;
+}
+
+} // namespace
+
+Shape conv2dShape(
+    std::span<const int64_t> input, std::span<const int64_t> kernel, int64_t stride,
+    int64_t padding) {
+    const ConvGeometry g = geometry(input, kernel, stride, padding);
+    return {g.N, g.O, g.OH, g.OW};
+}
+
+Array *conv2d(
+    const Array *input, const Array *kernel, const Array *bias, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator) {
+    const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
+    if (bias && !(bias->rank() == 1 && bias->dim(0) == g.O)) {
+        throw ShapeError(
+            "conv2d bias must have shape [" + std::to_string(g.O) + "], got " +
+            dims(bias->shapeSpan()));
+    }
+    const TypeCode code = computableElementType("conv2d", {input, kernel, bias});
+    return forElementType(code, [&]<typename T>() {
+        return conv2dIn<T>(g, input, kernel, bias, allocator);
+    });
+}
+
+Array *conv2dInputGrad(
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator) {
+    const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
+    requireDy(g, dy);
+    const TypeCode code = computableElementType("conv2d_input_grad", {kernel, dy});
+    return forElementType(code, [&]<typename T>() {
+        return conv2dInputGradIn<T>(g, input, kernel, dy, allocator);
+    });
+}
+
+Array *conv2dKernelGrad(
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator) {
+    const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
+    requireDy(g, dy);
+    const TypeCode code = computableElementType("conv2d_kernel_grad", {input, dy});
+    return forElementType(code, [&]<typename T>() {
+        return conv2dKernelGradIn<T>(g, input, kernel, dy, allocator);
+    });
+}
+
+Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator) {
+    if (dy->rank() != 4) {
+        throw ShapeError("conv2d bias gradient expects a rank-4 dy, got " + dims(dy->shapeSpan()));
+    }
+    const TypeCode code = computableElementType("conv2d_bias_grad", {dy});
+    return forElementType(code, [&]<typename T>() { return conv2dBiasGradIn<T>(dy, allocator); });
+}
+
+Shape pool2dShape(std::span<const int64_t> input, const Window2d &window) {
+    if (input.size() != 4) {
+        throw ShapeError("pool2d expects NCHW input, got " + dims(input));
+    }
+    if (window.kernelH <= 0 || window.kernelW <= 0 || window.strideH <= 0 || window.strideW <= 0 ||
+        window.padH < 0 || window.padW < 0) {
+        throw std::invalid_argument(
+            "pool2d requires positive kernel/stride and non-negative padding");
+    }
+    if (input[2] + 2 * window.padH < window.kernelH ||
+        input[3] + 2 * window.padW < window.kernelW) {
+        throw ShapeError("pool2d window does not fit input " + dims(input));
+    }
+    return {input[0], input[1], window.outH(input[2]), window.outW(input[3])};
+}
+
+Array *pool2d(
+    PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator) {
+    const Shape outShape = pool2dShape(input->shapeSpan(), window);
+    const char *op       = kind == PoolKind::Max ? "max_pool2d" : "avg_pool2d";
+    const TypeCode code  = computableElementType(op, {input});
+    return forElementType(code, [&]<typename T>() {
+        return pool2dIn<T>(kind, input, window, outShape, allocator);
+    });
+}
+
+Array *pool2dGrad(
+    PoolKind kind, const Array *input, const Array *dy, const Window2d &window,
+    mm::IAllocator &allocator) {
+    const Shape outShape = pool2dShape(input->shapeSpan(), window);
+    if (dy->rank() != 4 || !std::equal(outShape.begin(), outShape.end(), dy->shape())) {
+        throw ShapeError(
+            "pool2d gradient expects dy of shape " + dims(outShape) + ", got " +
+            dims(dy->shapeSpan()));
+    }
+    const char *op      = kind == PoolKind::Max ? "max_pool2d_grad" : "avg_pool2d_grad";
+    const TypeCode code = computableElementType(op, {input, dy});
+    return forElementType(code, [&]<typename T>() {
+        return pool2dGradIn<T>(kind, input, dy, window, outShape, allocator);
+    });
+}
+
 Array *batchNorm(
     const Array *input, const Array *mean, const Array *var,
     const Array *gamma, const Array *beta, double eps, mm::IAllocator &allocator) {
@@ -403,30 +576,10 @@ Array *batchNorm(
                 dims(p->shapeSpan()));
         }
     }
-    requireF32("batch_norm", {input, mean, var, gamma, beta});
-    Array *out = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
-    int64_t inner     = 1;
-    for (size_t d = 2; d < input->rank(); ++d) {
-        inner *= input->dim(d);
-    }
-    const int64_t N = input->dim(0);
-    parallelFor(
-        N * C,
-        std::max<int64_t>(1, 16384 / std::max<int64_t>(inner, 1)),
-        [&](int64_t begin, int64_t end) {
-            for (int64_t plane = begin; plane < end; ++plane) {
-                const int64_t c   = plane % C;
-                const float scale = gamma->dataAs<float>()[c] /
-                                    std::sqrt(var->dataAs<float>()[c] + static_cast<float>(eps));
-                const float shift = beta->dataAs<float>()[c] - mean->dataAs<float>()[c] * scale;
-                const float *src  = input->dataAs<float>() + plane * inner;
-                float *dst        = out->dataAs<float>() + plane * inner;
-                for (int64_t i = 0; i < inner; ++i) {
-                    dst[i] = src[i] * scale + shift;
-                }
-            }
-        });
-    return out;
+    const TypeCode code = computableElementType("batch_norm", {input, mean, var, gamma, beta});
+    return forElementType(code, [&]<typename T>() {
+        return batchNormIn<T>(input, mean, var, gamma, beta, eps, allocator);
+    });
 }
 
 namespace {
@@ -471,7 +624,7 @@ struct BnTrainStats {
     std::vector<double> mean, var, invStd;
 };
 
-BnTrainStats bnTrainStats(const float *x, const BnTrainGeometry &g, double eps) {
+template <typename T> BnTrainStats bnTrainStats(const T *x, const BnTrainGeometry &g, double eps) {
     BnTrainStats stats;
     const size_t C = static_cast<size_t>(g.C);
     stats.mean.assign(C, 0.0);
@@ -481,17 +634,17 @@ BnTrainStats bnTrainStats(const float *x, const BnTrainGeometry &g, double eps) 
         for (int64_t c = begin; c < end; ++c) {
             double sum = 0.0;
             for (int64_t n = 0; n < g.N; ++n) {
-                const float *plane = x + (n * g.C + c) * g.inner;
+                const T *plane = x + (n * g.C + c) * g.inner;
                 for (int64_t i = 0; i < g.inner; ++i) {
-                    sum += plane[i];
+                    sum += static_cast<double>(plane[i]);
                 }
             }
             const double mu = sum / static_cast<double>(g.perChannel());
             double sq       = 0.0;
             for (int64_t n = 0; n < g.N; ++n) {
-                const float *plane = x + (n * g.C + c) * g.inner;
+                const T *plane = x + (n * g.C + c) * g.inner;
                 for (int64_t i = 0; i < g.inner; ++i) {
-                    const double d = plane[i] - mu;
+                    const double d = static_cast<double>(plane[i]) - mu;
                     sq += d * d;
                 }
             }
@@ -504,6 +657,112 @@ BnTrainStats bnTrainStats(const float *x, const BnTrainGeometry &g, double eps) 
     return stats;
 }
 
+template <typename T>
+void batchNormTrainIn(
+    const BnTrainGeometry &g, const Array *input, const Array *gamma, const Array *beta,
+    const Array *runningMean, const Array *runningVar, double momentum, double eps,
+    Array **outY, Array **outRunningMean, Array **outRunningVar, mm::IAllocator &allocator) {
+    const Shape statShape{g.C};
+    Array *y   = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator);
+    Array *nrm = createTensor(dtypeOf<T>(), statShape, allocator);
+    Array *nrv = createTensor(dtypeOf<T>(), statShape, allocator);
+
+    const BnTrainStats stats = bnTrainStats(input->dataAs<T>(), g, eps);
+
+    const T keep = static_cast<T>(1.0 - momentum), mix = static_cast<T>(momentum);
+    const double unbiased =
+        static_cast<double>(g.perChannel()) / static_cast<double>(g.perChannel() - 1);
+    const T *pgamma = gamma->dataAs<T>(), *pbeta = beta->dataAs<T>();
+    const T *prmean = runningMean->dataAs<T>(), *prvar = runningVar->dataAs<T>();
+    T *prm = nrm->dataAs<T>(), *prv = nrv->dataAs<T>();
+    for (int64_t c = 0; c < g.C; ++c) {
+        const size_t u = static_cast<size_t>(c);
+        prm[c] = keep * prmean[c] + mix * static_cast<T>(stats.mean[u]);
+        prv[c] = keep * prvar[c] + mix * static_cast<T>(stats.var[u] * unbiased);
+    }
+    const T *psrc = input->dataAs<T>();
+    T *py         = y->dataAs<T>();
+    parallelFor(
+        g.N * g.C,
+        std::max<int64_t>(1, 16384 / std::max<int64_t>(g.inner, 1)),
+        [&](int64_t begin, int64_t end) {
+            for (int64_t plane = begin; plane < end; ++plane) {
+                const int64_t c = plane % g.C;
+                const size_t u  = static_cast<size_t>(c);
+                const T scale   = pgamma[c] * static_cast<T>(stats.invStd[u]);
+                const T shift   = pbeta[c] - static_cast<T>(stats.mean[u]) * scale;
+                const T *src    = psrc + plane * g.inner;
+                T *dst          = py + plane * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    dst[i] = src[i] * scale + shift;
+                }
+            }
+        });
+    *outY           = y;
+    *outRunningMean = nrm;
+    *outRunningVar  = nrv;
+}
+
+template <typename T>
+void batchNormTrainGradIn(
+    const BnTrainGeometry &g, const Array *input, const Array *gamma, const Array *dy, double eps,
+    Array **outDx, Array **outDgamma, Array **outDbeta, mm::IAllocator &allocator) {
+    const Shape statShape{g.C};
+    Array *dx = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator);
+    Array *dg = createTensor(dtypeOf<T>(), statShape, allocator);
+    Array *db = createTensor(dtypeOf<T>(), statShape, allocator);
+
+    const BnTrainStats stats = bnTrainStats(input->dataAs<T>(), g, eps);
+    const T *pgamma          = gamma->dataAs<T>();
+    const T *psrc            = input->dataAs<T>();
+    const T *pdy             = dy->dataAs<T>();
+    const double M           = static_cast<double>(g.perChannel());
+    T *pdx = dx->dataAs<T>(), *pdg = dg->dataAs<T>(), *pdb = db->dataAs<T>();
+    // Per-channel sums of dy and dy*xhat (double accumulators).
+    parallelFor(g.C, 1, [&](int64_t begin, int64_t end) {
+        for (int64_t c = begin; c < end; ++c) {
+            const size_t u  = static_cast<size_t>(c);
+            const double mu = stats.mean[u], inv = stats.invStd[u];
+            double sumDy = 0.0, sumDyXhat = 0.0;
+            for (int64_t n = 0; n < g.N; ++n) {
+                const T *xplane = psrc + (n * g.C + c) * g.inner;
+                const T *dplane = pdy + (n * g.C + c) * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    const double xhat = (static_cast<double>(xplane[i]) - mu) * inv;
+                    sumDy += static_cast<double>(dplane[i]);
+                    sumDyXhat += static_cast<double>(dplane[i]) * xhat;
+                }
+            }
+            pdb[c] = static_cast<T>(sumDy);
+            pdg[c] = static_cast<T>(sumDyXhat);
+        }
+    });
+    // dx = gamma*inv * (dy - sum(dy)/M - xhat*sum(dy*xhat)/M)
+    parallelFor(
+        g.N * g.C,
+        std::max<int64_t>(1, 16384 / std::max<int64_t>(g.inner, 1)),
+        [&](int64_t begin, int64_t end) {
+            for (int64_t plane = begin; plane < end; ++plane) {
+                const int64_t c = plane % g.C;
+                const size_t u  = static_cast<size_t>(c);
+                const double mu = stats.mean[u], inv = stats.invStd[u];
+                const T ginv                        = pgamma[c] * static_cast<T>(inv);
+                const T meanDy                      = pdb[c] / static_cast<T>(M);
+                const T meanDxh                     = pdg[c] / static_cast<T>(M);
+                const T *xplane                     = psrc + plane * g.inner;
+                const T *dplane                     = pdy + plane * g.inner;
+                T *dst                              = pdx + plane * g.inner;
+                for (int64_t i = 0; i < g.inner; ++i) {
+                    const T xhat = (xplane[i] - static_cast<T>(mu)) * static_cast<T>(inv);
+                    dst[i]       = ginv * (dplane[i] - meanDy - xhat * meanDxh);
+                }
+            }
+        });
+    *outDx     = dx;
+    *outDgamma = dg;
+    *outDbeta  = db;
+}
+
 } // namespace
 
 void batchNormTrain(
@@ -513,46 +772,13 @@ void batchNormTrain(
     mm::IAllocator &allocator) {
     const BnTrainGeometry g =
         bnTrainGeometry(input, {gamma, beta, runningMean, runningVar}, "batch_norm_train");
-    requireF32("batch_norm_train", {input, gamma, beta, runningMean, runningVar});
-    const Shape statShape{g.C};
-    Array *y   = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
-    Array *nrm = createTensor(TypeCode::Float32, statShape, allocator);
-    Array *nrv = createTensor(TypeCode::Float32, statShape, allocator);
-
-    const BnTrainStats stats = bnTrainStats(input->dataAs<float>(), g, eps);
-
-    const float keep = static_cast<float>(1.0 - momentum), mix = static_cast<float>(momentum);
-    const double unbiased =
-        static_cast<double>(g.perChannel()) / static_cast<double>(g.perChannel() - 1);
-    float *prm = nrm->dataAs<float>(), *prv = nrv->dataAs<float>();
-    for (int64_t c = 0; c < g.C; ++c) {
-        const size_t u = static_cast<size_t>(c);
-        prm[c]         = keep * runningMean->dataAs<float>()[c] +
-                 mix * static_cast<float>(stats.mean[u]);
-        prv[c] = keep * runningVar->dataAs<float>()[c] +
-                 mix * static_cast<float>(stats.var[u] * unbiased);
-    }
-    parallelFor(
-        g.N * g.C,
-        std::max<int64_t>(1, 16384 / std::max<int64_t>(g.inner, 1)),
-        [&](int64_t begin, int64_t end) {
-            for (int64_t plane = begin; plane < end; ++plane) {
-                const int64_t c   = plane % g.C;
-                const size_t u    = static_cast<size_t>(c);
-                const float scale =
-                    gamma->dataAs<float>()[c] * static_cast<float>(stats.invStd[u]);
-                const float shift =
-                    beta->dataAs<float>()[c] - static_cast<float>(stats.mean[u]) * scale;
-                const float *src = input->dataAs<float>() + plane * g.inner;
-                float *dst       = y->dataAs<float>() + plane * g.inner;
-                for (int64_t i = 0; i < g.inner; ++i) {
-                    dst[i] = src[i] * scale + shift;
-                }
-            }
-        });
-    *outY           = y;
-    *outRunningMean = nrm;
-    *outRunningVar  = nrv;
+    const TypeCode code =
+        computableElementType("batch_norm_train", {input, gamma, beta, runningMean, runningVar});
+    return forElementType(code, [&]<typename T>() {
+        batchNormTrainIn<T>(
+            g, input, gamma, beta, runningMean, runningVar, momentum, eps, outY, outRunningMean,
+            outRunningVar, allocator);
+    });
 }
 
 void batchNormTrainGrad(
@@ -565,59 +791,10 @@ void batchNormTrainGrad(
             "batch_norm_train_grad expects dy shaped like the input, got " + dims(dy->shapeSpan()) +
             " vs " + dims(input->shapeSpan()));
     }
-    requireF32("batch_norm_train_grad", {input, gamma, dy});
-    const Shape statShape{g.C};
-    Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
-    Array *dg = createTensor(TypeCode::Float32, statShape, allocator);
-    Array *db = createTensor(TypeCode::Float32, statShape, allocator);
-
-    const BnTrainStats stats = bnTrainStats(input->dataAs<float>(), g, eps);
-    const double M           = static_cast<double>(g.perChannel());
-    float *pdg = dg->dataAs<float>(), *pdb = db->dataAs<float>();
-    // Per-channel sums of dy and dy*xhat (double accumulators).
-    parallelFor(g.C, 1, [&](int64_t begin, int64_t end) {
-        for (int64_t c = begin; c < end; ++c) {
-            const size_t u  = static_cast<size_t>(c);
-            const double mu = stats.mean[u], inv = stats.invStd[u];
-            double sumDy = 0.0, sumDyXhat = 0.0;
-            for (int64_t n = 0; n < g.N; ++n) {
-                const float *xplane = input->dataAs<float>() + (n * g.C + c) * g.inner;
-                const float *dplane = dy->dataAs<float>() + (n * g.C + c) * g.inner;
-                for (int64_t i = 0; i < g.inner; ++i) {
-                    const double xhat = (xplane[i] - mu) * inv;
-                    sumDy += dplane[i];
-                    sumDyXhat += dplane[i] * xhat;
-                }
-            }
-            pdb[c] = static_cast<float>(sumDy);
-            pdg[c] = static_cast<float>(sumDyXhat);
-        }
+    const TypeCode code = computableElementType("batch_norm_train_grad", {input, gamma, dy});
+    return forElementType(code, [&]<typename T>() {
+        batchNormTrainGradIn<T>(g, input, gamma, dy, eps, outDx, outDgamma, outDbeta, allocator);
     });
-    // dx = gamma*inv * (dy - sum(dy)/M - xhat*sum(dy*xhat)/M)
-    parallelFor(
-        g.N * g.C,
-        std::max<int64_t>(1, 16384 / std::max<int64_t>(g.inner, 1)),
-        [&](int64_t begin, int64_t end) {
-            for (int64_t plane = begin; plane < end; ++plane) {
-                const int64_t c = plane % g.C;
-                const size_t u  = static_cast<size_t>(c);
-                const double mu = stats.mean[u], inv = stats.invStd[u];
-                const float ginv    = gamma->dataAs<float>()[c] * static_cast<float>(inv);
-                const float meanDy  = pdb[c] / static_cast<float>(M);
-                const float meanDxh = pdg[c] / static_cast<float>(M);
-                const float *xplane = input->dataAs<float>() + plane * g.inner;
-                const float *dplane = dy->dataAs<float>() + plane * g.inner;
-                float *dst          = dx->dataAs<float>() + plane * g.inner;
-                for (int64_t i = 0; i < g.inner; ++i) {
-                    const float xhat =
-                        (xplane[i] - static_cast<float>(mu)) * static_cast<float>(inv);
-                    dst[i] = ginv * (dplane[i] - meanDy - xhat * meanDxh);
-                }
-            }
-        });
-    *outDx     = dx;
-    *outDgamma = dg;
-    *outDbeta  = db;
 }
 
 } // namespace camel::tensor::kernels

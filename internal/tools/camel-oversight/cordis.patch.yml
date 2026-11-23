@@ -1,0 +1,6 @@
+- insert:
+    - id: camel-oversight
+      name: '@local/camel-oversight'
+      # Machine-local values (buildHost, logFile) go in %USERPROFILE%\.camel-oversight\config.json,
+      # for example {"buildHost": "88zjwei"}; that file overrides anything written here.
+      config: {}

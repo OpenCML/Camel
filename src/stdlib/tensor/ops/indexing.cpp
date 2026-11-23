@@ -25,6 +25,7 @@
 #include "support.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/slice.h"
 
 #include <algorithm>
 #include <bit>
@@ -454,13 +455,15 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
         return std::nullopt;
     }
 
-    // The positions taken: the kernel's own count (sliceRange), fixed by the bounds and the step
-    // alone -- an unwritten bound is the one that depends on the axis.
+    // The positions taken: the one slice rule's count (`camel::core::slicePositions`), fixed by the
+    // bounds and the step alone -- a bound the program did not write is the one that depends on the
+    // axis, so its value is here only when the extent is.
     std::optional<int64_t> len;
     if (start->value && end->value) {
-        const int64_t from = *start->value, to = *end->value;
-        len = backwards ? (from > to ? (from - to - *step - 1) / (-*step) : 0)
-                        : (from < to ? (to - from + *step - 1) / *step : 0);
+        if (const auto positions =
+                camel::core::slicePositions(extent, start->value, end->value, *step)) {
+            len = positions->count;
+        }
     }
     const ExprId lenP = b.derived("len", len, kNoExpr);
     std::vector<ExprId> coords;

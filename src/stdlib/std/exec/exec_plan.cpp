@@ -19,6 +19,7 @@
 #include "camel/runtime/control_regions.h"
 
 #include <algorithm>
+#include <atomic>
 #include <format>
 #include <numeric>
 #include <optional>
@@ -2225,7 +2226,19 @@ constexpr std::string_view kExecPlanKey = "std.execPlan";
 } // namespace
 
 facts::KindId execPlanKind() {
-    return facts::findKind(kExecPlanKey);
+    // The kind is registered once, by this module; a back end asks for its id on every call (the
+    // graph's slot is indexed by it), so the id is kept after the first successful lookup rather
+    // than hashing the key again on every read. Kinds are never unregistered, so a stored id
+    // stays right.
+    static std::atomic<facts::KindId> known{facts::kNoKind};
+    facts::KindId kind = known.load(std::memory_order_acquire);
+    if (kind == facts::kNoKind) {
+        kind = facts::findKind(kExecPlanKey);
+        if (kind != facts::kNoKind) {
+            known.store(kind, std::memory_order_release);
+        }
+    }
+    return kind;
 }
 
 std::shared_ptr<const ExecPlan> execPlanOf(const GCGraph &graph) {

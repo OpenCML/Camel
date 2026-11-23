@@ -107,20 +107,6 @@ void integerGemm(int64_t M, int64_t N, int64_t K, const T *A, const T *B, T *C) 
     }
 }
 
-/// f64 matmul: the same summation order as sgemm (ascending k), in double. A separate loop
-/// rather than the f32 kernel: an f64 tensor is computed in f64, never narrowed to f32.
-void dgemm(int64_t M, int64_t N, int64_t K, const double *A, const double *B, double *C) {
-    for (int64_t i = 0; i < M; ++i) {
-        for (int64_t j = 0; j < N; ++j) {
-            double acc = 0.0;
-            for (int64_t k = 0; k < K; ++k) {
-                acc += A[i * K + k] * B[k * N + j];
-            }
-            C[i * N + j] = acc;
-        }
-    }
-}
-
 struct MatmulPlan {
     Shape outShape;
     Shape batchShape;
@@ -249,6 +235,28 @@ void sgemm(
     noteGemmThreads(insideParallelRegion() ? 1 : numThreads());
     noteGemmLibraryThreads(0);
     builtinBackend().fn(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+}
+
+void dgemm(
+    bool transA, bool transB, int64_t M, int64_t N, int64_t K, double alpha, const double *A,
+    int64_t lda, const double *B, int64_t ldb, double beta, double *C, int64_t ldc) {
+    // The canonical algorithm in double: one output element at a time, a chain of multiply-adds in
+    // ascending k from +0, alpha and beta applied after the chain. Serial on purpose -- the f32
+    // kernel's packed, register-tiled, tile-parallel path is what makes f32 the fast one; this is
+    // the reference loop, and a product that needs it can read it. `beta == 0` does not read C
+    // (sgemm's rule): C is then an output, not an accumulator.
+    for (int64_t i = 0; i < M; ++i) {
+        for (int64_t j = 0; j < N; ++j) {
+            double acc = 0.0;
+            for (int64_t k = 0; k < K; ++k) {
+                const double a = transA ? A[k * lda + i] : A[i * lda + k];
+                const double b = transB ? B[j * ldb + k] : B[k * ldb + j];
+                acc += a * b;
+            }
+            double *c = C + i * ldc + j;
+            *c        = beta == 0.0 ? alpha * acc : alpha * acc + beta * (*c);
+        }
+    }
 }
 
 namespace {
@@ -457,12 +465,19 @@ Array *matmul(
                     plan.N);
             } else if (compute == TypeCode::Float64) {
                 dgemm(
+                    false,
+                    false,
                     plan.M,
                     plan.N,
                     plan.K,
+                    1.0,
                     a->dataAs<double>() + aOff,
+                    plan.K,
                     b->dataAs<double>() + bOff,
-                    out->dataAs<double>() + batch * cSize);
+                    plan.N,
+                    0.0,
+                    out->dataAs<double>() + batch * cSize,
+                    plan.N);
             } else if (compute == TypeCode::Int32) {
                 integerGemm<int32_t>(
                     plan.M,

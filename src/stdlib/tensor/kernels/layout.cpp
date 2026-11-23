@@ -13,6 +13,7 @@
 
 #include "parallel.h"
 
+#include "camel/core/slice.h"
 #include "camel/utils/random.h"
 
 #include <algorithm>
@@ -472,10 +473,10 @@ Array *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &allocat
         throw std::invalid_argument("range step cannot be zero");
     }
     int64_t count = 0;
-    if (step > 0 && stop > start) {
-        count = (stop - start + step - 1) / step;
-    } else if (step < 0 && stop < start) {
-        count = (start - stop - step - 1) / -step;
+    // How many integers the range names: the one slice rule's count, on the sequence the two ends
+    // bound (`camel/core/slice.h`).
+    if (const auto positions = camel::core::slicePositions(std::nullopt, start, stop, step)) {
+        count = positions->count;
     }
     const int64_t shape[] = {count};
     Array *out     = createTensor(TypeCode::Int64, shape, allocator);

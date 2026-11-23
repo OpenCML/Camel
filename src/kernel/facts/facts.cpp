@@ -39,6 +39,7 @@
 #include "camel/core/operator_table.h"
 
 #include "camel/graph/graph.h"
+#include "camel/runtime/fact_slots.h"
 #include "graph/graph_view.h"
 
 #include <algorithm>
@@ -186,6 +187,44 @@ versionsOf(std::span<const Anchor> anchors, const GraphAccess &graphs) {
         versions.emplace_back(graph, graphs.version ? graphs.version(*graph) : 0);
     }
     return versions;
+}
+
+/// Publishes `value` into the graph's slot for `kind` (`camel/runtime/fact_slots.h`): the answer
+/// the next reader gets without asking this store. Only the two scopes with one fact per place
+/// have a slot -- a Graph fact's value, a Node fact's array entry -- so a CrossNode or CrossGraph
+/// fact, which has several facts on one graph, is answered by the store alone.
+void publishSlot(
+    const GraphAccess &graphs,
+    KindId kind,
+    Scope scope,
+    std::span<const Anchor> anchors,
+    const void *value) {
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        return;
+    }
+    const Anchor &at = anchors[0];
+    if (scope == Scope::Graph && graphs.setSlot) {
+        graphs.setSlot(*at.graph, kind, value);
+    } else if (scope == Scope::Node && graphs.setNodeSlot && at.node != kWholeGraph) {
+        graphs.setNodeSlot(*at.graph, kind, at.node, value);
+    }
+}
+
+/// Clears the slot `publishSlot` would have written. Called before the value is released, so that
+/// a reader never finds a slot naming a fact that is gone. It needs no scope: a graph slot that a
+/// Node kind never writes is cleared harmlessly, and the same the other way round.
+void clearSlot(const GraphAccess &graphs, KindId kind, std::span<const Anchor> anchors) {
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        return;
+    }
+    const Anchor &at = anchors[0];
+    if (at.node == kWholeGraph) {
+        if (graphs.setSlot) {
+            graphs.setSlot(*at.graph, kind, nullptr);
+        }
+    } else if (graphs.setNodeSlot) {
+        graphs.setNodeSlot(*at.graph, kind, at.node, nullptr);
+    }
 }
 
 std::string jsonString(std::string_view text) {
@@ -409,8 +448,16 @@ GraphHolds &graphHolds() {
 
 GraphAccess frozenGraphs() {
     return GraphAccess{
-        .view    = [](const graph::Graph &graph) { return &graph.view(); },
-        .version = [](const graph::Graph &) { return std::uint64_t(0); },
+        .view        = [](const graph::Graph &graph) { return &graph.view(); },
+        .version     = [](const graph::Graph &) { return std::uint64_t(0); },
+        // The graph's own slots: written and cleared by the store, read by whoever has the graph
+        // (camel/runtime/fact_slots.h). A draft keeps none, and these writes land nowhere.
+        .setSlot     = [](const graph::Graph &graph, KindId kind, const void *value) {
+            runtime::setFactSlotOf(graph, kind, value);
+        },
+        .setNodeSlot = [](const graph::Graph &graph, KindId kind, NodeId node, const void *value) {
+            runtime::setNodeFactSlotOf(graph, kind, node, value);
+        },
     };
 }
 
@@ -460,6 +507,15 @@ Store::Store(GraphAccess graphs, bool persistent)
     : graphs_(std::move(graphs)), persistent_(persistent) {}
 
 Store::~Store() {
+    // A graph may outlive the store (the store goes with its context; a frozen graph can be freed
+    // after it). Every slot this store published is cleared while the values it names are still
+    // its own -- after this body they are released with the entries, and a slot left behind would
+    // name a fact nobody owns (camel/runtime/fact_slots.h).
+    for (const auto &[key, list] : entries_) {
+        for (const Entry &entry : list) {
+            clearSlot(graphs_, key.kind, entry.anchors);
+        }
+    }
     // A store that goes before the graphs it was told about stops being their answer: the graph's
     // end (`forgetGraph`) then names no store rather than a dead one.
     GraphHolds &holds = graphHolds();
@@ -503,6 +559,8 @@ Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, 
         status = Status::Valid;
         return &*it;
     }
+    // The fact is gone: its slot goes first, while the value it names is still the entry's.
+    clearSlot(graphs_, kind, it->anchors);
     list.erase(it);
     if (list.empty()) {
         entries_.erase(bucket);
@@ -544,8 +602,10 @@ void Store::putValue(
     });
     if (it == list.end()) {
         list.push_back(std::move(entry));
+        publishSlot(graphs_, kind, info.scope, anchors, list.back().value.get());
     } else {
         *it = std::move(entry);
+        publishSlot(graphs_, kind, info.scope, anchors, it->value.get());
     }
     ++counts_.puts;
 }
@@ -605,8 +665,10 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     });
     if (it == list.end()) {
         list.push_back(std::move(entry));
+        publishSlot(graphs_, kind, info.scope, anchors, list.back().value.get());
     } else {
         *it = std::move(entry);
+        publishSlot(graphs_, kind, info.scope, anchors, it->value.get());
     }
     ++counts_.puts;
     return value;
@@ -657,21 +719,41 @@ void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
     if (bucket == entries_.end()) {
         return;
     }
-    std::erase_if(bucket->second, [&](const Entry &entry) {
-        return sameAnchors(entry.anchors, anchors);
-    });
-    if (bucket->second.empty()) {
+    auto &list = bucket->second;
+    for (auto it = list.begin(); it != list.end();) {
+        if (sameAnchors(it->anchors, anchors)) {
+            clearSlot(graphs_, kind, it->anchors);
+            it = list.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (list.empty()) {
         entries_.erase(bucket);
     }
 }
 
 void Store::invalidateGraph(const graph::Graph *graph) {
     std::lock_guard lock(mutex_);
-    std::erase_if(entries_, [&](const auto &item) { return item.first.graph == graph; });
+    for (auto it = entries_.begin(); it != entries_.end();) {
+        if (it->first.graph != graph) {
+            ++it;
+            continue;
+        }
+        for (const Entry &entry : it->second) {
+            clearSlot(graphs_, it->first.kind, entry.anchors);
+        }
+        it = entries_.erase(it);
+    }
 }
 
 void Store::clear() {
     std::lock_guard lock(mutex_);
+    for (const auto &[key, list] : entries_) {
+        for (const Entry &entry : list) {
+            clearSlot(graphs_, key.kind, entry.anchors);
+        }
+    }
     entries_.clear();
 }
 

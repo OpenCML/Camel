@@ -103,6 +103,11 @@ namespace camel::facts {
 /// needs, since a fact is about one version (docs/design/graph-store).
 using NodeId = std::uint32_t;
 
+/// The number a kind is registered under, in registration order: a small integer, which is what a
+/// graph's slot table is indexed by (`camel/runtime/fact_slots.h`).
+using KindId                    = std::uint32_t;
+inline constexpr KindId kNoKind = UINT32_MAX;
+
 /// The anchor that is the graph as a whole rather than one node.
 inline constexpr NodeId kWholeGraph = UINT32_MAX;
 
@@ -159,6 +164,14 @@ struct GraphAccess {
     std::function<const graph::GraphView *(const graph::Graph &)> view;
     /// The version of the graph's content: a stored fact is stale when it changed.
     std::function<std::uint64_t(const graph::Graph &)> version;
+
+    /// Where the graph keeps a fact of `kind`, so that a reader that has the graph reaches it with
+    /// one indexed load (`camel/runtime/fact_slots.h`, `GCGraph::factSlot`). The store writes the
+    /// slot when it stores the fact and clears it before it releases the value; a graph that keeps
+    /// no slots -- a draft, an editing session -- takes the write and holds nothing.
+    std::function<void(const graph::Graph &, KindId, const void *)> setSlot;
+    /// The same for a Node fact: the slot of its kind holds a dense array indexed by node id.
+    std::function<void(const graph::Graph &, KindId, NodeId, const void *)> setNodeSlot;
 };
 
 /**
@@ -217,9 +230,6 @@ enum class Dependence : std::uint8_t {
     /// a fact computed by code written before this framework declares.
     Anchors,
 };
-
-using KindId                    = std::uint32_t;
-inline constexpr KindId kNoKind = UINT32_MAX;
 
 /// The type-erased registration of a kind, as the registry keeps it.
 struct KindInfo {

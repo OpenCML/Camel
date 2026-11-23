@@ -683,8 +683,11 @@ Value Builder::visitIndices(cst::Indices context) {
                 if (child.isToken()) {
                     if (child.token().kind() == TK::DotDot) {
                         ++marks;
-                    } else if (child.token().kind() == TK::Identifier &&
-                               child.token().text() == "range") {
+                    } else if (child.token().kind() == TK::Identifier) {
+                        // Any name here is the marker of the stepped form: a dimension that is not
+                        // a slice is a data expression, and the parser only kept a name in a
+                        // `sliceIndices` for `range(...)`, whose parts are written in order. What
+                        // the name is decides nothing, so it is not read.
                         stepped = true;
                     }
                     continue;

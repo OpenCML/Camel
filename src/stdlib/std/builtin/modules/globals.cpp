@@ -16,6 +16,7 @@
 #include "builtin/operators/struct.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
+#include "camel/core/slice.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
@@ -409,18 +410,16 @@ std::optional<Type *> indexTakeResultType(const type_vec_t &norm, static_args_t 
 
 /// The positions a slice takes along one axis, when the call's constants and the type's extent say
 /// them: the first position, the one the walk stops at, how many positions it takes, and the
-/// distance between two. The arithmetic is the kernel's own
-/// (`src/stdlib/std/builtin/operators/struct.cpp`, `sliceRange`), read from the extent the type
-/// states instead of the one the value holds. The two ends are the bounds of an integer sequence,
-/// not positions (design principles 5.4): `range(3, -1, -1)` is 3, 2, 1, 0, so an end of -1 -- the
-/// one a backward walk stops at, written or left out -- is the position before the first element
-/// and the walk never takes it. `std::nullopt` when only the run knows the positions: a computed
-/// bound or step, or an extent the type does not state.
+/// distance between two. The arithmetic is the one slice rule (`camel::core::slicePositions`),
+/// read from the extent the type states instead of the one the value holds. `std::nullopt` when
+/// only the run knows the positions: a computed bound or step, or an extent the type does not
+/// state.
 struct StaticSliceRange {
-    int64_t start = 0; // the first position taken
-    int64_t end   = 0; // where the walk stops: a bound, which the walk does not take
-    int64_t count = 0; // how many positions the slice takes
-    int64_t step  = 1; // the distance between two positions taken
+    int64_t start = 0;     // the first position taken
+    int64_t end   = 0;     // where the walk stops: a bound, which the walk does not take
+    int64_t count = 0;     // how many positions the slice takes
+    int64_t step  = 1;     // the distance between two positions taken
+    bool outside  = false; // a position the walk takes is not one the axis has
 };
 
 std::optional<StaticSliceRange> staticSliceRange(
@@ -440,24 +439,29 @@ std::optional<StaticSliceRange> staticSliceRange(
         return std::nullopt;
     }
     // A bound the program did not write is not read from its word (the lowering writes a zero
-    // there): the mask says it was not written, and the step's direction says what it stands for --
-    // the start of the axis, or the position before the first element of a backward walk.
-    const std::optional<int64_t> from =
-        (*mask & 2) != 0 ? constantArg(statics, 2)
-                         : std::optional<int64_t>(*step > 0 ? 0 : *extent - 1);
-    const std::optional<int64_t> to =
-        (*mask & 1) != 0 ? constantArg(statics, 3)
-                         : std::optional<int64_t>(*step > 0 ? *extent : -1);
-    if (!from || !to) {
+    // there): the mask says it was not written, and the rule names what an end left out stands for
+    // -- the axis' own end on that side, by the step's direction.
+    std::optional<int64_t> from;
+    std::optional<int64_t> to;
+    if ((*mask & 2) != 0) {
+        from = constantArg(statics, 2);
+        if (!from) {
+            return std::nullopt;
+        }
+    }
+    if ((*mask & 1) != 0) {
+        to = constantArg(statics, 3);
+        if (!to) {
+            return std::nullopt;
+        }
+    }
+    const std::optional<camel::core::SlicePositions> positions =
+        camel::core::slicePositions(extent, from, to, *step);
+    if (!positions) {
         return std::nullopt;
     }
-    StaticSliceRange range;
-    range.step  = *step;
-    range.start = *from;
-    range.end   = *to;
-    range.count = *step > 0 ? (*from < *to ? (*to - *from + *step - 1) / *step : 0)
-                            : (*from > *to ? (*from - *to - *step - 1) / (-*step) : 0);
-    return range;
+    return StaticSliceRange{
+        positions->start, positions->stop, positions->count, positions->step, positions->outside};
 }
 
 /// The length the result's type states for the axis a slice cuts: the number of positions the call
@@ -477,14 +481,12 @@ std::optional<int64_t> staticSliceLength(
 /// function form's declaration defaults fill the two words a short call leaves out, so a call of
 /// either spelling meets this check with its six words and its constants where it wrote them.
 ///
-/// What must lie inside the axis is what the range takes -- its first position and its last
-/// (design principles 5.4). A bound is not a position: a negative one is refused by the position it
-/// makes the walk take and not by its sign, so a backward slice's end of -1, written or left out,
-/// is legal because the walk stops there without taking it, and `t[-1..2]` is refused because the
-/// position it takes first is -1. The ends themselves are still refused past the axis, so an empty
-/// range names a place the axis has (`5..5` of a length-4 axis) while `4..4` is the empty tail. A
-/// position is judged only when the type states the axis' extent; a length only the run knows is
-/// the kernel's to read, and it applies this same rule (`sliceRange`).
+/// What must lie inside the axis is what the range takes, and which positions those are is the one
+/// slice rule's answer (`camel::core::slicePositions`): a bound is not a position, so a backward
+/// slice's end of -1, written or left out, is legal because the walk stops there without taking
+/// it, and `t[-1..2]` is refused because the position it takes first is -1. A position is judged
+/// only when the type states the axis' extent; a length only the run knows is the kernel's to read,
+/// and it applies this same rule.
 std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_args_t statics) {
     if (norm.size() < 4 || norm.size() > 6) {
         return std::nullopt;
@@ -505,17 +507,12 @@ std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_a
     if (!range) {
         return std::nullopt;
     }
-    const auto outside = [extent](int64_t at) { return at < 0 || at >= *extent; };
     const auto refusal = [&]() {
         return std::format(
             "slice bounds {}..{} are outside axis {} of extent {}",
             range->start, range->end, *axis, *extent);
     };
-    if (range->start > *extent || range->end > *extent) {
-        return refusal();
-    }
-    if (range->count > 0 &&
-        (outside(range->start) || outside(range->start + (range->count - 1) * range->step))) {
+    if (range->outside) {
         return refusal();
     }
     return std::nullopt;
