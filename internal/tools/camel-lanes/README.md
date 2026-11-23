@@ -18,20 +18,21 @@ model reads every step says so without being asked.
 | `maxBehind` | commits the worst lane branch is behind | 100 |
 | `mergedLocal` | local branches already merged and not deleted | 20 |
 | `mergedRemote` | remote branches already merged and not deleted | 10 |
-| `inboxBehind` | inbox commits on `fsh-dev` that are not on `develop` | 0 |
-| `claimedNotDeleted` | items marked `doing` in the backlog that are still in the inbox | 0 |
 
 The first four are branch hygiene: crossing one stops new branches being opened, because a branch a hundred
 commits behind cannot be merged with a conflict surface anyone can reason about, and its own run cannot
 produce a real red.
 
-The last two are about the task list. An item is claimed by deleting it from `internal/inbox.md` and entering
-it in `internal/backlog.md` under the same number — both halves, because the inbox is what nobody has taken
-and the backlog is what someone is doing. A number in both is an item that was taken and not removed, and the
-inbox then reports it as waiting. And an inbox commit that is not on `develop` means the list being dispatched
-from is a copy someone read, not the one in the tree: that is not visible from inside the branch, because a
-file read from `origin/fsh-dev` looks exactly like a file in the tree.
 
+The four that remain are branch hygiene: crossing one stops new branches being opened, because a branch
+commits behind cannot be merged with a conflict surface anyone can reason about, and its own run will
+produce a real red.
+
+Two gates went with the inbox. `inboxBehind` and `claimedNotDeleted` counted halves of a claim, and a
+claim is no longer made in a file: work is dispatched and followed on the oversight channel, and which
+lanes are running is read from the live subagents rather than from a table somebody maintains. Counting
+a file nobody writes would have gone on reporting zero, which is the reading a gate must never be able
+to make falsely.
 ## Two routes, and what they cost
 
 The plugin registers on the web server that already serves the GUI, so there is no second
@@ -39,7 +40,7 @@ listener and no second lifecycle to keep alive.
 
 | Route | Method | Does |
 |---|---|---|
-| `/camel/state` | GET | the six gate readings, the lanes, the inbox numbers |
+| `/camel/state` | GET | the four gate readings, the branches and worktrees behind them, and what the build host is doing |
 | `/camel/say` | POST | `{"text": "..."}` becomes a user message in the configured session |
 
 `/camel/say` is not a new mechanism. It calls the same `sessionController.prompt` the composer

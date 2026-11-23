@@ -65,3 +65,11 @@
 | D-1123-33 | 效应仍有两个来源，21 处读者 | `lane/effects-one-source` | doing |
 | D-1123-34 | 四算子按 URI 分类 + 内核 include 标准库 | `lane/operator-uri` | doing |
 | D-1123-36 | 注释里的过程痕迹 + 检查脚本 | `lane/comment-traces` | doing |
+
+## 2026-11-23 21:50 从撤掉的 inbox 转来（`D-1123-46`）
+
+| 编号 | 事 | 状态 |
+|---|---|---|
+| `C-1123-6` | `internal/archive/` 四个旧清单里没做完的条目，逐条以 `C-` 号转进本表；做过则记 done | todo |
+| `C-1123-12⑥` | URI 统一为 `std:模块:路径`；等「改算子身份」那一摞合入后一刀切，不许边改边切 | todo（等） |
+| `C-1123-37` | 今天收工跑一轮 GitHub Actions，读数写在收工报告里 | todo（收工做） |

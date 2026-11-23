@@ -27,10 +27,6 @@ const DEFAULTS = {
     repo: 'D:\\Projects\\Camel',
     intervalSeconds: 300,
     staleMinutes: 120,
-    // The lane table has moved once already. Both places are tried, newest first, because a
-    // single path that stops existing reports "no lane table" and that reads exactly like
-    // "no stalled lane".
-    lanesFiles: ['internal/lanes.md', 'docs/handover/lanes.cn.md'],
     fetch: true,
     // The way in from outside. Off means no routes are registered at all, which is the safe
     // default for a plugin that also runs where nobody asked for a door.
@@ -53,16 +49,6 @@ const GATES = [
     { key: 'maxBehind', limit: 100, what: 'commits behind on the worst lane, so merging it is unsafe' },
     { key: 'mergedLocal', limit: 20, what: 'local branches already merged and not deleted' },
     { key: 'mergedRemote', limit: 10, what: 'remote branches already merged and not deleted' },
-    {
-        key: 'inboxBehind',
-        limit: 0,
-        what: 'inbox commits on fsh-dev that are not on develop, so the task list being worked from is a copy someone read rather than the one in the tree',
-    },
-    {
-        key: 'claimedNotDeleted',
-        limit: 0,
-        what: 'items a lane is working from that are still in the inbox, so the inbox says nobody has taken them',
-    },
 ]
 
 function git(repo, args) {
@@ -103,50 +89,6 @@ function ageMinutesOf(stamp, now) {
     return Math.round((now - at.getTime()) / 60000)
 }
 
-/// Every row of the lane table with the branch it names and how long ago it was touched.
-export function readLanes(file, staleMinutes, now = Date.now()) {
-    let text
-    try {
-        text = readFileSync(file, 'utf8')
-    } catch {
-        return { unreadable: `no lane table at ${file}` }
-    }
-    const rows = []
-    for (const line of text.split(/\r?\n/)) {
-        if (!line.startsWith('|')) continue
-        const cells = line
-            .split('|')
-            .slice(1, -1)
-            .map((cell) => cell.trim())
-        if (cells.length < 6) continue
-        const [branch, doing, branchReading, developReading, next, stamp] = cells
-        if (!branch.startsWith('lane/')) continue
-        const age = ageMinutesOf(stamp, now)
-        // A lane is closed only when its stage names an end state. Matching on a leading 已 instead would
-// also silence "已开,未提交" -- opened, nothing committed -- which is the row most in need of a
-// nudge. The list is of ending words, not of the characters they start with.
-        const closed = /^已(合入|收|弃|取代|关闭)/.test(doing)
-        rows.push({
-            branch,
-            doing,
-            branchReading,
-            developReading,
-            next,
-            stamp,
-            ageMinutes: age,
-            closed,
-            stalled: !closed && age !== null && age > staleMinutes,
-        })
-    }
-    // Closed rows stay in the table on purpose: a lane that ended is history worth keeping, and
-    // dropping it would make the file disagree with the branches it describes.
-    return {
-        rows,
-        closed: rows.filter((row) => row.closed).map((row) => row.branch),
-        stalled: rows.filter((row) => row.stalled).map((row) => row.branch),
-    }
-}
-
 /// Local branches with no unmerged work, and remote branches already contained in develop.
 ///
 /// The remote side is written as `origin/<name>` on purpose. A `refs/heads/<name>` string does
@@ -180,7 +122,6 @@ function branchesAlreadyMerged(repo) {
 /// Everything one beat measures. Each entry is a reading or an object saying it was unreadable.
 export function measure({
     repo,
-    lanesFiles,
     staleMinutes,
     fetch,
     // The build panel's three files. `stateDir` names the directory; empty means "read it from the
@@ -328,41 +269,6 @@ export function measure({
                 runs: readRuns(runRegistryPath),
             }
         }),
-        // An item is claimed by deleting it from the inbox and entering it in the backlog under the
-        // same number. Both halves are needed: the inbox is what nobody has taken, the backlog is
-        // what someone is doing. A number that appears in both is an item that was taken and not
-        // removed, and the inbox then reports it as waiting.
-        inbox: attempt(() => {
-            const behind = Number(
-                git(repo, ['rev-list', '--count', 'origin/develop..origin/fsh-dev', '--', 'internal/inbox.md']),
-            )
-            let claimedNotDeleted = 0
-            let unreadable = null
-            try {
-                const inbox = readText(path.join(repo, 'internal', 'inbox.md'))
-                const backlog = readText(path.join(repo, 'internal', 'backlog.md'))
-                const inInbox = new Set((inbox.match(/\bD-\d{4}-\d+\b/g) || []))
-                const doing = new Set(
-                    (backlog.match(/^\|\s*(D-\d{4}-\d+)\s*\|[^\n]*\|\s*doing\s*\|/gm) || []).map(
-                        (row) => row.match(/^\|\s*(D-\d{4}-\d+)/)[1],
-                    ),
-                )
-                for (const number of doing) if (inInbox.has(number)) claimedNotDeleted += 1
-            } catch (error) {
-                unreadable = String(error && error.message ? error.message : error)
-            }
-            if (unreadable !== null) return { unreadable: `cannot read the inbox or the backlog: ${unreadable}` }
-            return { behind, claimedNotDeleted }
-        }),
-        lanes: (() => {
-            const tried = []
-            for (const candidate of lanesFiles) {
-                const table = readLanes(path.join(repo, candidate), staleMinutes, now.getTime())
-                if (!table.unreadable) return table
-                tried.push(candidate)
-            }
-            return { unreadable: `no lane table; tried ${tried.join(' and ')}` }
-        })(),
     }
 }
 
@@ -372,15 +278,12 @@ export function gateValues(state) {
     const value = (f) => (f && !f.unreadable ? f : null)
     const branches = value(state.branches)
     const mergedBranches = value(state.merged)
-    const inbox = value(state.inbox)
     return {
         unmerged: branches ? branches.unmerged : null,
         maxBehind: branches ? branches.maxBehind : null,
         worktrees: typeof state.worktrees === 'number' ? state.worktrees : null,
         mergedLocal: mergedBranches ? mergedBranches.mergedLocal.length : null,
         mergedRemote: mergedBranches ? mergedBranches.mergedRemote.length : null,
-        inboxBehind: inbox ? inbox.behind : null,
-        claimedNotDeleted: inbox ? inbox.claimedNotDeleted : null,
     }
 }
 
@@ -473,16 +376,6 @@ export function render(state, silenced = new Map()) {
     }
 
     show('origin/fsh-dev', state.fshDev)
-
-    if (state.lanes && !state.lanes.unreadable && state.lanes.rows) {
-        const stalled = state.lanes.stalled
-        lines.push(
-            `- lane table: ${state.lanes.rows.length} open row(s)` +
-                (stalled.length === 0 ? ', none stalled' : `, stalled: ${stalled.join(', ')}`),
-        )
-    } else {
-        show('lane table', state.lanes)
-    }
 
     lines.push(
         'These readings are refreshed on a timer and are not a substitute for measuring again before acting on them.',
@@ -719,7 +612,6 @@ export function apply(ctx, rawConfig) {
                         gates: gateValues(state),
                         over: breaches(state).map((gate) => gate.key),
                         lanes: state.branches,
-                        inbox: state.inbox,
                     })
                 },
             }),
