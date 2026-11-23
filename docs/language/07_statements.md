@@ -106,11 +106,13 @@ error InvalidAge: age is negative
 ### 7.4.1 声明
 
 ```
-标注* (with <with 形参>)? export? 修饰符* func 名字(形参): 返回类型 sync? { 语句 }
+标注* (with <with 形参>)? export? 修饰符* func 名字(形参) => 返回类型 sync? { 语句 }
 ```
 
+返回类型写在 `=>` 之后（[4.4](../design-principles.cn.md)）：声明的类型正好是它上面写的那个函数类型 `(形参) => 返回类型`。`:` 只表示"是这个类型"或"取这个值"，不再引出返回类型；本页其余示例里的 `: 返回类型` 是旧写法，按语料统一改写时一并改掉。
+
 ```cml
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 

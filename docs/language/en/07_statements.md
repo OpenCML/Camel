@@ -106,11 +106,13 @@ error InvalidAge: age is negative
 ### 7.4.1 Declaration
 
 ```
-annotation* (with <with parameters>)? export? modifier* func name(parameters): return-type sync? { statements }
+annotation* (with <with parameters>)? export? modifier* func name(parameters) => return-type sync? { statements }
 ```
 
+The return type follows `=>` ([4.4](../../design-principles.en.md)): the type of the declaration is exactly the function type written above it, `(parameters) => return-type`. `:` says "is of this type" or "takes this value" and no longer introduces a return type; the `: return-type` examples elsewhere on this page are the older spelling and go with the corpus-wide rewrite.
+
 ```cml
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
