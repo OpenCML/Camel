@@ -173,8 +173,7 @@ export func check(rules: Rule[]) => CheckReport panic
 /// @example rules->check((x: int) => x + 1)
 #op('rewrite:check_over')
 with <samples: int = 100, seed: int = 0>
-export func check::<F>(rules: Rule[], over: F) => CheckReport
-    panic
+export func check::<F>(rules: Rule[], over: F) => CheckReport panic
     when is_function::<F>()
 
 /// The report's fixed rendering, one line per row, for a caller that wants it as a value.

@@ -83,7 +83,8 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // The value is settled where the call is built, not where it runs: an OPER node carries the
 // instantiated type of the call, never the type argument it was written with, so nothing at run
 // time still says which type the extents belong to. A reader that has the type -- the transposition
-// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`).
+// walk -- asks `statedExtentsOf` directly
+// (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`).
 //
 // So this operator has no kernel, and deliberately not one that would only throw. The rule accepts
 // a call only when the type argument states every extent (`resolveForCall`), and every accepted
@@ -318,10 +319,10 @@ namespace {
 //
 // The step and which of the start and the end the program wrote come with the call as a two-bit
 // mask (bit 0 end, bit 1 start), which is exactly the lowering the subscript writes
-// (`src/compile/src/gct/builder_expr.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`). The
-// two spellings of a slice -- the subscript `t[a..b]` and the call `slice(t, axis, a, b, s)` -- are
-// one node with one parameter table, and the function form fills the mask "both written" (3),
-// which is the value that same lowering gives a subscript that writes both bounds.
+// (`src/compile/src/gct/builder_expr.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 :
+// 0))`). The two spellings of a slice -- the subscript `t[a..b]` and the call `slice(t, axis, a, b,
+// s)` -- are one node with one parameter table, and the function form fills the mask "both written"
+// (3), which is the value that same lowering gives a subscript that writes both bounds.
 //
 // The forward slice and the range scatter of its gradient both read the range here, so the
 // adjoint puts each element's gradient back where the forward took the element.
@@ -1502,8 +1503,7 @@ static camel::runtime::GCFillKind fillKindOfType(camel::core::type::Type *type) 
     }
     throwRuntimeFault(
         RuntimeDiag::RuntimeError,
-        std::format(
-            "a construction's target type '{}' is not one a fill makes", type->toString()));
+        std::format("a construction's target type '{}' is not one a fill makes", type->toString()));
 }
 
 // A construction as an ordinary operator (`fill::<T, ...F>` of `lib/std/prelude.cml`; plan
@@ -1520,8 +1520,7 @@ slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     Type *type = norm.resultType();
     GUARD(type != nullptr, "a construction must state the type it makes.");
-    GUARD(
-        isGCTraced(type->code()), "a construction's target type is not GC-traced.");
+    GUARD(isGCTraced(type->code()), "a construction's target type is not GC-traced.");
     GUARD(norm.size() >= 1, "a construction must read its template.");
     Object *templateValue = norm.get<Object *>(0);
     GUARD(templateValue != nullptr, "a construction's template value is null.");
@@ -1548,7 +1547,13 @@ slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // stays the member's own type, the way `GCAccsBody`'s two kinds were the payload's answer: the
 // with argument's type says whether a member is read by place or by name. The builder refuses a
 // member read whose operand count is not this shape (`Builder::memberReadNodeOf`), so a call that
-// reaches here has one value; the guards below are the kernel's own invariant, not that check.
+// reaches here has one value, and the two count guards below are the kernel's own invariant. The
+// place and the name are not: a program writes them (`access::<T, U><at>(x)`, the call form the
+// declaration documents), so a place the tuple does not have and a name the struct does not have
+// are the program's own faults, and they are reported where `[]` reports the same two of the same
+// value (`:op/idx_str`, builtin/operators/ops.cpp): IndexOutOfRange and FieldNotFound. That is
+// what the declaration's `panic` states (design principles 3.9), and the fault leaves the call
+// without a value instead of aborting the process.
 slot_t __access_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)ctx;
     GUARD(norm.size() == 1, "a member read reads one value.");
@@ -1560,14 +1565,16 @@ slot_t __access_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
         GUARD(object != nullptr, "a member read by name must read a struct.");
         auto *structType = norm.type(0);
         GUARD(structType != nullptr, "a member read must state the type it reads.");
+        if (!object->has(key->view(), structType)) {
+            throwRuntimeFault(RuntimeDiag::FieldNotFound, std::string(key->view()));
+        }
         return object->get<slot_t>(std::string(key->view()), structType);
     }
     const Int64 at = with.get<Int64>(0);
-    GUARD(at >= 0, "a member read by place must be given a place that is not negative.");
-    auto *tuple = norm.get<Tuple *>(0);
+    auto *tuple    = norm.get<Tuple *>(0);
     GUARD(tuple != nullptr, "a member read by place must read a tuple.");
-    GUARD(
-        static_cast<uint64_t>(at) < tuple->size(),
-        "a member read's tuple index is out of bounds.");
+    if (at < 0 || static_cast<uint64_t>(at) >= tuple->size()) {
+        throwRuntimeFault(RuntimeDiag::IndexOutOfRange, at, "a tuple", tuple->size());
+    }
     return tuple->get<slot_t>(static_cast<size_t>(at));
 }
