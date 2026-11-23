@@ -83,13 +83,20 @@ function Stop-With {
     exit 1
 }
 
-# The baseline's own checkout: a worktree of THIS repository, detached at the sha it must measure.
+# The baseline's own checkout: a worktree of THIS repository, held at the sha it must measure.
 # Returns $null when the tree is ready, or a sentence saying why it is not -- the caller turns that
 # into an exit 2, because a baseline that could not be taken is the gate being down and not a
 # verdict about the tree being merged.
 #
-# It refuses anything it did not create: a path that holds a checkout of another repository, or a
-# dirty checkout, is somebody else's tree, and `git checkout -f` over it is how a lane's work is lost.
+# A detached checkout is the obvious way to say "this tree and no branch", and `camel-remote` refuses
+# it outright (`detached HEAD in <name>; check out a branch first`, because it stages a *branch* to
+# the host and the host checks that branch out). So the tree is pinned by a scratch branch of this
+# script's own, always at the first-parent sha; the tree is the same one a detached checkout would
+# give, and the sha is read back out of the checkout afterwards instead of being asserted here.
+#
+# It refuses anything it did not create: a path that holds a checkout of another repository, a dirty
+# checkout, or a branch somebody else has checked out. `git checkout -B` over a lane's worktree is
+# how a lane's work is lost.
 function Sync-BaselineWorktree {
     param(
         [Parameter(Mandatory)][string] $Path,
@@ -98,6 +105,7 @@ function Sync-BaselineWorktree {
         [Parameter(Mandatory)][string] $Repo
     )
 
+    $ourBranch = 'camel-baseline'
     $short = $Sha.Substring(0, 9)
     try { $target = [System.IO.Path]::GetFullPath($Path) } catch { return "the baseline worktree path '$Path' is not a path" }
     $repoFull = (Resolve-Path -LiteralPath $Repo -ErrorAction SilentlyContinue).Path
@@ -129,12 +137,21 @@ function Sync-BaselineWorktree {
                 return "$target has $($dirty.Count) uncommitted change(s); the baseline must be measured on a clean checkout of $short, and moving it would discard them"
             }
             $onBranch = "$(& git -C $target symbolic-ref -q --short HEAD 2>$null)".Trim()
-            if ($onBranch) {
+            if ($onBranch -ne $ourBranch) {
                 # A labelled worktree belongs to a lane or to the merge position; this step only owns
-                # the detached one it made. Refusing here is what keeps a mistyped -BaselineWorktree
+                # the one branch it made. Refusing here is what keeps a mistyped -BaselineWorktree
                 # from checking somebody's branch backwards.
-                return "$target has the branch $onBranch checked out; the baseline is measured in a detached worktree, and checking that path out at $short would move a branch somebody is working on"
+                $what = if ($onBranch) { "the branch $onBranch checked out" } else { 'a detached HEAD' }
+                return "$target has $what; the baseline worktree is the one this script makes, on $ourBranch at the first parent, and moving it would discard a checkout somebody is working in"
             }
+            $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
+            if ($at -ne $Sha) {
+                & git -C $target checkout -q -B $ourBranch $Sha 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) { return "could not move $ourBranch in $target to $short" }
+                $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
+                if ($at -ne $Sha) { return "$target did not end up at $short (it is at $($at.Substring(0, [Math]::Min(9, $at.Length))))" }
+            }
+            return $null
             $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
             if ($at -ne $Sha) {
                 & git -C $target checkout -q -f --detach $Sha 2>&1 | Out-Null
@@ -150,8 +167,8 @@ function Sync-BaselineWorktree {
     if ($parent -and -not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Force -Path $parent | Out-Null
     }
-    & git -C $Repo worktree add -q --detach $target $Sha 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { return "git worktree add --detach $target $short failed" }
+    & git -C $Repo worktree add -q -B $ourBranch $target $Sha 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { return "git worktree add -B $ourBranch $target $short failed (a branch of that name checked out elsewhere is the usual cause)" }
     $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
     if ($at -ne $Sha) { return "the new worktree $target is at $($at.Substring(0, [Math]::Min(9, $at.Length))), not $short" }
     return $null
