@@ -12,8 +12,9 @@
 
 #pragma once
 
-#include "split.h"
 #include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
+#include "split.h"
 
 #include "jvp.h"
 #include "lift.h"
@@ -86,10 +87,11 @@ FunctionType *splitOperatorType(FunctionType *function);
 
 /// The lifted signature a call node passes a value for, or null when it passes no function value or
 /// the value's type is not one.
-camel::core::type::FunctionType *callValueSignatureOf(const rt::GCGraph &graph, gc_node_ref_t ref);
+camel::core::type::FunctionType *
+callValueSignatureOf(const camel::graph::GraphView &view, gc_node_ref_t ref);
 
-/// The ports of a lifted signature that the caller passes values for: the ones whose paired position
-/// has a tangent space, which is the column `parameterOfPort` numbers.
+/// The ports of a lifted signature that the caller passes values for: the ones whose paired
+/// position has a tangent space, which is the column `parameterOfPort` numbers.
 std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedType);
 
 /// Which parameter a lifted signature's port is the value of, and whether it is that parameter's
@@ -230,8 +232,9 @@ struct Half {
         // position of the tangents in a call's argument list is not the signature's arithmetic
         // either, because a function value passed as an argument is an ordinary data input and a
         // call through a value has no callee among its data inputs at all.
-        const camel::core::type::FunctionType *liftedType = callValueSignatureOf(*source, ref);
-        const auto *callee        = liftedType != nullptr ? nullptr : calleeOf(ref);
+        const camel::core::type::FunctionType *liftedType =
+            callValueSignatureOf(source->view(), ref);
+        const auto *callee = liftedType != nullptr ? nullptr : calleeOf(ref);
         if (liftedType == nullptr) {
             liftedType = callee != nullptr ? callee->funcType() : source->funcType();
         }
@@ -549,9 +552,9 @@ struct Half {
         }
         case NodeCase::Oper: {
             // The inputs arrive as one list in port order -- the ordinary ones and then the context
-            // ones (`halfInputsOf` is `dataInputsOf`) -- so they are placed back on the copy the way
-            // they were found: a member read's place, an `append`'s value or a `softmax<1>`'s axis
-            // handed to `setNormInputs` would be an ordinary operand of a different call.
+            // ones (`halfInputsOf` is `dataInputsOf`) -- so they are placed back on the copy the
+            // way they were found: a member read's place, an `append`'s value or a `softmax<1>`'s
+            // axis handed to `setNormInputs` would be an ordinary operand of a different call.
             const auto *body         = source->nodeBodyAs<rt::GCOperBody>(ref);
             const gc_node_ref_t made = draft.addOperNode(node->dataType(), nullptr, body->uri());
             placeCallArguments(made, ref, inputs);
@@ -578,7 +581,7 @@ struct Half {
                 slots.push_back(static_cast<size_t>(slot));
             }
             const std::vector<std::byte> payload = rt::makeFillPayload(body->fillKind, slots);
-            const gc_node_ref_t made = draft.addFillNode(node->dataType(), payload);
+            const gc_node_ref_t made             = draft.addFillNode(node->dataType(), payload);
             // A fill's data ports are its template (the ordinary one) and the values it
             // carries (the context ones); `inputs` is both, in the source's port order. A
             // construction the source wrote as a call states the same two things in its own
@@ -612,9 +615,9 @@ struct Half {
             //
             // The answer is named and held here, not viewed: `gateWaitsOf` answers with a vector by
             // value (`camel/runtime/graph.h`), so a `std::span` over it would be a view of a
-            // temporary destroyed at the end of the declaration -- `.empty()` alone would still read
-            // the span's own size and say nothing, and the first reader of an element would read
-            // freed memory.
+            // temporary destroyed at the end of the declaration -- `.empty()` alone would still
+            // read the span's own size and say nothing, and the first reader of an element would
+            // read freed memory.
             const std::vector<gc_node_ref_t> waits = gateWaitsOf(*source, ref);
             if (!waits.empty()) {
                 return refuseAt(
@@ -654,7 +657,8 @@ struct Half {
             // is `(result, lin)`, and the tangent the source read is the second half's call of that
             // `lin` (`residualsOf` carries it as the call's linear half).
             if (!tangent && answersAPairByValueAt(*source, ref)) {
-                camel::core::type::FunctionType *valueType = callValueSignatureOf(*source, ref);
+                camel::core::type::FunctionType *valueType =
+                    callValueSignatureOf(source->view(), ref);
                 FunctionType *splitType =
                     valueType != nullptr ? splitOperatorType(valueType) : nullptr;
                 const size_t withCount = source->withInputsOf(ref).size();
@@ -728,7 +732,7 @@ struct Half {
                 // the same values in, `(result, lin)` out. `lin` is the callee's own linear half,
                 // closed over whatever its body reads, so the call site never sees those values --
                 // `residualsOf` names `lin` itself for the backward half to call.
-                const auto *calleeGraph        = calleeOf(ref);
+                const auto *calleeGraph = calleeOf(ref);
                 CutMember nested;
                 if (calleeCuts != nullptr && calleeGraph != nullptr) {
                     const auto known = calleeCuts->find(calleeGraph);
@@ -836,9 +840,9 @@ struct Half {
                     FunctionType *calleeType = nullptr;
                     if (source->node(call) != nullptr &&
                         source->node(call)->kind == rt::GCNodeKind::Call) {
-                        calleeType = callValueSignatureOf(*source, call);
+                        calleeType = callValueSignatureOf(source->view(), call);
                     } else if (
-                        const auto *callee        = calleeGraphOf(*source, program, call);
+                        const auto *callee = calleeGraphOf(*source, program, call);
                         callee != nullptr) {
                         calleeType = callee->funcType();
                     }
@@ -1049,11 +1053,10 @@ struct LoopCut {
 /// is one of these lines, not a second entry.
 bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &os, LoopCut &cut);
 
-/// The whole cut of a loop: the forward half runs the primal loop and tapes each round, the backward
-/// half loops over that tape and hands the tangent on.
+/// The whole cut of a loop: the forward half runs the primal loop and tapes each round, the
+/// backward half loops over that tape and hands the tangent on.
 SplitGraph cutLoopGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os, LoopCut &cut);
 
 } // namespace camel::transforms
-
