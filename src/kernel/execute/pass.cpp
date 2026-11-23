@@ -17,6 +17,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/effect_liveness.h"
+#include "camel/runtime/effects.h"
 #include "camel/runtime/graph_exit_type.h"
 #include "camel/runtime/resources.h"
 #include "camel/runtime/writings.h"
@@ -959,18 +960,19 @@ bool programContentChanged(
     return false;
 }
 
-/// Whether the node runs an effect. This is the tree's one judgement of it, copied from the
-/// `"effect"` exclusion of modules/tiles/src/graph_regions.cpp: an operator that is not pure, or
-/// one whose running is visible outside the program. A second reading of the operator table here
-/// would be a second model to keep in step with that one.
-bool nodeHasEffect(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+/// Whether the node runs an effect. The answer is the node's effect fact
+/// (`camel::runtime::effectSummaryOfNode`): an effect is a write -- of a resource outside the
+/// program or of state the program owns -- and a read is a dependency rather than an effect
+/// (design principles 3.3). This is the tree's one judgement of it; a second reading of the
+/// operator table here would be a second model to keep in step with that one.
+bool nodeHasEffect(
+    const camel::runtime::Program &program, const GCGraph &graph,
+    camel::runtime::gc_node_ref_t ref) {
     const camel::runtime::GCNode *node = graph.node(ref);
     if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
         return false;
     }
-    const auto &table            = camel::core::OperatorTable::instance();
-    const camel::core::OperId op = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
-    return !table.isPure(op) || table.hasExternalEffect(op);
+    return !camel::runtime::effectSummaryOfNode(program, &graph, ref).pure();
 }
 
 /// The call whose body a node was copied into, when a pass inlined one around it: the source origin
@@ -1185,7 +1187,7 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
         }
         for (size_t position = 0; position < order.nodes.size(); ++position) {
             const gc_node_ref_t ref = order.nodes[position];
-            if (!nodeHasEffect(*graph, ref)) {
+            if (!nodeHasEffect(program, *graph, ref)) {
                 continue;
             }
             EffectSite site;
@@ -1637,7 +1639,7 @@ std::vector<std::string> portDeclarationViolation(const camel::runtime::Program 
 bool nodeRunsForItsEffect(
     const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
     camel::runtime::gc_node_ref_t ref) {
-    if (!nodeHasEffect(graph, ref)) {
+    if (!nodeHasEffect(program, graph, ref)) {
         return false;
     }
     const camel::runtime::NodeResources resources =

@@ -6,15 +6,26 @@
  * An effect is decided in the fact layer, and nowhere else.
  *
  * The target architecture (section 7, "守护") writes the invariant as "an effect is decided only
- * through the fact layer", with the mechanical check "the combination of
- * `isPure`/`hasExternalEffect` is allowed only in the fact layer". A caller that asks "is this pure"
- * or "does this have an external effect" is asking the fact layer for the answer it already
- * computes; a caller that takes the two atoms and assembles the answer itself is the second place
- * where the effect of an operator is decided, which is the defect the row names.
+ * through the fact layer". The criterion the author set for it
+ * (`internal/questions/2026-11-23-who-owns-freely-arrangeable.cn.md`) is narrower than "every use
+ * of the two atoms moves": **outside the fact layer nobody assembles these atoms into "freely
+ * arrangeable" or "has an effect"**. So the finding this check reports is the **statement that
+ * names both atoms** -- the one that builds the conjunction itself -- and a statement that reads
+ * one of them is reported as a reading, not as a violation: asking "is it pure" of a thing that is
+ * about to be put on a device is a different question from deciding whether a pass may move it.
  *
- * That page is not in this tree as of 2026-11-14: it is the design branch's (`origin/fsh-dev`), so
- * section 7 is quoted here rather than linked -- a link to a page this tree does not hold is a
- * broken link, and `scripts/check-doc-links.mjs --citations` says so.
+ * Two kinds of use are not counted at all, and both are exemptions written down here rather than
+ * judged case by case:
+ *
+ *   - a **placement** judgement -- "can the device run this operator" (`tiles`). It reads the same
+ *     atoms and answers a different question; folding it into the scheduling fact would merge "can
+ *     the device run it" with "may a pass move it", which the author's answer rules out.
+ *   - a **user query** -- `graph.is_pure`, and a listing. It asks the fact layer for the answer it
+ *     already computes, so it is one of the places the fact is read, not one that assembles it.
+ *
+ * That page is not in this tree: it is the design branch's (`origin/fsh-dev`), so it is quoted
+ * here rather than linked -- a link to a page this tree does not hold is a broken link, and
+ * `scripts/check-doc-links.mjs --citations` says so.
  *
  * --- what "the fact layer" is here ------------------------------------------
  * It is derived from the source, not from a list of files a person keeps in step by hand, and it is
@@ -27,28 +38,23 @@
  *   2. the same three things for `effectSummaryOf`, the function that hands out the fact layer's
  *      answer: it is declared in `src/kernel/include/camel/runtime/effects.h` and defined in
  *      `src/kernel/runtime/effects.cpp`, so `src/kernel/include/camel/runtime/` and that `.cpp` are home too.
+ *   3. the same for `arrangeableKind`, the kind that carries "freely arrangeable" as one fact
+ *      (`src/kernel/facts/`, `camel/facts/arrangeable.h`): the four-term conjunction is stated
+ *      there or nowhere.
  *
- * A named symbol used outside that home is a crossing, reported once per use (`path:line: symbol`).
- * A use whose **statement** also names the other atom is tagged as the combination the invariant
- * forbids, because that is the shape the row is about; a lone atom outside the home is reported
- * too, because it is the same question asked of the same two declarations in a second place.
- *
- * **This rule is mechanical, and it is the author's to change.** The judgement it encodes is that
- * the answer is one fact (`EffectSummary`, declared in `src/kernel/include/camel/runtime/effects.h`) and that
- * its two atoms (`OperatorTable::isPure`, `OperatorTable::hasExternalEffect`) are its inputs. If a
- * file outside these trees is where the answer belongs, move the answer there or add the file here,
- * deliberately, with the reason written beside it -- and if the second atom should be removed from
- * `OperatorTable` altogether, this check then fails to find a declaring file and refuses (exit 2)
- * instead of passing over nothing.
+ * **This rule is mechanical, and it is the author's to change.** If a file outside these trees is
+ * where the answer belongs, move the answer there or add the file to `EXEMPT` with the reason
+ * written beside it. If the atoms should be removed from `OperatorTable` altogether, this check
+ * fails to find a declaring file and refuses (exit 2) instead of passing over nothing.
  *
  * --- usage -----------------------------------------------------------------
  *   node scripts/check-effect-facts.mjs                the list, in report-only mode (exit 0)
- *   node scripts/check-effect-facts.mjs --enforce       exit 1 when the list is not empty
+ *   node scripts/check-effect-facts.mjs --enforce       exit 1 when a statement assembles the answer
  *   node scripts/check-effect-facts.mjs --path <p>      scan another file or directory (a sample)
  *
- * The gate runs the bare form: this file prints the list and the count, and the count is the
- * baseline the list has to come down from. `--enforce` is the mode the gate entry becomes once the
- * list is empty.
+ * The gate runs the bare form: this file prints the violations, the readings and the counts. The
+ * violation count is the baseline that has to be 0; `--enforce` is the mode the gate entry uses
+ * once it is.
  */
 
 import fs from 'node:fs'
@@ -70,8 +76,20 @@ const HEADER = /(?:\.h|\.hpp|\.hh|\.hxx)$/
 /** The two atoms an effect is assembled from. */
 const SYMBOLS = ['isPure', 'hasExternalEffect']
 
-/** The function that hands out the fact layer's answer: its own home is the fact layer. */
-const ANSWER = 'effectSummaryOf'
+/** The functions that hand out the fact layer's answer: their own home is the fact layer. */
+const ANSWERS = ['effectSummaryOf', 'arrangeableKind']
+
+/**
+ * The places that read the atoms and answer another question, with the reason. A file listed here
+ * is not reported: the ruling exempts the shape of use it makes, and the reason says which one.
+ */
+const EXEMPT = new Map([
+    [
+        'src/stdlib/tiles/src/graph_regions.cpp',
+        'placement: `touchesNothing` asks whether the device can run the operator, not whether a ' +
+            'pass may move it (design principles 3.4 is the second question)',
+    ],
+])
 
 /** Replaces comments and string/character literals with spaces, so offsets and lines survive. */
 function stripCommentsAndStrings(text) {
@@ -205,7 +223,7 @@ const TREE = SCANNED.map((name) => path.join(ROOT, name))
     .filter((target) => fs.existsSync(target))
     .flatMap((target) => sourceFilesUnder(target))
 const atoms = homeOf(TREE, SYMBOLS)
-const fact = homeOf(TREE, [ANSWER])
+const fact = homeOf(TREE, ANSWERS)
 const homeFiles = new Set([...atoms.files, ...fact.files])
 const homeImpls = new Set([...atoms.impls, ...fact.impls])
 const homeDirs = [...new Set([...atoms.dirs, ...fact.dirs])]
@@ -235,54 +253,58 @@ function statementAt(text, offset) {
 }
 
 const findings = []
+const readings = []
 for (const file of scanned) {
     if (isHome(file)) continue
+    if (EXEMPT.has(shown(file))) continue
     const text = stripCommentsAndStrings(fs.readFileSync(file, 'utf8'))
     for (const symbol of SYMBOLS) {
         const other = SYMBOLS.find((candidate) => candidate !== symbol)
         for (const match of text.matchAll(new RegExp(`\\b${symbol}\\b`, 'g'))) {
             const statement = statementAt(text, match.index)
-            const combines = new RegExp(`\\b${other}\\b`).test(statement)
-            findings.push({
-                file,
-                line: text.slice(0, match.index).split('\n').length,
-                symbol,
-                detail: combines
-                    ? `combined with ${other} in one statement: the answer belongs to the fact layer`
-                    : 'asked outside the fact layer',
-            })
+            const line = text.slice(0, match.index).split('\n').length
+            if (new RegExp(`\\b${other}\\b`).test(statement)) {
+                findings.push({ file, line, symbol })
+            } else {
+                readings.push({ file, line, symbol })
+            }
         }
     }
 }
-findings.sort(
-    (left, right) =>
-        left.file.localeCompare(right.file) || left.line - right.line || left.symbol.localeCompare(right.symbol),
-)
+const byPlace = (left, right) =>
+    left.file.localeCompare(right.file) || left.line - right.line || left.symbol.localeCompare(right.symbol)
+findings.sort(byPlace)
+readings.sort(byPlace)
 
 for (const finding of findings) {
-    console.log(`${shown(finding.file)}:${finding.line}: ${finding.symbol} -- ${finding.detail}`)
+    console.log(
+        `${shown(finding.file)}:${finding.line}: ${finding.symbol} -- assembles the answer ` +
+            '("is it freely arrangeable / does it have an effect") from both atoms',
+    )
+}
+for (const reading of readings) {
+    console.log(`${shown(reading.file)}:${reading.line}: ${reading.symbol} -- one atom, read as itself`)
 }
 
-const homeTrees = [...new Set(homeDirs.map((dir) => `${shown(dir)}/`))].sort()
-const home = [...new Set([...homeFiles, ...homeImpls].map(shown))].sort()
 const files = new Set(findings.map((finding) => shown(finding.file)))
-const combined = findings.filter((finding) => finding.detail.startsWith('combined')).length
+const places = new Set(readings.map((reading) => shown(reading.file)))
 console.log(
-    `${NAME}: ${findings.length} effect-atom call(s) outside the fact layer (${combined} of them ` +
-        `combining both atoms), in ${files.size} file(s) of ${scanned.length} source file(s) scanned`,
-)
-console.log(
-    `${NAME}: home is ${homeTrees.concat(home).join(', ')} ` +
-        '(derived from the declarations; see the file comment)',
+    `${NAME}: ${findings.length} statement(s) assembling the answer outside the fact layer, in ` +
+        `${files.size} file(s); ${readings.length} statement(s) reading one atom as itself, in ` +
+        `${places.size} file(s); ${scanned.length} source file(s) scanned`,
 )
 if (findings.length === 0) {
-    console.log(`${NAME}: every effect question is answered by the fact layer`)
+    console.log(
+        `${NAME}: the answer is assembled in the fact layer and nowhere else (${
+            EXEMPT.size
+        } exempt file(s): placement and user queries, see the file comment)`,
+    )
 }
 if (enforce && findings.length > 0) {
     console.error(
         `${NAME}: a file outside the fact layer assembles an operator's effect from its atoms: the ` +
-            'answer is one fact, declared with the other graph facts ' +
-            '(the target architecture, section 7)',
+            'answer is one fact -- `EffectSummary` for "does it have an effect" and ' +
+            '`core.arrangeable` for "is it freely arrangeable" (design principles 3.4)',
     )
     process.exit(1)
 }

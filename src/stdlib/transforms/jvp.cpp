@@ -506,7 +506,7 @@ JvpGraph buildJvpGraphInGroup(
     // the order they were first called. A function called twice is one entry.
     os << "REINTERP jvp callees=" << state.callees.size() << '\n';
     group.encode();
-    const camel::runtime::GCGraph *made = group.encoded(member);
+    const auto *made                    = group.encoded(member);
     return JvpGraph{
         camel::runtime::ProgramHold(*context, group.program()),
         const_cast<camel::runtime::GCGraph *>(made)};
@@ -1222,7 +1222,7 @@ bool liftGraph(
             if (!rt::isValid(calleeId)) {
                 return false;
             }
-            camel::runtime::GCGraph *callee = program->graph(calleeId);
+            auto *callee                    = program->graph(calleeId);
             if (callee == nullptr) {
                 return false;
             }
@@ -1945,7 +1945,7 @@ bool liftGraph(
                 if (at == liftedCalleeOf.end()) {
                     return fail(refusal);
                 }
-                camel::runtime::GCGraph *callee = program->graph(function.calleeIdOf(ref));
+                auto *callee                    = program->graph(function.calleeIdOf(ref));
                 if (callee == nullptr) {
                     return fail(refusal);
                 }

@@ -36,7 +36,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "cli.version_stamp"
-desc = "`camel --version` prints the footprint the build recorded in out/<tag>/build-info.json, in the pinned stamp's shape (a timestamp plus an optional git-describe suffix), and with the build type that install was configured with."
+desc = "`camel --version` prints the footprint the build recorded in out/<tag>/build-info.json, in the pinned stamp's shape (the source fingerprint's first 12 hex digits, plus an optional git-describe suffix), and with the build type that install was configured with."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/tools/cli/version_stamp.mjs"

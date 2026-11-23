@@ -77,6 +77,13 @@ inline std::string compilerNamedOperator(std::string_view plain) {
 /// only there are the types of the two operands known. No program writes the name.
 inline constexpr std::string_view kCompositionCall = "$comp::..";
 
+/// The name the compiler writes for `f <> g` (design principles 4.2): the
+/// composition of two functions, and nothing else -- an interval is written `a..b` and a `<>`
+/// between two integers has no reading. It has a name of its own so that the GIR builder can
+/// refuse everything but two functions without looking at the spelling of the source. No program
+/// writes the name.
+inline constexpr std::string_view kComposeCall = "$comp::<>";
+
 /// The operator of `fail<'Kind'>(message)` (design principles 3.9), declared in
 /// `stdlib/prelude.cml` and built in as the group `fail`: the program's own premise
 /// check, whose call gives the bottom type `never`. A program never writes the URI; the builder

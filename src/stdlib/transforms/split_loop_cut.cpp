@@ -821,8 +821,8 @@ SplitGraph cutLoopGraph(
         draft.setReturnNode(answered, rt::GCReturnKind::Self);
     }
     group.encode();
-    const rt::GCGraph *forwardMade  = group.encoded(forwardId);
-    const rt::GCGraph *backwardMade = group.encoded(backwardId);
+    const auto *forwardMade         = group.encoded(forwardId);
+    const auto *backwardMade        = group.encoded(backwardId);
     built.residuals                 = cuts.size();
     // `invariants` counts what the forward half takes *before* the loop -- the reading this cell
     // has always printed -- and `after` what it takes from the loop's result, printed only when

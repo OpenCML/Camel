@@ -562,8 +562,7 @@ const runtime::Program *outlineRegions(
                 // A host effect (`print`, `save_npy`, a file write) is the boundary of a device
                 // scope, not an operator the device must run: the pass leaves it on the host and
                 // the value it observes is downloaded there (docs/design/gpu/plan.cn.md 2.4).
-                const auto &table = core::OperatorTable::instance();
-                if (!table.isPure(oper) || table.hasExternalEffect(oper))
+                if (!touchesNothing(oper))
                     continue;
                 if (!deviceCapable(oper)) {
                     // A device answer on the node itself is the operator having no device

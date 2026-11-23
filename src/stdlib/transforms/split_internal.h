@@ -231,7 +231,7 @@ struct Half {
         // either, because a function value passed as an argument is an ordinary data input and a
         // call through a value has no callee among its data inputs at all.
         const camel::core::type::FunctionType *liftedType = callValueSignatureOf(*source, ref);
-        const rt::GCGraph *callee = liftedType != nullptr ? nullptr : calleeOf(ref);
+        const auto *callee        = liftedType != nullptr ? nullptr : calleeOf(ref);
         if (liftedType == nullptr) {
             liftedType = callee != nullptr ? callee->funcType() : source->funcType();
         }
@@ -724,7 +724,7 @@ struct Half {
                 // the same values in, `(result, lin)` out. `lin` is the callee's own linear half,
                 // closed over whatever its body reads, so the call site never sees those values --
                 // `residualsOf` names `lin` itself for the backward half to call.
-                const rt::GCGraph *calleeGraph = calleeOf(ref);
+                const auto *calleeGraph        = calleeOf(ref);
                 CutMember nested;
                 if (calleeCuts != nullptr && calleeGraph != nullptr) {
                     const auto known = calleeCuts->find(calleeGraph);
@@ -834,7 +834,7 @@ struct Half {
                         source->node(call)->kind == rt::GCNodeKind::Call) {
                         calleeType = callValueSignatureOf(*source, call);
                     } else if (
-                        const rt::GCGraph *callee = calleeGraphOf(*source, program, call);
+                        const auto *callee        = calleeGraphOf(*source, program, call);
                         callee != nullptr) {
                         calleeType = callee->funcType();
                     }

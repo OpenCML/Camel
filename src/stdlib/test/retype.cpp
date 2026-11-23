@@ -129,7 +129,7 @@ bool graphMentions(const GCGraph &graph, TypeId id, bool includeStatics = true) 
 
 size_t countNodesTyped(const Program &program, TypeId id) {
     size_t count = 0;
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             if ((*it)->typeId == id) {
                 ++count;
@@ -144,7 +144,7 @@ size_t graphCount(const Program &program) { return program.graphs().size(); }
 /// The graphs of `program`, by id, with what they looked like.
 std::map<uint64_t, GraphShape> shapesOf(const Program &program) {
     std::map<uint64_t, GraphShape> shapes;
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         shapes.emplace(camel::runtime::toValue(graph->id()), shapeOf(*graph));
     }
     return shapes;
@@ -168,7 +168,7 @@ const Program *RetypeTrivialTestPass::apply(const Program *program, std::ostream
     const auto before            = shapesOf(*program);
     const size_t graphsBefore    = graphCount(*program);
     const size_t f64Before       = countNodesTyped(*program, floatId);
-    const GCGraph *sourceRoot    = program->root();
+    const auto *sourceRoot       = program->root();
     const GraphShape sourceShape = shapeOf(*sourceRoot);
 
     // (1) A rebuild of nothing is the same graph: an empty substitution changes no type, the
@@ -212,7 +212,7 @@ const Program *RetypeTrivialTestPass::apply(const Program *program, std::ostream
     // (3) The assertions the plan locks in: same graphs, same node counts, same edge counts.
     bool topologySame = graphCount(*next) == graphsBefore;
     size_t nodesNow = 0, edgesNow = 0;
-    for (const GCGraph *graph : next->graphs()) {
+    for (const auto *graph : next->graphs()) {
         nodesNow += graph->nodeCount();
         const auto old = before.find(toValue(graph->id()));
         if (topologySame && old != before.end()) {
@@ -222,7 +222,7 @@ const Program *RetypeTrivialTestPass::apply(const Program *program, std::ostream
         }
     }
     bool f64After = false;
-    for (const GCGraph *graph : next->graphs()) {
+    for (const auto *graph : next->graphs()) {
         f64After = f64After || graphMentions(*graph, floatId);
     }
     const size_t retypedNow = countNodesTyped(*next, intId);
@@ -254,7 +254,7 @@ namespace {
 /// The pair type the probe replaces: a tuple whose components include a `float` and a function
 /// type -- a value and the pullback that goes with it.
 ty::TupleType *findPairType(const Program &program) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             Type *nodeType = (*it)->dataType();
             if (nodeType == nullptr || nodeType->code() != TypeCode::Tuple) {
@@ -314,7 +314,7 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
     GraphRetypeOptions options;
     options.leaveStaticObjects = true;
 
-    const GCGraph *sourceRoot   = program->root();
+    const auto *sourceRoot      = program->root();
     const GraphShape sourceShape = shapeOf(*sourceRoot);
     const size_t pairBefore      = countNodesTyped(*program, pairId);
 
@@ -328,7 +328,7 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
 
     const size_t pairAfter = countNodesTyped(*next, pairId);
     bool pairLeft          = false;
-    for (const GCGraph *graph : next->graphs()) {
+    for (const auto *graph : next->graphs()) {
         pairLeft = pairLeft || graphMentions(*graph, pairId, /*includeStatics=*/false);
     }
     const size_t enumNodes = countNodesTyped(*next, boxed->typeId());
@@ -339,7 +339,7 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
     size_t joins = 0, armsChecked = 0;
     bool armsAgree = true;
     const auto &table = ty::TypeTable::instance();
-    for (const GCGraph *graph : next->graphs()) {
+    for (const auto *graph : next->graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             if ((*it)->kind != GCNodeKind::Join) {
                 continue;

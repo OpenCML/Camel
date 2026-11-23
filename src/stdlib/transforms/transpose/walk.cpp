@@ -1224,7 +1224,7 @@ bool buildTransposeMember(
                     // transposed as themselves; a callee that answers the pair is transposed
                     // through its second half, and that branch answers and moves on before this is
                     // read.
-                    camel::runtime::GCGraph *calleeToTranspose = callee;
+                    auto *calleeToTranspose                    = callee;
                     // The parameters the transposition answers for. Empty = every parameter, which
                     // is what a plain call needs; a kernel answers for its tangents.
                     std::vector<bool> participates;
@@ -3260,7 +3260,7 @@ bool buildTransposeMember(
                     return false;
                 }
 
-                camel::runtime::GCGraph *callee = state.program->graph(calleeId);
+                auto *callee                    = state.program->graph(calleeId);
                 if (callee == nullptr) {
                     // The callee is the value the first input carries, and a value that is itself
                     // computed -- a call's result, a returned closure -- names no graph here.

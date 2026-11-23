@@ -29,6 +29,7 @@
 #include "camel/runtime/canonical.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_writes.h"
+#include "camel/runtime/effects.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
@@ -540,12 +541,18 @@ camel::core::OperId operOf(const NodeView &node, const Handle *handle, const cha
     return graphOf(handle, site).nodeBodyAs<GCOperBody>(handle->index())->oper;
 }
 
+/// Whether the node's operator is pure: it writes nothing, neither state of the program nor
+/// anything outside it. The answer is the effect fact of the operator
+/// (`camel::runtime::effectSummaryOfOperator`; design principles 3.1, 3.3: an effect is a write,
+/// and a read is a dependency), which is the statement the compiler's own judgement of a node
+/// starts from -- so this query and that judgement are one answer read in one place instead of a
+/// purity column of their own.
 slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView node = viewOf(handle, "graph.is_pure");
     bool pure           = false;
     if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
-        pure = OperatorTable::instance().isPure(operOf(node, handle, "graph.is_pure"));
+        pure = camel::runtime::effectSummaryOfOperator(operOf(node, handle, "graph.is_pure")).pure();
     }
     return toSlot<Bool>(pure);
 }

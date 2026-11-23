@@ -10,6 +10,8 @@
 
 #include "builder_types.h"
 
+#include <string_view>
+
 namespace camel::compile::gir {
 
 /// The graph builder of a program (design principles 10.1, "模块"; the graph model,
@@ -3129,17 +3131,24 @@ class Builder {
     /// write gives).
     node_handle_t visitLinkNode(
         const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store = std::nullopt);
-    /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
-    /// interval of two integers, told apart by the types of the two operands (design principles
-    ///  4.2; the rule). `expected`
+    /// `a..b` (the GCT link of `kCompositionCall`) and `a <> b` (`kComposeCall`): the composition
+    /// of two functions, or -- for `..` alone -- the interval of two integers, told apart by the
+    /// types of the two operands (design principles 4.2; the rule). `compositionOnly` is set for
+    /// `<>`, which has the composition reading and no other. `expected`
     /// is the type of the position the whole expression stands in: a function type there is the
     /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (
     /// section generic-operands-of-composition).
-    node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected);
+    node_handle_t
+    buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool compositionOnly = false);
     /// The same, from two operands already built: the sequence position of a loop builds them
     /// itself, to know whether the interval is the loop's form before the rest of `..` is built.
-    node_handle_t
-    buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, node_handle_t rhs);
+    /// `opText` is the operator the program wrote, which the refusals name.
+    node_handle_t buildCompositionWith(
+        const GCT::node_ptr_t &gct,
+        node_handle_t lhs,
+        node_handle_t rhs,
+        bool compositionOnly = false,
+        std::string_view opText = "..");
     /// Whether `expr` is written `a..b`: the GCT link of `kCompositionCall`.
     static bool isIntervalExpr(const GCT::node_ptr_t &expr);
     /// Whether the two operands of `..` are the interval's: two integers, and nothing else

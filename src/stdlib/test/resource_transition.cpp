@@ -132,7 +132,7 @@ ResourceTransitionTestPass::apply(const camel::runtime::Program *program, std::o
     std::sort(graphs.begin(), graphs.end(), [](const rt::GCGraph *a, const rt::GCGraph *b) {
         return a->name() < b->name();
     });
-    for (const rt::GCGraph *graph : graphs) {
+    for (const auto *graph : graphs) {
         const ResourceSignature *measured = gir::measuredReachOf(graph->id());
         if (measured == nullptr) {
             continue; // not a body this compile measured

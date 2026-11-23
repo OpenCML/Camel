@@ -1,0 +1,102 @@
+# 「读一个格子」算不算一个效应，以及算子记录的沉默在放置判断里值多少
+
+## 事实
+
+`core.arrangeable` 落地（`internal/questions/2026-11-23-who-owns-freely-arrangeable.cn.md`
+的裁决）之后，逐节点的改前/改后答案对照跑在 6 个程序、224 个节点、70 个 OPER 节点上
+（`test::arrangeable_probe`，临时探针，读数如下）：
+
+| 程序 | 节点 | OPER | 可自由安排 同/异 | 效应 同/异 | `graph.is_pure` 同/异 | 放置（`touchesNothing`）同/异 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `loops/recursion` | 27 | 5 | 5/0 | 5/0 | 5/0 | 5/0 |
+| `effects/inferred_recursive_is_empty` | 17 | 2 | 2/0 | 2/0 | 2/0 | 2/0 |
+| `facts/tensors_and_loops` | 40 | 11 | 11/0 | 11/0 | 11/0 | 11/0 |
+| `linear/nvm/fib` | 27 | 11 | 11/0 | 11/0 | 11/0 | 11/0 |
+| `compile/fold_calls/recursive` | 21 | 5 | 5/0 | 5/0 | 5/0 | 5/0 |
+| `linear/byref/var_writes_through_recursion` | 92 | 36 | 36/0 | **23/13** | **23/13** | 36/0 |
+| 合计 | 224 | 70 | 70/0 | 57/13 | 57/13 | 70/0 |
+
+13 处不同的全部是 `:var/get`（图 47、48）：改前 `!isPure ∨ hasExternalEffect` 答「有效应」，
+`EffectSummary` 答 `pure() = true`；改前 `graph.is_pure` 答 false，改后答 true。这正是 3.3
+「读是一个依赖，不是一个效应」与 `OperatorTable::isPure` 的读法之间的差：前者说读格子不写任何
+东西，后者说碰到格子就不算纯。
+
+第二件，同一批探针读数里可以单独量出来：把放置判断的两个原子**只**从算子记录取
+（`Record::pure()` / `Record::external()`，`uses` 没写就按 3.3 读成「写全局资源」），gpu 层
+13 个已知红的原因从 `TILES-OUTLINED-10->12`（device）/`->5`（resident）整体变成
+`TILES-OUTLINED-10->0`——`region_outline.cpp` 把几乎每个算子都当成宿主效应跳过，一个区域也
+outline 不出来；同一棵树里 `nofallback.*` 另有 8 例由绿转红。改成「记录写了 `uses` 就按记录，
+没写就按声明语义」之后，13 个已知红回到记录里的原因（`0 recorded for another reason`），
+`is_pure`/效应/放置三列在 5 个程序上与改前逐项相同。
+
+## 需要裁的两件
+
+### ① 读一个程序变量，效应事实该答「有」还是「无」
+
+裁决说「同一个格子别读第二遍；改问效应事实（`EffectSummary` 已经是答案）」。按那句做，
+`:var/get` 的答案从「有效应」变成「无效应」——13 个节点、1 个程序。设计原则 3.3 支持后者
+（读是依赖不是效应），而 `OperatorTable::isPure` 支持前者（碰了格子就不纯）。本笔按裁决交付
+（事实层是唯一的家，`EffectSummary::pure()` 是答案），因此这 13 处答案确实变了；这条问题页是
+把这个变化摆出来，不是把它判成对的。
+
+要裁的是：`:var/get` 这类「读状态」的算子在 3.4 的第 1、2 项上算不算成立；若算成立，那
+`graph.is_pure` 对它的答案就该是 true（现在的实现），若不成立，事实层要为「读」单独留一个项。
+
+### ② 算子记录没写 `uses`，放置判断该读哪一边
+
+3.3 说没写就按「写全局资源」读（`Record::external()` 的定义），而树里几乎每个算子的记录都没
+写 `uses`，于是严格按记录读会让设备层整体停摆（上面 `TILES_OUTLINED 0` 的读数）。本笔为了让
+每条改前/改后答案相同，取「记录写了就按记录，没写就按算子被声明时的语义」，也就是把
+`OperatorTable::isPure` / `hasExternalEffect` 在事实层内部当作「声明语义」读一次。
+
+要裁的是：这条「沉默就回落到声明」的读法是不是裁决里「两个原子从算子记录来」的意思。若不是，
+则要么先补齐各模块声明里的 `uses`（谁补、按什么口径补），要么接受设备层停摆到补齐为止——
+两条都不是本笔能自己定的。
+
+## 本笔怎么处理
+
+两件都按「改前答案 = 改后答案」的硬约束交付：①之外的每一处答案逐项相同（70/70 可自由安排、
+70/70 放置、70/70 终止方向），①按裁决本身变化并把 13 个节点列在上面。②取回落读法，因此它
+没有改任何答案，但它是不是裁决的本意，需要作者看过。
+
+被删掉的临时探针（`test::arrangeable_probe` 与其 plan）只用来产出上面两段读数；读数记在这里，
+探针不留在树上。
+## 裁决与改动
+
+作者裁（`6fe8c9bbb`）：
+
+- **① 读程序变量是依赖，不是效应。** `var` 是写法不是实体（设计原则 3.5）：没有可变变量，共享可变
+  状态只有 `Ref` 与外部资源，`var` 不是资源。所以 `:var/get` 在 3.4 的第 1、2 项上成立，
+  `EffectSummary` 与 `graph.is_pure` 现在的答案（纯）是对的；改前 `OperatorTable::isPure` 说「碰了
+  格子就不纯」是格子实现漏出来的读法（读写的先后由建图时连的边保证）。那 13 个节点的变化收下。
+- **② 「沉默就回落」不成立。** 回落意味着事实层内部自己想办法，那仍是第二个读者。做法照 `panic`
+  那次：登记时把 `OperatorTable` 里每个算子的效应语义写进 `Record::uses`，于是事实层只读记录；
+  两个入口都没说的，仍按 3.3 读成「写全局资源」（这是对的），并由一条检查列出、逐个补声明。
+
+改法：删掉回落分支（`termsOfOperator` 与 `tiles::touchesNothing` 都只读记录），在
+`builtin_semantics.cpp#declareBuiltinOperatorUses` 把声明过的 `ResourceSpec` 整份写进记录的
+`uses`（照 `panic` 同一个位置），`camel inspect --ops` 增加 `record`、`uses_stated`、
+`clause_pure` 三个字段，`test/cases/feat/modules/oprecord_uses.py` 把两个读法扣在一起并列出
+还没补声明的算子。
+
+## 按裁决做完之后的读数（`stateUsesInRecord` + 只读记录）
+
+`camel inspect --ops test/cases/modules/stdlib/registry_all.cml` 逐算子读；`--ops` 新加的
+`record`、`uses_stated`、`clause_pure` 三个字段是记录那一侧：
+
+- 814 个算子，814 个都有记录；
+- **349 个记录里写了 `uses`**（改前 0）；
+- 465 个仍沉默，其中 **440 个在表里声明了 accesses 却没能进记录**
+  （`declared accesses that are not in the record: 440`）。`stateUsesInRecord` 写在
+  `OperatorTable::declareSemantics` 里，对这些算子没有落地；换成「登记后扫一遍」也是同样的数字，
+  所以问题不在写入点，而在记录于模块装载的某个时刻被换成了一份没有 `uses` 的 —— 原因还没有查明。
+
+两件事要请作者定：
+
+- `TILES_OUTLINED` 有一处读到 **12**（原 10）：按记录判，多出两个算子「碰不到外面」，而设备层没有
+  它们的程序，`nofallback.*` 两条诊断因此变红（`tensor:matmul` 的 "no device program"）。
+  **判「能不能上设备」是读记录（新）还是读表（旧）**？
+- 那 440 个没进记录的算子，在记录里沉默 ⇒ 按 3.3 读成外部效应 ⇒ 它们上面的节点不再可排。要不要在
+  装载结束时补一次写入（即承认「登记时写」不够），还是继续只读记录、把 440 个当欠账逐个补声明？
+
+`var` 那条已按裁决收下：13 处 `:var/get` 的答案变化是纠正（`var` 是写法不是实体）。

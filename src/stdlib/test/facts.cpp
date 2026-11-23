@@ -186,7 +186,7 @@ void registration(std::ostream &os) {
 }
 
 GCGraph *named(const Program &program, GCGraph *root, std::string_view name) {
-    for (GCGraph *graph : collectReachableGraphs(program, root)) {
+    for (auto *graph : collectReachableGraphs(program, root)) {
         if (graph->name() == name) {
             return graph;
         }
@@ -204,14 +204,14 @@ void probe(std::ostream &os, FactStore &store, std::string_view check, KindId ki
 
 const camel::runtime::Program *
 FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph                    = program->root();
     const TestKinds &k = testKinds();
     FactStore &store   = context_->facts();
     registration(os);
 
-    GCGraph *root = graph;
-    GCGraph *main = named(*program, root, "main");
-    GCGraph *f    = named(*program, root, "f");
+    auto *root    = graph;
+    auto *main    = named(*program, root, "main");
+    auto *f       = named(*program, root, "f");
 
     // ---- Storing and reading --------------------------------------------------------------
     store.put<int>(k.kind, Anchor{program, main, 0}, 11);
@@ -264,7 +264,7 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         RuntimeGraphDraftSession session(context_, program);
         (void)session.edit(main).edit();
         program       = session.commit();
-        GCGraph *same = program->root();
+        auto *same    = program->root();
         os << "FACTS unchanged_revision_main "
            << (named(*program, same, "main")->revision() == main->revision() ? "kept" : "new")
            << "\n";
@@ -284,9 +284,9 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     (void)session.edit(main).edit().materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
     const camel::runtime::Program *program2 = session.commit();
-    GCGraph *root2                          = program2->root();
-    GCGraph *main2                          = named(*program2, root2, "main");
-    GCGraph *f2                             = named(*program2, root2, "f");
+    auto *root2                             = program2->root();
+    auto *main2                             = named(*program2, root2, "main");
+    auto *f2                                = named(*program2, root2, "f");
     os << "FACTS id_main " << (main2->id() == main->id() ? "kept" : "new") << "\n";
     os << "FACTS id_f " << (f2->id() == f->id() ? "kept" : "new") << "\n";
     os << "FACTS id_root " << (root2->id() == root->id() ? "kept" : "new") << "\n";
@@ -346,7 +346,7 @@ namespace {
 /// The graphs of the program of `root`, by GraphId.
 std::unordered_map<GraphId, GCGraph *> graphsById(const Program &program, GCGraph *root) {
     std::unordered_map<GraphId, GCGraph *> byId;
-    for (GCGraph *graph : collectReachableGraphs(program, root)) {
+    for (auto *graph : collectReachableGraphs(program, root)) {
         byId.emplace(graph->id(), graph);
     }
     return byId;
@@ -358,7 +358,7 @@ std::unordered_map<GraphId, GCGraph *> graphsById(const Program &program, GCGrap
 void printRevisions(
     std::ostream &os, const Program &program, GCGraph *root, std::string_view prefix) {
     const auto byId = graphsById(program, root);
-    for (GCGraph *graph : collectReachableGraphs(program, root)) {
+    for (auto *graph : collectReachableGraphs(program, root)) {
         if (byId.at(graph->id()) != graph) {
             continue;
         }
@@ -376,7 +376,7 @@ size_t tally(
     std::string_view prefix) {
     const auto byId = graphsById(program, root);
     // Two graphs of one program never share a GraphId (a commit copies each graph once).
-    for (GCGraph *graph : collectReachableGraphs(program, root)) {
+    for (auto *graph : collectReachableGraphs(program, root)) {
         if (byId.at(graph->id()) != graph) {
             os << "FACTS " << prefix << " shared id " << graph->name() << " "
                << byId.at(graph->id())->name() << "\n";
@@ -489,7 +489,7 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
 
 const camel::runtime::Program *
 FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph                    = program->root();
     FactStore &store = context_->facts();
     os << std::format(
         "FACTS epoch check={}\n", camel::core::OperatorTable::instance().declarationEpoch());
@@ -583,7 +583,7 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 
 const camel::runtime::Program *
 FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph                    = program->root();
     FactStore &store = context_->facts();
     computeFacts(store, *program);
     const std::vector<PortableFact> facts = exportFacts(store, *program);
@@ -650,7 +650,7 @@ const camel::runtime::Program *
 FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     FactStore &store   = context_->facts();
     const TestKinds &k = testKinds();
-    GCGraph *root      = program->root();
+    auto *root         = program->root();
     // The entry node: a node no edit of another node of the graph rewrites, and one whose place
     // the rewrite keeps (the encoder keeps the ids of a graph it rewrites).
     const gc_node_ref_t kept = root->entryNodeRef();
@@ -664,7 +664,7 @@ FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     RuntimeGraphDraftSession session(context_, program);
     (void)blankNode(session.edit(root));
     const camel::runtime::Program *grown = session.commit();
-    GCGraph *grownRoot                   = grown->root();
+    auto *grownRoot                      = grown->root();
     const Anchor grownAnchor{grown, grownRoot, kept};
     os << "FACTS node_revision " << (grownRoot->revision() == revision ? "kept" : "new") << "\n";
     os << "FACTS node_version " << (grownRoot->nodeContentHash(kept) == version ? "kept" : "new")

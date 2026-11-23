@@ -28,7 +28,7 @@ constexpr std::string_view kPrintUri = ":io/println";
 /// Every standard ambient use of the program, as `name (way)`, counted.
 std::map<std::string, size_t> ambientUses(const camel::runtime::Program *program) {
     std::map<std::string, size_t> counts;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
             if (graph->node(id) == nullptr) {
                 continue; // a dead place: its id is kept so the others do not move
@@ -67,7 +67,7 @@ InlineUseTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << "\n";
     // One line per print node, so a copy inlining made is visible as a node of its own rather than
     // folded into a total: the total alone cannot say whether a print moved house or was doubled.
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
             if (graph->node(id) == nullptr) {
                 continue;
@@ -102,7 +102,7 @@ InlineUseDropTestPass::apply(const camel::runtime::Program *program, std::ostrea
     }
     RuntimeGraphDraftSession session(context_, program);
     size_t erased = 0;
-    for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+    for (auto *graph : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(graph);
         auto &draft       = transaction.edit();
         std::vector<gc_node_ref_t> prints;

@@ -412,7 +412,7 @@ tangentArgumentsOf(const rt::GCGraph &graph, const rt::Program *program, gc_node
     const size_t withCount               = graph.withInputsOf(ref).size();
     const size_t ordinary                = all.size() > withCount ? all.size() - withCount : 0;
     const size_t half                    = ordinary / 2;
-    const rt::GCGraph *callee            = calleeGraphOf(graph, program, ref);
+    const auto *callee                   = calleeGraphOf(graph, program, ref);
     const FunctionType *calleeType =
         callee != nullptr ? callee->funcType() : callValueSignatureOf(graph, ref);
     std::vector<gc_node_ref_t> tangents;
@@ -609,7 +609,7 @@ std::vector<Residual> residualsOf(
             // inside the callee stay inside it, in its closure.
             if (const gc_node_ref_t call = pairTangentReadOf(lifted, program, ref);
                 call != rt::kInvalidNodeRef) {
-                const rt::GCGraph *calleeGraph = calleeGraphOf(lifted, program, call);
+                const auto *calleeGraph        = calleeGraphOf(lifted, program, call);
                 // The linear half's type is the callee's own backward half. A call through a value
                 // has no callee graph to ask, so the type comes from the value's signature -- the
                 // same halves, read from the only place that exists before the program runs.
@@ -655,7 +655,7 @@ std::vector<Residual> residualsOf(
                 // as `3*(c+y)` instead of `3*(dc+dy)`.
                 std::vector<gc_node_ref_t> onward;
                 const GraphId lateCalleeId    = lifted.calleeIdOf(ref);
-                const rt::GCGraph *lateCallee = program != nullptr && rt::isValid(lateCalleeId)
+                const auto *lateCallee        = program != nullptr && rt::isValid(lateCalleeId)
                                                     ? program->graph(lateCalleeId)
                                                     : nullptr;
                 const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
@@ -742,7 +742,7 @@ std::vector<Residual> residualsOf(
                 // contributes: the value port of its own parameter, which is the only thing the
                 // forward half can hand over.
                 const GraphId calleeId         = lifted.calleeIdOf(ref);
-                const rt::GCGraph *calleeGraph = program != nullptr && rt::isValid(calleeId)
+                const auto *calleeGraph        = program != nullptr && rt::isValid(calleeId)
                                                      ? program->graph(calleeId)
                                                      : nullptr;
                 if (!answersAPair(calleeGraph) && !answersAPairByValueAt(lifted, ref)) {
@@ -985,7 +985,7 @@ std::vector<Residual> residualsOf(
         if (std::find(linearHalves.begin(), linearHalves.end(), ref) != linearHalves.end()) {
             // The linear half of a call: its type is the callee's own backward half, `(tangents) =>
             // tangent`, and its name is the call because that is what it is the second answer of.
-            const rt::GCGraph *calleeGraph = calleeGraphOf(lifted, program, ref);
+            const auto *calleeGraph        = calleeGraphOf(lifted, program, ref);
             const FunctionType *linearOf =
                 calleeGraph != nullptr && calleeGraph->funcType() != nullptr
                     ? calleeGraph->funcType()
@@ -1617,8 +1617,8 @@ SplitGraph cutBranchGraph(
         draft.setReturnNode(join, rt::GCReturnKind::Self);
     }
     group.encode();
-    const rt::GCGraph *forwardMade  = group.encoded(forwardId);
-    const rt::GCGraph *backwardMade = group.encoded(backwardId);
+    const auto *forwardMade         = group.encoded(forwardId);
+    const auto *backwardMade        = group.encoded(backwardId);
     built.residuals                 = cuts.size();
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId) << " type="
@@ -2656,8 +2656,8 @@ SplitGraph buildSplitGraph(
         }
     }
     group.encode();
-    const rt::GCGraph *forwardMade  = group.encoded(forwardId);
-    const rt::GCGraph *backwardMade = group.encoded(backwardId);
+    const auto *forwardMade         = group.encoded(forwardId);
+    const auto *backwardMade        = group.encoded(backwardId);
     built.residuals                 = graphResiduals.size();
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId) << " type="

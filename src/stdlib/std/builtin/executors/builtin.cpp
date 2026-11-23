@@ -630,7 +630,14 @@ void registerBuiltinOperatorTraits() {
         "op/lt_i",
         "op/lt_l",
         "op/lt_s",
-        "op/mem_blocks",
+        // `op/mem_blocks` is not here: it reads the allocator's counters, so the call cannot be
+        // folded, merged or dropped as a pure one. Its accesses are itemized where the effect is
+        // declared -- `externalAmbient("mm", AccessMode::Read)` in the built-in module's semantics,
+        // and `.pure = false` beside the other words below -- and an operator whose accesses are
+        // itemized elsewhere is declared by that list, not by this one (design principles 3.3).
+        // Listing it here as well was a leftover of the pure word and a second statement of it: the
+        // record keeps the first statement it is given (a record is never re-stated), so the two
+        // disagreed on the one operator -- `scripts/check-operator-uses.mjs` prints that disagreement.
         "op/mod",
         "op/mod_i",
         "op/mod_l",

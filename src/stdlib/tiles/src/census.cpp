@@ -58,7 +58,7 @@ OperatorSurface operatorSurface(const rt::Program &program) {
             const std::string name(table.uri(oper));
             if (!onSurface(name) || node->isMacro())
                 continue;
-            if (!table.isPure(oper) || table.hasExternalEffect(oper))
+            if (!touchesNothing(oper))
                 continue;
             (deviceCapable(oper) ? surface.device : surface.gap).insert(name);
         }
