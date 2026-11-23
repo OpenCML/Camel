@@ -383,18 +383,9 @@ try {
         [System.IO.File]::WriteAllText($planSetFile, ($planTargets -join "`n") + "`n",
             (New-Object System.Text.UTF8Encoding($false)))
     }
-    # The change itself, as file names, written down once. The merged run diffs this same tree for
-    # itself; the seeding run is handed this list instead (`-ChangedList`), so the two cannot disagree
-    # about what the merge touches -- the one thing that has to agree for the comparison to mean
-    # anything. A base ref cannot promise it: the baseline tree and the merged tree differ by the
-    # lane's own files, so a diff taken there names those files too and selects more plans than the
-    # merge does (measured once as `smoke`-plus-`docs.links` against `docs.links`, 31 cases against
-    # 21, and every comparison after it refused -- correctly -- as two runs of different things).
-    $changedFilesFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-changed-$PID.txt")
-    $changedFiles = @(& git diff --name-only 'HEAD^1' 2>$null) |
-        ForEach-Object { "$_".Trim().Replace('\', '/') } | Where-Object { $_ }
-    [System.IO.File]::WriteAllText($changedFilesFile, (($changedFiles -join "`n") + "`n"),
-        (New-Object System.Text.UTF8Encoding($false)))
+    # The change this merge brings, as `git diff --name-only HEAD^1` sees it in this checkout. The
+    # seeding run lists the change from the other end (see below); both must name the same files or
+    # the two runs hold different sets of cases and the comparison says nothing.
     if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
         # Not a red and not a green: the selection itself did not answer, so the plans this merge
         # touches are unknown and nothing about the change has been measured. Same shape as the
@@ -489,12 +480,15 @@ try {
             Write-Host ("  no baseline for develop {0}: measuring it there, in a worktree at {1} on the gate's own branch" -f `
                 $developTip.Substring(0, 9), $baselinePath)
             $seedStarted = Get-Date
-            # The same change, named once and handed to both runs. `-ChangedList` is the file list this
-            # merge touches, measured in the merge position a few lines above: the baseline tree does
-            # not hold the lane's files, so a diff taken *there* against any base names them too.
+            # The same change, read from the other end: the seeding run lists it with `git diff
+            # --name-only` against `-ChangedBase`, taken in the baseline tree, so the base has to be the
+            # MERGE COMMIT. The files that differ between the merged tree and the baseline tree are
+            # exactly the files this merge changes; a diff against the lane head also names the lane's
+            # own files, because those two trees differ by more than the merge -- measured as
+            # `smoke`-plus-`docs.links` (31 cases) where the merge selected `docs.links` (21), and the
+            # comparison then refused, correctly, as two runs of different things.
             $seedRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
-                -Path $baselinePath -Changed -ChangedBase $developTip -ChangedList $changedFilesFile `
-                -ListKnown -NoGpuWatch 2>&1)
+                -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
             $seedExit = $LASTEXITCODE
             $seedSeconds = ((Get-Date) - $seedStarted).TotalSeconds
             [System.IO.File]::WriteAllText($seedTranscript,
@@ -657,6 +651,6 @@ finally {
     if ($transcript) { Remove-Item -LiteralPath $transcript -Force -ErrorAction SilentlyContinue }
     if ($seedTranscript) { Remove-Item -LiteralPath $seedTranscript -Force -ErrorAction SilentlyContinue }
     if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
-    if ($changedFilesFile) { Remove-Item -LiteralPath $changedFilesFile -Force -ErrorAction SilentlyContinue }
+    # (the changed-file list is not a temp file: both sides read it from git)
     Pop-Location
 }

@@ -312,12 +312,6 @@ param(
     # naming the base and the layer it declines to run; it is never a run of the whole layer.
     [switch]$Changed,
     [string]$ChangedBase = 'origin/develop',
-    # The changed-file list, already measured by the caller, instead of `git diff` against -ChangedBase.
-    # A caller that runs the same change on two checkouts has to name the change once: the two trees
-    # differ by the branch's own files, so a diff taken on either one names those files too, and the
-    # two runs then hold different sets of cases -- which reads, correctly, as a comparison that says
-    # nothing about anything.
-    [string]$ChangedList = '',
     # Rewrite the goldens of the named plans instead of checking them: runs the golden tool,
     # not the runner, because a golden mismatch cannot be fixed through the checking path.
     [switch]$UpdateGolden,
@@ -1207,18 +1201,6 @@ try {
     if ($Changed -and -not $UpdateGolden) {
         $changedList = @()
         $listProblem = $null
-        if ($ChangedList -ne '') {
-            # The caller measured this change itself and hands the list over. A base ref cannot
-            # promise the same selection on two checkouts: the trees differ by the branch's own files,
-            # so a diff taken on the baseline tree names the lane's files as well and selects a larger
-            # plan set than the merged tree does -- measured once as `smoke`-plus-`docs.links` against
-            # `docs.links`, 31 cases against 21, and every comparison after that refused.
-            if (-not (Test-Path -LiteralPath $ChangedList)) {
-                $listProblem = "cannot read the changed-file list $ChangedList"
-            } else {
-                $changedList = @(Get-Content -LiteralPath $ChangedList -Encoding utf8)
-            }
-        } else {
         try {
             # Three different refusals used to read as one: a ref that does not resolve, a ref with
             # no merge-base (a shallow clone, another root's history -- `git diff` answers across
@@ -1240,7 +1222,6 @@ try {
             }
         } catch {
             $listProblem = "cannot read $ChangedBase`: $($_.Exception.Message)"
-        }
         }
         if ($listProblem) {
             # What the fallback would have run, counted the way the run reads it: the report has to
