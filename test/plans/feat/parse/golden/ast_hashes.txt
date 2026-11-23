@@ -3198,7 +3198,7 @@ b08fce1ddfd4e39f ok test/cases/modules/nn/checkpoint_tensor.cml
 248a4989d7f292dc ok test/cases/modules/nn/checkpoint_unsupported_leaf.cml
 00903ed6af0af540 ok test/cases/modules/nn/checkpoint_unsupported_load.cml
 2bd68b5639559cab ok test/cases/modules/nn/conv2d_grad_sanity.cml
-a41f58173fb1bc0b ok test/cases/modules/nn/conv2d_shape_error.cml
+2e4b0e5e1ae57d83 ok test/cases/modules/nn/conv2d_shape_error.cml
 0772d4720314f08b ok test/cases/modules/nn/embedding_grad_sanity.cml
 3442e9a6ae5b082f ok test/cases/modules/nn/embedding_index_error.cml
 53b0363144020dbe ok test/cases/modules/nn/embedding_mf.cml
