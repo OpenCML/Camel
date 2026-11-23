@@ -562,12 +562,13 @@ class Walker {
             true);
         walk(ctx.type());
         signatureOf_ = savedSignature;
-        // The body follows the `=>`.
-        if (ctx.has(TK::FatArrow)) {
-            const syn::Child last = ctx.lastChild();
-            if (last.isNode()) {
-                walkBody(last.node());
-            }
+        // The body is what follows the parameters, and the `=>` before it introduces the result
+        // type, not the body: `func (x) { x * x }` and `func (x: int) => int { x }` (design
+        // principles 4.4). A lambda written either way has its body indexed, so a name used
+        // inside one is a reference like any other.
+        const syn::Child last = ctx.lastChild();
+        if (last.isNode() && (last.node().is(NK::StmtBlock) || last.node().isExpr())) {
+            walkBody(last.node());
         }
         popScope();
     }

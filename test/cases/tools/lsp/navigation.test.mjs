@@ -139,8 +139,10 @@ await withServer(async (ls) => {
     checkEq(fmtRange(d[0].range), '3:5-3:9', 'a type alias')
     d = await def(') => T', 1, 5)
     checkEq(fmtRange(d[0].range), '6:16-6:17', 'a type variable: its head declaration')
+    // The lambda's parameter is written after `func `, and the formatter put the body on lines of
+    // its own: the declaration is at 36:23, and the use in the body is what names it.
     d = await def('v * 2')
-    checkEq(fmtRange(d[0].range), '36:18-36:19', 'a parameter of a function literal')
+    checkEq(fmtRange(d[0].range), '36:23-36:24', 'a parameter of a function literal')
     d = await def('println')
     checkEq(d, [], 'a built-in function has no definition in source')
     d = await def('{ norm2', 1, 2)
