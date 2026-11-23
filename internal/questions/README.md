@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：5 页
+## 现在在等作者：6 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -13,6 +13,7 @@
 | [`2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup`](2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup.cn.md) | 一个 Oper 的身份是 payload 里的 URI，还是算子表查出来的名字 |
 | [`2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner`](2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner.cn.md) | 一条算子 URI 只有一种写法，而把 2,677 处改成它归谁 |
 | [`2026-11-23-what-a-read-of-a-cell-costs`](2026-11-23-what-a-read-of-a-cell-costs.cn.md) | 「读一个格子」算不算一个效应，以及算子记录的沉默在放置判断里值多少 |
+| [`2026-11-23-who-holds-the-facts-store`](2026-11-23-who-holds-the-facts-store.cn.md) | 事实层在生产里没有商店：一个 Store 的形状该由谁定 |
 | [`2026-11-23-who-owns-freely-arrangeable`](2026-11-23-who-owns-freely-arrangeable.cn.md) | 「可自由调度」这句判断归谁：事实层给一个 kind，还是各处自己拼 |
 
 ## 生成器不会删的行：242 行（页已不在 `questions/` 里）
