@@ -18,6 +18,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/runtime/fact_slots.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/region_roots.h"
@@ -48,6 +49,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -3519,14 +3521,71 @@ const GCUseIndex &GCGraph::uses() const {
 const ExecPlan &GCGraph::execPlan() const {
     // The plan is the fact `std.execPlan` of the module that reads it: the store answers, and a
     // kind that is not registered is an error about the kind rather than a plan computed here
-    // (camel/runtime/exec_plan.h, `execPlanOf`).
+    // (camel/runtime/exec_plan.h, `execPlanOf`). What the graph keeps itself is the slot the
+    // store published the plan into, so the ask every call and every operator makes is one
+    // indexed load: a frozen graph does not change, so a plan in its slot cannot be stale, and a
+    // cleared slot means "ask the store" (which computes it and publishes it here).
+    const camel::facts::KindId kind = execPlanKind();
+    if (const void *published = factSlot(kind)) {
+        return *static_cast<const ExecPlan *>(published);
+    }
     return *execPlanOf(*this);
+}
+
+void GCGraph::setNodeFactSlot(
+    std::uint32_t kind, gc_node_ref_t node, const void *value) const noexcept {
+    if (kind >= kFactSlotCount || node >= nodeCount()) {
+        return;
+    }
+    FactNodeSlots *array = nodeFactSlots_[kind].load(std::memory_order_acquire);
+    if (array == nullptr) {
+        array = new (std::nothrow) FactNodeSlots[nodeCount()];
+        if (array == nullptr) {
+            return;
+        }
+        for (gc_cnt_t at = 0; at < nodeCount(); ++at) {
+            array[at].store(nullptr, std::memory_order_relaxed);
+        }
+        FactNodeSlots *expected = nullptr;
+        if (!nodeFactSlots_[kind].compare_exchange_strong(
+                expected, array, std::memory_order_acq_rel, std::memory_order_acquire)) {
+            delete[] array; // another thread made it first; both have this graph's node count
+            array = expected;
+        }
+    }
+    array[node].store(value, std::memory_order_release);
+}
+
+namespace {
+
+/// A slot is a property of a frozen graph; a draft has none, which is the answer that leaves the
+/// store doing what it did before (`camel/runtime/fact_slots.h`).
+const GCGraph *frozenGraphOf(const camel::graph::Graph &graph) {
+    return dynamic_cast<const GCGraph *>(&graph);
+}
+
+} // namespace
+
+void setFactSlotOf(
+    const camel::graph::Graph &graph, std::uint32_t kind, const void *value) noexcept {
+    if (const GCGraph *frozen = frozenGraphOf(graph)) {
+        frozen->setFactSlot(kind, value);
+    }
+}
+
+void setNodeFactSlotOf(
+    const camel::graph::Graph &graph, std::uint32_t kind, std::uint32_t node,
+    const void *value) noexcept {
+    if (const GCGraph *frozen = frozenGraphOf(graph)) {
+        frozen->setNodeFactSlot(kind, node, value);
+    }
 }
 
 GCGraph::~GCGraph() {
     // The facts anchored on this graph end here: an address is a graph only while the graph is
     // there, and the store that was told about this one must not answer about it afterwards
-    // (camel/facts/facts.h). The store itself outlives nothing here: it goes with its context.
+    // (camel/facts/facts.h). This is also what clears the slots first, while the values they name
+    // are still the store's: a slot that outlived its fact would be a dangling read (fact_slots.h).
     camel::facts::forgetGraph(this);
     // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
     // graph, so it goes before the graph does. `GraphView` is complete in this file
@@ -3534,6 +3593,9 @@ GCGraph::~GCGraph() {
     delete static_cast<const camel::graph::GraphView *>(viewCache_);
     viewCache_ = nullptr;
     delete uses_.load(std::memory_order_acquire);
+    for (auto &slots : nodeFactSlots_) {
+        delete[] slots.load(std::memory_order_acquire);
+    }
 }
 
 void GCGraph::releaseNodeChunks() {
