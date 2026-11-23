@@ -236,7 +236,7 @@ bool bodyNeedsOrder(
             break;
         }
     }
-    for (GCGraph *sub : program.subGraphs(*graph)) {
+    for (auto *sub : program.subGraphs(*graph)) {
         if (bodyNeedsOrder(program, sub, seen)) {
             return true;
         }
@@ -394,7 +394,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
     using camel::core::type::TypeCode;
     MacroOperandGraphs result;
     std::vector<const GCGraph *> work;
-    for (GCGraph *graph : closure) {
+    for (auto *graph : closure) {
         if (!graph) {
             continue;
         }
@@ -413,7 +413,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
                     if (operand->kind == GCNodeKind::Oper && operand->isMacro()) {
                         continue; // the result of another macro operator, handled at that one
                     }
-                    GCGraph *target = functionConstantGraph(graph, input);
+                    auto *target = functionConstantGraph(graph, input);
                     if (!target) {
                         result.all = true;
                         return result;
@@ -431,7 +431,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
         }
     };
     while (!work.empty()) {
-        const GCGraph *graph = work.back();
+        const auto *graph = work.back();
         work.pop_back();
         // A graph this session already edited calls what its draft calls: a specialization
         // made in this session is a new graph that only the draft refers to, and it is as much
@@ -461,7 +461,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
             if (!*it) {
                 continue;
             }
-            GCGraph *target = session.work().calleeOf(*graph, it.ref());
+            auto *target = session.work().calleeOf(*graph, it.ref());
             if (!target) {
                 target = functionConstantGraph(graph, it.ref());
             }
@@ -493,14 +493,14 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
     std::vector<std::vector<size_t>> edges(closure.size());
     std::vector<std::vector<size_t>> reverseEdges(closure.size());
     for (size_t i = 0; i < closure.size(); ++i) {
-        GCGraph *graph = closure[i];
+        auto *graph = closure[i];
         if (!graph) {
             continue;
         }
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             // A FUNC node calls its callee the way a function called from a loop body calls the
             // function the loop is in; the loop itself names no graph (design principles 3.10).
-            for (GCGraph *callee : {program.calleeOf(*graph, it.ref())}) {
+            for (auto *callee : {program.calleeOf(*graph, it.ref())}) {
                 if (!callee) {
                     continue;
                 }
@@ -784,7 +784,7 @@ class CallBook {
     void replaceHeld(const GCGraph *graph, const std::vector<const GCGraph *> &now) {
         std::vector<uint32_t> nowSlots;
         nowSlots.reserve(now.size());
-        for (const GCGraph *callee : now) {
+        for (const auto *callee : now) {
             nowSlots.push_back(slotOf(callee));
         }
         const uint32_t self = slotOf(graph);
@@ -872,17 +872,17 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
             !std::ranges::all_of(closure, [&](GCGraph *g) { return closureSet.contains(g); });
         if (closureChanged) {
             camel::utils::PointerSet<GCGraph> members(closure.size());
-            for (GCGraph *member : closure) {
+            for (auto *member : closure) {
                 members.insert(member);
             }
-            for (GCGraph *left : previousClosure) {
+            for (auto *left : previousClosure) {
                 if (!members.contains(left)) {
                     callBook.forget(left);
                 }
             }
             previousClosure = closure;
             closureSet      = std::move(members);
-            for (GCGraph *runtimeGraph : closure) {
+            for (auto *runtimeGraph : closure) {
                 if (runtimeGraph && !callBook.counted(runtimeGraph)) {
                     callBook.recount(runtimeGraph);
                 }
@@ -891,7 +891,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
         }
         if (config.enableInlining) {
             if (closureChanged) {
-                for (GCGraph *runtimeGraph : closure) {
+                for (auto *runtimeGraph : closure) {
                     if (!runtimeGraph) {
                         continue;
                     }
@@ -901,7 +901,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         if (!node || node->kind != GCNodeKind::Func) {
                             continue;
                         }
-                        GCGraph *callee = session.work().calleeOf(*runtimeGraph, it.ref());
+                        auto *callee = session.work().calleeOf(*runtimeGraph, it.ref());
                         if (!callee) {
                             continue;
                         }
@@ -938,7 +938,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
         bool roundChanged = false;
         bool restartRound = false;
         for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
-            GCGraph *nextGraph = *it;
+            auto *nextGraph = *it;
             if (!nextGraph) {
                 continue;
             }
@@ -996,7 +996,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         graphRewritten = true;
                         // The callee after the rewrite is the copy (counted in full even when
                         // an existing copy was reused).
-                        const GCGraph *copy = draft.calleeGraphOf(funcNodeId);
+                        const auto *copy = draft.calleeGraphOf(funcNodeId);
                         growthSpent += copy ? copy->nodeCount() : 0;
                     }
                 }

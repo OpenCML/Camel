@@ -486,7 +486,7 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
         return oper(graph, ref);
     case GCNodeKind::Func: {
         const auto norm       = graph.normInputsOf(ref);
-        const GCGraph *callee = program_.calleeOf(graph, ref);
+        const auto *callee = program_.calleeOf(graph, ref);
         if (callee != nullptr && callee->funcType() != nullptr &&
             callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete &&
             callee->funcType()->resources().captures.empty()) {
@@ -1562,7 +1562,7 @@ std::string unnamedReasonOf(const Program &program, const GCGraph &graph, gc_nod
             return "the function value it runs publishes no resource clause (its type promises "
                    "nothing), so nothing says what it reaches";
         }
-        const GCGraph *callee = program.calleeOf(graph, ref);
+        const auto *callee = program.calleeOf(graph, ref);
         if (callee == nullptr) {
             return "the body behind the function value it runs is not one the graph names, so "
                    "nothing says what it reaches";
@@ -1804,7 +1804,7 @@ std::string namedNode(const Program &program, const GCGraph &graph, gc_node_ref_
     std::string what   = "a node";
     if (node != nullptr) {
         if (node->kind == GCNodeKind::Func || node->kind == GCNodeKind::Call) {
-            const GCGraph *callee = program.calleeOf(graph, ref);
+            const auto *callee = program.calleeOf(graph, ref);
             what = callee == nullptr ? std::string("a call") : "a call of '" + callee->name() + "'";
         } else if (node->kind == GCNodeKind::Oper) {
             if (const auto *body = graph.nodeBodyAs<GCOperBody>(ref)) {

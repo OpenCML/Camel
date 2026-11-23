@@ -722,7 +722,7 @@ class CanonicalWalk {
         // The binding is the pair (this value, that port of the bound graph), and the port's number
         // is the bound graph's numbering: a key that leaves numbers out leaves the pair out too, and
         // the binding is still in the shape, as the with inputs the closure value carries.
-        const GCGraph *callee = withNumbers ? boundGraphOf(ref) : nullptr;
+        const auto *callee = withNumbers ? boundGraphOf(ref) : nullptr;
         if (callee != nullptr) {
             const std::vector<uint32_t> *numbers = numbersOf(*callee);
             const std::span<const gc_node_ref_t> withs = graph_.withInputsOf(ref);
@@ -900,7 +900,7 @@ class CanonicalWalk {
     /// is the bound graph's own canonical number for that port, taken before this graph is numbered
     /// (CanonicalProgram numbers the graphs a graph binds first), so it is a fact about that graph.
     std::string bindingText(gc_node_ref_t user, gc_node_ref_t ref) const {
-        const GCGraph *callee = boundGraphOf(user);
+        const auto *callee = boundGraphOf(user);
         const GCNode *record  = graph_.node(user);
         if (callee == nullptr || record == nullptr) {
             return {};
@@ -1059,7 +1059,7 @@ CanonicalProgram::CanonicalProgram(const Program &program, const GCGraph &root) 
         order.push_back(graph);
     };
     visit(const_cast<GCGraph *>(&root));
-    for (GCGraph *graph : collectReachableGraphs(program, const_cast<GCGraph *>(&root))) {
+    for (auto *graph : collectReachableGraphs(program, const_cast<GCGraph *>(&root))) {
         visit(graph);
     }
 
@@ -1068,7 +1068,7 @@ CanonicalProgram::CanonicalProgram(const Program &program, const GCGraph &root) 
     std::vector<CanonicalTie> ties;
     for (size_t round = 0; round < 2; ++round) {
         ties.clear();
-        for (GCGraph *graph : order) {
+        for (auto *graph : order) {
             CanonicalWalk walk(program, *graph, &numbers, &ties);
             std::vector<gc_node_ref_t> sequence = walk.run();
             std::vector<uint32_t> places(graph->nodeCount(), kNoCanonicalNumber);
@@ -1081,7 +1081,7 @@ CanonicalProgram::CanonicalProgram(const Program &program, const GCGraph &root) 
             sequences[graph] = std::move(sequence);
         }
     }
-    for (GCGraph *graph : order) {
+    for (auto *graph : order) {
         GraphNumbers entry;
         entry.order   = std::move(sequences[graph]);
         entry.numbers = std::move(numbers[graph]);
