@@ -407,55 +407,116 @@ std::optional<Type *> indexTakeResultType(const type_vec_t &norm, static_args_t 
     return ArrayType::create(arr->elemType(), extents);
 }
 
-/// Why a slice call cannot be this call: the constant 0 as the step, a constant negative bound, or
-/// a constant bound outside the extent the type states for the axis it names. One set of checks
-/// answers both spellings, because both are the same six-word node: the subscript's lowering
-/// writes the mask and the axis itself, and the function form's declaration defaults fill the two
-/// words a short call leaves out, so a call of either spelling meets this check with its six words
-/// and its constants where it wrote them.
+/// The positions a slice takes along one axis, when the call's constants and the type's extent say
+/// them: the first position, the one the walk stops at, how many positions it takes, and the
+/// distance between two. The arithmetic is the kernel's own
+/// (`src/stdlib/std/builtin/operators/struct.cpp`, `sliceRange`), read from the extent the type
+/// states instead of the one the value holds. The two ends are the bounds of an integer sequence,
+/// not positions (design principles 5.4): `range(3, -1, -1)` is 3, 2, 1, 0, so an end of -1 -- the
+/// one a backward walk stops at, written or left out -- is the position before the first element
+/// and the walk never takes it. `std::nullopt` when only the run knows the positions: a computed
+/// bound or step, or an extent the type does not state.
+struct StaticSliceRange {
+    int64_t start = 0; // the first position taken
+    int64_t end   = 0; // where the walk stops: a bound, which the walk does not take
+    int64_t count = 0; // how many positions the slice takes
+    int64_t step  = 1; // the distance between two positions taken
+};
+
+std::optional<StaticSliceRange> staticSliceRange(
+    const type_vec_t &norm, static_args_t statics, int64_t axis) {
+    const std::optional<int64_t> extent = staticAxisExtent(norm[0], axis);
+    if (!extent) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> mask =
+        norm.size() >= 6 ? constantArg(statics, 5) : std::optional<int64_t>(3);
+    if (!mask) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> step =
+        norm.size() >= 5 ? constantArg(statics, 4) : std::optional<int64_t>(1);
+    if (!step || *step == 0) {
+        return std::nullopt;
+    }
+    // A bound the program did not write is not read from its word (the lowering writes a zero
+    // there): the mask says it was not written, and the step's direction says what it stands for --
+    // the start of the axis, or the position before the first element of a backward walk.
+    const std::optional<int64_t> from =
+        (*mask & 2) != 0 ? constantArg(statics, 2)
+                         : std::optional<int64_t>(*step > 0 ? 0 : *extent - 1);
+    const std::optional<int64_t> to =
+        (*mask & 1) != 0 ? constantArg(statics, 3)
+                         : std::optional<int64_t>(*step > 0 ? *extent : -1);
+    if (!from || !to) {
+        return std::nullopt;
+    }
+    StaticSliceRange range;
+    range.step  = *step;
+    range.start = *from;
+    range.end   = *to;
+    range.count = *step > 0 ? (*from < *to ? (*to - *from + *step - 1) / *step : 0)
+                            : (*from > *to ? (*from - *to - *step - 1) / (-*step) : 0);
+    return range;
+}
+
+/// The length the result's type states for the axis a slice cuts: the number of positions the call
+/// takes, when the call's constants and the value's type give it (sliceResultType).
+std::optional<int64_t> staticSliceLength(
+    const type_vec_t &norm, static_args_t statics, int64_t axis) {
+    const std::optional<StaticSliceRange> range = staticSliceRange(norm, statics, axis);
+    if (!range) {
+        return std::nullopt;
+    }
+    return range->count;
+}
+
+/// Why a slice call cannot be this call: the constant 0 as the step, or a constant range that reads
+/// a position its axis does not have. One set of checks answers both spellings, because both are
+/// the same six-word node: the subscript's lowering writes the mask and the axis itself, and the
+/// function form's declaration defaults fill the two words a short call leaves out, so a call of
+/// either spelling meets this check with its six words and its constants where it wrote them.
 ///
-/// A negative bound is a fault rather than a count from the end (design principles 5.4: "不支持
-/// 负数下标（负数是故障），最后一个元素用 last(t)"), and a bound the type does not give an extent
-/// for is read by the kernel, which faults the same way.
+/// What must lie inside the axis is what the range takes -- its first position and its last
+/// (design principles 5.4). A bound is not a position: a negative one is refused by the position it
+/// makes the walk take and not by its sign, so a backward slice's end of -1, written or left out,
+/// is legal because the walk stops there without taking it, and `t[-1..2]` is refused because the
+/// position it takes first is -1. The ends themselves are still refused past the axis, so an empty
+/// range names a place the axis has (`5..5` of a length-4 axis) while `4..4` is the empty tail. A
+/// position is judged only when the type states the axis' extent; a length only the run knows is
+/// the kernel's to read, and it applies this same rule (`sliceRange`).
 std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_args_t statics) {
     if (norm.size() < 4 || norm.size() > 6) {
         return std::nullopt;
     }
     // The constant 0 step is not refused here. The builder's own check refuses it with the named
     // `SemanticDiag::SliceStepZero`, located at the step the program wrote
-    // (src/compile/gir/builder_operators.cpp), and a named diagnostic of the catalog outranks a
+    // (src/compile/src/gir/builder_call.cpp), and a named diagnostic of the catalog outranks a
     // message from this resolver: two answers to one constant would be two reports of one fault.
-    // The bounds as the slice reads them: a bound the program did not write stands for the start
-    // of the axis or its end, which the two-bit mask the lowering writes with the call says, and a
-    // call that left the mask out wrote both bounds (3).
-    const std::optional<int64_t> mask =
-        norm.size() >= 6 ? constantArg(statics, 5) : std::optional<int64_t>(3);
-    if (!mask) {
-        return std::nullopt;
-    }
-    const std::optional<int64_t> from =
-        (*mask & 2) != 0 ? constantArg(statics, 2) : std::optional<int64_t>(0);
-    const std::optional<int64_t> to =
-        (*mask & 1) != 0 ? constantArg(statics, 3) : std::optional<int64_t>(0);
-    if (from && *from < 0) {
-        return std::format(
-            "a slice bound must not be negative, and {} is; the last element is 'last(t)'", *from);
-    }
-    if (to && *to < 0) {
-        return std::format(
-            "a slice bound must not be negative, and {} is; the last element is 'last(t)'", *to);
-    }
     const std::optional<int64_t> axis = constantArg(statics, 1);
-    if (!axis || !from || !to || asArrayType(norm[0]) == nullptr) {
+    if (!axis || asArrayType(norm[0]) == nullptr) {
         return std::nullopt; // a string's length is never in its type
     }
     const std::optional<int64_t> extent = staticAxisExtent(norm[0], *axis);
     if (!extent) {
         return std::nullopt; // the length is not in the type, and the kernel reads it
     }
-    if (*from > *extent || *to > *extent) {
+    const std::optional<StaticSliceRange> range = staticSliceRange(norm, statics, *axis);
+    if (!range) {
+        return std::nullopt;
+    }
+    const auto outside = [extent](int64_t at) { return at < 0 || at >= *extent; };
+    const auto refusal = [&]() {
         return std::format(
-            "slice bounds {}..{} are outside axis {} of extent {}", *from, *to, *axis, *extent);
+            "slice bounds {}..{} are outside axis {} of extent {}",
+            range->start, range->end, *axis, *extent);
+    };
+    if (range->start > *extent || range->end > *extent) {
+        return refusal();
+    }
+    if (range->count > 0 &&
+        (outside(range->start) || outside(range->start + (range->count - 1) * range->step))) {
+        return refusal();
     }
     return std::nullopt;
 }
@@ -516,43 +577,6 @@ class StaticCheckedResolver final : public FuncTypeResolver {
     resolver_ptr_t inner_;
     Check check_;
 };
-
-/// The length of the axis a slice cuts, when the call's constants and the value's type say it: the
-/// step and both bounds are constants, and the type states the axis' extent, which a bound the
-/// program did not write stands for (the start of the axis, or its end). `std::nullopt` when only
-/// the run knows the length -- a computed bound or step, or an extent the type does not state --
-/// and the type then says `?` for that axis. The arithmetic is the kernel's own
-/// (`src/builtin/operators/struct.cpp`, `sliceRange`): a positive step takes the positions from the
-/// start below the end, a negative one takes them backwards from the start down to the end.
-std::optional<int64_t> staticSliceLength(const type_vec_t &norm, static_args_t statics, int64_t axis) {
-    const std::optional<int64_t> extent = staticAxisExtent(norm[0], axis);
-    if (!extent) {
-        return std::nullopt;
-    }
-    const std::optional<int64_t> mask =
-        norm.size() >= 6 ? constantArg(statics, 5) : std::optional<int64_t>(3);
-    if (!mask) {
-        return std::nullopt;
-    }
-    const std::optional<int64_t> step =
-        norm.size() >= 5 ? constantArg(statics, 4) : std::optional<int64_t>(1);
-    if (!step || *step == 0) {
-        return std::nullopt;
-    }
-    // A bound the program did not write is not read from its word (the lowering writes a zero
-    // there): the mask says it was not written, and the step's direction says what it stands for.
-    const std::optional<int64_t> from =
-        (*mask & 2) != 0 ? constantArg(statics, 2)
-                         : std::optional<int64_t>(*step > 0 ? 0 : *extent - 1);
-    const std::optional<int64_t> to =
-        (*mask & 1) != 0 ? constantArg(statics, 3)
-                         : std::optional<int64_t>(*step > 0 ? *extent : -1);
-    if (!from || !to) {
-        return std::nullopt;
-    }
-    return *step > 0 ? (*from < *to ? (*to - *from + *step - 1) / *step : 0)
-                     : (*from > *to ? (*from - *to - *step - 1) / (-*step) : 0);
-}
 
 /// The type a slice of `norm[0]` has: the value's element type and rank, every axis the slice does
 /// not cut at the length the value's type states, and the one axis it cuts at the length the
@@ -671,8 +695,8 @@ FunctionType *sliceParameterTable() {
 ///
 /// The axis and the rank are the call's own: the kernel reads the axis, and the value's rank at
 /// run time. The constants the call writes are checked here, where the call is written
-/// (staticSliceRejection): the constant step 0, a constant negative bound, and a constant bound
-/// outside an extent the type states. A bound only the run knows is the kernel's to read, and it
+/// (staticSliceRejection): the constant step 0, and a range that reads a position the axis does not
+/// have when the type states its extent. A bound only the run knows is the kernel's to read, and it
 /// faults with the core's one wording. The result type reads those same constants: the axis this
 /// call names and the length its bounds and step give it, with every other axis at the length the
 /// value's type states (sliceResultType, reached through the rule's statics path).
