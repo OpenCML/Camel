@@ -11460,9 +11460,12 @@ A call site carries the type of the function value it calls, and a pass can leav
 
 ```camel
 // Two functions of the same shape -- same argument type, same result type, same value -- that differ
-// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
-// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
-// defect `test::fold_function_type` writes on purpose.
+// in one thing: one of them prints. `announced` is called both ways: directly, so the fold has the
+// pair of calls it is about, and through a function value, so the clause the call site carries is
+// the value's and not the callee's own. Giving that value the pure function's type is how a fold
+// leaves a printing body called through a `pure` clause, which is the defect
+// `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
+// so the commit that publishes this program has nothing of its own to refuse.
 
 func doubled(x: int): int {
     return x * 2
@@ -11473,10 +11476,12 @@ func announced(x: int): int sync {
     return x * 2
 }
 
-func main(): int {
+func main(): int sync {
     let quiet = doubled(21)
-    let noisy = announced(3)
-    return quiet + noisy
+    let f = announced
+    let noisy = f(3)
+    let direct = announced(3)
+    return quiet + noisy + direct
 }
 ```
 
@@ -11504,9 +11509,12 @@ A commit owes the program it publishes the effect its target function declares: 
 
 ```camel
 // Two functions of the same shape -- same argument type, same result type, same value -- that differ
-// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
-// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
-// defect `test::fold_function_type` writes on purpose.
+// in one thing: one of them prints. `announced` is called both ways: directly, so the fold has the
+// pair of calls it is about, and through a function value, so the clause the call site carries is
+// the value's and not the callee's own. Giving that value the pure function's type is how a fold
+// leaves a printing body called through a `pure` clause, which is the defect
+// `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
+// so the commit that publishes this program has nothing of its own to refuse.
 
 func doubled(x: int): int {
     return x * 2
@@ -11517,10 +11525,12 @@ func announced(x: int): int sync {
     return x * 2
 }
 
-func main(): int {
+func main(): int sync {
     let quiet = doubled(21)
-    let noisy = announced(3)
-    return quiet + noisy
+    let f = announced
+    let noisy = f(3)
+    let direct = announced(3)
+    return quiet + noisy + direct
 }
 ```
 
@@ -11548,9 +11558,12 @@ Analysis 4.1 asks a commit for order completeness: within one region, any two ac
 
 ```camel
 // Two functions of the same shape -- same argument type, same result type, same value -- that differ
-// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
-// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
-// defect `test::fold_function_type` writes on purpose.
+// in one thing: one of them prints. `announced` is called both ways: directly, so the fold has the
+// pair of calls it is about, and through a function value, so the clause the call site carries is
+// the value's and not the callee's own. Giving that value the pure function's type is how a fold
+// leaves a printing body called through a `pure` clause, which is the defect
+// `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
+// so the commit that publishes this program has nothing of its own to refuse.
 
 func doubled(x: int): int {
     return x * 2
@@ -11561,10 +11574,12 @@ func announced(x: int): int sync {
     return x * 2
 }
 
-func main(): int {
+func main(): int sync {
     let quiet = doubled(21)
-    let noisy = announced(3)
-    return quiet + noisy
+    let f = announced
+    let noisy = f(3)
+    let direct = announced(3)
+    return quiet + noisy + direct
 }
 ```
 
