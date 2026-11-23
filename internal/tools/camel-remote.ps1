@@ -549,6 +549,16 @@ $checkers = [ordered]@{
     # this entry becomes once the reading is 0/0. The script's header states the scope, the counting
     # rule and what the repository-wide corpus would add (`--all`).
     'capture-census'        = @{ script = 'scripts/check-capture-census.mjs'; args = @(); compiler = $true; reportOnly = $true; findings = 's/.*check-capture-census: ([0-9]+) reference capture port.*/\1/p' }
+    # The effect debt: the operators of `registry_all.cml`'s modules whose record carries no `uses`
+    # clause, one line each -- nobody stated the effect at either entrance. It is a reading and not a
+    # wall: the list is the declarations still to write, and the number coming down is what this row
+    # exists to show. The count is read out of `camel inspect --ops`, that is, from the record, because
+    # a module writes most of its statements in loops over the names of an implementation map
+    # (`for (const auto &[name, op] : getOpsImplMap())`), where no reader of the source can attribute
+    # the statement to an operator -- `scripts/check-operator-uses.mjs` states the measurement that
+    # settled it. The day the list is empty the check stops printing a finding and the row becomes a
+    # wall by having nothing left to say, the same way every other `reportOnly` entry turns over.
+    'operator-uses'         = @{ script = 'scripts/check-operator-uses.mjs'; args = @(); compiler = $true; reportOnly = $true; findings = 's/.*check-operator-uses: ([0-9]+) operator\(s\) with no effect statement.*/\1/p' }
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both

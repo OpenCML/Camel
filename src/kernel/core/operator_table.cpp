@@ -108,6 +108,38 @@ std::optional<OperId> OperatorTable::lookup(std::string_view uri) const {
     return std::nullopt;
 }
 
+namespace {
+
+/// The `uses` clause of the record `recordId` names, stated from the resource spec the table holds
+/// for the operator. Every place the table states an effect calls this -- `set`, whose word `pure`
+/// is the empty access list, and `declareSemantics`, which is where `declareResources` lands -- so
+/// the record carries the statement from the moment it is made, at whichever of the table's
+/// entrances it was made. The record is interned by `internLocked` before any declaration, so a zero
+/// id is an operator the registry never saw: nothing to write there. A record that already states a
+/// clause keeps it -- that statement came from the same declaration through the Camel entrance, and
+/// two writers of one fact is the defect this removes.
+void stateUsesInRecord(
+    std::uint32_t recordId, std::string_view uri, const sem::ResourceSpec &spec) {
+    if (recordId == 0) {
+        return;
+    }
+    auto &registry = camel::ops::Registry::instance();
+    // A record the registry has not materialized yet answers nothing: `find` returns null for it
+    // and `declare` builds it from this statement. Skipping it because it is not there yet would
+    // leave every operator declared before its module's records are made without the clause --
+    // more than half the surface, measured (`camel inspect --ops`, `uses_stated`).
+    if (const camel::ops::Record *record = registry.find(recordId);
+        record != nullptr && record->uses.stated()) {
+        return;
+    }
+    camel::ops::Record statement;
+    statement.key        = sem::OperatorKey::of(uri);
+    statement.uses.value = spec;
+    statement.uses.byCpp = true;
+    registry.declare(recordId, statement);
+}
+} // namespace
+
 void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     std::unique_lock lock(mutex_);
     const OperId id = internLocked(uri);
@@ -155,6 +187,16 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
         // Semantics already published: the traits belong to the same record, so publish the
         // updated one there too. No version bump: a trait is not a semantics fact.
         entry.declared.store(declarations_.back().get(), std::memory_order_release);
+    }
+    // The effect the word states, written into the operator record it belongs to. `pure` above made
+    // it the empty access list, which is a clause; a word that says "state-only" or "effectful"
+    // itemizes nothing, and the record's own reading of a clause nobody wrote is already that answer
+    // (design principles 3.3: it writes the global resource), so nothing is invented for it. This is
+    // the entrance a module's `declare` uses, and most of the standard library says `pure` and
+    // nothing else -- without this call those records would state no clause while the table states
+    // one.
+    if (declarations_.back()->resources) {
+        stateUsesInRecord(entry.record, uri, *declarations_.back()->resources);
     }
 }
 
@@ -802,34 +844,6 @@ std::string checkSemantics(
 
 } // namespace
 
-namespace {
-
-/// The `uses` clause of the record `recordId` names, stated from the resource spec the table
-/// declared (`declareSemantics`). The record is interned by `internLocked` before any declaration,
-/// so a zero id is an operator the registry never saw: nothing to write there. A record that
-/// already states a clause keeps it -- that statement came from the same declaration through the
-/// Camel entrance, and two writers of one fact is the defect this removes.
-void stateUsesInRecord(
-    std::uint32_t recordId, std::string_view uri, const sem::ResourceSpec &spec) {
-    if (recordId == 0) {
-        return;
-    }
-    auto &registry = camel::ops::Registry::instance();
-    // A record the registry has not materialized yet answers nothing: `find` returns null for it
-    // and `declare` builds it from this statement. Skipping it because it is not there yet would
-    // leave every operator declared before its module's records are made without the clause --
-    // more than half the surface, measured (`camel inspect --ops`, `uses_stated`).
-    if (const camel::ops::Record *record = registry.find(recordId);
-        record != nullptr && record->uses.stated()) {
-        return;
-    }
-    camel::ops::Record statement;
-    statement.key        = sem::OperatorKey::of(uri);
-    statement.uses.value = spec;
-    statement.uses.byCpp = true;
-    registry.declare(recordId, statement);
-}
-} // namespace
 
 
 void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantics semantics) {
@@ -888,12 +902,9 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
     }
     declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
     const sem::OperatorSemantics *published = declarations_.back().get();
-    // The effect this declaration states, written into the operator record it belongs to: the
-    // record is what a reader of the effect asks (`camel/ops/operator_record.h`, item `uses`), and
-    // this is where the declaration is made, so the copy is made here and at no second place. The
-    // Camel entrance writes the same clause for a declaration compiled in; a record that already
-    // states one is left as it is, because that statement came from the same source and two
-    // writers of one fact is the defect this removes.
+    // The effect this declaration states, written into the operator record it belongs to
+    // (`stateUsesInRecord`): `declareResources` and `declareDefinition` arrive here, so a spec a
+    // module itemizes reaches the record by the same door as the trait word `set` writes.
     if (published->resources) {
         stateUsesInRecord(entry.record, uri, *published->resources);
     }
