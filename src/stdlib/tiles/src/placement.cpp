@@ -256,7 +256,7 @@ bool hasPlacementFact(const runtime::GCGraph &graph) {
 }
 
 bool hasPlacementFact(const runtime::Program &program) {
-    for (const runtime::GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (hasPlacementFact(*graph)) {
             return true;
         }
@@ -270,7 +270,7 @@ std::string placementReport(const runtime::Program &program) {
     }
     const attr::AttrKey key = attr::key("tiles.placement");
     std::ostringstream out;
-    for (const runtime::GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         const attr::AttrSetId body        = bodyAttrs(*graph);
         const attr::AttrValueId bodyValue = attr::valueOf(body, key);
         const bool bodyGpu                = bodyValue == attr::symbol("gpu");
@@ -315,7 +315,7 @@ std::string placementReport(const runtime::Program &program) {
 GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : everyNode_(everyNodeOnDevice) {
     // A body tag makes the whole graph a device unit.
     std::vector<const runtime::GCGraph *> scopes;
-    for (const runtime::GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (bodyPlacementOf(*graph).placement == Placement::GpuRequired) {
             scopeOf_.emplace(graph, graph);
             scopes.push_back(graph);
@@ -326,20 +326,20 @@ GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : 
     const auto addCall = [&](const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
         if (placementOf(graph, id).fact == "cpu")
             return;
-        const runtime::GCGraph *callee = calleeGraphOf(program, graph, id);
+        const auto *callee = calleeGraphOf(program, graph, id);
         if (callee == nullptr || scopeOf_.contains(callee))
             return;
         const auto found = scopeOf_.find(&graph);
         scopeOf_.emplace(callee, found == scopeOf_.end() ? &graph : found->second);
         scopes.push_back(callee);
     };
-    for (const runtime::GCGraph *graph : program.graphs())
+    for (const auto *graph : program.graphs())
         for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
             if (placementOf(*graph, id).onDevice())
                 addCall(*graph, id);
     // Transitive: a helper of a helper is called by the scope as well.
     for (size_t next = 0; next < scopes.size(); ++next) {
-        const runtime::GCGraph *graph = scopes[next];
+        const auto *graph = scopes[next];
         for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
             addCall(*graph, id);
     }

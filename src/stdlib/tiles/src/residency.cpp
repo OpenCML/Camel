@@ -183,7 +183,7 @@ std::string residencyReport(const rt::Program &program) {
         return {};
     }
     std::ostringstream out;
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
