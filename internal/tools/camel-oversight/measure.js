@@ -83,11 +83,14 @@ async function mergedOf(git) {
 async function backlogOf(repo) {
     const text = await readFile(path.join(repo, 'internal', 'backlog.md'), 'utf8')
     const rows = new Map()
+    const ownRows = new Set()
     for (const line of text.split('\n')) {
         if (!line.trim().startsWith('|')) continue
         // The id is in the first cell, possibly in code or bold marks; a table of any width counts.
         const cells = line.split('|').map((cell) => cell.trim().replace(/[`*]/g, ''))
-        const id = /^([DC]-\d+-\d+)/.exec(cells[1] || '')
+        // The whole first word is the id: a sub-item such as `D-1123-50④` is its own row and must not
+        // overwrite the item it was split from.
+        const id = /^([DC]-\d+-\d+\S*)/.exec(cells[1] || '')
         if (!id) continue
         // The documented table has seven columns (status fifth, stamp sixth); a narrower one is read
         // by content: the status is the cell that names one, the stamp the cell that holds one.
@@ -97,13 +100,19 @@ async function backlogOf(repo) {
         const stampCell = wide ? cells[6] : cells.slice(2).find((cell) => /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(cell)) || ''
         const stamp = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(stampCell)
         const updated = stamp ? new Date(+stamp[1], +stamp[2] - 1, +stamp[3], +stamp[4], +stamp[5]).getTime() : null
-        rows.set(id[0], {
+        const row = {
             status,
             doing: /在做|doing|progress/i.test(status),
             blocked: /卡住|blocked/i.test(status),
             done: /完成|done|resolved/i.test(status),
             updated,
-        })
+        }
+        rows.set(id[0], row)
+        // A row for a sub-item or a group (`D-1123-11/12/13`) also records the item it belongs to,
+        // unless that item has a row of its own, which wins wherever it stands.
+        const base = /^[DC]-\d+-\d+/.exec(id[0])[0]
+        if (base !== id[0] && !ownRows.has(base)) rows.set(base, row)
+        if (base === id[0]) ownRows.add(base)
     }
     return rows
 }
