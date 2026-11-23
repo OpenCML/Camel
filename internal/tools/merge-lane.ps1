@@ -25,6 +25,15 @@
     tree it lands on (`scripts/merge-readings.mjs`): the cases this change fixed, the cases it
     turned red, and the cases that were red both times and fail differently now.
 
+    The baseline is what that comparison reads, and where it comes from is the whole of it: a
+    baseline measured on the merged tree would be this change compared with itself -- 0 fixed, 0 new,
+    0 changed, and a green that measured nothing. So when there is no baseline for the tree this
+    merge lands on (its FIRST PARENT, i.e. develop as it stands before the merge), this script
+    measures it itself: a worktree detached at that first parent, the same plan set, one run, stored
+    with `--accept` under that sha. Two runs, two trees, and both shas are printed. The comparer
+    refuses a baseline whose recorded tree is the tree it is comparing, so the mis-ordering cannot
+    pass quietly; and the seeding step can fail, which is exit 2 and an empty baseline is never one.
+
 .PARAMETER Branch
     The lane branch to merge, e.g. lane/range-ri.
 
@@ -34,6 +43,17 @@
 .PARAMETER WhatIf
     Pass both checks, then stop before committing.
 
+.PARAMETER NoPush
+    Take every reading -- the baseline, the merged tree, the comparison -- and stop before the push.
+    It is how a merge is tried once without landing it: the merge commit stays on this checkout's
+    HEAD (which is why a trial belongs on a scratch branch, never on develop), nothing reaches
+    origin, and the baseline this merge would have stored for its own tree is not written, because a
+    baseline for a commit nothing else can see is a key nobody asks for.
+
+.PARAMETER BaselineWorktree
+    Where the baseline is measured. It is a worktree of its own, detached at the tree the merge lands
+    on, and it is kept between merges so the host's build of it stays warm.
+
 .EXAMPLE
     .\merge-lane.ps1 -Branch lane/range-ri -Message "merge range-ri: ..." -WhatIf
 #>
@@ -42,7 +62,13 @@ param(
     [Parameter(Mandatory)][string] $Branch,
     [Parameter(Mandatory)][string] $Message,
     [string] $MainCheckout = 'D:\Projects\Camel',
-    [switch] $WhatIf
+    # Where the baseline is measured. It has to be a tree that is NOT the one being compared, and it
+    # has to be a real checkout (the gate builds it), so it is a worktree of this repository detached
+    # at the first parent. One fixed path and not one per merge: the host keeps the build of that
+    # worktree between runs, and a fresh path per merge would mean a cold build per merge.
+    [string] $BaselineWorktree = 'D:\Projects\Camel-wt\camel-baseline',
+    [switch] $WhatIf,
+    [switch] $NoPush
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,14 +83,117 @@ function Stop-With {
     exit 1
 }
 
+# The baseline's own checkout: a worktree of THIS repository, held at the sha it must measure.
+# Returns $null when the tree is ready, or a sentence saying why it is not -- the caller turns that
+# into an exit 2, because a baseline that could not be taken is the gate being down and not a
+# verdict about the tree being merged.
+#
+# A detached checkout is the obvious way to say "this tree and no branch", and `camel-remote` refuses
+# it outright (`detached HEAD in <name>; check out a branch first`, because it stages a *branch* to
+# the host and the host checks that branch out). So the tree is pinned by a scratch branch of this
+# script's own, always at the first-parent sha; the tree is the same one a detached checkout would
+# give, and the sha is read back out of the checkout afterwards instead of being asserted here.
+#
+# It refuses anything it did not create: a path that holds a checkout of another repository, a dirty
+# checkout, or a branch somebody else has checked out. `git checkout -B` over a lane's worktree is
+# how a lane's work is lost.
+function Sync-BaselineWorktree {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string] $Sha,
+        [Parameter(Mandatory)][string] $CommonDir,
+        [Parameter(Mandatory)][string] $Repo
+    )
+
+    $ourBranch = 'camel-baseline'
+    $short = $Sha.Substring(0, 9)
+    try { $target = [System.IO.Path]::GetFullPath($Path) } catch { return "the baseline worktree path '$Path' is not a path" }
+    $repoFull = (Resolve-Path -LiteralPath $Repo -ErrorAction SilentlyContinue).Path
+    if ($repoFull -and $target -eq $repoFull) {
+        # The one mistake this whole step exists to prevent, caught before it is made.
+        return "the baseline worktree and the merge position are the same checkout ($repoFull); the baseline has to be measured on another tree, or the comparison is one tree against itself and every set comes out empty"
+    }
+
+    if (Test-Path -LiteralPath $target) {
+        if (-not (Test-Path -LiteralPath (Join-Path $target '.git'))) {
+            # An empty directory is not a worktree either, but it is harmless to adopt it.
+            $entries = @(Get-ChildItem -LiteralPath $target -Force -ErrorAction SilentlyContinue)
+            if ($entries.Count -gt 0) {
+                return "$target is not a git checkout and holds $($entries.Count) entr(y/ies); the baseline is measured in a worktree of this repository, so name an empty path with -BaselineWorktree"
+            }
+        } else {
+            $there = "$(& git -C $target rev-parse --git-common-dir 2>$null)".Trim()
+            if (-not $there) {
+                return "$target holds a .git that git cannot read; the baseline is measured in a worktree of this repository"
+            }
+            if (-not [System.IO.Path]::IsPathRooted($there)) { $there = Join-Path $target $there }
+            $thereFull = (Resolve-Path -LiteralPath $there -ErrorAction SilentlyContinue).Path
+            $commonFull = (Resolve-Path -LiteralPath $CommonDir -ErrorAction SilentlyContinue).Path
+            if (-not $thereFull -or -not $commonFull -or $thereFull -ne $commonFull) {
+                return "$target is a checkout of another repository ($there); the baseline is measured in a worktree of $Repo"
+            }
+            $dirty = @(& git -C $target status --porcelain 2>$null)
+            if ($dirty.Count -gt 0) {
+                return "$target has $($dirty.Count) uncommitted change(s); the baseline must be measured on a clean checkout of $short, and moving it would discard them"
+            }
+            $onBranch = "$(& git -C $target symbolic-ref -q --short HEAD 2>$null)".Trim()
+            if ($onBranch -ne $ourBranch) {
+                # A labelled worktree belongs to a lane or to the merge position; this step only owns
+                # the one branch it made. Refusing here is what keeps a mistyped -BaselineWorktree
+                # from checking somebody's branch backwards.
+                $what = if ($onBranch) { "the branch $onBranch checked out" } else { 'a detached HEAD' }
+                return "$target has $what; the baseline worktree is the one this script makes, on $ourBranch at the first parent, and moving it would discard a checkout somebody is working in"
+            }
+            $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
+            if ($at -ne $Sha) {
+                & git -C $target checkout -q -B $ourBranch $Sha 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) { return "could not move $ourBranch in $target to $short" }
+                $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
+                if ($at -ne $Sha) { return "$target did not end up at $short (it is at $($at.Substring(0, [Math]::Min(9, $at.Length))))" }
+            }
+            return $null
+            $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
+            if ($at -ne $Sha) {
+                & git -C $target checkout -q -f --detach $Sha 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) { return "could not check $target out at $short" }
+                $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
+                if ($at -ne $Sha) { return "$target did not end up at $short (it is at $($at.Substring(0, [Math]::Min(9, $at.Length))))" }
+            }
+            return $null
+        }
+    }
+
+    $parent = Split-Path -Parent $target
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+    & git -C $Repo worktree add -q -B $ourBranch $target $Sha 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { return "git worktree add -B $ourBranch $target $short failed (a branch of that name checked out elsewhere is the usual cause)" }
+    $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
+    if ($at -ne $Sha) { return "the new worktree $target is at $($at.Substring(0, [Math]::Min(9, $at.Length))), not $short" }
+    return $null
+}
+
 Push-Location $MainCheckout
 try {
+    # The two directories that are not `$MainCheckout\.git` once the merge position is a linked
+    # worktree: the per-worktree git dir (the index, MERGE_HEAD) and the common one the worktrees
+    # share (where the baseline cache belongs, because the cache is about develop commits and every
+    # worktree of this repository sees the same ones). Hard-coding `\.git\` read the wrong place the
+    # moment a merge was tried from anywhere but the main checkout.
+    $gitDir = "$(& git rev-parse --absolute-git-dir 2>$null)".Trim()
+    $commonDir = "$(& git rev-parse --git-common-dir 2>$null)".Trim()
+    if (-not $gitDir -or -not $commonDir) {
+        Stop-With 'this is not a git checkout' "git rev-parse did not answer for $MainCheckout."
+    }
+    if (-not [System.IO.Path]::IsPathRooted($commonDir)) { $commonDir = Join-Path $MainCheckout $commonDir }
+
     # A reader that refreshes the index takes the lock and a merge then refuses. Clearing it is only
     # safe when nothing is writing: deleting the lock under a git that is mid-write corrupts the index,
     # which is worse than a refused merge. So the lock is cleared only when it is older than two
     # minutes AND no git process is running at all. Otherwise this stops and prints the command lines,
     # because the answer to "who holds it" is something a person has to see, not something to guess at.
-    $lock = Join-Path $MainCheckout '.git\index.lock'
+    $lock = Join-Path $gitDir 'index.lock'
     if (Test-Path $lock) {
         $ageSeconds = ((Get-Date) - (Get-Item $lock).LastWriteTime).TotalSeconds
         $gitProcs = @(Get-CimInstance Win32_Process -Filter "Name='git.exe'" -ErrorAction SilentlyContinue)
@@ -143,7 +272,7 @@ try {
 
     # git merge with -m has already made the commit; a second commit has nothing to do. What is worth
     # checking is that HEAD is that merge and not something else.
-    if (-not (Test-Path (Join-Path $MainCheckout '.git\MERGE_HEAD'))) {
+    if (-not (Test-Path (Join-Path $gitDir 'MERGE_HEAD'))) {
         $parents = @(& git rev-list --parents -n 1 HEAD 2>$null | ForEach-Object { $_.Split(' ') })
         if ($parents.Count -lt 3) {
             Stop-With 'HEAD is not a merge commit' "HEAD $(& git rev-parse --short HEAD) has $($parents.Count - 1) parent(s). A merge that did not happen also lands the branch check, so this is checked separately."
@@ -223,8 +352,22 @@ try {
     Write-Host ''
     Write-Host 'row readings (the plans this merge touches, case by case) ...'
     $rowsStarted = Get-Date
-    $selectOut = @(& node (Join-Path $MainCheckout 'scripts\test.js') --changed --list 2>&1)
-    $selectExit = $LASTEXITCODE
+    # The base of this selection is the tree the merge lands on (`HEAD^1`), not `origin/develop`.
+    # That ref is not this sha and other people move it: it advanced between two runs of one identical
+    # merge while this stage was being proved, the selection went from 2 plans to 22, and the second
+    # comparison -- correctly -- refused for a plan set the baseline had never been measured under.
+    # The change a merge *brings* is its first parent's difference from itself, and nothing moves that.
+    # The sha is read the same way a few lines below, where it becomes the cache key; it is the same
+    # commit, and that block is the one that refuses when git cannot name it.
+    $savedBase = $env:CAMEL_TEST_BASE
+    $env:CAMEL_TEST_BASE = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
+    try {
+        $selectOut = @(& node (Join-Path $MainCheckout 'scripts\test.js') --changed --list 2>&1)
+        $selectExit = $LASTEXITCODE
+    } finally {
+        if ($null -eq $savedBase) { Remove-Item Env:\CAMEL_TEST_BASE -ErrorAction SilentlyContinue }
+        else { $env:CAMEL_TEST_BASE = $savedBase }
+    }
     $prefix = $MainCheckout.TrimEnd('\') + '\'
     $planTargets = @($selectOut | ForEach-Object { "$_".Trim() } | Where-Object { $_ -and $_.StartsWith($prefix) } |
         ForEach-Object { $_.Substring($prefix.Length) -replace '\\', '/' })
@@ -240,6 +383,19 @@ try {
         [System.IO.File]::WriteAllText($planSetFile, ($planTargets -join "`n") + "`n",
             (New-Object System.Text.UTF8Encoding($false)))
     }
+    # The change this merge brings, as `git diff --name-only HEAD^1` sees it in this checkout, and the
+    # merge message. The comparison reads them to answer the one question the case sets cannot: a case
+    # the baseline holds and this run does not is either a case this change removed -- then it is
+    # `removed` and not `fixed`, and a red one has to be named in the message -- or the two runs
+    # selected differently, which is a fact about the selection and exits 2. Without these two files
+    # both readings look the same, and the gate used to call both of them "not a green".
+    $changedFilesFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-changed-$PID.txt")
+    $changedFiles = @(& git diff --name-only 'HEAD^1' 2>$null) |
+        ForEach-Object { "$_".Trim().Replace('\', '/') } | Where-Object { $_ }
+    [System.IO.File]::WriteAllText($changedFilesFile, (($changedFiles -join "`n") + "`n"),
+        (New-Object System.Text.UTF8Encoding($false)))
+    $messageFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-message-$PID.txt")
+    [System.IO.File]::WriteAllText($messageFile, "$Message`n", (New-Object System.Text.UTF8Encoding($false)))
     if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
         # Not a red and not a green: the selection itself did not answer, so the plans this merge
         # touches are unknown and nothing about the change has been measured. Same shape as the
@@ -260,12 +416,157 @@ try {
         exit 2
     }
 
+    # --- the two trees this stage is about --------------------------------------
+    # The cache key is the tree this merge LANDS ON: `HEAD^1`, develop as it stood before this merge.
+    # Never the merge commit. The merge commit did not exist until a few lines ago, so no run could
+    # have measured it: keyed by it, every merge would miss, and a gate that has to be handed a
+    # baseline it can never have is a gate that refuses every merge -- the same uselessness as one
+    # that passes every merge, and it hides the same thing. The rows this run read come off the
+    # merged tree, and that sha travels beside the key (`--tree`) so the comparer can tell the one
+    # failure the three sets cannot show: a baseline measured on the tree it is comparing.
+    $comparedTree = "$(& git rev-parse HEAD 2>$null)".Trim()
+    $developTip = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
+    if (-not $comparedTree -or -not $developTip) {
+        Write-Host ''
+        Write-Host 'STOPPED: the two trees this comparison needs could not be read (exit 2, no reading taken)' -ForegroundColor Yellow
+        Write-Host '  This is not a defect in your tree: git did not answer for HEAD or HEAD^1, so which tree to compare with which is unknown and nothing was measured about this change.'
+        Write-Host '  What repairs it: the merge commit is what makes HEAD^1 the tree to land on; this stop means HEAD is not in that shape. Nothing was pushed.'
+        Write-Host ''
+        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        exit 2
+    }
+    if ($developTip -eq $comparedTree) {
+        Write-Host ''
+        Write-Host 'STOPPED: HEAD^1 is HEAD, so there is no second tree to read (exit 2, no reading taken)' -ForegroundColor Yellow
+        Write-Host '  This is not a defect in your tree: the baseline would be measured on the very tree it is compared with, which is 0 fixed, 0 new and 0 changed by construction -- a green that measured one tree twice.'
+        Write-Host '  What repairs it: a merge commit whose first parent is develop. Nothing was pushed.'
+        Write-Host ''
+        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        exit 2
+    }
+    $compareDir = Join-Path $commonDir 'camel-readings'
+    Write-Host ("  baseline key: develop {0} (the first parent, before this merge); this run reads tree {1} (the merge commit)" -f `
+        $developTip.Substring(0, 9), $comparedTree.Substring(0, 9))
+
+    # --- is there a baseline for that tree? --------------------------------------
+    # A miss used to stop here and print a command for a person to run by hand -- with the merged
+    # tree's own sha in it, so following it stored this merge's rows under this merge's key and the
+    # comparison that followed was the tree against itself: 0/0/0, and a green that measured nothing.
+    # So this asks the comparer's own key (it is the only place the key is written) and, on a miss,
+    # measures the tree the merge lands on rather than asking anybody to.
+    $probe = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --cache $compareDir `
+        --develop $developTip --plans $planSetFile --probe 2>&1)
+    $probeExit = $LASTEXITCODE
+    $probeText = ($probe | ForEach-Object { "$_" }) -join "`n"
+    $seededFrom = $null
+
+    if ($probeText -match 'cache-miss') {
+        # The tree to measure is NOT this one. It is checked out detached at the first parent, in a
+        # worktree of its own: the merge commit is already here, so checking develop out here would
+        # move the branch the merge landed on, and measuring the merged tree is the defect this whole
+        # step exists to remove. The worktree is kept between merges so the host's build of it stays
+        # warm -- a cold build per merge is what would make people go around this gate.
+        $baselinePath = $BaselineWorktree
+        $worktreeProblem = Sync-BaselineWorktree -Path $baselinePath -Sha $developTip `
+            -CommonDir $commonDir -Repo $MainCheckout
+        # The sha this run will really read, taken from the checkout itself. `--tree $developTip`
+        # alone would be an assertion about the source, and an assertion is exactly what a seeding
+        # pointed at the wrong tree gets right while measuring the wrong one.
+        $measuredTree = ''
+        if ($null -eq $worktreeProblem) {
+            $measuredTree = "$(& git -C $baselinePath rev-parse HEAD 2>$null)".Trim()
+            if ($measuredTree -ne $developTip) {
+                $worktreeProblem = "$baselinePath is at $($measuredTree.Substring(0, [Math]::Min(9, $measuredTree.Length))), not at the first parent $($developTip.Substring(0, 9)), so the baseline would come from another tree than the one this merge lands on"
+            }
+            if ($measuredTree -eq $comparedTree) {
+                $worktreeProblem = "the baseline checkout is the merged tree ($($comparedTree.Substring(0, 9))); a baseline measured there is this change compared with itself"
+            }
+        }
+        $seedTranscript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-baseline-$PID.txt")
+        $seedSeconds = 0
+        $seedRows = 0
+        $seedReds = 0
+        if ($null -eq $worktreeProblem) {
+            Write-Host ("  no baseline for develop {0}: measuring it there, in a worktree at {1} on the gate's own branch" -f `
+                $developTip.Substring(0, 9), $baselinePath)
+            $seedStarted = Get-Date
+            # The same change, read from the other end: the seeding run lists it with `git diff
+            # --name-only` against `-ChangedBase`, taken in the baseline tree, so the base has to be the
+            # MERGE COMMIT. The files that differ between the merged tree and the baseline tree are
+            # exactly the files this merge changes; a diff against the lane head also names the lane's
+            # own files, because those two trees differ by more than the merge -- measured as
+            # `smoke`-plus-`docs.links` (31 cases) where the merge selected `docs.links` (21), and the
+            # comparison then refused, correctly, as two runs of different things.
+            $seedRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+                -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
+            $seedExit = $LASTEXITCODE
+            $seedSeconds = ((Get-Date) - $seedStarted).TotalSeconds
+            [System.IO.File]::WriteAllText($seedTranscript,
+                (($seedRun | ForEach-Object { "$_" }) -join "`n") + "`n",
+                (New-Object System.Text.UTF8Encoding($false)))
+            $seedRows = @($seedRun | Where-Object { "$_".TrimStart().StartsWith('{') }).Count
+            $seedReds = @($seedRun | Where-Object { "$_".TrimStart().StartsWith('{') -and "$_" -match '"verdict"\s*:\s*"fail"' }).Count
+        }
+        if ($null -ne $worktreeProblem) {
+            Write-Host ''
+            Write-Host 'STOPPED: the baseline could not be measured, so nothing was compared (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host '  This is not a defect in your tree: the tree the baseline comes from was not available, so nothing was learned about this change.'
+            Write-Host "  $worktreeProblem"
+            Write-Host "  What repairs it: the baseline is measured in a worktree held at the first parent ($($developTip.Substring(0, 9))). Name one with -BaselineWorktree, or let this script create it; a path that holds somebody else's checkout is refused rather than checked out over."
+            Write-Host ''
+            Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+            exit 2
+        }
+        if ($seedRows -eq 0) {
+            Write-Host ''
+            Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
+            Write-Host "  This is not a defect in your tree: the baseline run on develop $($developTip.Substring(0, 9)) recorded no row, so nothing was learned about this change and nothing was pushed."
+            Write-Host "  What repairs it: the row block must arrive with rows inside it. Re-run internal/tools/camel-remote.ps1 -Path $baselinePath -Changed -ChangedBase $head -ListKnown -NoGpuWatch and read what it prints; a build that failed or a plan set that starts no case writes no block. An empty baseline is never stored -- it would call every case fixed."
+            Write-Host ''
+            Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+            exit 2
+        }
+        # The seconds and the case count are the reading this step owes: "it measured" is only worth
+        # something if it says how much. They travel into the entry's `.where` beside the shas.
+        $env:CAMEL_BASELINE_SECONDS = [string][int]$seedSeconds
+        $accept = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $seedTranscript `
+            --cache $compareDir --develop $developTip --plans $planSetFile --tree $measuredTree --accept 2>&1)
+        $acceptExit = $LASTEXITCODE
+        Remove-Item Env:\CAMEL_BASELINE_SECONDS -ErrorAction SilentlyContinue
+        if ($acceptExit -ne 0) {
+            $accept | ForEach-Object { "  $_" }
+            Write-Host ''
+            Write-Host 'STOPPED: the baseline was measured but could not be stored (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host "  This is not a defect in your tree: $seedRows row(s) came back from develop $($developTip.Substring(0, 9)) in $([int]$seedSeconds) s and the store refused them, so nothing was pushed and nothing was learned about this change."
+            Write-Host "  What repairs it: the comparer's own refusal is above; it names what about the rows or the cache it could not use."
+            Write-Host ''
+            Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+            exit 2
+        }
+        $accept | ForEach-Object { "  $_" }
+        $seededFrom = $measuredTree
+        Write-Host ("  baseline seeded from tree {0} (the first parent, in the worktree at {1} on the gate's own branch; NOT the tree above): {2} case(s), {3} already red on develop, {4:N0} s" -f `
+            $measuredTree.Substring(0, 9), $baselinePath, $seedRows, $seedReds, $seedSeconds)
+    } elseif ($probeExit -ne 0) {
+        $probe | ForEach-Object { "  $_" }
+        Write-Host ''
+        Write-Host "STOPPED: whether a baseline exists could not be answered (exit $probeExit, no reading taken)" -ForegroundColor Yellow
+        Write-Host '  This is not a defect in your tree: the cache was not read, so nothing was compared and nothing was pushed.'
+        Write-Host '  What repairs it: the comparer''s own line is above; `--probe` reads one key and needs no rows, so a refusal here is about the cache directory or the plan set file, not about the tree.'
+        Write-Host ''
+        Write-Host 'The merge commit is in this checkout and nothing was pushed.'
+        exit 2
+    } else {
+        $probe | ForEach-Object { "  $_" }
+        Write-Host ("  baseline hit, nothing measured twice ({0:N0} s)" -f ((Get-Date) - $rowsStarted).TotalSeconds)
+    }
+
     # One measurement, one transcript. The rows are read out of it twice -- once for the comparison
     # and once, after the push, to store this commit's own reading as the baseline for the next
     # merge -- so the plan runs once and both readers read the same run.
     $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
     $rowsRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
-        -Path $MainCheckout -Changed -ListKnown -NoGpuWatch 2>&1)
+        -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
     $rowsExit = $LASTEXITCODE
     # Byte for byte, without a BOM and with LF: the comparer splits on `\n` and matches the markers
     # exactly, and a transcript written by `>` in PowerShell would be UTF-16.
@@ -276,10 +577,9 @@ try {
     Write-Host ("  {0} row(s) from the run, camel-remote exit {1}, {2} plan target(s){3}" -f `
         $rowsCount, $rowsExit, $planTargets.Count, $(if ($widened) { ' (the whole fast layer)' } else { '' }))
 
-    $developTip = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
-    $compareDir = Join-Path $MainCheckout '.git\camel-readings'
     $compare = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
-        --cache $compareDir --develop $developTip --plans $planSetFile 2>&1)
+        --cache $compareDir --develop $developTip --plans $planSetFile --tree $comparedTree `
+        --changed-files $changedFilesFile --message-file $messageFile 2>&1)
     $compareExit = $LASTEXITCODE
 
     # The same three-way convention as the clang step. 1 is a reading -- the cases that moved are
@@ -304,13 +604,30 @@ try {
         Write-Host ''
         Write-Host "STOPPED: the row readings were not taken (exit $compareExit, no reading taken)" -ForegroundColor Yellow
         Write-Host "  This is not a defect in your tree: there were no rows to compare, so nothing was learned about this change. The run that should have recorded them exited $rowsExit; the comparer's own refusal is above."
-        Write-Host "  What repairs it: the block must arrive with rows inside it. A run that selected no plan writes no block, and a plan set whose cases all start nothing writes an empty one -- re-run internal/tools/camel-remote.ps1 -Path $MainCheckout -Changed -ListKnown -NoGpuWatch and read the block it prints. If the block is there and the baseline is what is missing, measure that plan set on a checkout of develop $($developTip.Substring(0, 9)) and store it: node scripts/merge-readings.mjs --transcript <that run's output> --cache $compareDir --develop $developTip --plans '$planSet' --accept"
+        Write-Host "  What repairs it: the block must arrive with rows inside it. A run that selected no plan writes no block, and a plan set whose cases all start nothing writes an empty one. This script measures the baseline itself (tree $($developTip.Substring(0, 9)) against tree $($comparedTree.Substring(0, 9))) and there is no command to run by hand for it; if the refusal above is the baseline being this very tree, the two shas are the reading to look at."
         Write-Host ''
         Write-Host 'The merge commit is in this checkout and nothing was pushed.'
         exit 2
     }
-    Write-Host ("  measured: develop {0} against this tree, no new red and no changed failure ({1:N0} s)" -f `
-        $developTip.Substring(0, 9), ((Get-Date) - $rowsStarted).TotalSeconds)
+    # The two shas on the one line that says "measured": a reader who trusts this line has to be able
+    # to see that it was two trees, not one tree twice.
+    #
+    # The comparer's line is echoed even when it allowed the merge: a case this change added and a case
+    # it removed are names the record has to carry, and a green that says only "no new red" is a green
+    # whose case set the reader cannot see.
+    $compare | Where-Object { "$_".StartsWith('merge-readings:') } | ForEach-Object { "  $_" }
+    Write-Host ("  measured: baseline tree {0} ({1}) against this tree {2}, no new red and no changed failure ({3:N0} s)" -f `
+        $developTip.Substring(0, 9), $(if ($seededFrom) { 'seeded now' } else { 'from the cache' }), `
+        $comparedTree.Substring(0, 9), ((Get-Date) - $rowsStarted).TotalSeconds)
+
+    if ($NoPush) {
+        Write-Host ''
+        Write-Host "would push: every reading was taken and neither tree refused it. develop is still $($developTip.Substring(0,9)) and this merge commit ($($comparedTree.Substring(0,9))) is only in this checkout." -ForegroundColor Yellow
+        Write-Host "  The baseline this merge would store for its own tree is not written: a key for a commit origin cannot see is a key nobody asks for. Nothing was pushed."
+        Write-Host ''
+        Write-Host "tried $Branch at $head; nothing was pushed (-NoPush)"
+        exit 0
+    }
 
     for ($i = 1; $i -le 3; $i++) {
         & git push origin develop 2>&1 | Select-Object -Last 1
@@ -334,8 +651,8 @@ try {
     # on a machine has no cache yet, and creating it is this script's job, not the reader's.
     New-Item -ItemType Directory -Force -Path $compareDir | Out-Null
     & node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
-        --cache $compareDir --develop $local --plans $planSetFile --accept 2>&1 | Select-Object -Last 1 |
-        ForEach-Object { "  $_" }
+        --cache $compareDir --develop $local --plans $planSetFile --tree $local --accept 2>&1 |
+        Select-Object -Last 1 | ForEach-Object { "  $_" }
     if ($LASTEXITCODE -ne 0) {
         # Not a refusal: the merge is already on origin, and a merge that did land is not undone by
         # a baseline that could not be written. The next merge on this commit measures instead of
@@ -348,6 +665,10 @@ try {
 }
 finally {
     if ($transcript) { Remove-Item -LiteralPath $transcript -Force -ErrorAction SilentlyContinue }
+    if ($seedTranscript) { Remove-Item -LiteralPath $seedTranscript -Force -ErrorAction SilentlyContinue }
     if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
+    if ($changedFilesFile) { Remove-Item -LiteralPath $changedFilesFile -Force -ErrorAction SilentlyContinue }
+    if ($messageFile) { Remove-Item -LiteralPath $messageFile -Force -ErrorAction SilentlyContinue }
+    # (the changed-file list is not a temp file: both sides read it from git)
     Pop-Location
 }
