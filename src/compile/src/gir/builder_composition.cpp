@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The composition `f..g` and the interval `a..b`: one construct with two readings, told apart
- * by the types of its two operands (buildComposition, buildCompositionWith,
- * composeFunctionValue, intervalValue), and the link the pipe operator `|>` makes of the call
- * it moves into (visitPipeLink, yieldToPipe).
+ * The interval `a..b` and the composition `f <> g`: two constructs, told apart by the token the
+ * program wrote (buildComposition, buildCompositionWith, composeFunctionValue, intervalValue), and
+ * the link the pipe operator `|>` makes of the call it moves into (visitPipeLink, yieldToPipe).
  */
 
 #include "builder.h"
@@ -63,16 +62,18 @@ const std::string kRangeCall = camel::core::compilerNamedOperator("range");
 } // namespace
 
 node_handle_t
-Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool compositionOnly) {
-    // The composition is the lambda `(x) => g(f(x))` and nothing else (design principles 4.2), so
-    // it is typed exactly as that lambda is typed: the function type the position expects gives
-    // the composed function its input - the parameter of `f` - and its output - the result of
-    // `g` - and it instantiates the operands where they stand, as the lambda's two calls are
-    // instantiated (design principles 5.9, 5.5).
-    // `f <> g` is the composition and nothing else (`compositionOnly`): the interval is written
-    // `a..b`, so an operand that is not a function is refused rather than read as a bound.
+Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool intervalOnly) {
+    // `a..b` is the interval and nothing else (design principles 4.2): `range(a, b, 1)` over two
+    // integers, and an operand of any other type is refused by `buildCompositionWith`. It is not
+    // a composition with a `..` spelling, so the type this position expects says nothing about
+    // its operands.
+    // `f <> g` is the composition and nothing else: the lambda `(x) => g(f(x))`, typed exactly as
+    // that lambda is typed, so the function type the position expects gives the composed function
+    // its input - the parameter of `f` - and its output - the result of `g` - and it instantiates
+    // the operands where they stand, as the lambda's two calls are instantiated (design
+    // principles 5.9, 5.5).
     FunctionType *expectedFunc = nullptr;
-    if (expected != nullptr && expected->code() == TypeCode::Function) {
+    if (!intervalOnly && expected != nullptr && expected->code() == TypeCode::Function) {
         auto *candidate = tt::as_ptr<FunctionType>(expected);
         // A composed function takes the one argument `f` takes. A position that expects some
         // other signature - two parameters, or a `with` parameter this value cannot carry - says
@@ -125,7 +126,7 @@ Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool compo
         }
     }
     node_handle_t rhs = operandValue(gct->at(2), rhsExpected);
-    return buildCompositionWith(gct, lhs, rhs, compositionOnly, compositionOnly ? "<>" : "..");
+    return buildCompositionWith(gct, lhs, rhs, intervalOnly, intervalOnly ? ".." : "<>");
 }
 
 bool Builder::isIntervalExpr(const GCT::node_ptr_t &expr) {
@@ -146,14 +147,16 @@ node_handle_t Builder::buildCompositionWith(
     const GCT::node_ptr_t &gct,
     node_handle_t lhs,
     node_handle_t rhs,
-    bool compositionOnly,
+    bool intervalOnly,
     std::string_view opText) {
     Type *lhsType            = nodeTypeOf(lhs);
     Type *rhsType            = nodeTypeOf(rhs);
     const bool bothFunctions = lhsType != nullptr && rhsType != nullptr &&
                                lhsType->code() == TypeCode::Function &&
                                rhsType->code() == TypeCode::Function;
-    if (bothFunctions) {
+    // The composition is what `<>` is and nothing else: `..` has no composition reading, so two
+    // functions written with `..` are the interval's refusal below, not a composition.
+    if (!intervalOnly && bothFunctions) {
         auto *lhsFunc = static_cast<FunctionType *>(lhsType);
         auto *rhsFunc = static_cast<FunctionType *>(rhsType);
         // `f` is unary: the composed function takes the one argument `f` takes (design
@@ -170,30 +173,34 @@ node_handle_t Builder::buildCompositionWith(
     // Two integers are the interval `[a, b)` (design principles 4.2). `int` is the language's
     // integer type (`Type::Int()` is `Int64`), and the interval is the array of them. `<>` does
     // not have this reading: an interval is written `a..b`.
-    if (!compositionOnly && lhsType != nullptr && rhsType != nullptr &&
+    if (intervalOnly && lhsType != nullptr && rhsType != nullptr &&
         lhsType->code() == TypeCode::Int64 && rhsType->code() == TypeCode::Int64) {
         return intervalValue(lhs, rhs, gct);
     }
     // A name of a generic function that neither the position nor the other operand settles: the
     // composition is refused by that name, together with the two ways to settle it (
     // section generic-operands-of-composition). This is not CompOperandMismatch: the operand is
-    // not a value of a type the composition cannot take, it is a name with no instance yet.
-    for (const bool isLeft : {true, false}) {
-        const node_handle_t operandNode = isLeft ? lhs : rhs;
-        const auto found                = genericDrefs_.find(operandNode);
-        if (found == genericDrefs_.end()) {
-            continue;
+    // not a value of a type the composition cannot take, it is a name with no instance yet. The
+    // interval has no such refusal: its operands are integers, and anything else is the mismatch
+    // below.
+    if (!intervalOnly) {
+        for (const bool isLeft : {true, false}) {
+            const node_handle_t operandNode = isLeft ? lhs : rhs;
+            const auto found                = genericDrefs_.find(operandNode);
+            if (found == genericDrefs_.end()) {
+                continue;
+            }
+            const GCT::node_ptr_t &expr        = gct->at(isLeft ? 1 : 2);
+            const generic_template_ptr_t &tmpl = found->second.one();
+            std::string written                = sourceTextOf(expr);
+            if (written.empty() && tmpl != nullptr) {
+                written = tmpl->name;
+            }
+            diags_->of(SemanticDiag::CompOperandGenericWithoutType)
+                .atOrigin(gct->origin())
+                .commit(opText, isLeft ? "left" : "right", written);
+            throw BuildAbortException();
         }
-        const GCT::node_ptr_t &expr        = gct->at(isLeft ? 1 : 2);
-        const generic_template_ptr_t &tmpl = found->second.one();
-        std::string written                = sourceTextOf(expr);
-        if (written.empty() && tmpl != nullptr) {
-            written = tmpl->name;
-        }
-        diags_->of(SemanticDiag::CompOperandGenericWithoutType)
-            .atOrigin(gct->origin())
-            .commit(opText, isLeft ? "left" : "right", written);
-        throw BuildAbortException();
     }
     // The operand's type as the message names it. A value whose type is not settled is not a
     // type the program wrote, and the message says that rather than print `void` as one.
@@ -276,7 +283,7 @@ node_handle_t Builder::composeFunctionValue(
 node_handle_t
 Builder::intervalValue(node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct) {
     // `a..b` of two integers is the array of them from `a` to `b - 1`, left closed and right
-    // open, as the slice `t[a:b]` is (design principles 4.2). It is the step-1 case of `range`,
+    // open, as the slice `t[a..b]` is (design principles 4.2). It is the step-1 case of `range`,
     // written out as that call with the step, `range(a, b, 1)`: the group has one rule and it
     // takes three arguments, so the two-argument spelling is an ordinary no-match while the
     // interval keeps its own lowering -- the operation is retired nowhere.

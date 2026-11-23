@@ -2146,10 +2146,10 @@ any Formatter::visitTypeArguments(cst::TypeArguments context) {
 
 /*
 namedTypeArgument
-    : IDENTIFIER (':' | '=') typeExpr
+    : IDENTIFIER ':' typeExpr
     ;
 The named argument writes the colon (design principles 5.9): `f::<T: int>`, as a parameter or a
-field names its type. `=` is the older spelling and is still read; the formatter writes `:`.
+field names its type.
 */
 any Formatter::visitNamedTypeArgument(cst::NamedTypeArgument context) {
     return context->tok(TK::Identifier)->text() + ": " +

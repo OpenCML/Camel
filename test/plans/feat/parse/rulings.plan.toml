@@ -277,7 +277,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.lambda_needs_parentheses"
-desc = "A lambda is written `func (x) { … }`: `x => e` is not a lambda, because a rule body's `x => x` already spends that arrow, so the unparenthesised spelling is named - SyntaxDiag::LambdaParametersNeedParentheses, at the `=>`, saying how a lambda is written. The composition `f..g` is accepted in the line above it, so the two spellings are told apart in one program. It used to be `Unexpected '=>'; expected '}'.` at the `=>`."
+desc = "A lambda is written `func (x) { … }`: `x => e` is not a lambda, because a rule body's `x => x` already spends that arrow, so the unparenthesised spelling is named - SyntaxDiag::LambdaParametersNeedParentheses, at the `=>`, saying how a lambda is written. The composition `ident <> ident` is accepted in the line above it, so the two spellings are told apart in one program. It used to be `Unexpected '=>'; expected '}'.` at the `=>`."
 kind = "negative"
 case = "../../../cases/parse/rulings/lambda_without_parentheses.cml"
 args = ["${case}"]
@@ -349,7 +349,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "rulings.open_range_not_in_language"
-desc = "There is no open interval `a..` (the author's ruling of 2026-11-16): a range has only a bounded form, its result is an array, and no syntax is added for counting until a condition holds -- that is the counting `while` loop. `1..` has no right-hand side, and it is refused by name - SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself (18:17) - instead of the parser taking the `return` of the following line for the missing operand and reporting `Unexpected 'return'; expected an expression` at 8:5, which is a token that is not wrong. The help gives the author's replacement wording, and the two readings that do have a second operand are accepted in the same program above the refusal: `1..4` is the interval and `inc..dbl` is the composition, so a change that made `..` unreadable everywhere would be red here."
+desc = "There is no open interval `a..` (the author's ruling of 2026-11-16): a range has only a bounded form, its result is an array, and no syntax is added for counting until a condition holds -- that is the counting `while` loop. `1..` has no right-hand side, and it is refused by name - SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself (18:17) - instead of the parser taking the `return` of the following line for the missing operand and reporting `Unexpected 'return'; expected an expression` at 8:5, which is a token that is not wrong. The help gives the author's replacement wording, and what does have a second operand is accepted in the same program above the refusal: `1..4` is the interval and `inc <> dbl` is the composition, so a change that made `..` unreadable everywhere would be red here."
 kind = "negative"
 case = "../../../cases/parse/rulings/open_range.cml"
 args = ["${case}"]

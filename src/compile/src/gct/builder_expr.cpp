@@ -840,7 +840,7 @@ enum ReservedDataOp {
     ErrorThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data obj, Data* args, NamedData* kwargs
-    Comp, // Data lhs, Data rhs -- `a..b`, two readings
+    Comp, // Data lhs, Data rhs -- `a..b`, the interval
     Compose, // Data lhs, Data rhs -- `a<>b`, the composition alone
     As, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
@@ -1082,10 +1082,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Comp:
     case AST::ReservedDataOp::Compose: {
-        // `a..b` has two readings and `a<>b` has one (design principles 4.2). GCT has no types,
-        // so the construct goes on as one call of the compiler's own name for it, which the GIR
-        // builder resolves: `Comp` keeps both readings while the corpus still writes the
-        // composition as `..`, and `Compose` is the composition alone.
+        // `a..b` is the interval and `a <> b` the composition (design principles 4.2). GCT has no
+        // types, so each goes on as a call of the compiler's own name for it, which the GIR
+        // builder resolves: `Comp` is the interval alone and `Compose` the composition alone; the
+        // token the program wrote decides which, so no reader has to guess from the operands.
         //
         // It is not handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
         // src/builtin/operators/macro.cpp), whose resolver takes two functions and answers with

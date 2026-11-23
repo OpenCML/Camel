@@ -8,7 +8,7 @@
  * gives an operand or the result (chooseOperatorOverload, overloadValueFor, answerValueGraphOf,
  * settledAnswerOf).
  *
- * A write is in builder_operator_writes.cpp, the composition `f..g` and the interval `a..b` in
+ * A write is in builder_operator_writes.cpp, the interval `a..b` and the composition `f <> g` in
  * builder_composition.cpp, and the graph a LINK node becomes in builder_call.cpp.
  */
 

@@ -2880,11 +2880,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             elementType      = Type::Int64();
             intervalIterates = true;
         } else {
-            // Two functions, or two operands `..` has no reading for: the composition (or the
-            // refusal it gives everywhere else), built from the operands already in hand so that
-            // neither of them is built twice.
-            sequence = valueOf(
-                functionValueOf(valueNodeOf(buildCompositionWith(interval, from, to)), interval));
+            // Two operands `..` has no reading for: the refusal it gives everywhere else, built
+            // from the operands already in hand so that neither of them is built twice.
+            sequence = valueOf(functionValueOf(
+                valueNodeOf(buildCompositionWith(interval, from, to, true, "..")), interval));
             elementType = iterableElementType(sequence, interval);
         }
     } else if (hasIterable) {

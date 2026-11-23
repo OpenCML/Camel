@@ -1,6 +1,6 @@
 /**
- * Type arguments at a call (design principles 5.9): `f::<T>` gives them by position, `f::<A = T>`
- * by name in any order, and `f::<T = int>` alone is a function value. The `::` separates them
+ * Type arguments at a call (design principles 5.9): `f::<T>` gives them by position, `f::<A: T>`
+ * by name in any order, and `f::<T: int>` alone is a function value. The `::` separates them
  * from the value arguments in angle brackets, which are a different form.
  */
 
