@@ -66,6 +66,14 @@
     origin, and the baseline this merge would have stored for its own tree is not written, because a
     baseline for a commit nothing else can see is a key nobody asks for.
 
+.PARAMETER WarmBaseline
+    Start no merge: measure the fast layer (`test/plans/smoke` and `test/plans/feat`) once on the
+    current develop commit, in the baseline worktree, and store the rows as that commit's baseline.
+    This is the idle-slot half of D-1123-123: a baseline measured across a superset of the plans a
+    merge selects lets that merge compare instead of measuring a baseline of its own, so the merge
+    position runs one measurement (the merged tree) and not two. It asserts the same start point,
+    pushes nothing and touches no branch; run it when the test slot is free, after a merge.
+
 .PARAMETER BaselineWorktree
     Where the baseline is measured. It is a worktree of its own, detached at the tree the merge lands
     on, and it is kept between merges so the host's build of it stays warm.
@@ -75,8 +83,10 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][string] $Branch,
-    [Parameter(Mandatory)][string] $Message,
+    # Neither is Mandatory: -WarmBaseline starts no merge and names no branch, and a Mandatory
+    # parameter would make PowerShell prompt for one. A merge without them is refused below, by name.
+    [string] $Branch = '',
+    [string] $Message = '',
     [string] $MainCheckout = 'D:\Projects\Camel',
     # Where the baseline is measured. It has to be a tree that is NOT the one being compared, and it
     # has to be a real checkout (the gate builds it), so it is a worktree of this repository detached
@@ -84,7 +94,8 @@ param(
     # worktree between runs, and a fresh path per merge would mean a cold build per merge.
     [string] $BaselineWorktree = 'D:\Projects\Camel-wt\camel-baseline',
     [switch] $WhatIf,
-    [switch] $NoPush
+    [switch] $NoPush,
+    [switch] $WarmBaseline
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,6 +111,26 @@ $ErrorActionPreference = 'Stop'
 #
 # `-MergeCommit` is the merge commit this run made, passed by the callers that are past the merge in
 # their own control flow -- not guessed here. Empty means the merge has not happened.
+# Does the cache already hold a baseline that covers the fast layer for this commit? The merge position
+# asks this between merges (to say which of the two the next merge will do) and -WarmBaseline asks it
+# before spending a run. The list is what `--changed` widens to when a change names no plan, which is
+# why it is the layer a superset baseline is measured across: every rule target in
+# `test/plan-selection.json` sits under `test/plans/smoke` or `test/plans/feat`, and a selection that
+# names something outside them (the GPU plans a tiles change adds) misses and measures as it always did.
+function Test-FastLayerBaseline {
+    param([string] $CacheDir, [string] $Develop, [string] $Checkout)
+
+    $list = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-fastlayer-$PID.txt")
+    [System.IO.File]::WriteAllText($list, "test/plans/smoke`ntest/plans/feat`n",
+        (New-Object System.Text.UTF8Encoding($false)))
+    try {
+        $out = @(& node (Join-Path $Checkout 'scripts\merge-readings.mjs') --cache $CacheDir `
+            --develop $Develop --plans $list --probe 2>&1)
+        return @{ Hit = ($LASTEXITCODE -eq 0); Text = (($out | ForEach-Object { "$_" }) -join "`n") }
+    } finally {
+        Remove-Item -LiteralPath $list -Force -ErrorAction SilentlyContinue
+    }
+}
 function Write-GitState {
     param([string] $MergeCommit = '')
 
@@ -482,6 +513,94 @@ try {
     }
 
     Write-Host "start point: local develop is $($localDevelop.Substring(0,9)), which is origin/develop"
+
+    # --- -WarmBaseline: the idle-slot run, D-1123-123 --------------------------
+    # A merge needs "what the plans it selects read on the commit it lands on". Measured per merge,
+    # that is one extra run per merge on top of the merged tree's own. Measured once across the fast
+    # layer, the same rows answer every merge that lands on that commit and selects anything inside
+    # the layer -- which is nearly every merge, and the layer `--changed` widens to when a change names
+    # no plan.
+    #
+    # The run belongs here and not inside a merge because it is nobody's verdict: a merge that started
+    # while it ran would wait on a measurement it does not need to wait for when a baseline is already
+    # there. So this starts no merge, asserts the start point like every other path, measures develop
+    # in the baseline worktree and stores the rows under that commit. It pushes nothing and moves no
+    # branch.
+    if ($WarmBaseline) {
+        $warmDir = Join-Path $commonDir 'camel-readings'
+        $warmStarted = Get-Date
+        $warmProbe = Test-FastLayerBaseline -CacheDir $warmDir -Develop $originDevelop -Checkout $MainCheckout
+        if ($warmProbe.Hit) {
+            $warmProbe.Text -split "`n" | Where-Object { $_ } | ForEach-Object { "  $_" }
+            Write-Host ''
+            Write-Host "  a baseline covering the fast layer is already stored for develop $($originDevelop.Substring(0,9)); nothing was measured (exit 0)"
+            exit 0
+        }
+        if ($warmProbe.Text -notmatch 'cache-miss') {
+            $warmProbe.Text -split "`n" | Where-Object { $_ } | ForEach-Object { "  $_" }
+            Write-Host ''
+            Write-Host 'STOPPED: whether a fast-layer baseline exists could not be answered (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host '  This is not a defect in your tree: the cache was not read, so nothing was measured and nothing was stored.'
+            Write-Host '  What repairs it: the comparer''s own line is above; `--probe` reads one key and needs no rows.'
+            exit 2
+        }
+        $warmPath = $BaselineWorktree
+        $warmProblem = Sync-BaselineWorktree -Path $warmPath -Sha $originDevelop -CommonDir $commonDir -Repo $MainCheckout
+        $warmMeasured = ''
+        if ($null -eq $warmProblem) {
+            $warmMeasured = "$(& git -C $warmPath rev-parse HEAD 2>$null)".Trim()
+            if ($warmMeasured -ne $originDevelop) {
+                $warmProblem = "$warmPath is at $($warmMeasured.Substring(0, [Math]::Min(9, $warmMeasured.Length))), not at develop $($originDevelop.Substring(0,9)), so the baseline would come from another tree"
+            }
+        }
+        if ($null -ne $warmProblem) {
+            Write-Host ''
+            Write-Host 'STOPPED: the fast layer could not be measured, so nothing was stored (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host "  $warmProblem"
+            Write-Host "  What repairs it: the baseline is measured in a worktree held at develop ($($originDevelop.Substring(0,9))). Name one with -BaselineWorktree, or let this script create it."
+            exit 2
+        }
+        $warmPlans = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-warm-plans-$PID.txt")
+        [System.IO.File]::WriteAllText($warmPlans, "test/plans/smoke`ntest/plans/feat`n",
+            (New-Object System.Text.UTF8Encoding($false)))
+        $warmTranscript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-warm-rows-$PID.txt")
+        Write-Host ("  measuring the fast layer on develop {0} in {1} -- the run every merge after this one would otherwise do for itself ..." -f `
+            $originDevelop.Substring(0,9), $warmPath)
+        $warmRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+            -Path $warmPath -Plan @('test/plans/smoke', 'test/plans/feat') -ListKnown -NoGpuWatch 2>&1)
+        $warmExit = $LASTEXITCODE
+        $warmSeconds = ((Get-Date) - $warmStarted).TotalSeconds
+        [System.IO.File]::WriteAllText($warmTranscript,
+            (($warmRun | ForEach-Object { "$_" }) -join "`n") + "`n",
+            (New-Object System.Text.UTF8Encoding($false)))
+        $warmRows = @($warmRun | Where-Object { "$_".TrimStart().StartsWith('{') }).Count
+        $warmReds = @($warmRun | Where-Object { "$_".TrimStart().StartsWith('{') -and "$_" -match '"verdict"\s*:\s*"fail"' }).Count
+        if ($warmRows -eq 0) {
+            Write-Host ''
+            Write-Host "STOPPED: the fast layer was not measured (exit 2, no reading taken; the run exited $warmExit)" -ForegroundColor Yellow
+            Write-Host '  This is not a defect in your tree: no row came back, so there is no baseline to store and nothing will hit it.'
+            Write-Host '  What repairs it: the row block must arrive with rows inside it; a build that failed or a plan set that starts no case writes no block.'
+            exit 2
+        }
+        $env:CAMEL_BASELINE_SECONDS = [string][int]$warmSeconds
+        $warmAccept = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $warmTranscript `
+            --cache $warmDir --develop $originDevelop --plans $warmPlans --tree $warmMeasured --accept 2>&1)
+        $warmAcceptExit = $LASTEXITCODE
+        Remove-Item Env:\CAMEL_BASELINE_SECONDS -ErrorAction SilentlyContinue
+        $warmAccept | ForEach-Object { "  $_" }
+        Remove-Item -LiteralPath $warmPlans, $warmTranscript -Force -ErrorAction SilentlyContinue
+        if ($warmAcceptExit -ne 0) {
+            Write-Host ''
+            Write-Host 'STOPPED: the fast layer was measured but could not be stored (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host "  $warmRows row(s) came back from develop $($originDevelop.Substring(0,9)) in $([int]$warmSeconds) s and the store refused them."
+            Write-Host "  What repairs it: the comparer's own refusal is above; it names what about the rows or the cache it could not use."
+            exit 2
+        }
+        Write-Host ("  measured: {0} case(s) across the fast layer on develop {1}, {2} already red there, {3:N0} s" -f `
+            $warmRows, $originDevelop.Substring(0,9), $warmReds, $warmSeconds)
+        Write-Host "  from now on a merge that lands on $($originDevelop.Substring(0,9)) and selects plans inside test/plans/smoke or test/plans/feat compares against this and measures only its own tree (exit 0)"
+        exit 0
+    }
 
     $head = (& git rev-parse --verify "$Branch^{commit}" 2>$null)
     if ($LASTEXITCODE -ne 0) {
@@ -919,6 +1038,15 @@ try {
     }
 
     Write-Host ''
+    # Which of the two the next merge will do, read rather than left to be discovered as a slow
+    # merge: a baseline for this commit covers the plans this run selected, and the fast layer covers
+    # every merge whose selection stays inside it.
+    $tipProbe = Test-FastLayerBaseline -CacheDir $compareDir -Develop $local -Checkout $MainCheckout
+    if ($tipProbe.Hit) {
+        Write-Host "  the next merge on $($local.Substring(0,9)) compares against that fast-layer baseline and measures only its own tree"
+    } else {
+        Write-Host "  the next merge on $($local.Substring(0,9)) measures a baseline of its own: internal\tools\merge-lane.ps1 -WarmBaseline measures the fast layer once on this commit, when the test slot is free, and every merge after it compares instead"
+    }
     Write-Host "merged $Branch at $head; develop is $($local.Substring(0,9))" -ForegroundColor Green
     # The closing claim read back rather than asserted: after the push both ends are one sha, and the
     # line says which. A push that reported success and a ref that did not move is a reading worth
