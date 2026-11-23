@@ -309,6 +309,18 @@ class GraphView {
     virtual std::uint32_t nodeSlotCount() const = 0;
     /// True when `ref` is a node of this view. Replaces `alive()` plus `containsNodeRef()`/
     /// `containsNode()`; a tombstone and a placeholder are both false here.
+    ///
+    /// This is **not** the question "can this ref be asked about at all", and the difference is
+    /// deliberate: a JOIN, a DREF and a dead place hold a node record and answer their ports
+    /// (`inputs`, `users`, `predecessors`) while answering false here and no kind at all. A port
+    /// list is a fact about the graph's edges; a kind is one of the nine, and there is no tenth for
+    /// a place this vocabulary does not carry.
+    ///
+    /// Do not "fix" that by letting a JOIN into `nodes()`: `nodes()` answers what nodes the graph
+    /// has, and whether a JOIN -- the merge point of a branch, not a value the graph computes -- is
+    /// one of them is a question about what the view is for, not about whether its ports can be
+    /// counted. `test::view_ports` pins the port answer node by node against the graph's own; that
+    /// is the property the readers of this stage need, and it holds without a tenth kind.
     virtual bool contains(NodeRef ref) const = 0;
 
     virtual NodeKind kindOf(NodeRef ref) const = 0;

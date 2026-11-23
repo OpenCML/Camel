@@ -3,7 +3,8 @@
 
 /*
  * `DraftGraphAdapter`: the answers of `GraphView` over the graph a session is building. The header
- * (`draft_view.h`) carries the mapping table and the id table's two forms; this file is the mapping.
+ * (`draft_view.h`) carries the mapping table and the id table's two forms; this file is the
+ * mapping.
  *
  * Two things are the draft's and not the view's, and both are answered here rather than stored
  * anywhere a reader can see:
@@ -30,8 +31,8 @@
 #include <vector>
 
 // The draft's face, and the destructor that frees it: both are here because the adapter is what the
-// draft keeps (`draft.h`, `viewCache_`). Global scope, because a member of `camel::runtime::GraphDraft`
-// is defined where no namespace encloses it wrongly.
+// draft keeps (`draft.h`, `viewCache_`). Global scope, because a member of
+// `camel::runtime::GraphDraft` is defined where no namespace encloses it wrongly.
 const camel::graph::GraphView &camel::runtime::GraphDraft::view() const {
     if (viewCache_ == nullptr) {
         viewCache_ = new camel::graph::DraftGraphAdapter(*this);
@@ -54,9 +55,9 @@ using camel::runtime::GraphDraft;
 /// The four high bits of a translation buffer's key, one value per kind of question, so that an
 /// answer to one question is never overwritten by an answer to another. See `translated`.
 enum class TranslatedSlot : std::uint64_t {
-    Inputs  = 1,
-    Users   = 2,
-    Region  = 3,
+    Inputs = 1,
+    Users  = 2,
+    Region = 3,
 };
 
 std::uint64_t translatedKey(TranslatedSlot slot, std::uint64_t first, std::uint64_t second) {
@@ -82,8 +83,7 @@ bool viewHasNode(const DraftNodeHeader *header) {
 /// The payload body of `ref` copied out of the draft's tail; false when it has none or the payload
 /// is smaller than `Body`. A draft keeps its payload at an arbitrary offset, so a body is never
 /// reinterpreted in place.
-template <typename Body>
-bool payloadBodyOf(const GraphDraft &draft, std::uint32_t ref, Body &out) {
+template <typename Body> bool payloadBodyOf(const GraphDraft &draft, std::uint32_t ref, Body &out) {
     const std::span<const std::byte> bytes = draft.payloadOf(ref);
     if (bytes.size() < sizeof(Body)) {
         return false;
@@ -165,9 +165,7 @@ DraftGraphAdapter::translated(std::uint64_t slot, std::span<const NodeRef> list)
     return buffer;
 }
 
-camel::core::type::FunctionType *DraftGraphAdapter::funcType() const {
-    return graph_->funcType();
-}
+camel::core::type::FunctionType *DraftGraphAdapter::funcType() const { return graph_->funcType(); }
 
 std::vector<NodeRef> DraftGraphAdapter::ports(PortGroup group) const {
     const GraphDraft &draft = *graph_;
@@ -225,8 +223,8 @@ std::optional<::slot_t> DraftGraphAdapter::constantOf(NodeRef ref) const {
     if (head == nullptr || head->kind != GCNodeKind::Data || head->dataIndex >= 0) {
         return std::nullopt;
     }
-    const auto index     = static_cast<std::size_t>(-head->dataIndex);
-    const auto &static_  = draft.staticSlots();
+    const auto index    = static_cast<std::size_t>(-head->dataIndex);
+    const auto &static_ = draft.staticSlots();
     if (index >= static_.size()) {
         return std::nullopt;
     }
@@ -242,22 +240,22 @@ std::uint64_t DraftGraphAdapter::originOf(NodeRef ref) const {
 
 std::span<const NodeRef> DraftGraphAdapter::inputs(NodeRef ref, PortGroup group) const {
     const GraphDraft &draft = *graph_;
-    if (!contains(ref)) {
+    // A record at the place, not `contains` (see graph_view.h): a JOIN and a DREF hold one and
+    // answer their ports.
+    if (!holdsPlace(ref) || draft.header(sourceOf(ref)) == nullptr) {
         return {};
     }
     const NodeRef source = sourceOf(ref);
     switch (group) {
     case PortGroup::Normal: {
         const std::span<const NodeRef> list = draft.normInputsOf(source);
-        return kept_.empty()
-                   ? list
-                   : translated(translatedKey(TranslatedSlot::Inputs, ref, 0), list);
+        return kept_.empty() ? list
+                             : translated(translatedKey(TranslatedSlot::Inputs, ref, 0), list);
     }
     case PortGroup::Context: {
         const std::span<const NodeRef> list = draft.withInputsOf(source);
-        return kept_.empty()
-                   ? list
-                   : translated(translatedKey(TranslatedSlot::Inputs, ref, 1), list);
+        return kept_.empty() ? list
+                             : translated(translatedKey(TranslatedSlot::Inputs, ref, 1), list);
     }
     default:
         // A capture is a port of the graph, not of one of its nodes (see `ports`).
@@ -267,22 +265,21 @@ std::span<const NodeRef> DraftGraphAdapter::inputs(NodeRef ref, PortGroup group)
 
 std::span<const NodeRef> DraftGraphAdapter::users(NodeRef ref, PortGroup group) const {
     const GraphDraft &draft = *graph_;
-    if (!contains(ref)) {
+    // The same gate `inputs` uses: a record at the place, which a JOIN has and `contains` denies.
+    if (!holdsPlace(ref) || draft.header(sourceOf(ref)) == nullptr) {
         return {};
     }
     const NodeRef source = sourceOf(ref);
     switch (group) {
     case PortGroup::Normal: {
         const std::span<const NodeRef> list = draft.normUsersOf(source);
-        return kept_.empty()
-                   ? list
-                   : translated(translatedKey(TranslatedSlot::Users, ref, 0), list);
+        return kept_.empty() ? list
+                             : translated(translatedKey(TranslatedSlot::Users, ref, 0), list);
     }
     case PortGroup::Context: {
         const std::span<const NodeRef> list = draft.withUsersOf(source);
-        return kept_.empty()
-                   ? list
-                   : translated(translatedKey(TranslatedSlot::Users, ref, 1), list);
+        return kept_.empty() ? list
+                             : translated(translatedKey(TranslatedSlot::Users, ref, 1), list);
     }
     default:
         return {};
@@ -292,7 +289,8 @@ std::span<const NodeRef> DraftGraphAdapter::users(NodeRef ref, PortGroup group) 
 std::vector<NodeRef> DraftGraphAdapter::predecessors(NodeRef ref, EdgeKind kind) const {
     const GraphDraft &draft = *graph_;
     std::vector<NodeRef> preds;
-    if (!contains(ref)) {
+    // The same gate `inputs` uses: a record at the place, which a JOIN has and `contains` denies.
+    if (!holdsPlace(ref) || draft.header(sourceOf(ref)) == nullptr) {
         return preds;
     }
     const NodeRef source = sourceOf(ref);
@@ -359,15 +357,13 @@ RegionRecord DraftGraphAdapter::region(RegionId id) const {
         record.kind = RegionKind::Root;
         break;
     }
-    record.owner  = stored.owner == camel::runtime::kInvalidNodeRef
-                        ? kNoNode
-                        : viewIdOf(stored.owner);
+    record.owner =
+        stored.owner == camel::runtime::kInvalidNodeRef ? kNoNode : viewIdOf(stored.owner);
     record.index = stored.index;
     // The body is in nothing; every other region is in at least the body (see the frozen adapter).
     record.parent = id == 0 ? kNoRegion : static_cast<RegionId>(stored.parent);
-    record.result = stored.result == camel::runtime::kInvalidNodeRef
-                        ? kNoNode
-                        : viewIdOf(stored.result);
+    record.result =
+        stored.result == camel::runtime::kInvalidNodeRef ? kNoNode : viewIdOf(stored.result);
     return record;
 }
 
@@ -377,8 +373,7 @@ std::span<const NodeRef> DraftGraphAdapter::regionParameters(RegionId id) const 
         return {};
     }
     const std::span<const NodeRef> list = draft.regionPortsOf(id);
-    return kept_.empty() ? list
-                         : translated(translatedKey(TranslatedSlot::Region, id, 0), list);
+    return kept_.empty() ? list : translated(translatedKey(TranslatedSlot::Region, id, 0), list);
 }
 
 std::vector<NodeRef> DraftGraphAdapter::regionNodes(RegionId id) const {
@@ -434,7 +429,7 @@ std::vector<RegionId> DraftGraphAdapter::regionsOwnedBy(NodeRef ref) const {
     if (!contains(ref)) {
         return owned;
     }
-    const NodeRef source = sourceOf(ref);
+    const NodeRef source        = sourceOf(ref);
     const DraftNodeHeader *head = draft.header(source);
     if (head == nullptr) {
         return owned;
