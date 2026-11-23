@@ -254,6 +254,66 @@ function messageNames(caseName, message) {
     return lower.includes(caseName.toLowerCase()) || lower.includes(id.toLowerCase())
 }
 
+// --- derived case names ------------------------------------------------------
+// A plan may declare `[[sweeps]]`: it runs the tests of other plans again under an extra
+// environment, and names each copy `<sweep name>:<source plan id>:<the source test's name>`
+// (`test/tools/run-tests.mjs`, `rename` in the sweep expansion, and the format spelled out at the
+// `[[sweeps]]` comment above it). The copy is not a case of its own: it exists because the source
+// does, and it stops existing when the source does -- or when the sampling that decides which
+// source tests get copied picks a different one, which is the shape that got this wrong.
+//
+// So a copy that a baseline holds and a run does not says nothing until the source is looked up.
+// The sweep names come from the plan set's own `[[sweeps]]` declarations, not from the shape of the
+// string: a name with a colon in it is not evidence that anything was derived.
+const sweepNames = (() => {
+    const names = new Set()
+    const planSetPath = arg('--plans')
+    if (!planSetPath) return names
+    for (const target of planSetNames(planSetPath).map((s) => s.trim()).filter(Boolean)) {
+        for (const plan of planFilesOf(target)) {
+            let text = ''
+            try {
+                text = fs.readFileSync(plan.file, 'utf8')
+            } catch {
+                continue
+            }
+            for (const block of text.split('[[sweeps]]').slice(1)) {
+                const name = block.match(/^\s*name\s*=\s*"([^"]+)"/m)
+                const plans = block.match(/^\s*plans\s*=\s*\[/m)
+                // The first `name` after `[[sweeps]]` belongs to the sweep only while no other table
+                // has started; a block that runs into the next table is not a sweep this can read.
+                const stop = block.search(/^\[\[(?!sweeps)/m)
+                if (name && plans && (stop < 0 || name.index < stop)) names.add(name[1])
+            }
+        }
+    }
+    return names
+})()
+
+/** Contains a colon, so it is shaped like a derived name even if no sweep in the set claims it. */
+const looksDerived = (caseName) => caseName.slice(caseName.indexOf('/') + 1).includes(':')
+
+/**
+ * The source case a derived name came from, or null. Returns `{ sweep, source }` when the plan set
+ * declares the sweep; `{ sweep: null, source: null }`-shaped input (a colon with no declaration) is
+ * the caller's "this derived name cannot be resolved" case and is reported, never guessed.
+ */
+function sourceCaseOf(caseName) {
+    const slash = caseName.indexOf('/')
+    if (slash < 0) return null
+    const casePart = caseName.slice(slash + 1)
+    const at = casePart.indexOf(':')
+    if (at <= 0) return null
+    const sweep = casePart.slice(0, at)
+    const rest = casePart.slice(at + 1)
+    const sep = rest.indexOf(':')
+    if (sep <= 0) return null
+    const sourceId = rest.slice(0, sep)
+    const original = rest.slice(sep + 1)
+    if (!sweepNames.has(sweep) || !sourceId || !original) return { sweep, source: null }
+    return { sweep, source: `${sourceId}/${original}` }
+}
+
 let cacheKey = null
 if (cacheDir) {
     if (!develop || !planSet) die('--cache needs --develop <sha> and --plans <file or comma list>: a baseline keyed by commit alone is reused across plan sets it was not measured on')
@@ -374,6 +434,8 @@ const addedGreen = []
 const removed = []
 const removedRedUnnamed = []
 const unexplained = []
+const derivedMissing = []
+const unresolvedDerived = []
 for (const [name, before] of base.rows) {
     const after = tree.rows.get(name)
     if (!after) continue
@@ -392,12 +454,29 @@ for (const [name, after] of tree.rows) {
 }
 for (const [name, before] of base.rows) {
     if (tree.rows.has(name)) continue
-    // Missing from this run. Two very different facts wear that shape:
+    // Missing from this run. Three very different facts wear that shape:
+    //   - it is a derived copy and the source case it copies is still here. Then the copy did not
+    //     come out of a source that exists, so the two runs selected differently: exit 2, and say
+    //     that the derivation is what is missing, not the case.
     //   - the change removed the case (its file, its plan entry). Then it is `removed` and it is NOT
-    //     `fixed` -- a red case that disappears must not read as a case that went green.
+    //     `fixed` -- a red case that disappears must not read as a case that went green. For a copy,
+    //     the evidence is the removal of its source, since the copy lives and dies with it.
     //   - the change did not touch anything that holds the case, so the two runs selected
     //     differently. That is a fact about the selection, not about this merge: exit 2, and name it.
-    if (!removalExplained(name, changedFiles, planSet)) {
+    const derived = sourceCaseOf(name)
+    if (derived && !derived.source) {
+        // Shaped like a copy, but no sweep in this plan set declares the prefix: the source cannot
+        // be resolved. Reading it as "still here" would exit 2 for the wrong reason and reading it as
+        // "removed" would let a deletion through, so it is reported as what it is.
+        unresolvedDerived.push(name)
+        continue
+    }
+    if (derived && tree.rows.has(derived.source)) {
+        derivedMissing.push({ name, source: derived.source })
+        continue
+    }
+    const subject = derived ? derived.source : name
+    if (!removalExplained(subject, changedFiles, planSet)) {
         unexplained.push(name)
         continue
     }
@@ -437,6 +516,19 @@ if (unexplained.length > 0) {
     console.log(`merge-readings: ${unexplained.length} case(s) the baseline measured and this run did not, and this change does not remove:`)
     for (const name of unexplained) console.log(`  ${name}`)
     console.log('merge-readings: the two runs selected differently -- that is the selection, not this merge, so nothing here is a verdict on the change')
+    process.exit(2)
+}
+if (derivedMissing.length > 0) {
+    console.log(`merge-readings: ${derivedMissing.length} derived case(s) the baseline measured and this run did not, whose source case is still here and unchanged:`)
+    for (const d of derivedMissing) console.log(`  ${d.name}`)
+    for (const d of derivedMissing) console.log(`    the copy did not come out of ${d.source}, which this run measured`)
+    console.log('merge-readings: a copy that is absent while its source is present was not deleted by anyone -- the derivation, not the case, is what is missing, so this is a fact about the selection and exits 2')
+    process.exit(2)
+}
+if (unresolvedDerived.length > 0) {
+    console.log(`merge-readings: ${unresolvedDerived.length} case(s) shaped like a derived copy that no sweep in this plan set declares:`)
+    for (const name of unresolvedDerived) console.log(`  ${name}`)
+    console.log('merge-readings: the source case cannot be resolved, and an unresolved derived name is neither "still here" nor "removed" -- a reading that cannot be resolved says nothing, so it exits 2')
     process.exit(2)
 }
 if (changed.length > 0) {
