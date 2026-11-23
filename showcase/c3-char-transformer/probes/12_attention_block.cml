@@ -10,9 +10,9 @@
 // reports' parity reading is about: it either answers six cotangents or it stops at the first
 // construct the library cannot differentiate, and which of those happens is the reading.
 import { sqrt } from math
-import { softmax, sum, transpose } from tensor
 import rulesets.jvp
 import rulesets.transpose
+import { softmax, sum, transpose } from tensor
 import { vjp } from vjp
 
 type Head = {
@@ -23,7 +23,7 @@ type Head = {
 
 /// One head over one sequence of two tokens: `x` is `[2, 2]`, each weight `[2, 1]`.
 with <h: Head>
-func head(x: f32[...]): f32 {
+func head(x: f32[...]) => f32 {
     let scores = (x @ h.wq) @ transpose((x @ h.wk)) / sqrt(2.0)
     let masked = scores - 1000.0 * (1.0 - [[1.0, 0.0], [1.0, 1.0]] as f32[2, 2])
     let attention = softmax<1>(masked)
@@ -31,7 +31,7 @@ func head(x: f32[...]): f32 {
     return sum(out)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 0.5], [0.5, 1.0]] as f32[2, 2]
     let h = {
         wq: [[1.0], [0.5]] as f32[2, 1],

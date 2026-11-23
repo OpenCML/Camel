@@ -5,18 +5,16 @@
  * fields project the same node, as the C++ expansion of `tree_map` does.
  */
 
-func pairUp(t: {p: (int, int)}): {p: (int, int)} {
-    return { static for n, F in fields {p: (int, int)} do (
-        static for m, G in fields F do t.[n].[m] * 10
-    ) }
+func pairUp(t: { p: (int, int) }) => { p: (int, int) } {
+    return {static for n, F in fields { p: (int, int) } do (static for m, G in fields F do t.[n].[m] * 10)}
 }
 
-func sum(r: {p: (int, int)}): int {
+func sum(r: { p: (int, int) }) => int {
     return r.p.0 + r.p.1
 }
 
-func main(): int sync {
-    let r = pairUp({p: (1, 2)})
+func main() => int sync {
+    let r = pairUp({ p: (1, 2) })
     println(sum(r))
     return 0
 }

@@ -6,18 +6,20 @@ import { find, index_of } from array
 
 type Product = { id: int, name: string, price: float }
 
-func by_id(items: Product[], id: int): Product? {
-    return items->find<func (p: Product) => bool { p.id == id }>
+func by_id(items: Product[], id: int) => Product? {
+    return items->find<func (p: Product) => bool {
+        p.id == id
+    }>
 }
 
-func label(p: Product?): string {
+func label(p: Product?) => string {
     return match p {
         case null => 'no such product'
         case v => v.name + ' costs ' + format<v.price>('{:.2f}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let catalog: Product[] = [
         { id: 10, name: 'lamp', price: 19.5 },
         { id: 20, name: 'desk', price: 120.0 },
@@ -25,15 +27,17 @@ func main(): int sync {
     ]
     println(label(by_id(catalog, 20)))
     println(label(by_id(catalog, 99)))
-
-    let names = catalog->map<func (p: Product) => string { p.name }>
+    
+    let names = catalog->map<func (p: Product) => string {
+        p.name
+    }>
     println('desk is at', names->index_of<'desk'> ?? -1, 'and sofa at', names->index_of<'sofa'> ?? -1)
-
+    
     // A Map lookup is nullable as well.
     let stock = [('lamp', 4), ('desk', 0)] as Map<string, int>
     println('lamps:', stock['lamp'] ?? 0, 'chairs:', stock['chair'] ?? 0)
     println('chair is listed:', stock->has<'chair'>)
-
+    
     let nothing: int? = null
     println(nothing, nothing ?? -1)
     return 0

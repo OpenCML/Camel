@@ -7,15 +7,15 @@
 tag cost on func
 
 #[reads(reassociate, contract)]
-func first(p: int): int {
+func first(p: int) => int {
     return p
 }
 
 #[reads(cost)]
-func second(p: int): int {
+func second(p: int) => int {
     return p
 }
 
-func main(): int {
+func main() => int {
     return first(1) + second(2)
 }

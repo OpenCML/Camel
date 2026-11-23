@@ -4,14 +4,14 @@
 
 import { read_text } from fs
 
-func show(r: int!): string {
+func show(r: int!) => string {
     return match r {
         case error e => format<e.kind, e.message, e.location>('{}: {} at {}')
         case v => format<v>('ok {}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(parse_int('42') !! 0)
     println(parse_int('-7') !! 0)
     println(parse_int('4x2') !! 0)

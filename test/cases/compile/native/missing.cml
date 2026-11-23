@@ -4,6 +4,6 @@
  */
 import { absent } from missing_module
 
-func main(): int {
+func main() => int {
     return absent(1)
 }

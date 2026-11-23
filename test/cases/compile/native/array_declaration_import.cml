@@ -7,7 +7,7 @@
 
 import { sort, argsort, flatten, unique } from array
 
-func main(): int sync {
+func main() => int sync {
     println(argsort([30, 10, 20]))
     println(argsort([2.5, 1.5, 3.5]))
     println(argsort(['pear', 'fig', 'apple']))

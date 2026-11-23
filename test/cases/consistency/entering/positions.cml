@@ -5,14 +5,16 @@
  * write with `as`.
  */
 
-func or_else(x: int?, d: int): int { return x ?? d }
-func show(r: int!): string {
+func or_else(x: int?, d: int) => int {
+    return x ?? d
+}
+func show(r: int!) => string {
     return match r {
         case error e => 'error ' + e.kind
         case v => 'ok ' + string(v)
     }
 }
-func deep(x: int?!): string {
+func deep(x: int?!) => string {
     return match x {
         case error e => 'failed'
         case v => 'value ' + string(v ?? -1)
@@ -20,16 +22,28 @@ func deep(x: int?!): string {
 }
 
 // overloads: the exact match wins over the one the argument would enter
-func which(x: int): string { return 'int' }
-func which(x: int?): string { return 'int?' }
+func which(x: int) => string {
+    return 'int'
+}
+func which(x: int?) => string {
+    return 'int?'
+}
 
 // generic: an argument that is not of the form binds the payload
-func first_or::<T>(x: T?, d: T): T { return x ?? d }
+func first_or::<T>(x: T?, d: T) => T {
+    return x ?? d
+}
 
 // branch arms: one arm enters the form of the other
-func pick(c: bool, x: int): int? { return if c then x else null }
-func half(x: int): int! { return if x % 2 == 1 then { return error('Odd', 'odd') } else x / 2 }
-func grade(k: int): string? {
+func pick(c: bool, x: int) => int? {
+    return if c then x else null
+}
+func half(x: int) => int! {
+    return if x % 2 == 1 then {
+        return error('Odd', 'odd')
+    } else x / 2
+}
+func grade(k: int) => string? {
     return match k {
         case 1 => 'one'
         case 2 => 'two'
@@ -38,20 +52,28 @@ func grade(k: int): string? {
 }
 
 // return: several levels at once
-func lift(x: int): int?! { return x }
-
-func total(xs: (int?)[]): int {
-    return xs->map<func (x: int?) => int { x ?? 0 }>->reduce<func (a: int, b: int) => int { a + b }, 0>
+func lift(x: int) => int?! {
+    return x
 }
 
-func main(): int sync {
+func total(xs: (int?)[]) => int {
+    return xs->map<func (x: int?) => int {
+        x ?? 0
+    }>->reduce<func (a: int, b: int) => int {
+        a + b
+    }, 0>
+}
+
+func main() => int sync {
     // arguments
     println(or_else(7, 0), or_else(null, 0), show(3), deep(4), deep(null))
     let opt: int? = 9
     println(which(5), which(opt), which(null))
     println(first_or(5, 0), first_or(opt, 0), first_or('a', 'z'))
     // a function value
-    let f = func (x: int?, y: string!) => string { string(x ?? -1) + (y !! '?') }
+    let f = func (x: int?, y: string!) => string {
+        string(x ?? -1) + (y !! '?')
+    }
     println(f(1, 'a'), f(null, 'b'))
     // annotated let
     let a: int? = 5

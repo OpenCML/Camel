@@ -3,7 +3,7 @@
  * a literal element the element type cannot hold is reported at the element.
  */
 
-func main(): int sync {
+func main() => int sync {
     let xs: i32[] = [1, 3000000000]
     println(xs)
     return 0

@@ -13,10 +13,11 @@
 //
 // The transpose is asked twice, at cotangent 1 and at cotangent 2, so the answer has to be 4 then 8 --
 // proportional to the cotangent, and 8 is a number no forward line prints.
-import { jvp, split, transpose } from transforms
+import rulesets.jvp
 import rulesets.transpose
+import { jvp, split, transpose } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     let b = x > 0.0
     if b then {
         return x * x
@@ -24,8 +25,8 @@ func f(x: float): float {
         return 0.5 * x
     }
 }
-import rulesets.jvp
-func main(): int sync {
+
+func main() => int sync {
     println(f(2.0))
     let (_, lin) = split(jvp(f))(2.0)
     println(transpose(lin)(1.0))

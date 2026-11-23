@@ -3,7 +3,7 @@
 
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let a: Point = { x: 3, y: 4 }
     let b: Point = { x: 3, y: 4 }
     println(a == b)

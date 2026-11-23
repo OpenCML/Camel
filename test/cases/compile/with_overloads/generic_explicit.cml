@@ -4,36 +4,36 @@
  * arguments written, by the names they carry, and by their types (`mark::<int><'a'>` and
  * `mark::<int><3>`).
  */
-func pick::<T>(x: T): T {
+func pick::<T>(x: T) => T {
     return x
 }
 
 with <n: int>
-func pick::<T>(x: T): T[] {
-    return [x for i in 0..n]
+func pick::<T>(x: T) => T[] {
+    return [x for i in 0 .. n]
 }
 
 with <label: string>
-func tag::<T>(x: T): string {
+func tag::<T>(x: T) => string {
     return label
 }
 
 with <times: int>
-func tag::<T>(x: T): int {
+func tag::<T>(x: T) => int {
     return times
 }
 
 with <word: string>
-func mark::<T>(x: T): string {
+func mark::<T>(x: T) => string {
     return word
 }
 
 with <count: int>
-func mark::<T>(x: T): int {
+func mark::<T>(x: T) => int {
     return count
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick::<int>(1))
     println(pick::<int><n: 2>(1))
     println(pick::<int><3>(1))

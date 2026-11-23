@@ -13,7 +13,7 @@
  * Run: camel test/cases/compile/var/loop_append_copies.cml std::nvm
  *      camel inspect --copies test/cases/compile/var/loop_append_copies.cml
  */
-func main(): int sync {
+func main() => int sync {
     var xs: int[] = []
     let _ = loop i = 0 while i < 3 do sync {
         xs = xs->append<i>

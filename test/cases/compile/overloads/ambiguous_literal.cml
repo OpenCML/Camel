@@ -3,15 +3,15 @@
  * ambiguous. It used to take the first overload in declaration order.
  */
 
-func scale(x: f32): f32 {
+func scale(x: f32) => f32 {
     return x * 2.0
 }
 
-func scale(x: float): float {
+func scale(x: float) => float {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(scale(2))
     println('never printed')
     return 0

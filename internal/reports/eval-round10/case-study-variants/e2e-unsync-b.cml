@@ -1,11 +1,11 @@
 // Item A's sixth rewrite, second form: the `sync` is dropped from `apply`, the function that
 // calls the closure. Same five lines; the document is the reading.
 
-func apply(f: (x: int) => int, x: int): int {
+func apply(f: (x: int) => int, x: int) => int {
     return f(x)
 }
 
-func run(n: int, base: int): int sync {
+func run(n: int, base: int) => int sync {
     let label = 'step'
     let twice = base * 2
     let thrice = base * 3
@@ -23,7 +23,7 @@ func run(n: int, base: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = run(3, 10)
     return 0
 }

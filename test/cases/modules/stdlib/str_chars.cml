@@ -4,11 +4,11 @@
  * not a code point.
  */
 
-import { codepoints, from_codepoints } from str
 import { encode, decode, from_array } from bytes
+import { codepoints, from_codepoints } from str
 
-func main(): int sync {
-    let s = 'h€😀é'        // 1 + 3 + 4 + 2 bytes, 4 characters
+func main() => int sync {
+    let s = 'h€😀é' // 1 + 3 + 4 + 2 bytes, 4 characters
     println(len(s), len(encode(s)))
     println(codepoints(s))
     println(codepoints(''), len(''))
@@ -18,12 +18,12 @@ func main(): int sync {
     println(s[0], s[1], s[2], s[3])
     println(s[1..3], s[0..4])
     println(len(s[4..4]), len(''[0..0]))
-
+    
     // not a code point: an error value
     println(from_codepoints([55296]) !! 'surrogate')
     println(from_codepoints([1114112]) !! 'beyond')
     println(from_codepoints([-1]) !! 'negative')
-
+    
     // what decode accepts: valid UTF-8 only; malformed bytes are an error value, not a fault
     println(decode(from_array([226, 130, 172])) !! 'bad', (decode(encode('h€😀é')) !! 'bad') == 'h€😀é')
     return 0

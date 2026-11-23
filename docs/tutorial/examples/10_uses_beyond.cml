@@ -5,12 +5,12 @@
 
 resource db
 
-func stamp(): int uses var db sync {
+func stamp() => int uses var db sync {
     println('x')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(stamp())
     return 0
 }

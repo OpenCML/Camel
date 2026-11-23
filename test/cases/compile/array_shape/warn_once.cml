@@ -1,10 +1,9 @@
 // A name written once in the signature relates nothing, so the compiler suggests `?`.
-
-func first(x: f32[n]): f32 {
+func first(x: f32[n]) => f32 {
     return x[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1.0, 2.0]))
     return 0
 }

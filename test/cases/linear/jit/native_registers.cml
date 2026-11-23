@@ -6,29 +6,23 @@
  * needs the second lowering (no values kept in registers across bytecodes).
  */
 
-func mix(a: int, b: int, c: int, d: int, e: int, n: int): int {
-    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 3 + (e * d) / 7
-           else mix(b, c, d, e, a + n, n - 1)
+func mix(a: int, b: int, c: int, d: int, e: int, n: int) => int {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 3 + (e * d) / 7 else mix(b, c, d, e, a + n, n - 1)
 }
 
-func cmp(a: int, b: int, c: int, d: int, n: int): int {
-    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
-                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
-           else cmp(d, a, b, c, n - 1)
+func cmp(a: int, b: int, c: int, d: int, n: int) => int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) + (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0) else cmp(d, a, b, c, n - 1)
 }
 
-func fmix(a: float, b: float, c: float, d: float, e: float, n: int): float {
-    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 4.0
-           else fmix(b, c, d, e, a + 0.5, n - 1)
+func fmix(a: float, b: float, c: float, d: float, e: float, n: int) => float {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 4.0 else fmix(b, c, d, e, a + 0.5, n - 1)
 }
 
-func fcmp(a: float, b: float, c: float, d: float, n: int): int {
-    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
-                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
-           else fcmp(d, a, b, c, n - 1)
+func fcmp(a: float, b: float, c: float, d: float, n: int) => int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) + (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0) else fcmp(d, a, b, c, n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println('mix {} {} {} {}'->format<mix(3, 5, 7, 11, 13, 0), mix(3, 5, 7, 11, 13, 4), mix(3, 5, 7, 11, 13, 9), mix(0 - 3, 5, 0 - 7, 11, 0 - 13, 6)>)
     println('cmp {} {} {} {}'->format<cmp(1, 2, 3, 4, 0), cmp(1, 2, 3, 4, 3), cmp(4, 4, 4, 2, 5), cmp(9, 1, 9, 1, 6)>)
     println('fmix {} {} {}'->format<fmix(1.5, 2.5, 3.5, 4.5, 5.5, 0), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 4), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 7)>)

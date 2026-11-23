@@ -7,11 +7,11 @@
  * Expected output: 1010, then 9.
  */
 
-func train(base: int, epochs: int, k: int): int sync {
+func train(base: int, epochs: int, k: int) => int sync {
     let b2 = base + 1
     let w0 = k * 2
-
-    func step(epoch: int, w: int): int sync {
+    
+    func step(epoch: int, w: int) => int sync {
         if (epoch >= epochs) then {
             return w
         } else sync {
@@ -22,11 +22,11 @@ func train(base: int, epochs: int, k: int): int sync {
             return step(epoch + 1, nw)
         }
     }
-
+    
     return step(0, w0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(train(3, 1000, 5))
     println(train(4, 7, 1))
     return 0

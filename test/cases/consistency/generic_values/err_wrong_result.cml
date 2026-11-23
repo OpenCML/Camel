@@ -1,6 +1,10 @@
-func id::<A>(x: A): A { return x }
-func keep::<T>(p: (x: T) => bool, x: T): bool { return p(x) }
-func main(): int sync {
+func id::<A>(x: A) => A {
+    return x
+}
+func keep::<T>(p: (x: T) => bool, x: T) => bool {
+    return p(x)
+}
+func main() => int sync {
     println(keep(id, 3))
     return 0
 }

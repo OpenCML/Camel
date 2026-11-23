@@ -12,11 +12,11 @@
 export resource graph readonly
 export resource spelling readonly
 
-func twice(f: int): int uses graph {
+func twice(f: int) => int uses graph {
     return f * 2
 }
 
-func main(): int {
+func main() => int {
     println(twice(21))
     return 0
 }

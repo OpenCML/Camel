@@ -4,17 +4,17 @@
  * its returned value is redundant too; the caller's return anchor remains.
  */
 
-func constant(): int sync {
+func constant() => int sync {
     println(1)
     return 41
 }
 
-func effect_value(): int sync {
+func effect_value() => int sync {
     println(3)
     return println(4)
 }
 
-func main(): int sync {
+func main() => int sync {
     constant()
     println(2)
     effect_value()

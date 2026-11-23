@@ -7,10 +7,14 @@
  * The second binding repeats the name at the same types: the instance that failed is remembered as
  * failed in its template, so the second time it is not built again and nothing is reported either.
  */
-func pick::<T>(x: T, y: T): T { return len(x) }
-func pick::<T>(x: int, y: T): T { return y }
+func pick::<T>(x: T, y: T) => T {
+    return len(x)
+}
+func pick::<T>(x: int, y: T) => T {
+    return y
+}
 
-func main(): int sync {
+func main() => int sync {
     let f: (x: int, y: int) => int = pick
     let g: (x: int, y: int) => int = pick
     println(f(1, 2) + g(3, 4))

@@ -7,12 +7,12 @@
  * `let m = { w: weight('w'), ... }` depended on the pass pipeline.
  */
 
-func loud(s: string): string sync {
+func loud(s: string) => string sync {
     println(s)
     return s
 }
 
-func main(): int sync {
+func main() => int sync {
     println('one')
     let m = { a: loud('two'), b: loud('three') }
     println('four')

@@ -7,12 +7,16 @@ import { grad } from autodiff
 type P = { x: float, y: float }
 
 with <xs: float[]>
-func pick(): float { return xs[0] + xs[2] }
+func pick() => float {
+    return xs[0] + xs[2]
+}
 
 with <ps: P[]>
-func pick_x(): float { return ps[0].x + ps[1].x }
+func pick_x() => float {
+    return ps[0].x + ps[1].x
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1.0, 2.0, 3.0]
     let ps = [{ x: 1.0, y: 10.0 }, { x: 2.0, y: 20.0 }]
     println(grad(pick)<xs>())

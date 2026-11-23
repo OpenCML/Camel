@@ -2,17 +2,14 @@
  * Operator-level sanity check for embedding repeated-index table gradients.
  */
 
+import { embedding, embedding_table_grad } from nn
 import { reshape, sum } from tensor
 
-import {
-    embedding, embedding_table_grad
-} from nn
-
-func main(): int sync {
+func main() => int sync {
     let table = reshape<[3, 2]>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
     let indices = reshape<[3]>([1, 1, 2])
     let dy = reshape<[3, 2]>([1.0, 1.0, 2.0, 3.0, 4.0, 5.0])
-
+    
     let gathered = embedding(table, indices)
     let grad = embedding_table_grad(table, indices, dy)
     let gathered_sum = sum(gathered)
@@ -22,7 +19,7 @@ func main(): int sync {
     let row0 = sum(f64(grad) * reshape<[3, 2]>([1.0, 1.0, 0.0, 0.0, 0.0, 0.0]))
     let row1 = sum(f64(grad) * reshape<[3, 2]>([0.0, 0.0, 1.0, 1.0, 0.0, 0.0]))
     let row2 = sum(f64(grad) * reshape<[3, 2]>([0.0, 0.0, 0.0, 0.0, 1.0, 1.0]))
-
+    
     'embedding_grad_sanity gathered_sum={} row0={} row1={} row2={}'->format<gathered_sum, row0, row1, row2>->println
     return 0
 }

@@ -9,11 +9,11 @@
 //
 // The order edge is the whole of the edit, so the program prints the same two values before and
 // after it.
-func seed(): int {
+func seed() => int {
     return 7
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = seed() + 20
     let c = a + 1
     println(c)

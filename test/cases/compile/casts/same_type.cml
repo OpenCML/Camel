@@ -5,14 +5,16 @@
 type A = int[]
 type S = { a: int, b: string }
 
-func through(p: A): A { return p as A }
+func through(p: A) => A {
+    return p as A
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2]
     let ys = xs as int[]
-    let t = (1, "x")
+    let t = (1, 'x')
     let u = t as (int, string)
-    let s: S = { a: 3, b: "y" }
+    let s: S = { a: 3, b: 'y' }
     let r = s as S
     println(ys)
     println(u)
@@ -29,9 +31,9 @@ func main(): int sync {
     println(b as bool)
     let f: float = 1.5
     println(f as float)
-    let z: c128 = 1+2i
+    let z: c128 = 1 + 2i
     println(z as c128)
-    let w: c64 = 1-2i
+    let w: c64 = 1 - 2i
     println(w as c64)
     println(3 as int)
     println(1.5 as float)

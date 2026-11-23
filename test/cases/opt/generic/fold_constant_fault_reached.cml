@@ -5,7 +5,7 @@
  * add one warning at the same position before the run.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     let a = 1 / 0
     println(a)

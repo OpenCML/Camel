@@ -9,10 +9,9 @@
  *   camel transformer_step.cml --arg steps=20 --arg lr=0.01 std::profile std::nvm
  */
 
-
-import { mean, relu, softmax, sqrt, sum, transpose, zeros } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
+import { mean, relu, softmax, sqrt, sum, transpose, zeros } from tensor
 import { now } from time
 
 // d = 8, s = 4, batch = 1: small enough to run a hundred steps in a second, large enough that
@@ -33,13 +32,13 @@ type Block = {
 }
 
 // RMSNorm over the last axis, the gain applied after the normalization.
-func rmsnorm(x: f32[...], g: f32[...]): f32[...] {
+func rmsnorm(x: f32[...], g: f32[...]) => f32[...] {
     let scale = mean<-1, true>(x * x)
     return x / sqrt(scale + 1e-6) * g
 }
 
 with <block: Block>
-func attention(x: f32[...]): f32[...] {
+func attention(x: f32[...]) => f32[...] {
     let h = rmsnorm(x, block.g1)
     let q = h @ block.wq
     let k = h @ block.wk
@@ -51,20 +50,22 @@ func attention(x: f32[...]): f32[...] {
 }
 
 with <block: Block>
-func feed_forward(x: f32[...]): f32[...] {
+func feed_forward(x: f32[...]) => f32[...] {
     let h = rmsnorm(x, block.g2)
     return relu(h @ block.w1 + block.b1) @ block.w2 + block.b2 + x
 }
 
 with <block: Block>
-func logits(x: f32[...]): f32[...] { return feed_forward<block>(attention<block>(x)) }
+func logits(x: f32[...]) => f32[...] {
+    return feed_forward<block>(attention<block>(x))
+}
 
 with <block: Block>
-func loss(x: f32[...], labels: f32[...]): float {
+func loss(x: f32[...], labels: f32[...]) => float {
     return softmax_cross_entropy(logits<block>(x), int(labels))
 }
 
-func main(steps: int, lr: float): int sync {
+func main(steps: int, lr: float) => int sync {
     // Deterministic inputs and starting weights.
     let x = zeros::<f32>([4, 8]) + 0.01
     let labels = zeros::<f32>([4])
@@ -81,22 +82,18 @@ func main(steps: int, lr: float): int sync {
         b2: zeros::<f32>([8]) + 0.001
     }
     'perf transformer steps={} lr={}'->format<steps, lr>->println
-
+    
     let grad = with_grad(loss)
     let started = now()
     // The EMA of `w1`, updated after every step: one more tensor op on a tensor of the model.
-    let (trained, state, ema, done) = loop b = block, opt = adam_state(block), e = block.w1, step = 0
-        while step < steps
-        do {
-            let (value, gradient) = grad<b>(x, labels)
-            let next = adam(b, gradient, opt, lr)
-            let moved = e * 0.9 + next.0.w1 * 0.1
-            return (next.0, next.1, moved, step + 1)
-        }
+    let (trained, state, ema, done) = loop b = block, opt = adam_state(block), e = block.w1, step = 0 while step < steps do {
+        let (value, gradient) = grad<b>(x, labels)
+        let next = adam(b, gradient, opt, lr)
+        let moved = e * 0.9 + next.0.w1 * 0.1
+        return (next.0, next.1, moved, step + 1)
+    }
     let elapsed = now() - started
     
-        'perf transformer seconds={:.6f} ms_per_step={:.3f} ema={} logits={}'
-        ->format<elapsed, elapsed * 1000.0 / float(done), sum(ema), sum(trained.w1)>
-        ->println
+    'perf transformer seconds={:.6f} ms_per_step={:.3f} ema={} logits={}'->format<elapsed, elapsed * 1000.0 / float(done), sum(ema), sum(trained.w1)>->println
     return 0
 }

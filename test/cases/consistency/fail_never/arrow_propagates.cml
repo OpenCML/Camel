@@ -5,22 +5,24 @@
  * fallible position is the failed arm of that form.
  */
 
-func double(n: int): int { return n * 2 }
+func double(n: int) => int {
+    return n * 2
+}
 
-func failed(s: string): int! {
+func failed(s: string) => int! {
     return error('BadInput', 'not a number')
 }
 
-func show(r: int!): string {
+func show(r: int!) => string {
     return match r {
         case error e => e.kind
         case v => format<v>('{}')
     }
 }
 
-func main(): int sync {
-    println(21 -> double)
-    println(show(failed('x') -> double))
+func main() => int sync {
+    println(21->double)
+    println(show(failed('x')->double))
     println('end')
     return 0
 }

@@ -7,13 +7,13 @@
  * Reduced by test/tools/progen from seed 929 (generator version 1, all features).
  */
 
-func main(): int sync {
+func main() => int sync {
     if false then sync {
-        null;
+        null
     } else sync {
-        var v71 = float(0);
-        println('');
-        null;
-    };
-    return 0;
+        var v71 = float(0)
+        println('')
+        null
+    }
+    return 0
 }

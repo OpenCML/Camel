@@ -6,35 +6,35 @@
 // `sync` body, a nested loop, a body with an operator.
 
 // Three state components: the condition reads one of them, the body writes all three.
-func three(n: int): (int, int, int) {
+func three(n: int) => (int, int, int) {
     return loop i = 0, a = 0, b = 1 while i < n do (i + 1, a + i, b * 2)
 }
 
 // No round at all: the test stops the loop before the first one, and its value is the first state,
 // brought up to date from the components on the way out.
-func no_round(n: int): (int, int) {
+func no_round(n: int) => (int, int) {
     return loop i = n, acc = 0 while i < 0 do (i + 1, acc + 1)
 }
 
 // The condition reads one component and the body writes both.
-func split(n: int): (int, int) {
+func split(n: int) => (int, int) {
     return loop i = 0, total = 0 while i < n do (i + 1, total + i * 2)
 }
 
 // The division of the body is native code in the round (`markDivision`): the fault path of the
 // round is the JIT's own and the driver reports it at the instruction's origin.
-func fault(n: int): (int, int) {
+func fault(n: int) => (int, int) {
     return loop i = 0, acc = 0 while i < n do (i + 1, acc + 100 / (i - 2))
 }
 
 // The same loop called twice: each call runs its rounds in its own frame.
-func twice(n: int): int {
+func twice(n: int) => int {
     let (i, a, b) = three(n)
     let (j, c, d) = three(n + 1)
     return i + a + b + j + c + d
 }
 
-func main(): int sync {
+func main() => int sync {
     let (i, a, b) = three(4)
     println(i, a, b)
     let (x, y) = no_round(5)

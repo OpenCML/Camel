@@ -15,18 +15,18 @@ import { grad } from autodiff
 import { max, min } from tensor
 
 with <w: float>
-func high(): float {
+func high() => float {
     let xs: float[2, 2] = [[w, 4.0], [3.0, 2.0]]
     return max(xs)
 }
 
 with <w: float>
-func low(): float {
+func low() => float {
     let xs: float[2, 2] = [[w, 4.0], [3.0, 2.0]]
     return min(xs)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(high)<5.0>())
     println(grad(high)<3.0>())
     println(grad(low)<1.0>())

@@ -7,10 +7,12 @@
  * value is taken while the arms are built, because `rebindSsa` changes the binding where it stands
  * and would otherwise leave the last arm's value behind for this arm to pick up.
  */
-func main(): int {
-    var x = 7;
-    let c = 0;
-    if c > 0 then { x = 1 } else { }
-    let shown = println(x);
+func main() => int {
+    var x = 7
+    let c = 0
+    if c > 0 then {
+        x = 1
+    } else {}
+    let shown = println(x)
     return 0
 }

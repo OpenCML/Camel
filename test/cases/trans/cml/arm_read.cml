@@ -19,23 +19,23 @@
  *   int 0 3                 the other arm reads that same version, untouched
  */
 
-func report(tag: string, a: int, b: int): int sync {
+func report(tag: string, a: int, b: int) => int sync {
     println(tag, a, b)
     return 0
 }
 
-func picked(c: bool): int sync {
+func picked(c: bool) => int sync {
     var t = 3
     if c then {
         let before = t
         t += 1
-        report("int", before, t)
+        report('int', before, t)
     } else {
-        report("int", 0, t)
+        report('int', 0, t)
     }
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     return picked(true) + picked(false)
 }

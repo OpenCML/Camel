@@ -6,7 +6,7 @@ import { Rule, rewrite } from rewrite
 
 rule drop_one(x: int) { x + 1 => x }
 
-export func discard::<F>(p: F): F! sync {
+export func discard::<F>(p: F) => F! sync {
     let rules: Rule[] = [drop_one]
     let tried = p->rewrite<rules> !! p
     return p

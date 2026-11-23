@@ -1,9 +1,10 @@
 import { upload, download, run_preferred_resident } from tiles
-func cpu(x: float): float sync {
-    println("cpu fault once")
+
+func cpu(x: float) => float sync {
+    println('cpu fault once')
     return 1.0 / x
 }
-func main(): int sync {
+func main() => int sync {
     println(download(run_preferred_resident<cpu>(upload(0.0))))
     return 0
 }

@@ -5,11 +5,15 @@
  */
 
 @kernelish(reassociate)
-func b(x: float): float { return x * 2.0 }
+func b(x: float) => float {
+    return x * 2.0
+}
 
 @numeric()
-func c(x: float): float { return x * 2.0 }
+func c(x: float) => float {
+    return x * 2.0
+}
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

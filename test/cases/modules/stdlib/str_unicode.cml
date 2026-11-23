@@ -5,14 +5,14 @@
  * (DESIGN-QUESTION(param-style)).
  */
 
-import { split, trim, trim_start, trim_end, to_upper, to_lower, replace, index_of, starts_with, ends_with, repeat } from str
 import { encode, decode, from_array, to_array } from bytes
+import { split, trim, trim_start, trim_end, to_upper, to_lower, replace, index_of, starts_with, ends_with, repeat } from str
 
-func show(label: string, s: string): void sync {
+func show(label: string, s: string) => void sync {
     println(label + ' [' + s + '] ' + string(len(s)))
 }
 
-func main(): int sync {
+func main() => int sync {
     // split
     println('a,b,c'->split<','>)
     println('a,,c,'->split<','>)
@@ -22,7 +22,7 @@ func main(): int sync {
     println('aaa'->split<'aa'>)
     println('é,ü'->split<','>)
     println(' x , y '->trim->split<' , '>)
-
+    
     // trim: ASCII white space only
     show('trim', trim('  \t hi there \n\r '))
     show('trim_start', trim_start('  hi  '))
@@ -32,14 +32,14 @@ func main(): int sync {
     show('trim none', trim('hi'))
     // U+00A0 (no-break space) is not ASCII white space and stays
     show('trim nbsp', trim('  x  '))
-
+    
     // case: ASCII letters only, other characters are kept
     show('upper', to_upper('hello, World 123'))
     show('lower', to_lower('HELLO, World 123'))
     show('upper non-ascii', to_upper('héllo ünï straße'))
     show('lower non-ascii', to_lower('HÉLLO ÜNÏ'))
     show('upper empty', to_upper(''))
-
+    
     // replace: every occurrence, left to right, not overlapping
     show('replace', 'a-b-c'->replace<'-', '+'>)
     show('replace none', 'abc'->replace<'x', 'y'>)
@@ -48,12 +48,12 @@ func main(): int sync {
     show('replace overlap', 'aaaa'->replace<'aa', 'b'>)
     show('replace empty subject', ''->replace<'a', 'b'>)
     show('replace non-ascii', 'héllo'->replace<'é', 'e'>)
-
+    
     // index_of: the (code point) index of the first occurrence, or null
     println('hello'->index_of<'l'> ?? -1, 'hello'->index_of<'lo'> ?? -1, 'hello'->index_of<'z'> ?? -1)
     println('hello'->index_of<''> ?? -1, ''->index_of<''> ?? -1, ''->index_of<'a'> ?? -1)
     println('héllo'->index_of<'l'> ?? -1, 'hello'->index_of<'hello!'> ?? -1)
-
+    
     // a slice s[a..b] counts code points
     show('slice', 'hello'[1..4])
     show('slice all', 'hello'[0..5])
@@ -62,11 +62,11 @@ func main(): int sync {
     show('slice one char of é', 'é'[0..1]->encode->len->string)
     show('slice non-ascii', 'h€llo'[1..3])
     show('slice 4-byte', '😀a😀'[1..3])
-
+    
     // starts_with / ends_with
     println('hello'->starts_with<'he'>, 'hello'->starts_with<''>, 'hello'->starts_with<'hello!'>, ''->starts_with<''>)
     println('hello'->ends_with<'lo'>, 'hello'->ends_with<''>, 'hello'->ends_with<'xhello'>, 'hello'->ends_with<'he'>)
-
+    
     // repeat
     show('repeat', 'ab'->repeat<3>)
     show('repeat zero', 'ab'->repeat<0>)
@@ -74,7 +74,7 @@ func main(): int sync {
     show('repeat negative', 'ab'->repeat<-1>)
     show('replace empty old', 'ab'->replace<'', '-'>)
     println('split empty sep', 'héy'->split<''>)
-
+    
     // the UTF-8 bytes of a string, and back (bytes::encode / bytes::decode)
     println(to_array(encode('hé')), to_array(encode('')), len(encode('€')))
     show('decode', decode(from_array([104, 105])) !! 'bad')
@@ -84,7 +84,7 @@ func main(): int sync {
     println(len(decode(from_array([104, 0, 105])) !! 'bad'), to_array(encode(decode(from_array([104, 0, 105])) !! 'bad')))
     // the bytes of a character
     println(decode(from_array([228, 184, 173])) !! 'bad', len(decode(from_array([228, 184, 173])) !! 'bad'))
-
+    
     // indexing: the character at the index, as a string (design principles 11.1)
     let s = 'hello'
     println(s[0], s[4], len(s[1]))

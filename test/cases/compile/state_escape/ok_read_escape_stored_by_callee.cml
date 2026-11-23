@@ -16,19 +16,21 @@
  * `acc`.
  */
 
-func keep(f: (x: int) => int): ((x: int) => int, int) {
+func keep(f: (x: int) => int) => ((x: int) => int, int) {
     return (f, 0)
 }
 
-func make(base: int): int sync {
+func make(base: int) => int sync {
     var acc = 0
     acc = base * 3
-    let add = func (x: int) => int { acc + x }
+    let add = func (x: int) => int {
+        acc + x
+    }
     let (kept, n) = keep(add)
     return kept(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(make(7))
     return 0
 }

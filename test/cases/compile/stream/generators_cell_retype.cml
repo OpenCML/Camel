@@ -8,14 +8,14 @@
  * write nor invents a second cell of another type for it.
  */
 
-func mixed(): int.. sync {
+func mixed() => int.. sync {
     var x = 1
     yield x
-    x = "text"
+    x = 'text'
     yield x
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = mixed()
     return 0
 }

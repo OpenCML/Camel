@@ -8,4 +8,4 @@
 import bytes
 
 #op('bytes:to_array')
-export func to_array(content: Bytes): int[]
+export func to_array(content: Bytes) => int[]

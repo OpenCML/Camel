@@ -6,15 +6,15 @@
 
 var counter = 0
 
-func bump(): bool sync {
+func bump() => bool sync {
     counter = counter + 1
     return counter > 0
 }
 
-func bad(x: int): int when bump() {
+func bad(x: int) => int when bump() {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }

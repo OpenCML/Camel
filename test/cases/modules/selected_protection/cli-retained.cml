@@ -3,5 +3,9 @@
 
 // A demanded print that a selected multiply-zero rule can discard.
 
-func probe(a: int): int { return println(a) * 0 }
-func main(): int { return println(probe(41)) }
+func probe(a: int) => int {
+    return println(a) * 0
+}
+func main() => int {
+    return println(probe(41))
+}

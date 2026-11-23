@@ -5,13 +5,15 @@
  * located MaxRecursionDepthExceeded report.
  */
 
-func add(a: int, b: int): int { a + b }
+func add(a: int, b: int) => int {
+    a + b
+}
 
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(add(1, 2))
     println(depth(1000))
     println('not reached')

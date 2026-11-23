@@ -6,7 +6,7 @@
 
 import { sleep, user_name, cpu_count } from process
 
-func main(): int sync {
+func main() => int sync {
     let user: string = user_name() !! ''
     let cores: int = cpu_count()
     sleep(0.001)

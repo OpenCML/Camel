@@ -3,17 +3,22 @@
  */
 
 with <k: int>
-func scale(x: int): int { return x * k }
-
-with <lo: int, hi: int>
-func clamp(x: int): int {
-    return if x < lo then lo else if x > hi then hi else x
+func scale(x: int) => int {
+    return x * k
 }
 
-func main(): int sync {
+with <lo: int, hi: int>
+func clamp(x: int) => int {
+    return if x < lo then lo
+    else if x > hi then hi else x
+}
+
+func main() => int sync {
     println(scale<3>(7))
     println(7->scale<3>)
     println(7->scale<3>->clamp<0, 10>)
-    println(((-2)..3)->map<func (x: int) => int { x->scale<4>->clamp<-3, 3> }>)
+    println(((-2) .. 3)->map<func (x: int) => int {
+        x->scale<4>->clamp<-3, 3>
+    }>)
     return 0
 }

@@ -8,11 +8,11 @@
 // compile. The refusals are the other half of the same rule and each keeps its own case --
 // `array_literal_length_mismatch` (a cast that states the wrong extent) and
 // `array_literal_in_return_length_mismatch` (a return that states the wrong extent).
-func take3(x: float[3]): void {
+func take3(x: float[3]) => void {
     println(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let byCast = [1.5, 2.5, 2.5] as float[3]
     let byDeclaration: float[3] = [1.5, 2.5, 2.5]
     take3([1.5, 2.5, 2.5])

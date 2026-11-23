@@ -2,6 +2,6 @@
 /// library below, so the library's own `import graph` takes this file and not stdlib/graph.cmo,
 /// silently: the own-directory rule comes before the standard library (design principles 10.2).
 
-export func answer(): int {
+export func answer() => int {
     return 41
 }

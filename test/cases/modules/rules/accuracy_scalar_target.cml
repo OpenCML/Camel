@@ -11,34 +11,34 @@
 import { exp, expm1, log1p, log } from math
 
 #[refine_accuracy]
-func naive_log1p(x: float): float {
+func naive_log1p(x: float) => float {
     return log(1.0 + x)
 }
 
 #[refine_accuracy]
-func naive_expm1(x: float): float {
+func naive_expm1(x: float) => float {
     return exp(x) - 1.0
 }
 
 #[refine_accuracy]
-func naive_log1p32(x: f32): f32 {
+func naive_log1p32(x: f32) => f32 {
     return log(1.0 + x)
 }
 
 #[refine_accuracy]
-func naive_expm1_32(x: f32): f32 {
+func naive_expm1_32(x: f32) => f32 {
     return exp(x) - 1.0
 }
 
-func guarded_log(x: float): float {
+func guarded_log(x: float) => float {
     return log(2.0 + x)
 }
 
-func guarded_exp(x: float): float {
+func guarded_exp(x: float) => float {
     return exp(x) - 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let tiny = 1e-300
     let near = -1.0 + 1e-15
     let tiny32: f32 = 1e-8

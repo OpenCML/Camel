@@ -4,7 +4,9 @@
  * 5.5).
  */
 
-func main(): int sync {
-    let f = func (x: T) { x }
+func main() => int sync {
+    let f = func (x: T) {
+        x
+    }
     return 0
 }

@@ -12,11 +12,11 @@
 
 import { Json, decode, get } from json
 
-func report(j: Json): int sync {
+func report(j: Json) => int sync {
     println(get(j, key: 'a'))
     return 0
 }
 
-func main(): int sync {
-    return decode('{"a": 7}') -> report !! 1
+func main() => int sync {
+    return decode('{"a": 7}')->report !! 1
 }

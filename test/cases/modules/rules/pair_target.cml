@@ -8,20 +8,20 @@
  * assumes one type per value).
  */
 
-func i64_pair(x: int, y: int): int {
+func i64_pair(x: int, y: int) => int {
     return x + y - y
 }
 
-func i32_pair(x: i32, y: i32): i32 {
+func i32_pair(x: i32, y: i32) => i32 {
     return x + y - y
 }
 
 /// A value no instance of the pair law can hold: `-` takes no string.
-func greet(): string {
+func greet() => string {
     return 'pair law'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     println(i64_pair(3, 4), i32_pair(5, 6))
     return 0

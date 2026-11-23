@@ -3,6 +3,6 @@
 
 tag label(x: int) on func
 
-func main(): int sync {
+func main() => int sync {
     return label(1)
 }

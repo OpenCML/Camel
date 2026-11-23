@@ -5,8 +5,7 @@
  */
 import tensor
 
-
-func main(): int sync {
-    println("camel-ran-marker")
+func main() => int sync {
+    println('camel-ran-marker')
     return 0
 }

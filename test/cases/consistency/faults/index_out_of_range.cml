@@ -2,9 +2,11 @@
  * Reading past the end of an array inside a function: IndexOutOfRange at the bracket.
  */
 
-func at(xs: int[], i: int): int { return xs[i] }
+func at(xs: int[], i: int) => int {
+    return xs[i]
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = [10, 20, 30]
     println(at(xs, 2))
     println(at(xs, 3))

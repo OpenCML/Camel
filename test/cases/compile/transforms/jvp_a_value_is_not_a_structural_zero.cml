@@ -20,19 +20,19 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func product(x: float, y: float): float {
+func product(x: float, y: float) => float {
     return x * y
 }
 
-func halfProduct(x: bf16, y: bf16): bf16 {
+func halfProduct(x: bf16, y: bf16) => bf16 {
     return x * y
 }
 
-func power(x: float, w: float): float {
+func power(x: float, w: float) => float {
     return x ^ w
 }
 
-func main(): int sync {
+func main() => int sync {
     let (productValue, productTangent) = jvp(product)(3.0, 2.0, 1.0, 1.0)
     `product  value={} tangent={}`->format<productValue, productTangent>->println
     let (halfValue, halfTangent) = jvp(halfProduct)(3.0, 2.0, 1.0, 1.0)

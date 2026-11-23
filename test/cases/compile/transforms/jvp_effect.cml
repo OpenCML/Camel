@@ -8,12 +8,12 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func g(x: float): float sync {
+func g(x: float) => float sync {
     println(x)
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g(3.0))
     let (value, tangent) = jvp(g)(3.0, 1.0)
     println(value)

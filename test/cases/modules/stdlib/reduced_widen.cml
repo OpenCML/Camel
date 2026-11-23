@@ -41,15 +41,15 @@
  * element type's overflow rule (infinity, not saturation) is what answers.
  */
 
-import { to_bytes } from tensor
 import { to_array } from bytes
+import { to_bytes } from tensor
 
-func bitsOfF32(value: f32): int[] {
+func bitsOfF32(value: f32) => int[] {
     let one: f32[] = [value]
     return to_array(to_bytes(one))
 }
 
-func main(): int sync {
+func main() => int sync {
     // ---- f16 to f32, at both ends of the range and in the subnormals ----
     let largest: f16 = 65504.0
     println(bitsOfF32(f32(largest)))
@@ -68,14 +68,14 @@ func main(): int sync {
     let f16Max: f16 = 65504.0
     let infinite: f16 = f16Max + f16Max
     println(bitsOfF32(f32(infinite)))
-
+    
     // the element that was stored, not the decimal that was written
     let tenth: f16 = 0.1
     println(bitsOfF32(f32(tenth)), bitsOfF32(f32(0.1)), f32(tenth) == f32(0.1))
-
+    
     // exact against f64, and the round trip back into the element
     println(f32(largest) == f32(f64(largest)), f16(f32(third)) == third)
-
+    
     // ---- bf16 to f32 ----
     let bfLargest: bf16 = 3.3895314e38
     println(bitsOfF32(f32(bfLargest)))
@@ -83,7 +83,7 @@ func main(): int sync {
     println(bitsOfF32(f32(bfThird)))
     let bfTenth: bf16 = 0.1
     println(bitsOfF32(f32(bfTenth)), bitsOfF32(f32(0.1)), f32(bfTenth) == f32(0.1))
-
+    
     // ---- the widened value is an f32: two of them are eight bytes ----
     let two: f32[] = [f32(third), f32(bfThird)]
     println(len(to_bytes(two)))

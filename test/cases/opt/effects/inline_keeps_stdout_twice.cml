@@ -4,12 +4,12 @@
 // pass invented.
 import { println } from std
 
-func noisy(): int sync {
-    println("noisy")
+func noisy() => int sync {
+    println('noisy')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = noisy() + 1
     let b = noisy() + 2
     println(a)

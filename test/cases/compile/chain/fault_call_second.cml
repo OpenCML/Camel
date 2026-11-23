@@ -6,11 +6,11 @@
  *
  * Run: camel test/cases/compile/chain/fault_call_second.cml
  */
-func divide(x: int): int {
+func divide(x: int) => int {
     return 100 / x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(2)
     let a = divide(2)
     return a

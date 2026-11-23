@@ -4,10 +4,10 @@
  */
 import { Txn } from graph
 
-func same::<F>(t: Txn<F>): Txn<F> {
+func same::<F>(t: Txn<F>) => Txn<F> {
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

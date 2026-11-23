@@ -5,16 +5,32 @@
  *  5.9; item 2: inference does not change overload resolution).
  */
 
-func over(f: (x: int) => int, v: int): int { return f(v) + 1 }
+func over(f: (x: int) => int, v: int) => int {
+    return f(v) + 1
+}
 
-func over(f: (x: float) => float, v: float): float { return f(v) + 0.5 }
+func over(f: (x: float) => float, v: float) => float {
+    return f(v) + 0.5
+}
 
-func pick(f: (x: int) => int, v: int): int { return f(v) }
+func pick(f: (x: int) => int, v: int) => int {
+    return f(v)
+}
 
-func pick(f: (x: int) => int, v: string): string { return 'string' }
+func pick(f: (x: int) => int, v: string) => string {
+    return 'string'
+}
 
-func main(): int sync {
-    println('over', over(func (x: int) { x * 2 }, 20), over(func (x: float) { x * 2.0 }, 1.0))
-    println('pick', pick(func (x: int) { x + 1 }, 41), pick(func (x: int) { x + 1 }, 'a'))
+func main() => int sync {
+    println('over', over(func (x: int) {
+        x * 2
+    }, 20), over(func (x: float) {
+        x * 2.0
+    }, 1.0))
+    println('pick', pick(func (x: int) {
+        x + 1
+    }, 41), pick(func (x: int) {
+        x + 1
+    }, 'a'))
     return 0
 }

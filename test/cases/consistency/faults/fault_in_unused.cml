@@ -2,12 +2,12 @@
  * A faulting expression whose result nothing uses, outside a sync block, never runs: no fault.
  */
 
-func careless(z: int): int {
+func careless(z: int) => int {
     let unused = 10 / z
     return z + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(careless(0))
     return 0
 }

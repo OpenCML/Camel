@@ -18,11 +18,11 @@
 //
 // The constants are all different on purpose: cse merges equal constants, and rewriting walk
 // itself would change its revision and invalidate every entry made for it.
-func spin(n: int): int {
+func spin(n: int) => int {
     return if n <= 0 then 1 else spin(n - 1)
 }
 
-func walk(n: int, k: int): int {
+func walk(n: int, k: int) => int {
     let a = k % 97
     let b = a * 3 + 10
     let c = b % 89
@@ -34,11 +34,11 @@ func walk(n: int, k: int): int {
 // tick's copies are inlined into main in the round that makes them, so the commit drops their
 // table entries: the table is a cache, not an owner, and the count must not grow with copies
 // nothing reaches any more.
-func tick(k: int): int {
+func tick(k: int) => int {
     return k * 7 + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     var k = 5
     let p = walk(6, k)
     let q = walk(4, k)

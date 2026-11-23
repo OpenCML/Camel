@@ -23,8 +23,8 @@ import { encode, decode } from bytes
 /// The whole content of a file, as text.
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason; error value `EncodingError` when the content is not valid UTF-8
 /// @example 'notes.txt'->read_text !! ''    // the text of the file, or '' when it cannot be read
-export func read_text(path: string): string! {
-    return path->read_bytes -> decode
+export func read_text(path: string) => string! {
+    return path->read_bytes->decode
 }
 
 /// The whole content of a file, every byte preserved.
@@ -32,7 +32,7 @@ export func read_text(path: string): string! {
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason
 /// @example-fragment the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example 'pixels.bin'->read_bytes !! encode('')    // the bytes of the file
-export func read_bytes(path: string): Bytes!
+export func read_bytes(path: string) => Bytes!
 
 /// Up to size bytes of a file from byte offset on; fewer at the end of the file, none at or past
 /// it. Reading a large file piece by piece is `read_chunk` with a growing offset.
@@ -42,7 +42,7 @@ export func read_bytes(path: string): Bytes!
 /// @example 'notes.txt'->read_chunk<0, 16> !! encode('')    // the first 16 bytes
 #op('fs:read_chunk')
 with <offset: int, size: int>
-export func read_chunk(path: string): Bytes! panic
+export func read_chunk(path: string) => Bytes! panic
 
 // ---- writing ----
 
@@ -53,7 +53,7 @@ export func read_chunk(path: string): Bytes! panic
 /// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included)
 /// @example 'done'->write_text<'out/log.txt'>
 with <path: string, atomic: bool = false>
-export func write_text(content: string): void! {
+export func write_text(content: string) => void! {
     return content->encode->write_bytes<path, atomic>
 }
 
@@ -64,14 +64,14 @@ export func write_text(content: string): void! {
 /// @example-fragment the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example encode('abc')->write_bytes<'payload.bin', atomic: true>
 with <path: string, atomic: bool = false>
-export func write_bytes(content: Bytes): void!
+export func write_bytes(content: Bytes) => void!
 
 /// Adds a text to the end of the file at path, creating the file and its parent directories when
 /// they are not there.
 /// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason
 /// @example 'one more line\n'->append_text<'out/log.txt'>
 with <path: string>
-export func append_text(content: string): void! {
+export func append_text(content: string) => void! {
     return content->encode->append_bytes<path>
 }
 
@@ -81,7 +81,7 @@ export func append_text(content: string): void! {
 /// @example-fragment the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example encode('abc')->append_bytes<'payload.bin'>
 with <path: string>
-export func append_bytes(content: Bytes): void!
+export func append_bytes(content: Bytes) => void!
 
 // ---- questions about a path ----
 
@@ -89,30 +89,30 @@ export func append_bytes(content: Bytes): void!
 /// be searched) is reported as not existing.
 /// @effect reads the file system
 /// @example 'notes.txt'->exists    // true or false
-export func exists(path: string): bool
+export func exists(path: string) => bool
 
 /// Whether the path names a regular file.
 /// @effect reads the file system
 /// @example 'notes.txt'->is_file    // true or false
-export func is_file(path: string): bool
+export func is_file(path: string) => bool
 
 /// Whether the path names a directory.
 /// @effect reads the file system
 /// @example 'out'->is_dir    // true or false
-export func is_dir(path: string): bool
+export func is_dir(path: string) => bool
 
 /// The size of a file in bytes.
 /// @effect reads the file system
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the question; error value `IOError` otherwise
 /// @example 'notes.txt'->file_size !! 0    // 1024
-export func file_size(path: string): int!
+export func file_size(path: string) => int!
 
 /// The names of what a directory holds, without the path in front of them, in the byte order of
 /// the names (so the order is the same on every platform). `.` and `..` are not listed.
 /// @effect reads the file system
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the listing; error value `IOError` when the path is not a directory
 /// @example 'out'->list_dir !! []    // ['log.txt', 'today']
-export func list_dir(path: string): string[]!
+export func list_dir(path: string) => string[]!
 
 // ---- creating and removing ----
 
@@ -120,25 +120,25 @@ export func list_dir(path: string): string[]!
 /// @effect changes the file system
 /// @fails error value `AlreadyExists` when something exists at the path; error value `NotFound` when the parent directory does not exist; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise
 /// @example 'out'->mkdir
-export func mkdir(path: string): void!
+export func mkdir(path: string) => void!
 
 /// Creates a directory and every missing parent. A directory that is already there is not an
 /// error, so the call can be repeated.
 /// @effect changes the file system
 /// @fails error value `AlreadyExists` when a file, not a directory, exists at the path; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise
 /// @example 'out/logs/today'->mkdirs
-export func mkdirs(path: string): void!
+export func mkdirs(path: string) => void!
 
 /// Removes a file or a symbolic link; a directory, even an empty one, is an error (use
 /// `remove_dir`). Removing a path that is not there is an error, not a silent success.
 /// @effect removes a file
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a directory or the removal fails for another reason
 /// @example 'notes.txt'->remove
-export func remove(path: string): void!
+export func remove(path: string) => void!
 
 /// Removes one empty directory. A directory that is not empty is an error, not a recursive
 /// delete; a file or a symbolic link is an error too.
 /// @effect removes a directory
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a file, a symbolic link, or a directory that is not empty
 /// @example 'out/old'->remove_dir
-export func remove_dir(path: string): void!
+export func remove_dir(path: string) => void!

@@ -1,8 +1,6 @@
-
-
 import { max } from array
 
-func main(): int sync {
+func main() => int sync {
     let xs: int[] = []
     println('before')
     println(max(xs))

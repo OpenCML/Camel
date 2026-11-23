@@ -33,16 +33,16 @@
 // and the same sentence holds on both backends: `zeros=true misread=false` is the forward law, and
 // `zeros=false misread=true` is the transposition's shape wearing the forward law's name.
 import rulesets.jvp
-import { jvp } from transforms
 import { abs, log_softmax, sum } from tensor
+import { jvp } from transforms
 
 /// The operator itself, so the tangent is the jacobian applied to `dx` and not a scalar functional of
 /// it: a `sum(...)` in between would hide which element answered what.
-func axial(x: float[...]): float[...] {
+func axial(x: float[...]) => float[...] {
     return log_softmax<0>(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1.0, 2.0, 3.0] as float[]
     let dxs = [1.0, 1.0, 1.0] as float[]
     let (value, tangent) = jvp(axial)(xs, dxs)

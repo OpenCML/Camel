@@ -30,47 +30,40 @@
 //
 // The rounds are folded into two arrays and printed once, because an effect written inside a `loop`
 // body does not reach the output (measured here: only the line after the loop printed).
-import { matmul, sum } from tensor
-import { grad } from vjp
 import { with_grad } from autodiff
 import { abs, max } from math
+import { matmul, sum } from tensor
+import { grad } from vjp
 
 // The model and its loss, with the weight where a model keeps it.
 with <w: float[2, 2]>
-func loss(x: float[2, 2], t: float[2, 2]): float {
+func loss(x: float[2, 2], t: float[2, 2]) => float {
     let e = matmul(x, w) - t
     return 0.5 * sum(e * e)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
     let w0 = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
-
+    
     // The library's leg: the gradient function of the same loss, read once outside the loop.
     let library_step = grad(loss)
-
-    let (_done, _library_weight, _engine_weight, library_curve, engine_curve, worst) =
-        loop round = 0,
-             library_weight = w0,
-             engine_weight = w0,
-             library_curve = [] as float[],
-             engine_curve = [] as float[],
-             worst = 0.0
-        while round < 12 do {
-            let library_gradient = library_step<library_weight>(x, t)
-            let library_loss = loss<library_weight>(x, t)
-            let (engine_loss, engine_gradient) = with_grad(loss)<engine_weight>(x, t)
-            (
-                round + 1,
-                library_weight - library_gradient * 0.03125,
-                engine_weight - engine_gradient * 0.03125,
-                library_curve->append<library_loss>,
-                engine_curve->append<engine_loss>,
-                max(worst, abs(library_loss - engine_loss))
-            )
-        }
-
+    
+    let (_done, _library_weight, _engine_weight, library_curve, engine_curve, worst) = loop round = 0, library_weight = w0, engine_weight = w0, library_curve = [] as float[], engine_curve = [] as float[], worst = 0.0 while round < 12 do {
+        let library_gradient = library_step<library_weight>(x, t)
+        let library_loss = loss<library_weight>(x, t)
+        let (engine_loss, engine_gradient) = with_grad(loss)<engine_weight>(x, t)
+        (
+            round + 1,
+            library_weight - library_gradient * 0.03125,
+            engine_weight - engine_gradient * 0.03125,
+            library_curve->append<library_loss>,
+            engine_curve->append<engine_loss>,
+            max(worst, abs(library_loss - engine_loss))
+        )
+    }
+    
     `s2 curve library={}`->format<library_curve>->println
     `s2 curve engine={}`->format<engine_curve>->println
     `s2 curve_max_abs_diff={:.12e}`->format<worst>->println

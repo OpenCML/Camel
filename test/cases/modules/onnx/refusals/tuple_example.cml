@@ -6,10 +6,12 @@
  * value that depends on the model input is used where a tensor is expected").
  */
 
-import { reshape } from tensor
 import { export_model } from onnx
+import { reshape } from tensor
 
-func main(): void! sync {
+func main() => void! sync {
     let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[])
-    export_model<out: 'tmp/test/onnx/refusal_tuple_example.onnx'>(func (x: f32[2, 3]) => f32[...] { x * 2.0 }, (ex,))
+    export_model<out: 'tmp/test/onnx/refusal_tuple_example.onnx'>(func (x: f32[2, 3]) => f32[...] {
+        x * 2.0
+    }, (ex,))
 }

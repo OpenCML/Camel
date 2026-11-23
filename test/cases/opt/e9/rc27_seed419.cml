@@ -1,12 +1,12 @@
-func q21(a22: int, a23: bool): bool sync {
-    println('');
-    return false;
+func q21(a22: int, a23: bool) => bool sync {
+    println('')
+    return false
 }
 
-func main(): int sync {
-    let o44: int? = 0;
-    let n50 = o44 != null;
-    q21(0, false);
-    var v52 = if o44 == null then 0 else 100;
-    return 0;
+func main() => int sync {
+    let o44: int? = 0
+    let n50 = o44 != null
+    q21(0, false)
+    var v52 = if o44 == null then 0 else 100
+    return 0
 }

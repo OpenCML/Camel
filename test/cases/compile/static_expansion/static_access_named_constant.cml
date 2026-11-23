@@ -6,12 +6,12 @@
  */
 
 func first_of::<T>(t: T) {
-    let first = ( static for n, _ in fields T do n ).[0]
+    let first = (static for n, _ in fields T do n).[0]
     return t.[first]
 }
 
-func main(): int sync {
-    println(first_of({a: 1, b: 2}))
+func main() => int sync {
+    println(first_of({ a: 1, b: 2 }))
     println(first_of((3, 4)))
     return 0
 }

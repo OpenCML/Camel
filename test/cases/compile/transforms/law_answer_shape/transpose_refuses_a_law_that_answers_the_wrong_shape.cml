@@ -35,11 +35,11 @@ import { transpose } from transforms
 
 /// `x + w` on a `float[2, 3]` and a `float[3]`: one operator, whose law answers the wrong shape for
 /// the first operand.
-func broadcast_sum(x: float[2, 3], w: float[3]): float[...] {
+func broadcast_sum(x: float[2, 3], w: float[3]) => float[...] {
     return x + w
 }
 
-func main(): int sync {
+func main() => int sync {
     let start = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] as float[2, 3]
     // The cotangent of the result: two rows of ones, the seed `Σ` would hand a sum.
     let (dx, dw) = transpose(broadcast_sum)(start)

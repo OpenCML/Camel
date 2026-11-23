@@ -7,11 +7,11 @@
 // number it is, because a rank-zero array is not a separate type (there is nothing to convert and
 // no array to make).
 
-func rank(v: f32[...]): int {
+func rank(v: f32[...]) => int {
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let scalar: f32 = 2.5
     println(rank(scalar))
     let row: f32[3] = [1.0, 2.0, 3.0]

@@ -6,17 +6,17 @@
 
 let two = 2
 let four = two + two
-func seven(): int {
+func seven() => int {
     return 7
 }
 let computed = seven()
 let total = two + four + computed
 
-func scaled(x: int): int {
+func scaled(x: int) => int {
     return x * two
 }
 
-export func show::<F>(p: F): F! sync {
+export func show::<F>(p: F) => F! sync {
     println(two, four, computed, total)
     println(scaled(3))
     return p

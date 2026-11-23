@@ -2,9 +2,11 @@
  * int(' 7'): blanks are not part of a number (it used to give 7).
  */
 
-func conv(s: string): int { return int(s) }
+func conv(s: string) => int {
+    return int(s)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(conv('7'))
     println(conv(' 7'))
     println('not reached')

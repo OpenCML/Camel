@@ -19,14 +19,14 @@
  * expression and is one the fold pass leaves alone.
  */
 
-import { get_env } from env
 import { sum } from array
+import { get_env } from env
 
-func grow(xs: f32[n], k: int): f32 {
-    return if k <= 0 then sum(xs) else grow(concat(xs, xs[0 .. 1]), k - 1)
+func grow(xs: f32[n], k: int) => f32 {
+    return if k <= 0 then sum(xs) else grow(concat(xs, xs[0..1]), k - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grow([1.0, 2.0], int(get_env('H476_GROW_DEPTH') ?? '')))
     return 0
 }

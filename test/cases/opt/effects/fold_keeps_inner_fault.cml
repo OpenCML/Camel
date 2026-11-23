@@ -16,7 +16,7 @@
  * wait that keeps the division is the control edge the pruned branch's residue leaves behind.
  */
 
-func main(): int {
+func main() => int {
     var z = 0
     let x2 = 3
     return (if ((if (1 / z > 0) then x2 else 3) > 3) then x2 else println(4))

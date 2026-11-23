@@ -8,24 +8,24 @@
 // A defaulted `with` parameter is omitted at the call, or given another value by position or
 // by name. The parameter a call leaves out takes the declaration's value.
 with <rounds: int = 8, strict: bool = false>
-func repeat(x: int): int {
+func repeat(x: int) => int {
     return if strict then x * rounds else x + rounds
 }
 
 // The default is a constant expression, computed where the declaration is (2 + 3 = 5), not at
 // each call.
 with <scale: int = 2 + 3>
-func scaled(x: int): int {
+func scaled(x: int) => int {
     return x * scale
 }
 
 // A generic declaration's default is the declaration's too: every instance takes it.
 with <n: int = 3>
-func gen::<T>(x: T): int {
+func gen::<T>(x: T) => int {
     return n
 }
 
-func main(): int sync {
+func main() => int sync {
     // Both defaults.
     println(repeat(10))
     // Both overridden by position: 10 * 2.

@@ -2,7 +2,7 @@
 // the pass; the libraries it declares definitions from are next to this file.
 import { reshape, softmax } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(softmax(reshape<[2]>([1.0, 2.0])))
     return 0
 }

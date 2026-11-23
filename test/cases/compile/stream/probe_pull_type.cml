@@ -5,21 +5,23 @@
  * out of a declared position, where the compiler names it.
  */
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func probe(s: int..): int {
+func probe(s: int..) => int {
     let pull = s as (() => (int, int..)?)
     let pulled = pull()
     let wrong: int = pulled
     return wrong
 }
 
-func main(): int sync {
+func main() => int sync {
     return probe(count(1))
 }

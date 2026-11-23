@@ -1,14 +1,14 @@
 namespace util {
-    func id::<T>(x: T): T {
+    func id::<T>(x: T) => T {
         return x
     }
     type Pair<T> = (T, T)
-    func dup::<T>(x: T): util::Pair<T> {
+    func dup::<T>(x: T) => util::Pair<T> {
         return (util::id(x), x)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(util::id(3))
     println(util::dup('s'))
     let p: util::Pair<int> = (1, 2)

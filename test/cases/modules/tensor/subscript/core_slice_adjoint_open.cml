@@ -14,15 +14,15 @@
  * of the wrong shape, or the value's element type is lost on the way back.
  */
 
-import { sum } from tensor
 import { grad } from autodiff
+import { sum } from tensor
 
 with <x: f32[]>
-func probe(): float {
+func probe() => float {
     return float(sum(x[1..4]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]
     let g = grad(probe)<x>()
     'core_slice_adjoint_open value={:.1f} grad_sum={:.1f}'->format<probe<x>(), sum(g)>->println

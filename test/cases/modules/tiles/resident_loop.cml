@@ -7,26 +7,26 @@
 import { reshape, sum } from tensor
 
 #gpu
-func twice(a: f32[2]): f32[2] sync {
+func twice(a: f32[2]) => f32[2] sync {
     return a * 2.0
 }
 
 #gpu
-func step(x: f32[2]): f32[2] sync {
+func step(x: f32[2]) => f32[2] sync {
     let y = loop a = x for k in [1, 2] do a + a
     return twice(y) + y
 }
 
-func twice_host(a: f32[2]): f32[2] sync {
+func twice_host(a: f32[2]) => f32[2] sync {
     return a * 2.0
 }
 
-func step_host(x: f32[2]): f32[2] sync {
+func step_host(x: f32[2]) => f32[2] sync {
     let y = loop a = x for k in [1, 2] do a + a
     return twice_host(y) + y
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(sum(step(x)))
     println(sum(step_host(x)))

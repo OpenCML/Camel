@@ -2,7 +2,7 @@
 // declares and builds the whole import closure, in import order (item 1).
 import { six } from chainlib
 
-export func show::<F>(p: F): F! sync {
+export func show::<F>(p: F) => F! sync {
     println(six())
     return p
 }

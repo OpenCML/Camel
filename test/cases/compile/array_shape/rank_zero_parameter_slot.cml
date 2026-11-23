@@ -6,11 +6,11 @@
 // Before that conversion (`619eedb6c`) this crashed as `show` did; after it (`cae413dbf`) the same
 // program prints the value it was given, and the four slots print the same two lines.
 
-func elem(v: f32[...]): f32 {
+func elem(v: f32[...]) => f32 {
     return v
 }
 
-func main(): int sync {
+func main() => int sync {
     println(elem(1.0))
     println(elem(2.5))
     return 0

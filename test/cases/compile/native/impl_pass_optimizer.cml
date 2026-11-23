@@ -14,14 +14,14 @@
  */
 
 #op(':op/add_l')
-func add_kernel(a: int, b: int): int
+func add_kernel(a: int, b: int) => int
 
 #impl(add_kernel)
-export func plus(a: int, b: int): int {
+export func plus(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func main(): int sync {
+func main() => int sync {
     let by_body = plus
     let k = plus(19, 23)
     let b = by_body(19, 23)

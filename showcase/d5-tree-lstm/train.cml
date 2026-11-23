@@ -11,9 +11,9 @@
 //         --arg log_every=50 --arg threads=1 std::macro std::nvm
 
 // == imports ==
-import { argmax, load_npy, numel, reshape, set_num_threads, shape, sigmoid, sum, tanh, zeros } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
+import { argmax, load_npy, numel, reshape, set_num_threads, shape, sigmoid, sum, tanh, zeros } from tensor
 import { now } from time
 
 // == model ==
@@ -27,14 +27,33 @@ type Tree = enum {
 // use the child they forget, as in the binary Tree-LSTM.
 type Params = {
     emb: f32[...],
-    wi: f32[...], wfl: f32[...], wfr: f32[...], wo: f32[...], wu: f32[...],
-    ui: f32[...], ufl: f32[...], ufr: f32[...], uo: f32[...], uu: f32[...],
-    bi: f32[...], bfl: f32[...], bfr: f32[...], bo: f32[...], bu: f32[...],
-    wout: f32[...], bout: f32[...]
+    wi: f32[...],
+    wfl: f32[...],
+    wfr: f32[...],
+    wo: f32[...],
+    wu: f32[...],
+    ui: f32[...],
+    ufl: f32[...],
+    ufr: f32[...],
+    uo: f32[...],
+    uu: f32[...],
+    bi: f32[...],
+    bfl: f32[...],
+    bfr: f32[...],
+    bo: f32[...],
+    bu: f32[...],
+    wout: f32[...],
+    bout: f32[...]
 }
 
 with <p: Params>
-func cell(x: f32[...], hl: f32[...], cl: f32[...], hr: f32[...], cr: f32[...]): (f32[...], f32[...]) {
+func cell(
+    x: f32[...],
+    hl: f32[...],
+    cl: f32[...],
+    hr: f32[...],
+    cr: f32[...]
+) => (f32[...], f32[...]) {
     let i = sigmoid(x @ p.wi + hl @ p.ui + hr @ p.ui + p.bi)
     let fl = sigmoid(x @ p.wfl + hl @ p.ufl + hr @ p.ufl + p.bfl)
     let fr = sigmoid(x @ p.wfr + hl @ p.ufr + hr @ p.ufr + p.bfr)
@@ -47,7 +66,7 @@ func cell(x: f32[...], hl: f32[...], cl: f32[...], hr: f32[...], cr: f32[...]): 
 // The recursion.  A leaf's input is its embedding; an internal node's input is the sum of the
 // children's hidden states, so the node type itself carries no extra parameter.
 with <p: Params>
-func forward(t: Tree): (f32[...], f32[...]) {
+func forward(t: Tree) => (f32[...], f32[...]) {
     return match t {
         case Tree::Leaf(onehot) => {
             let x = onehot @ p.emb
@@ -64,74 +83,85 @@ func forward(t: Tree): (f32[...], f32[...]) {
 
 // == loss ==
 with <p: Params>
-func loss(t: Tree, target: f32[...]): float {
+func loss(t: Tree, target: f32[...]) => float {
     let (hidden, state) = forward<p>(t)
     return float(softmax_cross_entropy(hidden @ p.wout + p.bout, target))
 }
 
 // == data ==
-func tree_at(words: f32[...]): Tree {
+func tree_at(words: f32[...]) => Tree {
     let vocab = shape(words)[2]
     return Tree::Node(
         Tree::Node(
             Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 0, 1))),
-            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 1, 2)))),
+            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 1, 2)))
+        ),
         Tree::Node(
             Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 2, 3))),
-            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 3, 4)))))
+            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 3, 4)))
+        )
+    )
 }
 
-func load_model(data: string): Params {
+func load_model(data: string) => Params {
     let init = data + '/init'
     return {
         emb: load_npy::<f32>(init + '/emb.npy'),
-        wi: load_npy::<f32>(init + '/wi.npy'), wfl: load_npy::<f32>(init + '/wfl.npy'),
-        wfr: load_npy::<f32>(init + '/wfr.npy'), wo: load_npy::<f32>(init + '/wo.npy'),
+        wi: load_npy::<f32>(init + '/wi.npy'),
+        wfl: load_npy::<f32>(init + '/wfl.npy'),
+        wfr: load_npy::<f32>(init + '/wfr.npy'),
+        wo: load_npy::<f32>(init + '/wo.npy'),
         wu: load_npy::<f32>(init + '/wu.npy'),
-        ui: load_npy::<f32>(init + '/ui.npy'), ufl: load_npy::<f32>(init + '/ufl.npy'),
-        ufr: load_npy::<f32>(init + '/ufr.npy'), uo: load_npy::<f32>(init + '/uo.npy'),
+        ui: load_npy::<f32>(init + '/ui.npy'),
+        ufl: load_npy::<f32>(init + '/ufl.npy'),
+        ufr: load_npy::<f32>(init + '/ufr.npy'),
+        uo: load_npy::<f32>(init + '/uo.npy'),
         uu: load_npy::<f32>(init + '/uu.npy'),
-        bi: load_npy::<f32>(init + '/bi.npy'), bfl: load_npy::<f32>(init + '/bfl.npy'),
-        bfr: load_npy::<f32>(init + '/bfr.npy'), bo: load_npy::<f32>(init + '/bo.npy'),
+        bi: load_npy::<f32>(init + '/bi.npy'),
+        bfl: load_npy::<f32>(init + '/bfl.npy'),
+        bfr: load_npy::<f32>(init + '/bfr.npy'),
+        bo: load_npy::<f32>(init + '/bo.npy'),
         bu: load_npy::<f32>(init + '/bu.npy'),
-        wout: load_npy::<f32>(init + '/wout.npy'), bout: load_npy::<f32>(init + '/bout.npy')
+        wout: load_npy::<f32>(init + '/wout.npy'),
+        bout: load_npy::<f32>(init + '/bout.npy')
     }
 }
 
-func count_params(p: Params): int {
-    return numel(p.emb) + numel(p.wi) + numel(p.wfl) + numel(p.wfr) + numel(p.wo) +
-        numel(p.wu) + numel(p.ui) + numel(p.ufl) + numel(p.ufr) + numel(p.uo) +
-        numel(p.uu) + numel(p.bi) + numel(p.bfl) + numel(p.bfr) + numel(p.bo) +
-        numel(p.bu) + numel(p.wout) + numel(p.bout)
+func count_params(p: Params) => int {
+    return numel(p.emb) + numel(p.wi) + numel(p.wfl) + numel(p.wfr) + numel(p.wo) + numel(p.wu) + numel(p.ui) + numel(p.ufl) + numel(p.ufr) + numel(p.uo) + numel(p.uu) + numel(p.bi) + numel(p.bfl) + numel(p.bfr) + numel(p.bo) + numel(p.bu) + numel(p.wout) + numel(p.bout)
 }
 
 // == evaluate ==
 // One tree at a time; the validation set is small and the point is the recursion, not a
 // throughput record.
 with <p: Params>
-func accuracy(words: f32[...], labels: f32[...]): float {
+func accuracy(words: f32[...], labels: f32[...]) => float {
     let n = shape(words)[0]
-    let (correct, finished) = loop count = 0.0, index = 0
-        while index < n
-        do {
-            let sample = slice(words, 0, index, index + 1)
-            let target = slice(labels, 0, index, index + 1)
-            let (hidden, state) = forward<p>(tree_at(sample))
-            // The mask is the elementwise comparison, so `hits` is a bool array of the ones this
-            // count adds up (design principles 4.2). A mask is not a number, so they are read as the
-            // numbers they stand for once the conversion is written, at the element type of the
-            // count they are added to (design principles 5.1).
-            let hits = argmax<1>(hidden @ p.wout + p.bout) === argmax<1>(target)
-            let hit: float[...] = float(hits)
-            (count + sum(hit), index + 1)
-        }
+    let (correct, finished) = loop count = 0.0, index = 0 while index < n do {
+        let sample = slice(words, 0, index, index + 1)
+        let target = slice(labels, 0, index, index + 1)
+        let (hidden, state) = forward<p>(tree_at(sample))
+        // The mask is the elementwise comparison, so `hits` is a bool array of the ones this
+        // count adds up (design principles 4.2). A mask is not a number, so they are read as the
+        // numbers they stand for once the conversion is written, at the element type of the
+        // count they are added to (design principles 5.1).
+        let hits = argmax<1>(hidden @ p.wout + p.bout) === argmax<1>(target)
+        let hit: float[...] = float(hits)
+        (count + sum(hit), index + 1)
+    }
     return correct / float(n)
 }
 
 // == entry ==
-func main(data: string, steps: int, lr: float, log_every: int, threads: int): int sync {
+func main(
+    data: string,
+    steps: int,
+    lr: float,
+    log_every: int,
+    threads: int
+) => int sync {
     set_num_threads(threads)
-
+    
     // == data ==
     let train_words = load_npy::<f32>(data + '/train_words.npy')
     let train_labels = load_npy::<f32>(data + '/train_labels.npy')
@@ -142,7 +172,7 @@ func main(data: string, steps: int, lr: float, log_every: int, threads: int): in
     let before = accuracy<initial>(val_words, val_labels)
     `d5 config steps=${steps} lr=${lr} threads=${threads} params=${count_params(initial)} train=${train_n}`->println
     `d5 init val_accuracy=${before:.9f}`->println
-
+    
     // == train ==
     // One sample per step; the sample index wraps around the shuffled file.  The tree is built
     // from a contiguous slice of the one-hot rows, so no row selection operator is needed.
@@ -151,21 +181,19 @@ func main(data: string, steps: int, lr: float, log_every: int, threads: int): in
     // The loop carries three states and this declaration wants two of them: `_` is the third, a
     // value dropped on purpose (design principles 3.9), which is also what a name too few has to
     // be written as now.
-    let (trained, optimizer, _) = loop p = initial, opt = adam_state(initial), step = 0
-        while step < steps
-        do sync {
-            let index = step % train_n
-            let sample = slice(train_words, 0, index, index + 1)
-            let target = slice(train_labels, 0, index, index + 1)
-            let (value, gradient) = loss_with_grad<p>(tree_at(sample), target)
-            if step % log_every == 0 then {
-                `d5 step=${step} loss=${value:.9f}`->println
-            }
-            let next = adam(p, gradient, opt, lr)
-            return (next.0, next.1, step + 1)
+    let (trained, optimizer, _) = loop p = initial, opt = adam_state(initial), step = 0 while step < steps do sync {
+        let index = step % train_n
+        let sample = slice(train_words, 0, index, index + 1)
+        let target = slice(train_labels, 0, index, index + 1)
+        let (value, gradient) = loss_with_grad<p>(tree_at(sample), target)
+        if step % log_every == 0 then {
+            `d5 step=${step} loss=${value:.9f}`->println
         }
+        let next = adam(p, gradient, opt, lr)
+        return (next.0, next.1, step + 1)
+    }
     let elapsed = now() - started
-
+    
     // == evaluate ==
     let after = accuracy<trained>(val_words, val_labels)
     `d5 trained steps=${steps} seconds=${elapsed:.6f} val_accuracy=${after:.9f}`->println

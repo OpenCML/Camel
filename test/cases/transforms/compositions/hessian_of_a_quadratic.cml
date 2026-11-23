@@ -41,29 +41,29 @@
 import { grad } from vjp
 
 with <a: float, b: float>
-func quadratic(): float {
+func quadratic() => float {
     return a * a + 3.0 * a * b + 2.0 * b * b
 }
 
 with <b: float, a: float>
-func quadratic_ba(): float {
+func quadratic_ba() => float {
     return a * a + 3.0 * a * b + 2.0 * b * b
 }
 
 // `df/da` of `quadratic`, as a function whose first `with` value is `b`: one step, so that the step
 // after it differentiates `b`.
 with <b: float, a: float>
-func df_da_of_b(): float {
+func df_da_of_b() => float {
     return grad(quadratic)<a, b>()
 }
 
 // `df/db` of `quadratic_ba`, as a function whose first `with` value is `a`.
 with <a: float, b: float>
-func df_db_of_a(): float {
+func df_db_of_a() => float {
     return grad(quadratic_ba)<b, a>()
 }
 
-func main(): int sync {
+func main() => int sync {
     let hAA = grad(grad(quadratic))<1.0, 2.0>()
     let hBB = grad(grad(quadratic_ba))<2.0, 1.0>()
     let hAB = grad(df_da_of_b)<2.0, 1.0>()

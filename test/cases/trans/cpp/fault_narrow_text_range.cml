@@ -7,7 +7,7 @@
  * camel/core/numeric_convert_half.h does and what std::cpp renders into the site. A number that
  * f32 holds and the element type does not is f16's own range, and that is the next case.
  */
-func main(): int sync {
+func main() => int sync {
     println(bf16('1.5'))
     println(bf16('1e300'))
     println('not reached')

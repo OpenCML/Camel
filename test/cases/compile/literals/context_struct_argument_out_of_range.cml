@@ -6,9 +6,11 @@
 
 type Point = { x: f32, y: f32 }
 
-func px(p: Point): f32 { return p.x }
+func px(p: Point) => f32 {
+    return p.x
+}
 
-func main(): int sync {
+func main() => int sync {
     println(px({ x: 1e40, y: 0.0 }))
     return 0
 }

@@ -28,16 +28,16 @@
 import { vjp } from vjp
 
 with <w: float>
-func scale(x: float): float {
+func scale(x: float) => float {
     return w * x
 }
 
 with <w: float, v: float>
-func quadratic(x: float): float {
+func quadratic(x: float) => float {
     return w * x + v * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (a, pullback_a) = vjp(scale)<2.0>(3.0)
     let (b, pullback_b) = vjp(quadratic)<2.0, 3.0>(1.5)
     let (c, pullback_c) = vjp(quadratic)<3.0, 2.0>(1.0)

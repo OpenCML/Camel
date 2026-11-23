@@ -4,7 +4,7 @@
 
 import lib
 
-func main(): int sync {
+func main() => int sync {
     println(lib::name())
     return 0
 }

@@ -8,11 +8,11 @@ import { reshape, sum } from tensor
 
 type Tens<T> = T
 
-func half::<T>(x: Tens<T>): Tens<T> {
+func half::<T>(x: Tens<T>) => Tens<T> {
     return x * 0.5
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = int(reshape<[4]>([1.0, 2.0, 3.0, 4.0] as f32[]))
     println(sum(half(x)))
     return 0

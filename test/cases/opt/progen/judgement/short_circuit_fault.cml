@@ -9,9 +9,11 @@
  * Reduced by test/tools/progen from seed 8190 (generator version 3, all features).
  */
 
-func f(xs: int[], i: int, c: bool): bool { return c || (xs[i] < 3) }
+func f(xs: int[], i: int, c: bool) => bool {
+    return c || (xs[i] < 3)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(f([1], 2, true))
     return 0
 }

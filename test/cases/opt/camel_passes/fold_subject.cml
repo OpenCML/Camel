@@ -15,7 +15,7 @@
 // folding the branch structure around it. The two literals of one expression are folded by the
 // front end before either pass runs, which is why the corpus reaches its chains through `let`s.
 
-func chain(): int sync {
+func chain() => int sync {
     let a = 2 * 3
     let b = a + 4
     let c = b * 2
@@ -23,19 +23,19 @@ func chain(): int sync {
     return 0
 }
 
-func compare(): int sync {
+func compare() => int sync {
     let a = 2
     let b = 3
     println(a < b)
     return 0
 }
 
-func live(x: int): int sync {
+func live(x: int) => int sync {
     println(x * 3 + 1)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(chain())
     println(compare())
     println(live(4))

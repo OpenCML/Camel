@@ -12,16 +12,22 @@
  * Reduced by test/tools/progen from seed 7347 (generator version 2, all features).
  */
 
-func f15(a16: string, a17: string, a18: (a0: int, a1: string) => string): string {
-    return a18(0 % 997, if false then '' else '');
+func f15(
+    a16: string,
+    a17: string,
+    a18: (a0: int, a1: string) => string
+) => string {
+    return a18(0 % 997, if false then '' else '')
 }
 
-func main(): int sync {
-    let n62 = 0;
+func main() => int sync {
+    let n62 = 0
     let n72 = match n62 {
         case 10 => ''
-        case 5 => f15('', 'x', func (p68: int, p69: string) => string { '' })
+        case 5 => f15('', 'x', func (p68: int, p69: string) => string {
+            ''
+        })
         case _ => ''
-    };
-    return 0;
+    }
+    return 0
 }

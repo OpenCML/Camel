@@ -2,11 +2,11 @@
 // specialized, its condition folds, the surviving arm is inlined. fib(18) would become its whole
 // call tree (thousands of calls); the growth budget stops the unrolling and leaves the remaining
 // calls as calls. The values must not change.
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = fib(10)
     let b = fib(18)
     println(a)

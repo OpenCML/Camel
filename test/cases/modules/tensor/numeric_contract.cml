@@ -8,12 +8,12 @@ import { reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, ful
 
 /// vals where mask is 1 and NaN where mask is 0 (0 / 0 is NaN for tensors).
 /// The arrays are float[]; cast is the explicit conversion to the f32 the tensor math runs in.
-func pick(mask: float[], vals: float[]): f32[...] {
+func pick(mask: float[], vals: float[]) => f32[...] {
     let m = f32(mask)
     return (m / m) * f32(vals)
 }
 
-func main(): int sync {
+func main() => int sync {
     let nz = -0.0
     // relu([NaN, -0, 1, -2])
     println(relu(pick([0.0, 1.0, 1.0, 1.0], [1.0, nz, 1.0, -2.0])))
@@ -31,7 +31,7 @@ func main(): int sync {
     println(max<0>(f32([nz, 0.0])))
     println(min<0>(f32([0.0, nz])))
     println(min<0>(f32([nz, 0.0])))
-
+    
     // matmul: one fused multiply-add per step. (1 + 2^-12)^2 - 1 is 2^-11 + 2^-24 exactly;
     // rounding the product first loses the 2^-24.
     let u = f32([-1.0, 1.000244140625])
@@ -41,7 +41,7 @@ func main(): int sync {
     // one is added to the running sum; summing the ones in blocks first gives more.
     let col = concat<0>(full([1, 1], f32(16777216.0)), ones::<f32>([511, 1]))
     'matmul chain={}'->format<sum(ones::<f32>([1, 512]) @ col)>->println
-
+    
     // softmax agrees with exp(x - max) / sum(exp(x - max)).
     let x = reshape<[2, 4]>(f32([0.5, -1.25, 3.0, 2.0, 0.125, -7.0, 1.0, 9.5]))
     let m = max<1, true>(x)

@@ -4,9 +4,9 @@
  * comes back as the canonical form; nothing about the statement is special to `camel-format`,
  * which reads the tree and needs no compiler.
  */
-func pairs(n: int): (int, int).. {
+func pairs(n: int) => (int, int).. {
     loop i = 0 while i < n do {
-        yield    (i,i+1)
-        i+1
+        yield (i, i + 1)
+        i + 1
     }
 }

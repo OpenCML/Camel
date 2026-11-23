@@ -73,7 +73,7 @@ import { is_function } from types
 
 // ---- the finite domains: the boundaries and the special values of each type ----
 
-func int_values(): int[] {
+func int_values() => int[] {
     return [
         0,
         1,
@@ -93,7 +93,7 @@ func int_values(): int[] {
     ]
 }
 
-func i32_values(): i32[] {
+func i32_values() => i32[] {
     return [
         0,
         1,
@@ -112,7 +112,7 @@ func i32_values(): i32[] {
     ]
 }
 
-func float_values(): float[] {
+func float_values() => float[] {
     return [
         0.0,
         -0.0,
@@ -138,7 +138,7 @@ func float_values(): float[] {
     ]
 }
 
-func f32_values(): f32[] {
+func f32_values() => f32[] {
     return [
         0.0,
         -0.0,
@@ -164,7 +164,7 @@ func f32_values(): f32[] {
     ]
 }
 
-func f32_arrays(): f32[][] {
+func f32_arrays() => f32[][] {
     return [
         [],
         [0.0],
@@ -177,7 +177,7 @@ func f32_arrays(): f32[][] {
     ]
 }
 
-func int_triples(): (int, int, int)[] {
+func int_triples() => (int, int, int)[] {
     return [
         (0, 0, 0),
         (1, 2, 3),
@@ -189,7 +189,7 @@ func int_triples(): (int, int, int)[] {
     ]
 }
 
-func int_array_triples(): (int[], int[], int[])[] {
+func int_array_triples() => (int[], int[], int[])[] {
     return [
         ([], [0], [1]),
         ([1, 2, 3], [4, 5, 6], [7, 8, 9]),
@@ -205,21 +205,23 @@ func pair_line(
     input: string,
     before: string,
     after: string
-): string {
+) => string {
     return `pair ${label} ${before} | ${after} | ${input}`
 }
 
-func nodes_of::<F>(f: F): int when is_function::<F>() {
+func nodes_of::<F>(f: F) => int when is_function::<F>() {
     return len(flatten(graphs_of(f)->map<nodes>))
 }
 
 with <rules: Rule[]>
-func check_scalar::<T>(label: string, f: (x: T) => T, values: T[]): string[] {
+func check_scalar::<T>(label: string, f: (x: T) => T, values: T[]) => string[] {
     return match f->run<rules, rounds: 6> {
         case error e => [`error ${label} ${e.kind}`]
         case r => concat(
             [`fired ${label} ${r.rewrites}`],
-            values->map<func (v: T) => string { pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`) }>
+            values->map<func (v: T) => string {
+                pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`)
+            }>
         )
     }
 }
@@ -229,12 +231,14 @@ func check_array::<E>(
     label: string,
     f: (xs: E[]) => E[],
     values: E[][]
-): string[] {
+) => string[] {
     return match f->run<rules, rounds: 6> {
         case error e => [`error ${label} ${e.kind}`]
         case r => concat(
             [`fired ${label} ${r.rewrites}`],
-            values->map<func (v: E[]) => string { pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`) }>
+            values->map<func (v: E[]) => string {
+                pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`)
+            }>
         )
     }
 }
@@ -248,14 +252,16 @@ func check_rearranging_three::<T>(
     label: string,
     f: (a: T, b: T, c: T) => T,
     values: (T, T, T)[]
-): string[] {
+) => string[] {
     return match f->saturate<rules, rounds: 6> {
         case error e => [`error ${label} ${e.kind}`]
         case tabled => match tabled->extract<node_cost> {
             case error e => [`error ${label} ${e.kind}`]
             case g => concat(
                 [`rearranged ${label} ${nodes_of(f)} ${nodes_of(g)}`],
-                values->map<func (v: (T, T, T)) => string { pair_line(label, `${v.0} ${v.1} ${v.2}`, `${f(v.0, v.1, v.2)}`, `${g(v.0, v.1, v.2)}`) }>
+                values->map<func (v: (T, T, T)) => string {
+                    pair_line(label, `${v.0} ${v.1} ${v.2}`, `${f(v.0, v.1, v.2)}`, `${g(v.0, v.1, v.2)}`)
+                }>
             )
         }
     }
@@ -264,204 +270,204 @@ func check_rearranging_three::<T>(
 // ---- the witnesses: one left side each, at concrete types and constants ----
 
 // The real-number laws, at the integers and at the floats.
-func w_mul_one_int(x: int): int {
+func w_mul_one_int(x: int) => int {
     return x * 1
 }
-func w_mul_one_float(x: float): float {
+func w_mul_one_float(x: float) => float {
     return x * 1.0
 }
-func w_div_one_int(x: int): int {
+func w_div_one_int(x: int) => int {
     return x / 1
 }
-func w_div_one_float(x: float): float {
+func w_div_one_float(x: float) => float {
     return x / 1.0
 }
-func w_sub_zero_int(x: int): int {
+func w_sub_zero_int(x: int) => int {
     return x - 0
 }
-func w_sub_zero_float(x: float): float {
+func w_sub_zero_float(x: float) => float {
     return x - 0.0
 }
-func w_neg_neg_int(x: int): int {
+func w_neg_neg_int(x: int) => int {
     return -(-x)
 }
-func w_neg_neg_float(x: float): float {
+func w_neg_neg_float(x: float) => float {
     return -(-x)
 }
-func w_add_self_int(x: int): int {
+func w_add_self_int(x: int) => int {
     return x + x
 }
-func w_add_self_float(x: float): float {
+func w_add_self_float(x: float) => float {
     return x + x
 }
 
 // The integer laws: wrapping arithmetic, exact at every width.
-func w_int_add_zero(x: int): int {
+func w_int_add_zero(x: int) => int {
     return x + 0
 }
-func w_int_add_zero_32(x: i32): i32 {
+func w_int_add_zero_32(x: i32) => i32 {
     return x + 0
 }
-func w_int_mul_zero(x: int): int {
+func w_int_mul_zero(x: int) => int {
     return x * 0
 }
-func w_int_mul_zero_32(x: i32): i32 {
+func w_int_mul_zero_32(x: i32) => i32 {
     return x * 0
 }
-func w_int_sub_self(x: int): int {
+func w_int_sub_self(x: int) => int {
     return x - x
 }
-func w_int_sub_self_32(x: i32): i32 {
+func w_int_sub_self_32(x: i32) => i32 {
     return x - x
 }
-func w_int_combine(x: int): int {
+func w_int_combine(x: int) => int {
     return x * 3 + x * 5
 }
-func w_int_combine_32(x: i32): i32 {
+func w_int_combine_32(x: i32) => i32 {
     return x * 3 + x * 5
 }
-func w_int_combine_negative(x: int): int {
+func w_int_combine_negative(x: int) => int {
     return x * -4 + x * 9
 }
-func w_int_fold(x: int): int {
+func w_int_fold(x: int) => int {
     return (x * 3) * 5
 }
-func w_int_fold_32(x: i32): i32 {
+func w_int_fold_32(x: i32) => i32 {
     return (x * 3) * 5
 }
-func w_int_fold_add(x: int): int {
+func w_int_fold_add(x: int) => int {
     return (x + 3) + 5
 }
-func w_int_fold_add_32(x: i32): i32 {
+func w_int_fold_add_32(x: i32) => i32 {
     return (x + 3) + 5
 }
-func w_int_combine_one(x: int): int {
+func w_int_combine_one(x: int) => int {
     return x * 3 + x
 }
-func w_int_combine_one_32(x: i32): i32 {
+func w_int_combine_one_32(x: i32) => i32 {
     return x * 3 + x
 }
 
 // The float law that needs no permission, and the ones a permission allows. The tags are the
 // licence the law asks for, written on the code it applies to (design principles 7.5); a witness
 // without them is a witness the engine refuses to rewrite, which is a change this case reports.
-func w_float_add_neg_zero(x: float): float {
+func w_float_add_neg_zero(x: float) => float {
     return x + -0.0
 }
-func w_float_add_neg_zero_32(x: f32): f32 {
+func w_float_add_neg_zero_32(x: f32) => f32 {
     return x + -0.0
 }
-func w_float_combine(x: float): float {
+func w_float_combine(x: float) => float {
     return x * 3.0 + x * 5.0
 }
-func w_float_combine_32(x: f32): f32 {
+func w_float_combine_32(x: f32) => f32 {
     return x * 3.0 + x * 5.0
 }
-func w_float_combine_negative(x: float): float {
+func w_float_combine_negative(x: float) => float {
     return x * -3.0 + x * -5.0
 }
 
 #[reassociate, no_infs, no_signed_zeros]
-func w_float_combine_mixed(x: float): float {
+func w_float_combine_mixed(x: float) => float {
     return x * 3.0 + x * -5.0
 }
 
 #[reassociate, no_infs, no_signed_zeros]
-func w_float_combine_mixed_32(x: f32): f32 {
+func w_float_combine_mixed_32(x: f32) => f32 {
     return x * 3.0 + x * -5.0
 }
 
 #[reassociate, no_infs]
-func w_float_fold(x: float): float {
+func w_float_fold(x: float) => float {
     return (x * 3.0) * 5.0
 }
 
 #[reassociate, no_infs]
-func w_float_fold_32(x: f32): f32 {
+func w_float_fold_32(x: f32) => f32 {
     return (x * 3.0) * 5.0
 }
 
-func w_float_double(x: float): float {
+func w_float_double(x: float) => float {
     return x * 2.0 + x * 2.0
 }
-func w_float_double_32(x: f32): f32 {
+func w_float_double_32(x: f32) => f32 {
     return x * 2.0 + x * 2.0
 }
-func w_float_combine_one(x: float): float {
+func w_float_combine_one(x: float) => float {
     return x * 3.0 + x
 }
-func w_float_combine_one_32(x: f32): f32 {
+func w_float_combine_one_32(x: f32) => f32 {
     return x * 3.0 + x
 }
 
 #[reassociate, no_infs, no_signed_zeros]
-func w_float_combine_one_mixed(x: float): float {
+func w_float_combine_one_mixed(x: float) => float {
     return x * -3.0 + x
 }
 
 #[reassociate, no_infs, no_signed_zeros]
-func w_float_combine_one_mixed_32(x: f32): f32 {
+func w_float_combine_one_mixed_32(x: f32) => f32 {
     return x * -3.0 + x
 }
 
 // The elementwise forms of the same laws.
-func w_array_mul_one(x: f32[]): f32[] {
+func w_array_mul_one(x: f32[]) => f32[] {
     return x * 1.0
 }
-func w_array_div_one(x: f32[]): f32[] {
+func w_array_div_one(x: f32[]) => f32[] {
     return x / 1.0
 }
-func w_array_sub_zero(x: f32[]): f32[] {
+func w_array_sub_zero(x: f32[]) => f32[] {
     return x - 0.0
 }
-func w_array_neg_neg(x: f32[]): f32[] {
+func w_array_neg_neg(x: f32[]) => f32[] {
     return -(-x)
 }
-func w_array_add_self(x: f32[]): f32[] {
+func w_array_add_self(x: f32[]) => f32[] {
     return x + x
 }
-func w_array_add_neg_zero(x: f32[]): f32[] {
+func w_array_add_neg_zero(x: f32[]) => f32[] {
     return x + -0.0
 }
-func w_array_combine(x: f32[]): f32[] {
+func w_array_combine(x: f32[]) => f32[] {
     return x * 3.0 + x * 5.0
 }
-func w_array_double(x: f32[]): f32[] {
+func w_array_double(x: f32[]) => f32[] {
     return x * 2.0 + x * 2.0
 }
-func w_array_combine_one(x: f32[]): f32[] {
+func w_array_combine_one(x: f32[]) => f32[] {
     return x * 3.0 + x
 }
 
 #[reassociate, no_infs, no_signed_zeros]
-func w_array_combine_mixed(x: f32[]): f32[] {
+func w_array_combine_mixed(x: f32[]) => f32[] {
     return x * 3.0 + x * -5.0
 }
 
 #[reassociate, no_infs]
-func w_array_fold(x: f32[]): f32[] {
+func w_array_fold(x: f32[]) => f32[] {
     return (x * 3.0) * 5.0
 }
 
 #[reassociate, no_infs, no_signed_zeros]
-func w_array_combine_one_mixed(x: f32[]): f32[] {
+func w_array_combine_one_mixed(x: f32[]) => f32[] {
     return x * -3.0 + x
 }
 
 // The rearranging laws, written in their long form, and the fusion law whose sides are one value.
-func w_int_distribute(a: int, b: int, c: int): int {
+func w_int_distribute(a: int, b: int, c: int) => int {
     return a * b + a * c
 }
-func w_array_distribute(a: int[], b: int[], c: int[]): int[] {
+func w_array_distribute(a: int[], b: int[], c: int[]) => int[] {
     return a * b + a * c
 }
-func w_array_sigmoid_chain(x: f32[]): f32[] {
+func w_array_sigmoid_chain(x: f32[]) => f32[] {
     return 1.0 / (1.0 + exp_array(-x))
 }
 
 // ---- the library, as this case reads it ----
 
-func report(): string[] {
+func report() => string[] {
     return flatten([
         // the real-number laws
         check_scalar<[mul_one]>('mul_one/int', w_mul_one_int, int_values()),
@@ -526,7 +532,7 @@ func report(): string[] {
     ])
 }
 
-func main(): int sync {
+func main() => int sync {
     let out = report()
     out->foreach<func (line: string) => void {
         println(line)

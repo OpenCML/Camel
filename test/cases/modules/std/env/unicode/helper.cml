@@ -3,6 +3,6 @@
  * the process code page, and that directory is what CAMEL_PACKAGES points at (item 3).
  */
 
-export func twice(x: int): int {
+export func twice(x: int) => int {
     return x * 2
 }

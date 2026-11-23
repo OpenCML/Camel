@@ -9,13 +9,15 @@
  * test/cases/consistency/entry/error_thrown.cml).
  */
 
-import { read_text } from fs
 import { get_cwd } from env
+import { read_text } from fs
 
-func main(): int! sync {
+func main() => int! sync {
     let path = (get_cwd() !! '') + '/不存在 文件 🐪.txt'
     match path->read_text {
-        case error e => sync { return e }
+        case error e => sync {
+            return e
+        }
         case text => sync {
             println(text)
             return 0

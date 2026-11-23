@@ -5,7 +5,7 @@
  */
 import { key, uniform, normal } from random
 
-func main(): int sync {
+func main() => int sync {
     let k = key(1)
     println(k->uniform::<f32><shape: [4]>)
     println(k->uniform::<float><shape: [2, 2]>)

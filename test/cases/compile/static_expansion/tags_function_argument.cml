@@ -9,24 +9,23 @@
 tag rule::<F>(f: F) on field when is_function::<F>()
 tag width(w: int) on field
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x + x
 }
 
 type Box = {
     #rule(twice) scaled: int,
-    #width(8) plain: int,
+    #width(8) plain: int
 }
 
-func read(b: Box): int {
-    return static loop acc = 0 for n, F, tags in fields Box do
-        acc + (match type typeof(tags) {
-            case { width: { w: int } } => tags.width.w
-            case _ => 0
-        })
+func read(b: Box) => int {
+    return static loop acc = 0 for n, F, tags in fields Box do acc + (match type typeof (tags) {
+        case {width:{w:int}} => tags.width.w
+        case _ => 0
+    })
 }
 
-func main(): int sync {
-    println(read({scaled: 1, plain: 2}))
+func main() => int sync {
+    println(read({ scaled: 1, plain: 2 }))
     return 0
 }

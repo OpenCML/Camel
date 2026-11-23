@@ -4,14 +4,14 @@
  * takes a `with` parameter, which is bound from the command line.
  */
 
-
-func base_of(): int {
+func base_of() => int {
     return 7
 }
 
 let base = base_of()
 
-with <label: string> export func report::<F>(p: F): F! sync {
+with <label: string>
+export func report::<F>(p: F) => F! sync {
     println('base ', base, ' label ', label)
     return p
 }

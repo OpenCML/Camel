@@ -3,14 +3,14 @@
  * the pattern is reported instead of being kept as a case that never matches.
  */
 
-func bad::<T>(t: T): int {
+func bad::<T>(t: T) => int {
     return match type T {
         case void => 1
         case _ => 0
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bad(1))
     return 0
 }

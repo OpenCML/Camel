@@ -3,7 +3,7 @@
  * 64 bits, on every execution engine.
  */
 
-func pick(x: float, y: float): int {
+func pick(x: float, y: float) => int {
     let lt = if x < y then 1 else 0
     let le = if x <= y then 1 else 0
     let gt = if x > y then 1 else 0
@@ -13,7 +13,7 @@ func pick(x: float, y: float): int {
     return lt * 100000 + le * 10000 + gt * 1000 + ge * 100 + eq * 10 + ne
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = pick(1.5, 2.5)
     let b = pick(2.5, 1.5)
     let c = pick(2.5, 2.5)

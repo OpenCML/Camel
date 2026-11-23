@@ -6,22 +6,34 @@
  */
 
 with <axis: int, keepdims: bool = false>
-func g(xs: float[...]): int { return if keepdims then axis + 100 else axis }
+func g(xs: float[...]) => int {
+    return if keepdims then axis + 100 else axis
+}
 
-func g(xs: float[]): int { return 7 }
+func g(xs: float[]) => int {
+    return 7
+}
 
 with <a: int, b: int = 1, c: int = 2>
-func h(xs: int[]): int { return a * 100 + b * 10 + c }
+func h(xs: int[]) => int {
+    return a * 100 + b * 10 + c
+}
 
 with <a: int>
-func h(xs: string[]): int { return a }
+func h(xs: string[]) => int {
+    return a
+}
 
 with <axis: int, keepdims: bool = false, scale: int = 10>
-func gg::<T>(xs: T[...]): int { return if keepdims then axis * scale + 1 else axis * scale }
+func gg::<T>(xs: T[...]) => int {
+    return if keepdims then axis * scale + 1 else axis * scale
+}
 
-func gg::<T>(xs: T[]): int { return -1 }
+func gg::<T>(xs: T[]) => int {
+    return -1
+}
 
-func main(): int sync {
+func main() => int sync {
     let x = [1.0, 2.0]
     println(g(x), x->g<0>, x->g<3, true>)
     let n = [1, 2]

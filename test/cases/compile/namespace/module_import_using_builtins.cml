@@ -3,9 +3,10 @@
  */
 
 import tensor
+
 using namespace tensor
 
-func main(): int sync {
+func main() => int sync {
     let a = ones::<f32>([2, 2])
     let b = ones::<f32>([2, 2])
     let a0 = shape(a)[0]

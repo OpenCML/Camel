@@ -9,13 +9,15 @@
  * the program prints 2.
  */
 
-func update(var x: int, f: () => int): void sync {
+func update(var x: int, f: () => int) => void sync {
     x = f()
 }
 
-func main(): int sync {
+func main() => int sync {
     var x = 1
-    update(x, func () { x + 1 })
+    update(x, func () {
+        x + 1
+    })
     println(x)
     return 0
 }

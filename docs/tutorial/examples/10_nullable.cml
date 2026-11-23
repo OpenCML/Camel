@@ -1,20 +1,19 @@
 // T? may be null; open it with ?? or with match.
 // Run: camel docs/tutorial/examples/10_nullable.cml
 
-func find(xs: int[], target: int, i: int): int? {
+func find(xs: int[], target: int, i: int) => int? {
     return if i >= len(xs) then null
-        else if xs[i] == target then i
-        else find(xs, target, i + 1)
+    else if xs[i] == target then i else find(xs, target, i + 1)
 }
 
-func show(x: int?): string {
+func show(x: int?) => string {
     return match x {
         case null => 'not found'
         case v => 'at ' + string(v)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [10, 20, 30]
     println(find(xs, 20, 0) ?? -1)
     println(find(xs, 99, 0) ?? -1)

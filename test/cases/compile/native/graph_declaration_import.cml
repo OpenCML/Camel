@@ -10,7 +10,7 @@
 import { name, nodes, id, type_of, type_name, graph_of } from graph
 import { Graph, Node } from graph
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let g: Graph = graph_of(main)
     println(name(g))
     let ns = nodes(g)

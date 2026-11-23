@@ -3,15 +3,15 @@
 // and `re::has_match` is used where a pattern is needed.
 // Run: camel examples/text/log_filter.cml
 
+import { count } from array
+import { get_env } from env
+import { mkdirs, write_text, read_text } from fs
 import { has_match } from re
 import { split, trim, index_of } from str
-import { count } from array
-import { mkdirs, write_text, read_text } from fs
-import { get_env } from env
 
 type Entry = { time: string, level: string, message: string }
 
-func has(text: string, part: string): bool {
+func has(text: string, part: string) => bool {
     let at = text->index_of<part>
     return match at {
         case null => false
@@ -21,7 +21,7 @@ func has(text: string, part: string): bool {
 
 // '09:00:07 WARN  disk usage at 81%': the time, then the level up to the next space, then
 // the message.
-func parse(line: string): Entry {
+func parse(line: string) => Entry {
     let rest = line[9..]
     let cut = rest->index_of<' '> ?? len(rest)
     return {
@@ -31,7 +31,7 @@ func parse(line: string): Entry {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     // The runner's per-test scratch directory; a direct run keeps the header's fixed path.
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
@@ -45,24 +45,35 @@ func main(): int sync {
 09:01:18 ERROR cannot open cache.db
 09:02:00 INFO  shutdown requested
 '->write_text<path>
-
+    
     // The file ends with a line feed and has an empty line: both give empty pieces.
-    let lines = (path->read_text !! '')->split<'\n'>
-        ->map<func (l: string) => string { trim(l) }>
-        ->filter<func (l: string) => bool { len(l) > 0 }>
+    let lines = (path->read_text !! '')->split<'\n'>->map<func (l: string) => string {
+        trim(l)
+    }>->filter<func (l: string) => bool {
+        len(l) > 0
+    }>
     let entries = lines->map<parse>
     println('lines:', len(lines))
-
+    
     let levels = ['INFO', 'WARN', 'ERROR']
     levels->foreach<func (level: string) sync {
-        println(format<level, entries->count<func (e: Entry) => bool { e.level == level }>>('{:<5} {}'))
+        println(format<level, entries->count<func (e: Entry) => bool {
+            e.level == level
+        }>>('{:<5} {}'))
     }>
-
+    
     println('problems:')
-    entries->filter<func (e: Entry) => bool { e.level != 'INFO' }>
-        ->foreach<func (e: Entry) sync { println('  ' + e.time + ' ' + e.message) }>
-
-    println('lines that mention cache.db:', lines->count<func (l: string) => bool { has(l, 'cache.db') }>)
-    println('lines with a number followed by a unit:', lines->count<func (l: string) => bool { l->has_match<'[0-9]+(%|s)'> }>)
+    entries->filter<func (e: Entry) => bool {
+        e.level != 'INFO'
+    }>->foreach<func (e: Entry) sync {
+        println('  ' + e.time + ' ' + e.message)
+    }>
+    
+    println('lines that mention cache.db:', lines->count<func (l: string) => bool {
+        has(l, 'cache.db')
+    }>)
+    println('lines with a number followed by a unit:', lines->count<func (l: string) => bool {
+        l->has_match<'[0-9]+(%|s)'>
+    }>)
     return 0
 }

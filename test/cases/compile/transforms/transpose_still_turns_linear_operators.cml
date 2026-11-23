@@ -12,15 +12,15 @@
 //
 //     camel test/cases/compile/transforms/transpose_still_turns_linear_operators.cml
 import rulesets.transpose
-import { transpose } from transforms
 import { sum } from tensor
+import { transpose } from transforms
 
 /// `x ↦ Σx`: the sum law, and nothing else.
-func f_total(x: float[3]): float {
+func f_total(x: float[3]) => float {
     return float(sum(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let cotangent = transpose(f_total)(1.0)
     `total ct=1.0 {}  right=[1.0, 1.0, 1.0]`->format<cotangent>->println
     return 0

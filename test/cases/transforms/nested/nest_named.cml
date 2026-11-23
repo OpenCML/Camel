@@ -7,16 +7,16 @@
 import { grad } from vjp
 
 with <x: float>
-func cube(): float {
+func cube() => float {
     return x * x * x
 }
 
 with <x: float>
-func dcube(): float {
+func dcube() => float {
     return grad(cube)<x>()
 }
 
-func main(): int sync {
+func main() => int sync {
     let d1 = dcube<2.0>()
     let d2 = grad(dcube)<2.0>()
     'nest_named x=2.0 d1={} d2={}'->format<d1, d2>->println

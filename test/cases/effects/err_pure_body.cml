@@ -3,12 +3,12 @@
 // written, and the resource the clause leaves out is named (design effects plan, step 5).
 
 /// The clause promises the empty set; the body writes `stdout`.
-func say(): int pure sync {
+func say() => int pure sync {
     println('x')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(say())
     return 0
 }

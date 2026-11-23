@@ -1,15 +1,14 @@
-
 import { graph_of, graphs_of, name, nodes, inputs, kind } from graph
 
-func helper(x: int): int {
+func helper(x: int) => int {
     return x * 2
 }
 
-func f(x: int): int spelling {
+func f(x: int) => int spelling {
     return helper(x) + 1
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let gs = graphs_of(f)
     println(len(gs))
     println(gs->map<name>)

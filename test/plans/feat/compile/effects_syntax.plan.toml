@@ -438,7 +438,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_many_parameters_pure.cml:14:", "pure"]
+expect_output_contains = ["err_many_parameters_pure.cml:15:", "pure"]
 
 [[tests]]
 name = "ok.recursive_pure"

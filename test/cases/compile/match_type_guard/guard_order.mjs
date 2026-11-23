@@ -25,7 +25,7 @@ export type Zero = match type int {
     case _ => int[0]
 }
 
-export func wants(x: Zero): int sync {
+export func wants(x: Zero) => int sync {
     return 0
 }
 `
@@ -43,7 +43,7 @@ export type Unused<T> = match type T {
 /// are the same two, written in the two possible orders.
 const entry = (imports) => `${imports}
 
-func main(): int sync {
+func main() => int sync {
     return wants("not an int")
 }
 `

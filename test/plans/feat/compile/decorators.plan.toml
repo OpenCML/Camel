@@ -39,17 +39,17 @@ const all = (line, value) => {
 }
 all(11, '')                          // plain: called from decorated code
 all(16, 'test.mark')                 // marked
-all(21, 'test.flags={1}')            // the lambda in nested
-all(22, 'test.flags={1}')            // the condition and the arms of the if
-all(25, 'test.flags={1, 70}')        // the block: its grant and the function's
-all(30, '')                          // blocky outside its block
-all(33, 'test.flags={3}, test.mark') // two decorators on the block
-all(39, 'test.mark')                 // the loop and its body
-all(45, 'test.mark')                 // the innermost decorator
-all(52, '')                          // under a decorator applied as it runs
-all(58, '')                          // a value not given as the program is built
-all(63, 'test.level=3')              // leveled
-all(66, 'test.level=5')              // its block: the inner value
+all(22, 'test.flags={1}')            // the lambda in nested
+all(24, 'test.flags={1}')            // the condition and the arms of the if
+all(27, 'test.flags={1, 70}')        // the block: its grant and the function's
+all(32, '')                          // blocky outside its block
+all(36, 'test.flags={3}, test.mark') // two decorators on the block
+all(42, 'test.mark')                 // the loop and its body
+all(49, 'test.mark')                 // the innermost decorator
+all(57, '')                          // under a decorator applied as it runs
+all(63, '')                          // a value not given as the program is built
+all(68, 'test.level=3')              // leveled
+all(71, 'test.level=5')              // its block: the inner value
 }
 """
 
@@ -65,8 +65,8 @@ verify_script = """
 const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
 const at = (line) => opers.filter((l) => l.includes(`span="${line}:`))
 assert(at(11).length > 0 && at(11).every((l) => !l.includes('attrs=')), 'inlined plain must have no attributes')
-assert(at(21).length > 0 && at(21).every((l) => l.includes('attrs="test.flags={1}"')), 'the inlined lambda keeps its flags')
-assert(at(25).every((l) => l.includes('attrs="test.flags={1, 70}"')), 'the block keeps its attributes')
+assert(at(22).length > 0 && at(21).every((l) => l.includes('attrs="test.flags={1}"')), 'the inlined lambda keeps its flags')
+assert(at(27).every((l) => l.includes('attrs="test.flags={1, 70}"')), 'the block keeps its attributes')
 }
 """
 
@@ -132,7 +132,7 @@ kind = "negative"
 case = "../../../cases/compile/decorators/block_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["NoMatchingFunction", "block_mismatch.cml:11:"]
+expect_output_contains = ["NoMatchingFunction", "block_mismatch.cml:13:"]
 
 [[tests]]
 name = "test_module_exported"

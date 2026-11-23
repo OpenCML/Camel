@@ -9,7 +9,7 @@ import state
 // released -- so it waits at the LOOP node's own position, which is where the loop ends. Before that
 // position carried a give-back, the plan still read balanced (the reference was called `kept`) and
 // the box stayed counted for the life of the program.
-func read_only(): int sync {
+func read_only() => int sync {
     let box = state::ref(0)
     loop i = 0 while i < 3 do sync {
         println(`box ${state::get(box)}`)
@@ -18,6 +18,6 @@ func read_only(): int sync {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return read_only()
 }

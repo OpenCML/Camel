@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     println('{:d}'->format<'text'>)
     return 0
 }

@@ -2,7 +2,7 @@
 // parse diagnostic — not an exception out of the pipeline (item 1).
 
 
-export func run::<F>(p: F): F! sync {
+export func run::<F>(p: F) => F! sync {
     println(
     return p
 }

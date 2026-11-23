@@ -21,17 +21,17 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func sq(x: float): float {
+func sq(x: float) => float {
     return x * x
 }
 
-func g(x: float): float {
+func g(x: float) => float {
     return sq(x) + 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let forward = split(jvp(g))
-    let (value, backward)  = forward(3.0)
+    let (value, backward) = forward(3.0)
     'g value={}'->format<value>->println
     'g dgdx={}'->format<backward(1.0)>->println
     return 0

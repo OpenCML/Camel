@@ -4,7 +4,7 @@
  * nothing is printed twice on stderr.
  */
 
-func count(a: int): int sync {
+func count(a: int) => int sync {
     var total = 0
     if a > 0 then sync {
         total = a
@@ -13,7 +13,7 @@ func count(a: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count(1))
     return missing_name
 }

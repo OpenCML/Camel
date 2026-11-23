@@ -7,15 +7,15 @@
 type Point = { x: int, y: int }
 type Pair = (int, int)
 
-func first_field::<S>(): string {
-    return ( static for n, _ in fields S do n ).[0]
+func first_field::<S>() => string {
+    return (static for n, _ in fields S do n).[0]
 }
 
-func label(constas k: string): string {
+func label(constas k: string) => string {
     return k
 }
 
-func main(): int sync {
+func main() => int sync {
     println(label(first_field::<Point>()))
     println(label(first_field::<Pair>()))
     return 0

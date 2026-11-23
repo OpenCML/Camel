@@ -8,12 +8,11 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
-| lane/notation-corpus | `D-1123-31` 第 4 条：4,252 个 `.cml` 的旧返回类型写法与残留 `f..g` 用格式化器一次过，**然后**再删解析器旧分支；冲突时重跑格式化器 | 语料 **4254 → 0**、解析器旧分支已删（`eb20efab7`、`0b93cbf6f`）；`camel-format` 改 4,163 文件；幂等 4253/4254，唯一例外 `comparison_across_lines.cml` 是**故意保留换行**（它钉的就是行尾 `>`）；`f..g` 14 处手改为 `<>`（格式化器只加空格、分不出区间）；`ast_hashes.txt` 用 `-UpdateAstHashes` 重录 4,097 行 | `feat/parse` 126/126/0、`smoke` 10/10/0；`feat/compile` 2669 里 **130 红**，逐条判完 **甲 12 / 乙 1** | **修 `camel-format` 的 `visitStrayPositional`**（见下），再按 CST 逐文件对照证明没丢第二处，然后重录一次 | 2026-11-23 18:36 |
-
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |
 |---|---|---|---|
+| lane/notation-corpus | `99a85f5016`（车道尖，第二个父提交） | 语料 **4254 → 0**；`feat/parse` 126/126/0、`smoke` 10/10/0、`feat/compile` **2672 里 2667 通 / 0 红 / 5 known**（`-Jobs 8`，`[SUMMARY] total 2808, pass 2803, fail 0, known 5`）；`ast_hashes.txt` 重录 **4,487 行，已录的 4,487 行一字节未差** | 131 条红逐条判完：**130 条是记录（重录）、1 条是工具缺陷**（`f(a: 1, 2)` 丢第二个实参，已修 `fmt.{cpp,h}` 的 `visitStrayPositional`）。合并时 `tagged.plan.toml` 被按边解，把 `ce7f79bd9` 的 `:op/cast` 抹回 `CAST`，同一次合并里改回（`99a85f5016`）。**留下的账**：主机 gpu 观察有 7 条未录红——5 条是语料挪动位置（`resident_fallback_fault` ×4、`requires_device`），2 条是缺 `tiles-module-lease`/`tiles-async-check` 二进制；gpu 不判绿，下一笔重录这 5 个位置 |
 | lane/facts-tools | `adde6e793` | `feat/tools/facts` 6/6、`smoke` 10/10/0、`feat/tools/debugger` 12/14 | `--facts` 打两库、每条 `FACT` 行带 `library`；逐项对照 `enclosing 3/0`、`chain 3/0`、`within 8/8`、`nodes 40/0`；顺带修掉 `factJson` 先关对象再写 `epoch`/`target`（原以 `"target":0` 结尾，不是合法 JSON）。**到期条件**：`library` 字段在两库合一后消失（3b 把旧的七个 kind 搬进 `facts` 库时）。`dap_session`/`dap_stepping` 两条红经单独回退证明与本笔无因果 |
 | lane/golden-debt | `74b03ac99` | `feat/parse` **125/126 → 126/126/0** | 重录 `differential_equivalence.cml` 的 ast 哈希（`15457dbcd` 改注释里的脚本路径未重录） |
 | lane/3a-b5 | `74d9cf433` | `git grep -c 'GCGraph\|GraphDraft' -- 'src/compile' 'src/stdlib' 'src/tools'` **1576 → 1535**（compile 34→33、stdlib 1483→1443、tools 59→59）；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` 2669/2663/1红/5known | 5 处 `C-1123-17`（视图里 JOIN 与墓碑不占位）全不改并报出；`src/tools` 实测 59 不是 58（`facts-tools` 合并给 `camel-cli/main.cpp:555` 加了一行 `GCGraph *root`），**派工里的那个数在写它的时候是对的** |

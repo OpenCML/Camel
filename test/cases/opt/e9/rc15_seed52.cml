@@ -1,19 +1,27 @@
-func f9(a10: (int, string), a11: bool, a12: (a0: int, a1: int) => string): string {
-    return a12(31, 31);
+func f9(
+    a10: (int, string),
+    a11: bool,
+    a12: (a0: int, a1: int) => string
+) => string {
+    return a12(31, 31)
 }
 
-func main(): int sync {
-    let n62 = 0;
-    let n63 = '';
-    func g65(a66: int): string {
-        return f9((0, ''), false, func (p67: int, p68: int) => string { n63 });
-    };
+func main() => int sync {
+    let n62 = 0
+    let n63 = ''
+    func g65(a66: int) => string {
+        return f9((0, ''), false, func (p67: int, p68: int) => string {
+            n63
+        })
+    }
     let n88 = if ['' for q80 in ['']]->contains<''> then sync {
-        return 7;
-    } else 0;
-    let n94 = f9((0, ''), false, func (p92: int, p93: int) => string { '' }) <= (match n62 {
+        return 7
+    } else 0
+    let n94 = f9((0, ''), false, func (p92: int, p93: int) => string {
+        ''
+    }) <= (match n62 {
         case 3 => ''
         case _ => 'cd'
-    });
-    return 0;
+    })
+    return 0
 }

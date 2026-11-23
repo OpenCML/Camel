@@ -19,11 +19,11 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func quartic(x: float): float {
+func quartic(x: float) => float {
     return x * x * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = jvp(jvp(quartic))
     let (pair, slope) = g(2.0, 1.0, 1.0, 0.0)
     let (y, t0) = pair

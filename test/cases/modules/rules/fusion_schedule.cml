@@ -7,12 +7,13 @@
 import { Run, run } from rewrite
 import { array_sigmoid_chain } from rules
 
-func reported::<F>(label: string, r: Run<F>): F sync {
+func reported::<F>(label: string, r: Run<F>) => F sync {
     println(label, 'rewrites', r.rewrites, 'rounds', r.rounds)
     return r.result
 }
 
-export func only_sigmoid::<F>(p: F): F! sync {
-    return p->run<[array_sigmoid_chain], rounds: 16, strict: false>
-        -> func (r: Run<F>) sync { reported('only_sigmoid', r) }
+export func only_sigmoid::<F>(p: F) => F! sync {
+    return p->run<[array_sigmoid_chain], rounds: 16, strict: false>->func (r: Run<F>) sync {
+        reported('only_sigmoid', r)
+    }
 }

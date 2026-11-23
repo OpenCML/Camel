@@ -14,21 +14,25 @@ import { rewrite } from rewrite
 
 /// The guard on the coefficient's value: the type is the parameter's own, so no dummy sample
 /// value tells `constant` which type to read.
-func positive(c: float): bool {
+func positive(c: float) => bool {
     return c > 0.0 && c - c == 0.0
 }
 
 rule keep_positive(x: float, const c: float) when positive(c) { x * c => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[keep_positive]>
 }
 
-func positive_case(x: float): float { return x * 3.0 }
+func positive_case(x: float) => float {
+    return x * 3.0
+}
 
-func negative_case(x: float): float { return x * -3.0 }
+func negative_case(x: float) => float {
+    return x * -3.0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(positive_case(5.0), negative_case(5.0))
     return 0
 }

@@ -10,11 +10,15 @@
  * Actual: 0.5, -1.75, 7.75 (node VM; the second line differs between schedulers)
  */
 
-func f(x: float): float { return x + 0.5 }
+func f(x: float) => float {
+    return x + 0.5
+}
 
-func h(x: float, y: float): float { return x * 2.0 + y + 0.25 }
+func h(x: float, y: float) => float {
+    return x * 2.0 + y + 0.25
+}
 
-func main(): int sync {
+func main() => int sync {
     let i = 7
     let j = 3
     let d = 3.5

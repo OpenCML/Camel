@@ -6,9 +6,11 @@
 
 import state
 
-func main(): int sync {
+func main() => int sync {
     let n = state::ref(0)
-    let f = func () => int { state::get(n) }
+    let f = func () => int {
+        state::get(n)
+    }
     let box = state::ref(f)
     let g = state::get(box)
     println(g())

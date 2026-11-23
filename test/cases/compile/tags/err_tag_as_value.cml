@@ -4,7 +4,7 @@
 
 tag label(x: int) on func
 
-func main(): int sync {
+func main() => int sync {
     let f = label
     return 0
 }

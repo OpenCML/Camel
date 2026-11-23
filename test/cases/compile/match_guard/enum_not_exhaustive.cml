@@ -9,16 +9,16 @@
 
 type E = enum {
     A,
-    B,
+    B
 }
 
-func f(e: E): int {
+func f(e: E) => int {
     return match e {
         case E::A when false => 1
         case E::B => 2
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(E::A)
 }

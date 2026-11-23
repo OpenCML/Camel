@@ -6,18 +6,18 @@
  * or the result's position) stays in C++ and is imported the same way.
  */
 
-import { reshape, shape, numel, dim, to_bytes, from_bytes, load_npy, save_npy, set_num_threads, num_threads } from tensor
 import { seed } from random
+import { reshape, shape, numel, dim, to_bytes, from_bytes, load_npy, save_npy, set_num_threads, num_threads } from tensor
 
 // The file operators still type-check (this function is not called): `load_npy` writes the
 // element type the file holds, and the file's own element type is checked against it when the
 // call runs.
-func round_trip(t: f32[...], path: string): f32[...] sync {
+func round_trip(t: f32[...], path: string) => f32[...] sync {
     save_npy(t, path)
     return load_npy::<f32>(path)
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = [[1.0, 2.0], [3.0, 4.0]] as f32[2, 2]
     let extents = shape(t)
     println(extents[0] * 10 + extents[1])

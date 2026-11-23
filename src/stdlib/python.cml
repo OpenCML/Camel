@@ -40,7 +40,7 @@ export type PyObject
 // forms of its elements, and a tuple and a struct a `tuple` and a `dict` of the forms of their
 // members. Nothing else is (a `T?`, a `T!`, a map, a set, a function): the call is refused where
 // it is compiled.
-func has_python_form::<T>(): bool {
+func has_python_form::<T>() => bool {
     return match type T {
         case PyObject | Bytes | bool | int | i32 | float | f32 | string => true
         case array => has_python_form::<ElementOf<T>>()
@@ -50,7 +50,7 @@ func has_python_form::<T>(): bool {
 }
 
 // Every member of a struct or tuple has a Python form; the walk is static.
-func every_member_python::<T>(): bool {
+func every_member_python::<T>() => bool {
     return static loop every = true for n, F in fields T do every && has_python_form::<F>()
 }
 
@@ -59,26 +59,26 @@ func every_member_python::<T>(): bool {
 /// @fails error value `PythonError` when the code raises
 /// @example exec('x = 1')
 #op('python:exec')
-export func exec(code: string): void! panic
+export func exec(code: string) => void! panic
 
 /// Evaluates a Python expression and gives its value.
 /// @fails error value `PythonError` when the expression raises
 /// @example eval('1 + 2 * 3')->to_string !! ''    // '7'
 #op('python:eval')
-export func eval(expression: string): PyObject! panic
+export func eval(expression: string) => PyObject! panic
 
 /// Runs the Python script at the path.
 /// @fails error value `PythonError` when the file cannot be read or the script raises
 /// @example 'test/cases/modules/std/python/hello.py'->run_file
 #op('python:run_file')
-export func run_file(path: string): void! panic
+export func run_file(path: string) => void! panic
 
 /// Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs
 /// the body of the module and records it in `sys.modules`.
 /// @fails error value `PythonError` when the import raises
 /// @example import_module('math')->attr<'pi'>->to_string !! ''    // '3.141592653589793'
 #op('python:import_module')
-export func import_module(name: string): PyObject! panic
+export func import_module(name: string) => PyObject! panic
 
 /// The attribute of a Python object; a dotted name walks the chain. Asking may run a property or
 /// a descriptor, so it can raise.
@@ -86,7 +86,7 @@ export func import_module(name: string): PyObject! panic
 /// @example import_module('math')->attr<'pi'>
 #op('python:attr')
 with <name: string>
-export func attr(obj: PyObject): PyObject! panic
+export func attr(obj: PyObject) => PyObject! panic
 
 /// Calls a Python callable with the arguments the array holds, in order, and the keyword arguments
 /// the callable was bound with. `call<fn>` is a function from an array of arguments to a result, so
@@ -96,23 +96,23 @@ export func attr(obj: PyObject): PyObject! panic
 /// @example [2.0->to_py !! eval('0')]->call<sqrt>
 #op('python:call')
 with <fn: PyObject, kwargs: Map<string, PyObject>? = null>
-export func call(args: PyObject[]): PyObject! panic
+export func call(args: PyObject[]) => PyObject! panic
 
 /// The `str()` of a Python object, as text.
 /// @fails error value `PythonError` when `__str__` raises
 /// @example eval('[1, 2]')->to_string !! ''    // '[1, 2]'
 #op('python:to_string')
-export func to_string(obj: PyObject): string! panic
+export func to_string(obj: PyObject) => string! panic
 
 /// The Python object that stands for a Camel value, in the Python form of its type.
 /// @fails error value `PythonError` when the interpreter cannot make the object
 /// @example 2.0->to_py->to_string !! ''    // '2.0'
 #op('python:to_py')
-export func to_py::<T>(x: T): PyObject! panic when has_python_form::<T>()
+export func to_py::<T>(x: T) => PyObject! panic when has_python_form::<T>()
 
 /// The Camel value of type T that a Python object holds. T is written at the call
 /// (`from_py::<int>(obj)`) or taken from the type of the position the call stands in.
 /// @fails error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises
 /// @example eval('1 + 2')->from_py::<int> !! 0    // 3
 #op('python:from_py')
-export func from_py::<T>(obj: PyObject): T! panic when has_python_form::<T>()
+export func from_py::<T>(obj: PyObject) => T! panic when has_python_form::<T>()

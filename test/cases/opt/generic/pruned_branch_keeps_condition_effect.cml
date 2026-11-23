@@ -5,12 +5,12 @@
  * std::opt (both "side 2" lines were missing, exit 0).
  */
 
-func side(n: int): bool sync {
+func side(n: int) => bool sync {
     println('side {}'->format<n>)
     return n > 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = side(2)
     let b = if a then 1 else 0
     let c = side(2)

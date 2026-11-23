@@ -2,14 +2,14 @@
 // values, the 8-byte elements and the round trip through `to_bytes`/`from_bytes` are the evidence
 // that no creation, arithmetic, reduction or conversion narrows the element type.
 
-import { sum, mean, to_bytes, from_bytes } from tensor
 import { to_array } from bytes
+import { sum, mean, to_bytes, from_bytes } from tensor
 
-func scaled(x: f64[...], by: f64): f64[...] {
+func scaled(x: f64[...], by: f64) => f64[...] {
     return (x * by)
 }
 
-func main(): int sync {
+func main() => int sync {
     let numbers: f64[] = [16777217.0]
     let t = numbers
     println(sum(t))

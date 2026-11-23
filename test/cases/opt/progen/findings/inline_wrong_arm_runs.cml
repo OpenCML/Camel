@@ -7,27 +7,27 @@
  * Reduced by test/tools/progen from seed 89 (generator version 1, all features).
  */
 
-func f1(a2: int): bool {
-    return (('a' + 'pq') != ('yz' + '')) && false;
+func f1(a2: int) => bool {
+    return (('a' + 'pq') != ('yz' + '')) && false
 }
 
-func main(): int sync {
+func main() => int sync {
     let h13 = func (p12: int) => int sync {
-        println('');
-        return 0;
-    };
-    var v14 = 0;
+        println('')
+        return 0
+    }
+    var v14 = 0
     let n34 = if false then sync {
-        return 'yz';
+        return 'yz'
     } else sync {
         if !f1(0) then sync {
-            let n24 = v14;
-            null;
+            let n24 = v14
+            null
         } else sync {
-            let n25 = h13(0);
-            null;
-        };
-        return '';
-    };
-    return 0;
+            let n25 = h13(0)
+            null
+        }
+        return ''
+    }
+    return 0
 }

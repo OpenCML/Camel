@@ -7,21 +7,21 @@
  * function with that declared type (design principles 4.2, 5.1).
  */
 
-func doubles(n: int): f32[] {
+func doubles(n: int) => f32[] {
     // The declared return type: the position that always worked.
-    return [f32(i) * 0.5 for i in 0..n]
+    return [f32(i) * 0.5 for i in 0 .. n]
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = 4
-    let declared: f32[] = [f32(i) for i in 0..n]
-    let cast = [i + 1 for i in 0..n] as int[]
-    let pair: (f32[], int) = ([f32(i) for i in 0..n], 7)
+    let declared: f32[] = [f32(i) for i in 0 .. n]
+    let cast = [i + 1 for i in 0 .. n] as int[]
+    let pair: (f32[], int) = ([f32(i) for i in 0 .. n], 7)
     println(declared, len(declared))
     println(cast, len(cast))
     println(len(pair.0), pair.1)
     println(doubles(n), len(doubles(n)))
-    var bound: int[] = [i * i for i in 0..n]
+    var bound: int[] = [i * i for i in 0 .. n]
     println(bound, len(bound))
     return 0
 }

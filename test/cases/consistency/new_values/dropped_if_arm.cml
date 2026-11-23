@@ -3,7 +3,7 @@
  * the error UnusedPureResult (single-expression arm and block arm).
  */
 
-func main(): int sync {
+func main() => int sync {
     var out: int[] = []
     if len(out) == 0 then out->append<9>
     if len(out) == 0 then sync {

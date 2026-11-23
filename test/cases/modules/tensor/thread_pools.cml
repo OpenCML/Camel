@@ -21,17 +21,18 @@
 import { num_threads, sum, zeros } from tensor
 import { thread_count } from test_support
 
-func main(): int sync {
+func main() => int sync {
     let a = zeros::<f32>([1024, 1024]) + 0.001
     let b = zeros::<f32>([1024, 1024]) + 0.001
     let plain = sum(a @ b)
-
+    
     let batch_a = zeros::<f32>([4, 1024, 1024]) + 0.001
     let batch_b = zeros::<f32>([4, 1024, 1024]) + 0.001
     let batched = sum(batch_a @ batch_b)
-
+    
     let threads = thread_count()
     let budget = num_threads()
     'thread_pools threads={} budget={}'->format<threads, budget>->println
-    return if threads > budget then 1 else if budget == 1 && threads != 1 then 2 else 0
+    return if threads > budget then 1
+    else if budget == 1 && threads != 1 then 2 else 0
 }

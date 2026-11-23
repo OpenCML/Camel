@@ -1,6 +1,6 @@
 import { shr } from math
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(1->shr<-1>)
     println('not reached')

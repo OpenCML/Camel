@@ -3,9 +3,11 @@
  * was reported at the start of the enclosing function).
  */
 
-func inc(x: int): int { return x + 1 }
+func inc(x: int) => int {
+    return x + 1
+}
 
-func main(): int sync {
+func main() => int sync {
     let fs = [inc, nosuch]
     println('never printed')
     return 0

@@ -5,6 +5,8 @@
  * source of the signatures.
  */
 
+import { decode, encode } from bytes
+import { get_env } from env
 import {
     exists,
     is_file,
@@ -17,20 +19,18 @@ import {
     read_chunk,
     read_bytes,
     remove,
-    remove_dir,
+    remove_dir
 } from fs
-import { decode, encode } from bytes
-import { get_env } from env
 
 /// The kind of a `void!`, or ok.
-func verdict(r: void!): string {
+func verdict(r: void!) => string {
     return match r {
         case error e => e.kind
         case _ => 'ok'
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp/fs_declaration' else root + '/fs_declaration'
     let path = dir + '/notes.txt'
@@ -45,8 +45,8 @@ func main(): int sync {
     println(is_dir(dir))
     println(path->file_size !! 0)
     println(path->read_text !! 'bad')
-    println(path->read_chunk<0, 5> -> decode !! '')
-    println(path->read_bytes -> decode !! '')
+    println(path->read_chunk<0, 5>->decode !! '')
+    println(path->read_bytes->decode !! '')
     println(verdict(remove(path)))
     println(verdict(remove(path)))
     println(verdict(remove(binary)))

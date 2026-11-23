@@ -5,12 +5,12 @@
  * declared type has its own shape: the program exited on a segmentation fault.
  */
 
-func g(): int! {
+func g() => int! {
     return error('BadInput', 'nothing to give')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: int! = g()
     println(v !! -1)
     return 0

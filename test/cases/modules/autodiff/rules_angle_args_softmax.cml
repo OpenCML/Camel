@@ -17,16 +17,15 @@
  *            y * (dx - y.dx) = [0.25, -0.25], so f' = 0.25 * 1 - 0.25 * 2 = -0.25.
  */
 import rulesets.jvp
-import { jvp } from transforms
 import { softmax, sum } from tensor
+import { jvp } from transforms
 
-func loss_softmax(x: float[...]): float {
+func loss_softmax(x: float[...]) => float {
     return float(sum(softmax<1>(x) * ([1.0, 2.0] as float[])))
 }
 
-func main(): int sync {
-    let (softmaxValue, softmaxTangent) =
-        jvp(loss_softmax)([[1.0, 1.0]] as float[1, 2], [[1.0, 0.0]] as float[1, 2])
+func main() => int sync {
+    let (softmaxValue, softmaxTangent) = jvp(loss_softmax)([[1.0, 1.0]] as float[1, 2], [[1.0, 0.0]] as float[1, 2])
     'rules_angle_args softmax value={} tangent={}'->format<softmaxValue, softmaxTangent>->println
     return 0
 }

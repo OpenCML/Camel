@@ -5,6 +5,6 @@
 
 export type Color = enum { Red, Green, Blue }
 
-export func operator +(a: Color, b: Color): Color {
+export func operator +(a: Color, b: Color) => Color {
     return if a == b then Color::Blue else b
 }

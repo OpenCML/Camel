@@ -17,36 +17,43 @@
  * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
  */
 
-import { relu, mean, abs, reshape, zeros, save_npy } from tensor
 import { with_grad } from autodiff
-import { sgd, save_params } from nn
 import { get_env } from env
+import { sgd, save_params } from nn
 import { export_model } from onnx
+import { relu, mean, abs, reshape, zeros, save_npy } from tensor
 
 type Mlp = {
-    w1: float[...], b1: float[...], w2: float[...], b2: float[...],
-    w3: float[...], b3: float[...], wo: float[...], bo: float[...],
-    we: float[...], be: float[...]
+    w1: float[...],
+    b1: float[...],
+    w2: float[...],
+    b2: float[...],
+    w3: float[...],
+    b3: float[...],
+    wo: float[...],
+    bo: float[...],
+    we: float[...],
+    be: float[...]
 }
 
 with <m: Mlp>
-func loss(x: float[...]): float {
+func loss(x: float[...]) => float {
     let h1 = relu(x @ m.w1 + m.b1)
     let h2 = relu(h1 @ m.w2 + m.b2)
     let y = if float(mean(abs(h2))) > 0.5 then h2 @ m.we + m.be else relu(h2 @ m.w3 + m.b3) @ m.wo + m.bo
     return float(mean(y * y))
 }
 
-func fwd(m: Mlp, x: float[...]): float {
+func fwd(m: Mlp, x: float[...]) => float {
     return loss<m>(x)
 }
 
-func step(m: Mlp, x: float[...]): (float, Mlp) {
+func step(m: Mlp, x: float[...]) => (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func load(): Mlp {
+func load() => Mlp {
     return {
         w1: reshape<[3, 4]>([0.5, -0.25, 0.75, -1.0, -0.5, 0.25, 0.5, -0.75, 1.0, 0.5, -0.25, -0.25]),
         b1: zeros::<f32>([4]),
@@ -61,11 +68,11 @@ func load(): Mlp {
     }
 }
 
-func input_a(): float[...] {
+func input_a() => float[...] {
     return reshape<[2, 3]>([1.0, 2.0, -1.0, 0.5, -1.5, 2.0])
 }
 
-func do_run(m: Mlp): int sync {
+func do_run(m: Mlp) => int sync {
     let dump = get_env('DUMP') ?? ''
     let xa = input_a()
     let xb = reshape<[2, 3]>([-0.5, -0.5, -0.5, -0.5, -0.5, -0.5])
@@ -87,7 +94,7 @@ func do_run(m: Mlp): int sync {
     return 0
 }
 
-func do_export(m: Mlp): int sync {
+func do_export(m: Mlp) => int sync {
     let out = get_env('ONNX_OUT') ?? ''
     return if (get_env('WHAT') ?? '') == 'fwd' then sync {
         let r = export_model<out: out>(fwd, (m, input_a()))
@@ -116,7 +123,7 @@ func do_export(m: Mlp): int sync {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = load()
     return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

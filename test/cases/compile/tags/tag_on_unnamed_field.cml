@@ -1,11 +1,10 @@
 /// A tag on a field of a struct type written inline, which is not a declaration.
-
 tag width(w: int) on field
 
-func f(x: { #width(8) a: int }): int {
+func f(x: { #width(8) a: int }) => int {
     return x.a
 }
 
-func main(): int {
+func main() => int {
     return 0
 }

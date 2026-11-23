@@ -2,19 +2,19 @@ import { Graph, Node, Region, RegionKind, nodes, region_of, region_kind, region_
 
 // Every node is in a region; the body of a graph is region 0 and its kind is Root, whether or
 // not the graph has a region table.
-func isBodyNode(n: Node): bool {
+func isBodyNode(n: Node) => bool {
     return region_kind(region_of(n)) == RegionKind::Root
 }
 
-func isInlineRegion(r: Region): bool {
+func isInlineRegion(r: Region) => bool {
     return region_kind(r) == RegionKind::Inline
 }
 
-func isInlineNode(n: Node): bool {
+func isInlineNode(n: Node) => bool {
     return isInlineRegion(region_of(n))
 }
 
-func parentOk(n: Node): bool {
+func parentOk(n: Node) => bool {
     let r = region_of(n)
     return if isInlineRegion(r) then region_parent(r) != null else true
 }
@@ -27,7 +27,9 @@ func reportGraph(g: Graph) sync {
     println(len(ns->filter<parentOk>))
 }
 
-export func report::<F>(p: F): F! sync {
-    graphs_of(p)->foreach<func (g: Graph) { reportGraph(g) }>
+export func report::<F>(p: F) => F! sync {
+    graphs_of(p)->foreach<func (g: Graph) {
+        reportGraph(g)
+    }>
     return p
 }

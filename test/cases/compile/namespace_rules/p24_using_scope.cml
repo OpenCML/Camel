@@ -1,13 +1,14 @@
 // Does a using-directive written inside one function reach another function?
 import lib
-func a(): int {
+
+func a() => int {
     using namespace lib::Tools
     return inc(1)
 }
-func b(): int {
+func b() => int {
     return inc(10)
 }
-func main(): int sync {
+func main() => int sync {
     println(a(), b())
     return 0
 }

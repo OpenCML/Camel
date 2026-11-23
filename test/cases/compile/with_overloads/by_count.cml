@@ -6,19 +6,29 @@
  */
 
 with <axis: int>
-func total(xs: int[]): int { return axis }
+func total(xs: int[]) => int {
+    return axis
+}
 
-func total(xs: int[]): int { return len(xs) }
+func total(xs: int[]) => int {
+    return len(xs)
+}
 
 with <axis: int, keep: bool>
-func total(xs: int[]): int { return axis + 10 }
+func total(xs: int[]) => int {
+    return axis + 10
+}
 
 with <n: int>
-func fill(): int[] { return [n] }
+func fill() => int[] {
+    return [n]
+}
 
-func fill(): int[] { return [0] }
+func fill() => int[] {
+    return [0]
+}
 
-func main(): int sync {
+func main() => int sync {
     println(total([1, 2]))
     println([1, 2]->total<axis: 3>)
     println([1, 2]->total<1, true>)

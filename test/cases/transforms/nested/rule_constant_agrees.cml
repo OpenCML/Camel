@@ -17,18 +17,18 @@
 // its right side. That is the same limitation `angleargs`
 // met from the rule side, and it is why no end-to-end positive case for this guard can exist today:
 // the one law in the tree that writes a `<>` value is the one whose adjoint has no rule at all.
-import { grad } from vjp
 import { reshape, sum } from tensor
+import { grad } from vjp
 
 with <x: f32[]>
-func loss(): f32 {
+func loss() => f32 {
     let t = reshape<[2, 2]>(x)
     return sum(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
     let g = grad(loss)<xs>()
-    println("agrees g0=", g[0], " g3=", g[3])
+    println('agrees g0=', g[0], ' g3=', g[3])
     return 0
 }

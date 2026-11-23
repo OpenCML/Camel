@@ -10,9 +10,9 @@
  * printed nothing while reporting one warning per line.
  */
 
-func main(): int {
-    println("alpha")
-    println("beta")
-    println("gamma")
+func main() => int {
+    println('alpha')
+    println('beta')
+    println('gamma')
     return 0
 }

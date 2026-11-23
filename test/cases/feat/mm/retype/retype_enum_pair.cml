@@ -17,12 +17,14 @@
  */
 type Pull = (float, (dy: float) => float)
 
-func make_pair(c: bool, x: float, f: (dy: float) => float): Pull {
+func make_pair(c: bool, x: float, f: (dy: float) => float) => Pull {
     if c then (x, f) else (x + 1.0, f)
 }
 
-func main(): int sync {
-    make_pair(true, 1.5, func (dy: float) => float { dy * 2.0 })
-    println("pair made")
+func main() => int sync {
+    make_pair(true, 1.5, func (dy: float) => float {
+        dy * 2.0
+    })
+    println('pair made')
     return 0
 }

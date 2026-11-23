@@ -6,12 +6,12 @@
 
 import { ElementOf } from types
 
-func first(xs: int[]): int sync {
+func first(xs: int[]) => int sync {
     let e: ElementOf<typeof xs> = xs[0]
     return e
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([7, 8]))
     return 0
 }

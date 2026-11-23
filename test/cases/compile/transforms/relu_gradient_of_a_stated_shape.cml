@@ -30,16 +30,16 @@ import { vjp } from vjp
 
 /// The engine's route: the differentiated value is the `with` parameter (design principles 9.9).
 with <x: float[4]>
-func total_of_the_parameter(): float {
+func total_of_the_parameter() => float {
     return sum(relu(x))
 }
 
 /// The library's route: an ordinary parameter, which is what `vjp` takes.
-func total(x: float[4]): float {
+func total(x: float[4]) => float {
     return sum(relu(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let slope = grad(total_of_the_parameter)
     let de = slope<[-1.5, 0.0, 2.5, 0.25] as float[4]>()
     `relu stated engine d={}`->format<de>->println

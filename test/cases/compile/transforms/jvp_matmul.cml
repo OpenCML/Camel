@@ -15,15 +15,15 @@
 // `:op/idx_arr` by naming the two port lists. The rule is written with both terms anyway, so that
 // the day the lift carries an array operand's tangent the rule is right; this case locks the half
 // that can be read today.
-import { matmul } from tensor
 import rulesets.jvp
+import { matmul } from tensor
 import { jvp } from transforms
 
-func quadratic(x: float[...]): float {
+func quadratic(x: float[...]) => float {
     return matmul([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], x)[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [1.0, 2.0] as float[]
     let e0 = [1.0, 0.0] as float[]
     let e1 = [0.0, 1.0] as float[]

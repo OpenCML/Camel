@@ -20,15 +20,15 @@
 // -- and not an aggregate, and not the value of the function it differentiates.
 //
 //     camel test/cases/compile/transforms/tanh_gradient_through_the_library.cml
-import { vjp } from vjp
 import { sum, tanh } from tensor
+import { vjp } from vjp
 
 /// The same function as the engine case, with the differentiated value as an ordinary parameter.
-func total(x: float[...]): float {
+func total(x: float[...]) => float {
     return sum(tanh(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(total)([0.5, -1.0] as float[])
     let d = pullback(1.0).0
     `tanh library value={} d={}`->format<value, d>->println

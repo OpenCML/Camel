@@ -13,11 +13,11 @@
 import { grad } from autodiff
 
 with <x: float>
-func loss(): (float, float) {
+func loss() => (float, float) {
     return (x * x, x * 3.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(loss, has_aux: false)<2.0>()
     println(d)
     return 0

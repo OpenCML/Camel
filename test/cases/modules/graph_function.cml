@@ -1,37 +1,39 @@
 import { Node, Graph, nodes, inputs, op, op_name, constant, open, commit, replace, graph_of, name } from graph
 
-func target(x: int): int {
+func target(x: int) => int {
     return (x + 0) * 3
 }
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func isZero(n: Node): bool {
+func isZero(n: Node) => bool {
     return match constant::<int>(n) {
         case null => false
         case v => v == 0
     }
 }
 
-func isAddZero(n: Node): bool spelling {
+func isAddZero(n: Node) => bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isZero(ins[1])
 }
 
-func adds(f: (x: int) => int): int {
+func adds(f: (x: int) => int) => int {
     return len(nodes(graph_of(f))->filter<isAddZero>)
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     println(name(graph_of(target)))
     println(adds(target))
     let t = open(target)
-    nodes(graph_of(target))->filter<isAddZero>->foreach<func (n: Node) { replace(t, n, inputs(n)[0]) }>
+    nodes(graph_of(target))->filter<isAddZero>->foreach<func (n: Node) {
+        replace(t, n, inputs(n)[0])
+    }>
     let result = commit(t)
     let g = result !! target
     println(adds(g))

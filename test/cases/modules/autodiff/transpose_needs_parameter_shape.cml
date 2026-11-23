@@ -20,14 +20,14 @@
  * handed says which parameter and what to write instead.
  */
 import rulesets.transpose
-import { transpose } from transforms
 import { mean, sum } from tensor
+import { transpose } from transforms
 
-func loss_mean(x: float[...]): float {
+func loss_mean(x: float[...]) => float {
     return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(loss_mean)(1.0)
     'transpose should have been refused, and it answered {}'->format<back.0>->println
     return 0

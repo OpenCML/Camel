@@ -16,23 +16,23 @@
 //     the branch written out instead, `NaN` at `x <= 0` included.
 //
 //     camel test/cases/compile/transforms/jvp_of_a_pow_call.cml
+import { pow } from math
 import rulesets.jvp
 import { jvp } from transforms
-import { pow } from math
 
-func cube(x: float): float {
+func cube(x: float) => float {
     return pow(x, 3.0)
 }
 
-func fractional(x: float): float {
+func fractional(x: float) => float {
     return pow(x, 2.5)
 }
 
-func throughExponent(n: float): float {
+func throughExponent(n: float) => float {
     return pow(2.0, n)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, tangent) = jvp(cube)(2.0, 1.0)
     `jvp pow value={} d={}`->format<value, tangent>->println
     let (fracValue, fracTangent) = jvp(fractional)(2.0, 1.0)

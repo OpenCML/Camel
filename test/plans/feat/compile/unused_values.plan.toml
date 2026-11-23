@@ -133,7 +133,7 @@ expect_exit = 1
 verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.diagnostics[0].name)
-assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
 """
 
 # ---- What a statement whose value nobody takes reports, per position (author's ruling of 2026-11-05, `080778522`) ----

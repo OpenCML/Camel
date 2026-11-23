@@ -9,26 +9,40 @@ import { rewrite } from rewrite
 
 rule add_zero(x: int) when true { x + 0 => publishes(x) }
 
-func publishes(x: int): int sync {
+func publishes(x: int) => int sync {
     let p = redex
     let t = open(p)
     let n = add_constant(t, graph_of(p), 1)
-    sync { println('added node ', id(n)) }
+    sync {
+        println('added node ', id(n))
+    }
     let published = commit(t)
     return match published {
-        case error e => sync { println('inner error value: ', e.kind); return x }
-        case q => sync { println('inner ok'); return x }
+        case error e => sync {
+            println('inner error value: ', e.kind)
+            return x
+        }
+        case q => sync {
+            println('inner ok')
+            return x
+        }
     }
 }
 
-func redex(x: int): int {
+func redex(x: int) => int {
     return x + 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = redex
     return match p->rewrite<[add_zero]> {
-        case error e => sync { println('outer error value: ', e.kind, ' | ', e.message); return 1 }
-        case q => sync { println('rewritten'); return 0 }
+        case error e => sync {
+            println('outer error value: ', e.kind, ' | ', e.message)
+            return 1
+        }
+        case q => sync {
+            println('rewritten')
+            return 0
+        }
     }
 }

@@ -4,13 +4,13 @@ import { Json, decode, get } from json
 // used to be passed on unboxed and `??` read the integer 7 as the address of a box
 // (segmentation fault). A decoded value is a `Json` now;
 // the branch with a `null` arm makes it a `Json?`.
-func pick(seven: Json, zero: Json): Json {
+func pick(seven: Json, zero: Json) => Json {
     let n = len('ab')
     let a = if n > 0 then seven else null
     return a ?? zero
 }
 
-func main(): int sync {
+func main() => int sync {
     let pair = decode('[7, 0]')
     return match pair {
         case error e => 1

@@ -3,7 +3,7 @@
  * end of the inner sync block is the error UnusedPureResult.
  */
 
-func main(): int sync {
+func main() => int sync {
     var out: int[] = []
     sync {
         out->append<7>

@@ -2,7 +2,7 @@
  * A `main` that declares `int`: the value is the exit code and is not printed.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('a')
     return 3
 }

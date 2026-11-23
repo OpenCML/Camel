@@ -7,7 +7,7 @@
 import { stop_gradient } from autodiff
 import { shape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(stop_gradient(7))
     println(stop_gradient('text'))
     println(shape(stop_gradient([1.0, 2.0] as float[]))[0])

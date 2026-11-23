@@ -11,7 +11,7 @@
 
 import state
 
-func read_only(): int sync {
+func read_only() => int sync {
     let box = state::ref(0)
     loop i = 0 while i < 3 do sync {
         println(`box ${state::get(box)}`)
@@ -20,7 +20,7 @@ func read_only(): int sync {
     return 0
 }
 
-func written(): int sync {
+func written() => int sync {
     let box = state::ref(0)
     loop i = 0 while i < 3 do sync {
         state::set(box, state::get(box) + 1)
@@ -30,7 +30,7 @@ func written(): int sync {
     return 0
 }
 
-func after(): int sync {
+func after() => int sync {
     let box = state::ref(0)
     loop i = 0 while i < 3 do sync {
         state::set(box, state::get(box) + 1)
@@ -39,7 +39,7 @@ func after(): int sync {
     return state::get(box)
 }
 
-func nested(): int sync {
+func nested() => int sync {
     let box = state::ref(0)
     loop i = 0 while i < 2 do sync {
         loop j = 0 while j < 2 do sync {
@@ -51,7 +51,7 @@ func nested(): int sync {
     return state::get(box)
 }
 
-func plain(): int sync {
+func plain() => int sync {
     var total = 0
     loop i = 0 while i < 3 do sync {
         var t = i + 1
@@ -61,7 +61,7 @@ func plain(): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     println(read_only())
     println(written())
     println(after())

@@ -15,15 +15,15 @@
  * shape whose rounds are not numbers, and it is refused rather than run.
  */
 
-import { sum } from tensor
 import { grad } from autodiff
+import { sum } from tensor
 
 with <rows: f32[][]>
-func total(): float {
+func total() => float {
     return loop acc = 0.0 for row in rows do acc + float(sum(row))
 }
 
-func main(): int sync {
+func main() => int sync {
     let rows = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]] as f32[][]
     let d = grad(total)<rows>()
     'loop_grad_refuse_slice_iterable d={}'->format<d>->println

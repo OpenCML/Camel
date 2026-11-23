@@ -3,13 +3,15 @@
  * written with constants.
  */
 
-func safe(a: int, b: int): int {
+func safe(a: int, b: int) => int {
     return if b == 0 then 0 else a / b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(safe(10, 0))
     println(safe(10, 5))
-    println((0..4)->map<func (b: int) => int { safe(12, b) }>)
+    println((0 .. 4)->map<func (b: int) => int {
+        safe(12, b)
+    }>)
     return 0
 }

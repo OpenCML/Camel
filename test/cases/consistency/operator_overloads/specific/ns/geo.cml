@@ -3,6 +3,10 @@
 
 namespace Geo {
     export type P = { x: int, y: int }
-    export func p(x: int, y: int): P { return { x: x, y: y } }
-    export func operator +(a: P, b: P): P { return { x: a.x + b.x, y: a.y + b.y } }
+    export func p(x: int, y: int) => P {
+        return { x: x, y: y }
+    }
+    export func operator +(a: P, b: P) => P {
+        return { x: a.x + b.x, y: a.y + b.y }
+    }
 }

@@ -4,7 +4,7 @@
  * either branch must not drop the effect of the arm that stands in its place.
  */
 
-func pick(c: bool, d: bool): int sync {
+func pick(c: bool, d: bool) => int sync {
     return if c then sync {
         println(11)
         let inner = if d then sync {
@@ -16,7 +16,7 @@ func pick(c: bool, d: bool): int sync {
     } else 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true, true))
     println(pick(true, false))
     return 0

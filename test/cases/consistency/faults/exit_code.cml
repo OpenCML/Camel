@@ -5,14 +5,14 @@
 
 import { exit } from process
 
-func stop(code: int): int sync {
+func stop(code: int) => int sync {
     println('stopping')
     exit(code)
     println('not reached in stop')
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     stop(3)
     println('not reached')

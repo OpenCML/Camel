@@ -11,19 +11,19 @@
  * counts a value of two dimensions has (`2` rows, `4` elements) are different numbers, and a
  * position is only ever compared with the one it addresses.
  */
-func two(xs: float[2, 2], i: int, j: int): float {
+func two(xs: float[2, 2], i: int, j: int) => float {
     return xs[i, j]
 }
 
-func nested(xs: float[2, 2], i: int, j: int): float {
+func nested(xs: float[2, 2], i: int, j: int) => float {
     return xs[i][j]
 }
 
-func one(xs: float[3], i: int): float {
+func one(xs: float[3], i: int) => float {
     return xs[i]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[2, 2] = [[1.0, 2.0], [3.0, 4.0]]
     let i0 = 2
     let i1 = 5

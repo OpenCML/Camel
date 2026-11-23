@@ -2,15 +2,15 @@
 // argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 
-func apply(f: (x: int) => int pure, x: int): int {
+func apply(f: (x: int) => int pure, x: int) => int {
     return f(x)
 }
 
-func twice(x: int): int pure {
+func twice(x: int) => int pure {
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(twice, 4))
     return 0
 }

@@ -3,7 +3,7 @@
  * case of this `match` (design principles 3.9).
  */
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     let r: int!? = 5
     let s = match r {

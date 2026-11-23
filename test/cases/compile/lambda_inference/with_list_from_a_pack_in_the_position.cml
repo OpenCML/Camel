@@ -18,28 +18,33 @@
 // second one, which is the shape `has_aux` needs from the library.
 import { WithOf, ParamsOf } from types
 
-type GradientAux<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)
+type GradientAux<F> = <...WithOf<F>>(...ParamsOf<F>) => (float, float)
 
 with <w: float>
-func loss(): float {
+func loss() => float {
     return w
 }
 
 with <w: float, k: float>
-func loss2(): float {
+func loss2() => float {
     return w * k
 }
 
 with <w: float>
-func loss3(x: float, y: float): float {
+func loss3(x: float, y: float) => float {
     return w * x * y
 }
 
-func main(): int sync {
-    let one: GradientAux<<w: float> () => float> = func <w, ...rest> () { (w, 1.0) }
-    let two: GradientAux<<w: float, k: float> () => float> = func <w, ...rest> () { (w, 1.0) }
-    let three: GradientAux<<w: float> (x: float, y: float) => float> =
-        func <w, ...rest> (x, y) { (w * x * y, 1.0) }
+func main() => int sync {
+    let one: GradientAux<<w: float>() => float> = func <w, ...rest>() {
+        (w, 1.0)
+    }
+    let two: GradientAux<<w: float, k: float>() => float> = func <w, ...rest>() {
+        (w, 1.0)
+    }
+    let three: GradientAux<<w: float>(x: float, y: float) => float> = func <w, ...rest>(x, y) {
+        (w * x * y, 1.0)
+    }
     println(`one ${one<2.0>()}`)
     println(`two ${two<2.0, 3.0>()}`)
     println(`three ${three<2.0>(3.0, 4.0)}`)

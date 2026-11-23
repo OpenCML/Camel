@@ -2,38 +2,41 @@
  * Parallel block-sorting workload used to verify independent large-array jobs can be scheduled without cross-block corruption.
  */
 
-import { now } from time
-import { seed, shuffle, next_key } from random
 import { sort } from array
+import { seed, shuffle, next_key } from random
+import { now } from time
 
-func sort_block(arr: int[], lo: int, hi: int): int[] {
+func sort_block(arr: int[], lo: int, hi: int) => int[] {
     return sort(arr[lo..hi])
 }
 
-func main(): int sync {
+func main() => int sync {
     let blocks = 8
     let block_size = 500000
     let n = blocks * block_size
     let preview = 16
     let s = 20260309
-
+    
     seed(s)
     'Generating {} shuffled integers...'->format<n>->println
-    let arr = (0..n)->shuffle<next_key()>
-
+    let arr = (0 .. n)->shuffle<next_key()>
+    
     'Sorting {} independent blocks with {} items each...'->format<blocks, block_size>->println
     let start = now()
-
-    let chunks = (0..blocks)->map<func (i: int) => int[] {
+    
+    let chunks = (0 .. blocks)->map<func (i: int) => int[] {
         let lo = i * block_size
         let hi = (i + 1) * block_size
         return sort_block(arr, lo, hi)
     }>
     let duration = now() - start
     println('Each block is sorted independently; unordered block boundaries shown below:')
-    chunks->map<func (chunk: int[]) => int { chunk[0] }>->println
-    chunks->map<func (chunk: int[]) => int { chunk[block_size - 1] }>->println
+    chunks->map<func (chunk: int[]) => int {
+        chunk[0]
+    }>->println
+    chunks->map<func (chunk: int[]) => int {
+        chunk[block_size - 1]
+    }>->println
     'Block sorting completed in {:.2f} seconds'->format<duration>->println
     return 0
 }
-

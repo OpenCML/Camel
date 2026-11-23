@@ -17,21 +17,21 @@
 //
 //     camel test/cases/compile/transforms/max_gradient_both_legs.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, max, sum } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 with <x: float[...]>
-func total(): float {
+func total() => float {
     return max(x)
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[]): float {
+func total_plain(x: float[]) => float {
     return max(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let engine = grad(total)<[1.0, 3.0, 3.0, 0.5] as float[]>()
     `max engine={}`->format<engine>->println
     let (value, pullback) = vjp(total_plain)([1.0, 3.0, 3.0, 0.5] as float[])

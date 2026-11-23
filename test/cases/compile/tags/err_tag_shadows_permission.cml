@@ -6,6 +6,6 @@
 
 tag reassociate on func
 
-func main(): int {
+func main() => int {
     return 0
 }

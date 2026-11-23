@@ -10,16 +10,16 @@ import { nodes as sizeCost } from rules
 
 rule drop_one(x: int) { x + 1 => x }
 
-func positiveNext(x: int, c: bool): bool {
+func positiveNext(x: int, c: bool) => bool {
     return c && x + 1 > 0
 }
 
 /// The function the rules are applied to: the program itself would be a recursive reference.
-func target(): int {
+func target() => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = target
     let rules: Rule[] = [drop_one]
     let s = p->saturate<rules, rounds: 2> !! p

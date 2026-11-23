@@ -20,14 +20,14 @@
 import { grad } from autodiff
 
 with <w: float>
-func loss(x: float): float {
+func loss(x: float) => float {
     var weight = w
     weight = weight - 0.1 * (weight * x - 3.0) * x
     let residual = weight * x - 3.0
     return residual * residual
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(loss)
     println(d<1.0>(2.0))
     return 0

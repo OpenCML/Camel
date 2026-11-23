@@ -9,25 +9,25 @@
 import { grad } from autodiff
 
 with <x: float>
-func leaky(): float {
+func leaky() => float {
     return if x > 0.0 then x * x else 0.5 * x
 }
 
 with <x: float>
-func power(n: int): float {
+func power(n: int) => float {
     return if n == 0 then 1.0 else x * power<x>(n - 1)
 }
 
 with <x: float>
-func cube(): float {
+func cube() => float {
     return if x > 0.0 then x * x * x else 0.0 - x
 }
 
-func of_param(f: <x: float> () => float, x: float): float {
+func of_param(f: <x: float>() => float, x: float) => float {
     return grad(f)<x>()
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before grad')
     let a = grad(leaky)<3.0>()
     let b = grad(power)<2.0>(5)

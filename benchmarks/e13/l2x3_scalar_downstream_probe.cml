@@ -4,16 +4,16 @@
  * directly, exports fine) and X2 (tensor arms, fails).
  */
 
-import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
-import { sgd } from nn
 import { get_env } from env
+import { sgd } from nn
 import { export_model } from onnx
+import { relu, mean, reshape } from tensor
 
 type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
 
 with <m: Mlp>
-func loss(x: f32[...]): float {
+func loss(x: f32[...]) => float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     let s = float(mean(y * y))
@@ -21,12 +21,12 @@ func loss(x: f32[...]): float {
     return z * 3.0
 }
 
-func step(m: Mlp, x: f32[...]): (float, Mlp) {
+func step(m: Mlp, x: f32[...]) => (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
         b1: reshape<[3]>([0.1, 0.0, -0.1]),

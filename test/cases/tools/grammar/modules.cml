@@ -1,27 +1,26 @@
 // Module declarations, imports, exports, namespaces and qualified names.
-
-import time
-import ..sibling
 import ...pkg.deep.name
-import { now, sleep } from time
-import { zen, } from this
-import tensor from .local.tensor
+import ..sibling
 import ..sibling as near
+import tensor from .local.tensor
 import { helper as dist } from shapes::detail::impl
+import { zen } from this
+import time
+import { now, sleep } from time
 
 namespace shapes {
     type Point = { x: int, y: int }
-
-    func origin(): Point {
+    
+    func origin() => Point {
         return { x: 0, y: 0 }
     }
-
+    
     namespace detail::impl {
-        func helper(p: shapes::Point): int {
+        func helper(p: shapes::Point) => int {
             return p.x
         }
     }
-
+    
     using namespace detail::impl
     export { origin }
 }
@@ -31,7 +30,7 @@ using namespace shapes
 export let ORIGIN = shapes::origin()
 export type P = shapes::Point
 
-func main(): int sync {
+func main() => int sync {
     let p: shapes::Point = shapes::origin()
     let d = shapes::detail::impl::helper(p)
     let t = time::now()

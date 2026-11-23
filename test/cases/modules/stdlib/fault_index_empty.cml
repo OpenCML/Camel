@@ -1,6 +1,6 @@
 import { trim } from str
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     let s = trim('  ')
     println(s[0])

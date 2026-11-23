@@ -6,7 +6,7 @@
 
 import { get_env, get_cwd } from env
 
-func main(): int sync {
+func main() => int sync {
     let path = get_env('PATH') ?? ''
     let cwd = get_cwd() !! ''
     println(path, cwd)

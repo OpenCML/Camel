@@ -7,22 +7,22 @@
  * Reduced by test/tools/progen (an early batch, before the seed stream was versioned).
  */
 
-func f1(a2: bool): bool {
+func f1(a2: bool) => bool {
     let n5 = if true then if a2 then '' else '' else {
-        return '';
-    };
+        return ''
+    }
     return (match n5 {
         case 'x' => -1
         case _ => -1
-    }) < int(-1.5);
+    }) < int(-1.5)
 }
 
-func main(): int sync {
+func main() => int sync {
     let n63 = if (if false then true else f1(false)) then sync {
-        return '';
+        return ''
     } else sync {
-        println('');
-        return '';
-    };
-    return 0;
+        println('')
+        return ''
+    }
+    return 0
 }

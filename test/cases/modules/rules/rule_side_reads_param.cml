@@ -14,18 +14,20 @@ with <shift: int = 1>
 rule add_shift(x: int) when shift > 0 { x + 0 => x + shift }
 
 /// The rule at its default, `shift = 1`.
-export func apply_default::<F>(p: F): F! {
+export func apply_default::<F>(p: F) => F! {
     return p->rewrite<[add_shift]>
 }
 
 /// The same rule bound to 7: another instance, whose right side adds 7.
-export func apply_seven::<F>(p: F): F! {
+export func apply_seven::<F>(p: F) => F! {
     return p->rewrite<[add_shift<7>]>
 }
 
-func left(x: int): int { return x + 0 }
+func left(x: int) => int {
+    return x + 0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(left(3))
     return 0
 }

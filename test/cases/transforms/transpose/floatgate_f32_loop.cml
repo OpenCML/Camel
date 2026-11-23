@@ -20,11 +20,11 @@
 import rulesets.transpose
 import { transpose } from transforms
 
-func f(x: f32): f32 {
-    return loop a = x for i in 0..3 do a * 3.0
+func f(x: f32) => f32 {
+    return loop a = x for i in 0 .. 3 do a * 3.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(f)
     'loop f32 value={}'->format<f(1.0)>->println
     'loop f32 transpose d={}'->format<back(1.0).0>->println

@@ -5,11 +5,11 @@
  * move, because compiled code would contain the address of the constant. No allocation.
  */
 
-func pick(n: int, a: string): string {
+func pick(n: int, a: string) => string {
     return if n < 2 then 'leaf' else pick(n - 1, pick(n - 2, a))
 }
 
-func main(n: int): int sync {
+func main(n: int) => int sync {
     println(pick(n, 'x'))
     return 0
 }

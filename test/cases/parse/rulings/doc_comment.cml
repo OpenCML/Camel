@@ -1,11 +1,11 @@
 /// The square of a number.
 /// Negative numbers are fine.
-func square(x: int): int {
+func square(x: int) => int {
     return x * x
 }
 
 // An ordinary comment is not documentation.
-func plain(x: int): int {
+func plain(x: int) => int {
     return x
 }
 
@@ -18,7 +18,7 @@ type Pair = (int, int)
 /// Exported and documented.
 export let common = 1
 
-func main(): int sync {
+func main() => int sync {
     println(square(answer) + plain(common))
     return 0
 }

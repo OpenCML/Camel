@@ -4,15 +4,15 @@
  * declares the type as well (design principles 5.7), not only among the imports written here.
  */
 
-export func twice::<T>(x: T): T {
+export func twice::<T>(x: T) => T {
     return x + x
 }
 
-export func same::<T>(a: T, b: T): bool {
+export func same::<T>(a: T, b: T) => bool {
     return a == b
 }
 
-export func differs::<T>(a: T, b: T): bool {
+export func differs::<T>(a: T, b: T) => bool {
     return a != b
 }
 
@@ -20,7 +20,7 @@ export func differs::<T>(a: T, b: T): bool {
  * `+=` follows its plain operator (`+`, design principles 4.3), which is the declaring
  * module's one here as well (5.7). Sync because the rebinding writes a variable.
  */
-export func bump::<T>(x: T, y: T): T sync {
+export func bump::<T>(x: T, y: T) => T sync {
     var acc = x
     acc += y
     return acc

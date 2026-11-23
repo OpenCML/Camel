@@ -1,11 +1,11 @@
 // A literal holds a known number of elements, and an extent the position states as a constant is
 // what they are the elements of: four written where four are declared.
 
-func count(x: f32[4]): int {
+func count(x: f32[4]) => int {
     return len(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count([1.0, 2.0, 3.0, 4.0]))
     return 0
 }

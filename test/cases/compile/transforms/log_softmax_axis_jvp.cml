@@ -32,28 +32,27 @@
  * the axis, and it holds for either spelling.
  */
 import rulesets.jvp
-import { jvp } from transforms
 import { log_softmax, sum } from tensor
+import { jvp } from transforms
 
-func axis0(x: float[...]): float {
+func axis0(x: float[...]) => float {
     return sum(log_softmax<0>(x) * ([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]))
 }
 
-func axis1(x: float[...]): float {
+func axis1(x: float[...]) => float {
     return sum(log_softmax<1>(x) * ([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]))
 }
 
-func axis2(x: float[...]): float {
+func axis2(x: float[...]) => float {
     return sum(log_softmax<2>(x) * ([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[[0.0, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]] as float[2, 2, 2]
     let dx = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]
     let (_v0, tangent0) = jvp(axis0)(x, dx)
     let (_v1, tangent1) = jvp(axis1)(x, dx)
     let (_v2, tangent2) = jvp(axis2)(x, dx)
-    'rules_angle_args log-softmax-axes axis0={} axis1={} axis2={}'->format<
-        tangent0, tangent1, tangent2>->println
+    'rules_angle_args log-softmax-axes axis0={} axis1={} axis2={}'->format<tangent0, tangent1, tangent2>->println
     return 0
 }

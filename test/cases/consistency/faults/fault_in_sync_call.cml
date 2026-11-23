@@ -7,7 +7,7 @@ func bump(var x: int, d: int) {
     x = x / d
 }
 
-func main(): int sync {
+func main() => int sync {
     var i = 5
     bump(i, 3)
     println(i)

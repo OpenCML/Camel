@@ -15,9 +15,9 @@
 //
 //     camel showcase/c3-char-transformer/block_train.cml
 //     python showcase/c3-char-transformer/baseline/block_train.py
-import { softmax, sum, transpose } from tensor
 import { with_grad } from autodiff
 import { sqrt } from math
+import { softmax, sum, transpose } from tensor
 
 type Head = {
     wq: float[...],
@@ -25,12 +25,12 @@ type Head = {
     wv: float[...]
 }
 
-func mask(): float[...] {
+func mask() => float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
 with <h: Head>
-func block(x: float[...]): float {
+func block(x: float[...]) => float {
     let q = x @ h.wq
     let k = transpose(x @ h.wk)
     let scores = q @ k * 0.70710678118654752
@@ -41,7 +41,7 @@ func block(x: float[...]): float {
 // The six numbers as one parameter tree, written out: a struct of `float[2, 1]` tensors, because the
 // block multiplies them, while the loop below carries them as six `float`s, because the optimizer
 // moves one number at a time.
-func head(a: float, b: float, c: float, d: float, e: float, f: float): Head {
+func head(a: float, b: float, c: float, d: float, e: float, f: float) => Head {
     return {
         wq: [[a], [b]] as float[2, 1],
         wk: [[c], [d]] as float[2, 1],
@@ -49,49 +49,60 @@ func head(a: float, b: float, c: float, d: float, e: float, f: float): Head {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
     let first = [[1.0], [0.0]] as float[2, 1]
     let second = [[0.0], [1.0]] as float[2, 1]
-    let (wa, wb, wc, wd, we, wf, ma, mb, mc, md, me, mf, va, vb, vc, vd, ve, vf, c1, c2, steps, log) = loop a = 1.0, b = 0.5, c = 0.5, d = 1.0, e = 1.0, f = -1.0, ma = 0.0, mb = 0.0, mc = 0.0, md = 0.0, me = 0.0, mf = 0.0, va = 0.0, vb = 0.0, vc = 0.0, vd = 0.0, ve = 0.0, vf = 0.0, c1 = 1.0, c2 = 1.0, step = 0, log = '' as string
-        while step < 50
-        do {
-            let (value, g) = with_grad(block)<head(a, b, c, d, e, f)>(x)
-            let ga = sum(g.wq * first)
-            let gb = sum(g.wq * second)
-            let gc = sum(g.wk * first)
-            let gd = sum(g.wk * second)
-            let ge = sum(g.wv * first)
-            let gf = sum(g.wv * second)
-            let nm_a = 0.9 * ma + 0.1 * ga
-            let nm_b = 0.9 * mb + 0.1 * gb
-            let nm_c = 0.9 * mc + 0.1 * gc
-            let nm_d = 0.9 * md + 0.1 * gd
-            let nm_e = 0.9 * me + 0.1 * ge
-            let nm_f = 0.9 * mf + 0.1 * gf
-            let nv_a = 0.999 * va + 0.001 * ga * ga
-            let nv_b = 0.999 * vb + 0.001 * gb * gb
-            let nv_c = 0.999 * vc + 0.001 * gc * gc
-            let nv_d = 0.999 * vd + 0.001 * gd * gd
-            let nv_e = 0.999 * ve + 0.001 * ge * ge
-            let nv_f = 0.999 * vf + 0.001 * gf * gf
-            let nc1 = c1 * 0.9
-            let nc2 = c2 * 0.999
-            let rate = 0.002
-            let eps = 0.00000001
-            let nlog = log + `c3 train step=${step + 1} loss=${value:.12f}` + "\n"
-            return (
-                a - rate * (nm_a / (1.0 - nc1)) / (sqrt(nv_a / (1.0 - nc2)) + eps),
-                b - rate * (nm_b / (1.0 - nc1)) / (sqrt(nv_b / (1.0 - nc2)) + eps),
-                c - rate * (nm_c / (1.0 - nc1)) / (sqrt(nv_c / (1.0 - nc2)) + eps),
-                d - rate * (nm_d / (1.0 - nc1)) / (sqrt(nv_d / (1.0 - nc2)) + eps),
-                e - rate * (nm_e / (1.0 - nc1)) / (sqrt(nv_e / (1.0 - nc2)) + eps),
-                f - rate * (nm_f / (1.0 - nc1)) / (sqrt(nv_f / (1.0 - nc2)) + eps),
-                nm_a, nm_b, nm_c, nm_d, nm_e, nm_f,
-                nv_a, nv_b, nv_c, nv_d, nv_e, nv_f,
-                nc1, nc2, step + 1, nlog
-            )
-        }
+    let (wa, wb, wc, wd, we, wf, ma, mb, mc, md, me, mf, va, vb, vc, vd, ve, vf, c1, c2, steps, log) = loop a = 1.0, b = 0.5, c = 0.5, d = 1.0, e = 1.0, f = -1.0, ma = 0.0, mb = 0.0, mc = 0.0, md = 0.0, me = 0.0, mf = 0.0, va = 0.0, vb = 0.0, vc = 0.0, vd = 0.0, ve = 0.0, vf = 0.0, c1 = 1.0, c2 = 1.0, step = 0, log = '' as string while step < 50 do {
+        let (value, g) = with_grad(block)<head(a, b, c, d, e, f)>(x)
+        let ga = sum(g.wq * first)
+        let gb = sum(g.wq * second)
+        let gc = sum(g.wk * first)
+        let gd = sum(g.wk * second)
+        let ge = sum(g.wv * first)
+        let gf = sum(g.wv * second)
+        let nm_a = 0.9 * ma + 0.1 * ga
+        let nm_b = 0.9 * mb + 0.1 * gb
+        let nm_c = 0.9 * mc + 0.1 * gc
+        let nm_d = 0.9 * md + 0.1 * gd
+        let nm_e = 0.9 * me + 0.1 * ge
+        let nm_f = 0.9 * mf + 0.1 * gf
+        let nv_a = 0.999 * va + 0.001 * ga * ga
+        let nv_b = 0.999 * vb + 0.001 * gb * gb
+        let nv_c = 0.999 * vc + 0.001 * gc * gc
+        let nv_d = 0.999 * vd + 0.001 * gd * gd
+        let nv_e = 0.999 * ve + 0.001 * ge * ge
+        let nv_f = 0.999 * vf + 0.001 * gf * gf
+        let nc1 = c1 * 0.9
+        let nc2 = c2 * 0.999
+        let rate = 0.002
+        let eps = 0.00000001
+        let nlog = log + `c3 train step=${step + 1} loss=${value:.12f}` + '\n'
+        return (
+            a - rate * (nm_a / (1.0 - nc1)) / (sqrt(nv_a / (1.0 - nc2)) + eps),
+            b - rate * (nm_b / (1.0 - nc1)) / (sqrt(nv_b / (1.0 - nc2)) + eps),
+            c - rate * (nm_c / (1.0 - nc1)) / (sqrt(nv_c / (1.0 - nc2)) + eps),
+            d - rate * (nm_d / (1.0 - nc1)) / (sqrt(nv_d / (1.0 - nc2)) + eps),
+            e - rate * (nm_e / (1.0 - nc1)) / (sqrt(nv_e / (1.0 - nc2)) + eps),
+            f - rate * (nm_f / (1.0 - nc1)) / (sqrt(nv_f / (1.0 - nc2)) + eps),
+            nm_a,
+            nm_b,
+            nm_c,
+            nm_d,
+            nm_e,
+            nm_f,
+            nv_a,
+            nv_b,
+            nv_c,
+            nv_d,
+            nv_e,
+            nv_f,
+            nc1,
+            nc2,
+            step + 1,
+            nlog
+        )
+    }
     log->print
     let check = wa + wb + wc + wd + we + wf
     let final = with_grad(block)<head(wa, wb, wc, wd, we, wf)>(x).0

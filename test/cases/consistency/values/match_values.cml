@@ -2,7 +2,7 @@
  * match on ints and strings, with a default.
  */
 
-func name(n: int): string {
+func name(n: int) => string {
     return match n {
         case 0 => 'zero'
         case 1 | 2 => 'small'
@@ -10,7 +10,7 @@ func name(n: int): string {
     }
 }
 
-func code(s: string): int {
+func code(s: string) => int {
     return match s {
         case 'zero' => 0
         case 'small' => 1
@@ -18,8 +18,10 @@ func code(s: string): int {
     }
 }
 
-func main(): int sync {
-    println((0..5)->map<name>)
-    println((0..5)->map<func (n: int) => int { code(name(n)) }>)
+func main() => int sync {
+    println((0 .. 5)->map<name>)
+    println((0 .. 5)->map<func (n: int) => int {
+        code(name(n))
+    }>)
     return 0
 }

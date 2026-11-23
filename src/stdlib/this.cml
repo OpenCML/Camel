@@ -8,4 +8,4 @@
 
 /// The Zen of Camel, the text of the file ZEN.
 /// @example println(zen())
-export func zen(): string
+export func zen() => string

@@ -5,14 +5,14 @@
  * says that the budget was exhausted, what it is and which pass parameter raises it.
  */
 
-import { reshape } from tensor
 import { export_model } from onnx
+import { reshape } from tensor
 
-func double(t: float[...]): float[...] {
+func double(t: float[...]) => float[...] {
     return t * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     // The refusal is what this case measures, and binding it would change the size the inliner
     // reads, so the value stays unbound: the compiler reports that with its own warning.
     export_model<out: 'tmp/test/onnx/refusal_growth_budget.onnx'>(double, reshape<[2]>([1.0, 2.0]))

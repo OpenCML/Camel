@@ -5,19 +5,28 @@
  * compile time (it used to say that the example argument is "a value computed at run time").
  */
 
-import { reshape } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape } from tensor
 
-func double(t: float[...]): float[...] {
+func double(t: float[...]) => float[...] {
     return t * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0])
     return if (get_env('P7_MODE') ?? '') == 'export' then sync {
         let r = export_model<out: 'tmp/test/onnx/refusal_request_in_arm.onnx'>(double, x)
-        match r { case error e => sync { println(e); 1 } case _ => sync { println('exported'); 0 } }
+        match r {
+            case error e => sync {
+                println(e)
+                1
+            }
+            case _ => sync {
+                println('exported')
+                0
+            }
+        }
         return 0
     } else 0
 }

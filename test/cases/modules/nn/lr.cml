@@ -2,10 +2,10 @@
  * Linear-regression training loop used to exercise tensor algebra, gradient updates, and mutable-weight iteration.
  */
 
-import { concat, ones, shape, sum, transpose, zeros } from tensor
 import { next_key, uniform } from random
+import { concat, ones, shape, sum, transpose, zeros } from tensor
 
-func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]): float {
+func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]) => float {
     let residuals = y_pred - y_true
     let squared_residuals = residuals ^ 2.0
     let total_squared_error = float(sum(squared_residuals))
@@ -14,15 +14,15 @@ func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]): float {
 }
 
 with <weights: f32[?, ?]>
-func predict(X: f32[?, ?]): f32[?, ?] {
+func predict(X: f32[?, ?]) => f32[?, ?] {
     let num_of_samples = shape(X)[0]
     let ones_col = ones::<f32>([num_of_samples, 1])
-    let X_with_bias = concat<1>(X, ones_col)  // axis=1
+    let X_with_bias = concat<1>(X, ones_col) // axis=1
     return X_with_bias @ weights
 }
 
 with <X: f32[?, ?], y: f32[?, ?], lr: float>
-func update(var w: f32[?, ?]): f32[?, ?] {
+func update(var w: f32[?, ?]) => f32[?, ?] {
     let pred = X @ w
     let errors = pred - y
     var dw = transpose(X) @ errors
@@ -33,13 +33,13 @@ func update(var w: f32[?, ?]): f32[?, ?] {
 }
 
 with <X: f32[?, ?], y: f32[?, ?], lr: float, its: int>
-func train(var weights: f32[?, ?]): void {
-    let m = shape(X)[0]  // number of samples
-    let n = shape(X)[1]  // number of features
+func train(var weights: f32[?, ?]) => void {
+    let m = shape(X)[0] // number of samples
+    let n = shape(X)[1] // number of features
     
     let ones_col = ones::<f32>([m, 1])
-    let X_bias = concat<1>(X, ones_col)  // axis=1
-
+    let X_bias = concat<1>(X, ones_col) // axis=1
+    
     // The rounds are a `loop` whose carried state is the iteration count: the weight is written by
     // `update`'s `var` parameter, which is a write of this body's own name. The rounds used to be a
     // `foreach` element function, and a closure holds the value a name had when it was made, not the
@@ -59,20 +59,20 @@ func train(var weights: f32[?, ?]): void {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let lr = 0.001 // learning rate
     let its = 1000 // number of iterations
     let num_samples = 4
     let num_features = 2
-
+    
     let X = (next_key()->uniform::<f32><shape: [num_samples, num_features]> * 10.0) as f32[?, ?]
     let y = ones::<f32>([num_samples, 1])
     var w = zeros::<f32>([num_features + 1, 1]) // +1 for bias term
-
+    
     println('Feature matrix X:', X)
     println('Target vector y:', y)
     println('Initial weights:', w)
-
+    
     println('Starting training...')
     train<X, y, lr, its>(w)
     'Training completed with weights: \n{}'->format<w>->println
@@ -84,6 +84,6 @@ func main(): int sync {
     // Calculate final loss
     let final_loss = mean_squared_error(predictions, y)
     'Final MSE Loss: {}'->format<final_loss>->println
-
+    
     return 0
 }

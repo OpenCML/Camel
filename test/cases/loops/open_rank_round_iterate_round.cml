@@ -6,14 +6,11 @@
 // docs/language/en/06_expressions.md).
 import tensor
 
-
-func rounds(x: f32[...]): int {
-    return loop c = 0 for v in x do (
-        c + (loop d = 0 for u in v do d + 1)
-    )
+func rounds(x: f32[...]) => int {
+    return loop c = 0 for v in x do (c + (loop d = 0 for u in v do d + 1))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: f32[] = [1.0, 2.0, 3.0]
     println(rounds(x))
     return 0

@@ -12,7 +12,7 @@ import { lift } from rulesets.jvp
 import rulesets.transpose
 import rulesets.vmap
 
-func main(): int sync {
+func main() => int sync {
     println(lift(1.0).0)
     return 0
 }

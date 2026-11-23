@@ -15,43 +15,43 @@
  *      LOSS ('mean' | 'summean', default 'summean').
  */
 
-import { relu, mean, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff
+import { get_env } from env
 import { sgd, save_params } from nn
 import { export_model } from onnx
-import { get_env } from env
+import { relu, mean, sum, reshape, shape, load_npy } from tensor
 
 type Mlp = { w1: float[...], b1: float[...], w2: float[...], b2: float[...] }
 
 with <m: Mlp>
-func fwd(x: float[...]): float[...] {
+func fwd(x: float[...]) => float[...] {
     let h = relu(x @ m.w1 + m.b1)
     return h @ m.w2 + m.b2
 }
 
 with <m: Mlp>
-func loss_mean(x: float[...]): float {
+func loss_mean(x: float[...]) => float {
     let y = fwd<m>(x)
     return float(mean(y * y))
 }
 
 with <m: Mlp>
-func loss_summean(x: float[...]): float {
+func loss_summean(x: float[...]) => float {
     let y = fwd<m>(x)
     return float(sum(y * y)) / float(shape(y)[0] * shape(y)[1])
 }
 
-func step_mean(m: Mlp, x: float[...]): (float, Mlp) {
+func step_mean(m: Mlp, x: float[...]) => (float, Mlp) {
     let vg = with_grad(loss_mean)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func step_summean(m: Mlp, x: float[...]): (float, Mlp) {
+func step_summean(m: Mlp, x: float[...]) => (float, Mlp) {
     let vg = with_grad(loss_summean)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
         b1: reshape<[3]>([0.1, 0.0, -0.1]),
@@ -66,8 +66,7 @@ func main(): int sync {
     let out = get_env('ONNX_OUT') ?? ''
     if out != '' then {
         if (get_env('DYN') ?? '') == '1' then {
-            let r = (if useMean then export_model<out: out, dynamic_axes: [0]>(step_mean, (m, x))
-            else export_model<out: out, dynamic_axes: [0]>(step_summean, (m, x)))
+            let r = (if useMean then export_model<out: out, dynamic_axes: [0]>(step_mean, (m, x)) else export_model<out: out, dynamic_axes: [0]>(step_summean, (m, x)))
             return match r {
                 case error e => sync {
                     println(e)
@@ -76,8 +75,7 @@ func main(): int sync {
                 case _ => 0
             }
         } else {
-            let r = (if useMean then export_model<out: out>(step_mean, (m, x))
-            else export_model<out: out>(step_summean, (m, x)))
+            let r = (if useMean then export_model<out: out>(step_mean, (m, x)) else export_model<out: out>(step_summean, (m, x)))
             return match r {
                 case error e => sync {
                     println(e)

@@ -13,19 +13,19 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func plain(y: float): float {
+func plain(y: float) => float {
     return y * y
 }
 
-func thrice(y: float): float {
+func thrice(y: float) => float {
     return 3.0 * y
 }
 
-func use(f: (y: float) => float, z: float): float {
+func use(f: (y: float) => float, z: float) => float {
     return f(z)
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = jvp(use)
     let (a, da) = d(plain, 2.0, (), 1.0)
     let (b, db) = d(thrice, 2.0, (), 1.0)

@@ -18,11 +18,11 @@
  */
 import { vjp } from vjp
 
-func loss(x: float): (float, float) {
+func loss(x: float) => (float, float) {
     return (x * x, x + 10.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (y, pullback) = vjp(loss)(3.0)
     let value = y.0
     let aux = y.1

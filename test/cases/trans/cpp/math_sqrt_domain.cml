@@ -9,19 +9,21 @@
 
 import { sqrt, nan, is_nan } from math
 
-func neg(x: float): float { return -x }
+func neg(x: float) => float {
+    return -x
+}
 
-func main(): int sync {
+func main() => int sync {
     let m1 = neg(1.0)
     let r = sqrt(m1)
     print(r)
     print(is_nan(r))
-
+    
     let n = nan
     let r2 = sqrt(n)
     print(r2)
     print(is_nan(r2))
-
+    
     let f = neg(4.0)
     let r3 = sqrt(f)
     print(r3)

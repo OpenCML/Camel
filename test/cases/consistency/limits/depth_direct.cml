@@ -7,11 +7,11 @@
 
 import { get_env } from env
 
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = int(get_env('N') ?? '')
     println('start')
     println(depth(n))

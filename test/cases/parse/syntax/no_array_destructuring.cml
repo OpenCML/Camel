@@ -4,12 +4,12 @@
  * carrier the parser used to read is gone with the struct and array carriers.
  */
 
-func f(xs: int[]): int {
+func f(xs: int[]) => int {
     let [a, b] = xs
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     println(f([1, 2]))
     return 0

@@ -19,16 +19,20 @@
  * The f32 line is the same gradient at f32's width and must keep its numbers.
  */
 
-import { erf, sum } from tensor
 import { grad } from autodiff
+import { erf, sum } from tensor
 
 with <x: f64[...]>
-func loss64(): float { return float(sum(erf(x))) }
+func loss64() => float {
+    return float(sum(erf(x)))
+}
 
 with <x: f32[...]>
-func loss32(): float { return float(sum(erf(x))) }
+func loss32() => float {
+    return float(sum(erf(x)))
+}
 
-func main(): int sync {
+func main() => int sync {
     let x = [-1.0, 0.0, 1.0] as f64[]
     println('erf_grad_f64 forward={}'->format<erf(x)>)
     println('erf_grad_f64 grad={}'->format<grad(loss64)<x>()>)

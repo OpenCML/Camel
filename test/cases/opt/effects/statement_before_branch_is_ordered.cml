@@ -12,12 +12,12 @@
  * any pass runs.
  */
 
-func pick(c: bool): int {
+func pick(c: bool) => int {
     let a = println(1)
     return if c then a else (println(2) - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(false))
     return 0
 }

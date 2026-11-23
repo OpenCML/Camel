@@ -39,21 +39,21 @@
  */
 
 import { Op } from graph
-import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { abs, exp, expm1, log, log1p, trunc } from math
+import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { exp as exp_array, log as log_array, log_softmax, sigmoid, softmax } from tensor
 import { is_float, is_integer, is_function } from types
 
 // ---- the families ----
 
 // A type whose arithmetic the laws below are about: an integer (wrapping) or a float.
-func is_real::<T>(): bool {
+func is_real::<T>() => bool {
     return is_integer::<T>() || is_float::<T>()
 }
 
 // The largest integer c for which doubling a rounded product commutes with rounding and 2c is
 // exactly representable: 2^(p - 1) for a significand of p bits.
-func exact_limit::<T>(): float {
+func exact_limit::<T>() => float {
     return match type T {
         case float => 4503599627370496.0
         case f32 => 8388608.0
@@ -118,19 +118,13 @@ export rule int_mul_zero::<T>(x: T) when is_integer::<T>() { x * 0 => 0 as T }
 export rule int_sub_self::<T>(x: T) when is_integer::<T>() { x - x => 0 as T }
 
 /// `x * c1 + x * c2` is `x * (c1 + c2)`.
-export rule int_combine::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
-    x * c1 + x * c2 => x * (c1 + c2)
-}
+export rule int_combine::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// `(x * c1) * c2` is `x * (c1 * c2)`.
-export rule int_fold::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
-    (x * c1) * c2 => x * (c1 * c2)
-}
+export rule int_fold::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() { (x * c1) * c2 => x * (c1 * c2) }
 
 /// `(x + c1) + c2` is `x + (c1 + c2)`.
-export rule int_fold_add::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
-    (x + c1) + c2 => x + (c1 + c2)
-}
+export rule int_fold_add::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() { (x + c1) + c2 => x + (c1 + c2) }
 
 /// The bare operand: `x * c + x` is `x * c + x * 1`. No rule can write `1 * x` (a rule matches the
 /// graph it is given, it cannot add a multiplication to read a coefficient), so the coefficient 1
@@ -146,9 +140,7 @@ export rule int_distribute::<T>(a: T, b: T, c: T) when is_integer::<T>() { a * (
 /// design grants, because the products may overflow where the sum does not (`a * (b + c)` is 0
 /// where `a * b + a * c` is `inf + -inf`, a NaN).
 #requires(reassociate)
-export rule array_distribute::<T>(a: T[...], b: T[...], c: T[...]) when is_integer::<T>() {
-    a * (b + c) <=> a * b + a * c
-}
+export rule array_distribute::<T>(a: T[...], b: T[...], c: T[...]) when is_integer::<T>() { a * (b + c) <=> a * b + a * c }
 
 // ---- Floats: only what rounding does not touch ----
 //
@@ -175,42 +167,39 @@ export rule array_add_neg_zero::<T>(x: T[...]) when is_float::<T>() { x + -0.0 =
 
 // Whether a value is finite: NaN and the infinities are the only values that are not equal to
 // themselves after a subtraction. The subtraction is the instance's own width.
-func finite_value::<T>(x: T): bool {
+func finite_value::<T>(x: T) => bool {
     return x - x == 0.0
 }
 
 // `x*c1 + x*c2 => x*(c1+c2)` with two finite, nonzero coefficients of the same sign: the
 // reassociation changes rounding only, so the default `reassociate` grant suffices.
-func combine_same_sign::<T>(c1: T, c2: T): bool {
-    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0
-        && (c1 > 0.0) == (c2 > 0.0) && finite_value(c1 + c2)
+func combine_same_sign::<T>(c1: T, c2: T) => bool {
+    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0 && (c1 > 0.0) == (c2 > 0.0) && finite_value(c1 + c2)
 }
 
 // The opposite-sign case: cancellation can turn an infinity into a finite value or lose the sign of
 // a zero, so the rule also needs the assumptions that rule those out. A sum of zero (the
 // coefficients cancel) is left alone: the rewrite would only change the sign of the zero.
-func combine_mixed_sign::<T>(c1: T, c2: T): bool {
-    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0
-        && (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0
+func combine_mixed_sign::<T>(c1: T, c2: T) => bool {
+    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0 && (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0
 }
 
 // `(x*c1)*c2 => x*(c1*c2)`: both coefficients finite and nonzero, and their product finite and
 // nonzero. An overflowing product would become an infinity (the rewrite then computes `x*inf`),
 // and one that underflows to zero would erase the term. Removing the intermediate product may
 // remove an overflow, which `no_infs` allows.
-func fold_coefficients::<T>(c1: T, c2: T): bool {
-    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0
-        && finite_value(c1 * c2) && c1 * c2 != 0.0
+func fold_coefficients::<T>(c1: T, c2: T) => bool {
+    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0 && finite_value(c1 * c2) && c1 * c2 != 0.0
 }
 
 // The bare term in `x*c + x => x*(c+1)`: the same two conditions as `combine_same_sign` and
 // `combine_mixed_sign` read at the implicit second coefficient 1. Same sign means `c > 0`;
 // opposite sign means `c < 0`, and `c == -1` (the coefficients cancel) stays as it is.
-func combine_one_same_sign::<T>(c: T): bool {
+func combine_one_same_sign::<T>(c: T) => bool {
     return finite_value(c) && c != 0.0 && c > 0.0 && finite_value(c + 1.0)
 }
 
-func combine_one_mixed_sign::<T>(c: T): bool {
+func combine_one_mixed_sign::<T>(c: T) => bool {
     return finite_value(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0
 }
 
@@ -218,51 +207,40 @@ func combine_one_mixed_sign::<T>(c: T): bool {
 // bits of the element type's significand: doubling a rounded product commutes with rounding there,
 // and `2c` is exactly representable. The rule therefore needs no permission; the condition is what
 // makes that true.
-func exact_doubling::<T>(c: T): bool {
+func exact_doubling::<T>(c: T) => bool {
     return finite_value(c) && abs(c) >= 1.0 && trunc(c) == c && float(abs(c)) <= exact_limit::<T>()
 }
 
 /// `x * c1 + x * c2` is `x * (c1 + c2)` for coefficients of one sign.
 #requires(reassociate)
 export rule float_combine::<T>(x: T, const c1: T, const c2: T)
-    when is_float::<T>() && combine_same_sign(c1, c2) {
-    x * c1 + x * c2 => x * (c1 + c2)
-}
+    when is_float::<T>() && combine_same_sign(c1, c2) { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// The same for coefficients of opposite signs, which needs the assumptions that cancellation
 /// cannot invalidate.
 #requires(reassociate, no_infs, no_signed_zeros)
 export rule float_combine_mixed::<T>(x: T, const c1: T, const c2: T)
-    when is_float::<T>() && combine_mixed_sign(c1, c2) {
-    x * c1 + x * c2 => x * (c1 + c2)
-}
+    when is_float::<T>() && combine_mixed_sign(c1, c2) { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// `(x * c1) * c2` is `x * (c1 * c2)`.
 #requires(reassociate, no_infs)
 export rule float_fold::<T>(x: T, const c1: T, const c2: T)
-    when is_float::<T>() && fold_coefficients(c1, c2) {
-    (x * c1) * c2 => x * (c1 * c2)
-}
+    when is_float::<T>() && fold_coefficients(c1, c2) { (x * c1) * c2 => x * (c1 * c2) }
 
 /// `x * c + x * c` is `x * (c + c)`, exact for a small integer `c`, so it needs no permission.
-export rule float_double::<T>(x: T, const c: T) when is_float::<T>() && exact_doubling(c) {
-    x * c + x * c => x * (c + c)
-}
+export rule float_double::<T>(x: T, const c: T) when is_float::<T>() && exact_doubling(c) { x * c + x * c => x * (c + c) }
 
 /// The bare operand: `x * c + x` is `x * c + x * 1.0`, the same law and the same permission as
 /// `float_combine` with the coefficient 1 implicit. One rule reads both orders of the sum: the
 /// matcher exchanges the operands of a commutative operator.
 #requires(reassociate)
-export rule float_combine_one::<T>(x: T, const c: T) when is_float::<T>() && combine_one_same_sign(c) {
-    x * c + x => x * (c + 1.0)
-}
+export rule float_combine_one::<T>(x: T, const c: T)
+    when is_float::<T>() && combine_one_same_sign(c) { x * c + x => x * (c + 1.0) }
 
 /// The bare operand with a coefficient of the other sign.
 #requires(reassociate, no_infs, no_signed_zeros)
 export rule float_combine_one_mixed::<T>(x: T, const c: T)
-    when is_float::<T>() && combine_one_mixed_sign(c) {
-    x * c + x => x * (c + 1.0)
-}
+    when is_float::<T>() && combine_one_mixed_sign(c) { x * c + x => x * (c + 1.0) }
 
 // The array forms of the permissioned laws. A scalar beside an array takes the array's element
 // type (design principles 5.1), so a coefficient is declared `T` and the guards are the element
@@ -271,42 +249,31 @@ export rule float_combine_one_mixed::<T>(x: T, const c: T)
 /// `x * c1 + x * c2` is `x * (c1 + c2)`, elementwise.
 #requires(reassociate)
 export rule array_combine::<T>(x: T[...], const c1: T, const c2: T)
-    when is_float::<T>() && combine_same_sign(c1, c2) {
-    x * c1 + x * c2 => x * (c1 + c2)
-}
+    when is_float::<T>() && combine_same_sign(c1, c2) { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// The same for coefficients of opposite signs.
 #requires(reassociate, no_infs, no_signed_zeros)
 export rule array_combine_mixed::<T>(x: T[...], const c1: T, const c2: T)
-    when is_float::<T>() && combine_mixed_sign(c1, c2) {
-    x * c1 + x * c2 => x * (c1 + c2)
-}
+    when is_float::<T>() && combine_mixed_sign(c1, c2) { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// `(x * c1) * c2` is `x * (c1 * c2)`, elementwise.
 #requires(reassociate, no_infs)
 export rule array_fold::<T>(x: T[...], const c1: T, const c2: T)
-    when is_float::<T>() && fold_coefficients(c1, c2) {
-    (x * c1) * c2 => x * (c1 * c2)
-}
+    when is_float::<T>() && fold_coefficients(c1, c2) { (x * c1) * c2 => x * (c1 * c2) }
 
 /// `x * c + x * c` is `x * (c + c)`, elementwise, exact for a small integer `c`.
-export rule array_double::<T>(x: T[...], const c: T) when is_float::<T>() && exact_doubling(c) {
-    x * c + x * c => x * (c + c)
-}
+export rule array_double::<T>(x: T[...], const c: T)
+    when is_float::<T>() && exact_doubling(c) { x * c + x * c => x * (c + c) }
 
 /// The bare operand, elementwise: `x * c + x` is `x * c + x * 1.0`.
 #requires(reassociate)
 export rule array_combine_one::<T>(x: T[...], const c: T)
-    when is_float::<T>() && combine_one_same_sign(c) {
-    x * c + x => x * (c + 1.0)
-}
+    when is_float::<T>() && combine_one_same_sign(c) { x * c + x => x * (c + 1.0) }
 
 /// The bare operand with a coefficient of the other sign, elementwise.
 #requires(reassociate, no_infs, no_signed_zeros)
 export rule array_combine_one_mixed::<T>(x: T[...], const c: T)
-    when is_float::<T>() && combine_one_mixed_sign(c) {
-    x * c + x => x * (c + 1.0)
-}
+    when is_float::<T>() && combine_one_mixed_sign(c) { x * c + x => x * (c + 1.0) }
 
 // ---- Accuracy (rewrite design 8.10) ----
 //
@@ -328,14 +295,12 @@ export rule array_combine_one_mixed::<T>(x: T[...], const c: T)
 /// `log(softmax(x))` is `log_softmax(x)`: rounding each probability becomes an absolute error in
 /// its log, and a probability that rounds to zero gives -inf where the true log-softmax is finite.
 #requires(refine_accuracy)
-export rule array_log_softmax_of_softmax(x: f32[...], const axis: int) {
-    log_array(softmax<axis>(x)) => log_softmax<axis>(x)
-}
+export rule array_log_softmax_of_softmax(x: f32[...], const axis: int) { log_array(softmax<axis>(x)) => log_softmax<axis>(x) }
 
 /// The floating widths whose scalar `log`, `exp`, `log1p` and `expm1` are operators of the graph
 /// (`f32` and `float`): a rule is written over operators, and the other widths (`bf16`, `f16`) run
 /// the Camel body of the function, which is no operator, so those instances do not exist.
-func hasScalarKernel::<T>(): bool {
+func hasScalarKernel::<T>() => bool {
     return match type T {
         case float | f32 => true
         case _ => false
@@ -345,16 +310,12 @@ func hasScalarKernel::<T>(): bool {
 /// `log(1 + x)` is `log1p(x)`: `1 + x` rounds before the log, and for |x| below the spacing of 1
 /// the naive log is 0 and its relative error is 100%.
 #requires(refine_accuracy)
-export rule float_log1p::<T>(x: T) when hasScalarKernel::<T>() {
-    log(1.0 + x) => log1p(x)
-}
+export rule float_log1p::<T>(x: T) when hasScalarKernel::<T>() { log(1.0 + x) => log1p(x) }
 
 /// `exp(x) - 1` is `expm1(x)`: for |x| below the spacing of 1 the naive `exp(x)` rounds to
 /// exactly 1 and the subtraction gives 0.
 #requires(refine_accuracy)
-export rule float_expm1::<T>(x: T) when hasScalarKernel::<T>() {
-    exp(x) - 1.0 => expm1(x)
-}
+export rule float_expm1::<T>(x: T) when hasScalarKernel::<T>() { exp(x) - 1.0 => expm1(x) }
 
 // ---- Fusion ----
 //
@@ -370,9 +331,7 @@ export rule float_expm1::<T>(x: T) when hasScalarKernel::<T>() {
 /// are the same IEEE operations in the same order, so the rewrite changes no bit
 /// (`rules.fusion_bit_identical`); what changes is the cost: four kernels and four passes over the
 /// data become one.
-export rule array_sigmoid_chain(x: f32[...]) {
-    1.0 / (1.0 + exp_array(-x)) => sigmoid(x)
-}
+export rule array_sigmoid_chain(x: f32[...]) { 1.0 / (1.0 + exp_array(-x)) => sigmoid(x) }
 
 // ---- the rule sets ----
 
@@ -385,13 +344,37 @@ export rule array_sigmoid_chain(x: f32[...]) {
 /// otherwise take `x*c + x*c` first and leave `(x*c)*2` where the doubling law writes `x*(c+c)`
 /// (the shape `strict32` of `cases/opt/generic/algebra.cml` pins).
 export let algebra: Rule[] = [
-    int_add_zero, int_mul_zero, int_sub_self, int_combine, int_fold, int_fold_add, int_combine_one,
-    float_add_neg_zero, float_combine, float_combine_mixed, float_fold, float_double,
-    float_combine_one, float_combine_one_mixed,
-    mul_one, div_one, sub_zero, neg_neg, add_self,
-    array_add_neg_zero, array_combine, array_combine_mixed, array_fold, array_double,
-    array_combine_one, array_combine_one_mixed,
-    array_mul_one, array_div_one, array_sub_zero, array_neg_neg, array_add_self,
+    int_add_zero,
+    int_mul_zero,
+    int_sub_self,
+    int_combine,
+    int_fold,
+    int_fold_add,
+    int_combine_one,
+    float_add_neg_zero,
+    float_combine,
+    float_combine_mixed,
+    float_fold,
+    float_double,
+    float_combine_one,
+    float_combine_one_mixed,
+    mul_one,
+    div_one,
+    sub_zero,
+    neg_neg,
+    add_self,
+    array_add_neg_zero,
+    array_combine,
+    array_combine_mixed,
+    array_fold,
+    array_double,
+    array_combine_one,
+    array_combine_one_mixed,
+    array_mul_one,
+    array_div_one,
+    array_sub_zero,
+    array_neg_neg,
+    array_add_self
 ]
 
 /// The rules that rearrange and grow a writing: distribution, which only the saturation applies.
@@ -412,7 +395,7 @@ export let fusion_laws: Rule[] = [array_sigmoid_chain]
 /// @fails error value `RuleInvalid` when a rule does not compile
 /// @example ((x: int): int => x + 0)->simplify
 with <strict: bool = false>
-export func simplify::<F>(f: F): F! when is_function::<F>() {
+export func simplify::<F>(f: F) => F! when is_function::<F>() {
     return f->rewrite<concat(algebra, accuracy_laws), strict: strict>
 }
 
@@ -422,21 +405,20 @@ export func simplify::<F>(f: F): F! when is_function::<F>() {
 /// @fails error value `RuleInvalid` when a rule does not compile
 /// @example ((x: int): int => x * 3 + x * 4)->saturate_all
 with <rounds: int = 6, strict: bool = false>
-export func saturate_all::<F>(f: F): F! when is_function::<F>() {
-    return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>
-        -> extract<nodes>
+export func saturate_all::<F>(f: F) => F! when is_function::<F>() {
+    return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>->extract<nodes>
 }
 
 /// The accuracy laws, as the opt-in pass `rules::accuracy`.
 /// @example ((x: float): float => log(1.0 + x))->accuracy
-export func accuracy::<F>(f: F): F! when is_function::<F>() {
+export func accuracy::<F>(f: F) => F! when is_function::<F>() {
     return f->rewrite<accuracy_laws>
 }
 
 /// The fusion laws, as the opt-in pass `rules::fusion`.
 /// @example-fragment the sigmoid chain is written on an array
 /// @example f->fusion
-export func fusion::<F>(f: F): F! when is_function::<F>() {
+export func fusion::<F>(f: F) => F! when is_function::<F>() {
     return f->rewrite<fusion_laws>
 }
 
@@ -446,8 +428,10 @@ export func fusion::<F>(f: F): F! when is_function::<F>() {
 /// inputs.
 /// @example-fragment used as the cost of an extraction
 /// @example f->extract<nodes>
-export func nodes(o: Op, inputs: float[]): float {
-    return 1.0 + inputs->reduce<func (a, b) { a + b }, 0.0>
+export func nodes(o: Op, inputs: float[]) => float {
+    return 1.0 + inputs->reduce<func (a, b) {
+        a + b
+    }, 0.0>
 }
 
 // ---- scheduling rule sets (rewrite design 8.5) ----
@@ -459,7 +443,7 @@ export func nodes(o: Op, inputs: float[]): float {
 // `f->repeat<algebra, rounds: 8>`. A pass that only wants the function reads `.result`.
 
 // The schedule before its first stage: `f` unchanged, nothing applied, no fixpoint reached.
-func start::<F>(f: F): Run<F> {
+func start::<F>(f: F) => Run<F> {
     return {
         result: f,
         rewrites: 0,
@@ -468,14 +452,14 @@ func start::<F>(f: F): Run<F> {
         erased: 0,
         fixpoint: false,
         seconds: 0.0,
-        proof: null as Proof?,
+        proof: null as Proof?
     }
 }
 
 // The state after one more application `next`: its function, and the costs of `r` and `next`
 // added. `fixpoint` is the last application's, so it says whether the schedule has just stopped
 // changing, which is what `repeat` and `alternate` read.
-func plus::<F>(r: Run<F>, next: Run<F>): Run<F> {
+func plus::<F>(r: Run<F>, next: Run<F>) => Run<F> {
     return {
         result: next.result,
         rewrites: r.rewrites + next.rewrites,
@@ -484,28 +468,36 @@ func plus::<F>(r: Run<F>, next: Run<F>): Run<F> {
         erased: r.erased + next.erased,
         fixpoint: next.fixpoint,
         seconds: r.seconds + next.seconds,
-        proof: null as Proof?,
+        proof: null as Proof?
     }
 }
 
 // One application of `rules` on the result of `r`, at most `rounds` rounds, its cost added.
-func stage::<F>(r: Run<F>, rules: Rule[], rounds: int, strict: bool): Run<F>! {
-    return r.result->run<rules, rounds: rounds, strict: strict> -> func (next) { plus(r, next) }
+func stage::<F>(r: Run<F>, rules: Rule[], rounds: int, strict: bool) => Run<F>! {
+    return r.result->run<rules, rounds: rounds, strict: strict>->func (next) {
+        plus(r, next)
+    }
 }
 
 // Whether the last application reached a fixpoint. An error stops the loop that asks.
-func settled::<F>(r: Run<F>!): bool {
-    return (r -> func (x) { x.fixpoint }) !! false
+func settled::<F>(r: Run<F>!) => bool {
+    return (r->func (x) {
+        x.fixpoint
+    }) !! false
 }
 
 // Whether `r` has not rewritten anything yet.
-func untouched::<F>(r: Run<F>!): bool {
-    return (r -> func (x) { x.rewrites == 0 }) !! false
+func untouched::<F>(r: Run<F>!) => bool {
+    return (r->func (x) {
+        x.rewrites == 0
+    }) !! false
 }
 
 // Whether `done` holds for the function `r` holds; an error stops the loop.
-func finished::<F>(r: Run<F>!, done: (q: F) => bool): bool {
-    return (r -> func (x) { done(x.result) }) !! true
+func finished::<F>(r: Run<F>!, done: (q: F) => bool) => bool {
+    return (r->func (x) {
+        done(x.result)
+    }) !! true
 }
 
 /// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails fails
@@ -514,9 +506,10 @@ func finished::<F>(r: Run<F>!, done: (q: F) => bool): bool {
 /// @example-fragment the stages are rule sets of the caller
 /// @example f->seq<[algebra, fusion_laws]>
 with <stages: Rule[][], rounds: int = 16, strict: bool = false>
-export func seq::<F>(f: F): Run<F>! when is_function::<F>() {
-    return loop r = start(f) as Run<F>! for s in stages do
-        r -> func (x) { stage(x, s, rounds, strict) }
+export func seq::<F>(f: F) => Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for s in stages do r->func (x) {
+        stage(x, s, rounds, strict)
+    }
 }
 
 /// `first`: the stages tried in the written order, and the first one that rewrites something is
@@ -526,9 +519,10 @@ export func seq::<F>(f: F): Run<F>! when is_function::<F>() {
 /// @example-fragment the stages are rule sets of the caller
 /// @example f->first<[algebra, fusion_laws]>
 with <stages: Rule[][], rounds: int = 16, strict: bool = false>
-export func first::<F>(f: F): Run<F>! when is_function::<F>() {
-    return loop r = start(f) as Run<F>! for s in stages while untouched(r) do
-        r -> func (x) { stage(x, s, rounds, strict) }
+export func first::<F>(f: F) => Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for s in stages while untouched(r) do r->func (x) {
+        stage(x, s, rounds, strict)
+    }
 }
 
 /// `repeat`: one round of the rule set at a time, until a round applies nothing or `rounds`
@@ -538,9 +532,10 @@ export func first::<F>(f: F): Run<F>! when is_function::<F>() {
 /// @example-fragment the rule set is the caller's
 /// @example f->repeat<algebra, rounds: 8>
 with <rules: Rule[], rounds: int = 16, strict: bool = false>
-export func repeat::<F>(f: F): Run<F>! when is_function::<F>() {
-    return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
-        r -> func (x) { stage(x, rules, 1, strict) }
+export func repeat::<F>(f: F) => Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for i in 0 .. rounds while !settled(r) do r->func (x) {
+        stage(x, rules, 1, strict)
+    }
 }
 
 /// `until`: a round at a time, while `done` is false for the function; stops at a fixpoint, at
@@ -550,9 +545,10 @@ export func repeat::<F>(f: F): Run<F>! when is_function::<F>() {
 /// @example-fragment a predicate and a rule set come from the caller
 /// @example f->until<algebra, done>
 with <rules: Rule[], done: (q: F) => bool, rounds: int = 16, strict: bool = false>
-export func until::<F>(f: F): Run<F>! when is_function::<F>() {
-    return loop r = start(f) as Run<F>! for i in 0..rounds while !finished(r, done) do
-        r -> func (x) { stage(x, rules, 1, strict) }
+export func until::<F>(f: F) => Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for i in 0 .. rounds while !finished(r, done) do r->func (x) {
+        stage(x, rules, 1, strict)
+    }
 }
 
 /// `alternate`: one round of `left`, then one round of `right`, until a full pair applies nothing
@@ -561,25 +557,28 @@ export func until::<F>(f: F): Run<F>! when is_function::<F>() {
 /// @example-fragment two rule sets come from the caller
 /// @example f->alternate<algebra, fusion_laws>
 with <left: Rule[], right: Rule[], rounds: int = 16, strict: bool = false>
-export func alternate::<F>(f: F): Run<F>! when is_function::<F>() {
-    return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
-        r -> func (x) { pair(x, left, right, strict) }
+export func alternate::<F>(f: F) => Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for i in 0 .. rounds while !settled(r) do r->func (x) {
+        pair(x, left, right, strict)
+    }
 }
 
 // One round of `left` and one round of `right`, in that order; `fixpoint` says whether the pair
 // changed nothing, which ends `alternate`.
-func pair::<F>(r: Run<F>, left: Rule[], right: Rule[], strict: bool): Run<F>! {
-    return stage(r, left, 1, strict) -> func (a) { stage(a, right, 1, strict) -> func (b) {
-        let out: Run<F> = {
-            result: b.result,
-            rewrites: b.rewrites,
-            rounds: b.rounds,
-            visited: b.visited,
-            erased: b.erased,
-            fixpoint: b.rewrites == r.rewrites,
-            seconds: b.seconds,
-            proof: null as Proof?,
+func pair::<F>(r: Run<F>, left: Rule[], right: Rule[], strict: bool) => Run<F>! {
+    return stage(r, left, 1, strict)->func (a) {
+        stage(a, right, 1, strict)->func (b) {
+            let out: Run<F> = {
+                result: b.result,
+                rewrites: b.rewrites,
+                rounds: b.rounds,
+                visited: b.visited,
+                erased: b.erased,
+                fixpoint: b.rewrites == r.rewrites,
+                seconds: b.seconds,
+                proof: null as Proof?
+            }
+            return out
         }
-        return out
-    } }
+    }
 }

@@ -2,45 +2,55 @@
 // the counts in a Map<string, int>, the most frequent words with `sort_by` and `take` of `array`.
 // Run: camel examples/text/word_frequency.cml
 
-import { split, trim, to_lower, replace } from str
 import { flat_map, sort_by, take } from array
+import { split, trim, to_lower, replace } from str
 
 type Entry = (string, int)
 
 // The words of one line: lower case, punctuation removed, empty pieces dropped.
-func words_of(line: string): string[] {
+func words_of(line: string) => string[] {
     let plain = line->to_lower->replace<',', ' '>->replace<'.', ' '>
-    return plain->split<' '>->filter<func (w: string) => bool { len(w) > 0 }>
+    return plain->split<' '>->filter<func (w: string) => bool {
+        len(w) > 0
+    }>
 }
 
-func show(e: Entry): string {
+func show(e: Entry) => string {
     return `  ${e.0:<6} ${e.1}`
 }
 
-func main(): int sync {
+func main() => int sync {
     let text = '
         The quick fox sees the lazy dog.
         The dog sees the fox, and the fox runs.
 
         The Dog sleeps.
     '
-
-    let lines = text->split<'\n'>
-        ->map<func (l: string) => string { trim(l) }>
-        ->filter<func (l: string) => bool { len(l) > 0 }>
+    
+    let lines = text->split<'\n'>->map<func (l: string) => string {
+        trim(l)
+    }>->filter<func (l: string) => bool {
+        len(l) > 0
+    }>
     let words = lines->flat_map<words_of>
     println('lines:', len(lines), 'words:', len(words))
-
+    
     let counts = words->reduce<
-        func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> },
+        func (acc: Map<string, int>, w: string) => Map<string, int> {
+            acc->put<w, (acc[w] ?? 0) + 1>
+        },
         [] as Map<string, int>
     >
     println('distinct:', len(counts))
     println(counts)
-
+    
     // sort_by is stable: ordering by word first and by count second leaves words with the
     // same count in alphabetical order. The negated count puts the highest first.
-    let ranked = items(counts)->sort_by<func (e: Entry) { e.0 }>->sort_by<func (e: Entry) { 0 - e.1 }>
+    let ranked = items(counts)->sort_by<func (e: Entry) {
+        e.0
+    }>->sort_by<func (e: Entry) {
+        0 - e.1
+    }>
     println('top 3:')
     println(ranked->take<3>->map<show>->join<'\n'>)
     return 0

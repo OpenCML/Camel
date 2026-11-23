@@ -4,19 +4,25 @@
  * the structure the program has to change.
  */
 
-import { zeros } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { zeros } from tensor
 
-func double(t: f32[...]): f32[...] {
+func double(t: f32[...]) => f32[...] {
     return t * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     return if (get_env('P7_MODE') ?? '') == 'export' then sync {
         let shape: int[] = [len(get_env('P7_INPUT') ?? ''), 2]
         let r = export_model<out: 'tmp/test/onnx/refusal_request_in_arm_and_target.onnx'>(double, zeros::<f32>(shape))
-        match r { case error e => sync { println(e); 1 } case _ => 0 }
+        match r {
+            case error e => sync {
+                println(e)
+                1
+            }
+            case _ => 0
+        }
         return 0
     } else 0
 }

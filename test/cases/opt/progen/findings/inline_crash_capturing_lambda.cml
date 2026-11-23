@@ -7,20 +7,26 @@
  * Reduced by test/tools/progen from seed 1192 (generator version 1, all features).
  */
 
-func f1(a2: (a0: string) => float, a3: float, a4: bool): string {
-    return ([false]->map<func (p7: bool) => int { 1 }>)->reduce<func (p5: string, p6: int) => string { '' }, match a4 {
+func f1(a2: (a0: string) => float, a3: float, a4: bool) => string {
+    return ([false]->map<func (p7: bool) => int {
+        1
+    }>)->reduce<func (p5: string, p6: int) => string {
+        ''
+    }, match a4 {
         case true => 'pq'
         case false => ''
-    }>;
+    }>
 }
 
-func r8(a9: int, a10: string): string {
+func r8(a9: int, a10: string) => string {
     return if (0 <= 0) then f1(func (p11: string) => float {
-        return [a10, 'ab', 'cd']->reduce<func (p13: float, p14: string) => float { 1.0 }, 1.0>;
-    }, 3.0, true) else r8(0, '');
+        return [a10, 'ab', 'cd']->reduce<func (p13: float, p14: string) => float {
+            1.0
+        }, 1.0>
+    }, 3.0, true) else r8(0, '')
 }
 
-func main(): int sync {
-    let n53 = '' + r8(8, 'x');
-    return 0;
+func main() => int sync {
+    let n53 = '' + r8(8, 'x')
+    return 0
 }

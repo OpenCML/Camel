@@ -8,23 +8,23 @@
 
 import { reshape, abs, exp, sigmoid, sum } from tensor
 
-func chain(x: f32[...]): f32[...] {
+func chain(x: f32[...]) => f32[...] {
     return 1.0 / (1.0 + exp(-x))
 }
 
-func doubled(x: f32[...]): f32[...] {
+func doubled(x: f32[...]) => f32[...] {
     return 2.0 / (1.0 + exp(-x))
 }
 
-func positive(x: f32[...]): f32[...] {
+func positive(x: f32[...]) => f32[...] {
     return 1.0 / (1.0 + exp(x))
 }
 
-func after_matmul(x: f32[...], w: f32[...]): f32[...] {
+func after_matmul(x: f32[...], w: f32[...]) => f32[...] {
     return 1.0 / (1.0 + exp(-(x @ w)))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2, 3]>([0.3, -1.2, 0.5, 2.0, 1.1, 0.4] as f32[])
     let w = reshape<[3, 2]>([0.1, -0.2, 0.3, 0.4, -0.5, 0.6] as f32[])
     // The definition against its kernel: zero means bit for bit, at every element.

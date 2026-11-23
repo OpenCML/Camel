@@ -1,5 +1,7 @@
-func main(): int sync {
-    let total = [1, 2]->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+func main() => int sync {
+    let total = [1, 2]->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
     total->format<total>->println
     return 0
 }

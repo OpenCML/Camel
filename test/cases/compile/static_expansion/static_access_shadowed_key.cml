@@ -1,5 +1,5 @@
-func field(t: {a: int}): int {
-    static for n, F in fields {a: int} do {
+func field(t: { a: int }) => int {
+    static for n, F in fields { a: int } do {
         var n = 'a'
         n = 'b'
         t.[n]
@@ -7,6 +7,6 @@ func field(t: {a: int}): int {
     return 0
 }
 
-func main(): int {
-    return field({a: 1})
+func main() => int {
+    return field({ a: 1 })
 }

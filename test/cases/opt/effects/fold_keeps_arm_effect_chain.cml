@@ -4,7 +4,7 @@
  * either of them away with the arm that is dropped.
  */
 
-func pick(c: bool): int sync {
+func pick(c: bool) => int sync {
     return if c then sync {
         println(1)
         println(2)
@@ -12,7 +12,7 @@ func pick(c: bool): int sync {
     } else 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true))
     return 0
 }

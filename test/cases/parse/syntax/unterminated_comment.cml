@@ -1,6 +1,6 @@
 /// A block comment with no end: the lexer reports the line where it starts.
 
-func main(): int {
+func main() => int {
     return 0
 }
 

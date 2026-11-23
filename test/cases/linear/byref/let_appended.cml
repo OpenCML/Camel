@@ -5,7 +5,7 @@
  * place and `xs` is not a `var` (3.5).
  */
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2]
     xs->append<3>
     println(xs)

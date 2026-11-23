@@ -8,12 +8,12 @@ func bump(var x: int) {
     x += 1
 }
 
-func call(f: (x: int) => void, v: int): int sync {
+func call(f: (x: int) => void, v: int) => int sync {
     f(v)
     return v
 }
 
-func main(): int sync {
+func main() => int sync {
     println(call(bump, 1))
     return 0
 }

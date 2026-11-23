@@ -7,8 +7,10 @@
 
 import { unordered_reduce } from para
 
-func main(): int sync {
-    let xs: int[] = 1..5
-    let total: int = unordered_reduce<func (acc: int, item: int, extra: int) => int { acc + item + extra }, 0>(xs)
+func main() => int sync {
+    let xs: int[] = 1 .. 5
+    let total: int = unordered_reduce<func (acc: int, item: int, extra: int) => int {
+        acc + item + extra
+    }, 0>(xs)
     return total
 }

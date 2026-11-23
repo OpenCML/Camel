@@ -10,31 +10,37 @@
 
 export tag kernel on nodes
 export tag fast on func, nodes
-export tag readable on func, read_by std::opt
+export tag readable on func read_by std::opt
 tag pure = [kernel, fast]
 tag width(w: int) on type, field
 tag shaped(w: int) on type
 tag vjp::<F>(rule: F) on func when is_function::<F>()
 
 #kernel
-func marked(): int { return 1 }
+func marked() => int {
+    return 1
+}
 
 #[pure]
-func grouped(): int { return 2 }
+func grouped() => int {
+    return 2
+}
 
 #vjp(marked)
-func label(x: int): int { return x }
+func label(x: int) => int {
+    return x
+}
 
 #width(32)
 type Bits = {
     #width(8) low: int,
-    high: int,
+    high: int
 }
 
 #[shaped(4), width(16)]
 type Mixed = { a: int }
 
-func main(): int sync {
+func main() => int sync {
     #kernel
     {
         let a = marked()

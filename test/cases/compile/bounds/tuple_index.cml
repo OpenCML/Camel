@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     println('ran')
     let t = (1, 2, 3)
     println(t.5)

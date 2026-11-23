@@ -2,19 +2,19 @@
 // read takes the value of the most recent write before it, and a write nobody reads does not run.
 // Run: camel docs/tutorial/examples/10_var_order.cml
 
-func bump(var counter: int): int sync {
+func bump(var counter: int) => int sync {
     counter += 1
     return counter
 }
 
-func twice(): int sync {
+func twice() => int sync {
     var c = 0
     bump(c)
     bump(c)
     return c
 }
 
-func latest(): int sync {
+func latest() => int sync {
     var c = 1
     c = 2
     let before = c
@@ -22,7 +22,7 @@ func latest(): int sync {
     return before
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice())
     println(latest())
     return 0

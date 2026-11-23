@@ -8,11 +8,11 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func read(w: float[]): float {
+func read(w: float[]) => float {
     return w[0] * w[1] + w[2]
 }
 
-func main(): int sync {
+func main() => int sync {
     let w = [3.0, 2.0, 5.0] as float[]
     let (value, pullback) = vjp(read)(w)
     let cotangents = pullback(1.0)

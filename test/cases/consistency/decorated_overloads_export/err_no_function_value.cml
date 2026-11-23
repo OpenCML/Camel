@@ -6,7 +6,7 @@
 
 import lib
 
-func main(): int sync {
+func main() => int sync {
     let vs = [1, 2, 3]->map<lib::bump>
     println(vs)
     return 0

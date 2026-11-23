@@ -1,8 +1,10 @@
 type T = Unknown
 
-func f(a: T): T { return a }
+func f(a: T) => T {
+    return a
+}
 
-func main(): int sync {
+func main() => int sync {
     let v: T = 1
     return 0
 }

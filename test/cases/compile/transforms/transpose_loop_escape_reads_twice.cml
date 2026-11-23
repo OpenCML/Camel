@@ -7,14 +7,14 @@
 // `read_twice(x) = loop s = x for i in 0..3 do 2.0*s + x + x` is `s = 2s + 2x` three times,
 // `8x + 14x = 22x` on paper, so `transpose(read_twice)(1, 1)` answers 22 -- and 15, the previous
 // file's number, would be the answer if one of the two reads were dropped.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func read_twice(x: float): float {
-    return loop s = x for i in 0..3 do 2.0 * s + x + x
+func read_twice(x: float) => float {
+    return loop s = x for i in 0 .. 3 do 2.0 * s + x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(read_twice)
     println(back(1.0))
     return 0

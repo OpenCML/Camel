@@ -3,11 +3,11 @@
  * pick(1, 0) is fine, pick(-1, 0) faults at the division.
  */
 
-func pick(a: int, b: int): int {
+func pick(a: int, b: int) => int {
     return if a > 0 then a + b else 100 / b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(1, 0))
     println(pick(-1, 0))
     println('not reached')

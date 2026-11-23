@@ -21,23 +21,27 @@
 import state
 
 // A closure reading a `Ref` local.
-func read_through_closure(): int sync {
+func read_through_closure() => int sync {
     var box = state::ref(0)
     state::set(box, 5)
-    let read = func () { state::get(box) }
+    let read = func () {
+        state::get(box)
+    }
     return read()
 }
 
 // A closure writing a `Ref` local.
-func write_through_closure(): int sync {
+func write_through_closure() => int sync {
     var box = state::ref(0)
-    let bump = func () { state::set(box, 9) }
+    let bump = func () {
+        state::set(box, 9)
+    }
     state::set(box, 5)
     bump()
     return state::get(box)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(read_through_closure())
     println(write_through_closure())
     return 0

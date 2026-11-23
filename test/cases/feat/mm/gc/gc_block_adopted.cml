@@ -8,7 +8,7 @@
  * is asked for. The plan asserts the collection count, not a timing.
  */
 
-func churn(rounds: int, seed: int): int {
+func churn(rounds: int, seed: int) => int {
     let (i, total) = loop i = 0, total = 0 while i < rounds do {
         let junk = [i, seed] as int[]
         (i + 1, total + len(junk))
@@ -16,7 +16,7 @@ func churn(rounds: int, seed: int): int {
     return total
 }
 
-func main(pause: int, rounds: int, grow: int): int sync {
+func main(pause: int, rounds: int, grow: int) => int sync {
     let start = std::mem::blocks()
     let (jLeft, acc, total) = loop j = 0, acc = [] as int[], total = 0 while j < grow do {
         let c = if j < pause then churn(rounds, j) else 0

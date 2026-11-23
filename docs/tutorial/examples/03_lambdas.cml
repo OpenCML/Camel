@@ -1,11 +1,17 @@
 // A function with no name is written `(x: int): int => ...`; it can also be kept in a name.
 // Run: camel docs/tutorial/examples/03_lambdas.cml
 
-func main(): int sync {
-    let twice = func (x: int) => int { x * 2 }
+func main() => int sync {
+    let twice = func (x: int) => int {
+        x * 2
+    }
     println(twice(21))
-
-    println([1, 2, 3]->map<func (x: int) => int { x + 10 }>)
-    println([1, 2, 3, 4]->filter<func (x: int) => bool { x % 2 == 0 }>)
+    
+    println([1, 2, 3]->map<func (x: int) => int {
+        x + 10
+    }>)
+    println([1, 2, 3, 4]->filter<func (x: int) => bool {
+        x % 2 == 0
+    }>)
     return 0
 }

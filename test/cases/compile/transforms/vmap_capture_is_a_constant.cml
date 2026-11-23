@@ -17,15 +17,19 @@
 import rulesets.vmap
 import { vmap } from transforms
 
-func make(c: float): (x: float) => float {
-    return func (x: float) { x + c }
+func make(c: float) => (x: float) => float {
+    return func (x: float) {
+        x + c
+    }
 }
 
-func make2(a: float, b: float): (x: float) => float {
-    return func (x: float) { x * a + b }
+func make2(a: float, b: float) => (x: float) => float {
+    return func (x: float) {
+        x * a + b
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(make(3.0))(xs))
     'two captures={}'->format<vmap(make2(2.0, 1.0))(xs)>->println

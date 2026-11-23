@@ -14,12 +14,12 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func h(x: float): float {
+func h(x: float) => float {
     let _ = x
     return loop s = 0.0 for i in [1, 2, 3, 4] do s + 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println('h value=', h(1.0))
     let (value, pullback) = vjp(h)(1.0)
     println('h vjp value=', value)

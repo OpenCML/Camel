@@ -7,13 +7,13 @@ let separated = 1
 
 /// A blank line is not a gap between a declaration and its documentation.
 
-func with_gap(x: int): int {
+func with_gap(x: int) => int {
     return x
 }
 
 /// Documentation written above an exported name, with a blank line between the two.
 
-export func exported(): int {
+export func exported() => int {
     return with_gap(separated)
 }
 
@@ -25,13 +25,13 @@ let gap_constant = 2
 
 /// The second paragraph, below a blank line inside the block.
 
-func two_paragraphs(): int {
+func two_paragraphs() => int {
     return gap_constant
 }
 
 /// The documentation of `two_paragraphs` above is not documentation of `later`: the `///` lines
 /// below a declaration describe what follows, so the run may not reach back over the `}` of the
 /// declaration before it.
-func later(): int {
+func later() => int {
     return 3
 }

@@ -5,37 +5,57 @@
  * arguments unchecked: `scale(1.5)` handed a float to a function that takes an int.
  */
 
-func twice(f: (x: int) => int): (x: int) => int {
-    return func (x: int) { f(f(x)) }
+func twice(f: (x: int) => int) => (x: int) => int {
+    return func (x: int) {
+        f(f(x))
+    }
 }
 
-func twice_f(f: (x: float) => float): (x: float) => float {
-    return func (x: float) { f(f(x)) }
+func twice_f(f: (x: float) => float) => (x: float) => float {
+    return func (x: float) {
+        f(f(x))
+    }
 }
 
 // Both overloads decorated.
 @twice
-func step(x: int): int { return x + 1 }
+func step(x: int) => int {
+    return x + 1
+}
 @twice_f
-func step(x: float): float { return x + 0.5 }
+func step(x: float) => float {
+    return x + 0.5
+}
 
 // The decorated one first, a plain one after it.
 @twice
-func scale(x: int): int { return x * 3 }
-func scale(x: float): float { return x * 1.5 }
+func scale(x: int) => int {
+    return x * 3
+}
+func scale(x: float) => float {
+    return x * 1.5
+}
 
 // A plain one first, the decorated one after it.
-func shift(x: float): float { return x - 0.5 }
+func shift(x: float) => float {
+    return x - 0.5
+}
 @twice
-func shift(x: int): int { return x - 1 }
+func shift(x: int) => int {
+    return x - 1
+}
 
 // A single decorated function, still a value.
 @twice
-func alone(x: int): int { return x + 10 }
+func alone(x: int) => int {
+    return x + 10
+}
 
-func apply(f: (x: int) => int, x: int): int { return f(x) }
+func apply(f: (x: int) => int, x: int) => int {
+    return f(x)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(step(1), step(1.5))
     println(scale(2), scale(2.0))
     println(shift(5), shift(5.0))

@@ -12,14 +12,14 @@
  * names is the one that satisfies both, not the first type the compiler asks about.
  */
 
-func is_small_int::<T>(): bool {
+func is_small_int::<T>() => bool {
     return match type T {
         case i32 => true
         case _ => false
     }
 }
 
-func is_number::<T>(): bool {
+func is_number::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 => true
         case _ => false
@@ -27,17 +27,17 @@ func is_number::<T>(): bool {
 }
 
 #op(':op/add_i')
-func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_small_int::<T>()
 
 #op(':op/sub_i')
-func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_number::<T>()
 
 #impl(arms_kernel)
-func combine::<T>(a: T, b: T): T {
+func combine::<T>(a: T, b: T) => T {
     return a * b
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: i32 = 19
     let y: i32 = 23
     println(combine(x, y))

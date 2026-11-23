@@ -13,8 +13,8 @@
  * Reduced by test/tools/progen from seed 7333 (generator version 3, all features).
  */
 
-func main(): int sync {
-    let o25: float? = if false then null else 1.0;
-    println(o25);
-    return 0;
+func main() => int sync {
+    let o25: float? = if false then null else 1.0
+    println(o25)
+    return 0
 }

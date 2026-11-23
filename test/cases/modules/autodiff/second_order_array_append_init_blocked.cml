@@ -18,18 +18,18 @@
 import { grad } from autodiff
 
 with <xs: float[]>
-func f(): float {
+func f() => float {
     let ys = xs->append<2.0>
     return ys[0] * ys[0] + ys[1] * ys[2]
 }
 
 with <v: float[]>
-func df0(): float {
+func df0() => float {
     let g = grad(f)<v>()
     return g[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [3.0, 4.0]
     let g = grad(f)<xs>()
     'second_order_array_append_init d0={:.1f} d1={:.1f}'->format<g[0], g[1]>->println

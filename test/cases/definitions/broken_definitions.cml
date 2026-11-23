@@ -1,7 +1,6 @@
 // A library that does not compile (test::definitions): its definitions are refused.
 import tensor
 
-
-export func gelu(x: f32[...]): f32[...] {
+export func gelu(x: f32[...]) => f32[...] {
     return x + undefined_name
 }

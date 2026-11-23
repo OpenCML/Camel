@@ -28,34 +28,52 @@
 
 type Point = { x: float, y: float }
 
-func void_hands_on_its_value(): void { 42 }
+func void_hands_on_its_value() => void {
+    42
+}
 
-func open_rank_from_any(xs: float[]): float[...] { xs }
+func open_rank_from_any(xs: float[]) => float[...] {
+    xs
+}
 
-func any_rank_from_fixed(t: f32[3]): f32[] { t }
+func any_rank_from_fixed(t: f32[3]) => f32[] {
+    t
+}
 
-func rank_zero_read(t: float[...]): float { t[0] }
+func rank_zero_read(t: float[...]) => float {
+    t[0]
+}
 
-func nullable_null(): float? { null }
+func nullable_null() => float? {
+    null
+}
 
-func fallible_value(n: int): int! { n * 2 }
+func fallible_value(n: int) => int! {
+    n * 2
+}
 
-func named_struct_from_a_value(): Point { { y: 2.0, x: 1.0 } }
+func named_struct_from_a_value() => Point {
+    { y: 2.0, x: 1.0 }
+}
 
-func same_type_int(x: int): int { x + 1 }
+func same_type_int(x: int) => int {
+    x + 1
+}
 
-func same_type_float(x: float): float { x * 2.0 }
+func same_type_float(x: float) => float {
+    x * 2.0
+}
 
-func main(): int sync {
+func main() => int sync {
     void_hands_on_its_value()
-    let open_rank   = open_rank_from_any([1.0, 2.0]) as float[]
-    let any_rank    = any_rank_from_fixed([1.0, 2.0, 3.0])
-    let element     = rank_zero_read([4.5, 5.5])
-    let nullable    = nullable_null() ?? -1.0
-    let fallible    = fallible_value(21) !! -1
-    let point       = named_struct_from_a_value()
-    let ordinary    = same_type_int(41) + 0
-    let ordinary_f  = same_type_float(0.75)
+    let open_rank = open_rank_from_any([1.0, 2.0]) as float[]
+    let any_rank = any_rank_from_fixed([1.0, 2.0, 3.0])
+    let element = rank_zero_read([4.5, 5.5])
+    let nullable = nullable_null() ?? -1.0
+    let fallible = fallible_value(21) !! -1
+    let point = named_struct_from_a_value()
+    let ordinary = same_type_int(41) + 0
+    let ordinary_f = same_type_float(0.75)
     'legal_exits {} {} {} {} {} {} {} {}'->format<
         len(open_rank),
         len(any_rank),
@@ -64,6 +82,7 @@ func main(): int sync {
         fallible,
         point.x + point.y,
         ordinary,
-        ordinary_f>->println
+        ordinary_f
+    >->println
     return 0
 }

@@ -5,7 +5,7 @@
  * `..`, saying how to write the interval instead (`(a..b)`).
  */
 
-func main(): int sync {
+func main() => int sync {
     let n = 3
     let r = n as int..5
     println(r)

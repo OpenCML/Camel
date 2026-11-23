@@ -7,7 +7,7 @@
  */
 import { mean, reshape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let ints: int[4] = [1, 2, 3, 4]
     println(mean(ints))
     let thirds: int[3] = [1, 2, 2]

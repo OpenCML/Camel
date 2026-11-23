@@ -2,29 +2,30 @@
  * Parallel Monte Carlo estimator used to stress embarrassingly parallel map-reduce execution over many workers.
  */
 
-import { now } from time
 import { pi_hits } from sim
+import { now } from time
 
-func main(): int sync {
+func main() => int sync {
     let repeat = 50
     let samples_per_worker = 100000000
     let total_samples = repeat * samples_per_worker
     let base_seed = 0
-
+    
     'Running {} times of Monte Carlo simulation...'->format<repeat>->println
     'Samples per simulation: {}, total samples: {}'->format<samples_per_worker, total_samples>->println
-
+    
     let start = now()
-    let total_hits = (0..repeat)
-        ->map<func (i: int) => int { pi_hits(samples_per_worker, base_seed + i * 7919) }>
-        ->reduce<func (acc: int, cur: int) => int { acc + cur }, 0>
+    let total_hits = (0 .. repeat)->map<func (i: int) => int {
+        pi_hits(samples_per_worker, base_seed + i * 7919)
+    }>->reduce<func (acc: int, cur: int) => int {
+        acc + cur
+    }, 0>
     let duration = now() - start
     let pi = 4.0 * float(total_hits) / float(total_samples)
-
+    
     'Total hits = {}'->format<total_hits>->println
     'Estimated pi = {:.8f}'->format<pi>->println
     'Monte Carlo completed in {:.2f} seconds'->format<duration>->println
-
+    
     return 0
 }
-

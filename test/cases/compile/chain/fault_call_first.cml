@@ -9,11 +9,11 @@
  *
  * Run: camel test/cases/compile/chain/fault_call_first.cml
  */
-func divide(x: int): int {
+func divide(x: int) => int {
     return 100 / x
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = divide(2)
     println(2)
     return a

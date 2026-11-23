@@ -9,14 +9,14 @@ import { ParamsOf, WithOf, ResultOf, Vjp, Pullback, is_same } from types
 
 type Tangent<T> = T
 type Swap<F> = (r: ResultOf<F>) => (...ParamsOf<F>)
-type Weighted<F> = <...WithOf<F>> (...ParamsOf<F>) => ResultOf<F>
+type Weighted<F> = <...WithOf<F>>(...ParamsOf<F>) => ResultOf<F>
 
 type F0 = () => float
 type F1 = (a: int) => float
 type F3 = (a: int, b: string, c: bool) => float
-type W2 = <w: float, k: int> (a: int) => float
+type W2 = <w: float, k: int>(a: int) => float
 
-func main(): int sync {
+func main() => int sync {
     println(is_same::<Swap<F0>, (r: float) => ()>())
     println(is_same::<Swap<F1>, (r: float) => (int,)>())
     println(is_same::<Swap<F3>, (r: float) => (int, string, bool)>())

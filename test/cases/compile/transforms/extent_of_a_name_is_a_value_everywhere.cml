@@ -15,19 +15,19 @@
 
 import { is_array } from types
 
-func takes_it(f: () => int[]): int[] {
+func takes_it(f: () => int[]) => int[] {
     return f()
 }
 
-func from_param::<A>(): int[] when is_array::<A>() {
+func from_param::<A>() => int[] when is_array::<A>() {
     return extent_of::<A>()
 }
 
-func gives_one(): () => int[] {
+func gives_one() => () => int[] {
     return extent_of::<f32[3]>
 }
 
-func main(): int sync {
+func main() => int sync {
     let no_expected_type = extent_of::<f32[2, 3]>
     println(no_expected_type())
     println(gives_one()())

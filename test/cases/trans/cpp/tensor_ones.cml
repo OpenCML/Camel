@@ -13,7 +13,7 @@
 
 import { ones } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(ones::<f32>([2, 2]))
     return 0
 }

@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     println(`value: ${'text':d}`)
     return 0
 }

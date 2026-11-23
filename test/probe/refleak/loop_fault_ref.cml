@@ -10,7 +10,7 @@ import state
 // does not end, no round after it starts, and nothing reads the box again. The count is the
 // judgement -- if the fault path does not give the reference back, nothing else can, and the box
 // stays counted until the program's own exit disposes it.
-func read_then_fault(): int sync {
+func read_then_fault() => int sync {
     let box = state::ref(0)
     loop i = 0 while i < 3 do sync {
         println(`box ${state::get(box)}`)
@@ -20,6 +20,6 @@ func read_then_fault(): int sync {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return read_then_fault()
 }

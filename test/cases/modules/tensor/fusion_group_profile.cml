@@ -21,35 +21,35 @@
  * it. The values are the operators' either way: the table is what this program is for.
  */
 
-import { sum, zeros } from tensor
 import { with_grad } from autodiff
+import { sum, zeros } from tensor
 
 type W = { w: f32[...] }
 
 with <m: W>
-func private_chain(x: f32[...]): float {
+func private_chain(x: f32[...]) => float {
     return float(sum(x / m.w))
 }
 
 type AB = { a: f32[...], w: f32[...] }
 
 with <m: AB>
-func shared_chain(): float {
+func shared_chain() => float {
     return float(sum(m.a / m.w))
 }
 
-func main(fused: int): int sync {
+func main(fused: int) => int sync {
     var x = zeros::<f32>([8, 8])
     x = x + 1.0
     var w = zeros::<f32>([8, 8])
     w = w + 0.5
     if fused != 0 then {
         let g = with_grad(private_chain)
-        let (value, gradient) = g<{w: w}>(x)
+        let (value, gradient) = g<{ w: w }>(x)
         'profile fused v={} sum={}'->format<value, sum(gradient.w)>->println
     } else {
         let h = with_grad(shared_chain)
-        let (value, gradient) = h<{a: x, w: w}>()
+        let (value, gradient) = h<{ a: x, w: w }>()
         'profile shared v={} sum={}'->format<value, sum(gradient.a)>->println
     }
     return 0

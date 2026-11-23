@@ -14,7 +14,7 @@
 
 import { zeros } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(zeros::<f32>([2, 2]))
     return 0
 }

@@ -4,7 +4,7 @@
  * prints still run in written order.
  */
 
-func main(x: int): int sync {
+func main(x: int) => int sync {
     let r = (println(5) + println(6)) - x
     return 0
 }

@@ -9,11 +9,11 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     return x * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let forward = split(jvp(f))
     let (value, backward) = forward(3.0)
     println(value)

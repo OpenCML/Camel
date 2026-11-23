@@ -1,7 +1,8 @@
 // Manual crash-publication probe: kill the process after its pending directory appears.
-import { zeros, set_num_threads } from tensor
 import { save_tree } from ckpt
-func main(out: string): int sync {
+import { zeros, set_num_threads } from tensor
+
+func main(out: string) => int sync {
     set_num_threads(1)
     let _ = zeros::<f32>([16777216])->save_tree<out>
     return 0

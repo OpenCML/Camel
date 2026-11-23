@@ -5,11 +5,11 @@ import geometry
 
 let area = pi * 2.0 * 2.0
 
-func scaled(k: float): float {
+func scaled(k: float) => float {
     return geometry::tau * k
 }
 
-func main(): int sync {
+func main() => int sync {
     println('main starts')
     println(pi, area, scaled(1.0))
     println(geometry::circumference(1.0), geometry::unit.0)

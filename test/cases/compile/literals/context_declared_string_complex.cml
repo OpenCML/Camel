@@ -3,8 +3,8 @@
  * `c128` and `string`.
  */
 
-func main(): int sync {
-    let x: string = 1+2i
+func main() => int sync {
+    let x: string = 1 + 2i
     println(x)
     return 0
 }

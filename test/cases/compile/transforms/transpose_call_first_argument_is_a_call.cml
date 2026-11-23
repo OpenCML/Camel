@@ -41,16 +41,18 @@
 import rulesets.transpose
 import { transpose } from transforms
 
-func g(x: float): float {
+func g(x: float) => float {
     return 2.0 * x
 }
 
-func f(x: float): float {
-    let h = func (y: float, z: float) { y * z * x }
+func f(x: float) => float {
+    let h = func (y: float, z: float) {
+        y * z * x
+    }
     return h(g(x), 1.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(3.0))
     // The paper answer: (12.0,). No forward line prints 12, so the claim is about the transpose.
     println(transpose(f)(1.0))

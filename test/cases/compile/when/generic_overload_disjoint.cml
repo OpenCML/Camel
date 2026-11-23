@@ -8,29 +8,29 @@
  * declarations are written in decides nothing, and neither call is ambiguous.
  */
 
-func is_int::<T>(): bool {
+func is_int::<T>() => bool {
     return match type T {
         case int => true
         case _ => false
     }
 }
 
-func is_float::<T>(): bool {
+func is_float::<T>() => bool {
     return match type T {
         case float => true
         case _ => false
     }
 }
 
-func pick::<T>(x: T): string when is_int::<T>() {
+func pick::<T>(x: T) => string when is_int::<T>() {
     return 'int'
 }
 
-func pick::<T>(x: T): string when is_float::<T>() {
+func pick::<T>(x: T) => string when is_float::<T>() {
     return 'float'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(3))
     println(pick(1.5))
     return 0

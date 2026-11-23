@@ -15,10 +15,12 @@
  *
  * Run: camel test/cases/compile/var/closure_read.cml std::nvm
  */
-func main(): int sync {
+func main() => int sync {
     var x = 1
     x = 2
-    let read = func () { x }
+    let read = func () {
+        x
+    }
     println(read())
     return 0
 }

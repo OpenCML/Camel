@@ -1,11 +1,11 @@
 import { reshape } from tensor
 import { run_preferred_resident, download } from tiles
 
-func product(a: f32[...], b: f32[...]): f32[...] {
+func product(a: f32[...], b: f32[...]) => f32[...] {
     return a @ b
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let b = reshape<[3, 2]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     println(download(run_preferred_resident<product>((a, b))))

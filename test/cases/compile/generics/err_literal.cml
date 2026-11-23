@@ -1,9 +1,9 @@
-func zero_of::<T>(x: T): T {
+func zero_of::<T>(x: T) => T {
     let z: T = 0.5
     return z
 }
 
-func main(): int sync {
+func main() => int sync {
     println(zero_of(5))
     println(zero_of(2.5))
     return 0

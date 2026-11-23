@@ -5,14 +5,16 @@
 
 import state
 
-func counter(start: int): () => int sync {
+func counter(start: int) => () => int sync {
     let n = state::ref(start)
     return func () => int sync {
-        return state::update(n, func (x: int) { x + 1 })
+        return state::update(n, func (x: int) {
+            x + 1
+        })
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = counter(0)
     let b = counter(100)
     println(a())

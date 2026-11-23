@@ -2,4 +2,7 @@
  * A module declares an overload whose parameters an imported overload already takes.
  */
 import plus_c
-func main(): int { return 0 }
+
+func main() => int {
+    return 0
+}

@@ -1,6 +1,6 @@
 import { rev } from export_lib
 
-func main(): int sync {
+func main() => int sync {
     let f = rev
     return 0
 }

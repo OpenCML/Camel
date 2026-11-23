@@ -41,11 +41,11 @@
  */
 import { vjp } from vjp
 
-func f(x: float): float {
+func f(x: float) => float {
     return if x > 0.0 then x * x else 3.0 * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (y, pullback) = vjp(f)(2.0)
     let dfdx = pullback(1.0).0
     'author vjp value={} dfdx={}'->format<y, dfdx>->println

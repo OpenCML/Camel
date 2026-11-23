@@ -1,7 +1,7 @@
 // `print` and `println` with a format write what they write without one: `print` no line end,
 // `println` one (design principles 10.6: the extra empty line of `println<fmt>` and the extra
 // line end of `print<fmt>` were defects of the interpreter, which the generated C++ copied).
-func main(): int sync {
+func main() => int sync {
     print<'{}-{}'>(3, 4)
     print('|')
     println<'{}+{}'>(1, 2)

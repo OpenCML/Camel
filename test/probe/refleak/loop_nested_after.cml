@@ -8,7 +8,7 @@ import state
 // round, and a give-back there would release the box on the way into the second round. The read
 // after the loops is the other half: the exit's give-back must not take the box the later read
 // still needs, so the plan takes one hold for it (`copies 1`) and that read gives the last one back.
-func nested_after(): int sync {
+func nested_after() => int sync {
     let box = state::ref(0)
     loop i = 0 while i < 2 do sync {
         loop j = 0 while j < 2 do sync {
@@ -20,7 +20,7 @@ func nested_after(): int sync {
     return state::get(box)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(nested_after())
     return 0
 }

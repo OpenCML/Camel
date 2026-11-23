@@ -5,4 +5,4 @@
  */
 
 #op('nowhere:absent')
-export func absent(x: int): int
+export func absent(x: int) => int

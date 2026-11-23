@@ -34,11 +34,11 @@ import { grad as engine_grad } from autodiff
 import { grad as library_grad } from vjp
 
 with <w: float, scale: float>
-func loss(data: float): float {
+func loss(data: float) => float {
     return (w * data) * scale
 }
 
-func main(): int sync {
+func main() => int sync {
     // d/dw = data * scale = 12, the engine's reading: both `with` values in declaration order.
     let engine = engine_grad(loss)<2.0, 3.0>(4.0)
     // The same 12 off the library's composition: the same list, the same order, the same call.

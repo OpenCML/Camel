@@ -13,23 +13,23 @@
  * which must balance with the hold taken where the box is made rather than after the first reader.
  */
 
-import state
 import { sleep } from process
+import state
 
-func make_box(v: int): state::Ref<int> {
+func make_box(v: int) => state::Ref<int> {
     return state::ref(v)
 }
 
-func take_late(r: state::Ref<int>): int sync {
+func take_late(r: state::Ref<int>) => int sync {
     sleep(0.05)
     return state::get(r)
 }
 
-func take_now(r: state::Ref<int>): int {
+func take_now(r: state::Ref<int>) => int {
     return state::get(r)
 }
 
-func both(n: int): int {
+func both(n: int) => int {
     let r = make_box(41)
     let late = take_late(r)
     let now = take_now(r)
@@ -37,7 +37,7 @@ func both(n: int): int {
     return late + now + (junk - junk)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(both(7))
     return 0
 }

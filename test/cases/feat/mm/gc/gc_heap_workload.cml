@@ -11,21 +11,23 @@ type Box = {
     values: int[]
 }
 
-func score(box: Box): int {
+func score(box: Box) => int {
     return box.values[0] + box.values[1] + len(box.label)
 }
 
 with <fn: (x: int) => int>
-func map_one(xs: int[]): int[] sync {
-    return xs->map<func (x: int) => int { fn(x) }>
+func map_one(xs: int[]) => int[] sync {
+    return xs->map<func (x: int) => int {
+        fn(x)
+    }>
 }
 
-func main(): int sync {
-    let boxes = (0..16)->map<func (i: int) => Box {
+func main() => int sync {
+    let boxes = (0 .. 16)->map<func (i: int) => Box {
         let vals = [i, i + 1, i + 2]
         return { label: 'box{}'->format<i>, values: vals }
     }>
-
+    
     let first = boxes[0]
     let last = boxes[15]
     let offset = score(first)
@@ -33,7 +35,7 @@ func main(): int sync {
         return x + offset
     }>
     let mapped3 = mapped[3]
-
+    
     'gc_heap boxes={} first={} last={} mapped3={}'->format<len(boxes), score(first), score(last), mapped3>->println
     return 0
 }

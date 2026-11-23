@@ -44,14 +44,14 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     return loop a = x for k in [2.0, 3.0, 5.0] do a * k
 }
 
-func main(): int sync {
+func main() => int sync {
     let fwd = split(jvp(f))
     let (value, lin) = fwd(1.0)
-    println("loop y=", value)
-    println("loop d=", lin(1.0))
+    println('loop y=', value)
+    println('loop d=', lin(1.0))
     return 0
 }

@@ -3,11 +3,11 @@
  * there is the error UnusedPureResult, as anywhere else its result is dropped.
  */
 
-func push(var xs: int[]): void sync {
+func push(var xs: int[]) => void sync {
     xs->append<1>
 }
 
-func main(): int sync {
+func main() => int sync {
     var xs: int[] = []
     push(xs)
     println(xs)

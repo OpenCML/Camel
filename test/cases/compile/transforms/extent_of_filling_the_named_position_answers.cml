@@ -12,15 +12,15 @@
 // entry pins the words -- and it could not make the number come back here. That is what makes the
 // named position the repairing one and not a decoration.
 
-func the_open_extent_filled(): int[] {
+func the_open_extent_filled() => int[] {
     return extent_of::<float[3]>()
 }
 
-func the_open_rank_filled(): int[] {
+func the_open_rank_filled() => int[] {
     return extent_of::<float[2, 3]>()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(the_open_extent_filled())
     println(the_open_rank_filled())
     return 0

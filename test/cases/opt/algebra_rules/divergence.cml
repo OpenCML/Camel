@@ -17,21 +17,21 @@
 // `algebra_rules.divergence.differs` for the graph -- turn red if a rule or an engine change drops
 // it again.
 
-func anchor_add(x: int): int {
+func anchor_add(x: int) => int {
     return x + 0
 }
 
-func anchor_mul32(x: i32): i32 {
+func anchor_mul32(x: i32) => i32 {
     return x * 1
 }
 
-func effect_mul_zero(): int sync {
+func effect_mul_zero() => int sync {
     let a = println(5) * 0
     println(a)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(anchor_add(7))
     println(anchor_mul32(9))
     println(effect_mul_zero())

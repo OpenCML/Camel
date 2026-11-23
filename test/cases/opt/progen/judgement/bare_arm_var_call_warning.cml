@@ -8,13 +8,13 @@
  * See README.md, "For the owner to decide", J2.
  */
 
-func wr(var c: int, x: int): int sync {
+func wr(var c: int, x: int) => int sync {
     c += x
     println('wr')
     return c
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = 3
     var c = 0
     let r = if a > 2 then wr(c, 5) else 0

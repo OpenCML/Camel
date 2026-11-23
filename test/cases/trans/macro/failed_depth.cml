@@ -2,15 +2,16 @@
 // levels). count(20) is folded to a constant. count(100) exceeds the limit, which is a failed
 // evaluation: a run-time fault at the call (line 17) naming the limit. Without std::macro the
 // program runs and prints 20, 100, 7.
-#macro func count(n: int): int {
+#macro
+func count(n: int) => int {
     return if n == 0 then 0 else 1 + count(n - 1)
 }
 
-func run(n: int): int {
+func run(n: int) => int {
     return count(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count(20))
     println(count(100))
     println(run(7))

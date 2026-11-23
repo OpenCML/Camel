@@ -10,26 +10,38 @@
 // same into a callback that calls out (fvm's call-boundary safepoint), and a Struct element (the
 // Struct branch of the store).
 
-func pair_sum(p: (int, int)): int {
+func pair_sum(p: (int, int)) => int {
     return p.0 * 2 + p.1
 }
 
-func point_sum(p: {x: int, y: int}): int {
+func point_sum(p: { x: int, y: int }) => int {
     return p.x + p.y
 }
 
-func main(): int sync {
+func main() => int sync {
     // items() of a map of (int, int) is a compact array of pure-data tuples: a read of an element
     // is a view into the block.
     let m = ([(0, 0), (1, 2), (2, 4), (3, 6)] as Map<int, int>)
-
-    let leaf = items(m)->map<func (kv: (int, int)) => int { kv.0 * 2 + kv.1 }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
-
-    let nested = items(m)->map<func (kv: (int, int)) => int { pair_sum(kv) }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
-
-    let points = ([{x: 1, y: 2}, {x: 3, y: 4}] as {x: int, y: int}[])
-    let structs = points->map<func (p: {x: int, y: int}) => int { point_sum(p) }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
-
+    
+    let leaf = items(m)->map<func (kv: (int, int)) => int {
+        kv.0 * 2 + kv.1
+    }>->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
+    
+    let nested = items(m)->map<func (kv: (int, int)) => int {
+        pair_sum(kv)
+    }>->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
+    
+    let points = ([{ x: 1, y: 2 }, { x: 3, y: 4 }] as { x: int, y: int }[])
+    let structs = points->map<func (p: { x: int, y: int }) => int {
+        point_sum(p)
+    }>->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
+    
     println(leaf, nested, structs)
     return 0
 }

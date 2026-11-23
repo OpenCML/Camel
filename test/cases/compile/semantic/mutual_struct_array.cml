@@ -8,7 +8,7 @@
 type A = { b: B[] }
 type B = { a: A[] }
 
-func main(): int sync {
+func main() => int sync {
     let a: A = { b: [] }
     println(len(a.b))
     return 0

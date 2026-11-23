@@ -1,9 +1,9 @@
 type Pair<T> = (T, T)
 
-func f(p: Pair<const 3>): int {
+func f(p: Pair<const 3>) => int {
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

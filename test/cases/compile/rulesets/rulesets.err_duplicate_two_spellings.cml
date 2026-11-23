@@ -9,15 +9,15 @@
  * made of them both are `(float, float)`, which is the duplicate the index refuses.
  */
 
-rule first_rule(x: (float), w: float) {
-    x + w => func (dx: float, dw: float) { dx }
-}
+rule first_rule(x: (float), w: float) { x + w => func (dx: float, dw: float) {
+    dx
+} }
 
-rule second_rule(x: float, w: float) {
-    x + w => func (dx: float, dw: float) { dw }
-}
+rule second_rule(x: float, w: float) { x + w => func (dx: float, dw: float) {
+    dw
+} }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

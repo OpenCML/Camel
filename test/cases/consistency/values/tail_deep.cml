@@ -3,11 +3,11 @@
  * stack or of frames.
  */
 
-func spin(i: int, n: int, acc: int): int {
+func spin(i: int, n: int, acc: int) => int {
     return if i > n then acc else spin(i + 1, n, acc + i)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(spin(0, 100000, 0))
     println(spin(0, 1000000, 0))
     return 0

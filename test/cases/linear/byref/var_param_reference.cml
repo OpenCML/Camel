@@ -37,13 +37,13 @@ func bump(var x: int) {
     x += 1
 }
 
-func count_up(var acc: int, n: int): int sync {
+func count_up(var acc: int, n: int) => int sync {
     acc += n
     let r = if n == 0 then 0 else count_up(acc, n - 1)
     return r
 }
 
-func count(var acc: int, n: int): int sync {
+func count(var acc: int, n: int) => int sync {
     acc += 1
     return if n <= 1 then 0 else count(acc, n - 1)
 }
@@ -53,7 +53,7 @@ func bump_twice(var y: int) {
     bump(y)
 }
 
-func both(var a: int, var b: int): int sync {
+func both(var a: int, var b: int) => int sync {
     a += 1
     b += 10
     println('{} {}'->format<a, b>)
@@ -64,7 +64,7 @@ func move_to(var p: Point, v: int) {
     p = { x: v, y: v + 1 }
 }
 
-func push(var xs: int[], v: int): int sync {
+func push(var xs: int[], v: int) => int sync {
     xs = xs->append<v>
     return len(xs)
 }
@@ -78,70 +78,72 @@ func replace(var t: (int, int), a: int) {
 }
 
 with <var acc: int>
-func add(n: int): int sync {
+func add(n: int) => int sync {
     acc += n
     return acc
 }
 
-func write_then_read(var w: int, read: () => int): int sync {
+func write_then_read(var w: int, read: () => int) => int sync {
     w = 7
     return read()
 }
 
-func mixed(seen: int, var written: int): int sync {
+func mixed(seen: int, var written: int) => int sync {
     written += 1
     return seen
 }
 
-func main(): int sync {
+func main() => int sync {
     var c = 0
     bump(c)
     println(c)
-
+    
     let f = bump
     var g = 7
     f(g)
     println(g)
-
+    
     var total = 0
     let r1 = count_up(total, 4)
     println(total)
-
+    
     var deep = 0
     let r2 = count(deep, 5000)
     println(deep)
-
+    
     var t = 1
     bump_twice(t)
     println(t)
-
+    
     var e = 0
     let r3 = both(e, e)
     println(e)
-
+    
     // A `var` position takes the variable itself, so no value conversion can happen there: the
     // variable must have the parameter's type (design principles 5.2; an unnamed struct value
     // enters a named type by being copied, which a reference cannot be).
     var p: Point = { x: 1, y: 2 }
     move_to(p, 4)
     println(p.x + p.y)
-
+    
     var xs = [1, 2, 3]
     let n = push(xs, 4)
     println('{} {}'->format<xs, n>)
     reset(xs)
-
+    
     var q = (1, 2)
     replace(q, 7)
     println(q.0 + q.1)
-
+    
     var s = 0
     let r4 = add<s>(2)
     println(s)
-
+    
     var w = 0
-    println(write_then_read(w, func () => int { w }))
-
+    println(write_then_read(w, func () => int {
+        w
+    }))
+    
     var d = 0
     let seen = mixed(d, d)
     println('{} {}'->format<seen, d>)

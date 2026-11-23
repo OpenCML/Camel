@@ -9,12 +9,12 @@
 
 var counter = 0
 
-func bump(k: int): int sync {
+func bump(k: int) => int sync {
     let w = (counter = k) * 0
     return w + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bump(41))
     println(counter)
     return 0

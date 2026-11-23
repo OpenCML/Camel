@@ -6,12 +6,12 @@
  */
 
 // Line numbers below are asserted by the plan.
-func inc(var x: int): int sync {
+func inc(var x: int) => int sync {
     x += 1
     return 0
 }
 
-func main(): int {
+func main() => int {
     var c = 0
     inc(c)
     let r = if c > 0 then sync {

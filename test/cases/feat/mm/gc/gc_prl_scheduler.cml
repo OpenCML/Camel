@@ -2,15 +2,14 @@
  * Small parallel workload used by GC stress tests to cover PRL safepoints.
  */
 
-func work(n: int): int {
+func work(n: int) => int {
     return n * n
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = work(5)
     let b = work(6)
     let c = a + b
     'prl_scheduler a={} b={} sum={}'->format<a, b, c>->println
     return 0
 }
-

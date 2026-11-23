@@ -2,6 +2,6 @@
 // pass is named after the file. Nothing in the program is what the case is about; the pass is.
 import { open } from graph
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

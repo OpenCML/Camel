@@ -3,7 +3,7 @@
  * code, as under `int`.
  */
 
-func main(): int! sync {
+func main() => int! sync {
     println('before')
     return parse_int('7')
 }

@@ -298,7 +298,7 @@ case = "../../../cases/compile/overloads/decorated_call_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 18
 expect_diagnostic_column = 18
 expect_output_contains = ["Function of type '(x: int) => int' cannot be called with argument types: <> (float)."]
 expect_output_not_contains = ["never printed"]

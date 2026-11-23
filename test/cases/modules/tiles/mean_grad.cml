@@ -1,19 +1,26 @@
 // Mean's pullback queries numel; specialize that query from the invocation shape.
 // The differentiated tensor is the first `with` parameter; the derivative wrapper keeps the
 // ordinary signature that tiles::source and tiles::run specialize on.
-import { reshape, mean, abs, sum } from tensor
 import { grad } from autodiff
-import { source, run_preferred_resident, download } from tiles
 import { exit } from process
+import { reshape, mean, abs, sum } from tensor
+import { source, run_preferred_resident, download } from tiles
+
 with <x: f32[...]>
-func mse(): float { return float(mean(x * x)) }
-func main(run_gpu: bool): int sync {
+func mse() => float {
+    return float(mean(x * x))
+}
+func main(run_gpu: bool) => int sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    let derivative = func (v: f32[...]) => f32[...] { grad(mse)<v>() }
+    let derivative = func (v: f32[...]) => f32[...] {
+        grad(mse)<v>()
+    }
     let y = reshape<[1, 2]>([1.0, 2.0] as f32[])
     let first = source<derivative>(x)
     let second = source<derivative>(y)
-    if len(first) == 0 || len(second) == 0 || first == second then sync { exit(1) }
+    if len(first) == 0 || len(second) == 0 || first == second then sync {
+        exit(1)
+    }
     println('mean_grad shape specialization PASS')
     if run_gpu then sync {
         let gpu = download(run_preferred_resident<derivative>(x))

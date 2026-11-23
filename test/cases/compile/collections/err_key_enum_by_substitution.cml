@@ -4,12 +4,12 @@
 
 type Boxed = enum { Empty, Weight(float) }
 
-func to_set::<T>(x: T): Set<T> {
+func to_set::<T>(x: T) => Set<T> {
     return [x] as Set<T>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(to_set(Boxed::Empty))
-    println("never printed")
+    println('never printed')
     return 0
 }

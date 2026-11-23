@@ -32,7 +32,7 @@
 import { matmul, sum } from tensor
 import { vjp } from vjp
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
     let step = func (w: float[2, 2]) => float {

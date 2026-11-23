@@ -5,7 +5,7 @@
  */
 import bytes
 
-func main(): int sync {
+func main() => int sync {
     let b = bytes::from_array([1, 2, 3])
     println(bytes::to_array(b, b))
     return 0

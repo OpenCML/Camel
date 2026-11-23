@@ -21,35 +21,35 @@
  * carries it, not about the type (`test/cases/trans/cpp/sum_axis_rank.cml`) -- so each `f` here
  * declares its result open-rank, and the brackets of the numbers below are the shape the value has.
  */
-import rulesets.vmap
 import { vmap as row_vmap } from array
+import rulesets.vmap
 import { max, mean, min, sum } from tensor
 import { vmap } from transforms
 
 // The axis is the row's first one: in the lifted value it is the second.
-func column_sum(x: float[2, 3]): float[...] {
+func column_sum(x: float[2, 3]) => float[...] {
     return sum<0, false>(x)
 }
 
 // `keepdims` keeps the reduced axis, so the batch keeps it too: `float[?, 2, 1]`.
-func row_sum_kept(x: float[2, 3]): float[...] {
+func row_sum_kept(x: float[2, 3]) => float[...] {
     return sum<1, true>(x)
 }
 
-func column_max(x: float[2, 3]): float[...] {
+func column_max(x: float[2, 3]) => float[...] {
     return max<0, false>(x)
 }
 
 // The axis is the row's last one: it stays the last one of the lifted value.
-func row_min(x: float[2, 3]): float[...] {
+func row_min(x: float[2, 3]) => float[...] {
     return min<1, false>(x)
 }
 
-func column_mean(x: float[2, 3]): float[...] {
+func column_mean(x: float[2, 3]) => float[...] {
     return mean<0, false>(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let batch: float[3, 2, 3] = [
         [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
         [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]],

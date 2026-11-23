@@ -7,19 +7,21 @@
  * The same case is the failure case of `camel inspect --attrs`: the key is interned by a loaded
  * module and has no row, which is what the classification check reports.
  */
+import { get_env } from env
+import { export_model } from onnx
 import { reshape, sum } from tensor
 import { mark } from test_attrs
-import { export_model } from onnx
-import { get_env } from env
 
 @mark
-func net(x: f32[...]): f32[...] {
+func net(x: f32[...]) => f32[...] {
     let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[])
     return x @ w
 }
 
-func main(): void! sync {
+func main() => void! sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     println(sum(net(x)))
-    export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { net(x) }, x)
+    export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
+        net(x)
+    }, x)
 }

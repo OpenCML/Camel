@@ -10,7 +10,7 @@
 // every use of `kept` read the round's value where the use stood, so it printed the write that
 // came before it (1 0 0, 1 2 0, 1 2 3).
 
-func main(): int sync {
+func main() => int sync {
     var xs: int[] = [0, 0, 0]
     let _ = loop i = 0 while i < 3 do sync {
         let kept = xs

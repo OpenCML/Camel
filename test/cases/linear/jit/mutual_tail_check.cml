@@ -2,27 +2,27 @@
  * Verifies simple mutual-call control transfer on JIT, especially around base-case selection and returned tail values.
  */
 
-func keep(x: int): int {
+func keep(x: int) => int {
     return x
 }
 
-func base_even(): int {
+func base_even() => int {
     return 1
 }
 
-func base_odd(): int {
+func base_odd() => int {
     return 0
 }
 
-func even(n: int): int {
+func even(n: int) => int {
     return if n == 0 then base_even() else keep(base_odd())
 }
 
-func odd(n: int): int {
+func odd(n: int) => int {
     return if n == 0 then base_odd() else keep(base_even())
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = even(3)
     let b = odd(3)
     let c = even(0)
@@ -30,4 +30,3 @@ func main(): int sync {
     'mutual_tail_check a={} b={} c={} d={}'->format<a, b, c, d>->println
     return 0
 }
-

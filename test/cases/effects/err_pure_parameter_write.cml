@@ -11,16 +11,16 @@
 
 var total = 0
 
-func add(x: int): int sync {
+func add(x: int) => int sync {
     total = total + x
     return total
 }
 
-func usePure(f: (x: int) => int pure): int {
+func usePure(f: (x: int) => int pure) => int {
     return f(1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let g: (x: int) => int = add
     println(usePure(g))
     return 0

@@ -1,15 +1,15 @@
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func f(s: Shape): float {
+func f(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => r
         case Empty => 0.0
     }
 }
 
-func main(): void sync {
+func main() => void sync {
     println(f(Shape::Empty))
 }

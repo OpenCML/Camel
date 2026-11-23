@@ -6,7 +6,7 @@
 // Before the conversion (`619eedb6c`) the crash was in the reading; after it (`cae413dbf`) the four
 // slots print the same two lines.
 
-func main(): int sync {
+func main() => int sync {
     var value: f32[...] = 1.0
     println(value)
     sync {

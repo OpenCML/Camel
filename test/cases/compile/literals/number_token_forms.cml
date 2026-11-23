@@ -5,7 +5,7 @@
  * before another digit (`077`, `077.5`) is no token, in source or at the entry: octal is `0o77`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let h: float = 0xFF
     let b: f32 = 0b1010
     let o: float = 0o77

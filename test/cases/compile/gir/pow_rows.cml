@@ -16,7 +16,17 @@
  * leaves no row to see.
  */
 
-func main(i: int, l: i64, f: f32, d: f64, a: c64, b: c128, p: i32, h: bf16, g: f16): int sync {
+func main(
+    i: int,
+    l: i64,
+    f: f32,
+    d: f64,
+    a: c64,
+    b: c128,
+    p: i32,
+    h: bf16,
+    g: f16
+) => int sync {
     println(i ^ i, l ^ l, f ^ f, d ^ d, p ^ p)
     println(a ^ a, a ^ p, a ^ i)
     println(b ^ b, b ^ p, b ^ i)

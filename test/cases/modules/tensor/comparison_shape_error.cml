@@ -5,10 +5,9 @@
  * is `false` instead, because different shapes are simply not equal.
  */
 
-
 import tensor
 
-func main(): int sync {
+func main() => int sync {
     let a = [1.0, 2.0, 3.0] as float[]
     let c = [1.0, 2.0] as float[]
     println('{}', a === c)

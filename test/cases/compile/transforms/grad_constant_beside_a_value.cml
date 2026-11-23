@@ -16,17 +16,25 @@ import rulesets.jvp
 import rulesets.transpose
 import { grad } from vjp
 
-func f(x: float): float { return 5.0 + x * 7.0 }
+func f(x: float) => float {
+    return 5.0 + x * 7.0
+}
 
-func g(x: float): float { return x * 5.0 + x * 7.0 }
+func g(x: float) => float {
+    return x * 5.0 + x * 7.0
+}
 
 with <x: float>
-func f_at(): float { return f(x) }
+func f_at() => float {
+    return f(x)
+}
 
 with <x: float>
-func g_at(): float { return g(x) }
+func g_at() => float {
+    return g(x)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(grad(f_at)<2.0>())
     println(grad(g_at)<2.0>())
     return 0

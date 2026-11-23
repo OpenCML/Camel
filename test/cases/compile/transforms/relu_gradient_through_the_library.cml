@@ -48,15 +48,15 @@
 // the tangent's comes back.
 //
 //     camel test/cases/compile/transforms/relu_gradient_through_the_library.cml
-import { vjp } from vjp
 import { relu, sum } from tensor
+import { vjp } from vjp
 
 /// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
-func total(x: float[]): float {
+func total(x: float[]) => float {
     return sum(relu(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(total)([-2.0, 0.0, 3.0, -0.5] as float[])
     let cotangents = pullback(1.0)
     let d = cotangents.0

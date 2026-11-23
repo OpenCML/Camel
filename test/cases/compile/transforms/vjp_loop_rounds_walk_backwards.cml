@@ -26,15 +26,15 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func g(s: float[]): float {
+func g(s: float[]) => float {
     let y = loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
     return y[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(g)([1.0, 2.0])
-    println("value=", value)
+    println('value=', value)
     let cotangent = pullback(1.0)
-    println("grad=", cotangent.0)
+    println('grad=', cotangent.0)
     return 0
 }

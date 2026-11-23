@@ -6,15 +6,15 @@
  */
 import { is_integer, is_float } from types
 
-func is_real::<T>(): bool {
+func is_real::<T>() => bool {
     return is_integer::<T>() || is_float::<T>()
 }
 
-func twice::<T>(x: T): T when is_real::<T>() {
+func twice::<T>(x: T) => T when is_real::<T>() {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(21), twice(1.25))
     return 0
 }

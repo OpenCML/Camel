@@ -2,7 +2,7 @@
 import { limit } from value_conflict_a
 import { limit } from value_conflict_b
 
-func main(): int sync {
+func main() => int sync {
     println(limit)
     return 0
 }

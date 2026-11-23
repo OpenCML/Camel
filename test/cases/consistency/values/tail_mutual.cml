@@ -2,15 +2,15 @@
  * Mutual recursion in tail position, 200000 rounds.
  */
 
-func even(n: int): bool {
+func even(n: int) => bool {
     return if n == 0 then true else odd(n - 1)
 }
 
-func odd(n: int): bool {
+func odd(n: int) => bool {
     return if n == 0 then false else even(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(even(200000))
     println(odd(200000))
     println(even(199999))

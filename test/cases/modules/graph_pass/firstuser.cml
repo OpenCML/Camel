@@ -3,7 +3,7 @@
 // program's; another program declaring the same module keeps its own (task).
 import { bump, twice } from sharedvals
 
-export func run::<F>(p: F): F! sync {
+export func run::<F>(p: F) => F! sync {
     println(bump(9))
     println(twice(3))
     return p

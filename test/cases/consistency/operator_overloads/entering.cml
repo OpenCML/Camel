@@ -5,13 +5,15 @@
 
 type V = { x: int }
 
-func operator +(a: V, b: V): V { return { x: a.x + b.x } }
-func operator +(a: V?, b: V): V {
+func operator +(a: V, b: V) => V {
+    return { x: a.x + b.x }
+}
+func operator +(a: V?, b: V) => V {
     let fallback: V = { x: 100 }
     return { x: (a ?? fallback).x + b.x }
 }
 
-func main(): int sync {
+func main() => int sync {
     let a: V = { x: 1 }
     let none: V? = null
     let some: V? = a

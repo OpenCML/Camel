@@ -4,7 +4,7 @@
 // program behaves the same with and without the pass. The front end folds the two literals of one
 // expression, so the product reaches the graph as an operation over `let`s.
 
-func main(): int sync {
+func main() => int sync {
     let a = 1 / 0
     let x = 2
     let y = 3

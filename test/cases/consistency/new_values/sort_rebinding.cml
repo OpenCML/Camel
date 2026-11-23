@@ -22,12 +22,12 @@
 
 import { sort } from array
 
-func sorted_param(var v: int[]): int sync {
+func sorted_param(var v: int[]) => int sync {
     v = v->sort
     return len(v)
 }
 
-func main(): int sync {
+func main() => int sync {
     var xs: int[] = []
     xs = xs->append<3>
     xs = xs->append<1>
@@ -41,18 +41,18 @@ func main(): int sync {
     xs = xs->append<-1>
     xs = sort(xs)
     println(kept, xs)
-
+    
     var zs = [9, 8, 7]
     let n = sorted_param(zs)
     println(n, zs)
-
+    
     var fs = [2.5, -1.0, 0.5]
     let resort = func () => float[] sync {
         return fs->sort
     }
     let sorted_fs = resort()
     println(len(sorted_fs), sorted_fs, fs)
-
+    
     var gs = [2.5, -1.0, 0.5]
     gs = gs->sort
     println(len(gs), gs)

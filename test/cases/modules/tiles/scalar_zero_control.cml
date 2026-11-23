@@ -1,10 +1,11 @@
 import { zeros } from tensor
 import { upload, run_preferred_resident, download } from tiles
-func check(x: f32[...], b: float): f32[...] sync {
+
+func check(x: f32[...], b: float) => f32[...] sync {
     let q = 1.0 / b
     return x
 }
-func main(): int sync {
+func main() => int sync {
     println(download(run_preferred_resident<check>((zeros::<f32>([0]), upload(0.0)))))
     return 0
 }

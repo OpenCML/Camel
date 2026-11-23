@@ -1,17 +1,23 @@
 import { available, run_preferred_resident, download } from tiles
 
-func add(a: float, b: float): float { return a + b }
+func add(a: float, b: float) => float {
+    return a + b
+}
 
-func effect(x: float): float sync {
-    println("cpu effect")
+func effect(x: float) => float sync {
+    println('cpu effect')
     return x + x
 }
 
-func nested(a: float, b: float): float { return add(a, b) * 2.0 }
+func nested(a: float, b: float) => float {
+    return add(a, b) * 2.0
+}
 
-func pair(a: float, b: float): (float, float) { return (a + b, a * b) }
+func pair(a: float, b: float) => (float, float) {
+    return (a + b, a * b)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(available())
     println(download(run_preferred_resident<add>((2.0, 3.0))))
     println(download(run_preferred_resident<effect>(4.0)))

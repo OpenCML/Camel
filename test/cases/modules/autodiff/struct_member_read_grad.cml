@@ -14,23 +14,23 @@
  * Red when: the read has no derivative rule and the run refuses with "no derivative rule for
  * operator", when the gradient lands on the wrong member, or when it is dropped.
  */
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
+import { reshape, sum } from tensor
 
 type M = { w: f64[2, 2], b: f64[2] }
 
 with <m: M>
-func pairLoss(x: f64[2, 2]): float {
+func pairLoss(x: f64[2, 2]) => float {
     return float(sum(m.w * x)) + float(sum(m.b))
 }
 
 with <t: (f64[2, 2], f64[2])>
-func tupleLoss(x: f64[2, 2]): float {
+func tupleLoss(x: f64[2, 2]) => float {
     let (p, q) = t
     return float(sum(p * x)) + float(sum(q))
 }
 
-func main(): int sync {
+func main() => int sync {
     let w = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0])
     let b = reshape<[2]>([1.0, 1.0])
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
@@ -39,8 +39,9 @@ func main(): int sync {
     'struct_member_read_grad value={:.1f} dw={:.1f} db={:.1f}'->format<
         value,
         sum(gradient.w),
-        sum(gradient.b)>->println
-
+        sum(gradient.b)
+    >->println
+    
     let w2 = reshape<[2, 2]>([2.0, 0.0, 0.0, 2.0])
     let x2 = reshape<[2, 2]>([5.0, 6.0, 7.0, 8.0])
     let tmodel = (w2, b)
@@ -49,6 +50,7 @@ func main(): int sync {
     'tuple_member_read_grad value={:.1f} dp={:.1f} dq={:.1f}'->format<
         tvalue,
         sum(gp),
-        sum(gq)>->println
+        sum(gq)
+    >->println
     return 0
 }

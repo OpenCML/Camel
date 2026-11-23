@@ -2,11 +2,9 @@
  * Negative case: softmax must reject an axis outside the tensor's rank.
  */
 
-import {
-    reshape, softmax, sum
-} from tensor
+import { reshape, softmax, sum } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let values = reshape<[2]>([1.0, 2.0])
     let probs = softmax<1>(values)
     'softmax_axis_error sum={}'->format<sum(probs)>->println

@@ -1,6 +1,6 @@
 import { shl } from math
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(1->shl<64>)
     println('not reached')

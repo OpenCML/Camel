@@ -20,17 +20,17 @@
 
 import { shape } from tensor
 
-func same(t: float[2, 3]): bool {
+func same(t: float[2, 3]) => bool {
     let by_value: int[] = shape(t)
     let by_type: int[] = extent_of::<float[2, 3]>()
     return by_value == by_type
 }
 
-func by_value(t: float[...]): int[] {
+func by_value(t: float[...]) => int[] {
     return shape(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(same([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
     println(by_value([1.0, 2.0]))
     return 0

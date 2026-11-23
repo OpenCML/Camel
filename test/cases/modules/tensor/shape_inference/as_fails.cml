@@ -1,8 +1,9 @@
 import { concat, reshape, sum, load_npy } from tensor
-func h(a: f32[4]): float {
+
+func h(a: f32[4]) => float {
     return float(sum(a))
 }
-func main(): int sync {
+func main() => int sync {
     println('ran')
     let t = reshape<[-1]>(load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy'))
     println(h(concat<0>(t, t) as f32[4]))

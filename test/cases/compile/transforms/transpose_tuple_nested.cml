@@ -8,15 +8,15 @@
 // only ever works on one level, or that filled the outer slot with the number arriving at the innermost
 // read, would answer something else: reading `t.1` (the `3x`) instead would give 3, and reading `t.0.0`
 // would give 1.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func nested(x: float): float {
+func nested(x: float) => float {
     let t = ((x, 2.0 * x), 3.0 * x)
     return t.0.1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(nested(1.0))
     let back = transpose(nested)
     println(back(1.0))

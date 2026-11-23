@@ -5,28 +5,34 @@
  * segment is collected, grown and walked correctly, and what it costs.
  */
 
-func row(i: int, k: int): int[] {
+func row(i: int, k: int) => int[] {
     return [i, i + k, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7, i + 8, i + 9, i + 10, i + 11]
 }
 
-func block(n: int, k: int): int[][] {
-    return (0..n)->map<func (i: int) => int[] { row(i, k) }>
+func block(n: int, k: int) => int[][] {
+    return (0 .. n)->map<func (i: int) => int[] {
+        row(i, k)
+    }>
 }
 
-func blocks(count: int, n: int): int[][][] {
-    return (0..count)->map<func (b: int) => int[][] { block(n, b) }>
+func blocks(count: int, n: int) => int[][][] {
+    return (0 .. count)->map<func (b: int) => int[][] {
+        block(n, b)
+    }>
 }
 
-func probe(live: int[][][], n: int): int {
-    return live->reduce<func (acc: int, b: int[][]) => int { acc + b[n - 1][1] + b[0][0] }, 0>
+func probe(live: int[][][], n: int) => int {
+    return live->reduce<func (acc: int, b: int[][]) => int {
+        acc + b[n - 1][1] + b[0][0]
+    }, 0>
 }
 
-func churn(live: int[][][], n: int, left: int, total: int): int {
+func churn(live: int[][][], n: int, left: int, total: int) => int {
     return if left == 0 then total + probe(live, n) else churn(live, n, left - 1, total + block(n / 10 + 1, left)[n / 10][11])
 }
 
 // One block is 4096 rows: about 0.6 MB.
-func main(mb: int, reps: int): int sync {
+func main(mb: int, reps: int) => int sync {
     let n = 4096
     let count = mb * 10 / 6 + 1
     let live = blocks(count, n)

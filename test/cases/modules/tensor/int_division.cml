@@ -6,7 +6,7 @@
 
 import tensor
 
-func main(): int sync {
+func main() => int sync {
     let a = [7, 8, -9] as int[]
     let b = [2, 3, 2] as int[]
     println(a / b)

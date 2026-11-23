@@ -2,7 +2,7 @@
 /// concrete there): the call is refused at the type.
 import { ElementOf } from types
 
-func main(): int sync {
+func main() => int sync {
     let x: ElementOf<int> = 1
     println(x)
     return 0

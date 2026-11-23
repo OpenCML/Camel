@@ -3,7 +3,7 @@
  * message says, rather than text that is not a number.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x = float('1e999')
     println(x)
     return 0

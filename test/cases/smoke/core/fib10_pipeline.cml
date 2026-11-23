@@ -4,11 +4,11 @@
 
 import { now } from time
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main(): int sync {
+func main() => int sync {
     let idx = 10
     'Start computing fibonacci({})...'->format<idx>->println
     let start = now()
@@ -17,4 +17,3 @@ func main(): int sync {
     'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
     return 0
 }
-

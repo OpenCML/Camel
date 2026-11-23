@@ -1,4 +1,4 @@
-func main(n: int): int sync {
-    println(n)                       // mark:print
+func main(n: int) => int sync {
+    println(n) // mark:print
     return n + 1
 }

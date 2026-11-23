@@ -13,15 +13,15 @@ type Adam = { beta1: float, beta2: float }
 type SgdState = { steps: int, m: float }
 type AdamState = { steps: int, m: float }
 
-func init::<P>(opt: Sgd, params: P): SgdState {
+func init::<P>(opt: Sgd, params: P) => SgdState {
     return { steps: 1, m: 0.0 }
 }
 
-func init::<P>(opt: Adam, params: P): AdamState {
+func init::<P>(opt: Adam, params: P) => AdamState {
     return { steps: 2, m: opt.beta1 }
 }
 
-func main(): int sync {
+func main() => int sync {
     let sgd: Sgd = { rate: 0.1 }
     let adam: Adam = { beta1: 0.9, beta2: 0.999 }
     let a = init(sgd, (1.0, 2.0))

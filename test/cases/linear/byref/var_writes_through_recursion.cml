@@ -7,7 +7,7 @@
  */
 
 // one write per level, the base case returns a constant
-func climb(i: int, n: int, var c: int): int sync {
+func climb(i: int, n: int, var c: int) => int sync {
     return if i >= n then 0 else sync {
         c += 1
         let r = climb(i + 1, n, c)
@@ -16,7 +16,7 @@ func climb(i: int, n: int, var c: int): int sync {
 }
 
 // two writes per level around the recursive call, the result is not the counter
-func both_sides(i: int, n: int, var c: int): int sync {
+func both_sides(i: int, n: int, var c: int) => int sync {
     return if i >= n then 7 else sync {
         c += 10
         let r = both_sides(i + 1, n, c)
@@ -25,14 +25,14 @@ func both_sides(i: int, n: int, var c: int): int sync {
     }
 }
 
-func first_then_climb(var c: int): int sync {
+func first_then_climb(var c: int) => int sync {
     c += 1
     let k = c + 0
     let r = climb(0, 2, c)
     return k * 10 + r
 }
 
-func main(): int sync {
+func main() => int sync {
     var a = 0
     let ra = first_then_climb(a)
     println('use: {} counter {}'->format<ra, a>)

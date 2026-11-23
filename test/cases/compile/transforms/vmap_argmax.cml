@@ -24,27 +24,27 @@
  * floats, and each `f` declares `int[...]` -- a typing no float answer would satisfy -- so the
  * comparison is of positions as positions.
  */
-import rulesets.vmap
 import { vmap as row_vmap } from array
+import rulesets.vmap
 import { argmax, argmin } from tensor
 import { vmap } from transforms
 
 // The axis is the row's first one: in the lifted value it is the second.
-func column_argmax(x: float[2, 3]): int[...] {
+func column_argmax(x: float[2, 3]) => int[...] {
     return argmax<0, false>(x)
 }
 
 // `keepdims` keeps the reduced axis, so the batch keeps it too.
-func column_argmin(x: float[2, 3]): int[...] {
+func column_argmin(x: float[2, 3]) => int[...] {
     return argmin<0, true>(x)
 }
 
 // The axis is the row's second one, which is the lifted value's third.
-func row_argmax(x: float[2, 3]): int[...] {
+func row_argmax(x: float[2, 3]) => int[...] {
     return argmax<1, false>(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let batch: float[3, 2, 3] = [
         [[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]],
         [[7.0, 2.0, 5.0], [0.0, 8.0, 1.0]],

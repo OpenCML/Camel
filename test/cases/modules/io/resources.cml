@@ -5,6 +5,6 @@
 
 import io
 
-func main(): int {
+func main() => int {
     return 0
 }

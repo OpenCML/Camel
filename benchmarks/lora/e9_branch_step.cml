@@ -9,28 +9,28 @@
  * MODE=export : export the training step to ONNX
  */
 
-import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
-import { sgd, save_params } from nn
 import { get_env } from env
+import { sgd, save_params } from nn
 import { export_model } from onnx
+import { relu, mean, reshape } from tensor
 
 type Mlp = { w1: float[...], b1: float[...], w2: float[...], b2: float[...] }
 
 with <m: Mlp>
-func loss(x: float[...]): float {
+func loss(x: float[...]) => float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     let s = float(mean(y * y))
     return if s > 1.0 then s * 2.0 else s
 }
 
-func step(m: Mlp, x: float[...]): (float, Mlp) {
+func step(m: Mlp, x: float[...]) => (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func load(): Mlp {
+func load() => Mlp {
     return {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
         b1: reshape<[3]>([0.1, 0.0, -0.1]),
@@ -39,7 +39,7 @@ func load(): Mlp {
     }
 }
 
-func do_export(m: Mlp): int sync {
+func do_export(m: Mlp) => int sync {
     let r = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])))
     return match r {
         case error e => sync {
@@ -53,7 +53,7 @@ func do_export(m: Mlp): int sync {
     }
 }
 
-func do_run(m: Mlp): int sync {
+func do_run(m: Mlp) => int sync {
     // arm A (large loss, s>1) and arm B (small loss, s<=1) — same weights, two inputs.
     let xa = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
     let xb = reshape<[2, 2]>([0.01, 0.02, -0.01, 0.03])
@@ -65,7 +65,7 @@ func do_run(m: Mlp): int sync {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = load()
     return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

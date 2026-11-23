@@ -9,16 +9,16 @@
  * together, `with` arguments and ordinary ones alike.
  */
 
-func stop(m: string): never {
+func stop(m: string) => never {
     return fail<'Stopped'>(m)
 }
 
 with <rounds: int>
-func repeat(x: int): int {
+func repeat(x: int) => int {
     return x + rounds
 }
 
-func main(): int[] sync {
+func main() => int[] sync {
     println('before')
     return repeat<stop('no rounds by position')>(3)
 }

@@ -1,4 +1,5 @@
 /// A tag that is not declared.
-
 #nope
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}

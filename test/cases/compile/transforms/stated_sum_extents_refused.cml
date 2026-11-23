@@ -10,7 +10,7 @@
 //     camel test/cases/compile/transforms/stated_sum_extents_refused.cml
 import { sum_stated } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let x = [1.0, 2.0, 3.0, 4.0] as float[]
     let s = sum_stated(x, [2])
     `stated sum={}`->format<s>->println

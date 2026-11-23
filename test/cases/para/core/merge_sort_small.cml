@@ -6,16 +6,16 @@
  * one-pass `merge` below, as merge_sort.cml does.)
  */
 
-import { seed, shuffle, next_key } from random
 import { sort, merge_sorted } from array
+import { seed, shuffle, next_key } from random
 import { rendezvous } from test_support
 
-func sort_leaf(arr: int[]): (int[], int) sync {
+func sort_leaf(arr: int[]) => (int[], int) sync {
     let met = rendezvous(2, 5.0) - 1
     return (sort(arr), met)
 }
 
-func mergesort(arr: int[]): (int[], int) {
+func mergesort(arr: int[]) => (int[], int) {
     return if len(arr) <= 8 then sort_leaf(arr) else {
         let mid = len(arr) / 2
         let (lhs, lmet) = arr[0..mid]->mergesort
@@ -24,9 +24,9 @@ func mergesort(arr: int[]): (int[], int) {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     seed(1)
-    let arr = (0..64)->shuffle<next_key()>
+    let arr = (0 .. 64)->shuffle<next_key()>
     let (res, met) = mergesort(arr)
     res->println
     println('leaf sorts that met a peer: {} of 8'->format<met>)

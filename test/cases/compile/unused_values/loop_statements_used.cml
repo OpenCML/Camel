@@ -9,15 +9,15 @@
  * `s + b` below and `maybe`'s empty arm, exit 1).
  */
 
-func seed(xs: int[]): int {
+func seed(xs: int[]) => int {
     return loop s = 0 for b in xs do s + b
 }
 
-func dropsWhatItGives(flag: bool): void {
+func dropsWhatItGives(flag: bool) => void {
     if flag then {}
 }
 
-func main(): int sync {
+func main() => int sync {
     println(seed([1, 2, 3]))
     dropsWhatItGives(true)
     return 0

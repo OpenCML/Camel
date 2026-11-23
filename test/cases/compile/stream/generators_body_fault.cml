@@ -10,15 +10,18 @@
  * on to the next element, would print `1234` or `after`.
  */
 
-func halves(): int.. sync {
+func halves() => int.. sync {
     yield 1
     let z = 0
     yield 10 / z
     yield 1234
 }
 
-func main(): int sync {
-    loop acc = 0 for v in halves() do sync { println(v); acc + 1 }
-    println("after")
+func main() => int sync {
+    loop acc = 0 for v in halves() do sync {
+        println(v)
+        acc + 1
+    }
+    println('after')
     return 0
 }

@@ -32,16 +32,16 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func g(s: float[]): float {
+func g(s: float[]) => float {
     let y = loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
     return y[1]
 }
 
-func main(): int sync {
+func main() => int sync {
     let fwd = split(jvp(g))
     let (value, lin) = fwd([1.0, 2.0])
-    println("proj y=", value)
-    println("proj d1=", lin([1.0, 0.0]))
-    println("proj d2=", lin([0.0, 1.0]))
+    println('proj y=', value)
+    println('proj d1=', lin([1.0, 0.0]))
+    println('proj d2=', lin([0.0, 1.0]))
     return 0
 }

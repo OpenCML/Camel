@@ -12,19 +12,19 @@
 // All three are called, and `main` returns a number the plan compares, so a commit that published one
 // of these graphs would have to have published a program that still runs.
 
-func takes_int(n: int): int {
+func takes_int(n: int) => int {
     return n + 1
 }
 
-func mirror_int(n: int): int {
+func mirror_int(n: int) => int {
     return n * 2
 }
 
-func takes_float(x: float): int {
+func takes_float(x: float) => int {
     return if x > 0.0 then 7 else 0
 }
 
-func main(): int {
+func main() => int {
     let a = takes_int(41)
     let b = mirror_int(21)
     let f = takes_float(1.5)

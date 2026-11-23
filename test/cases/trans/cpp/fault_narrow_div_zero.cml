@@ -7,7 +7,7 @@
  * The same rule covers f16 (one site, the target's name in it), and the quotient of two values
  * is computed in f32 and rounded once, as the other arithmetic is.
  */
-func main(): int sync {
+func main() => int sync {
     println(bf16(1.0) / bf16(3.0))
     let zero: bf16 = 0.0
     println(bf16(1.0) / zero)

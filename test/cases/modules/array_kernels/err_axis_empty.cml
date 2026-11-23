@@ -1,7 +1,7 @@
 import { max } from array
 import { reshape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(reshape<[0, 2]>([] as float[])->max<0>)
     return 0
 }

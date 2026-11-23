@@ -24,7 +24,7 @@ Program
 |  |  |     \-RefType
 |  |  |        \- int
 |  |  \- )
-|  |- :
+|  |- =>
 |  |-RefType
 |  |  \- int
 |  \-StmtBlock
@@ -83,7 +83,7 @@ Program
 |  |-ParentParams
 |  |  |- (
 |  |  \- )
-|  |- :
+|  |- =>
 |  |-RefType
 |  |  \- int
 |  \-StmtBlock

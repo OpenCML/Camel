@@ -20,23 +20,23 @@
 //
 //     camel test/cases/compile/transforms/stated_sum_axis_gradient.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, sum, take } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 with <w: float[...]>
-func total(): float {
+func total() => float {
     let lane = sum<0, false>(w)
     return sum(take(lane, [1]))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[...]): float {
+func total_plain(x: float[...]) => float {
     let lane = sum<0, false>(x)
     return sum(take(lane, [1]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let engine = grad(total)<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]>()
     let (value, pullback) = vjp(total_plain)(x)

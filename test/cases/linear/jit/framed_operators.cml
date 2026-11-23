@@ -13,25 +13,24 @@ type Point = {
     y: int
 }
 
-func collatz(n: int, steps: int): int {
+func collatz(n: int, steps: int) => int {
     return if n == 1 then steps
-        else if n % 2 == 0 then collatz(n / 2, steps + 1)
-        else collatz(3 * n + 1, steps + 1)
+    else if n % 2 == 0 then collatz(n / 2, steps + 1) else collatz(3 * n + 1, steps + 1)
 }
 
-func repeat(s: string, n: int, acc: string): string {
+func repeat(s: string, n: int, acc: string) => string {
     return if n == 0 then acc else repeat(s, n - 1, acc + s)
 }
 
-func sum_at(xs: int[], i: int, acc: int): int {
+func sum_at(xs: int[], i: int, acc: int) => int {
     return if i == len(xs) then acc else sum_at(xs, i + 1, acc + xs[i])
 }
 
-func mean(xs: int[], i: int, acc: float): float {
+func mean(xs: int[], i: int, acc: float) => float {
     return if i == len(xs) then acc / float(len(xs)) else mean(xs, i + 1, acc + float(xs[i]))
 }
 
-func name_of(n: int): string {
+func name_of(n: int) => string {
     let k = n % 4
     return match k {
         case 0 => 'zero'
@@ -41,7 +40,7 @@ func name_of(n: int): string {
     }
 }
 
-func weight(name: string): int {
+func weight(name: string) => int {
     return match name {
         case 'zero' => 0
         case 'one' => 1
@@ -50,43 +49,47 @@ func weight(name: string): int {
     }
 }
 
-func weigh(n: int, acc: int): int {
+func weigh(n: int, acc: int) => int {
     return if n == 0 then acc else weigh(n - 1, acc + weight(name_of(n)))
 }
 
-func walk(p: Point, n: int): Point {
+func walk(p: Point, n: int) => Point {
     return if n == 0 then p else walk({ x: p.x + n, y: p.y - 1 }, n - 1)
 }
 
-func swap_sum(t: (int, int), n: int): int {
+func swap_sum(t: (int, int), n: int) => int {
     return if n == 0 then t.0 - t.1 else swap_sum((t.1 + 1, t.0), n - 1)
 }
 
-func is_even(n: int): bool {
+func is_even(n: int) => bool {
     return if n == 0 then true else is_odd(n - 1)
 }
 
-func is_odd(n: int): bool {
+func is_odd(n: int) => bool {
     return if n == 0 then false else is_even(n - 1)
 }
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n < 2 then n else fib(n - 1) + fib(n - 2)
 }
 
-func twice(f: (x: int) => int, x: int, n: int): int {
+func twice(f: (x: int) => int, x: int, n: int) => int {
     return if n == 0 then x else twice(f, f(f(x)) % 1000003, n - 1)
 }
 
-func scaled_total(xs: int[], k: int): int {
-    return xs->map<func (x: int) => int { x * k }>->reduce<func (a: int, b: int) => int { a + b }, 0>
+func scaled_total(xs: int[], k: int) => int {
+    return xs->map<func (x: int) => int {
+        x * k
+    }>->reduce<func (a: int, b: int) => int {
+        a + b
+    }, 0>
 }
 
-func totals(xs: int[], k: int, acc: int): int {
+func totals(xs: int[], k: int, acc: int) => int {
     return if k == 0 then acc else totals(xs, k - 1, acc + scaled_total(xs, k))
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
     'collatz {} {}'->format<collatz(27, 0), collatz(97, 0)>->println
     'repeat {}'->format<repeat('ab', 5, '>')>->println
@@ -98,7 +101,9 @@ func main(): int sync {
     'swap_sum {}'->format<swap_sum((0, 0), 101)>->println
     'parity {} {}'->format<is_even(100000), is_odd(100000)>->println
     'fib {}'->format<fib(20)>->println
-    'twice {}'->format<twice(func (x: int) => int { x * 3 + 1 }, 1, 50)>->println
+    'twice {}'->format<twice(func (x: int) => int {
+        x * 3 + 1
+    }, 1, 50)>->println
     'totals {}'->format<totals(xs, 30, 0)>->println
     return 0
 }

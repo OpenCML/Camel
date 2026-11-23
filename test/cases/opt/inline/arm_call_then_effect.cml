@@ -13,31 +13,31 @@
 
 import { now } from time
 
-func timed(remaining: int, ticks: int): int {
+func timed(remaining: int, ticks: int) => int {
     return if remaining <= 0 then ticks else sync {
         return timed(remaining - 1, ticks + 1)
     }
 }
 
-func measure(n: int): int sync {
+func measure(n: int) => int sync {
     println('start')
     let status = timed(n, 0)
     println('saved')
     return status
 }
 
-func other(n: int): int sync {
+func other(n: int) => int sync {
     println('other')
     return 0
 }
 
 // Not sync, and a condition no pass can fold: the arm survives every pipeline.
-func run(n: int): int {
+func run(n: int) => int {
     let t = now()
     return if t > 1.0 then measure(n) else other(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     let r = run(50000)
     'arm_call_then_effect r={}'->format<r>->println
     return 0

@@ -10,42 +10,42 @@
 
 import { get_env } from env
 
-func pick(xs: int[], i: int): int {
+func pick(xs: int[], i: int) => int {
     return xs[i] * 2
 }
 
-func picks(xs: int[], i: int, n: int, acc: int): int {
+func picks(xs: int[], i: int, n: int, acc: int) => int {
     return if i == n then acc else picks(xs, i + 1, n, acc + pick(xs, i))
 }
 
-func rem(a: int, b: int): int {
+func rem(a: int, b: int) => int {
     return a % b + 1
 }
 
-func rems(a: int, b: int, low: int, acc: int): int {
+func rems(a: int, b: int, low: int, acc: int) => int {
     return if b < low then acc else rems(a, b - 1, low, acc + rem(a, b))
 }
 
-func quot(xs: int[], d: int): int {
+func quot(xs: int[], d: int) => int {
     return len(xs) / d
 }
 
-func quots(xs: int[], d: int, low: int, acc: int): int {
+func quots(xs: int[], d: int, low: int, acc: int) => int {
     return if d < low then acc else quots(xs, d - 1, low, acc + quot(xs, d))
 }
 
-func depth(xs: int[], n: int): int {
+func depth(xs: int[], n: int) => int {
     return if n == 0 then len(xs) else 1 + depth(xs, n - 1)
 }
 
-func kind(r: int!): string {
+func kind(r: int!) => string {
     return match r {
         case error e => e.kind
         case v => format<v>('{}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
     let fault = get_env('FAULT') ?? ''
     println(picks(xs, 0, 8, 0))

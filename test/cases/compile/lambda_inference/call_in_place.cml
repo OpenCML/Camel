@@ -4,7 +4,9 @@
  * item 2, the second example of the reference's list).
  */
 
-func main(): int sync {
-    println((func (x) { x + 1 })(41))
+func main() => int sync {
+    println((func (x) {
+        x + 1
+    })(41))
     return 0
 }

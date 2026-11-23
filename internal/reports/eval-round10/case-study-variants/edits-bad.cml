@@ -1,22 +1,26 @@
 // The three bad edits item 11 (lane B) asks for, each made with the edit operations the graph module
 // publishes today: one that would break only the exit rule, one only acyclicity, one only the region
 // (scope) rule. Each pass says what it did and then commits; the commit's answer is the reading.
-import { is_function } from types
 import { Graph, Node, RegionKind, commit, exit_of, graphs_of, id, inputs, nodes, open, region_kind, region_of, replace } from graph
+import { is_function } from types
 
 /// The nodes of a graph that sit in an arm of a branch.
-func arm_nodes(g: Graph): Node[] {
-    return nodes(g)->filter<func (n: Node) => bool { region_kind(region_of(n)) == RegionKind::Arm }>
+func arm_nodes(g: Graph) => Node[] {
+    return nodes(g)->filter<func (n: Node) => bool {
+        region_kind(region_of(n)) == RegionKind::Arm
+    }>
 }
 
 /// The one graph of the program that has exactly one node in an arm.
-func arm_graph::<F>(p: F): Graph? when is_function::<F>() {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { len(arm_nodes(g)) == 1 }>
+func arm_graph::<F>(p: F) => Graph? when is_function::<F>() {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        len(arm_nodes(g)) == 1
+    }>
     return if len(found) == 1 then found[0] else null
 }
 
 /// The graph's exit and the arm node, in that order.
-func exit_and_arm(g: Graph): Node[] {
+func exit_and_arm(g: Graph) => Node[] {
     let ex = match exit_of(g) {
         case null => [] as Node[]
         case x => [x]
@@ -26,7 +30,7 @@ func exit_and_arm(g: Graph): Node[] {
 }
 
 /// The graph's exit and the value the exit reads, in that order.
-func exit_and_value(g: Graph): Node[] {
+func exit_and_value(g: Graph) => Node[] {
     let ins = match exit_of(g) {
         case null => [] as Node[]
         case x => inputs(x)
@@ -40,18 +44,22 @@ func exit_and_value(g: Graph): Node[] {
 
 // ---- (1) Exit: the exit is moved onto a node of an arm ----
 
-func move_exit_commit::<F>(p: F, g: Graph): F! sync {
+func move_exit_commit::<F>(p: F, g: Graph) => F! sync {
     let pair = exit_and_arm(g)
-    'move_exit: graph of {} nodes; the exit is {} (region kind {}); the node moved in is {} (region kind {})'
-        ->format<len(nodes(g)), string(id(pair[0])), string(region_kind(region_of(pair[0]))), string(id(pair[1])),
-                string(region_kind(region_of(pair[1])))>->println
+    'move_exit: graph of {} nodes; the exit is {} (region kind {}); the node moved in is {} (region kind {})'->format<
+        len(nodes(g)),
+        string(id(pair[0])),
+        string(region_kind(region_of(pair[0]))),
+        string(id(pair[1])),
+        string(region_kind(region_of(pair[1])))
+    >->println
     let t = open(p)
     replace(t, pair[0], pair[1])
     'move_exit: the step check accepted the replace; committing'->println
     return commit(t)
 }
 
-export func move_exit::<F>(p: F): F! sync {
+export func move_exit::<F>(p: F) => F! sync {
     return match arm_graph(p) {
         case null => p
         case g => move_exit_commit(p, g)
@@ -60,17 +68,16 @@ export func move_exit::<F>(p: F): F! sync {
 
 // ---- (2) Acyclic: the value the exit reads is replaced by the exit itself ----
 
-func self_read_commit::<F>(p: F, g: Graph): F! sync {
+func self_read_commit::<F>(p: F, g: Graph) => F! sync {
     let pair = exit_and_value(g)
-    'self_read: the exit is {} and the value it reads is {}; replacing that value with the exit'
-        ->format<string(id(pair[0])), string(id(pair[1]))>->println
+    'self_read: the exit is {} and the value it reads is {}; replacing that value with the exit'->format<string(id(pair[0])), string(id(pair[1]))>->println
     let t = open(p)
     replace(t, pair[1], pair[0])
     'self_read: the step check accepted the replace; committing'->println
     return commit(t)
 }
 
-export func self_read::<F>(p: F): F! sync {
+export func self_read::<F>(p: F) => F! sync {
     return match arm_graph(p) {
         case null => p
         case g => self_read_commit(p, g)
@@ -79,23 +86,24 @@ export func self_read::<F>(p: F): F! sync {
 
 // ---- (3) Scoped: the value the exit reads becomes a value of an arm ----
 
-func cross_region_commit::<F>(p: F, g: Graph): F! sync {
+func cross_region_commit::<F>(p: F, g: Graph) => F! sync {
     let pair = exit_and_value(g)
     let arm = arm_nodes(g)
-    'cross_region: the exit reads {} (region kind {}); replacing that value with {} (region kind {})'
-        ->format<string(id(pair[1])), string(region_kind(region_of(pair[1]))), string(id(arm[0])),
-                string(region_kind(region_of(arm[0])))>->println
+    'cross_region: the exit reads {} (region kind {}); replacing that value with {} (region kind {})'->format<
+        string(id(pair[1])),
+        string(region_kind(region_of(pair[1]))),
+        string(id(arm[0])),
+        string(region_kind(region_of(arm[0])))
+    >->println
     let t = open(p)
     replace(t, pair[1], arm[0])
     'cross_region: the step check accepted the replace; committing'->println
     return commit(t)
 }
 
-export func cross_region::<F>(p: F): F! sync {
+export func cross_region::<F>(p: F) => F! sync {
     return match arm_graph(p) {
         case null => p
         case g => cross_region_commit(p, g)
     }
 }
-
-

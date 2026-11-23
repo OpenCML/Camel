@@ -19,11 +19,11 @@
 import { grad, with_grad, vjp } from autodiff
 
 with <w: f32>
-func f(x: f32): f32 {
+func f(x: f32) => f32 {
     return w * x
 }
 
-func main(): int {
+func main() => int {
     let a = with_grad(f)
     let b = grad(f)
     let c = vjp(f)

@@ -12,23 +12,23 @@
 
 import { is_float, is_numeric, is_ordered } from types
 
-func numbers::<T>(xs: T[]): int when is_numeric::<T>() {
+func numbers::<T>(xs: T[]) => int when is_numeric::<T>() {
     return len(xs)
 }
 
-func ordered::<T>(xs: T[]): int when is_ordered::<T>() {
+func ordered::<T>(xs: T[]) => int when is_ordered::<T>() {
     return len(xs)
 }
 
-func main(): int sync {
+func main() => int sync {
     let bf: bf16[] = []
     let half: f16[] = []
-    println(if is_float::<bf16>() then "float" else "not float")
-    println(if is_float::<f16>() then "float" else "not float")
-    println(if is_numeric::<bf16>() then "numeric" else "not numeric")
-    println(if is_numeric::<f16>() then "numeric" else "not numeric")
-    println(if is_ordered::<bf16>() then "ordered" else "not ordered")
-    println(if is_ordered::<f16>() then "ordered" else "not ordered")
+    println(if is_float::<bf16>() then 'float' else 'not float')
+    println(if is_float::<f16>() then 'float' else 'not float')
+    println(if is_numeric::<bf16>() then 'numeric' else 'not numeric')
+    println(if is_numeric::<f16>() then 'numeric' else 'not numeric')
+    println(if is_ordered::<bf16>() then 'ordered' else 'not ordered')
+    println(if is_ordered::<f16>() then 'ordered' else 'not ordered')
     println(numbers(bf))
     println(ordered(half))
     return 0

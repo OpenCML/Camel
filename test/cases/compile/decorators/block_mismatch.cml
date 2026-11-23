@@ -3,17 +3,19 @@
  * function type does not accept it, an ordinary error of the call (language reference 7.6).
  */
 
-func twice(f: (x: int) => int): (x: int) => int {
-    return func (x: int) { f(f(x)) }
+func twice(f: (x: int) => int) => (x: int) => int {
+    return func (x: int) {
+        f(f(x))
+    }
 }
 
-func d(x: float): float {
+func d(x: float) => float {
     @twice
     {
         return x * 2.0
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

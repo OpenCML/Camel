@@ -4,14 +4,14 @@
  * it means, so it gives `b` a value or none of them does (design principles 4.4).
  */
 
-func f(a: int, b: int = 0): int {
+func f(a: int, b: int = 0) => int {
     return a * 10 + b
 }
 
-func f(a: int, b: int, c: int = 0): int {
+func f(a: int, b: int, c: int = 0) => int {
     return a * 100 + b * 10 + c
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(a: 1, c: 3)
 }

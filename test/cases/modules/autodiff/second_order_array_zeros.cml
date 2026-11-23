@@ -15,17 +15,17 @@
 import { grad } from autodiff
 
 with <xs: float[]>
-func f(): float {
+func f() => float {
     return xs[0] * xs[0] * xs[0]
 }
 
 with <v: float[]>
-func df0(): float {
+func df0() => float {
     let g = grad(f)<v>()
     return g[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [2.0, 3.0, 0.0]
     let g = grad(f)<xs>()
     let h = grad(df0)<xs>()
@@ -33,6 +33,7 @@ func main(): int sync {
         g[0],
         g[1],
         h[0],
-        h[1]>->println
+        h[1]
+    >->println
     return 0
 }

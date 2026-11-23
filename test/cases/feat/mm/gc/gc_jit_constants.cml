@@ -7,19 +7,25 @@
  * interpreter; `count`, which has no object constant, is still compiled.
  */
 
-func tag(n: int): string {
+func tag(n: int) => string {
     return if n <= 0 then 'leaf' else tag(n - 1)
 }
 
-func count(n: int, acc: int): int {
+func count(n: int, acc: int) => int {
     return if n <= 0 then acc else count(n - 1, acc + 1)
 }
 
-func label(i: int): string { return 'item-' + string(i) }
+func label(i: int) => string {
+    return 'item-' + string(i)
+}
 
-func churn(n: int): int { return len((0..n)->map<func (i: int) => string { label(i) }>) }
+func churn(n: int) => int {
+    return len((0 .. n)->map<func (i: int) => string {
+        label(i)
+    }>)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(tag(50), count(50, 0))
     let c = churn(200)
     println(tag(60), count(60, 0), c)

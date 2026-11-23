@@ -3,14 +3,13 @@
  * when nothing reads its value, so dead-code elimination keeps it (design principles 3.4).
  */
 
-
-func check(z: int): int sync {
+func check(z: int) => int sync {
     let r = 5 / z
     println('after')
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     return check(0)
 }

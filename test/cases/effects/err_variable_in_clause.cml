@@ -4,12 +4,12 @@
  * makes a call touch it. The clause is refused where the entry is written.
  */
 
-func bump(var acc: int): int uses var acc sync {
+func bump(var acc: int) => int uses var acc sync {
     acc += 1
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     var acc = 0
     println(bump(acc))
     return 0

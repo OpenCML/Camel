@@ -3,6 +3,6 @@
 /// principles 10.2 — the entry program follows the same rule as a library module, so its
 /// directory is not a module root).
 
-export func name(): string {
+export func name() => string {
     return 'root'
 }

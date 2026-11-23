@@ -5,20 +5,23 @@
  * feeding MaxUnpool — all standard opset-17 inference operators.
  */
 
-import { relu, mean, reshape, dim } from tensor
 import { with_grad } from autodiff
+import { get_env } from env
 import { conv2d, max_pool2d, sgd } from nn
 import { export_model } from onnx
-import { get_env } from env
+import { relu, mean, reshape, dim } from tensor
 
 type Cnn = {
-    conv1_w: float[...], conv1_b: float[...],
-    conv2_w: float[...], conv2_b: float[...],
-    fc_w: float[...], fc_b: float[...]
+    conv1_w: float[...],
+    conv1_b: float[...],
+    conv2_w: float[...],
+    conv2_b: float[...],
+    fc_w: float[...],
+    fc_b: float[...]
 }
 
 with <m: Cnn>
-func loss(x: float[...]): float {
+func loss(x: float[...]) => float {
     let c1 = relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 1))
     let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
     // conv2d, max_pool2d and relu answer in f32 while this model works in f64, so the value is
@@ -28,34 +31,107 @@ func loss(x: float[...]): float {
     return float(mean(y * y))
 }
 
-func step(m: Cnn, x: float[...]): (float, Cnn) {
+func step(m: Cnn, x: float[...]) => (float, Cnn) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let m = {
         conv1_w: reshape<[2, 1, 3, 3]>([
-            0.3, -0.2, 0.1, 0.4, -0.5, 0.2, 0.1, 0.6, -0.3,
-            -0.1, 0.2, 0.5, -0.4, 0.3, -0.2, 0.2, -0.6, 0.4] as float[]),
+            0.3,
+            -0.2,
+            0.1,
+            0.4,
+            -0.5,
+            0.2,
+            0.1,
+            0.6,
+            -0.3,
+            -0.1,
+            0.2,
+            0.5,
+            -0.4,
+            0.3,
+            -0.2,
+            0.2,
+            -0.6,
+            0.4
+        ] as float[]),
         conv1_b: [0.1, -0.1] as float[],
         conv2_w: reshape<[2, 2, 3, 3]>([
-            0.2, 0.1, -0.3, 0.5, -0.1, 0.4, -0.2, 0.3, 0.1,
-            -0.4, 0.2, 0.6, 0.1, -0.5, 0.3, 0.2, -0.1, -0.2,
-            0.1, -0.3, 0.2, -0.2, 0.4, -0.6, 0.5, 0.1, 0.3,
-            -0.1, 0.5, -0.4, 0.2, 0.3, -0.2, 0.6, -0.3, 0.1] as float[]),
+            0.2,
+            0.1,
+            -0.3,
+            0.5,
+            -0.1,
+            0.4,
+            -0.2,
+            0.3,
+            0.1,
+            -0.4,
+            0.2,
+            0.6,
+            0.1,
+            -0.5,
+            0.3,
+            0.2,
+            -0.1,
+            -0.2,
+            0.1,
+            -0.3,
+            0.2,
+            -0.2,
+            0.4,
+            -0.6,
+            0.5,
+            0.1,
+            0.3,
+            -0.1,
+            0.5,
+            -0.4,
+            0.2,
+            0.3,
+            -0.2,
+            0.6,
+            -0.3,
+            0.1
+        ] as float[]),
         conv2_b: [0.2, 0.0] as float[],
         fc_w: reshape<[2, 2]>([0.5, -0.5, 0.25, -0.75] as float[]),
         fc_b: [0.1, -0.2] as float[]
     }
     let x = reshape<[1, 1, 5, 5]>([
-        0.5, -0.3, 0.2, 0.7, -0.1,
-        0.4, 0.1, -0.6, 0.3, 0.2,
-        -0.2, 0.6, 0.5, -0.4, 0.1,
-        0.3, -0.5, 0.4, 0.2, -0.7,
-        0.1, 0.2, -0.1, 0.6, 0.4] as float[])
+        0.5,
+        -0.3,
+        0.2,
+        0.7,
+        -0.1,
+        0.4,
+        0.1,
+        -0.6,
+        0.3,
+        0.2,
+        -0.2,
+        0.6,
+        0.5,
+        -0.4,
+        0.1,
+        0.3,
+        -0.5,
+        0.4,
+        0.2,
+        -0.7,
+        0.1,
+        0.2,
+        -0.1,
+        0.6,
+        0.4
+    ] as float[])
     return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

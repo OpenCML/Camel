@@ -20,23 +20,23 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     return 2.0 * x
 }
 
-func g(x: float): float {
+func g(x: float) => float {
     return f(x) * x
 }
 
-func g2(x: float): float {
+func g2(x: float) => float {
     return g(x) * x
 }
 
-func g3(x: float): float {
+func g3(x: float) => float {
     return g2(x) * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let forward = split(jvp(g3))
     let (atTwo, dAtTwo) = forward(2.0)
     'y2={}'->format<atTwo>->println

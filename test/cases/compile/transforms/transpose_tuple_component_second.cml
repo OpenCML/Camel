@@ -8,15 +8,15 @@
 //
 // It also pins the zero on the other side: `x` is not read directly here, only through `2x`, so the
 // slot for the first component is zero and `x` gets its 2 only from the product.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func second(x: float): float {
+func second(x: float) => float {
     let t = (x, 2.0 * x)
     return t.1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(second(1.0))
     let back = transpose(second)
     println(back(1.0))

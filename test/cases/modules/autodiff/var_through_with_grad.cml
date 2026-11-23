@@ -6,26 +6,26 @@
  *   with_grad: value 2 cnt 2
  *   with_grad: value 3 cnt 3
  */
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
+import { reshape, sum } from tensor
 
 type P = { p0: f64[...] }
 
 with <m: P>
-func loss(x: f64[...], var cnt: int): float sync {
+func loss(x: f64[...], var cnt: int) => float sync {
     cnt += 1
     return float(sum(m.p0 * x)) * float(cnt)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0])
     let m = { p0: reshape<[2]>([0.5, 0.25]) }
     var cnt = 0
     let a = loss<m>(x, cnt)
-    println("plain call: value {} cnt {}"->format<a, cnt>)
+    println('plain call: value {} cnt {}'->format<a, cnt>)
     let vg1 = with_grad(loss)<m>(x, cnt)
-    println("with_grad: value {} cnt {}"->format<vg1.0, cnt>)
+    println('with_grad: value {} cnt {}'->format<vg1.0, cnt>)
     let vg2 = with_grad(loss)<m>(x, cnt)
-    println("with_grad: value {} cnt {}"->format<vg2.0, cnt>)
+    println('with_grad: value {} cnt {}'->format<vg2.0, cnt>)
     return 0
 }

@@ -14,7 +14,7 @@
  *
  * Run: camel test/cases/compile/var/loop_write_outside_read.cml std::nvm
  */
-func main(): int sync {
+func main() => int sync {
     var total = 0
     let _ = loop i = 0 while i < 3 do sync {
         total = total + i * 7

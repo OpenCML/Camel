@@ -8,13 +8,17 @@
 
 import { get_env } from env
 
-func build(i: int, d: int): string[] {
-    let xs = (0..20)->map<func (x: int) => string { format<x + i>('item {}') }>
+func build(i: int, d: int) => string[] {
+    let xs = (0 .. 20)->map<func (x: int) => string {
+        format<x + i>('item {}')
+    }>
     let n = 100 / d
-    return xs->map<func (s: string) => string { s + format<n>(' / {}') }>
+    return xs->map<func (s: string) => string {
+        s + format<n>(' / {}')
+    }>
 }
 
-func round(i: int): int {
+func round(i: int) => int {
     let r = attempt(build)(i, i % 3)
     let text = match r {
         case error e => [e.kind, e.message, e.location]
@@ -23,11 +27,11 @@ func round(i: int): int {
     return len(text) + len(text[0])
 }
 
-func rounds(i: int, n: int, acc: int): int {
+func rounds(i: int, n: int, acc: int) => int {
     return if i == n then acc else rounds(i + 1, n, acc + round(i))
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = int(get_env('N') ?? '')
     println(rounds(0, n, 0))
     println(attempt(build)(1, 0))

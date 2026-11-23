@@ -7,7 +7,7 @@
  * on the state, not a switch for the loop.
  */
 
-func snapshots(n: int): int[][] sync {
+func snapshots(n: int) => int[][] sync {
     var acc: int[] = []
     var seen: int[][] = []
     loop i = 0 while i < n do {
@@ -18,7 +18,7 @@ func snapshots(n: int): int[][] sync {
     return seen
 }
 
-func slot_writes(n: int): int[][] sync {
+func slot_writes(n: int) => int[][] sync {
     var acc: int[] = []
     var seen: int[][] = [[], [], []]
     loop i = 0 while i < n do {
@@ -29,7 +29,7 @@ func slot_writes(n: int): int[][] sync {
     return seen
 }
 
-func main(): int sync {
+func main() => int sync {
     println(snapshots(3))
     println(slot_writes(3))
     return 0

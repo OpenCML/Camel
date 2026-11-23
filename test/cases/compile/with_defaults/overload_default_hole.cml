@@ -5,15 +5,15 @@
  */
 
 with <rounds: int = 8, label: string = 'x'>
-func show(a: int): int {
+func show(a: int) => int {
     return a * rounds
 }
 
 with <rounds: int = 8, label: string = 'x'>
-func show(a: string): int {
+func show(a: string) => int {
     return rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     return show<label: 'p'>(3)
 }

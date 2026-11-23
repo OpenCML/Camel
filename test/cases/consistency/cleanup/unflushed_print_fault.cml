@@ -3,7 +3,7 @@
  * before the diagnostic.
  */
 
-func main(): int sync {
+func main() => int sync {
     let z = 0
     println('line')
     print('pending')

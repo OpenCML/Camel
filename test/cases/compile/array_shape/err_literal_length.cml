@@ -1,11 +1,11 @@
 // Three elements written where the parameter states four: the literal's elements are known here,
 // so the length is decided here rather than at the call.
 
-func count(x: f32[4]): int {
+func count(x: f32[4]) => int {
     return len(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count([1.0, 2.0, 3.0]))
     return 0
 }

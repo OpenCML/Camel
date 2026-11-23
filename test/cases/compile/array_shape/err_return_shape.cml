@@ -2,11 +2,11 @@
 // body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
 // type declares, so the two shapes do not agree.
 
-func firstTwo(x: f32[n]): f32[2] {
+func firstTwo(x: f32[n]) => f32[2] {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: f32[3] = [1.0, 2.0, 3.0]
     println(len(firstTwo(v)))
     return 0

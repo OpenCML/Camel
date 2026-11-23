@@ -15,16 +15,16 @@
 import { grad, with_grad } from autodiff
 
 with <x: float>
-func loss(): (float, float) {
+func loss() => (float, float) {
     return (x * x, x * 3.0)
 }
 
 with <x: float>
-func report(): (float, int) {
+func report() => (float, int) {
     return (x * x, 7)
 }
 
-func main(): int sync {
+func main() => int sync {
     let gradient = grad(loss, has_aux: true)<2.0>()
     let step = with_grad(loss, has_aux: true)<2.0>()
     let counted = grad(report, has_aux: true)<2.0>()

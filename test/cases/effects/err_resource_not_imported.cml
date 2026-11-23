@@ -6,11 +6,11 @@
 
 import test_support
 
-func meet(): int uses rendezvous_point {
+func meet() => int uses rendezvous_point {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(meet())
     return 0
 }

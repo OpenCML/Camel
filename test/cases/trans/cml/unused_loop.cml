@@ -14,13 +14,13 @@
  *   (nothing)               the loop answers nothing; it is kept because the source wrote it
  */
 
-func spin(): int sync {
+func spin() => int sync {
     loop i = 0 while i < 2 do sync {
         i + 1
     }
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return spin()
 }

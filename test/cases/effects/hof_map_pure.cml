@@ -6,11 +6,11 @@
  * carries no `effect` role. The other half of the pair is `hof_map_effect.cml`.
  */
 
-func inc(x: int): int {
+func inc(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     let ys = xs->map<inc>
     return ys[0]

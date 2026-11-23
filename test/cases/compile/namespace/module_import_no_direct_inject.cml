@@ -4,6 +4,6 @@
 
 import namespace_lib
 
-func main(): int sync {
+func main() => int sync {
     return root()
 }

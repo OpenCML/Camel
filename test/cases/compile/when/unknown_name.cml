@@ -4,10 +4,10 @@
  * treated as false.
  */
 
-func bad(x: int): int when x {
+func bad(x: int) => int when x {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }

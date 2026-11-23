@@ -3,6 +3,6 @@
  * is, and the report names the type (design principles 3.9).
  */
 
-func hold(): never {
+func hold() => never {
     return 1
 }

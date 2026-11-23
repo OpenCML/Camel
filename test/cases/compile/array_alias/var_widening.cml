@@ -3,11 +3,11 @@
 
 import { ones } from tensor
 
-func rows2(t: f32[?, ?]): int {
+func rows2(t: f32[?, ?]) => int {
     return len(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     var w = ones::<f32>([2, 3])
     w = ones::<f32>([4, 5])
     println(rows2(w))

@@ -7,7 +7,7 @@
 import predicates
 import unimported_user
 
-func main(): int sync {
+func main() => int sync {
     println(unimported_user::describe((1, 2)))
     return 0
 }

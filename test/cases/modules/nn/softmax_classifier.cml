@@ -5,63 +5,64 @@
  */
 
 import { grad, with_grad } from autodiff
-import { reshape, zeros } from tensor
 import { sgd, softmax_cross_entropy } from nn
+import { reshape, zeros } from tensor
 
 type Linear = {
     weight: f32[...],
     bias: f32[...]
 }
 
-type Classifier = {
-    head: Linear
-}
+type Classifier = { head: Linear }
 
 with <layer: Linear>
-func linear(x: f32[...]): f32[...] {
+func linear(x: f32[...]) => f32[...] {
     return (x @ layer.weight) + layer.bias
 }
 
 with <model: Classifier>
-func logits(x: f32[...]): f32[...] {
+func logits(x: f32[...]) => f32[...] {
     return x->linear<model.head>
 }
 
-func classifier_loss(logits_value: f32[...], target: f32[...]): float {
+func classifier_loss(logits_value: f32[...], target: f32[...]) => float {
     return softmax_cross_entropy(logits_value, target)
 }
 
 with <model: Classifier>
-func model_loss(x: f32[...], target: f32[...]): float {
+func model_loss(x: f32[...], target: f32[...]) => float {
     let pred = x->logits<model>
     return classifier_loss(pred, target)
 }
 
-func init(): Classifier {
-    return {
-        head: {
-            weight: reshape<[2, 2]>([0.1, 0.1, 0.1, 0.1] as f32[]),
-            bias: zeros::<f32>([2])
-        }
-    }
+func init() => Classifier {
+    return { head: {
+        weight: reshape<[2, 2]>([0.1, 0.1, 0.1, 0.1] as f32[]),
+        bias: zeros::<f32>([2])
+    } }
 }
 
-func train(model: Classifier, x: f32[...], target: f32[...], steps: int): Classifier {
+func train(
+    model: Classifier,
+    x: f32[...],
+    target: f32[...],
+    steps: int
+) => Classifier {
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.5), x, target, steps - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let model = init()
     let x = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[])
     let target = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[])
-
+    
     let before = model_loss<model>(x, target)
     let vg = with_grad(model_loss)<model>(x, target)
     let stepped = sgd(model, vg.1, 0.5)
     let after = model_loss<stepped>(x, target)
     let trained = train(model, x, target, 10)
     let after_train = model_loss<trained>(x, target)
-
+    
     'softmax_classifier metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'softmax_classifier weight={}'->format<stepped.head.weight>->println
     'softmax_classifier bias={}'->format<stepped.head.bias>->println

@@ -3,11 +3,11 @@
  * default of an `int` parameter is WithDefaultWrongType (design principles 4.4).
  */
 
-with <rounds: int = "many">
-func f(x: int): int {
+with <rounds: int = 'many'>
+func f(x: int) => int {
     return x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }

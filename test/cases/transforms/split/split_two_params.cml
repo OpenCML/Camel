@@ -14,26 +14,26 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func f(x: float, y: float): float {
+func f(x: float, y: float) => float {
     return x * x * y
 }
 
-func main(): int sync {
+func main() => int sync {
     let lifted = jvp(f)
     // The lift's parameters are `jvpSignature`'s: the value of every parameter and then the tangent of
     // every one (`50ecaf5e3`), so the four numbers are (x, y, dx, dy) -- not the (x, dx, y, dy) this
     // case was written with, which was the layout before that landing.
     let (vx, tx) = lifted(3.0, 2.0, 1.0, 0.0)
     let (vy, ty) = lifted(3.0, 2.0, 0.0, 1.0)
-    println("value=", vx)
-    println("dfdx=", tx)
-    println("dfdy=", ty)
+    println('value=', vx)
+    println('dfdx=', tx)
+    println('dfdy=', ty)
     let fwd = split(lifted)
     let (value, lin) = fwd(3.0, 2.0)
-    println("forward y=", value)
-    println("lin dx=", lin(1.0, 0.0))
-    println("lin dy=", lin(0.0, 1.0))
+    println('forward y=', value)
+    println('lin dx=', lin(1.0, 0.0))
+    println('lin dy=', lin(0.0, 1.0))
     // The second value the lift answers is the same function read in the other direction.
-    println("value from dy=", vy)
+    println('value from dy=', vy)
     return 0
 }

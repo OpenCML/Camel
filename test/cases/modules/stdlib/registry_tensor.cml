@@ -3,11 +3,11 @@
  * stdlib_registry.plan.toml).
  */
 
-import nn
-import tensor
 import autodiff
+import nn
 import onnx
+import tensor
 
-func main(): int {
+func main() => int {
     return 0
 }

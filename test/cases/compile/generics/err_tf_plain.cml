@@ -1,9 +1,9 @@
 type Point = (int, int)
 
-func f(p: Point<int>): int {
+func f(p: Point<int>) => int {
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

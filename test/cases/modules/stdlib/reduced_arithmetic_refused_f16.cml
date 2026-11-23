@@ -10,7 +10,7 @@
  * other unread.
  */
 
-func main(): int sync {
+func main() => int sync {
     let xs: f16[] = []
     println(xs[0] % xs[0])
     return 0

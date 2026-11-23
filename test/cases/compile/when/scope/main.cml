@@ -7,19 +7,19 @@
  */
 
 namespace ns {
-    func plain_int::<T>(): bool {
+    func plain_int::<T>() => bool {
         return match type T {
             case int => true
             case _ => false
         }
     }
-
-    func slot::<T>(): int when plain_int::<T>() {
+    
+    func slot::<T>() => int when plain_int::<T>() {
         return 1
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = (10, 20, 30)
     println(t.[ns::slot::<int>()])
     return 0

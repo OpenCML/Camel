@@ -1,7 +1,7 @@
 // After `index_of as str_find` the name `index_of` is not declared in this module.
 import { index_of as str_find } from str
 
-func main(): int sync {
+func main() => int sync {
     println('hello'->index_of<'l'> ?? -1)
     return 0
 }

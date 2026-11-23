@@ -2,11 +2,11 @@
  * nothing else, so the two canonical documents may differ in node attributes and permissions
  * only. */
 
-func quad(x: float): float {
+func quad(x: float) => float {
     return x * 1.0 + 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(quad(3.0))
     return 0
 }

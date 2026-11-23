@@ -2,11 +2,9 @@
  * Axis reductions with keepdims, full reductions, and softmax/log_softmax along an axis.
  */
 
-import {
-    reshape, sum, mean, max, argmax, softmax, log_softmax, exp, shape
-} from tensor
+import { reshape, sum, mean, max, argmax, softmax, log_softmax, exp, shape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let t = reshape<[2, 3]>([1.0, 5.0, 2.0, 4.0, 3.0, 6.0])
     let rows = sum<1>(t)
     let cols = sum<0, true>(t)

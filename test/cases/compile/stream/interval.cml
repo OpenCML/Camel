@@ -2,10 +2,10 @@
 // only, left-closed and right-open like the slice `t[a..b]`, and the `int[]` of the integers
 // from `a` to `b - 1`. It is the one spelling: the two-parameter `range(a, b)` is gone.
 
-func main(): int sync {
-    let xs = 1..5
+func main() => int sync {
+    let xs = 1 .. 5
     println(xs)
     let n = 3
-    println(0..n)
+    println(0 .. n)
     return 0
 }

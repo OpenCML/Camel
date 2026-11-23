@@ -1,6 +1,7 @@
 // import { a as b } from m
 import { root as lib_root } from lib
-func main(): int sync {
+
+func main() => int sync {
     println(lib_root())
     return 0
 }

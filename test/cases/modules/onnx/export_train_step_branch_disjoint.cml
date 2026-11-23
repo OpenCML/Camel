@@ -6,32 +6,39 @@
  * (plus one If for the branch value). Loss mean(y*y), one SGD step at lr 0.01.
  */
 
-import { relu, mean, abs, reshape, zeros } from tensor
 import { with_grad } from autodiff
+import { get_env } from env
 import { sgd } from nn
 import { export_model } from onnx
-import { get_env } from env
+import { relu, mean, abs, reshape, zeros } from tensor
 
 type Mlp = {
-    w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...],
-    w3: f32[...], b3: f32[...], wo: f32[...], bo: f32[...],
-    we: f32[...], be: f32[...]
+    w1: f32[...],
+    b1: f32[...],
+    w2: f32[...],
+    b2: f32[...],
+    w3: f32[...],
+    b3: f32[...],
+    wo: f32[...],
+    bo: f32[...],
+    we: f32[...],
+    be: f32[...]
 }
 
 with <m: Mlp>
-func loss(x: f32[...]): float {
+func loss(x: f32[...]) => float {
     let h1 = relu(x @ m.w1 + m.b1)
     let h2 = relu(h1 @ m.w2 + m.b2)
     let y = if float(mean(abs(h2))) > 0.5 then h2 @ m.we + m.be else relu(h2 @ m.w3 + m.b3) @ m.wo + m.bo
     return float(mean(y * y))
 }
 
-func step(m: Mlp, x: f32[...]): (float, Mlp) {
+func step(m: Mlp, x: f32[...]) => (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let m = {
         w1: reshape<[3, 4]>([0.5, -0.25, 0.75, -1.0, -0.5, 0.25, 0.5, -0.75, 1.0, 0.5, -0.25, -0.25] as f32[]),
         b1: zeros::<f32>([4]),
@@ -46,7 +53,9 @@ func main(): string! sync {
     }
     let x = reshape<[2, 3]>([1.0, 2.0, -1.0, 0.5, -1.5, 2.0] as f32[])
     return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

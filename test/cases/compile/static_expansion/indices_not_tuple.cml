@@ -3,10 +3,10 @@
  * walked with `fields T`; an `indices` over it has no positions to give.
  */
 
-func bad(t: {a: int, b: int}): int {
+func bad(t: { a: int, b: int }) => int {
     return static loop acc = 0 for j in indices t do acc + 1
 }
 
-func main(): int {
-    return bad({a: 1, b: 2})
+func main() => int {
+    return bad({ a: 1, b: 2 })
 }

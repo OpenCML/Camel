@@ -36,10 +36,10 @@
 // jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum`), so what is missing is not a law here.
 //
 //     camel test/cases/compile/transforms/transformer_step_gradient.cml
-import { matmul, mean, relu, softmax, sqrt, sum, transpose } from tensor
-import rulesets.jvp
-import { jvp } from transforms
 import { with_grad } from autodiff
+import rulesets.jvp
+import { matmul, mean, relu, softmax, sqrt, sum, transpose } from tensor
+import { jvp } from transforms
 
 type Params = {
     wq1: float[4, 2],
@@ -58,7 +58,7 @@ type Params = {
 }
 
 with <p: Params>
-func loss(x: float[2, 4]): float {
+func loss(x: float[2, 4]) => float {
     let s1 = ((x @ p.wq1) @ transpose(x @ p.wk1)) / 2.0
     let s2 = ((x @ p.wq2) @ transpose(x @ p.wk2)) / 2.0
     let a1 = softmax<1>(s1)
@@ -77,10 +77,21 @@ func loss(x: float[2, 4]): float {
 /// The same model with the parameters on the ordinary list, which is the list the transforms
 /// differentiate (design principles 9.9) -- the body is the same arithmetic, so the two legs
 /// differentiate one function and not two.
-func loss_plain(wq1: float[4, 2], wk1: float[4, 2], wv1: float[4, 2],
-                wq2: float[4, 2], wk2: float[4, 2], wv2: float[4, 2],
-                wo1: float[2, 4], wo2: float[2, 4], g: float[4],
-                w1: float[4, 4], b1: float[4], w2: float[4, 4], b2: float[4]): float {
+func loss_plain(
+    wq1: float[4, 2],
+    wk1: float[4, 2],
+    wv1: float[4, 2],
+    wq2: float[4, 2],
+    wk2: float[4, 2],
+    wv2: float[4, 2],
+    wo1: float[2, 4],
+    wo2: float[2, 4],
+    g: float[4],
+    w1: float[4, 4],
+    b1: float[4],
+    w2: float[4, 4],
+    b2: float[4]
+) => float {
     let x = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]] as float[2, 4]
     let s1 = ((x @ wq1) @ transpose(x @ wk1)) / 2.0
     let s2 = ((x @ wq2) @ transpose(x @ wk2)) / 2.0
@@ -97,7 +108,7 @@ func loss_plain(wq1: float[4, 2], wk1: float[4, 2], wv1: float[4, 2],
     return sum((ln + (h @ w2 + b2)) * [[1.0, 2.0, 4.0, 8.0], [1.0, 3.0, 5.0, 7.0]] as float[2, 4])
 }
 
-func init(): Params {
+func init() => Params {
     return {
         wq1: [[0.25, 0.0], [0.0, 0.25], [-0.25, 0.5], [0.5, -0.25]] as float[4, 2],
         wk1: [[0.5, -0.25], [0.25, 0.0], [0.0, -0.25], [-0.25, 0.5]] as float[4, 2],
@@ -115,17 +126,17 @@ func init(): Params {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]] as float[2, 4]
     let p = init()
-
+    
     let (value, grad) = with_grad(loss)<p>(x)
     `transformer step engine loss={}`->format<value>->println
     `transformer step engine dL/db2={}`->format<grad.b2>->println
     `transformer step engine dL/db1={}`->format<grad.b1>->println
     `transformer step engine dL/dw2={}`->format<grad.w2>->println
     `transformer step engine dL/dwq1={}`->format<grad.wq1>->println
-
+    
     // The forward transform, seeded twice: the tangent of a ones seed at one element of the gradient
     // is that element, so the two numbers below are `dL/db2[0]` and `dL/dwq1[0][0]` read by a route
     // the engine does not take.
@@ -133,18 +144,65 @@ func main(): int sync {
     let z24 = [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]] as float[2, 4]
     let z4 = [0.0, 0.0, 0.0, 0.0] as float[4]
     let z44 = [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]] as float[4, 4]
-
-    let (_l0, d_b2_0) = jvp(loss_plain)(p.wq1, p.wk1, p.wv1, p.wq2, p.wk2, p.wv2, p.wo1, p.wo2,
-                                        p.g, p.w1, p.b1, p.w2, p.b2,
-                                        z42, z42, z42, z42, z42, z42, z24, z24, z4, z44, z4, z44,
-                                        [1.0, 0.0, 0.0, 0.0] as float[4])
+    
+    let (_l0, d_b2_0) = jvp(loss_plain)(
+        p.wq1,
+        p.wk1,
+        p.wv1,
+        p.wq2,
+        p.wk2,
+        p.wv2,
+        p.wo1,
+        p.wo2,
+        p.g,
+        p.w1,
+        p.b1,
+        p.w2,
+        p.b2,
+        z42,
+        z42,
+        z42,
+        z42,
+        z42,
+        z42,
+        z24,
+        z24,
+        z4,
+        z44,
+        z4,
+        z44,
+        [1.0, 0.0, 0.0, 0.0] as float[4]
+    )
     `transformer step library dL/db2[0]={}`->format<d_b2_0>->println
-
-    let (_l1, d_wq1_00) = jvp(loss_plain)(p.wq1, p.wk1, p.wv1, p.wq2, p.wk2, p.wv2, p.wo1, p.wo2,
-                                          p.g, p.w1, p.b1, p.w2, p.b2,
-                                          [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[4, 2],
-                                          z42, z42, z42, z42, z42,
-                                          z24, z24, z4, z44, z4, z44, z4)
+    
+    let (_l1, d_wq1_00) = jvp(loss_plain)(
+        p.wq1,
+        p.wk1,
+        p.wv1,
+        p.wq2,
+        p.wk2,
+        p.wv2,
+        p.wo1,
+        p.wo2,
+        p.g,
+        p.w1,
+        p.b1,
+        p.w2,
+        p.b2,
+        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[4, 2],
+        z42,
+        z42,
+        z42,
+        z42,
+        z42,
+        z24,
+        z24,
+        z4,
+        z44,
+        z4,
+        z44,
+        z4
+    )
     `transformer step library dL/dwq1[0][0]={}`->format<d_wq1_00>->println
     return 0
 }

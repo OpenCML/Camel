@@ -8,7 +8,7 @@
 // reader, so folding it left a write no root held and no port read (design principles 9.7) -- and the
 // plan reads that judgement on `dead_write_held_by_program.cml` now.
 
-func probe(): int {
+func probe() => int {
     var c = 0
     let h = func () => int sync {
         println(c)
@@ -19,7 +19,7 @@ func probe(): int {
     return w + p.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(probe())
     return 0
 }

@@ -3,12 +3,12 @@
  * the value it returns is dropped for nothing, and the error is UnusedPureResult there too.
  */
 
-func twice(a: int): int {
+func twice(a: int) => int {
     a + 2
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(1))
     return 0
 }

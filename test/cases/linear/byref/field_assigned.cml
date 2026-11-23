@@ -4,7 +4,7 @@
  * target, and the store happens in place when the value is not shared.
  */
 
-func main(): int sync {
+func main() => int sync {
     var p = { x: 1, y: 2 }
     p.x = 9
     println(p)

@@ -5,8 +5,8 @@
 
 #op(':op/add_l')
 #impl(add_kernel)
-func add_kernel(a: int, b: int): int
+func add_kernel(a: int, b: int) => int
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

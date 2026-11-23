@@ -14,21 +14,30 @@
  *   train_ce   run the fine-tune loop (CAMEL_FT_* protocol of lora_mlp.cml)
  */
 
-import { relu, mean, sum, log_softmax, load_npy } from tensor
 import { with_grad, stop_gradient } from autodiff
-import { sgd, save_params } from nn
-import { get_env } from env
-import { export_model } from onnx
 import { weight } from camel_bench
+import { get_env } from env
+import { sgd, save_params } from nn
+import { export_model } from onnx
+import { relu, mean, sum, log_softmax, load_npy } from tensor
 
 type LoraMlp = {
-    fc1_w: f32[...], fc1_b: f32[...], fc1_lora_a: f32[...], fc1_lora_b: f32[...],
-    fc2_w: f32[...], fc2_b: f32[...], fc2_lora_a: f32[...], fc2_lora_b: f32[...],
-    fc3_w: f32[...], fc3_b: f32[...], fc3_lora_a: f32[...], fc3_lora_b: f32[...]
+    fc1_w: f32[...],
+    fc1_b: f32[...],
+    fc1_lora_a: f32[...],
+    fc1_lora_b: f32[...],
+    fc2_w: f32[...],
+    fc2_b: f32[...],
+    fc2_lora_a: f32[...],
+    fc2_lora_b: f32[...],
+    fc3_w: f32[...],
+    fc3_b: f32[...],
+    fc3_lora_a: f32[...],
+    fc3_lora_b: f32[...]
 }
 
 with <m: LoraMlp>
-func forward(x: f32[...]): f32[...] {
+func forward(x: f32[...]) => f32[...] {
     let scale = 2.0
     let h1 = relu(x @ stop_gradient(m.fc1_w) + ((x @ m.fc1_lora_b) @ m.fc1_lora_a) * scale + stop_gradient(m.fc1_b))
     let h2 = relu(h1 @ stop_gradient(m.fc2_w) + ((h1 @ m.fc2_lora_b) @ m.fc2_lora_a) * scale + stop_gradient(m.fc2_b))
@@ -38,23 +47,28 @@ func forward(x: f32[...]): f32[...] {
 /// Cross-entropy against one-hot targets, composed from primitive tensor ops
 /// (same as lora_mlp.cml's loss_ce).
 with <m: LoraMlp>
-func loss_ce(x: f32[...], target: f32[...]): float {
+func loss_ce(x: f32[...], target: f32[...]) => float {
     let y = forward<m>(x)
     return float(mean(sum<1>(target * (-log_softmax<1>(y)))))
 }
 
 /// The SGD learning rate, CAMEL_FT_LR or 0.05; shared by the export and the native loop.
-func ce_lr(): float sync {
+func ce_lr() => float sync {
     let v = get_env('CAMEL_FT_LR') ?? ''
     return if v == '' then 0.05 else float(v)
 }
 
-func step_ce(m: LoraMlp, x: f32[...], target: f32[...], lr: float): (float, LoraMlp) {
+func step_ce(
+    m: LoraMlp,
+    x: f32[...],
+    target: f32[...],
+    lr: float
+) => (float, LoraMlp) {
     let vg = with_grad(loss_ce)<m>(x, target)
     return (vg.0, sgd(m, vg.1, lr))
 }
 
-func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
+func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float) => LoraMlp {
     return if i >= steps then m else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES') ?? ''
@@ -66,24 +80,32 @@ func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
     }
 }
 
-func load(): LoraMlp {
+func load() => LoraMlp {
     return {
-        fc1_w: weight('fc1_w'), fc1_b: weight('fc1_b'),
-        fc1_lora_a: weight('fc1_lora_a'), fc1_lora_b: weight('fc1_lora_b'),
-        fc2_w: weight('fc2_w'), fc2_b: weight('fc2_b'),
-        fc2_lora_a: weight('fc2_lora_a'), fc2_lora_b: weight('fc2_lora_b'),
-        fc3_w: weight('fc3_w'), fc3_b: weight('fc3_b'),
-        fc3_lora_a: weight('fc3_lora_a'), fc3_lora_b: weight('fc3_lora_b')
+        fc1_w: weight('fc1_w'),
+        fc1_b: weight('fc1_b'),
+        fc1_lora_a: weight('fc1_lora_a'),
+        fc1_lora_b: weight('fc1_lora_b'),
+        fc2_w: weight('fc2_w'),
+        fc2_b: weight('fc2_b'),
+        fc2_lora_a: weight('fc2_lora_a'),
+        fc2_lora_b: weight('fc2_lora_b'),
+        fc3_w: weight('fc3_w'),
+        fc3_b: weight('fc3_b'),
+        fc3_lora_a: weight('fc3_lora_a'),
+        fc3_lora_b: weight('fc3_lora_b')
     }
 }
 
-func do_export_ce(m: LoraMlp): int sync {
+func do_export_ce(m: LoraMlp) => int sync {
     let dir = get_env('CAMEL_FT_BATCHES') ?? ''
     let x = load_npy::<f32>(dir + '/batch_0.npy')
     let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = ce_lr()
     let r = export_model<out: get_env('CAMEL_BENCH_EXPORT') ?? ''>(
-        func (mm: LoraMlp, xx: f32[...], tt: f32[...]) => (float, LoraMlp) { step_ce(mm, xx, tt, lr) },
+        func (mm: LoraMlp, xx: f32[...], tt: f32[...]) => (float, LoraMlp) {
+            step_ce(mm, xx, tt, lr)
+        },
         (m, x, t)
     )
     return match r {
@@ -95,7 +117,7 @@ func do_export_ce(m: LoraMlp): int sync {
     }
 }
 
-func do_train_ce(m: LoraMlp): int sync {
+func do_train_ce(m: LoraMlp) => int sync {
     let steps = int(get_env('CAMEL_FT_STEPS') ?? '')
     let nb = int(get_env('CAMEL_FT_NBATCHES') ?? '')
     let final = loop_ce(m, 0, steps, nb, ce_lr())
@@ -104,7 +126,7 @@ func do_train_ce(m: LoraMlp): int sync {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = load()
     return if (get_env('CAMEL_BENCH_WORKLOAD') ?? '') == 'export_ce' then do_export_ce(m) else do_train_ce(m)
 }

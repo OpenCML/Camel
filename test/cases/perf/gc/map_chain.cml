@@ -3,20 +3,25 @@
  * makes a new array of new small objects; only the last result of a round is used.
  */
 
-func round(n: int, k: int): int {
-    return (0..n)
-        ->map<func (i: int) => (int, int) { (i, i * k) }>
-        ->map<func (p: (int, int)) => int[] { [p.0, p.1, p.0 + p.1] }>
-        ->filter<func (xs: int[]) => bool { xs[2] % 3 != 0 }>
-        ->map<func (xs: int[]) => string { string(xs[2]) }>
-        ->reduce<func (acc: int, s: string) => int { acc + len(s) }, 0>
+func round(n: int, k: int) => int {
+    return (0 .. n)->map<func (i: int) => (int, int) {
+        (i, i * k)
+    }>->map<func (p: (int, int)) => int[] {
+        [p.0, p.1, p.0 + p.1]
+    }>->filter<func (xs: int[]) => bool {
+        xs[2] % 3 != 0
+    }>->map<func (xs: int[]) => string {
+        string(xs[2])
+    }>->reduce<func (acc: int, s: string) => int {
+        acc + len(s)
+    }, 0>
 }
 
-func run(n: int, left: int, total: int): int {
+func run(n: int, left: int, total: int) => int {
     return if left == 0 then total else run(n, left - 1, total + round(n, left))
 }
 
-func main(n: int, reps: int): int sync {
+func main(n: int, reps: int) => int sync {
     println('map_chain total={}'->format<run(n, reps, 0)>)
     return 0
 }

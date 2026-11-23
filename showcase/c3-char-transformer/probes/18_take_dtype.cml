@@ -5,7 +5,7 @@
 // the model is where that is noticed (`'__mat__' with (f32[...], float[...])`).
 import { sum, take, zeros } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let table = zeros::<float>([2, 2])
     let row = take(table, [0])
     let position = zeros::<float>([1, 2])

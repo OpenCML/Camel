@@ -3,26 +3,29 @@
 // tail-recursive scalar function. Fine-grained work: the parallel scheduler makes one task per
 // reduce step.
 
-func collatz_steps(n: int, steps: int): int {
+func collatz_steps(n: int, steps: int) => int {
     return if n == 1 then steps
-        else if n % 2 == 0 then collatz_steps(n / 2, steps + 1)
-        else collatz_steps(3 * n + 1, steps + 1)
+    else if n % 2 == 0 then collatz_steps(n / 2, steps + 1) else collatz_steps(3 * n + 1, steps + 1)
 }
 
-func longer(a: (int, int), b: (int, int)): (int, int) {
+func longer(a: (int, int), b: (int, int)) => (int, int) {
     return if b.1 > a.1 then b else a
 }
 
-func longest_in(lo: int, hi: int): (int, int) {
-    return (lo..hi)->reduce<
-        func (best: (int, int), n: int) => (int, int) { longer(best, (n, collatz_steps(n, 0))) },
+func longest_in(lo: int, hi: int) => (int, int) {
+    return (lo .. hi)->reduce<
+        func (best: (int, int), n: int) => (int, int) {
+            longer(best, (n, collatz_steps(n, 0)))
+        },
         (lo, 0)
     >
 }
 
-func main(): int sync {
+func main() => int sync {
     let block = 5000
-    let results = (0..8)->map<func (i: int) => (int, int) { longest_in(i * block + 1, (i + 1) * block + 1) }>
+    let results = (0 .. 8)->map<func (i: int) => (int, int) {
+        longest_in(i * block + 1, (i + 1) * block + 1)
+    }>
     println(results)
     return 0
 }

@@ -2,6 +2,6 @@
 /// finds the root's library, and that library's `import lib` must not fall back to this file: the
 /// entry directory is not a module root. Value 9 is never printed.
 
-export func n(): int {
+export func n() => int {
     return 9
 }

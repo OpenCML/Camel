@@ -5,7 +5,7 @@
  * written (design principles 4.4).
  */
 
-func main(): int sync {
+func main() => int sync {
     'a{}'->format<x: 1>->println
     return 0
 }

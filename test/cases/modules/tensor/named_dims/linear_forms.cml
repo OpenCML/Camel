@@ -1,4 +1,5 @@
 import { ones, sum } from tensor
+
 // Dimensions are linear forms: `n`, `n + 1`, `2 * n`, and `n + m` over two names. The names
 // bind in any parameter, and every occurrence is held to the same value.
 func affine(
@@ -7,10 +8,10 @@ func affine(
     c: f32[2 * n],
     d: f32[n + m],
     e: f32[m]
-): float {
+) => float {
     return float(sum(a)) + float(sum(b)) + float(sum(c)) + float(sum(d)) + float(sum(e))
 }
-func main(): int sync {
+func main() => int sync {
     // n = 2, m = 3: n + 1 = 3, 2 * n = 4, n + m = 5.
     println(affine(ones::<f32>([2]), ones::<f32>([3]), ones::<f32>([4]), ones::<f32>([5]), ones::<f32>([3])))
     // Another call, other extents: one function, no new instance.

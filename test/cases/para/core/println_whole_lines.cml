@@ -4,12 +4,12 @@
  * print one line, and the output is 3000 lines of the form "line <i> of the map", each i once.
  */
 
-func show(i: int): int sync {
+func show(i: int) => int sync {
     println('line {} of the map'->format<i>)
     return i
 }
 
-func main(): int sync {
-    let shown = (0..3000)->map<show>
+func main() => int sync {
+    let shown = (0 .. 3000)->map<show>
     return if len(shown) == 3000 then 0 else 1
 }

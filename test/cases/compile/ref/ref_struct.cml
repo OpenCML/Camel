@@ -8,7 +8,7 @@ import state
 
 type Point = { x: int, y: int }
 
-func main(): int sync {
+func main() => int sync {
     let p: Point = { x: 1, y: 2 }
     let r = state::ref(p)
     let q = state::get(r)

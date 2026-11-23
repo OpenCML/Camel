@@ -4,7 +4,7 @@
  * now, so it is reported like any other exit: the program most likely meant to leave `f`.
  */
 
-func f(x: int): int sync {
+func f(x: int) => int sync {
     if x > 2 then sync {
         println('big')
         return null
@@ -13,7 +13,7 @@ func f(x: int): int sync {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(9))
     return 0
 }

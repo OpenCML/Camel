@@ -2,12 +2,12 @@
 // written in, so an unused `println` in a body that is not `sync` still runs (design principles 3.1).
 // Run: camel docs/tutorial/examples/06_unused_effect.cml
 
-func greet(): int {
-    println('hello from greet')     // a write in the body region: it runs, used result or not
+func greet() => int {
+    println('hello from greet') // a write in the body region: it runs, used result or not
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(greet())
     return 0
 }

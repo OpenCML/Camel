@@ -6,36 +6,42 @@
  * what the printed line says: the same line with and without the pass, on every backend.
  */
 
-func square(x: int): int {
+func square(x: int) => int {
     return x * x
 }
 
-func negate(x: int): int {
+func negate(x: int) => int {
     return 0 - x
 }
 
-func apply(f: (x: int) => int, x: int): int {
+func apply(f: (x: int) => int, x: int) => int {
     return f(x)
 }
 
-func pairwise(a: int[], b: int[], f: (x: int, y: int) => int): int[] {
+func pairwise(a: int[], b: int[], f: (x: int, y: int) => int) => int[] {
     return [f(a[0], b[0]), f(a[1], b[1]), f(a[2], b[2])]
 }
 
-func pick(flag: bool, x: int): int {
+func pick(flag: bool, x: int) => int {
     return if flag then apply(square, x) else apply(negate, x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let named = apply(square, 4)
-    let lambda = apply(func (x: int) { x + 100 }, 4)
-    let pairs = pairwise([1, 2, 3], [10, 20, 30], func (x: int, y: int) { x * y })
+    let lambda = apply(func (x: int) {
+        x + 100
+    }, 4)
+    let pairs = pairwise([1, 2, 3], [10, 20, 30], func (x: int, y: int) {
+        x * y
+    })
     let taken = pick(true, 5)
     let other = pick(false, 5)
-    'HIGHER ORDER named={} lambda={} pairs={} taken={} other={}'->format<named,
+    'HIGHER ORDER named={} lambda={} pairs={} taken={} other={}'->format<
+        named,
         lambda,
         pairs,
         taken,
-        other>->println
+        other
+    >->println
     return 0
 }

@@ -19,84 +19,84 @@
  *   after 2 2               a read written after the write sees it
  */
 
-func swap(var x: int, v: int): int sync {
+func swap(var x: int, v: int) => int sync {
     x = v
     return 0
 }
 
-func report(tag: string, a: int, b: int): int sync {
+func report(tag: string, a: int, b: int) => int sync {
     println(tag, a, b)
     return 0
 }
 
-func report_array(tag: string, a: int[], b: int[]): int sync {
+func report_array(tag: string, a: int[], b: int[]) => int sync {
     println(tag, a, b)
     return 0
 }
 
-func report_arm(tag: string, a: int, b: int, c: int): int sync {
+func report_arm(tag: string, a: int, b: int, c: int) => int sync {
     println(tag, a, b, c)
     return 0
 }
 
-func through_var_argument(): int {
+func through_var_argument() => int {
     var a = 1
     let b = a
     swap(a, 2)
-    return report("int", a, b)
+    return report('int', a, b)
 }
 
-func through_assignment(): int {
+func through_assignment() => int {
     var a = 1
     let b = a
     a = 2
-    return report("int", a, b)
+    return report('int', a, b)
 }
 
-func through_array_assignment(): int {
+func through_array_assignment() => int {
     var a = [1, 1]
     let b = a
     a = [7, 7]
-    return report_array("array", a, b)
+    return report_array('array', a, b)
 }
 
-func through_arm(): int {
+func through_arm() => int {
     var v = 0
     let before = v
     let r = if true then sync {
         v = 5
         1
     } else 0
-    return report_arm("arm", before, v, r)
+    return report_arm('arm', before, v, r)
 }
 
-func through_loop(): int {
+func through_loop() => int {
     var z = 0
     let before = z
     loop i = 0 while i < 2 do sync {
         z = z + 1
         i + 1
     }
-    return report("loop", before, z)
+    return report('loop', before, z)
 }
 
-func between_two_writes(): int {
+func between_two_writes() => int {
     var a = 1
     a = 2
     let b = a
     a = 3
     let c = a
-    return report("steps", b, c)
+    return report('steps', b, c)
 }
 
-func after_the_write(): int {
+func after_the_write() => int {
     var a = 1
     swap(a, 2)
     let c = a
-    return report("after", a, c)
+    return report('after', a, c)
 }
 
-func main(): int sync {
+func main() => int sync {
     through_var_argument()
     through_assignment()
     through_array_assignment()

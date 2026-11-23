@@ -1,6 +1,6 @@
 import { clamp, nan } from math
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(clamp(0.5, 0.0, nan))
     println('not reached')

@@ -2,7 +2,7 @@
  * The right-hand side of `??` has the payload type: TaggedOperandMismatch.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     let a = 1 as int?
     let b = a ?? 'seven'

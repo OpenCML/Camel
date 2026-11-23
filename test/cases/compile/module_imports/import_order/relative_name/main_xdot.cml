@@ -3,7 +3,7 @@
 
 import x.
 
-func main(): int sync {
+func main() => int sync {
     println(x::name())
     return 0
 }

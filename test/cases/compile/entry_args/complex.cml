@@ -7,7 +7,7 @@
 
 import { im, re } from math
 
-func main(z: c128, w: c64): int sync {
+func main(z: c128, w: c64) => int sync {
     println(z, w)
     println(re(z), im(z))
     println(re(w), im(w))

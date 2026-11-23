@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     var g: int? = 1
     g = 2.0
     return 0

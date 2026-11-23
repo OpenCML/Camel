@@ -5,32 +5,31 @@
 // random 模块基础测试
 import { seed, rand, randn, randint, choice, shuffle, next_key } from random
 
-func main(): int sync {
-    println("=== Random Module Basic Tests ===")
-
+func main() => int sync {
+    println('=== Random Module Basic Tests ===')
+    
     seed(42)
-
-    println("\n[1] rand()")
+    
+    println('\n[1] rand()')
     let r = rand()
-    println("  rand() =", r)
-
-    println("\n[2] randn()")
+    println('  rand() =', r)
+    
+    println('\n[2] randn()')
     let n = randn()
-    println("  randn() =", n)
-
-    println("\n[3] next_key()->randint<0, 11>")
+    println('  randn() =', n)
+    
+    println('\n[3] next_key()->randint<0, 11>')
     let i = next_key()->randint<0, 11>
-    println("  randint<0, 11> =", i)
-
-    println("\n[4] [1, 2, 3]->choice<next_key()>")
+    println('  randint<0, 11> =', i)
+    
+    println('\n[4] [1, 2, 3]->choice<next_key()>')
     let c = [1, 2, 3]->choice<next_key()>
-    println("  choice =", c)
-
-    println("\n[5] [1, 2, 3, 4, 5]->shuffle<next_key()>")
+    println('  choice =', c)
+    
+    println('\n[5] [1, 2, 3, 4, 5]->shuffle<next_key()>')
     let s = [1, 2, 3, 4, 5]->shuffle<next_key()>
-    println("  shuffle =", s)
-
-    println("\n=== Random tests completed ===")
+    println('  shuffle =', s)
+    
+    println('\n=== Random tests completed ===')
     return 0
 }
-

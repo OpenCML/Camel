@@ -17,13 +17,13 @@
  *   camel algebra_order.cml std::cxx::inline std::cxx::algebra std::jgir
  */
 
-func scaled(x: float): float sync {
+func scaled(x: float) => float sync {
     println(x)
     let t = x * 0.1
     return t + t
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = 2.0
     'first'->println
     'scaled {} {}'->format<scaled(x), scaled(x)>->println

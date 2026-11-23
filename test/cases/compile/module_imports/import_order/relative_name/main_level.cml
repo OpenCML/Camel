@@ -3,7 +3,7 @@
 
 import level.helper
 
-func main(): int sync {
+func main() => int sync {
     println(helper::name())
     return 0
 }

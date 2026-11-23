@@ -9,7 +9,7 @@
 
 import { get_env } from env
 
-func main(): int {
-    get_env("CAMEL_REGION_ROOTS_NO_SUCH_VARIABLE")
+func main() => int {
+    get_env('CAMEL_REGION_ROOTS_NO_SUCH_VARIABLE')
     return 0
 }

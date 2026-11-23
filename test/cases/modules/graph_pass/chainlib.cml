@@ -1,5 +1,5 @@
 import { triple } from innerlib
 
-export func six(): int {
+export func six() => int {
     return triple(2)
 }

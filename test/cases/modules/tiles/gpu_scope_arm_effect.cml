@@ -14,7 +14,7 @@
 import { reshape, sum } from tensor
 
 #gpu
-func choose(flag: bool, x: f32[3]): f32[3] sync {
+func choose(flag: bool, x: f32[3]) => f32[3] sync {
     let y = x * 2.0
     if flag then sync {
         println('taken')
@@ -24,7 +24,7 @@ func choose(flag: bool, x: f32[3]): f32[3] sync {
     return y + 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(sum(choose(true, x)))
     println(sum(choose(false, x)))

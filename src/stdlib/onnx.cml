@@ -23,7 +23,6 @@
 // pure, and the declaration carries that (a declaration carries types, not effects), so a call
 // may be folded, merged or run concurrently and its result may not be dropped.
 
-
 import { is_function } from types
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
@@ -31,7 +30,7 @@ import { is_function } from types
 /// module and never touches the file system or the ONNX runtime.
 /// @pure
 /// @example let uris = supported_operators()
-export func supported_operators(): string[]
+export func supported_operators() => string[]
 
 /// Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
 /// backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
@@ -48,7 +47,7 @@ export func supported_operators(): string[]
 /// @example export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">((x: float) => x * 2.0, 2.0)
 #op('onnx:export_model')
 with <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
-export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>()
+export func export_model::<F, E>(fn: F, example: E) => void! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program
@@ -65,5 +64,5 @@ export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>
 // scripts/stdlib-reference.mjs takes a declaration's parameters from a single line. The proper fix
 // is for the generator to read the block form. Do not
 // read this as the house style for pass parameters.
-with <out: string = "", trace: bool = false, dump: bool = false, prep_stats: bool = false>
-export func export_model::<F>(f: F): F! when is_function::<F>()
+with <out: string = '', trace: bool = false, dump: bool = false, prep_stats: bool = false>
+export func export_model::<F>(f: F) => F! when is_function::<F>()

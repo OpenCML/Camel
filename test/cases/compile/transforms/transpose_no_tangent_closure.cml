@@ -21,15 +21,17 @@
 // here is exactly the capture: a transposed callee would have to take the captured values as parameters
 // of its own, which this transform does not do (it refuses `with` parameters outright, as `jvp` does).
 // The paper answer this case owes is 2 (and 6 at cotangent 3).
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func g2(x: float): float {
-    let h = func (y: float) { y * x }
+func g2(x: float) => float {
+    let h = func (y: float) {
+        y * x
+    }
     return h(2.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g2(1.0))
     let back = transpose(g2)
     println(back(1.0))

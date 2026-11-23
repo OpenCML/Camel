@@ -9,14 +9,16 @@
  * own names adds no resource to its measurement.
  */
 
-func total(x: int): int {
+func total(x: int) => int {
     var acc = 0
     acc = x * (x - 1) / 2
-    let read = func () => int { acc }
+    let read = func () => int {
+        acc
+    }
     read()
 }
 
-func main(): int sync {
+func main() => int sync {
     let f: (x: int) => int pure = total
     println(f(3))
     return 0

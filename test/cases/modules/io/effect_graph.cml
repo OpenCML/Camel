@@ -5,6 +5,6 @@
 
 import { get_chars } from io
 
-func main(): int sync {
+func main() => int sync {
     return len(get_chars(1))
 }

@@ -3,6 +3,6 @@
 // not later, and not with a pass diagnostic: nothing asked for a pass of it.
 import unparsable_pass
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

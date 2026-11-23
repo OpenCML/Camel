@@ -6,15 +6,14 @@
 import { sort, index_of } from array
 
 // Searches xs[lo, hi) for `target` and returns its index.
-func search(xs: int[], target: int, lo: int, hi: int): int? {
+func search(xs: int[], target: int, lo: int, hi: int) => int? {
     let mid = (lo + hi) / 2
     return if lo >= hi then null
-        else if xs[mid] == target then mid
-        else if xs[mid] < target then search(xs, target, mid + 1, hi)
-        else search(xs, target, lo, mid)
+    else if xs[mid] == target then mid
+    else if xs[mid] < target then search(xs, target, mid + 1, hi) else search(xs, target, lo, mid)
 }
 
-func describe(xs: int[], target: int): string {
+func describe(xs: int[], target: int) => string {
     let found = search(xs, target, 0, len(xs))
     return match found {
         case null => string(target) + ' is not in the array'
@@ -22,14 +21,18 @@ func describe(xs: int[], target: int): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = sort([41, 7, 19, 3, 88, 54, 23, 60])
     println(xs)
-    println([54, 3, 88, 20]->map<func (t: int) => string { describe(xs, t) }>->join<'\n'>)
+    println([54, 3, 88, 20]->map<func (t: int) => string {
+        describe(xs, t)
+    }>->join<'\n'>)
     println('index_of gives:', xs->index_of<54> ?? -1, xs->index_of<20> ?? -1)
-
+    
     // One million even numbers: at most twenty steps.
-    let evens = (0..1000000)->map<func (i: int) => int { i * 2 }>
+    let evens = (0 .. 1000000)->map<func (i: int) => int {
+        i * 2
+    }>
     println(search(evens, 1337330, 0, len(evens)) ?? -1, search(evens, 1337331, 0, len(evens)) ?? -1)
     return 0
 }

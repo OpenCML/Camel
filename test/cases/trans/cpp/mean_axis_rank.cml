@@ -15,7 +15,7 @@
  */
 import { mean, reshape, shape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let line: f32[3] = [1.0, 5.0, 2.0]
     println(mean<0, false>(line))
     println(shape(mean<0, false>(line)))

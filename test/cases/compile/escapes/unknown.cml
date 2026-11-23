@@ -4,7 +4,7 @@
  * diagnostic names the pair that was written and points at the load that holds it.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('\q')
     return 0
 }

@@ -2,7 +2,7 @@
  * `int` of a string that is not a number is a located fault when it runs.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(int('12'))
     let s = 'abc'
     println(int(s))

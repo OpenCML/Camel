@@ -11,14 +11,15 @@
 //
 // The function of several parameters whose laws *do* read the operands -- `mul_tangent`'s -- cannot
 // carry this reading at all: its pullback is refused, and `transpose_many_parameters` records why.
+import rulesets.jvp
 import rulesets.transpose
 import { transpose } from transforms
 
-func sum4(a: float, b: float, c: float, d: float): float {
+func sum4(a: float, b: float, c: float, d: float) => float {
     return a + b + c + d
 }
-import rulesets.jvp
-func main(): int sync {
+
+func main() => int sync {
     println(transpose(sum4)(1.0))
     println(transpose(sum4)(2.0))
     return 0

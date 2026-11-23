@@ -14,29 +14,29 @@
  * from -- the program the run was handed -- computes 12 beside `ones=0`: the graph query says the
  * copy reached the rewritten callee and the run says it did not.
  */
-import { first_with_as_param } from transforms
-import { Rule, rewrite } from rewrite
 import { Graph, Node, constant, graph_of, graphs_of, inputs, name, nodes, op, op_name } from graph
+import { Rule, rewrite } from rewrite
 import { ends_with } from str
+import { first_with_as_param } from transforms
 
 rule drop_one(x: int) { x + 1 => x }
 
-func scaled(x: int): int {
+func scaled(x: int) => int {
     return x + 1
 }
 
 with <w: int>
-func weighted(y: int): int spelling {
+func weighted(y: int) => int spelling {
     return scaled(y) * w
 }
 
 /// The body of `weighted` at `w = 2` in the program the rewrite was taken from.
-func plain(y: int): int spelling {
+func plain(y: int) => int spelling {
     return scaled(y) * 2
 }
 
 /// The text of a node's operator, or '' for a node that is not an operator.
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
@@ -44,7 +44,7 @@ func opText(n: Node): string {
 }
 
 /// Whether a node is the constant 1.
-func isOne(n: Node): bool {
+func isOne(n: Node) => bool {
     return match constant::<int>(n) {
         case null => false
         case v => v == 1
@@ -52,27 +52,27 @@ func isOne(n: Node): bool {
 }
 
 /// The `x + 1` of a `scaled`: an int addition whose second operand is the constant 1.
-func isAddOne(n: Node): bool spelling {
+func isAddOne(n: Node) => bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
 }
 
 /// How many `+ 1` nodes the graph of a function has.
-func addOnes(g: Graph): int {
+func addOnes(g: Graph) => int {
     return len(nodes(g)->filter<isAddOne>)
 }
 
-func isScaled(g: Graph): bool spelling {
+func isScaled(g: Graph) => bool spelling {
     return name(g)->ends_with<'scaled'>
 }
 
 /// The graph of `scaled` that `p` reaches.
-func scaledIn::<F>(p: F): Graph {
+func scaledIn::<F>(p: F) => Graph {
     let found = graphs_of(p)->filter<isScaled>
     return found[0]
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let rules: Rule[] = [drop_one]
     let q = weighted->rewrite<rules> !! weighted
     let moved = first_with_as_param(q)

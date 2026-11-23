@@ -1,19 +1,19 @@
 // Many calls of small functions from a tail-recursive loop: 2e6 iterations, two calls each.
 // Nothing here is independent of anything else; a scheduler can only add cost.
 
-func sq(x: int): int {
+func sq(x: int) => int {
     return x * x
 }
 
-func mix(a: int, b: int): int {
+func mix(a: int, b: int) => int {
     return (a + sq(b)) % 1000003
 }
 
-func spin(i: int, n: int, acc: int): int {
+func spin(i: int, n: int, acc: int) => int {
     return if i == n then acc else spin(i + 1, n, mix(acc, i))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(spin(0, 2000000, 0))
     return 0
 }

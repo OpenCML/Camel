@@ -1,13 +1,13 @@
 // A linear model trained by gradient descent: the loss, its gradient as a library
 // transform, and a training step that takes the model in and gives a new one back.
-import { grad } from vjp
-import { shape, sum } from tensor
 import { sgd } from nn
+import { shape, sum } from tensor
+import { grad } from vjp
 
 type Linear = { weight: f32[?, ?] }
 
 with <layer: Linear, y: f32[?, ?]>
-func loss(X: f32[?, ?]): float {
+func loss(X: f32[?, ?]) => float {
     let err = X @ layer.weight - y
     return float(sum(err * err)) / float(shape(X)[0])
 }
@@ -16,21 +16,21 @@ func loss(X: f32[?, ?]): float {
 // stdout that its body makes. It is the legal counterpart of the rewrite that adds a print to a `step`
 // whose type declares nothing (`eco::step_print`). Nothing else is changed -- same loss, same run, same
 // entry function -- so the two programs' readings are comparable line for line.
-func step(layer: Linear, X: f32[?, ?], y: f32[?, ?], rate: float): Linear sync {
+func step(layer: Linear, X: f32[?, ?], y: f32[?, ?], rate: float) => Linear sync {
     let dloss = grad(loss)
     let g = dloss<layer, y>(X)
     println('stepping')
     return sgd(layer, g, rate)
 }
 
-func run(X: f32[?, ?], y: f32[?, ?], rate: float): (float, Linear) {
+func run(X: f32[?, ?], y: f32[?, ?], rate: float) => (float, Linear) {
     let w0: Linear = { weight: [[0.0], [0.0]] as f32[2, 1] }
     let before = loss<w0, y>(X)
-    let model = loop m = w0 for i in 0..200 do step(m, X, y, rate)
+    let model = loop m = w0 for i in 0 .. 200 do step(m, X, y, rate)
     return (before, model)
 }
 
-func main(): int sync {
+func main() => int sync {
     let X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 1.0]] as f32[4, 2]
     let y = [[2.0], [-1.0], [1.0], [3.0]] as f32[4, 1]
     let (before, model) = run(X, y, 0.1)

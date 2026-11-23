@@ -3,13 +3,15 @@
  * argument's ordering to its body, even if data already orders the original call.
  */
 
-func consume(ignored: bool): int sync {
+func consume(ignored: bool) => int sync {
     println('after')
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
-    consume([1.0]->reduce<func (a: bool, b: float) => bool { false }, true>)
+    consume([1.0]->reduce<func (a: bool, b: float) => bool {
+        false
+    }, true>)
     return 0
 }

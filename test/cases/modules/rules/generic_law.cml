@@ -18,28 +18,36 @@ rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
 rule add_minus_zero::<T>(x: T) when is_float::<T>() { x + -0.0 => x }
 
 /// The nodes of one function of the program, by the name of its graph.
-func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func nodesOf::<F>(p: F, function: string) => Node[] spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return nodes(found[0])
 }
 
 /// The parameter of a function: the value its body is, after the law was applied to it.
-func portOf::<F>(p: F, function: string): Node spelling {
-    let ports = nodesOf(p, function)->filter<func (n: Node) => bool { kind(n) == NodeKind::Port }>
+func portOf::<F>(p: F, function: string) => Node spelling {
+    let ports = nodesOf(p, function)->filter<func (n: Node) => bool {
+        kind(n) == NodeKind::Port
+    }>
     return ports[0]
 }
 
 /// A value of a function that no law touched: what `why_not` answers about a type a law cannot be
 /// written for is asked at one of these.
-func valueOf::<F>(p: F, function: string): Node spelling {
-    let values = nodesOf(p, function)->filter<func (n: Node) => bool { kind(n) == NodeKind::Data }>
+func valueOf::<F>(p: F, function: string) => Node spelling {
+    let values = nodesOf(p, function)->filter<func (n: Node) => bool {
+        kind(n) == NodeKind::Data
+    }>
     return values[0]
 }
 
 /// Prints the proof of the run, so that every step names the instance that made it.
-func proofOf::<F>(r: Run<F>): F! sync {
+func proofOf::<F>(r: Run<F>) => F! sync {
     return match explain_all(r) {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case proof => sync {
             println(proof)
             return r.result
@@ -49,9 +57,11 @@ func proofOf::<F>(r: Run<F>): F! sync {
 
 /// The two laws applied once: what the application cost, the name the rule value carries, and the
 /// proof. The value is the one the module wrote, not a part of any program.
-export func counted::<F>(p: F): F! spelling sync {
+export func counted::<F>(p: F) => F! spelling sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(add_zero))
             return proofOf(r)
@@ -61,13 +71,21 @@ export func counted::<F>(p: F): F! spelling sync {
 
 /// The instance the small addition was made by, read out of `why_not`: the integer law's `i32`
 /// instance, named with its type.
-export func why_i32::<F>(p: F): F! spelling sync {
+export func why_i32::<F>(p: F) => F! spelling sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case r => sync {
             return match r->why_not<add_zero, portOf(r.result, 'i32_zero')> {
-                case error e => sync { println(e); return r.result }
-                case reason => sync { println(reason); return r.result }
+                case error e => sync {
+                    println(e)
+                    return r.result
+                }
+                case reason => sync {
+                    println(reason)
+                    return r.result
+                }
             }
         }
     }
@@ -78,13 +96,21 @@ export func why_i32::<F>(p: F): F! spelling sync {
 /// reaches the program, and the tuple is remembered as one that did not come about -- so this is
 /// the one place its reason is read (the rule on
 /// `generic-rule-instantiation-set-and-predicate`, §3).
-export func why_no_instance::<F>(p: F): F! spelling sync {
+export func why_no_instance::<F>(p: F) => F! spelling sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case r => sync {
             return match r->why_not<add_minus_zero, valueOf(r.result, 'greet')> {
-                case error e => sync { println(e); return r.result }
-                case reason => sync { println(reason); return r.result }
+                case error e => sync {
+                    println(e)
+                    return r.result
+                }
+                case reason => sync {
+                    println(reason)
+                    return r.result
+                }
             }
         }
     }
@@ -93,13 +119,21 @@ export func why_no_instance::<F>(p: F): F! spelling sync {
 /// The other question: at the value the float law made, `why_not` for the integer law names the
 /// instance that did fire there, `add_minus_zero<float>`, so a user asking the wrong law at the
 /// right value is told which instance ran.
-export func why_float::<F>(p: F): F! spelling sync {
+export func why_float::<F>(p: F) => F! spelling sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case r => sync {
             return match r->why_not<add_zero, portOf(r.result, 'f64_minus_zero')> {
-                case error e => sync { println(e); return r.result }
-                case reason => sync { println(reason); return r.result }
+                case error e => sync {
+                    println(e)
+                    return r.result
+                }
+                case reason => sync {
+                    println(reason)
+                    return r.result
+                }
             }
         }
     }

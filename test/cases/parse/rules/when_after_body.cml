@@ -2,6 +2,6 @@
 
 rule guarded(x: int) { x + 0 => x } when true
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

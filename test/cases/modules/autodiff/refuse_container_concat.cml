@@ -18,15 +18,15 @@
  * extent it does not have.
  */
 
-import { concat, reshape, sum } from tensor
 import { grad } from autodiff
+import { concat, reshape, sum } from tensor
 
 with <xs: float[][]>
-func loss(): float {
+func loss() => float {
     return float(sum(concat<0>(xs, reshape<[1, 2]>([10.0, 20.0]))))
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[][] = [[1.0, 2.0]]
     println('refuse_container_concat g={}'->format<grad(loss)<xs>()>)
     return 0

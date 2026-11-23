@@ -2,9 +2,10 @@
 // the imports and the `using` called the modules (here aliases).
 import lib as L
 import lib2 as M
+
 using namespace L::Tools
 using namespace M::Tools
-func main(): int sync {
+func main() => int sync {
     println(inc(1))
     return 0
 }

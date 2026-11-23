@@ -3,9 +3,10 @@
  */
 
 import namespace_lib
+
 using namespace namespace_lib::Tools
 
-func main(): int sync {
+func main() => int sync {
     let a = inc(8)
     'nested_namespace_using a={}'->format<a>->println
     return 0

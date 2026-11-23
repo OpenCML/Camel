@@ -3,11 +3,11 @@
 // (item 1).
 import { flat_map } from array
 
-func expanded(x: int): int[] {
+func expanded(x: int) => int[] {
     return [x, x + 1]
 }
 
-export func show::<F>(p: F): F! sync {
+export func show::<F>(p: F) => F! sync {
     println([1, 2, 3]->flat_map<expanded>)
     return p
 }

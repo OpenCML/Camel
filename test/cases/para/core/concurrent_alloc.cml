@@ -7,10 +7,10 @@
  * elements of a map, and folds the results with reduce and filter.
  */
 
-import { seed, shuffle, next_key } from random
 import { sort, merge_sorted } from array
+import { seed, shuffle, next_key } from random
 
-func mergesort(arr: int[]): int[] {
+func mergesort(arr: int[]) => int[] {
     return if len(arr) <= 4 then sort(arr) else {
         let mid = len(arr) / 2
         let lhs = arr[0..mid]->mergesort
@@ -19,19 +19,25 @@ func mergesort(arr: int[]): int[] {
     }
 }
 
-func checksum(arr: int[]): int {
-    return (0..len(arr))->map<func (i: int) => int { arr[i] * (i + 1) }>->reduce<func (a: int, b: int) => int { a + b }, 0>
+func checksum(arr: int[]) => int {
+    return (0 .. len(arr))->map<func (i: int) => int {
+        arr[i] * (i + 1)
+    }>->reduce<func (a: int, b: int) => int {
+        a + b
+    }, 0>
 }
 
-func main(): int sync {
+func main() => int sync {
     seed(7)
-    let data = (0..96)->shuffle<next_key()>
-    let sums = (0..12)->map<func (k: int) => int {
+    let data = (0 .. 96)->shuffle<next_key()>
+    let sums = (0 .. 12)->map<func (k: int) => int {
         let part = data[k * 8..96]
         return checksum(mergesort(part))
     }>
     sums->println
-    sums->filter<func (s: int) => bool { s > 100000 }>->println
+    sums->filter<func (s: int) => bool {
+        s > 100000
+    }>->println
     mergesort(data)->println
     return 0
 }

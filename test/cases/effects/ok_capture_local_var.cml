@@ -12,14 +12,16 @@
  * The call runs because it writes a cell of this body, so the answer is the sum of 0..x-1.
  */
 
-func total(x: int): int {
+func total(x: int) => int {
     var acc = 0
     acc = x * (x - 1) / 2
-    let read = func () => int { acc }
+    let read = func () => int {
+        acc
+    }
     read()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(3))
     return 0
 }

@@ -7,21 +7,21 @@
 resource db
 resource console = [db, stdout]
 
-#resource type Stream = { id: int }
+#resource
+type Stream = { id: int }
 
-func read_id(s: Stream): int uses s {
+func read_id(s: Stream) => int uses s {
     return s.id
 }
 
-func tick(): void uses var console {
-}
+func tick() => void uses var console {}
 
-func bump(var cell: int): int sync {
+func bump(var cell: int) => int sync {
     cell += 1
     return cell
 }
 
-func main(): int sync {
+func main() => int sync {
     let s: Stream = { id: 7 }
     println(read_id(s))
     tick()

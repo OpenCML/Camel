@@ -12,11 +12,11 @@
  * byte, exit status included.
  */
 
-func open2(v: float[2, 2]): float[...] {
+func open2(v: float[2, 2]) => float[...] {
     return v as float[...]
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     let a = open2([[1.0, 2.0], [3.0, 4.0]]) as float[3, 3]
     println(a)

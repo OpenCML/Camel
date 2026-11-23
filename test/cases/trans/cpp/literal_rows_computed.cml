@@ -11,7 +11,7 @@
  * byte for byte, and the C++ program holds the value as one flat constant of four elements with
  * its shape (`rt::Array<double>{{1.0, 0.0, 0.0, 2.0}, {2, 2}}`).
  */
-func main(): int sync {
+func main() => int sync {
     let w: float[2, 2] = [[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]
     println(w)
     return 0

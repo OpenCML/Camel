@@ -17,13 +17,13 @@
  *
  * Run: camel test/cases/compile/var/arm_shadow_var.cml
  */
-func main(): int {
-    var x = 0;
-    let c = 1;
+func main() => int {
+    var x = 0
+    let c = 1
     if c > 0 then {
-        var x = 5;
-        x = 7;
+        var x = 5
+        x = 7
     }
-    let shown = println(x);
+    let shown = println(x)
     return 0
 }

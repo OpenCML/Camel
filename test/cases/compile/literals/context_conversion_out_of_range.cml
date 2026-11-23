@@ -3,7 +3,7 @@
  * compile time for a literal argument, and says the value is out of the range.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x = i32(5000000000)
     println(x)
     return 0

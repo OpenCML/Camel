@@ -9,7 +9,7 @@
  */
 import rulesets.probe_missing
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

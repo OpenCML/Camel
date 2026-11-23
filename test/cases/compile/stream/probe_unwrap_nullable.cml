@@ -3,7 +3,7 @@
 // syntax error ("Expected ',' or ')' before '!'") -- so a value of a nullable type is not unwrapped
 // with `x!`; `??` is the form the language has.
 
-func main(): int sync {
+func main() => int sync {
     let x: int? = 5
     println(x!)
     return 0

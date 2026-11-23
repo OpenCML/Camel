@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     let t = ((1, 2), 3)
     println(t.0.1e2)
     return 0

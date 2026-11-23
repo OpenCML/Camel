@@ -5,7 +5,7 @@
 
 import { load_npy } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let t = load_npy::<f32>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')
     println(t)
     return 0

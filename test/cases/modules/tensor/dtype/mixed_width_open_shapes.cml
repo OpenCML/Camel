@@ -7,11 +7,11 @@
 
 import { load_npy, sum } from tensor
 
-func both(x: f64[...], y: f32[...]): float {
+func both(x: f64[...], y: f32[...]) => float {
     return float(sum(x * y))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = load_npy::<f64>('test/cases/compile/entry_args/b.npy') as f64[?]
     let y = load_npy::<f32>('test/cases/compile/entry_args/b.npy') as f32[?]
     println(both(x, y))

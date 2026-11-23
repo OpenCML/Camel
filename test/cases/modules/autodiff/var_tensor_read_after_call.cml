@@ -2,28 +2,28 @@
  * Refused: the variable is read after a call of the differentiated function that receives it
  * and may write it (`push` stores a value that depends on the parameter).
  */
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
+import { reshape, sum } from tensor
 
 type P = { p0: f64[] }
 
-func push(v: f64[], var acc: f64[]): int sync {
+func push(v: f64[], var acc: f64[]) => int sync {
     acc = v
     return 0
 }
 
 with <m: P>
-func loss(x: f64[], var acc: f64[]): float sync {
+func loss(x: f64[], var acc: f64[]) => float sync {
     push(m.p0 * x, acc)
     let b = acc * 1.0
     return float(sum(m.p0 * x)) + float(sum(b))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0])
     let m = { p0: reshape<[2]>([0.5, 0.25]) }
     var acc = reshape<[2]>([0.0, 0.0])
     let vg = with_grad(loss)<m>(x, acc)
-    println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
+    println('value {} grad {}'->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

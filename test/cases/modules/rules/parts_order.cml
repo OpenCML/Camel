@@ -30,15 +30,19 @@ import { rewrite } from rewrite
 
 fact sign: int match v {
     case const c: int => c
-    case _       => 0
-} join max
+    case _ => 0
+}
+join max
 
 fact mul_by_one(a: Node, b: Node): bool match (a, b) {
-    case x * y   => sign(y) == 1
-    case _       => false
-} join func (lhs: bool, rhs: bool) { lhs || rhs }
+    case x * y => sign(y) == 1
+    case _ => false
+}
+join func (lhs: bool, rhs: bool) {
+    lhs || rhs
+}
 
-func positive(c: float): bool {
+func positive(c: float) => bool {
     return c > 0.0
 }
 
@@ -50,36 +54,46 @@ rule drop_by_one(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c =>
 /// A guard on the value, which the value channel answers without any node.
 rule drop_positive(x: float, const c: float) when positive(c) { x * c => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[drop_by_one, drop_positive]>
 }
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
-    return len(nodes(found[0])->filter<func (n: Node) => bool { opText(n) == operator }>)
+func countOf::<F>(p: F, function: string, operator: string) => int spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
+    return len(nodes(found[0])->filter<func (n: Node) => bool {
+        opText(n) == operator
+    }>)
 }
 
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     println('swapped', countOf(p, 'swapped', ':op/mul_l'))
     println('kept', countOf(p, 'kept', ':op/mul_l'))
     println('plain', countOf(p, 'plain', ':op/mul_d'))
     return p
 }
 
-func swapped(a: int): int { return a * 1 }
+func swapped(a: int) => int {
+    return a * 1
+}
 
-func kept(a: int): int { return a * 2 }
+func kept(a: int) => int {
+    return a * 2
+}
 
-func plain(a: float): float { return a * 5.0 }
+func plain(a: float) => float {
+    return a * 5.0
+}
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     println(swapped(7), kept(7), plain(3.0))
     return 0
 }

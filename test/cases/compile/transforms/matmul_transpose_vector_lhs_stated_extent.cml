@@ -40,43 +40,41 @@
 // the extent in the declaration were the answer, the twin operators would have no reason to exist.
 //
 //     camel test/cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml
-import { matmul, sum } from tensor
-import { vjp } from vjp
 import { with_grad } from autodiff
 import { abs, max } from math
+import { matmul, sum } from tensor
+import { vjp } from vjp
 
 /// The product under a sum, both operands ordinary parameters.
-func sum_of_product(v: float[2], w: float[2, 2]): float {
+func sum_of_product(v: float[2], w: float[2, 2]) => float {
     return sum(matmul(v, w))
 }
 
 /// The same for the engine's pullback over `w`.
 with <w: float[2, 2]>
-func product_with_w(v: float[]): float {
+func product_with_w(v: float[]) => float {
     return sum(matmul(v, w))
 }
 
 /// And once over `v`, which is the rank-one half of the same law.
 with <v: float[]>
-func product_with_v(w: float[2, 2]): float {
+func product_with_v(w: float[2, 2]) => float {
     return sum(matmul(v, w))
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = [1.0, 2.0] as float[2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
-
+    
     let (value, pullback) = vjp(sum_of_product)(v, w)
     let (dv, dw) = pullback(1.0)
     `matmul_t vector_lhs value={} dL/dv={} dL/dw={}`->format<value, dv, dw>->println
-
-    let (engine_value_w, engine_w) =
-        with_grad(product_with_w)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>(v)
+    
+    let (engine_value_w, engine_w) = with_grad(product_with_w)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>(v)
     let (engine_value_v, engine_v) = with_grad(product_with_v)<[1.0, 2.0]>(w)
-    `matmul_t vector_lhs engine value={} dL/dw={} dL/dv={}`
-        ->format<engine_value_w, engine_w, engine_v>->println
+    `matmul_t vector_lhs engine value={} dL/dw={} dL/dv={}`->format<engine_value_w, engine_w, engine_v>->println
     `matmul_t vector_lhs engine_v value={}`->format<engine_value_v>->println
-
+    
     let dvalue = abs(value - engine_value_w)
     let dv0 = abs(dv[0] - engine_v[0])
     let dv1 = abs(dv[1] - engine_v[1])
@@ -85,7 +83,6 @@ func main(): int sync {
     let dw10 = abs(dw[1][0] - engine_w[1][0])
     let dw11 = abs(dw[1][1] - engine_w[1][1])
     let dw_diff = max(max(dw00, dw01), max(dw10, dw11))
-    `matmul_t vector_lhs max_abs_diff_library_vs_engine v={:.12e} w={:.12e} value={:.12e}`
-        ->format<max(dv0, dv1), dw_diff, dvalue>->println
+    `matmul_t vector_lhs max_abs_diff_library_vs_engine v={:.12e} w={:.12e} value={:.12e}`->format<max(dv0, dv1), dw_diff, dvalue>->println
     return 0
 }

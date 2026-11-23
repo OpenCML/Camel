@@ -6,11 +6,11 @@
 
 type P = { x: int, y: int }
 
-func point(): P {
+func point() => P {
     return { x: 1, y: 2 }
 }
 
-func main(): int sync {
+func main() => int sync {
     point().x = 9
     return 0
 }

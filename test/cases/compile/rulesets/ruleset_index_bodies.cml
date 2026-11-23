@@ -14,52 +14,52 @@
  * source spelling reaches them from outside the ruleset.
  */
 import rulesets.vmap
-import { vmap } from transforms
 import { argmax, argmin, concat, dim, matmul, max, mean, min, permute, reshape, sum, transpose, unsqueeze, where } from tensor
+import { vmap } from transforms
 
 // ---- the scalar arithmetic: `+/2`, `-/2`, `*/2`, `//2`, `-/1` ----
-func plus(x: float): float {
+func plus(x: float) => float {
     return x + 2.0
 }
 
-func minus(x: float): float {
+func minus(x: float) => float {
     return x - 2.0
 }
 
-func times(x: float): float {
+func times(x: float) => float {
     return x * 2.0
 }
 
-func divide(x: float): float {
+func divide(x: float) => float {
     return x / 2.0
 }
 
-func negate(x: float): float {
+func negate(x: float) => float {
     return -x
 }
 
 // ---- the whole-row reductions: `sum/1`, `mean/1`, `max/1`, `min/1`, `argmax/1`, `argmin/1` ----
-func row_sum(r: float[3]): float {
+func row_sum(r: float[3]) => float {
     return sum(r)
 }
 
-func row_mean(r: float[3]): float {
+func row_mean(r: float[3]) => float {
     return mean(r)
 }
 
-func row_max(r: float[3]): float {
+func row_max(r: float[3]) => float {
     return max(r)
 }
 
-func row_min(r: float[3]): float {
+func row_min(r: float[3]) => float {
     return min(r)
 }
 
-func row_argmax(r: float[3]): int {
+func row_argmax(r: float[3]) => int {
     return argmax(r)
 }
 
-func row_argmin(r: float[3]): int {
+func row_argmin(r: float[3]) => int {
     return argmin(r)
 }
 
@@ -67,32 +67,32 @@ func row_argmin(r: float[3]): int {
 // A row of two axes, so the answer is the rank below the row's (and its static type says so: the
 // axis reductions are declared `T[...]`/`int[...]`, an open rank, because which axis an axis word
 // drops is a fact at the call).
-func plane_sum_axis(r: float[2, 3]): float[...] {
+func plane_sum_axis(r: float[2, 3]) => float[...] {
     return sum<0, false>(r)
 }
 
-func plane_mean_axis(r: float[2, 3]): float[...] {
+func plane_mean_axis(r: float[2, 3]) => float[...] {
     return mean<0, false>(r)
 }
 
-func plane_max_axis(r: float[2, 3]): float[...] {
+func plane_max_axis(r: float[2, 3]) => float[...] {
     return max<0, false>(r)
 }
 
-func plane_min_axis(r: float[2, 3]): float[...] {
+func plane_min_axis(r: float[2, 3]) => float[...] {
     return min<0, false>(r)
 }
 
-func plane_argmax_axis(r: float[2, 3]): int[...] {
+func plane_argmax_axis(r: float[2, 3]) => int[...] {
     return argmax<0, false>(r)
 }
 
-func plane_argmin_axis(r: float[2, 3]): int[...] {
+func plane_argmin_axis(r: float[2, 3]) => int[...] {
     return argmin<0, false>(r)
 }
 
 // ---- a row's matrix product: `matmul/2` ----
-func flat_mul(r: float[2, 2]): float[2, 2] {
+func flat_mul(r: float[2, 2]) => float[2, 2] {
     let eye: float[2, 2] = [[1.0, 0.0], [0.0, 1.0]]
     return matmul(r, eye)
 }
@@ -100,34 +100,34 @@ func flat_mul(r: float[2, 2]): float[2, 2] {
 // ---- the layout tier: `reshape/1`, `unsqueeze/1`, `transpose/1`, `permute/1`, `concat/2`, `dim/1` ----
 // Each writes its shape, axis or permutation in angle brackets -- a `with` parameter, which a rule
 // receives as the batch of one row.
-func row_reshape(r: float[4]): float[2, 2] {
+func row_reshape(r: float[4]) => float[2, 2] {
     return reshape<[2, 2]>(r)
 }
 
-func row_unsqueeze(r: float[3]): float[1, 3] {
+func row_unsqueeze(r: float[3]) => float[1, 3] {
     return unsqueeze<0>(r)
 }
 
-func plane_transpose(r: float[2, 2]): float[2, 2] {
+func plane_transpose(r: float[2, 2]) => float[2, 2] {
     return transpose(r)
 }
 
-func plane_permute(r: float[2, 2]): float[2, 2] {
+func plane_permute(r: float[2, 2]) => float[2, 2] {
     return permute<[1, 0]>(r)
 }
 
-func plane_concat(r: float[2, 2]): float[2, 4] {
+func plane_concat(r: float[2, 2]) => float[2, 4] {
     return concat<1>(r, r)
 }
 
-func plane_dim(r: float[2, 2]): int {
+func plane_dim(r: float[2, 2]) => int {
     return dim<1>(r)
 }
-func row_where(r: float[3]): float[3] {
+func row_where(r: float[3]) => float[3] {
     let m: bool[3] = [true, false, true]
     return where(m, r, 0.0)
 }
-func main(): int sync {
+func main() => int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     let rows: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
     let planes: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]

@@ -12,9 +12,9 @@
 //
 //     camel showcase/c3-char-transformer/grow/stage3_embed_ffn.cml
 //     python showcase/c3-char-transformer/baseline/grow.py --stage 3
-import { relu, softmax, sum, take, transpose } from tensor
-import { adam, adam_state } from nn
 import { with_grad } from autodiff
+import { adam, adam_state } from nn
+import { relu, softmax, sum, take, transpose } from tensor
 
 type Model = {
     emb: float[...],
@@ -27,11 +27,16 @@ type Model = {
     wv1: float[...]
 }
 
-func mask(): float[...] {
+func mask() => float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
-func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): float[...] {
+func attention(
+    x: float[...],
+    wq: float[...],
+    wk: float[...],
+    wv: float[...]
+) => float[...] {
     let q = x @ wq
     let k = transpose(x @ wk)
     let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
@@ -39,14 +44,14 @@ func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): f
 }
 
 with <m: Model>
-func block(tokens: int[...]): float {
+func block(tokens: int[...]) => float {
     let x = take(m.emb, tokens)
     let r = x + attention(x, m.wq1, m.wk1, m.wv1)
     let hidden = relu(r @ m.f1 + m.b1)
     return sum(r + hidden @ m.f2 + m.b2)
 }
 
-func initial(): Model {
+func initial() => Model {
     return {
         emb: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
         f1: [[0.75, -0.5, 0.5, 0.25], [1.0, 0.5, -0.25, 0.75]] as float[2, 4],
@@ -59,17 +64,15 @@ func initial(): Model {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let tokens = [0, 1] as int[]
     let model0 = initial()
-    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
-        while step < 50
-        do {
-            let (value, g) = with_grad(block)<m>(tokens)
-            let next = adam(m, g, opt, 0.002)
-            let nlog = log + `stage3 step=${step + 1} loss=${value:.12f}` + "\n"
-            return (next.0, next.1, step + 1, nlog)
-        }
+    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string while step < 50 do {
+        let (value, g) = with_grad(block)<m>(tokens)
+        let next = adam(m, g, opt, 0.002)
+        let nlog = log + `stage3 step=${step + 1} loss=${value:.12f}` + '\n'
+        return (next.0, next.1, step + 1, nlog)
+    }
     log->print
     let last = with_grad(block)<final>(tokens).0
     `stage3 done steps=${steps} last=${last:.12f}`->println

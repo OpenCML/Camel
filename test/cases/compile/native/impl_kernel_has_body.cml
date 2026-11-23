@@ -3,15 +3,15 @@
  * so there is no body-less declaration to be its kernel (ImplKernelNotBodyless).
  */
 
-func helper(a: int, b: int): int {
+func helper(a: int, b: int) => int {
     return a + b
 }
 
 #impl(helper)
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func main(): int sync {
+func main() => int sync {
     return add(1, 2)
 }

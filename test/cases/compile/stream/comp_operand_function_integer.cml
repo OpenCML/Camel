@@ -4,12 +4,12 @@
 // by their types, and
 // neither of them is generic or unsettled.
 
-func inc(x: int): int {
+func inc(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
-    let composed = inc..3
+func main() => int sync {
+    let composed = inc .. 3
     println(composed)
     return 0
 }

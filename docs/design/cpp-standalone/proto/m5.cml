@@ -1,5 +1,5 @@
 /// 7.3 and 8: how values print, and the two print forms with a format string.
-func main(): int sync {
+func main() => int sync {
     println([1, 2, 3], (1, 'a'), { x: 1, y: 2.5 }, true, 'str', 1.0e-7, 3.0)
     let n: int? = null
     let m: int? = 5

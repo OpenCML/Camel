@@ -13,11 +13,11 @@
 
 import { inf, nan } from math
 
-func plus(x: float): float {
+func plus(x: float) => float {
     return x + x
 }
 
-func twice(x: float): float {
+func twice(x: float) => float {
     return x * 2.0
 }
 
@@ -25,7 +25,7 @@ func row(name: string, x: float) {
     println(name, plus(x), twice(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let max = 1.7976931348623157e308
     let half = max / 2.0
     row('zero', 0.0)

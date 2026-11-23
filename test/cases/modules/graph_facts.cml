@@ -1,33 +1,35 @@
-import { reshape } from tensor
 import { Node, Graph, name, nodes, effects, shape_text, permissions, graphs_of } from graph
+import { reshape } from tensor
 
-func quiet(x: int): int {
+func quiet(x: int) => int {
     return x * 2 + 1
 }
 
-func loud(x: int): int sync {
+func loud(x: int) => int sync {
     println(x)
     return x
 }
 
-func fragile(xs: int[]): int {
+func fragile(xs: int[]) => int {
     return xs[0]
 }
 
-func grid(): f32[...] {
+func grid() => f32[...] {
     return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
 }
 
-func describe(g: Graph): string spelling {
+func describe(g: Graph) => string spelling {
     return name(g)
 }
 
-func withName(text: string): Graph[] spelling {
+func withName(text: string) => Graph[] spelling {
     let all = concat(concat(graphs_of(quiet), graphs_of(loud)), concat(graphs_of(fragile), graphs_of(grid)))
-    return all->filter<func (g: Graph) => bool { name(g) == text }>
+    return all->filter<func (g: Graph) => bool {
+        name(g) == text
+    }>
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let q = effects(withName('quiet')[0])
     let l = effects(withName('loud')[0])
     let f = effects(withName('fragile')[0])
@@ -35,7 +37,11 @@ func main(): int spelling sync {
     println(q.may_fault)
     println(l.external)
     println(f.may_fault)
-    println(nodes(withName('grid')[0])->map<func (n: Node) => string { shape_text(n) ?? '-' }>)
-    println(nodes(withName('quiet')[0])->map<func (n: Node) => int { permissions(n) }>)
+    println(nodes(withName('grid')[0])->map<func (n: Node) => string {
+        shape_text(n) ?? '-'
+    }>)
+    println(nodes(withName('quiet')[0])->map<func (n: Node) => int {
+        permissions(n)
+    }>)
     return 0
 }

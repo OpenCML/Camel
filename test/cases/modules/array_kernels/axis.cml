@@ -11,7 +11,7 @@ import { sum, mean, min, max, argmax, argmin } from array
 import math
 import { reshape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     println(x->sum<0>, x->sum<1>, x->sum<-1>)
     println(x->sum<1, true>)
@@ -19,17 +19,17 @@ func main(): int sync {
     println(x->min<0>, x->max<1>)
     println(x->argmax<1>, x->argmin<0>)
     println(x->argmax<0, true>)
-
+    
     let n = reshape<[2, 3]>([3, 1, 2, 9, 8, 7])
     println(n->sum<1>, n->min<1>, n->max<0>)
     println(n->argmax<0>, n->argmin<1>)
-
+    
     // The sum of a float element type is taken in f64 and rounded once: an f32 sum that rounded
     // after each addition would stop at 16777216.0.
     let big = f32([16777216.0, 1.0, 1.0])
     println(big->sum<0>)
     println(bf16([1.0, 2.0, 3.0])->sum<0>, f16([1.0, 2.0, 4.0, 5.0])->mean<0>)
-
+    
     // A NaN wins a minimum and a maximum and is the first position of argmax and argmin; -0 is
     // below +0; the earlier position wins a tie.
     let nan = math::nan

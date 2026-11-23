@@ -32,50 +32,50 @@
  * bit for bit: a libm's last ulp is not this case's subject.
  */
 
-import { reshape, sum, gelu, erf, erfc, layer_norm, to_bytes } from tensor
 import { grad } from autodiff
 import { to_array } from bytes
+import { reshape, sum, gelu, erf, erfc, layer_norm, to_bytes } from tensor
 
 type N = { x: float[2, 3], g: float[3], b: float[3] }
 
 with <x: float[3]>
-func lossGelu(): float sync {
+func lossGelu() => float sync {
     return float(sum(gelu(x)))
 }
 
 with <x: float[3]>
-func lossErf(): float sync {
+func lossErf() => float sync {
     return float(sum(erf(x)))
 }
 
 with <x: float[3]>
-func lossErfc(): float sync {
+func lossErfc() => float sync {
     return float(sum(erfc(x)))
 }
 
 with <m: N>
-func lossNorm(): float sync {
+func lossNorm() => float sync {
     return float(sum(layer_norm(m.x, m.g, m.b)))
 }
 
 func line(label: string, t: float[...]) {
-    println("{} bytes={} d={}"->format<label, len(to_array(to_bytes(t))), t>)
+    println('{} bytes={} d={}'->format<label, len(to_array(to_bytes(t))), t>)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([-1.0, 0.0, 1.0] as float[])
-    line("f64.gelu", grad(lossGelu)<x>())
-    line("f64.erf", grad(lossErf)<x>())
-    line("f64.erfc", grad(lossErfc)<x>())
-
+    line('f64.gelu', grad(lossGelu)<x>())
+    line('f64.erf', grad(lossErf)<x>())
+    line('f64.erfc', grad(lossErfc)<x>())
+    
     let m = {
         x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as float[]),
         g: reshape<[3]>([1.0, 0.5, 2.0] as float[]),
-        b: reshape<[3]>([0.1, 0.2, 0.3] as float[]),
+        b: reshape<[3]>([0.1, 0.2, 0.3] as float[])
     }
     let gn = grad(lossNorm)<m>()
-    line("f64.lnorm.dx", gn.x)
-    line("f64.lnorm.dgamma", gn.g)
-    line("f64.lnorm.dbeta", gn.b)
+    line('f64.lnorm.dx', gn.x)
+    line('f64.lnorm.dgamma', gn.g)
+    line('f64.lnorm.dbeta', gn.b)
     return 0
 }

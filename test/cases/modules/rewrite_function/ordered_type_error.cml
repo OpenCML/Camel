@@ -5,10 +5,10 @@
 import { rewrite, run, saturate } from rewrite
 
 rule add_zero(x: int) { x + 0 => x }
-func target(x: int): int {
+func target(x: int) => int {
     return x + 0
 }
-func main(): int sync {
+func main() => int sync {
     println(target->rewrite<[add_zero], ordered: 'ordered'>)
     println(target->run<[add_zero], ordered: 'ordered'>)
     println(target->saturate<[add_zero], ordered: 'ordered'>)

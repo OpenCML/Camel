@@ -13,24 +13,28 @@ import { rewrite } from rewrite
 
 fact sign(v: int): int match v {
     case const c => c
-    case _       => 0
-} join max
+    case _ => 0
+}
+join max
 
 fact one: int match v {
     case const c: int => c
-    case x + y        => one(x) + one(y)
-    case _            => 0
-} join max
+    case x + y => one(x) + one(y)
+    case _ => 0
+}
+join max
 
 rule mul_by_sign(y: int, x: int) when sign(y) == 2 { x * y => x + 100 }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[mul_by_sign]>
 }
 
-func left(x: int): int { return x * 2 }
+func left(x: int) => int {
+    return x * 2
+}
 
-func main(): int sync {
+func main() => int sync {
     println(left(3))
     return 0
 }

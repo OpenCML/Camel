@@ -8,31 +8,31 @@
 
 type Box = { name: string, table: Map<int, string>, seen: Set<int> }
 
-func up(m: Map<int, string>, i: int, n: int): Map<int, string> {
+func up(m: Map<int, string>, i: int, n: int) => Map<int, string> {
     return if i >= n then m else up(m->put<i, 'v' + string(i)>, i + 1, n)
 }
 
-func down(m: Map<int, string>, i: int): Map<int, string> {
+func down(m: Map<int, string>, i: int) => Map<int, string> {
     return if i < 0 then m else down(m->put<i, 'v' + string(i)>, i - 1)
 }
 
-func cut(m: Map<int, string>, i: int, n: int): Map<int, string> {
+func cut(m: Map<int, string>, i: int, n: int) => Map<int, string> {
     return if i >= n then m else cut(m->remove<i>, i + 1, n)
 }
 
-func set_up(s: Set<int>, i: int, n: int): Set<int> {
+func set_up(s: Set<int>, i: int, n: int) => Set<int> {
     return if i >= n then s else set_up(s->add<i * 7 % 211>, i + 1, n)
 }
 
-func set_down(s: Set<int>, i: int): Set<int> {
+func set_down(s: Set<int>, i: int) => Set<int> {
     return if i < 0 then s else set_down(s->add<i * 7 % 211>, i - 1)
 }
 
-func box(m: Map<int, string>, s: Set<int>): Box {
+func box(m: Map<int, string>, s: Set<int>) => Box {
     return { name: 'x', table: m, seen: s }
 }
 
-func main(): int sync {
+func main() => int sync {
     let empty = [(0, 'v0')] as Map<int, string>
     let none = [0] as Set<int>
     let a = up(empty, 0, 200)

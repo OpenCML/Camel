@@ -5,14 +5,14 @@
  * settles at the empty set -- its type says `pure`, not nothing.
  */
 
-func step(n: int): int {
+func step(n: int) => int {
     return if n <= 0 then 0 else step(n - 1)
 }
 
-func show(f: (n: int) => int): int {
+func show(f: (n: int) => int) => int {
     return f(1)
 }
 
-func main(): int sync {
+func main() => int sync {
     return show(step)
 }

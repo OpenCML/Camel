@@ -6,6 +6,6 @@
 
 rule add_zero(x: int) { x + 0 => x }
 
-func main(): int {
+func main() => int {
     return 0
 }

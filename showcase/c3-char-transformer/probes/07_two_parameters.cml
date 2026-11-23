@@ -5,11 +5,11 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func dot(a: float[], b: float[]): float {
+func dot(a: float[], b: float[]) => float {
     return a[0] * b[0] + a[1] * b[1]
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(dot)([3.0, 4.0], [2.0, 5.0])
     println(`value = ${value:.1f}`)
     let cotangents = pullback(1.0)

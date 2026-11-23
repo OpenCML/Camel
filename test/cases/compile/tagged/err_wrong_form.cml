@@ -2,7 +2,7 @@
  * `!!` opens a `T!`, not a `T?`: TaggedOperandMismatch.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     let a = 1 as int?
     let b = a !! 7

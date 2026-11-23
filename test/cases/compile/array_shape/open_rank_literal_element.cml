@@ -6,7 +6,7 @@
 // there is nothing to refuse and nothing to wrap: the arithmetic below runs in the element type,
 // and `T[]` (`rank_one_refuses_literal.cml`) refuses the very same literal.
 
-func main(): int sync {
+func main() => int sync {
     let x: f32[...] = 1.0
     println(x + 1.0)
     let row: f32[...] = [1.0, 2.0]

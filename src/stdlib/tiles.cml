@@ -36,13 +36,13 @@ export resource driver
 /// a visible device is missing. A capability question only -- a device the run names with
 /// `--devices` and that is not there is a fault at start-up, never `false`.
 /// @example available()
-export func available(): bool uses var driver
+export func available() => bool uses var driver
 
 /// A description of the CUDA device the run selects: its ordinal, name, compute capability and
 /// memory.
 /// @fails error value `DeviceUnavailable` when this build or this machine has no CUDA device
 /// @example device() !! 'no device'
-export func device(): string! uses var driver
+export func device() => string! uses var driver
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program
@@ -51,7 +51,7 @@ export func device(): string! uses var driver
 /// Outlines the regions the device can run, compiles them and executes the program; the card is
 /// chosen at run time with `--devices`, never by a pass parameter.
 /// @fails error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope)
-export func compile::<F>(f: F): F! uses var driver when is_function::<F>()
+export func compile::<F>(f: F) => F! uses var driver when is_function::<F>()
 
 /// Prints the operator surface of the program and consumes it: one `TILES_CENSUS` line with the
 /// number of surface operators, how many the device's capability table names and how many it does
@@ -61,7 +61,7 @@ export func compile::<F>(f: F): F! uses var driver when is_function::<F>()
 /// the list is the work the support surface has left. It reads the program where the pipeline
 /// stands, which is why `std::macro` is written before it when a derived graph's operators are to be
 /// counted.
-export func census::<F>(f: F): F! when is_function::<F>()
+export func census::<F>(f: F) => F! when is_function::<F>()
 /// The outline pass the tests drive directly, with the readings they assert as parameters rather
 /// than as environment variables: `reasons=true` prints, per operator node of the result, the
 /// declaration and the reason it is in no region (`TILES_OPERATOR_DECLARATION`,
@@ -71,4 +71,4 @@ export func census::<F>(f: F): F! when is_function::<F>()
 /// `TILES_OUTLINED` and nothing else.
 /// @fails error value `GpuScopeUnsupported` when the outlined region holds an operator the device cannot run
 with <reasons: bool = false, declarations: bool = false>
-export func test_outline_compiled::<F>(f: F): F! when is_function::<F>()
+export func test_outline_compiled::<F>(f: F) => F! when is_function::<F>()

@@ -1,50 +1,68 @@
 import { name, nodes, op, op_name, inputs, users, type_of, type_name, is_pure, callee, tags, show, constant, origin, graphs_of } from graph
 import { Graph, Node } from graph
 
-func compute(x: int): int {
+func compute(x: int) => int {
     let y = x * 2
     return y + 1
 }
 
-func wrap(x: int): int spelling {
+func wrap(x: int) => int spelling {
     return compute(x)
 }
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => 'none'
         case o => op_name(o)
     }
 }
 
-func typeText(n: Node): string {
+func typeText(n: Node) => string {
     return match type_of(n) {
         case null => 'none'
         case t => type_name(t)
     }
 }
 
-func calleeText(n: Node): string spelling {
+func calleeText(n: Node) => string spelling {
     return match callee(n) {
         case null => 'none'
         case c => name(c)
     }
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let p = main
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == 'compute' }>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == 'compute'
+    }>
     let g = found[0]
-    println(nodes(g)->map<func (n: Node) => string { show(n) }>)
-    println(nodes(g)->map<func (n: Node) => int { len(inputs(n)) }>)
-    println(nodes(g)->map<func (n: Node) => int { len(users(n)) }>)
-    println(nodes(g)->map<func (n: Node) => bool { is_pure(n) }>)
+    println(nodes(g)->map<func (n: Node) => string {
+        show(n)
+    }>)
+    println(nodes(g)->map<func (n: Node) => int {
+        len(inputs(n))
+    }>)
+    println(nodes(g)->map<func (n: Node) => int {
+        len(users(n))
+    }>)
+    println(nodes(g)->map<func (n: Node) => bool {
+        is_pure(n)
+    }>)
     println(nodes(g)->map<opText>)
     println(nodes(g)->map<typeText>)
-    println(nodes(g)->map<func (n: Node) => string { tags(n) }>)
-    println(nodes(g)->map<func (n: Node) => int? { constant::<int>(n) }>)
-    println(nodes(g)->map<func (n: Node) => bool { origin(n) > 0 }>)
-    let wrap_graph = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == 'wrap' }>
+    println(nodes(g)->map<func (n: Node) => string {
+        tags(n)
+    }>)
+    println(nodes(g)->map<func (n: Node) => int? {
+        constant::<int>(n)
+    }>)
+    println(nodes(g)->map<func (n: Node) => bool {
+        origin(n) > 0
+    }>)
+    let wrap_graph = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == 'wrap'
+    }>
     println(nodes(wrap_graph[0])->map<calleeText>)
     return wrap(1) - 3
 }

@@ -7,10 +7,10 @@
 type Shape = enum {
     Circle(float),
     Rect { w: float, h: float },
-    Empty,
+    Empty
 }
 
-func literal(n: int): int {
+func literal(n: int) => int {
     return match n {
         case 1 | 2 when n > 1 => 10
         case _ when n > 100 => 20
@@ -18,7 +18,7 @@ func literal(n: int): int {
     }
 }
 
-func variant(s: Shape): float {
+func variant(s: Shape) => float {
     return match s {
         case Shape::Rect { w, h } when h == 0.0 => 0.0
         case Shape::Rect { w, h } => w * h
@@ -28,7 +28,7 @@ func variant(s: Shape): float {
     }
 }
 
-func nullable(x: int?): int {
+func nullable(x: int?) => int {
     return match x {
         case null when false => 1
         case null => 2
@@ -37,7 +37,7 @@ func nullable(x: int?): int {
     }
 }
 
-func fallible(x: int!): int {
+func fallible(x: int!) => int {
     return match x {
         case error e when false => 5
         case error e => 6
@@ -45,12 +45,12 @@ func fallible(x: int!): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(literal(1))
     println(literal(200))
     println(literal(7))
-    println(variant(Shape::Rect { w: 2.0, h: 3.0 }))
-    println(variant(Shape::Rect { w: 2.0, h: 0.0 }))
+    println(variant(Shape::Rect{ w: 2.0, h: 3.0 }))
+    println(variant(Shape::Rect{ w: 2.0, h: 0.0 }))
     println(variant(Shape::Circle(4.0)))
     println(variant(Shape::Circle(0.5)))
     println(variant(Shape::Empty))

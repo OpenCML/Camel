@@ -4,23 +4,23 @@
  * (design principles 5.5). Every declaration says `::<...>` at its head.
  */
 
-func id::<T>(x: T): T {
+func id::<T>(x: T) => T {
     return x
 }
 
-func pair::<U>(x: U): (U, U) {
+func pair::<U>(x: U) => (U, U) {
     return (id(x), x)
 }
 
-func first::<V>(p: (V, V)): V {
+func first::<V>(p: (V, V)) => V {
     return p.0
 }
 
-func chained::<W>(x: W): W {
+func chained::<W>(x: W) => W {
     return first(pair(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(chained(7))
     println(first(pair('s')))
     return 0

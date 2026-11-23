@@ -8,12 +8,14 @@
 import { grad } from autodiff
 
 with <w: float>
-func reduced(): float {
+func reduced() => float {
     let xs = [1.0, 2.0]
-    return xs->reduce<func (acc: float, item: float) { acc + item }, w>() * 2.0
+    return xs->reduce<func (acc: float, item: float) {
+        acc + item
+    }, w>() * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(reduced)<5.0>())
     return 0
 }
