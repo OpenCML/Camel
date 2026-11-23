@@ -73,7 +73,7 @@ void printInput(
 
 const camel::runtime::Program *
 LoopInputsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!graph->hasNodePayload()) {
             continue;
         }

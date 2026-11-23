@@ -65,7 +65,7 @@
 const camel::runtime::Program *
 PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!graph->hasNodePayload()) {
             continue;
         }

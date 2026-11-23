@@ -21,7 +21,7 @@ const camel::runtime::Program *
 ChunksTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
     GCGraph *largest = nullptr;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (largest == nullptr || graph->nodeCount() > largest->nodeCount()) {
             largest = graph;
         }
@@ -35,7 +35,7 @@ ChunksTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     const gc_node_ref_t edited = blankNode(transaction);
     const Program *next = session.commit();
 
-    const GCGraph *after = next->graph(largest->id());
+    const auto *after    = next->graph(largest->id());
     const auto *before   = largest->nodePayload();
     const auto *now      = after ? after->nodePayload() : nullptr;
     size_t shared        = 0;

@@ -66,7 +66,7 @@ void moveRange(ExecPlan &plan, uint32_t first, uint32_t last, uint32_t at) {
 
 const camel::runtime::Program *
 BreakLoopRangeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         ExecPlan *plan = nullptr;
         if (!takePlan(graph, plan)) {
             continue;
@@ -119,7 +119,7 @@ BreakLoopRangeTestPass::apply(const camel::runtime::Program *program, std::ostre
 
 const camel::runtime::Program *
 InterleaveLoopRangeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         ExecPlan *plan = nullptr;
         if (!takePlan(graph, plan) || plan->loops.size() < 2) {
             continue;

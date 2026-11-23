@@ -139,11 +139,11 @@ DefinitionsTestPass::apply(const camel::runtime::Program *program, std::ostream 
 
 const camel::runtime::Program *
 ExpandDefinitionsTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph                    = program->root();
     const auto &table = OperatorTable::instance();
     rt::RuntimeGraphDraftSession session(context_, program);
     std::map<std::string, size_t> expanded;
-    for (rt::GCGraph *g : rt::collectReachableGraphs(*program, graph)) {
+    for (auto *g : rt::collectReachableGraphs(*program, graph)) {
         std::vector<rt::gc_node_ref_t> nodes;
         for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
             if (g->node(ref)->kind != rt::GCNodeKind::Oper) {

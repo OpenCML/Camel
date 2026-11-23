@@ -74,7 +74,7 @@ std::string operFormOf(const GCGraph &graph, gc_node_ref_t ref, const GCNode *no
 const camel::runtime::Program *
 OperShapeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     std::set<std::string> lines;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!graph->hasNodePayload()) {
             continue;
         }

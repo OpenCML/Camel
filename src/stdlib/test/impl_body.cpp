@@ -45,7 +45,7 @@ ImplBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         return a->name() < b->name();
     });
     os << std::format("IMPL bodies {}\n", program->implBodies().size());
-    for (camel::runtime::GCGraph *graph : graphs) {
+    for (auto *graph : graphs) {
         os << std::format(
             "IMPL graph {} body={} nodes={} edges={}\n",
             graph->name(),

@@ -57,7 +57,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     uint32_t portArm       = 0;
     gc_node_ref_t reader   = kInvalidNodeRef;
     gc_node_ref_t port     = kInvalidNodeRef;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (uint32_t r = 1; branchy == nullptr && r < graph->regionCount(); ++r) {
             const GCRegion *arm = graph->region(r);
             if (arm == nullptr || arm->kind != GCRegionKind::Arm) {
@@ -144,7 +144,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     uint32_t bodyRegion    = 0;
     gc_node_ref_t loopNode = kInvalidNodeRef;
     gc_node_ref_t bodyExit = kInvalidNodeRef;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (uint32_t r = 1; looped == nullptr && r < graph->regionCount(); ++r) {
             const GCRegion *body = graph->region(r);
             if (body == nullptr || body->kind != GCRegionKind::LoopBody) {
@@ -232,7 +232,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     // neighbour's: the port and member rules refuse other shapes of the same draft.
     const GCGraph *lostRegionGraph = nullptr;
     uint32_t lostRegion            = 0;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (uint32_t r = 1; r < graph->regionCount(); ++r) {
             const GCRegion *region = graph->region(r);
             if (region == nullptr || region->owner == kInvalidNodeRef) {
@@ -292,7 +292,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     // wrong with this graph is that the node's region is not there, which is what the refusal has
     // to name. A node of the program moved into a retired region would say the same thing and, if
     // an arm read it, would be refused by the port rule first -- a different question.
-    const GCGraph *strandedGraph = lostRegionGraph;
+    const auto *strandedGraph    = lostRegionGraph;
     if (strandedGraph == nullptr && !program->graphs().empty()) {
         strandedGraph = *program->graphs().begin();
     }
@@ -416,7 +416,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         GCGraphPayloadShape shape;
         shape.nodeCount    = 2;
         shape.regionCount  = 1;
-        const GCGraph *bad = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *bad    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regionTable[0].kind = GCRegionKind::Block;
         });
         reading("bad_body_kind_refused", bad, "as its body, which is not a root");
@@ -428,12 +428,12 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         GCGraphPayloadShape shape;
         shape.nodeCount           = 2;
         shape.regionCount         = 2;
-        const GCGraph *pastTheEnd = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *pastTheEnd    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regionTable[1].kind   = GCRegionKind::Block;
             arena.regionTable[1].parent = 2; // the table holds two regions, 0 and 1
         });
         reading("parent_out_of_range_refused", pastTheEnd, "with a parent that is not a region");
-        const GCGraph *secondRoot = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *secondRoot    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regionTable[1].kind = GCRegionKind::Root; // a body that is not region 0
         });
         reading("root_outside_body_refused", secondRoot, "with a parent that is not a region");
@@ -444,7 +444,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         GCGraphPayloadShape shape;
         shape.nodeCount      = 2;
         shape.regionCount    = 3;
-        const GCGraph *cycle = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *cycle    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regionTable[1].kind   = GCRegionKind::Block;
             arena.regionTable[1].parent = 2;
             arena.regionTable[2].kind   = GCRegionKind::Block;
@@ -459,7 +459,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         shape.nodeCount        = 2;
         shape.regionCount      = 2;
         shape.regionPortCount  = 2;
-        const GCGraph *outside = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *outside    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regionTable[1].kind      = GCRegionKind::Block;
             arena.regionTable[1].portBegin = 2;
             arena.regionTable[1].portCount = 1;
@@ -476,7 +476,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     //    (which commit reports as "reads port ...", the rule the two cases above pin).
     const GCGraph *armed = nullptr;
     uint32_t armRegion   = 0;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         for (uint32_t r = 1; armed == nullptr && r < graph->regionCount(); ++r) {
             const GCRegion *region = graph->region(r);
             if (region != nullptr && region->kind == GCRegionKind::Arm) {
@@ -525,7 +525,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         shape.nodeCount          = 2;
         shape.regionCount        = 1;
         shape.regions            = true; // the graph carries a region column
-        const GCGraph *pastCount = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *pastCount    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regions[0] = 5; // a region the table does not have
             arena.regions[1] = 0;
         });
@@ -538,7 +538,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         GCGraphPayloadShape shape;
         shape.nodeCount          = 2;
         shape.regionCount        = 2;
-        const GCGraph *badResult = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *badResult    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regionTable[1].kind   = GCRegionKind::Block;
             arena.regionTable[1].result = 2; // two nodes, so 2 names none
         });
@@ -546,7 +546,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
             "result_ref_missing_refused",
             badResult,
             "that names a node the graph does not have");
-        const GCGraph *badCallSite = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+        const auto *badCallSite    = frozenCase(shape, [](GCGraphPayloadArena &arena) {
             arena.regionTable[1].kind     = GCRegionKind::Inline;
             arena.regionTable[1].callSite = 2;
         });
@@ -559,7 +559,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     // The largest graph that has arms, if any has, so that they are among the regions it keeps.
     GCGraph *largest   = nullptr;
     const auto hasArms = [](const GCGraph *graph) { return graph->regionCount() > 1; };
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (largest == nullptr || (hasArms(graph) && !hasArms(largest)) ||
             (hasArms(graph) == hasArms(largest) && graph->nodeCount() > largest->nodeCount())) {
             largest = graph;
@@ -613,7 +613,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     draft.setRegionPorts(outer, std::span<const gc_node_ref_t>(&outerPort, 1));
     const Program *next = session.commit();
 
-    const GCGraph *after = next->graph(largest->id());
+    const auto *after    = next->graph(largest->id());
     size_t inInner = 0, inOuter = 0;
     for (gc_node_ref_t id = 0; after && id < after->nodeCount(); ++id) {
         inInner += after->nodeRegion(id) == inner;

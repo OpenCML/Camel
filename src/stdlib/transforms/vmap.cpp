@@ -437,7 +437,7 @@ VmapGraph buildVmapGraph(
                 return rt::kInvalidNodeRef;
             }
             std::string calleeWhy;
-            const rt::GCGraph *callee = calleeGraphOf(
+            const auto *callee        = calleeGraphOf(
                 entry->instances[at],
                 match.rule.rhsCallee,
                 calleeWhy);
@@ -669,7 +669,7 @@ VmapGraph buildVmapGraph(
                 // `camel/core/forward.h#vmapRuleByHead`, which is this family's question and names
                 // the family itself. The answer is the rule object, whose `rhsCallee` is the name
                 // the batched body calls: nothing here looks a rule set up by name.
-                const rt::GCGraph *callee = program->calleeOf(*function, ref);
+                const auto *callee        = program->calleeOf(*function, ref);
                 const std::string name =
                     callee != nullptr ? leafNameOf(callee->name()) : std::string();
                 const size_t operands = function->normInputsOf(ref).size();
@@ -829,7 +829,7 @@ VmapGraph buildVmapGraph(
         draft.setReturnNode(liftedValue, rt::GCReturnKind::Self);
     }
     group.encode();
-    const rt::GCGraph *made = group.encoded(member);
+    const auto *made        = group.encoded(member);
     const auto *madeType    = made != nullptr ? made->funcType() : nullptr;
     std::string rules;
     for (const std::string &rule : usedRules) {

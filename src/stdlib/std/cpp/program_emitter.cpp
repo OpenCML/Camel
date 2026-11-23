@@ -298,7 +298,7 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
     for (size_t i = 0; i < functions.size(); ++i) {
         auto *graph = functions[i];
         probes[i]->definition();
-        for (const GCGraph *callee : probes[i]->tailCallees()) {
+        for (const auto *callee : probes[i]->tailCallees()) {
             calls[graph].push_back(const_cast<GCGraph *>(callee));
         }
         result[graph] = parts_.values.type(graph->funcType()->exitType()).value_or("");

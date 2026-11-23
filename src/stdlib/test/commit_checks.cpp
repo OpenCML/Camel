@@ -30,6 +30,8 @@
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/resources.h"
 
+#include "graph/graph_view.h"
+
 #include <algorithm>
 #include <span>
 #include <utility>
@@ -63,7 +65,7 @@ bool writesOutside(const Program &program, const GCGraph *graph) {
 /// Whether two graphs publish function types of the same shape: the same `with` and ordinary
 /// parameter types and the same exit type. What differs between them, when the two pass this, is
 /// the resource clause -- which is exactly what the fold below moves from one to the other.
-bool sameShape(const GCGraph &a, const GCGraph &b) {
+bool sameShape(const camel::graph::GraphView &a, const camel::graph::GraphView &b) {
     const auto *left  = a.funcType();
     const auto *right = b.funcType();
     if (left == nullptr || right == nullptr) {
@@ -107,7 +109,7 @@ SameShapePair findSameShapePair(const Program &program) {
     };
     std::vector<Call> quiet;
     std::vector<Call> noisy;
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -116,7 +118,7 @@ SameShapePair findSameShapePair(const Program &program) {
             if (node == nullptr || node->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = program.calleeOf(*graph, ref);
+            const auto *callee    = program.calleeOf(*graph, ref);
             if (callee == nullptr || callee == graph) {
                 continue;
             }
@@ -125,7 +127,8 @@ SameShapePair findSameShapePair(const Program &program) {
     }
     for (const Call &loud : noisy) {
         for (const Call &soft : quiet) {
-            if (loud.callee == soft.callee || !sameShape(*loud.callee, *soft.callee)) {
+            if (loud.callee == soft.callee ||
+                !sameShape(loud.callee->view(), soft.callee->view())) {
                 continue;
             }
             return SameShapePair{loud.callee, soft.callee};
@@ -152,7 +155,7 @@ const Program *foldTypeOf(
     gc_node_ref_t chosenGraph = kInvalidNodeRef;
     gc_node_ref_t chosenValue = kInvalidNodeRef;
     const GCGraph *chosenAt   = nullptr;
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -210,18 +213,26 @@ struct ConsoleWrite {
     gc_node_ref_t node   = kInvalidNodeRef;
 };
 
+/// Whether `ref` is a node of `graph` that writes the console. `println` in the prelude is
+/// `#op(':io/println')` (stdlib/prelude.cml), so a node that names that operator writes `stdout`,
+/// and a node this file adds with the same uri writes it too: one resource, two writers. The
+/// question is the node's operator, asked of the graph's face, rather than a payload read.
+bool writesTheConsole(const camel::graph::GraphView &graph, gc_node_ref_t ref) {
+    const camel::core::OperId oper = graph.operatorOf(ref);
+    return oper != camel::core::kNoOper &&
+           camel::core::OperatorTable::instance().uri(oper) == kPrintUri;
+}
+
 ConsoleWrite findPrint(const Program &program) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
-        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-            const GCNode *node = graph->node(ref);
-            if (node == nullptr || node->kind != GCNodeKind::Oper) {
-                continue;
-            }
-            const auto *body = graph->nodeBodyAs<GCOperBody>(ref);
-            if (body != nullptr && std::string_view(body->uri()) == kPrintUri) {
+        // The walk is over the nodes the face answers, so a place that is not a node -- a removed
+        // one, a draft's placeholder, a branch's JOIN -- is not visited: none of them writes.
+        const camel::graph::GraphView &face = graph->view();
+        for (const auto ref : face.nodes()) {
+            if (writesTheConsole(face, ref)) {
                 return ConsoleWrite{graph, ref};
             }
         }
@@ -281,7 +292,7 @@ void sayWhatTheDraftAdded(std::ostream &out, const char *who, std::string_view a
 /// capture, no `anyOf` and no effect outside the program. That is the type a splice into the body
 /// has to reach past, and the type of the quiet half of the fixture. `pure()` is the analysis's own
 /// answer to it, so this does not decide it a second time.
-bool declaresNothing(const GCGraph &graph) {
+bool declaresNothing(const camel::graph::GraphView &graph) {
     const auto *type = graph.funcType();
     return type != nullptr && type->resources().pure();
 }
@@ -299,7 +310,7 @@ struct BranchArm {
 /// can name, and the region tree is the graph's: this reads the frozen graph, because a draft is
 /// only what a graph is about to become.
 BranchArm findBranchArm(const Program &program) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -335,7 +346,7 @@ struct SiblingArms {
 };
 
 SiblingArms findSiblingArms(const Program &program) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -417,7 +428,7 @@ struct LoopBodyRead {
 };
 
 LoopBodyRead findLoopBodyRead(const Program &program) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr || !graph->hasNodePayload()) {
             continue;
         }
@@ -524,7 +535,7 @@ struct SignatureTrio {
 
 /// The parameter lists, and not the exit types: a draft that writes a new signature writes both
 /// halves at once, and the half this pass is about is the one a call site is checked against.
-bool sameParameterCount(const GCGraph &a, const GCGraph &b) {
+bool sameParameterCount(const camel::graph::GraphView &a, const camel::graph::GraphView &b) {
     const auto *left  = a.funcType();
     const auto *right = b.funcType();
     return left != nullptr && right != nullptr &&
@@ -532,7 +543,7 @@ bool sameParameterCount(const GCGraph &a, const GCGraph &b) {
            left->withTypesCount() == right->withTypesCount();
 }
 
-bool sameParameterTypes(const GCGraph &a, const GCGraph &b) {
+bool sameParameterTypes(const camel::graph::GraphView &a, const camel::graph::GraphView &b) {
     const auto *left  = a.funcType();
     const auto *right = b.funcType();
     if (!sameParameterCount(a, b)) {
@@ -553,7 +564,7 @@ bool sameParameterTypes(const GCGraph &a, const GCGraph &b) {
 
 SignatureTrio findSignatureTrio(const Program &program) {
     std::vector<const GCGraph *> called;
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -562,7 +573,7 @@ SignatureTrio findSignatureTrio(const Program &program) {
             if (node == nullptr || node->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = program.calleeOf(*graph, ref);
+            const auto *callee    = program.calleeOf(*graph, ref);
             if (callee == nullptr || callee == graph) {
                 continue;
             }
@@ -571,14 +582,15 @@ SignatureTrio findSignatureTrio(const Program &program) {
             }
         }
     }
-    for (const GCGraph *taken : called) {
+    for (const auto *taken : called) {
         const GCGraph *different = nullptr;
         const GCGraph *same      = nullptr;
-        for (const GCGraph *other : called) {
-            if (other == taken || !sameParameterCount(*taken, *other)) {
+        for (const auto *other : called) {
+            if (other == taken ||
+                !sameParameterCount(taken->view(), other->view())) {
                 continue;
             }
-            if (sameParameterTypes(*taken, *other)) {
+            if (sameParameterTypes(taken->view(), other->view())) {
                 if (same == nullptr) {
                     same = other;
                 }
@@ -912,8 +924,8 @@ CommitEffectTestPass::apply(const camel::runtime::Program *program, std::ostream
     // (a printing body under a type that declares nothing), reached by the door a rewrite actually
     // uses: a spliced node, not a replaced type.
     const GCGraph *quiet = nullptr;
-    for (const GCGraph *graph : program->graphs()) {
-        if (graph != nullptr && graph->nodeCount() > 1 && declaresNothing(*graph)) {
+    for (const auto *graph : program->graphs()) {
+        if (graph != nullptr && graph->nodeCount() > 1 && declaresNothing(graph->view())) {
             quiet = graph;
             break;
         }
@@ -1025,7 +1037,7 @@ CommitCycleTestPass::apply(const camel::runtime::Program *program, std::ostream 
         << std::flush;
     const GCGraph *graph = nullptr;
     gc_node_ref_t node   = kInvalidNodeRef;
-    for (const GCGraph *candidate : program->graphs()) {
+    for (const auto *candidate : program->graphs()) {
         if (candidate == nullptr) {
             continue;
         }
@@ -1088,16 +1100,16 @@ CommitAncestorTestPass::apply(const camel::runtime::Program *program, std::ostre
     // is left in the body is a write and a branch that waits for nothing from it and is waited on by
     // nothing of it.
     gc_node_ref_t bodyWrite = kInvalidNodeRef;
-    for (gc_node_ref_t ref = 0; ref < arm.graph->nodeCount(); ++ref) {
-        const GCNode *node = arm.graph->node(ref);
-        if (node == nullptr || node->kind != GCNodeKind::Oper ||
-            arm.graph->nodeRegion(ref) != 0) {
-            continue;
-        }
-        const auto *body = arm.graph->nodeBodyAs<GCOperBody>(ref);
-        if (body != nullptr && std::string_view(body->uri()) == kPrintUri) {
-            bodyWrite = ref;
-            break;
+    {
+        const camel::graph::GraphView &face = arm.graph->view();
+        for (const auto ref : face.nodes()) {
+            if (face.regionOf(ref) != 0) {
+                continue;
+            }
+            if (writesTheConsole(face, ref)) {
+                bodyWrite = ref;
+                break;
+            }
         }
     }
     if (bodyWrite == kInvalidNodeRef) {
@@ -1228,20 +1240,11 @@ struct ChainedPrints {
     bool readsFirst      = false;
 };
 
-/// Whether `node` is a node of `graph` that writes the console. `println` in the prelude is
-/// `#op(':io/println')` (stdlib/prelude.cml), so a node with this uri writes `stdout` and a node this
-/// file writes it at too is a second writer of one resource.
-bool isPrint(const GCGraph &graph, gc_node_ref_t ref) {
-    const GCNode *node = graph.node(ref);
-    if (node == nullptr || node->kind != GCNodeKind::Oper) {
-        return false;
-    }
-    const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
-    return body != nullptr && std::string_view(body->uri()) == kPrintUri;
-}
-
-bool readsValue(const GCGraph &graph, gc_node_ref_t reader, gc_node_ref_t value) {
-    for (gc_node_ref_t input : graph.normInputsOf(reader)) {
+/// Whether a node reads a value: the ordinary inputs of the reader. The question is the graph's
+/// shape, so it is asked of its face.
+bool readsValue(
+    const camel::graph::GraphView &graph, gc_node_ref_t reader, gc_node_ref_t value) {
+    for (const gc_node_ref_t input : graph.inputs(reader, camel::graph::PortGroup::Normal)) {
         if (input == value) {
             return true;
         }
@@ -1250,20 +1253,24 @@ bool readsValue(const GCGraph &graph, gc_node_ref_t reader, gc_node_ref_t value)
 }
 
 /// The first chained pair of prints in the program whose second write reads its first the given way.
+/// The walk is over the stored places because it asks `waitInputsOf` -- a block's chain is control
+/// inputs, which the graph's face does not answer as edges -- so the frozen graph is the face's
+/// owner here and the predicate is asked of the face.
 ChainedPrints findChainedPrints(const Program &program, bool readsFirst) {
-    for (const GCGraph *graph : program.graphs()) {
+    for (const auto *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
         }
+        const camel::graph::GraphView &face = graph->view();
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-            if (!isPrint(*graph, ref)) {
+            if (!writesTheConsole(face, ref)) {
                 continue;
             }
             for (gc_node_ref_t wait : graph->waitInputsOf(ref)) {
-                if (!isPrint(*graph, wait)) {
+                if (!writesTheConsole(face, wait)) {
                     continue;
                 }
-                const bool reads = readsValue(*graph, ref, wait);
+                const bool reads = readsValue(face, ref, wait);
                 if (reads == readsFirst) {
                     return ChainedPrints{graph, wait, ref, reads};
                 }
@@ -1418,7 +1425,7 @@ CommitMadeGraphPortsTestPass::apply(const camel::runtime::Program *program, std:
     // commit must refuse it, and the diagnostic must name the parameter.
     {
         RuntimeGraphDraftSession session(context_, current);
-        GCGraph *made = makeGraphWithOnePort(
+        auto *made    = makeGraphWithOnePort(
             context_,
             camel::core::type::Type::Int32(),
             camel::core::type::Type::Float32(),
@@ -1444,7 +1451,7 @@ CommitMadeGraphPortsTestPass::apply(const camel::runtime::Program *program, std:
     // refused", which is a reading of neither rule.
     {
         RuntimeGraphDraftSession session(context_, current);
-        GCGraph *made = makeGraphWithOnePort(
+        auto *made    = makeGraphWithOnePort(
             context_,
             camel::core::type::Type::Int32(),
             camel::core::type::Type::Int32(),
@@ -1520,7 +1527,7 @@ CommitMadeGraphOrderTestPass::apply(const camel::runtime::Program *program, std:
     // check (the graph is new, so the whole graph is the scope) and must refuse the pair.
     {
         RuntimeGraphDraftSession session(context_, current);
-        GCGraph *made = makeGraphWithTwoPrints(
+        auto *made    = makeGraphWithTwoPrints(
             context_, /*ordered=*/false, "test$made_order_unordered", "made$unordered");
         session.noteMadeGraph(made);
         out << "commit_made_order: made graph '" << made->name()
@@ -1580,7 +1587,7 @@ ValueRetypeTwiceTestPass::apply(const camel::runtime::Program *program, std::ost
     gc_node_ref_t site    = kInvalidNodeRef;
     size_t slot           = 0;
     GraphId calleeId{};
-    for (const GCGraph *graph : program->graphs()) {
+    for (const auto *graph : program->graphs()) {
         if (graph == nullptr) {
             continue;
         }
@@ -1617,7 +1624,7 @@ ValueRetypeTwiceTestPass::apply(const camel::runtime::Program *program, std::ost
             << std::flush;
         return program;
     }
-    const GCGraph *callee = program->graph(calleeId);
+    const auto *callee    = program->graph(calleeId);
     const auto *base      = callee->funcType();
     if (base == nullptr) {
         out << "value_retype_twice: graph '" << callee->name() << "' carries no type, so there is "
@@ -1666,7 +1673,7 @@ ValueRetypeTwiceTestPass::apply(const camel::runtime::Program *program, std::ost
     const Program *staged = session.prepared();
     const auto readBack    = [](const Program &held, const GCGraph *graph, GraphId wanted) {
         std::string said = "<no value>";
-        const GCGraph *copy = held.graph(graph->id());
+        const auto *copy    = held.graph(graph->id());
         if (copy == nullptr) {
             return std::string("<no copy>");
         }

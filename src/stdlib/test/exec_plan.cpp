@@ -23,7 +23,7 @@
 const camel::runtime::Program *
 ExecPlanTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
-    for (GCGraph *graph : program->graphs()) {
+    for (auto *graph : program->graphs()) {
         if (!graph->hasNodePayload()) {
             continue;
         }
