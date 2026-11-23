@@ -8,6 +8,7 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
+| lane/nn-element-type | 作者裁定：nn 算子的元素类型随入参（`conv2d` 一族、`pool` 一族、`bn` 一族、`shapedLike`、两个 softmax 梯度）；`conv2d_shape_error` 的返回声明改 `f64[...]`，它问的是几何 | `export_train_step_conv` 红→绿；`feat/modules` 44 红，逐名对 base `0d72639d9` 只差这一条（另一条只在车道上的 `compiled_region_parallel` 是 tiles 并行 SIGSEGV，单跑 `tiles.plan.toml` 绿、用例不 import nn） | `feat/modules` 2082/2028/44/7/3、`feat/compile` 2672/2666/1红/5known（那 1 红是既有 `vmap_batches_the_element_of_a_row.prl`）、`smoke` 10/10/0、`feat/parse` 125/126（红在 `src/stdlib/prelude.cml` 的旧记录行，base 就有，属语料那一笔） | `export_train_step_bn` 仍红在 BN 反向；`prelude.cml` 那行等语料那一笔覆盖，不在这里重录 | 2026-11-23 19:33 |
 | lane/notation-corpus | `D-1123-31` 第 4 条：4,252 个 `.cml` 的旧返回类型写法与残留 `f..g` 用格式化器一次过，**然后**再删解析器旧分支；冲突时重跑格式化器 | 语料 **4254 → 0**、解析器旧分支已删（`eb20efab7`、`0b93cbf6f`）；`camel-format` 改 4,163 文件；幂等 4253/4254，唯一例外 `comparison_across_lines.cml` 是**故意保留换行**（它钉的就是行尾 `>`）；`f..g` 14 处手改为 `<>`（格式化器只加空格、分不出区间）；`ast_hashes.txt` 用 `-UpdateAstHashes` 重录 4,097 行 | `feat/parse` 126/126/0、`smoke` 10/10/0；`feat/compile` 2669 里 **130 红**，逐条判完 **甲 12 / 乙 1** | **修 `camel-format` 的 `visitStrayPositional`**（见下），再按 CST 逐文件对照证明没丢第二处，然后重录一次 | 2026-11-23 18:36 |
 
 ## 已合入（本小时，18:00 之后）

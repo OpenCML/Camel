@@ -65,6 +65,13 @@ bool isIntegerCode(const std::optional<TypeCode> &code) {
     return !code || *code == TypeCode::Int32 || *code == TypeCode::Int64;
 }
 
+/// The element type an nn operator's answer follows its operand's: the operand's own when its
+/// facts state one, and f32 when they do not (a bare `Tensor`). The answer is not the registry's
+/// to fix; a model in f64 stays in f64 across a convolution, a pooling window or a batch norm.
+TypeCode elementTypeOf(const TensorFacts &facts) {
+    return facts.dtype.value_or(TypeCode::Float32);
+}
+
 /// Class labels: an int array or a rank-1 integer tensor, read as int64.
 std::vector<int64_t> labelArg(ArgsView &args, size_t index, std::string_view op) {
     Type *type = args.type(index);
@@ -111,9 +118,10 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
     if ((x.shape && x.shape->size() != 4) || (w.shape && w.shape->size() != 4)) {
         return std::nullopt;
     }
+    const TypeCode elem = elementTypeOf(x);
     if (known(x.shape) && known(w.shape) && stride && pad) {
         return tensorOf(
-            TypeCode::Float32,
+            elem,
             knownShape(k::conv2dShape(kernelExtents(*x.shape), kernelExtents(*w.shape), *stride, *pad)));
     }
     StaticShape out(4, std::nullopt);
@@ -123,7 +131,7 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
     if (w.shape) {
         out[1] = (*w.shape)[0];
     }
-    return tensorOf(TypeCode::Float32, out);
+    return tensorOf(elem, out);
 }
 
 slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -158,10 +166,12 @@ slot_t conv2dBiasGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-/// Gradient operators return a tensor shaped like argument `index`.
+/// Gradient operators return a tensor shaped like argument `index`, and its element type follows
+/// that argument: a gradient has the type of the value it is the gradient of.
 InferFn shapedLike(size_t index) {
     return [index](const InferContext &ctx) -> std::optional<Type *> {
-        return tensorOf(TypeCode::Float32, ctx.facts(index).shape);
+        const TensorFacts shaped = ctx.facts(index);
+        return tensorOf(elementTypeOf(shaped), shaped.shape);
     };
 }
 
@@ -202,17 +212,17 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
     const auto kernel = ctx.constInt(1);
     const auto stride = ctx.has(2) ? ctx.constInt(2) : kernel;
     const auto pad    = optConstInt(ctx, 3, 0);
+    const TypeCode elem = elementTypeOf(x);
     if (known(x.shape) && kernel && stride && pad) {
         const k::Window2d window{*kernel, *kernel, *stride, *stride, *pad, *pad};
-        return tensorOf(
-            TypeCode::Float32, knownShape(k::pool2dShape(kernelExtents(*x.shape), window)));
+        return tensorOf(elem, knownShape(k::pool2dShape(kernelExtents(*x.shape), window)));
     }
     StaticShape out(4, std::nullopt);
     if (x.shape) {
         out[0] = (*x.shape)[0];
         out[1] = (*x.shape)[1];
     }
-    return tensorOf(TypeCode::Float32, out);
+    return tensorOf(elem, out);
 }
 
 /**
@@ -388,11 +398,12 @@ std::optional<Type *> batchNormTrainInfer(const InferContext &ctx) {
     if (x.shape && x.shape->size() < 2) {
         return std::nullopt;
     }
+    const TensorFacts mean = ctx.facts(3), var = ctx.facts(4);
     return TupleType::create(
         std::vector<Type *>{
-            tensorOf(TypeCode::Float32, x.shape),
-            tensorOf(TypeCode::Float32, ctx.facts(3).shape),
-            tensorOf(TypeCode::Float32, ctx.facts(4).shape)});
+            tensorOf(elementTypeOf(x), x.shape),
+            tensorOf(elementTypeOf(mean), mean.shape),
+            tensorOf(elementTypeOf(var), var.shape)});
 }
 
 slot_t batchNormTrainGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -414,11 +425,12 @@ slot_t batchNormTrainGradKernel(ArgsView &, ArgsView &norm, context::Context &) 
 
 /// batch_norm_train_grad(x, gamma, dy): (dx like x, dgamma/dbeta like gamma).
 std::optional<Type *> batchNormTrainGradInfer(const InferContext &ctx) {
+    const TensorFacts x = ctx.facts(0), gamma = ctx.facts(1);
     return TupleType::create(
         std::vector<Type *>{
-            tensorOf(TypeCode::Float32, ctx.facts(0).shape),
-            tensorOf(TypeCode::Float32, ctx.facts(1).shape),
-            tensorOf(TypeCode::Float32, ctx.facts(1).shape)});
+            tensorOf(elementTypeOf(x), x.shape),
+            tensorOf(elementTypeOf(gamma), gamma.shape),
+            tensorOf(elementTypeOf(gamma), gamma.shape)});
 }
 
 // ------------------------------------------------------------------ embedding / loss
@@ -440,7 +452,7 @@ std::optional<Type *> embeddingInfer(const InferContext &ctx) {
     if (table.shape && table.shape->size() == 2) {
         out[1] = (*table.shape)[1];
     }
-    return tensorOf(table.dtype, out);
+    return tensorOf(elementTypeOf(table), out);
 }
 
 slot_t embeddingTableGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -816,7 +828,8 @@ std::vector<OpDef> nnTensorOps() {
                 if (target.dtype && isIntegerCode(target.dtype)) {
                     return std::nullopt; // integer targets select the labels overload
                 }
-                return tensorOf(TypeCode::Float32, ctx.facts(0).shape);
+                const TensorFacts logits = ctx.facts(0);
+                return tensorOf(elementTypeOf(logits), logits.shape);
             },
             .kernel = &softmaxCrossEntropyGradKernel,
             .traits = kPure});
@@ -842,7 +855,8 @@ std::vector<OpDef> nnTensorOps() {
                 if (!target.dtype || !isIntegerCode(target.dtype)) {
                     return std::nullopt;
                 }
-                return tensorOf(TypeCode::Float32, ctx.facts(0).shape);
+                const TensorFacts logits = ctx.facts(0);
+                return tensorOf(elementTypeOf(logits), logits.shape);
             },
             .kernel = &softmaxCrossEntropyLabelsGradKernel,
             .traits = kPure});

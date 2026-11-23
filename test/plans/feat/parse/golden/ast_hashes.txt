@@ -3061,6 +3061,7 @@ cd77d2e1477deacc ok test/cases/modules/autodiff/second_order_refused_vjp.cml
 d2dd88f7800b6525 ok test/cases/modules/autodiff/slice_grad.cml
 7f6e92ee1a8cc190 ok test/cases/modules/autodiff/slice_grad_negative_step.cml
 e8e4da97fcb524ae ok test/cases/modules/autodiff/slice_open_end.cml
+983772a5d30f31bb ok test/cases/modules/autodiff/struct_member_read_grad.cml
 0965607e93a9c7bf ok test/cases/modules/autodiff/tensor_grad_check.cml
 7180668b579bfd14 ok test/cases/modules/autodiff/transform_rules.cml
 554f094bc9bd1045 ok test/cases/modules/autodiff/transpose_needs_parameter_shape.cml
@@ -3197,7 +3198,7 @@ ea5e20ed654e2917 ok test/cases/modules/nn/checkpoint_tensor.cml
 a29ba56f51835b31 ok test/cases/modules/nn/checkpoint_unsupported_leaf.cml
 0bf82ebb684d628a ok test/cases/modules/nn/checkpoint_unsupported_load.cml
 abea62f5bde75aff ok test/cases/modules/nn/conv2d_grad_sanity.cml
-72ba46948540cf06 ok test/cases/modules/nn/conv2d_shape_error.cml
+6692c1c6ea1a5a1b ok test/cases/modules/nn/conv2d_shape_error.cml
 b6af5ba393c9f039 ok test/cases/modules/nn/embedding_grad_sanity.cml
 ab2a3d1ee4f50942 ok test/cases/modules/nn/embedding_index_error.cml
 34b48f7d991a18a1 ok test/cases/modules/nn/embedding_mf.cml
