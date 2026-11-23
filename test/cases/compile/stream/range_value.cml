@@ -1,0 +1,15 @@
+// A range is a value of the library's named type `Range`, not an array (design principles 5.4):
+// `to_range(a, b, s)` writes its three numbers down, `to_array` is the conversion from it to the
+// integers it names, and `is_empty` asks whether it names any. The interval `a..b` still builds the
+// array `range(a, b, 1)`, so a range is written with `to_range` here and nowhere becomes the
+// operand of `..`. The prelude brings these names only to a program that imports them, the type
+// included: `Range` is not in the ambient layer, so a program that annotates one imports it.
+
+import { Range, to_range, to_array, is_empty } from prelude
+
+func main(): int sync {
+    let r: Range = to_range(1, 5, 1)
+    println(r->to_array())
+    println(r->is_empty())
+    return 0
+}
