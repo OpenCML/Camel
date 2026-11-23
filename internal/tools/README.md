@@ -193,6 +193,14 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   local one;
 - `run-registry.jsonl` is one compact JSON line per run snapshot, keyed by `runId`, so several
   concurrent host runs are a list instead of one overwritten slot;
+- a host run's line carries the width it actually ran at: `jobs` (the plan, from the plan slot or,
+  for a `time_sensitive = true` plan, the whole host), `buildJobs` (the build, from the build slot),
+  and `jobsRequested` (what `-Jobs` said on the command line). They are separate because they are
+  separate facts. The host script sets the budget from the slot number it holds — 8 per build slot,
+  16 for the plan slot, 32 for a run holding all three, which is the core count — and `-Jobs` can
+  only narrow it: `-Jobs 32` in a build slot builds 8-wide, `-Jobs 4` builds 4-wide. So a `jobs`
+  that disagrees with `jobsRequested` is the mechanism working. A convention ("load is high, lower
+  `-Jobs` by hand") is not a mechanism: it is forgotten exactly when it matters.
 - all three are advisory: a locked or unwritable file never fails a build or a plan.
 ## The two DSH plugins
 

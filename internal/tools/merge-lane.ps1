@@ -132,8 +132,23 @@ try {
         exit 0
     }
 
-    & git commit --no-edit 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Stop-With 'git commit failed' 'The merge is in the index and not in a commit.' }
+    # git merge with -m has already made the commit; a second commit has nothing to do. What is worth
+    # checking is that HEAD is that merge and not something else.
+    if (-not (Test-Path (Join-Path $MainCheckout '.git\MERGE_HEAD'))) {
+        $parents = @(& git rev-list --parents -n 1 HEAD 2>$null | ForEach-Object { $_.Split(' ') })
+        if ($parents.Count -lt 3) {
+            Stop-With 'HEAD is not a merge commit' "HEAD $(& git rev-parse --short HEAD) has $($parents.Count - 1) parent(s). A merge that did not happen also lands the branch check, so this is checked separately."
+        }
+    }
+
+    # A file without a header has already stopped one CI run before it built anything. The check is
+    # cheap and local, so it runs here, before the push.
+    $headers = & node (Join-Path $MainCheckout 'scripts\headers.mjs') --check 2>&1
+    $headersExit = $LASTEXITCODE
+    $headers | Select-Object -Last 2 | ForEach-Object { "  $_" }
+    if ($headersExit -ne 0) {
+        Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.'
+    }
 
     for ($i = 1; $i -le 3; $i++) {
         & git push origin develop 2>&1 | Select-Object -Last 1
