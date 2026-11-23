@@ -2,7 +2,7 @@
 // that has to be pure.
 // Run: camel docs/tutorial/examples/10_exercise.cml
 
-func sum_upto(n: int): int sync {
+func sum_upto(n: int) => int sync {
     var total = 0
     loop i = 1 while i <= n do sync {
         total += i
@@ -11,15 +11,15 @@ func sum_upto(n: int): int sync {
     return total
 }
 
-func apply(f: (x: int) => int pure, x: int): int {
+func apply(f: (x: int) => int pure, x: int) => int {
     return f(x)
 }
 
-func square(x: int): int pure {
+func square(x: int) => int pure {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum_upto(4))
     println(apply(square, 5))
     return 0

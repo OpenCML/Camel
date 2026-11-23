@@ -3,6 +3,6 @@
 
 import ..lib
 
-export func name(): string {
+export func name() => string {
     return lib::name()
 }

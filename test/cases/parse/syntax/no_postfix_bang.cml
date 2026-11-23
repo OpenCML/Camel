@@ -5,7 +5,7 @@
  * (`Expected ',' or ')' before '!'`). It was a `ConstructNotSupported`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a = 1
     let b = (a!) + 1
     println('never printed')

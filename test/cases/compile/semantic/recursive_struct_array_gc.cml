@@ -7,7 +7,7 @@
 
 type Node = { value: int, children: Node[] }
 
-func total(node: Node): int sync {
+func total(node: Node) => int sync {
     var acc = node.value
     let _ = loop i = 0 while i < len(node.children) do sync {
         acc += total(node.children[i])
@@ -16,13 +16,13 @@ func total(node: Node): int sync {
     return acc
 }
 
-func main(): void sync {
+func main() => void sync {
     let kept: Node = {
         value: 1,
         children: [
             { value: 2, children: [] },
-            { value: 3, children: [{ value: 4, children: [] }] },
-        ],
+            { value: 3, children: [{ value: 4, children: [] }] }
+        ]
     }
     // More than the ten inline slots: the children live in a FixedArray, which the collector
     // relocates and traces the same way.
@@ -40,8 +40,8 @@ func main(): void sync {
             { value: 9, children: [] },
             { value: 10, children: [] },
             { value: 11, children: [] },
-            { value: 12, children: [] },
-        ],
+            { value: 12, children: [] }
+        ]
     }
     var sink = 0
     let _ = loop i = 0 while i < 32 do sync {

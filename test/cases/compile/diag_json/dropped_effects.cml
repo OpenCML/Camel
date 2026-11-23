@@ -9,44 +9,45 @@
  * Output: `operator`, `noisy` three times (lines 32, 33 and 36), `4`, `arm`, `kept 1`, `0 5`.
  */
 
-func noisy(x: int): int sync {
+func noisy(x: int) => int sync {
     println('noisy')
     return x
 }
 
-func modify(var x: int): int sync {
+func modify(var x: int) => int sync {
     x += 1
     return 0
 }
 
-func declared(x: int): int {
+func declared(x: int) => int {
     return x
 }
 
-func quiet(x: int): int {
+func quiet(x: int) => int {
     return x + 1
 }
 
-func dropped(): int {
+func dropped() => int {
     var i = 5
     var j = 5
-    println('operator')              // RUNS line 33: a write of stdout, and this region runs
-    noisy(1)                         // RUNS line 34: a call whose callee writes stdout
-    let unused = noisy(2)            // RUNS line 35: the same call, bound to a name nothing reads
-    modify(i)                        // WARNED line 36: writes a `var` cell, which is not outside
-    j = 7                            // WARNED line 37: an assignment nothing reads afterwards
-    println(noisy(4))                // RUNS line 38: the write runs, and reads its argument
-    if quiet(0) > 0 then sync {      // RUNS line 39: a branch statement, and the arm it takes
+    println('operator') // RUNS line 33: a write of stdout, and this region runs
+    noisy(1) // RUNS line 34: a call whose callee writes stdout
+    let unused = noisy(2) // RUNS line 35: the same call, bound to a name nothing reads
+    modify(i) // WARNED line 36: writes a `var` cell, which is not outside
+    j = 7 // WARNED line 37: an assignment nothing reads afterwards
+    println(noisy(4)) // RUNS line 38: the write runs, and reads its argument
+    if quiet(0) > 0 then sync {
+        // RUNS line 39: a branch statement, and the arm it takes
         println('arm')
     } else sync {
         println('other arm')
     }
-    quiet(1)                         // pure: no warning
-    let also_unused = quiet(2) + 1   // pure: no warning
+    quiet(1) // pure: no warning
+    let also_unused = quiet(2) + 1 // pure: no warning
     return 0
 }
 
-func kept(): int sync {
+func kept() => int sync {
     var i = 5
     println('kept {}'->format<noisy_free(1)>)
     modify(i)
@@ -54,11 +55,11 @@ func kept(): int sync {
     return i
 }
 
-func noisy_free(x: int): int {
+func noisy_free(x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = dropped()
     let b = kept()
     println('{} {}'->format<a, b - 1>)

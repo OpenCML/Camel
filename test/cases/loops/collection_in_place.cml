@@ -5,7 +5,7 @@
 // entry would be the same final array. The collector falls back to the copying append instead of
 // refusing the program as an internal error, so the tape holds one array per round — the printed
 // tape shows entries that grow round by round, not the final array repeated.
-func main(): int sync {
+func main() => int sync {
     println(loop ys = [0] while len(ys) < 5 do ys->append<7>)
     // The `for` shape of the same fallback.
     println(loop acc = [0] for x in [7, 7, 7, 7] do acc->append<x>)

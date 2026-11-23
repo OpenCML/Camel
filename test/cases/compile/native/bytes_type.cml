@@ -4,7 +4,7 @@
  */
 import bytes
 
-func main(): int sync {
+func main() => int sync {
     println(bytes::to_array(1))
     return 0
 }

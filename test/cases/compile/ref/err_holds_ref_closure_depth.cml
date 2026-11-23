@@ -8,11 +8,17 @@
 
 import state
 
-func main(): int sync {
+func main() => int sync {
     let n = state::ref(0)
-    let h = func () => int { state::get(n) }
-    let g = func () => int { h() }
-    let f = func () => int { g() }
+    let h = func () => int {
+        state::get(n)
+    }
+    let g = func () => int {
+        h()
+    }
+    let f = func () => int {
+        g()
+    }
     let box = state::ref(f)
     let call = state::get(box)
     println(call())

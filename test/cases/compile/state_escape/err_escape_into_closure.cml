@@ -9,16 +9,18 @@
  * Refused by `ClosureAssignsCapturedName` (0x03000213).
  */
 
-func make(): (y: int) => int {
+func make() => (y: int) => int {
     var acc = 0
     let inner = func (x: int) => int sync {
         acc = acc + x
         acc
     }
-    return func (y: int) => int { inner(y) + 1 }
+    return func (y: int) => int {
+        inner(y) + 1
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = make()
     println(g(1))
     return 0

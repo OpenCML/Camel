@@ -5,6 +5,6 @@
  * unknown.
  */
 
-export func describe::<T>(x: T): string when is_compound::<T>() {
+export func describe::<T>(x: T) => string when is_compound::<T>() {
     return 'compound'
 }

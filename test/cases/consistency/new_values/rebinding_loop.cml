@@ -19,7 +19,7 @@
 
 type Box = { label: string, values: int[] }
 
-func collect(n: int): int[] sync {
+func collect(n: int) => int[] sync {
     var out: int[] = []
     loop i = 0 while i < n do {
         out = out->append<i * i>
@@ -28,7 +28,7 @@ func collect(n: int): int[] sync {
     return out
 }
 
-func push_all(var xs: int[], n: int): int sync {
+func push_all(var xs: int[], n: int) => int sync {
     loop i = 0 while i < n do {
         xs = xs->append<i>
         i + 1
@@ -36,7 +36,7 @@ func push_all(var xs: int[], n: int): int sync {
     return len(xs)
 }
 
-func snapshots(n: int): int[][] sync {
+func snapshots(n: int) => int[][] sync {
     var acc: int[] = []
     var seen: int[][] = []
     loop i = 0 while i < n do {
@@ -48,7 +48,7 @@ func snapshots(n: int): int[][] sync {
     return seen
 }
 
-func boxes(n: int): Box[] sync {
+func boxes(n: int) => Box[] sync {
     var out: Box[] = []
     loop i = 0 while i < n do {
         out = out->append<{ label: 'b{}'->format<i>, values: [i, i + 1] }>
@@ -57,7 +57,7 @@ func boxes(n: int): Box[] sync {
     return out
 }
 
-func main(): int sync {
+func main() => int sync {
     let squares = collect(200)
     println(len(squares), squares[0], squares[199])
     var xs = [100]

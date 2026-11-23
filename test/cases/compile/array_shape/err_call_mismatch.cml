@@ -2,11 +2,11 @@
 // is, and the second argument must be that same extent. Each argument states its extent where it
 // is made, which is the form the call's binding reads.
 
-func dot(x: f32[n], y: f32[n]): f32 {
+func dot(x: f32[n], y: f32[n]) => f32 {
     return x[0] + y[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: f32[] = [1.0, 2.0, 3.0]
     let w: f32[] = [4.0, 5.0]
     let a = v as f32[3]

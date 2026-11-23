@@ -5,21 +5,23 @@
  * one read -- but two of them pull the same stream twice, and the second is refused.
  */
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func twice(s: int..): int {
+func twice(s: int..) => int {
     let first = loop acc = 0 for x in s do acc + x
     let second = loop acc = 0 for x in s do acc + x
     return first + second
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(count(3)))
     return 0
 }

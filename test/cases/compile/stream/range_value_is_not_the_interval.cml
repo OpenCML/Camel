@@ -4,7 +4,7 @@
 
 import { Range } from prelude
 
-func main(): int sync {
-    let r: Range = 1..5
+func main() => int sync {
+    let r: Range = 1 .. 5
     return 0
 }

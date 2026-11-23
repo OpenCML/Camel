@@ -9,11 +9,11 @@ import { sum } from tensor
 import tensor_definitions
 
 with <x: f32[...]>
-func mean_of(): float {
+func mean_of() => float {
     return float(tensor_definitions::mean(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0, 3.0, 4.0]] as f32[1, 4]
     println(mean_of<x>())
     println(sum(grad(mean_of)<x>()))

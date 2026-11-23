@@ -10,26 +10,26 @@
  * model opens and runs; ort_grad_matmul_batched.py checks the values against NumPy.
  */
 
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, sum } from tensor
 
 type P = { a: float[...], b: float[...], v: float[...] }
 
 with <m: P>
-func loss(x: float[...]): float {
-    let p = m.a @ m.b      // [2, 2, 3] @ [2, 3, 2] -> [2, 2, 2]
-    let q = m.a @ m.v      // [2, 2, 3] @ [3]       -> [2, 2]
+func loss(x: float[...]) => float {
+    let p = m.a @ m.b // [2, 2, 3] @ [2, 3, 2] -> [2, 2, 2]
+    let q = m.a @ m.v // [2, 2, 3] @ [3]       -> [2, 2]
     return float(sum(p * x)) + float(sum(q * q))
 }
 
-func step(m: P, x: float[...]): (float, P) {
+func step(m: P, x: float[...]) => (float, P) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, vg.1)
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let m = {
         a: reshape<[2, 2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, -0.375, 0.625, -0.125, 0.875, -0.75]),
         b: reshape<[2, 3, 2]>([1.0, -1.0, 0.5, 0.25, -0.75, 0.125, 0.375, -0.5, 1.25, 0.75, -0.25, 0.5]),
@@ -42,7 +42,9 @@ func main(): string! sync {
     println(r.1.b)
     println(r.1.v)
     return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

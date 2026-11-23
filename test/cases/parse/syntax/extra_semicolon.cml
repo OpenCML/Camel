@@ -2,7 +2,7 @@
 // the one before it is refused where it is written: the parser does not read it as an empty
 // statement, because a reader who wrote it meant one statement, not two.
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 1;;
     println(x)
     return 0

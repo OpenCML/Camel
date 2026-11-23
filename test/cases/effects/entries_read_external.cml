@@ -8,17 +8,17 @@
  */
 
 /// A read of an external resource: the entry carries no `var`.
-func probe(): int uses clock {
+func probe() => int uses clock {
     return 1
 }
 
 /// A write of an external resource: the entry carries `var`.
-func stamp(): int uses var stdout sync {
+func stamp() => int uses var stdout sync {
     println('stamp')
     return 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(probe())
     println(stamp())
     return 0

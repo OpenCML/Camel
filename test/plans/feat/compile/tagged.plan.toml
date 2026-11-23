@@ -1063,7 +1063,7 @@ const cast = next.trim().split(' ')[2]
 // the same graph: the throw's value is the operand of the conversion, which is the exit.
 assert(lines.some((l) => l.trim().startsWith(cast + ' [label=":op/cast"')), 'throw feeds a conversion')
 assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the conversion is the exit of the graph')
-assert(out.includes('label="graph_throw_pass.cml:8:12"'), 'the position of error(...) is a constant argument')
+assert(out.includes('label="graph_throw_pass.cml:10:12"'), 'the position of error(...) is a constant argument')
 }
 """
 timeout_ms = 8000
@@ -1171,7 +1171,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
 expect_diagnostic_code = "0x03000072"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 9
 expect_diagnostic_column = 11
 expect_output_contains = ["The type 'int??' marks 'int' twice."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1410,7 +1410,7 @@ const lines = out.split('\n')
 const nulls = lines.filter((l) => l.includes('label="null"') && l.includes('type="DATA"'))
 const typed = nulls.filter((l) => l.includes('value_type="int?"'))
 assert(typed.length === 1, 'one null constant of the position\'s type, got ' + typed.length + ': ' + nulls.join(' | '))
-assert(typed[0].includes('span="15:16-15:20"'), "the constant stands where the default is written: " + typed[0])
+assert(typed[0].includes('span="19:16-19:20"'), "the constant stands where the default is written: " + typed[0])
 const id = typed[0].trim().split(' ')[0]
 assert(out.split(id + ' ->').length - 1 === 2, 'both calls that leave the parameter out read that one node')
 }

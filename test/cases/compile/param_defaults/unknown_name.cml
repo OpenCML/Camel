@@ -3,10 +3,10 @@
  * callee: `z` is not one (design principles 4.4).
  */
 
-func f(a: int, b: int = 0): int {
+func f(a: int, b: int = 0) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1, z: 2)
 }

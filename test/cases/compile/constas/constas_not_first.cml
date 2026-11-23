@@ -3,11 +3,11 @@
  * 2026-10-22): the call writes its value at that position, and it takes no runtime slot.
  */
 
-func place(x: int, constas n: int): int {
+func place(x: int, constas n: int) => int {
     return x * 10 + n
 }
 
-func main(): int sync {
+func main() => int sync {
     println(place(1, 2))
     return 0
 }

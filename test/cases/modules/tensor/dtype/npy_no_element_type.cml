@@ -6,7 +6,7 @@
 
 import { load_npy } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let t = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
     println(t)
     return 0

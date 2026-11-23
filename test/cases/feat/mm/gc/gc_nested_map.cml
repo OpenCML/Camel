@@ -8,21 +8,27 @@
 
 type Row = int[]
 
-func table(n: int, k: int): Row[] {
-    return (0..n)->map<func (i: int) => int[] { (0..n)->map<func (j: int) => int { i + j + k }> }>
+func table(n: int, k: int) => Row[] {
+    return (0 .. n)->map<func (i: int) => int[] {
+        (0 .. n)->map<func (j: int) => int {
+            i + j + k
+        }>
+    }>
 }
 
-func probe(t: Row[], n: int): int {
-    return (0..n)
-        ->map<func (i: int) => int { t[i][0] + t[i][i] + t[i][n - 1] }>
-        ->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+func probe(t: Row[], n: int) => int {
+    return (0 .. n)->map<func (i: int) => int {
+        t[i][0] + t[i][i] + t[i][n - 1]
+    }>->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
 }
 
-func repeat(n: int, left: int, total: int): int {
+func repeat(n: int, left: int, total: int) => int {
     return if left == 0 then total else repeat(n, left - 1, total + probe(table(n, left), n))
 }
 
-func main(reps: int): int sync {
+func main(reps: int) => int sync {
     println('gc_nested_map total={}'->format<repeat(128, reps, 0)>)
     return 0
 }

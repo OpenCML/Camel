@@ -14,15 +14,15 @@
 //
 // The transpose is asked at cotangent 1 and 3, so the answers are 1 then 3: proportional, and 3 is a
 // number no forward line prints.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func k(x: float): float {
+func k(x: float) => float {
     let t = (x, 3)
     return float(t.1) + t.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(k(2.0))
     let back = transpose(k)
     println(back(1.0))

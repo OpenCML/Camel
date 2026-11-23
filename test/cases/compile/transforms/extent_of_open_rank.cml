@@ -13,13 +13,12 @@
 // it is `extent_of.axis_outside_the_rank_faults`).
 import { dim, numel, shape, zeros } from tensor
 
-func read(t: f32[...]): int sync {
-    println(
-        `shape={} dim0={} dim1={} numel={}`->format<shape(t), dim<0>(t), dim<1>(t), numel(t)>)
+func read(t: f32[...]) => int sync {
+    println(`shape={} dim0={} dim1={} numel={}`->format<shape(t), dim<0>(t), dim<1>(t), numel(t)>)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = read(zeros::<f32>([2, 3]))
     return 0
 }

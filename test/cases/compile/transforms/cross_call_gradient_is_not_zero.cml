@@ -28,19 +28,19 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func f(x: float): float {
+func f(x: float) => float {
     return 2.0 * x
 }
 
-func g(x: float): float {
+func g(x: float) => float {
     return f(x) * x
 }
 
-func flat(x: float): float {
+func flat(x: float) => float {
     return 2.0 * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(g)(3.0)
     println(`g(3) = {:.1f}  g'(3) = {:.1f}`->format<value, pullback(1.0).0>)
     let (flatValue, flatPullback) = vjp(flat)(3.0)

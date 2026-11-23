@@ -11,7 +11,7 @@
 // The reduction keeps its own case beside this one: `sum_to_refuses_a_shape_it_cannot_reach.cml`.
 import { broadcast_like } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1.0, 2.0, 3.0] as float[...]
     let m: float[2, 3] = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
     println(`broadcast_like(6.0, xs) = ${broadcast_like(6.0, xs):.1f}`)

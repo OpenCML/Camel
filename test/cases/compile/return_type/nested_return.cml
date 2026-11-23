@@ -4,7 +4,7 @@
  * 45 s to compile, and 2 s at depth 16. It compiles in milliseconds.
  */
 
-func f(x: int): int {
+func f(x: int) => int {
     return if x > 19 then sync {
         return if x > 18 then sync {
             return if x > 17 then sync {
@@ -48,7 +48,7 @@ func f(x: int): int {
     } else 19
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(3), f(100))
     return 0
 }

@@ -4,11 +4,11 @@
 import math
 import { pi, e, inf, nan, is_nan, is_inf, log } from math
 
-func area(r: float): float {
+func area(r: float) => float {
     return math::pi * r * r
 }
 
-func main(): int sync {
+func main() => int sync {
     println(math::pi, pi == math::pi, log(e))
     println(area(2.0), is_inf(-inf), is_nan(nan), inf > 1.0e308)
     let tau: float = 2.0 * pi

@@ -9,11 +9,11 @@
 // commits it. The same pass then makes the same copy read a value of the arm it sits in, which is
 // the half that says a refusal is about the arm and not about the read.
 
-func pick(b: bool, x: int): int {
+func pick(b: bool, x: int) => int {
     let y = if b then x + 1 else x + 2
     return y
 }
 
-func main(): int {
+func main() => int {
     return pick(true, 4) * 10
 }

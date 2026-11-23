@@ -6,11 +6,11 @@
 
 import { Graph, graph_of, name } from graph
 
-func entry_name(g: Graph): string spelling {
+func entry_name(g: Graph) => string spelling {
     return name(g)
 }
 
-func main(): int spelling {
+func main() => int spelling {
     println(entry_name(graph_of(main)))
     return 0
 }

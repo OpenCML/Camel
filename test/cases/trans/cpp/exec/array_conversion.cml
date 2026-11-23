@@ -1,6 +1,6 @@
 /// A type name applied to a one-dimensional numeric array converts every element: to a float
 /// width or to an integer width, in the program std::cpp writes as in std::fvm.
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     let ys = [1.5, -2.5, 3.25]
     println(float(xs), f32(xs), i32(xs), int(xs))

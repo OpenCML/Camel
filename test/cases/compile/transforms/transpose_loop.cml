@@ -9,18 +9,18 @@
 // is linear in its cotangent, so the cotangent 2.0 at x = 1 pulls back to 16: the two numbers are
 // the same graph read twice, not a coincidence of one seed. A body that needed the round's own
 // state would be refused by name (`skip=state`), never answered with a cotangent from nowhere.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func thrice(x: float): float {
-    return loop s = x for i in 0..3 do s * 2.0
+func thrice(x: float) => float {
+    return loop s = x for i in 0 .. 3 do s * 2.0
 }
 
-func quad(x: float): float {
-    return loop s = x for i in 0..4 do s * 2.0
+func quad(x: float) => float {
+    return loop s = x for i in 0 .. 4 do s * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let three_back = transpose(thrice)
     println(thrice(1.0))
     println(three_back(1.0))

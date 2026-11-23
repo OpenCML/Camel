@@ -13,25 +13,25 @@
  *   camel algebra_commutative.cml std::cxx::algebra std::jgir
  */
 
-func left(x: float): float {
+func left(x: float) => float {
     let t = 3.0 * (x + 1.0)
     return t + t
 }
 
-func right(x: float): float {
+func right(x: float) => float {
     let t = (x + 1.0) * 3.0
     return t + t
 }
 
-func subtract(x: float): float {
+func subtract(x: float) => float {
     return 0.0 - x
 }
 
-func divide(x: float): float {
+func divide(x: float) => float {
     return 1.0 / x
 }
 
-func main(x: float): int sync {
+func main(x: float) => int sync {
     println(left(x), right(x))
     println(subtract(x), divide(x))
     return 0

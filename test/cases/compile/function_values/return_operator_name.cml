@@ -8,7 +8,7 @@ func pick() {
     return println
 }
 
-func main(): int sync {
+func main() => int sync {
     pick()
     println('never printed')
     return 0

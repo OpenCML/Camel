@@ -5,13 +5,13 @@
 
 import { supported_operators } from onnx
 
-func show(ops: string[], i: int): int sync {
+func show(ops: string[], i: int) => int sync {
     return if i >= len(ops) then 0 else sync {
         'CAPABILITY {}'->format<ops[i]>->println
         return show(ops, i + 1)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return show(supported_operators(), 0)
 }

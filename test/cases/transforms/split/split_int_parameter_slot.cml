@@ -17,21 +17,21 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func widen(n: int, x: float): float {
+func widen(n: int, x: float) => float {
     return x * 3.0
 }
 
-func g(x: float): float {
+func g(x: float) => float {
     return widen(2, x) + 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let lifted = jvp(g)
     let (v, t) = lifted(2.0, 1.0)
-    println("lift value=", v, " tangent=", t)
+    println('lift value=', v, ' tangent=', t)
     let fwd = split(lifted)
     let (y, lin) = fwd(2.0)
-    println("g y=", y)
-    println("g d=", lin(1.0))
+    println('g y=', y)
+    println('g d=', lin(1.0))
     return 0
 }

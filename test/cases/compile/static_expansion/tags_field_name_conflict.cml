@@ -9,16 +9,13 @@ import tags_second_width
 
 tag width(w: int) on field
 
-type Box = {
-    #width(1) #tags_second_width::width(2) marked: int,
+type Box = { #width(1) #tags_second_width::width(2) marked: int }
+
+func read(b: Box) => int {
+    return static loop acc = 0 for n, F, tags in fields Box do acc + 1
 }
 
-func read(b: Box): int {
-    return static loop acc = 0 for n, F, tags in fields Box do
-        acc + 1
-}
-
-func main(): int sync {
-    println(read({marked: 3}))
+func main() => int sync {
+    println(read({ marked: 3 }))
     return 0
 }

@@ -8,11 +8,11 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     return if x > 0.0 then x * x else -x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (positive, positiveDerivative) = jvp(f)(2.0, 1.0)
     println(positive)
     println(positiveDerivative)

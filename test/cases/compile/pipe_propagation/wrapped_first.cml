@@ -5,21 +5,29 @@
  * does.
  */
 
-func describe(x: int): string { return 'a number' }
-func describe(x: int?): string { return 'maybe a number' }
+func describe(x: int) => string {
+    return 'a number'
+}
+func describe(x: int?) => string {
+    return 'maybe a number'
+}
 
-func only_plain::<T>(x: T): T when is_plain::<T>() { return x }
+func only_plain::<T>(x: T) => T when is_plain::<T>() {
+    return x
+}
 
-func is_plain::<T>(): bool {
+func is_plain::<T>() => bool {
     return match type T {
         case int => true
         case _ => false
     }
 }
 
-func anything::<T>(x: T): T { return x }
+func anything::<T>(x: T) => T {
+    return x
+}
 
-func main(): int sync {
+func main() => int sync {
     let a: int? = 1
     let b: int? = null
     println(a->describe, b->describe, 3->describe)

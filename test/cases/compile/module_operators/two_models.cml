@@ -5,6 +5,6 @@
 
 export type Box = { v: int }
 
-export func mk(n: int): Box {
+export func mk(n: int) => Box {
     return { v: n }
 }

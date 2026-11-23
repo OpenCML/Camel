@@ -6,14 +6,14 @@
  */
 
 #op(':op/add_l')
-func add_kernel(a: int, b: int): int
+func add_kernel(a: int, b: int) => int
 
 #impl(add_kernel)
-export func add(a: int, b: int): int {
+export func add(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func main(): int sync {
+func main() => int sync {
     let sum = add(19, 23)
     'impl_ordinary add={}'->format<sum>->println
     return 0

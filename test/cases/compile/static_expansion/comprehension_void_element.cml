@@ -3,11 +3,11 @@
  * has no element to pack, and is reported instead of building a struct of the wrong shape.
  */
 
-func broken(t: {a: int, b: int}) {
-    return { static for n, F in fields {a: int, b: int} do {} }
+func broken(t: { a: int, b: int }) {
+    return {static for n, F in fields { a: int, b: int } do {}}
 }
 
-func main(): int sync {
-    let r = broken({a: 1, b: 2})
+func main() => int sync {
+    let r = broken({ a: 1, b: 2 })
     return 0
 }

@@ -2,7 +2,9 @@
 /// has a map whose keys are not strings.
 import { encode } from json
 
-func main(): int sync {
-    println(encode(func (x: int) => int { x }))
+func main() => int sync {
+    println(encode(func (x: int) => int {
+        x
+    }))
     return 0
 }

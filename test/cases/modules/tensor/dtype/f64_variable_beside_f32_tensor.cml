@@ -11,10 +11,10 @@
 
 import { sum } from tensor
 
-func scale(x: f32[2, 3], s: float): float {
+func scale(x: f32[2, 3], s: float) => float {
     return float(sum(x * s))
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

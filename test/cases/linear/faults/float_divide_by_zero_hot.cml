@@ -4,11 +4,11 @@
  * the division (line 9, column 29), not inf.
  */
 
-func g(a: float, b: float, n: int): float {
+func g(a: float, b: float, n: int) => float {
     return if n <= 0 then a / b else g(a, b, n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g(1.0, 2.0, 3))
     let z = 0.0
     println(g(1.0, z, 3))

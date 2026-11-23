@@ -14,26 +14,30 @@
 
 /// The array it was given. The block is the caller's: nothing is allocated and nothing is copied,
 /// which is what the caller asserts by comparing the two data pointers.
-export func identity(xs: f32[]): f32[] {
+export func identity(xs: f32[]) => f32[] {
     return xs
 }
 
 /// A new array: every element multiplied by `k`. A block of its own.
-export func scale(xs: f32[], k: f32): f32[] {
-    return xs->map<func (v: f32) => f32 { v * k }>
+export func scale(xs: f32[], k: f32) => f32[] {
+    return xs->map<func (v: f32) => f32 {
+        v * k
+    }>
 }
 
 /// A number rather than an array: the sum of the squares, accumulated in f64.
-export func energy(xs: f32[]): float {
+export func energy(xs: f32[]) => float {
     return loop total = 0.0 for v in xs do total + float(v) * float(v)
 }
 
 /// An error value: a negative factor gives a Python exception whose file, line and column are
 /// the position the error value records (design principles 3.9).
-export func checked_scale(xs: f32[], k: f32): f32[]! {
+export func checked_scale(xs: f32[], k: f32) => f32[]! {
     return if k < 0.0 then {
         return error('RangeError', 'the factor must not be negative')
     } else {
-        return xs->map<func (v: f32) => f32 { v * k }>
+        return xs->map<func (v: f32) => f32 {
+            v * k
+        }>
     }
 }

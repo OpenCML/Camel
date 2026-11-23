@@ -8,7 +8,7 @@
 
 type Point = { x: float, y: float }
 
-func main(): int sync {
+func main() => int sync {
     let p: Point = { y: 2.0, x: '1.5' }
     println(p.x)
     return 0

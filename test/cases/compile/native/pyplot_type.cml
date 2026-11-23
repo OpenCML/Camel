@@ -6,7 +6,7 @@
 
 import { plot } from pyplot
 
-func main(): int sync {
-    plot("not an array")
+func main() => int sync {
+    plot('not an array')
     return 0
 }

@@ -10,37 +10,41 @@ import { flatten } from array
 import { Graph, Node, graphs_of, nodes, inputs, value_users, kind, op, op_name, id, open, commit } from graph
 import { is_function } from types
 
-func op_text(n: Node): string {
+func op_text(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func all_nodes(gs: Graph[]): Node[] {
+func all_nodes(gs: Graph[]) => Node[] {
     return flatten(gs->map<nodes>)
 }
 
-func is_matmul(n: Node): bool {
+func is_matmul(n: Node) => bool {
     return op_text(n) == 'tensor:matmul@1.1' || op_text(n) == 'tensor:matmul'
 }
 
 // What a fusion would fold into the matmul: the nodes that read its result, by operator.
-func report(sites: Node[]): void {
-    sites->foreach<func (n: Node) => void { println(
-        `fusion site ${id(n)}: ${op_text(n)} -> ${len(value_users(n))} reader(s)`) }>
-    sites->foreach<func (n: Node) => void { value_users(n)->foreach<func (m: Node) => void { println(
-        `  reader ${id(m)}: ${op_text(m)}`) }> }>
+func report(sites: Node[]) => void {
+    sites->foreach<func (n: Node) => void {
+        println(`fusion site ${id(n)}: ${op_text(n)} -> ${len(value_users(n))} reader(s)`)
+    }>
+    sites->foreach<func (n: Node) => void {
+        value_users(n)->foreach<func (m: Node) => void {
+            println(`  reader ${id(m)}: ${op_text(m)}`)
+        }>
+    }>
 }
 
-func commit_unchanged::<F>(f: F): F! sync {
+func commit_unchanged::<F>(f: F) => F! sync {
     let t = open(f)
     return commit(t)
 }
 
 /// @param note what the pass writes on stderr before the count
 with <note: string = 'fusion'>
-export func fuse::<F>(f: F): F! when is_function::<F>() sync {
+export func fuse::<F>(f: F) => F! when is_function::<F>() sync {
     let sites = all_nodes(graphs_of(f))->filter<is_matmul>
     println(`fusion: ${note}: ${len(sites)} matmul site(s)`)
     report(sites)

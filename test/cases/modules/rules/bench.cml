@@ -10,16 +10,29 @@
 import { Rule, Run, run } from rewrite
 import { int_add_zero, mul_one } from rules
 
-func report::<F>(label: string, r: Run<F>): void sync {
-    println(label, 'rewrites', r.rewrites, 'rounds', r.rounds, 'visited', r.visited, 'erased',
-        r.erased, 'fixpoint', r.fixpoint, 'seconds', r.seconds)
+func report::<F>(label: string, r: Run<F>) => void sync {
+    println(
+        label,
+        'rewrites',
+        r.rewrites,
+        'rounds',
+        r.rounds,
+        'visited',
+        r.visited,
+        'erased',
+        r.erased,
+        'fixpoint',
+        r.fixpoint,
+        'seconds',
+        r.seconds
+    )
 }
 
-export func measure::<F>(p: F): F! sync {
+export func measure::<F>(p: F) => F! sync {
     let rules: Rule[] = [int_add_zero, mul_one]
-    return p->run<rules> -> func (first: Run<F>) sync {
+    return p->run<rules>->func (first: Run<F>) sync {
         report('run_first', first)
-        return first.result->run<rules> -> func (second: Run<F>) sync {
+        return first.result->run<rules>->func (second: Run<F>) sync {
             report('run_again', second)
             return second.result
         }
@@ -29,23 +42,36 @@ export func measure::<F>(p: F): F! sync {
 /// Runs the same application twice on the same program, once without the attribution record and
 /// once with it (`run`'s `explain` with-parameter), and prints both costs (rewrite design 8.7).
 /// The two applications see the same program, so the record is the only difference between them.
-func one_pair::<F>(p: F): F! sync {
+func one_pair::<F>(p: F) => F! sync {
     return match p->run<[int_add_zero, mul_one]> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case off => sync {
             match p->run<[int_add_zero, mul_one], explain: true> {
-                case error e => { return e }
+                case error e => {
+                    return e
+                }
                 case on => sync {
                     println(
                         'bench',
-                        'off_seconds', off.seconds,
-                        'on_seconds', on.seconds,
-                        'off_rewrites', off.rewrites,
-                        'on_rewrites', on.rewrites,
-                        'off_rounds', off.rounds,
-                        'on_rounds', on.rounds,
-                        'off_visited', off.visited,
-                        'on_visited', on.visited)
+                        'off_seconds',
+                        off.seconds,
+                        'on_seconds',
+                        on.seconds,
+                        'off_rewrites',
+                        off.rewrites,
+                        'on_rewrites',
+                        on.rewrites,
+                        'off_rounds',
+                        off.rounds,
+                        'on_rounds',
+                        on.rounds,
+                        'off_visited',
+                        off.visited,
+                        'on_visited',
+                        on.visited
+                    )
                     return p
                 }
             }
@@ -54,9 +80,11 @@ func one_pair::<F>(p: F): F! sync {
 }
 
 /// Measures the two modes on the same program and leaves the program as it was.
-export func compare::<F>(p: F): F! sync {
+export func compare::<F>(p: F) => F! sync {
     return match one_pair(p) {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case done => done
     }
 }

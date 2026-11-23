@@ -3,7 +3,7 @@
  * compiler: `is_compound` matches the shape of T when the declaration is instantiated.
  */
 
-func is_compound::<T>(): bool {
+func is_compound::<T>() => bool {
     return match type T {
         case struct => true
         case tuple => true
@@ -11,11 +11,11 @@ func is_compound::<T>(): bool {
     }
 }
 
-func describe::<T>(x: T): string when is_compound::<T>() {
+func describe::<T>(x: T) => string when is_compound::<T>() {
     return 'compound'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describe((1, 2)))
     return 0
 }

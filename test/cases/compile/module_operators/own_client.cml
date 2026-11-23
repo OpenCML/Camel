@@ -3,12 +3,12 @@
  * are imported here only, by the caller. The module's own overload is used and the call is not
  * ambiguous (design principles 5.7: the caller's imports are not looked at).
  */
-import { mk } from two_models
 import { twice } from own_gen
 import two_left
+import { mk } from two_models
 import two_right
 
-func main(): int sync {
+func main() => int sync {
     println(twice(mk(1)).v)
     return 0
 }

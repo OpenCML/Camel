@@ -19,37 +19,43 @@ import rulesets.jvp
 import rulesets.transpose
 import { grad } from vjp
 
-func f(x: float): float {
+func f(x: float) => float {
     return 2.0 * x
 }
 
-func g(x: float): float {
+func g(x: float) => float {
     return f(x) * x
 }
 
-func g2(x: float): float {
+func g2(x: float) => float {
     return g(x) * x
 }
 
-func h(x: float): float {
+func h(x: float) => float {
     return 2.0 * x * x
 }
 
 // `grad` differentiates the first `with` parameter (design principles 9.9), so each function above
 // is read through a `with` one; the calls, and the cut they cross, are the ones the case is about.
 with <x: float>
-func g_at(): float { return g(x) }
+func g_at() => float {
+    return g(x)
+}
 
 with <x: float>
-func g2_at(): float { return g2(x) }
+func g2_at() => float {
+    return g2(x)
+}
 
 with <x: float>
-func h_at(): float { return h(x) }
+func h_at() => float {
+    return h(x)
+}
 
-func main(): int sync {
-    println("grad_g_3=", grad(g_at)<3.0>())
-    println("grad_g_5=", grad(g_at)<5.0>())
-    println("grad_g2_3=", grad(g2_at)<3.0>())
-    println("grad_h_3=", grad(h_at)<3.0>())
+func main() => int sync {
+    println('grad_g_3=', grad(g_at)<3.0>())
+    println('grad_g_5=', grad(g_at)<5.0>())
+    println('grad_g2_3=', grad(g2_at)<3.0>())
+    println('grad_h_3=', grad(h_at)<3.0>())
     return 0
 }

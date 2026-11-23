@@ -8,21 +8,25 @@
  * itself never compiled.
  */
 
-func quot(a: int, b: int): int { return (a * 3 + 1) / (b - 2) }
-func depth(n: int): int { return if n == 0 then 0 else 1 + depth(n - 1) }
+func quot(a: int, b: int) => int {
+    return (a * 3 + 1) / (b - 2)
+}
+func depth(n: int) => int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
 
-func kind(r: int!): string {
+func kind(r: int!) => string {
     return match r {
         case error e => e.kind + ' at ' + e.location
         case v => format<v>('{}')
     }
 }
 
-func warm(i: int, acc: int): int {
+func warm(i: int, acc: int) => int {
     return if i == 0 then acc else warm(i - 1, acc + quot(i, 0) + depth(5))
 }
 
-func main(): int sync {
+func main() => int sync {
     // Make both callees hot first, so that an on-demand JIT has compiled them.
     println(warm(200, 0))
     println(kind(attempt(quot)(9, 4)))
@@ -31,7 +35,9 @@ func main(): int sync {
     println(kind(attempt(depth)(40)))
     println(kind(attempt(depth)(1000000)))
     println(kind(attempt(depth)(40)))
-    println(kind(attempt(func () { quot(1, 2) + depth(3) })()))
+    println(kind(attempt(func () {
+        quot(1, 2) + depth(3)
+    })()))
     println(warm(200, 0))
     println('end')
     return 0

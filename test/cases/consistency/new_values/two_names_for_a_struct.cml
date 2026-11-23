@@ -18,7 +18,7 @@
 
 type Bag = { label: string, xs: int[] }
 
-func main(): int sync {
+func main() => int sync {
     // A second name made at a declaration: the write through `b` stays in `b`.
     let a: Bag = { label: 'a', xs: [1, 2] }
     var b = a
@@ -26,14 +26,14 @@ func main(): int sync {
     b.label = 'b'
     println(a.label, a.xs)
     println(b.label, b.xs)
-
+    
     // A second name a read keeps: `kept` is the value `inner` had when it was read, and the write
     // into the array inside it afterwards is not seen through `kept`.
     var inner: Bag = { label: 'i', xs: [3, 4] }
     let kept = inner
     inner.xs[0] = 7
     println(kept.xs, inner.xs)
-
+    
     // Nested: a struct in a struct, both with an array, written through a path.
     let outer = { name: 'o', box: { label: 'x', xs: [5, 6] } }
     var moved = outer

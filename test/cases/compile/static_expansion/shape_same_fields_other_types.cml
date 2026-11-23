@@ -6,11 +6,11 @@
  * head's `int` would have refused the value.
  */
 
-type A = {a: int}
-type B = {a: f32}
+type A = { a: int }
+type B = { a: f32 }
 
-func main(): int sync {
-    let x: B = {a: 1.5}
+func main() => int sync {
+    let x: B = { a: 1.5 }
     let y = A { static for n, F in fields B do x.[n] }
     // The field's type is the round's, not the head's: `int` does not read as a `float`.
     let asFloat: f32 = y.a

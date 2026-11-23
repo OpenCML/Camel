@@ -2,14 +2,14 @@
 // chain place and takes the read as a value input. The write the block makes next follows the
 // statements written before it (docs/design/effects/edges.cn.md 4.6, 5.6). The caller sees the write.
 
-func tally(var x: int): int sync {
-    println("tally", x)
+func tally(var x: int) => int sync {
+    println('tally', x)
     x = x + 1
-    println("after", x)
+    println('after', x)
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     var n = 4
     println(tally(n))
     println(n)

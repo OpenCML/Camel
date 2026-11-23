@@ -1,8 +1,6 @@
-
-
 import { mean } from array
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[] = []
     println('before')
     println(mean(xs))

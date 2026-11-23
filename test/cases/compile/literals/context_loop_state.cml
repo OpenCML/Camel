@@ -14,27 +14,27 @@
  * it (cases/loops/zero_leaf_state.cml pins the zero-leaf case).
  */
 
-func fromWhile(): f32 {
+func fromWhile() => f32 {
     loop s = 0.0 while s < 3.0 do s + 1.0
 }
 
-func fromFor(): i32 {
+func fromFor() => i32 {
     loop s = 0 for x in [1, 2, 3] do s + 1
 }
 
-func fromFold(): f32 {
+func fromFold() => f32 {
     // An expression of literals only is a literal as well: the position types the value it
     // comes to (design principles 5.1).
     loop s = 1.0 + 2.0 while s < 5.0 do s + 1.0
 }
 
-func fromStates(): f32 {
+func fromStates() => f32 {
     // Several states give a tuple: the position names one type per state.
     let pair: (f32, f32) = loop a = 0.0, b = 0.0 for k in [1, 2, 3] do (a + 1.0, b + 2.0)
     pair.0 + pair.1
 }
 
-func main(): int sync {
+func main() => int sync {
     // A declaration types the state's first value...
     let n: f32 = loop s = 0.0 while s < 3.0 do s + 1.0
     println(n)

@@ -1,6 +1,8 @@
 // Naming something of the module itself through the module's name.
-func f(): int { return 6 }
-func main(): int sync {
+func f() => int {
+    return 6
+}
+func main() => int sync {
     println(p18_self_module::f())
     return 0
 }

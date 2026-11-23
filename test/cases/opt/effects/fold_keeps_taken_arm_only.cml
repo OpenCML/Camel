@@ -4,7 +4,7 @@
  * nothing. Both calls print their own line, in the order the calls are written.
  */
 
-func pick(c: bool): int sync {
+func pick(c: bool) => int sync {
     return if c then sync {
         println(21)
         return 1
@@ -14,7 +14,7 @@ func pick(c: bool): int sync {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true))
     println(pick(false))
     return 0

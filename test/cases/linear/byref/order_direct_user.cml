@@ -16,17 +16,17 @@
  * modify` is present, and so is `modify ->` the read written after it.
  */
 
-func before(x: int): int sync {
+func before(x: int) => int sync {
     println(x)
     return x
 }
 
-func modify(var x: int): int sync {
+func modify(var x: int) => int sync {
     x += 10
     return 0
 }
 
-func run(): int sync {
+func run() => int sync {
     var i = 1
     let a = before(i + 1)
     modify(i)
@@ -34,7 +34,7 @@ func run(): int sync {
     return a * 1000 + b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(run())
     return 0
 }

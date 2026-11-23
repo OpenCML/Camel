@@ -1,12 +1,11 @@
 /** Helper module: the bottom of the diamond, whose top-level value has an effect. */
-
-func compute(): int sync {
+func compute() => int sync {
     println('computing the common value')
     return 40
 }
 
 let value = compute()
 
-export func common(): int {
+export func common() => int {
     return value
 }

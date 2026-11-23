@@ -6,35 +6,35 @@
 
 import { Node, Graph, NodeKind, name, nodes, inputs, kind, op, op_name, value_users, type_of, type_name, is_anchor, exit_of, order_inputs, graphs_of, open, order, commit } from graph
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func typeText(n: Node): string {
+func typeText(n: Node) => string {
     return match type_of(n) {
         case null => ''
         case t => type_name(t)
     }
 }
 
-func isAdd(n: Node): bool {
+func isAdd(n: Node) => bool {
     return opText(n) == ':op/add_l'
 }
 
-func isPrint(n: Node): bool {
+func isPrint(n: Node) => bool {
     return opText(n) == ':io/println'
 }
 
-func isGate(n: Node): bool {
+func isGate(n: Node) => bool {
     return kind(n) == NodeKind::Gate
 }
 
 /// An addition whose ordinary inputs are no addition: `a = seed() + 20`. Its value depends on no
 /// other addition, so it is the node the cycle case orders *against*.
-func isInnerAdd(n: Node): bool {
+func isInnerAdd(n: Node) => bool {
     let ins = inputs(n)
     let adds = ins->filter<isAdd>
     return isAdd(n) && len(adds) == 0
@@ -42,32 +42,34 @@ func isInnerAdd(n: Node): bool {
 
 /// An addition that reads another addition: `c = a + 1`. Ordering it before the addition it reads
 /// is the cycle `order` refuses.
-func readsAnAdd(n: Node): bool {
+func readsAnAdd(n: Node) => bool {
     let ins = inputs(n)
     let adds = ins->filter<isAdd>
     return len(adds) > 0
 }
 
-func firstIsPrint(pres: Node[]): bool {
+func firstIsPrint(pres: Node[]) => bool {
     return if len(pres) == 1 then isPrint(pres[0]) else false
 }
 
-func mainGraph::<F>(p: F): Graph spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == 'main' }>
+func mainGraph::<F>(p: F) => Graph spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == 'main'
+    }>
     return found[0]
 }
 
-func printOf(g: Graph): Node {
+func printOf(g: Graph) => Node {
     let prints = nodes(g)->filter<isPrint>
     return prints[1]
 }
 
-func gateOf(g: Graph): Node {
+func gateOf(g: Graph) => Node {
     let gates = nodes(g)->filter<isGate>
     return gates[0]
 }
 
-func outerAddOf(g: Graph): Node {
+func outerAddOf(g: Graph) => Node {
     let outers = nodes(g)->filter<readsAnAdd>
     return outers[0]
 }
@@ -75,7 +77,7 @@ func outerAddOf(g: Graph): Node {
 /// The shape of the node the graph hands its value out of, as one line: its kind, the type of the
 /// value, whether it is an anchor, how many nodes read it, how many ordinary inputs it has, and how
 /// many of those are additions.
-func exitText(n: Node): string {
+func exitText(n: Node) => string {
     let ins = inputs(n)
     let reads = value_users(n)
     let adds = ins->filter<isAdd>
@@ -84,7 +86,7 @@ func exitText(n: Node): string {
 
 /// What `exit_of` answers on a pure body: the addition the function returns -- the one that reads
 /// another addition, which is the node an independent search for that shape finds.
-export func exit_shape::<F>(p: F): F! spelling sync {
+export func exit_shape::<F>(p: F) => F! spelling sync {
     let g = mainGraph(p)
     println(match exit_of(g) {
         case null => 'no exit'
@@ -101,7 +103,7 @@ export func exit_shape::<F>(p: F): F! spelling sync {
 /// before the edit, one after it, and the one it reaches is a `println`. (The second `println` is
 /// not the node to read: the front end already writes an order edge from the first one to it, so
 /// the count there is one before the edit and the operator would have nothing to add.)
-export func order_read::<F>(p: F): F! spelling sync {
+export func order_read::<F>(p: F) => F! spelling sync {
     let g = mainGraph(p)
     let gate = gateOf(g)
     let pres = order_inputs(gate)
@@ -113,7 +115,7 @@ export func order_read::<F>(p: F): F! spelling sync {
 /// Orders the end of `main`'s `sync` block after its second `println`. Both ends write or carry the
 /// block's value, so the edge is one the encoder keeps (a node that arranges itself freely drops
 /// it), and the value the program prints is the same.
-export func order_add::<F>(p: F): F! spelling sync {
+export func order_add::<F>(p: F) => F! spelling sync {
     let t = open(p)
     let g = mainGraph(p)
     let print = printOf(g)
@@ -125,7 +127,7 @@ export func order_add::<F>(p: F): F! spelling sync {
 /// Orders an addition that reads another addition *before* the one it reads: the graph would have
 /// to run `c` before `a` while `c` is computed from `a`, so the operator refuses, and it refuses
 /// before the commit has anything to say about the graph.
-export func order_cycle::<F>(p: F): F! spelling sync {
+export func order_cycle::<F>(p: F) => F! spelling sync {
     let t = open(p)
     let g = mainGraph(p)
     let outer = outerAddOf(g)

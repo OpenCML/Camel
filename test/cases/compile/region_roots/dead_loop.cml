@@ -10,9 +10,9 @@
  * happened; the case name is what it used to be, and what it pins now is the other reading.
  */
 
-func main(): int {
+func main() => int {
     loop s = 0 for i in [0, 1, 2] do {
-        println("round")
+        println('round')
         s + i
     }
     return 0

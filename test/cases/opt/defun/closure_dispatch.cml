@@ -5,19 +5,23 @@
  * no extra argument. The program prints the same three numbers with the pass and without it.
  */
 
-func apply(f: (x: int) => int, x: int): int {
+func apply(f: (x: int) => int, x: int) => int {
     return f(x)
 }
 
-func plus(x: int): int {
+func plus(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = 2
     let b = 3
-    let add_a = func (x: int) { x + a }
-    let scale_b = func (x: int) { x * b }
+    let add_a = func (x: int) {
+        x + a
+    }
+    let scale_b = func (x: int) {
+        x * b
+    }
     let p = apply(plus, 10)
     let q = apply(add_a, 10)
     let r = apply(scale_b, 10)

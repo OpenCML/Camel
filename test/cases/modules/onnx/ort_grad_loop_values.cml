@@ -7,28 +7,28 @@
  * read from the working directory, the native values are saved there, and the step is exported
  * when ONNX_OUT is set.
  */
-import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { with_grad } from autodiff
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { load_npy, reshape, save_npy, sum, tanh } from tensor
 
 type P = { w: f32[...] }
 
 // A: (state, counter) as a tuple; the loss reads the state only.
 with <m: P>
-func walk(h: f32[...], k: int): (f32[...], int) {
+func walk(h: f32[...], k: int) => (f32[...], int) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss_a(x: f32[...]): float {
+func loss_a(x: f32[...]) => float {
     let (h, k) = walk<m>(x, 0)
     return float(sum(h * h))
 }
 
 // B: the counter enters the loss as a number (it has no derivative).
 with <m: P>
-func loss_b(x: f32[...]): float {
+func loss_b(x: f32[...]) => float {
     let (h, k) = walk<m>(x, 0)
     return float(sum(h * h)) * (1.0 + 0.5 * float(k))
 }
@@ -37,19 +37,24 @@ func loss_b(x: f32[...]): float {
 type Run = { state: f32[...], steps: int }
 
 with <m: P>
-func walk_c(h: f32[...], k: int): Run {
+func walk_c(h: f32[...], k: int) => Run {
     return if k >= 6 || sum(h * h) < 1.0 then { state: h, steps: k } else walk_c<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss_c(x: f32[...]): float {
+func loss_c(x: f32[...]) => float {
     let r = walk_c<m>(x, 0)
     return float(sum(r.state))
 }
 
 // D: four carried values, three of them differentiable (two tensors and a float).
 with <m: P>
-func walk_d(h: f32[...], k: int, acc: f32[...], e: float): (f32[...], int, f32[...], float) {
+func walk_d(
+    h: f32[...],
+    k: int,
+    acc: f32[...],
+    e: float
+) => (f32[...], int, f32[...], float) {
     return if k >= 6 || float(sum(h * h)) < 1.0 then (h, k, acc, e) else walk_d<m>(
         tanh(h @ m.w) * 0.3 + h * 0.6,
         k + 1,
@@ -59,13 +64,16 @@ func walk_d(h: f32[...], k: int, acc: f32[...], e: float): (f32[...], int, f32[.
 }
 
 with <m: P>
-func loss_d(x: f32[...]): float {
+func loss_d(x: f32[...]) => float {
     let r = walk_d<m>(x, 0, x * 0.0, 0.25)
     return float(sum(r.0)) + float(sum(r.2)) * 0.1 + r.3 * 0.3
 }
 
 // The counter as an output of the model, next to the value and the gradient.
-func step(w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...], float[...], f32[...], float[...], f32[...], int) {
+func step(
+    w: f32[...],
+    x: f32[...]
+) => (float[...], f32[...], float[...], f32[...], float[...], f32[...], float[...], f32[...], int) {
     let m = { w: w }
     let a = with_grad(loss_a)<m>(x)
     let b = with_grad(loss_b)<m>(x)
@@ -73,12 +81,19 @@ func step(w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...]
     let d = with_grad(loss_d)<m>(x)
     let (h, k) = walk<m>(x, 0)
     return (
-        reshape<[1]>([a.0]), a.1.w, reshape<[1]>([b.0]), b.1.w,
-        reshape<[1]>([c.0]), c.1.w, reshape<[1]>([d.0]), d.1.w, k
+        reshape<[1]>([a.0]),
+        a.1.w,
+        reshape<[1]>([b.0]),
+        b.1.w,
+        reshape<[1]>([c.0]),
+        c.1.w,
+        reshape<[1]>([d.0]),
+        d.1.w,
+        k
     )
 }
 
-func main(): int sync {
+func main() => int sync {
     let w = load_npy::<f32>('w.npy')
     let x = load_npy::<f32>('x.npy')
     let r = step(w, x)
@@ -93,7 +108,9 @@ func main(): int sync {
     save_npy(reshape<[1]>([r.8]), 'native_8.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
         match export_model<out: get_env('ONNX_OUT') ?? ''>(
-            func (w: f32[...], x: f32[...]) => (float[...], f32[...], float[...], f32[...], float[...], f32[...], float[...], f32[...], int) { step(w, x) },
+            func (w: f32[...], x: f32[...]) => (float[...], f32[...], float[...], f32[...], float[...], f32[...], float[...], f32[...], int) {
+                step(w, x)
+            },
             (w, x)
         ) {
             case error e => sync {

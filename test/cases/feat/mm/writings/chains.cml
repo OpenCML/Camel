@@ -4,7 +4,7 @@
  * other (test::writings).
  */
 
-func chains(a: int, b: int): int {
+func chains(a: int, b: int) => int {
     let x0 = a + 1
     let y0 = b + 1
     let x1 = x0 + 1
@@ -608,7 +608,7 @@ func chains(a: int, b: int): int {
     return x299 * y299
 }
 
-func main(): int sync {
+func main() => int sync {
     println(chains(2, 3))
     return 0
 }

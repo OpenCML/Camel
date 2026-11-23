@@ -1,18 +1,19 @@
 import { reshape, sum, abs, transpose } from tensor
 import { inspect, run_preferred_resident, download } from tiles
-func fixed(x: f32[2, 3]): f32[...] {
+
+func fixed(x: f32[2, 3]) => f32[...] {
     return transpose(x + x)
 }
-func dynamic(x: f32[...]): f32[...] {
+func dynamic(x: f32[...]) => f32[...] {
     return transpose(x + x)
 }
 with <ax: int>
-func axis(x: f32[2,3]): f32[...] {
+func axis(x: f32[2, 3]) => f32[...] {
     return x + sum<ax, true>(x)
 }
-func main(): int sync {
-    let x = reshape<[2,3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2,3]
-    let y = reshape<[4,1]>([1.0, 2.0, 3.0, 4.0] as f32[])
+func main() => int sync {
+    let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
+    let y = reshape<[4, 1]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(inspect<fixed>(x))
     println(inspect<fixed>(x))
     println(inspect<dynamic>(x))
@@ -20,10 +21,10 @@ func main(): int sync {
     println(inspect<dynamic>(x))
     println(inspect<axis<0>>(x))
     println(inspect<axis<1>>(x))
-    println(sum(abs(download(run_preferred_resident<fixed>(x))-fixed(x))))
-    println(sum(abs(download(run_preferred_resident<dynamic>(x))-dynamic(x))))
-    println(sum(abs(download(run_preferred_resident<dynamic>(y))-dynamic(y))))
-    println(sum(abs(download(run_preferred_resident<axis<0>>(x))-axis<0>(x))))
-    println(sum(abs(download(run_preferred_resident<axis<1>>(x))-axis<1>(x))))
+    println(sum(abs(download(run_preferred_resident<fixed>(x)) - fixed(x))))
+    println(sum(abs(download(run_preferred_resident<dynamic>(x)) - dynamic(x))))
+    println(sum(abs(download(run_preferred_resident<dynamic>(y)) - dynamic(y))))
+    println(sum(abs(download(run_preferred_resident<axis<0>>(x)) - axis<0>(x))))
+    println(sum(abs(download(run_preferred_resident<axis<1>>(x)) - axis<1>(x))))
     return 0
 }

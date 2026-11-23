@@ -10,7 +10,7 @@
 
 import { reshape } from tensor
 
-func same_everywhere(x: f32[...], y: f32[...]): bool {
+func same_everywhere(x: f32[...], y: f32[...]) => bool {
     return (x > 0.0) == (y > 0.0)
 }
 
@@ -19,7 +19,7 @@ func mask_as_array(x: f32[...], y: f32[...]) {
     println(same)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, -2.0] as f32[])
     let y = reshape<[2]>([1.0, 2.0] as f32[])
     println(same_everywhere(x, y))

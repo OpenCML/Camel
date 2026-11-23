@@ -9,24 +9,24 @@
 
 type Point = { x: f32 }
 
-func viaReturn(): f32[] {
+func viaReturn() => f32[] {
     return [1.0000000596046447753906251]
 }
 
-func viaDeclaration(): f32[] {
+func viaDeclaration() => f32[] {
     let xs: f32[] = [1.0000000596046447753906251]
     return xs
 }
 
-func structField(): Point {
+func structField() => Point {
     return { x: 1.0000000596046447753906251 }
 }
 
-func nested(): f32[][] {
+func nested() => f32[][] {
     return [[1.0000000596046447753906251]]
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = viaReturn()[0]
     let b = viaDeclaration()[0]
     let p = structField()

@@ -3,9 +3,10 @@
  */
 
 import namespace_lib
+
 using namespace namespace_lib
 
-func main(): int sync {
+func main() => int sync {
     let a = root()
     let b = Tools::inc(a)
     'module_import_using a={} b={}'->format<a, b>->println

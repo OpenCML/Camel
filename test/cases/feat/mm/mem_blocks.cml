@@ -3,14 +3,14 @@
 // operation allocated. The name needs no import: the built-in module exports it under the path.
 // `allocs - frees == live` is the counter identity; growing an array that needs a block moves
 // `allocs`, `live` and `bytes` by that one block.
-func make(n: int): int[] {
+func make(n: int) => int[] {
     return loop xs = [0] while len(xs) < n do xs->append<7>
 }
 
-func main(): int sync {
-    let a  = std::mem::blocks()
+func main() => int sync {
+    let a = std::mem::blocks()
     let xs = make(100)
-    let b  = std::mem::blocks()
+    let b = std::mem::blocks()
     println(a.allocs - a.frees == a.live)
     println(b.allocs - b.frees == b.live)
     println(b.live - a.live, b.allocs - a.allocs, b.frees - a.frees, b.bytes > a.bytes)

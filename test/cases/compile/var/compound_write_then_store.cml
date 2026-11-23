@@ -7,10 +7,10 @@
  * not, in the same body, is what says the guard is scoped to the statement it was built for.
  */
 
-func main(): int {
-    var x = 0;
-    let y = x;
-    x += 1;
-    x = 5;
+func main() => int {
+    var x = 0
+    let y = x
+    x += 1
+    x = 5
     return println(y)
 }

@@ -16,7 +16,7 @@
 import { sort, argsort } from array
 import { nan } from math
 
-func main(): int sync {
+func main() => int sync {
     let s_i: i32[] = [3, 1, 2]
     let s_l: int[] = [30, 10, 20]
     let s_f: f32[] = [3.5, 1.5, 2.5]
@@ -28,7 +28,7 @@ func main(): int sync {
     println('sort', r_i, r_l, r_f, r_d)
     println('body', s_i[argsort(s_i)], s_l[argsort(s_l)], s_f[argsort(s_f)], s_d[argsort(s_d)])
     println('input', s_i, s_l, s_f, s_d)
-
+    
     // ---- the in-place forms: nothing else refers to the variable ----
     var v_i: i32[] = [9, 8, 7]
     var v_l: int[] = [90, 70, 80]
@@ -39,7 +39,7 @@ func main(): int sync {
     v_f = v_f->sort
     v_d = v_d->sort
     println('in_place', v_i, v_l, v_f, v_d)
-
+    
     // ---- the order of floats: -0 below +0, every NaN after the numbers, ties keep their order ----
     let z: float[] = [1.0, nan, 0.0, -0.0, -1.0, nan]
     println('floats', sort(z), z[argsort(z)])

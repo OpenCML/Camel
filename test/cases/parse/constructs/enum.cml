@@ -9,10 +9,10 @@ type Color = enum { Red, Green, Blue }
 type Shape = enum {
     Circle(float),
     Rect { w: float, h: float },
-    Empty,
+    Empty
 }
 
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => 3.14159 * r * r
         case Shape::Rect { w, h } => w * h
@@ -20,7 +20,7 @@ func area(s: Shape): float {
     }
 }
 
-func initial(c: Color): string {
+func initial(c: Color) => string {
     return match c {
         case Color::Red => 'r'
         case Color::Green => 'g'
@@ -28,10 +28,10 @@ func initial(c: Color): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(initial(Color::Green))
     println(area(Shape::Circle(1.0)))
-    println(area(Shape::Rect { w: 2.0, h: 3.0 }))
+    println(area(Shape::Rect{ w: 2.0, h: 3.0 }))
     println(area(Shape::Empty))
     return 0
 }

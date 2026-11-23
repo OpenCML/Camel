@@ -31,43 +31,43 @@
  * changes the value (the run with the pass prints another gradient than the run without it).
  */
 
-import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff
+import { abs, reshape, sum } from tensor
 
 type M = {
     p0: f32[3],
-    x: f32[2, 3],
+    x: f32[2, 3]
 }
 
 #gpu
 with <m: M>
-func loss(): f32 sync {
+func loss() => f32 sync {
     return sum(m.x * m.p0)
 }
 
 #gpu
-func step(m: M): f32[3] sync {
+func step(m: M) => f32[3] sync {
     let vg = with_grad(loss)<m>()
     return vg.1.p0
 }
 
-func step_host(m: M): f32[3] sync {
+func step_host(m: M) => f32[3] sync {
     let vg = with_grad(loss)<m>()
     return vg.1.p0
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = {
         p0: reshape<[3]>([0.5, 0.25, 2.0] as f32[]),
-        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]),
+        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     }
     let in_scope = step(m)
     let outside = step_host(m)
     let expected = reshape<[3]>([5.0, 7.0, 9.0] as f32[])
     let zero = sum(expected - expected)
-    println("in_scope {}"->format<in_scope>)
-    println("outside {}"->format<outside>)
-    println("moved {}"->format<zero + sum(abs(in_scope - outside))>)
-    println("wrong {}"->format<zero + sum(abs(outside - expected))>)
+    println('in_scope {}'->format<in_scope>)
+    println('outside {}'->format<outside>)
+    println('moved {}'->format<zero + sum(abs(in_scope - outside))>)
+    println('wrong {}'->format<zero + sum(abs(outside - expected))>)
     return 0
 }

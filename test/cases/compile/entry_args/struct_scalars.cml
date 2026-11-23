@@ -2,7 +2,7 @@
 // writes reads only scalars from its command line, so std::cpp refuses it, at `main`.
 type P = { a: int, b: float }
 
-func main(p: P): int sync {
+func main(p: P) => int sync {
     println(p.a, p.b)
     return 0
 }

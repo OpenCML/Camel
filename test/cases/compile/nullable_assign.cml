@@ -14,7 +14,7 @@ type Acc = { best: float?, count: int }
 
 var seen: float? = null
 
-func main(): int sync {
+func main() => int sync {
     var best: float? = null
     let hi = 2.5
     best = hi
@@ -26,11 +26,15 @@ func main(): int sync {
     let step = 3
     count = step
     println(best, acc.best, xs, count)
-
-    let note = func (v: float) => void sync { seen = v }
+    
+    let note = func (v: float) => void sync {
+        seen = v
+    }
     note(4.5)
     println(seen)
-    [1.0, 2.0]->foreach<func (x: float) => void sync { seen = x }>
+    [1.0, 2.0]->foreach<func (x: float) => void sync {
+        seen = x
+    }>
     println(seen)
     return 0
 }

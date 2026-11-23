@@ -1,7 +1,8 @@
 import { from_array } from bytes
-import { write_bytes, read_text } from fs
 import { get_env } from env
-func main(): int sync {
+import { write_bytes, read_text } from fs
+
+func main() => int sync {
     // The scratch directory the runner gives every test; see bytes_values.cml.
     let scratch = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if scratch == '' then (get_env('TEMP') ?? '') else scratch

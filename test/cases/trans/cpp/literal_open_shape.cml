@@ -12,7 +12,7 @@
  */
 import { shape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let v = [1.0, 2.0, 3.0] as float[]
     println(shape(v), len(v))
     let z: float[] = [4.0, 5.0]

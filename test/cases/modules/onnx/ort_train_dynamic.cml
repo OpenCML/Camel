@@ -5,27 +5,27 @@
  * on the same input, and dumps the updated parameters to DUMP.
  */
 
-import { relu, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff
+import { get_env } from env
 import { sgd, save_params } from nn
 import { export_model } from onnx
-import { get_env } from env
+import { relu, sum, reshape, shape, load_npy } from tensor
 
 type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
 
 with <m: Mlp>
-func loss(x: f32[...]): float {
+func loss(x: f32[...]) => float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return float(sum(y * y)) / float(shape(y)[0] * shape(y)[1])
 }
 
-func step(m: Mlp, x: f32[...]): (float, Mlp) {
+func step(m: Mlp, x: f32[...]) => (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[]),
         b1: reshape<[3]>([0.1, 0.0, -0.1] as f32[]),
@@ -37,7 +37,8 @@ func main(): int sync {
     'CAMEL loss={}'->format<vg.0>->println
     save_params(vg.1, get_env('DUMP') ?? '')
     let out = get_env('ONNX_OUT') ?? ''
-    let refused = if out == '' then 0 else if (get_env('DYN') ?? '') == '1' then sync {
+    let refused = if out == '' then 0
+    else if (get_env('DYN') ?? '') == '1' then sync {
         match export_model<out: out, dynamic_axes: [0]>(step, (m, x)) {
             case error e => sync {
                 println(e)

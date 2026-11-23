@@ -4,30 +4,30 @@
  */
 
 import { mean } from array
-import { stdev, variance, median, quantile } from statistics
 import { inf, nan, is_nan } from math
+import { stdev, variance, median, quantile } from statistics
 
-func main(): int sync {
+func main() => int sync {
     let xs = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
     println(mean(xs), variance(xs), stdev(xs) * stdev(xs))
     println(variance(float([1, 2, 3, 4])), variance([3.0, 3.0, 3.0]))
-
+    
     println(median([3.0, 1.0, 2.0]), median([4.0, 1.0, 2.0, 3.0]), median(float([7])))
     println(median(xs))
     println(median([1.0e308, 1.0e308, -1.0e308]), median([-1.0e308, 1.0e308]))
-
+    
     let ys = [1.0, 2.0, 3.0, 4.0, 5.0]
     println(ys->quantile<0.0>, ys->quantile<0.25>, ys->quantile<0.5>, ys->quantile<1.0>)
     println(float([10, 20])->quantile<0.1>, [10.0]->quantile<0.9>)
     // the order of the elements does not matter
     println([5.0, 1.0, 4.0, 2.0, 3.0]->quantile<0.75>)
-
+    
     // an infinity at the upper rank of an exact position stays the infinity
     println([1.0, 2.0, inf]->quantile<0.5>)
-
+    
     // a NaN among the elements: the result is NaN
     println(is_nan(median([1.0, nan, 3.0])), is_nan([nan]->quantile<0.5>), is_nan(variance([1.0, nan])))
-
+    
     // the elements' own type: an f32 array answers an f32
     let zs = f32([1, 2, 4, 8])
     println(variance(zs), median(zs))

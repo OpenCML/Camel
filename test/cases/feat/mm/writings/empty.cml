@@ -3,7 +3,7 @@
  * (test::writings): the program is run, unchanged, after them.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

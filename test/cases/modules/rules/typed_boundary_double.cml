@@ -5,9 +5,11 @@
  * min.
  */
 
-func f32_double_frac(x: f32): f32 { return x * 0.1 + x * 0.1 }
+func f32_double_frac(x: f32) => f32 {
+    return x * 0.1 + x * 0.1
+}
 
-func main(): int sync {
+func main() => int sync {
     println(f32_double_frac(9.80908925027372e-45), 9.80908925027372e-45)
     return 0
 }

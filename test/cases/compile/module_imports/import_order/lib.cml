@@ -2,6 +2,6 @@
 /// writes `import ../lib`, which is a syntax error: an import names a module, and the
 /// own-directory rule adds no way to walk up out of the module's directory.
 
-export func name(): string {
+export func name() => string {
     return 'parent'
 }

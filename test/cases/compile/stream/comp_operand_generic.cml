@@ -5,12 +5,12 @@
 // settle it (design principles 5.5: a name of a generic function is an instance only
 // where a position fixes its type arguments).
 
-func ident::<T>(x: T): T {
+func ident::<T>(x: T) => T {
     return x
 }
 
-func main(): int sync {
-    let composed = ident..ident
+func main() => int sync {
+    let composed = ident <> ident
     println(composed(4))
     return 0
 }

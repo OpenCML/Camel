@@ -6,7 +6,7 @@
 
 import { abs, clamp, min, sqrt, shl, shr, pi } from math
 
-func main(): int sync {
+func main() => int sync {
     println(abs(-3))
     println(abs(f32(-2.5)))
     println(min(3, 5))

@@ -5,7 +5,7 @@
  * this case is what keeps the reason: the writing is not a worse remedy, it is not one.
  */
 
-func main(): int sync {
+func main() => int sync {
     let u = sync {
         println('never printed')
     }

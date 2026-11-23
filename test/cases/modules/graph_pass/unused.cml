@@ -1,34 +1,38 @@
 import { flatten } from array
-import { is_function } from types
 import { Node, Graph, NodeKind, nodes, kind, is_pure, is_constant, is_anchor, value_users, open, erase, commit, graphs_of } from graph
+import { is_function } from types
 
 /// Whether the node is no more than its value: a constant, a conversion, a copy, an access, a
 /// fill or a pure operation.
-func valueOnly(n: Node): bool {
+func valueOnly(n: Node) => bool {
     let k = kind(n)
     return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy || k == NodeKind::Accs || k == NodeKind::Fill || is_pure(n)
 }
 
-func isUnused(n: Node): bool {
+func isUnused(n: Node) => bool {
     return valueOnly(n) && len(value_users(n)) == 0 && !is_anchor(n)
 }
 
-func allNodes::<F>(p: F): Node[] {
-    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] { nodes(g) }>)
+func allNodes::<F>(p: F) => Node[] {
+    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] {
+        nodes(g)
+    }>)
 }
 
-func eraseAll::<F>(p: F, hits: Node[]): F! sync {
+func eraseAll::<F>(p: F, hits: Node[]) => F! sync {
     let t = open(p)
-    hits->foreach<func (n: Node) { erase(t, n) }>
+    hits->foreach<func (n: Node) {
+        erase(t, n)
+    }>
     return commit(t)
 }
 
-func settle::<F>(p: F): F! when is_function::<F>() sync {
+func settle::<F>(p: F) => F! when is_function::<F>() sync {
     let hits = allNodes(p)->filter<isUnused>
-    return if len(hits) == 0 then p else eraseAll(p, hits) -> settle
+    return if len(hits) == 0 then p else eraseAll(p, hits)->settle
 }
 
 /// The constants and pure operations that no node reads, removed until none is left.
-export func values::<F>(p: F): F! {
+export func values::<F>(p: F) => F! {
     return settle(p)
 }

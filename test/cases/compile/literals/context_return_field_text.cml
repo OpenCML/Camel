@@ -5,9 +5,11 @@
 
 type Point = { x: float, y: float }
 
-func make(): Point { return { x: '1.5', y: 2.0 } }
+func make() => Point {
+    return { x: '1.5', y: 2.0 }
+}
 
-func main(): int sync {
+func main() => int sync {
     println(make().x)
     return 0
 }

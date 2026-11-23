@@ -26,13 +26,13 @@
 import { reshape, sum } from tensor
 
 #gpu
-func observed(x: f32[3]): f32[3] sync {
+func observed(x: f32[3]) => f32[3] sync {
     let y = x * 2.0
     println(sum(y))
     return y + 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println('result {}'->format<observed(x)>)
     return 0

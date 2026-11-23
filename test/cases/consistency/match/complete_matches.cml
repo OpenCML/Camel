@@ -4,41 +4,41 @@
  * the fixed patterns over `T?` and `T!`. The graph of each has exactly the arms written.
  */
 
-func with_default(s: string): int {
+func with_default(s: string) => int {
     return match s {
         case 'a' => 1
         case _ => 0
     }
 }
 
-func both(b: bool): string {
+func both(b: bool) => string {
     return match b {
         case true => 'yes'
         case false => 'no'
     }
 }
 
-func either(b: bool): string {
+func either(b: bool) => string {
     return match b {
         case true | false => 'any'
     }
 }
 
-func or_zero(x: int?): int {
+func or_zero(x: int?) => int {
     return match x {
         case null => 0
         case v => v
     }
 }
 
-func text_of(r: int!): string {
+func text_of(r: int!) => string {
     return match r {
         case error e => e.kind
         case v => format<v>('ok {}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let none: int? = null
     let some: int? = 5
     println(with_default('a'), with_default('q'))

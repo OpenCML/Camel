@@ -11,14 +11,14 @@
  *   f  = sum(h2)  df/ds = sum(h0 @ d0 @ (I + 2 d1 s)) + sum(h1 @ 2 d1)
  */
 
-import { reshape, sum } from tensor
-import { abs } from math
 import { grad } from autodiff
+import { abs } from math
+import { reshape, sum } from tensor
 
 type Block = { w: f32[4, 4] }
 
 with <s: float>
-func loss(): float {
+func loss() => float {
     let one = reshape<[4, 4]>([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] as f32[])
     let d0 = reshape<[4, 4]>([0.3, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.1] as f32[])
     let d1 = reshape<[4, 4]>([0.1, 0.0, 0.0, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.2] as f32[])
@@ -28,12 +28,11 @@ func loss(): float {
     return float(sum(h))
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(loss)<0.25>()
     let hi = loss<0.2505>()
     let lo = loss<0.2495>()
     let fd = (hi - lo) / 1.0e-3
-    'loop_grad_record_tensor_fd d={:.6f} fd={:.6f} gap={:.9f}'
-        ->format<d, fd, abs(d - fd)>->println
+    'loop_grad_record_tensor_fd d={:.6f} fd={:.6f} gap={:.9f}'->format<d, fd, abs(d - fd)>->println
     return 0
 }

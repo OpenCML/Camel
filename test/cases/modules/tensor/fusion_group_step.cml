@@ -6,34 +6,25 @@
  * profile's operator executions are compared with.
  */
 
-
-import { sum, zeros } from tensor
 import { with_grad } from autodiff
+import { sum, zeros } from tensor
 
-type Model = {
-    w: f32[...]
-}
+type Model = { w: f32[...] }
 
 with <m: Model>
-func loss(x: f32[...]): float {
+func loss(x: f32[...]) => float {
     return float(sum(x / m.w))
 }
 
-func main(steps: int): int sync {
+func main(steps: int) => int sync {
     let x = zeros::<f32>([16]) + 0.5
-    let model: Model = {
-        w: zeros::<f32>([16]) + 2.0
-    }
+    let model: Model = { w: zeros::<f32>([16]) + 2.0 }
     let grad = with_grad(loss)
-    let (trained, done) = loop m = model, step = 0
-        while step < steps
-        do {
-            let (value, gradient) = grad<m>(x)
-            let next = {
-                w: m.w - 0.01 * gradient.w
-            }
-            (next, step + 1)
-        }
+    let (trained, done) = loop m = model, step = 0 while step < steps do {
+        let (value, gradient) = grad<m>(x)
+        let next = { w: m.w - 0.01 * gradient.w }
+        (next, step + 1)
+    }
     'step steps={} w={}'->format<done, sum(trained.w)>->println
     return 0
 }

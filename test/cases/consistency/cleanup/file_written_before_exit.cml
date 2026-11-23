@@ -2,11 +2,11 @@
  * A file written before exit(5) is complete on disk; what follows the exit is not written.
  */
 
-import { write_text, read_text, mkdirs } from fs
 import { get_env } from env
+import { write_text, read_text, mkdirs } from fs
 import { exit } from process
 
-func main(): int sync {
+func main() => int sync {
     let dir = get_env('CAMEL_TEST_DIR') ?? ''
     let _ = dir->mkdirs
     let path = dir + '/' + (get_env('CAMEL_TEST_FILE') ?? '')

@@ -1,6 +1,6 @@
-export func nine(): int {
+export func nine() => int {
     return 9
 }
-export func addOne(x: int): int {
+export func addOne(x: int) => int {
     return x + 1
 }

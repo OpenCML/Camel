@@ -3,11 +3,11 @@
 // it -- the declaration relates nothing and can never be specialized on it. Still a warning: the
 // program compiles and runs, and the repair is to write `T` in a type or remove it from `::<...>`.
 
-func f::<T>(x: int): int {
+func f::<T>(x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f::<int>(1))
     return 0
 }

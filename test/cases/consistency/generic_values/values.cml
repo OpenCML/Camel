@@ -6,21 +6,47 @@
 
 import { reverse } from array
 
-func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
-func id::<A>(x: A): A { return x }
-func pair::<A>(x: A): (A, A) { return (x, x) }
-func first::<T>(xs: T[]): T { return xs[0] }
-func left::<A, B>(p: (A, B)): A { return p.0 }
-func twice(f: (x: int) => int, x: int): int { return f(f(x)) }
-func compose::<A, B, C>(f: (x: A) => B, g: (y: B) => C, x: A): C { return g(f(x)) }
-func or_zero::<T>(x: T?, d: T): T { return x ?? d }
-func add::<N>(a: N, b: N): N { return a + b }
-func longer::<T>(a: T[], x: T): T[] { return concat(a, [x]) }
-func is_small::<T>(x: T): bool { return string(x) < '3' }
-func pick(): (x: string) => string { return id }
-func each::<T, U>(xs: T[], f: (x: T) => U): U[] { return xs->map<f> }
+func apply::<T, U>(f: (x: T) => U, x: T) => U {
+    return f(x)
+}
+func id::<A>(x: A) => A {
+    return x
+}
+func pair::<A>(x: A) => (A, A) {
+    return (x, x)
+}
+func first::<T>(xs: T[]) => T {
+    return xs[0]
+}
+func left::<A, B>(p: (A, B)) => A {
+    return p.0
+}
+func twice(f: (x: int) => int, x: int) => int {
+    return f(f(x))
+}
+func compose::<A, B, C>(f: (x: A) => B, g: (y: B) => C, x: A) => C {
+    return g(f(x))
+}
+func or_zero::<T>(x: T?, d: T) => T {
+    return x ?? d
+}
+func add::<N>(a: N, b: N) => N {
+    return a + b
+}
+func longer::<T>(a: T[], x: T) => T[] {
+    return concat(a, [x])
+}
+func is_small::<T>(x: T) => bool {
+    return string(x) < '3'
+}
+func pick() => (x: string) => string {
+    return id
+}
+func each::<T, U>(xs: T[], f: (x: T) => U) => U[] {
+    return xs->map<f>
+}
 
-func main(): int sync {
+func main() => int sync {
     // passed to another generic function: its other arguments fix the types
     println(apply(id, 3), apply(id, 'a'), apply(pair, 2), apply(first, [7, 8]))
     // two of them in one call, the second waiting for the first

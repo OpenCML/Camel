@@ -20,19 +20,19 @@
 //
 // The three refusals are reported together, each at its own call.
 
-func rank_is_open(): int[] {
+func rank_is_open() => int[] {
     return extent_of::<float[...]>()
 }
 
-func second_position_is_open(): int[] {
+func second_position_is_open() => int[] {
     return extent_of::<float[2, ?]>()
 }
 
-func only_position_is_open(): int[] {
+func only_position_is_open() => int[] {
     return extent_of::<float[?]>()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(rank_is_open())
     println(second_position_is_open())
     println(only_position_is_open())

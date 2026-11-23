@@ -5,13 +5,15 @@
 
 import { get_env } from env
 
-func via(f: (n: int) => int, n: int): int {
+func via(f: (n: int) => int, n: int) => int {
     return if n == 0 then 0 else 1 + f(n - 1)
 }
 
-func step(n: int): int { return 0 + via(step, n) }
+func step(n: int) => int {
+    return 0 + via(step, n)
+}
 
-func main(): int sync {
+func main() => int sync {
     let n = int(get_env('N') ?? '')
     println('start')
     println(step(n))

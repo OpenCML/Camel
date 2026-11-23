@@ -9,7 +9,7 @@
 type Node = { state: State, children: Node[] }
 type State = { board: int[] }
 
-func main(): int sync {
+func main() => int sync {
     let node: Node = { state: { board: [1] }, children: [] }
     println(len(node.state.board))
     return 0

@@ -6,11 +6,11 @@
 
 type Point = { x: int, y: int }
 
-func sum(ps: Point[]): int {
+func sum(ps: Point[]) => int {
     return loop acc = 0 for p in ps do acc + p.x + p.y
 }
 
-func main(): int sync {
+func main() => int sync {
     let p: Point = { x: 10, y: 20 }
     let anonymous_first = if p.x > 0 then { x: 1, y: 2 } else p
     let named_first = if p.x > 0 then p else { x: 1, y: 2 }

@@ -9,15 +9,15 @@
 
 type Ints = int..
 
-func pick(x: int..): int {
+func pick(x: int..) => int {
     return 0
 }
 
-func pick(x: Ints): int {
+func pick(x: Ints) => int {
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(0)
     return 0
 }

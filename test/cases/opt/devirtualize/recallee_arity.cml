@@ -10,15 +10,15 @@
  * retarget the call site no longer fits its callee, and neither the commit nor the pass may
  * pretend it does (see the plan for which of the two answers is pinned and why).
  */
-func add2(a: int, b: int): int {
+func add2(a: int, b: int) => int {
     return a + b
 }
 
-func shift1(a: int): int {
+func shift1(a: int) => int {
     return a + 10
 }
 
-func main(): int sync {
+func main() => int sync {
     let f = add2
     let g = shift1
     let sum = f(3, 4)

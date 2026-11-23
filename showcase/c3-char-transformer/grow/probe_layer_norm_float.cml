@@ -8,7 +8,7 @@
 // normalized to zero mean, the sum of both rows is 2*(0.1 - 0.2) = -0.2 exactly, in f64.
 import { layer_norm, sum } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 0.25], [0.5, 1.0]] as float[2, 2]
     let g = [1.0, 1.0] as float[]
     let b = [0.1, -0.2] as float[]

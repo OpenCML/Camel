@@ -7,7 +7,7 @@
  * `int`, so this pins the walk of a body no instance builds.
  */
 
-func shape::<T>(t: T): int {
+func shape::<T>(t: T) => int {
     return match type T {
         case struct => 1
         case tuple => {
@@ -20,7 +20,7 @@ func shape::<T>(t: T): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(shape(1))
     return 0
 }

@@ -12,17 +12,17 @@ import { encode } from bytes
 // The one kernel. The two public overloads below share it, so the text form is not a second
 // operator but the first one applied to the encoded text.
 #op('hash:sha256_bytes')
-func sha256_bytes(data: Bytes): string
+func sha256_bytes(data: Bytes) => string
 
 /// The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits.
 /// @example-fragment the example builds its `Bytes` value with `encode` from the `bytes` module, which this page does not import
 /// @example sha256(encode('abc'))    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
-export func sha256(data: Bytes): string {
+export func sha256(data: Bytes) => string {
     return sha256_bytes(data)
 }
 
 /// The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal digits.
 /// @example sha256('abc')    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
-export func sha256(text: string): string {
+export func sha256(text: string) => string {
     return sha256_bytes(encode(text))
 }

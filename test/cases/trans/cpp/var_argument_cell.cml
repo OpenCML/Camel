@@ -10,7 +10,7 @@ func bump(var x: int) sync {
     x = x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     var a = 1
     a = 2
     bump(a)

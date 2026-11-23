@@ -4,7 +4,7 @@
 
 import helper as shadow_helper
 
-func main(): int sync {
+func main() => int sync {
     println(shadow_helper::answer())
     return 0
 }

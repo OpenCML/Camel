@@ -4,14 +4,14 @@
 /// without the tag does not carry it.
 
 #independent
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2
 }
 
-func plain(x: int): int {
+func plain(x: int) => int {
     return x + 1
 }
 
-func main(): int {
+func main() => int {
     return twice(3) + plain(4)
 }

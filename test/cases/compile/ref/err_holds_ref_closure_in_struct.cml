@@ -11,9 +11,11 @@ import state
 type Inner = { cb: () => int }
 type Outer = { inner: Inner, n: int }
 
-func main(): int sync {
+func main() => int sync {
     let n = state::ref(0)
-    let h = func () => int { state::get(n) }
+    let h = func () => int {
+        state::get(n)
+    }
     let p: Outer = { inner: { cb: h }, n: 1 }
     let box = state::ref(p)
     let q = state::get(box)

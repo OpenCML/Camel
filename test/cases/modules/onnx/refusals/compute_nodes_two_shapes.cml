@@ -9,24 +9,24 @@
  * three GATEs the splice adds for its arguments were counted).
  */
 
-import { reshape } from tensor
 import { export_model } from onnx
 import { cpu_count } from process
+import { reshape } from tensor
 
-func double(t: float[...]): float[...] {
+func double(t: float[...]) => float[...] {
     return t * 2.0
 }
 
-func combine(a: int, b: int, c: int): int {
+func combine(a: int, b: int, c: int) => int {
     return a + b + c
 }
 
-func spin(n: int): int sync {
+func spin(n: int) => int sync {
     println(n)
     return if n <= 0 then 0 else spin(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     // The refusal is what this case measures, and binding it would add compute nodes to the
     // function whose size the refusal reports, so the value stays unbound: the compiler reports
     // that with its own warning.

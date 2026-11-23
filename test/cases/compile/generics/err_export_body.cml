@@ -1,6 +1,6 @@
 import { bad } from export_lib
 
-func main(): int sync {
+func main() => int sync {
     println(bad(1))
     println(bad('s'))
     return 0

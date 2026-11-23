@@ -5,7 +5,7 @@
  * a `return` in these arms, so there is no statement the `return` leaves behind and no diagnostic.
  */
 
-func pick(c: bool): int sync {
+func pick(c: bool) => int sync {
     if c then {
         return 7
     } else {
@@ -13,7 +13,7 @@ func pick(c: bool): int sync {
     }
 }
 
-func scaled(x: int): int {
+func scaled(x: int) => int {
     if x > 10 then {
         return x * 2
     } else {
@@ -21,7 +21,7 @@ func scaled(x: int): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true))
     println(pick(false))
     println(scaled(11))

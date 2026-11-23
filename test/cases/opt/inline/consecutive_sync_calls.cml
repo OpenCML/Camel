@@ -7,22 +7,22 @@
  * call's body no longer reached the exit and its println never ran.
  */
 
-func one(a: int): int sync {
+func one(a: int) => int sync {
     println(a)
     return 0
 }
 
-func two(a: int): int sync {
+func two(a: int) => int sync {
     println(a + 10)
     return 0
 }
 
-func three(a: int, b: int): int sync {
+func three(a: int, b: int) => int sync {
     println(a * 100 + b)
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     one(1)
     two(1)
     three(2, 3)

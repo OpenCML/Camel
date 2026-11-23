@@ -1,6 +1,6 @@
 import { shl } from math
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(i32(1)->shl<32>)
     println('not reached')

@@ -1,14 +1,14 @@
 import { ones, sum } from tensor
 
-func total(constas n: int, x: f32[n]): float {
+func total(constas n: int, x: f32[n]) => float {
     return float(sum(x))
 }
 
-func use(m: int): float {
+func use(m: int) => float {
     return total(m, ones::<f32>([3]))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(use(3))
     return 0
 }

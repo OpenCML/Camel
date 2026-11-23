@@ -9,20 +9,20 @@
  *   effects, var, varparam).
  */
 
-func f10(a11: int, a12: int): int {
+func f10(a11: int, a12: int) => int {
     return match a12 {
         case 10 => 0
         case 5 => {
-            return 0;
+            return 0
         }
         case _ => {
-            return 0 + (if false then a12 else 3);
+            return 0 + (if false then a12 else 3)
         }
-    };
+    }
 }
 
-func main(): int sync {
-    let n26 = f10(0, 7);
-    println('L4 {} {} {}'->format<0, n26, 'a'>);
-    return 0;
+func main() => int sync {
+    let n26 = f10(0, 7)
+    println('L4 {} {} {}'->format<0, n26, 'a'>)
+    return 0
 }

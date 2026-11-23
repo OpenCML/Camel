@@ -5,14 +5,16 @@
 
 tag jvp::<F>(rule: F) on func when is_function::<F>()
 
-rule mul_rule(x: float, w: float) {
-    x * w => func (dx: float, dw: float) { dx * w + x * dw }
-}
+rule mul_rule(x: float, w: float) { x * w => func (dx: float, dw: float) {
+    dx * w + x * dw
+} }
 
 #jvp(mul_rule)
-func mul(x: float, w: float): float { return x * w }
+func mul(x: float, w: float) => float {
+    return x * w
+}
 
-func main(): int sync {
+func main() => int sync {
     println(mul(2.0, 3.0))
     return 0
 }

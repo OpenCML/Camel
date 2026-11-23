@@ -5,11 +5,11 @@
  * `float` value where an `f32` is declared is refused at the declaration, as `let n: f32 = f` is.
  */
 
-func floatValue(): float {
+func floatValue() => float {
     2.5
 }
 
-func main(): int sync {
+func main() => int sync {
     let n: f32 = loop s = floatValue() while s < 3.0 do s + 1.0
     println(n)
     return 0

@@ -1,8 +1,9 @@
 import { ones } from tensor
-func f(x: f32[2, 3]): f32[3, 2] {
+
+func f(x: f32[2, 3]) => f32[3, 2] {
     return x * 2.0
 }
-func main(): int sync {
+func main() => int sync {
     println('ran')
     println(f(ones::<f32>([2, 3])))
     return 0

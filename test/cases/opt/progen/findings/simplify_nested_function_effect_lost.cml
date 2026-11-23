@@ -7,19 +7,21 @@
  * Reduced by test/tools/progen from seed 284 (generator version 1, all features).
  */
 
-func main(): int sync {
-    let n24 = '';
-    let n28 = [0];
-    func g29(a30: string): int sync {
-        println(n24);
-        return (if false then ['', '', a30] else [''])->reduce<func (p31: int, p32: string) => int { n28[0] }, 5>;
-    };
-    var v35 = -1;
+func main() => int sync {
+    let n24 = ''
+    let n28 = [0]
+    func g29(a30: string) => int sync {
+        println(n24)
+        return (if false then ['', '', a30] else [''])->reduce<func (p31: int, p32: string) => int {
+            n28[0]
+        }, 5>
+    }
+    var v35 = -1
     if (v35 <= 31) then sync {
-        let n50 = g29(['']->join<'-'>);
-        null;
+        let n50 = g29(['']->join<'-'>)
+        null
     } else sync {
-        null;
-    };
-    return 0;
+        null
+    }
+    return 0
 }

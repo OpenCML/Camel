@@ -1,8 +1,8 @@
-func first::<T>(xs: T[]): T {
+func first::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1], 2))
     return 0
 }

@@ -5,35 +5,37 @@
  * then faults again gives the second fault to its own boundary.
  */
 
-func risky(d: int): int { return 100 / d }
+func risky(d: int) => int {
+    return 100 / d
+}
 
-func inner_only(d: int): int {
+func inner_only(d: int) => int {
     return attempt(risky)(d) !! -1
 }
 
-func inner_then_outer(d: int): int {
+func inner_then_outer(d: int) => int {
     let a = attempt(risky)(d) !! -1
     return a + risky(d)
 }
 
-func twice(d: int): int {
+func twice(d: int) => int {
     let a = attempt(risky)(d) !! -1
     let b = attempt(risky)(d) !! -2
     return a * 10 + b
 }
 
-func deep(n: int, d: int): int {
+func deep(n: int, d: int) => int {
     return if n == 0 then risky(d) else (attempt(deep)(n - 1, d) !! (0 - n))
 }
 
-func kind(r: int!): string {
+func kind(r: int!) => string {
     return match r {
         case error e => e.kind + ' at ' + e.location
         case v => format<v>('{}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind(attempt(inner_only)(5)))
     println(kind(attempt(inner_only)(0)))
     println(kind(attempt(inner_then_outer)(5)))
@@ -41,7 +43,11 @@ func main(): int sync {
     println(kind(attempt(twice)(0)))
     println(kind(attempt(deep)(6, 0)))
     println(kind(attempt(deep)(0, 0)))
-    println(kind(attempt(func () { attempt(func () { attempt(risky)(0) !! 7 })() !! 8 })()))
+    println(kind(attempt(func () {
+        attempt(func () {
+            attempt(risky)(0) !! 7
+        })() !! 8
+    })()))
     println('end')
     return 0
 }

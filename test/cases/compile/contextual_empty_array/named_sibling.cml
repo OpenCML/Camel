@@ -8,15 +8,15 @@ type State = { board: int[], to_move: int }
 type Node = { state: State, children: Node[] }
 type Tree = { value: int, children: Tree[] }
 
-func width(node: Node): int {
+func width(node: Node) => int {
     return len(node.children) + node.state.to_move
 }
 
-func siblings(tree: Tree): int {
+func siblings(tree: Tree) => int {
     return len(tree.children)
 }
 
-func main(): int sync {
+func main() => int sync {
     let state: State = { board: [0, 0, 0, 0, 0, 0, 0, 0, 0], to_move: 1 }
     // The reported shape: one field is a variable of a named struct type, the other is `[]`.
     let node: Node = { state: state, children: [] }

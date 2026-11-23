@@ -9,52 +9,68 @@ import { Rule, Run, explain, why_not, run } from rewrite
 rule zero_to_one(x: int) { x + 0 => x + 1 }
 rule mul_zero(x: int) { x * 0 => 0 }
 
-func f(x: int): int {
+func f(x: int) => int {
     return x + 0
 }
 
 /// A function no rule matches: the value `why_not` is asked about, so its answer is the rule's
 /// own reason and not "another rule fired here".
-func g(x: int): int {
+func g(x: int) => int {
     return x + 1
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func nodesOf::<F>(p: F, function: string) => Node[] spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return nodes(found[0])
 }
 
 /// The one operation of `function`: the value a chain starts from or reaches, and the value
 /// `why_not` reads for a rule that cannot match it.
-func operOf::<F>(p: F, function: string): Node spelling {
-    let ops = nodesOf(p, function)->filter<func (n: Node) => bool { kind(n) == NodeKind::Oper }>
+func operOf::<F>(p: F, function: string) => Node spelling {
+    let ops = nodesOf(p, function)->filter<func (n: Node) => bool {
+        kind(n) == NodeKind::Oper
+    }>
     return ops[0]
 }
 
 /// The run, the value it started from and the values it produced are parameters here, so every
 /// one of them is a name of this frame when the program stops inside it.
-func show::<F>(r: Run<F>, before: Node, failing: Rule): int spelling sync {
+func show::<F>(r: Run<F>, before: Node, failing: Rule) => int spelling sync {
     let after = operOf(r.result, 'f')
     let other = operOf(r.result, 'g')
     let chain = match r->explain<before, after> {
-        case error e => sync { println(e); 0 }
-        case proof => sync { println(proof); 0 }
+        case error e => sync {
+            println(e)
+            0
+        }
+        case proof => sync {
+            println(proof)
+            0
+        }
     }
     let reason = match r->why_not<failing, other> {
-        case error e => sync { println(e); 0 }
-        case text => sync { println(text); 0 }
+        case error e => sync {
+            println(e)
+            0
+        }
+        case text => sync {
+            println(text)
+            0
+        }
     }
-    println(f(5))                       // mark:stop
+    println(f(5)) // mark:stop
     return chain + reason
 }
 
 /// The function the rules are applied to: it reaches `f` and `g`, and is not `main`, whose use of
 /// the rules would make the reference to it a recursive one.
-func subject(): int spelling {
+func subject() => int spelling {
     return f(1) + g(1)
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let p = subject
     let before = operOf(p, 'f')
     let outcome = p->run<[zero_to_one], explain: true>

@@ -21,38 +21,45 @@
  */
 
 import { sum as array_sum } from array
-import { reshape, sum as tensor_sum, to_bytes } from tensor
 import { to_array } from bytes
+import { reshape, sum as tensor_sum, to_bytes } from tensor
 
 /// The same elements widened to f64. `array_sum` over an f64 array accumulates in f64 (an f64
 /// accumulator is the f64 rule already), so this is the independent f64 reference for the vector.
-func widened(xs: f32[]): f64[] {
-    return xs->map<func (x: f32) { float(x) }>
+func widened(xs: f32[]) => f64[] {
+    return xs->map<func (x: f32) {
+        float(x)
+    }>
 }
 
 /// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
 /// rounds — this is what "round after every step" means, and what `array_sum` did for an f32
 /// array before the array reduction's rule.
-func foldF32(xs: f32[]): f32 {
-    return xs->reduce<func (acc: f32, item: f32) => f32 { acc + item }, f32(0.0)>
+func foldF32(xs: f32[]) => f32 {
+    return xs->reduce<func (acc: f32, item: f32) => f32 {
+        acc + item
+    }, f32(0.0)>
 }
 
 /// The four bytes of one f32 value, read back through a one-element f32 tensor.
-func bitsOf(value: f32): int[] {
+func bitsOf(value: f32) => int[] {
     let one: f32[] = [value]
     return to_array(to_bytes(one))
 }
 
-func sameBits(a: int[], b: int[]): bool {
+func sameBits(a: int[], b: int[]) => bool {
     return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]
 }
 
-func main(): int sync {
-    let a = (0..1026)->map<func (i: int) { if i == 0 then f32(16777216.0) else f32(1.0) }>
-    let b = (0..4096)
-                ->map<func (i: int) { if i == 0 then f32(16777216.0)
-                                  else if i % 2 == 0 then f32(1.0) else f32(0.5) }>
-
+func main() => int sync {
+    let a = (0 .. 1026)->map<func (i: int) {
+        if i == 0 then f32(16777216.0) else f32(1.0)
+    }>
+    let b = (0 .. 4096)->map<func (i: int) {
+        if i == 0 then f32(16777216.0)
+        else if i % 2 == 0 then f32(1.0) else f32(0.5)
+    }>
+    
     let sumA = array_sum(a)
     let refA = array_sum(widened(a))
     let foldA = foldF32(a)
@@ -61,43 +68,43 @@ func main(): int sync {
     // And it is not the per-step f32 fold: without this the case would also pass under the old
     // rule for a vector where the two agree.
     let differsA = sumA != foldA
-
+    
     let sumB = array_sum(b)
     let refB = array_sum(widened(b))
     let foldB = foldF32(b)
     let onceB = sumB == f32(refB)
     let differsB = sumB != foldB
-
+    
     // The tensor path over the same elements: sum(t, axis 1) keeps the element type f32 and
     // rounds once when it stores (reduce.cpp), so its bytes are the array path's bytes.
     let tensorA = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 1026]>(a))))
     let tensorB = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 4096]>(b))))
     let agreesA = sameBits(bitsOf(sumA), tensorA)
     let agreesB = sameBits(bitsOf(sumB), tensorB)
-
-    println("A array sum")
+    
+    println('A array sum')
     println(sumA)
-    println("A f64 reference")
+    println('A f64 reference')
     println(refA)
-    println("A per-step f32 fold")
+    println('A per-step f32 fold')
     println(foldA)
-    println("A array bytes")
+    println('A array bytes')
     println(bitsOf(sumA))
-    println("A tensor bytes")
+    println('A tensor bytes')
     println(tensorA)
-    println("B array sum")
+    println('B array sum')
     println(sumB)
-    println("B f64 reference")
+    println('B f64 reference')
     println(refB)
-    println("B per-step f32 fold")
+    println('B per-step f32 fold')
     println(foldB)
-    println("B array bytes")
+    println('B array bytes')
     println(bitsOf(sumB))
-    println("B tensor bytes")
+    println('B tensor bytes')
     println(tensorB)
     'round once: {} {}'->format<onceA, onceB>->println
     'differs from the per-step fold: {} {}'->format<differsA, differsB>->println
     'tensor agrees: {} {}'->format<agreesA, agreesB>->println
-
+    
     return if onceA && onceB && differsA && differsB && agreesA && agreesB then 0 else 1
 }

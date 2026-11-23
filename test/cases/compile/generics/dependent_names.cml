@@ -19,39 +19,41 @@
 import { is_integer } from types
 
 /// A field of a struct-typed parameter: a name only the instantiation answers.
-func name_of::<T>(s: { name: T }): T {
+func name_of::<T>(s: { name: T }) => T {
     return s.name
 }
 
 /// `later` is declared after this, and `bump` is a `with` parameter.
 with <bump: T>
-func scaled::<T>(x: T): T {
+func scaled::<T>(x: T) => T {
     return later(x) + bump
 }
 
-func later::<T>(x: T): T {
+func later::<T>(x: T) => T {
     return x + x
 }
 
 /// A generic `when`: the predicate is a name of this declaration's scope.
-func only_int::<T>(x: T): T when is_integer::<T>() {
+func only_int::<T>(x: T) => T when is_integer::<T>() {
     return x
 }
 
 /// The lambda's parameter is written as a tuple pattern: `a` and `b` are its names.
-func add_pairs::<T>(p: (T, T)): T {
-    let f: (x: (T, T)) => T = func ((a, b)) { a + b }
+func add_pairs::<T>(p: (T, T)) => T {
+    let f: (x: (T, T)) => T = func ((a, b)) {
+        a + b
+    }
     return f(p)
 }
 
 /// The loop's condition reads the state's name, and its body the element.
-func any_above::<T>(xs: T[], k: T): bool {
+func any_above::<T>(xs: T[], k: T) => bool {
     return loop hit = false for x in xs while !hit do x > k
 }
 
 /// A generic function declared in a generic body, its own type parameter and this one's.
-func four_times::<T>(x: T): T {
-    func twice_inner::<U>(y: U): (U, U) {
+func four_times::<T>(x: T) => T {
+    func twice_inner::<U>(y: U) => (U, U) {
         return (y, y)
     }
     let a = twice_inner(x)
@@ -59,13 +61,13 @@ func four_times::<T>(x: T): T {
 }
 
 /// `base` is declared below this.
-func add_base::<T>(x: T): T {
+func add_base::<T>(x: T) => T {
     return x + base
 }
 
 let base = 100
 
-func main(): int sync {
+func main() => int sync {
     println(name_of({ name: 'n' }))
     println(scaled<2>(21))
     println(only_int(5))

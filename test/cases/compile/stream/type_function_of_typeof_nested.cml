@@ -5,12 +5,12 @@
 
 import { ElementOf } from types
 
-func corner(xss: int[][]): int sync {
+func corner(xss: int[][]) => int sync {
     let e: ElementOf<ElementOf<typeof xss>> = xss[0][0]
     return e
 }
 
-func main(): int sync {
+func main() => int sync {
     println(corner([[7, 8], [9]]))
     return 0
 }

@@ -5,11 +5,11 @@
 type Tree = { value: int, children: Tree[] }
 type Move = { value: int, moves: int[], children: Move[] }
 
-func count(tree: Tree): int {
+func count(tree: Tree) => int {
     return len(tree.children)
 }
 
-func main(): int sync {
+func main() => int sync {
     let tree: Tree = { value: 4, children: [] }
     let move: Move = { value: 1, moves: [1, 2], children: [] }
     let nested: Tree = { value: 2, children: [] }

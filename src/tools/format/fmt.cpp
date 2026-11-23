@@ -1150,15 +1150,29 @@ any Formatter::visitIndexValues(cst::IndexValues context) {
 }
 
 /*
-pairedValues : keyValuePair (',' keyValuePair)* ;
+pairedValues : keyValuePair (',' keyValuePair)* | (keyValuePair | strayPositional)+ ;
 */
 any Formatter::visitPairedValues(cst::PairedValues context) {
-    return formatList(
-        vec(context->all<cst::KeyValuePair>()),
-        context,
-        ", ",
-        ",",
-        PaddingNL | PushScope);
+    // The positional the parser keeps after a named argument (`f(a: 1, 2)`) is a child here too:
+    // the call refuses it, and the refusal points at the argument, so formatting must write it.
+    std::vector<syn::Node> values;
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyValuePair) || child.is(NK::StrayPositional)) {
+            values.push_back(child);
+        }
+    }
+    return formatList(values, context, ", ", ",", PaddingNL | PushScope);
+}
+
+/*
+strayPositional : indexValue ;
+*/
+any Formatter::visitStrayPositional(cst::StrayPositional context) {
+    string result;
+    for (const syn::Node child : context->nodes()) {
+        result += any_cast<string>(visit(child));
+    }
+    return result;
 }
 
 /*
@@ -2254,6 +2268,7 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(IdentList)
         CAMEL_FORMAT(IndexValues)
         CAMEL_FORMAT(PairedValues)
+        CAMEL_FORMAT(StrayPositional)
         CAMEL_FORMAT(PairedParams)
         CAMEL_FORMAT(ArgumentList)
         CAMEL_FORMAT(Indices)

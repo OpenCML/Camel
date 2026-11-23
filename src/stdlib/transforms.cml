@@ -22,4 +22,4 @@
 /// graph is the transform's own (a member of one draft group), not the function's.
 ///
 ///     camel f.cml transforms::reinterp std::nvm
-export func reinterp::<F>(f: F): F! when is_function::<F>()
+export func reinterp::<F>(f: F) => F! when is_function::<F>()

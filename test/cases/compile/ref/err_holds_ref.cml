@@ -6,7 +6,7 @@
 
 import state
 
-func main(): int sync {
+func main() => int sync {
     let inner = state::ref(1)
     let outer = state::ref(inner)
     let back = state::get(outer)

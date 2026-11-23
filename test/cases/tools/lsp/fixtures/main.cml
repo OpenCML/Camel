@@ -4,16 +4,16 @@ import { now } from time
 type Pair = (int, string)
 
 /// Returns its argument.
-func identity::<T>(x: T): T {
+func identity::<T>(x: T) => T {
     let copy = x
     return copy
 }
 
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
-func add(a: float, b: float): float {
+func add(a: float, b: float) => float {
     return a + b
 }
 
@@ -34,7 +34,9 @@ func main() sync {
     let fsum = add(1.5, 2.5)
     let pair: Pair = (1, 'one')
     let first = pair.0
-    let double = func (v: int) { v * 2 }
+    let double = func (v: int) {
+        v * 2
+    }
     let d = double(sum)
     println(format<i, s, d>('{} {} {}'))
     let t = now()

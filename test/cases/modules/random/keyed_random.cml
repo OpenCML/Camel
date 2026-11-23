@@ -4,7 +4,7 @@
 
 import { key, split, permutation } from random
 
-func main(): int sync {
+func main() => int sync {
     let k = key(42)
     let (a, b) = split(k)
     'keyed key={} a={} b={}'->format<k, a, b>->println

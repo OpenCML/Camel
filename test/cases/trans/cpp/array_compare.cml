@@ -13,7 +13,7 @@
  * that compares sizes only, answers true there.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a: f32[4] = [1.0, 2.0, 3.0, 4.0]
     let same: f32[4] = [1.0, 2.0, 3.0, 4.0]
     let first: f32[4] = [9.0, 2.0, 3.0, 4.0]

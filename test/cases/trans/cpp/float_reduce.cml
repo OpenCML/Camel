@@ -6,7 +6,7 @@
 
 import { flatten, sort, sum } from array
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[] = [3.0, -0.0, 0.0, 1.5, 2.5]
     println(sum(xs))
     println(sort(xs))

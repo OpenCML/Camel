@@ -12,13 +12,15 @@
 
 var counter = 0
 
-func apply(f: (x: int) => void, v: int): int {
+func apply(f: (x: int) => void, v: int) => int {
     counter = 1
     f(v)
     return counter
 }
 
-func main(): int sync {
-    println(apply(func (y: int) { println('called', y) }, 3))
+func main() => int sync {
+    println(apply(func (y: int) {
+        println('called', y)
+    }, 3))
     return 0
 }

@@ -23,36 +23,38 @@
 //     camel test/cases/compile/transforms/first_step_library.cml
 //     D:\Projects\CamelTest\.venv\Scripts\python.exe D:\Temp\s2-first-step-torch.py
 import { grad, with_grad } from autodiff
-import { vjp } from vjp
 import { abs, max } from math
+import { vjp } from vjp
 
 // The library's spelling: everything the loss reads is an ordinary parameter.
-func loss_plain(w: float, b: float): float {
+func loss_plain(w: float, b: float) => float {
     let err = 1.5 * w + b - 2.0
     return 0.5 * err * err
 }
 
 // The engine's spelling: the same arithmetic, the weight first among the `with` parameters.
 with <w: float, b: float>
-func loss_with(x: float, t: float): float {
+func loss_with(x: float, t: float) => float {
     let err = x * w + b - t
     return 0.5 * err * err
 }
 
-func main(): int sync {
+func main() => int sync {
     // The library's leg.
     let (library_value, pullback) = vjp(loss_plain)(0.5, 0.75)
     let (library_w, library_b) = pullback(1.0)
-
+    
     // The engine's leg: `with_grad` gives the first `with` parameter's gradient, and the bias is
     // moved to the front by a lambda to be differentiated in its turn.
     let (engine_value, engine_w) = with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)
-    let engine_b = grad(func <bb: float> (ww: float) => float { loss_with<ww, bb>(1.5, 2.0) })<0.75>(0.5)
-
+    let engine_b = grad(func <bb: float>(ww: float) => float {
+        loss_with<ww, bb>(1.5, 2.0)
+    })<0.75>(0.5)
+    
     let dw = abs(library_w - engine_w)
     let db = abs(library_b - engine_b)
     let dv = abs(library_value - engine_value)
-
+    
     `first_step scalar value library={:.12f} engine={:.12f}`->format<library_value, engine_value>->println
     `first_step scalar library w={} b={}`->format<library_w, library_b>->println
     `first_step scalar engine w={} b={}`->format<engine_w, engine_b>->println

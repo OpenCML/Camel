@@ -7,24 +7,60 @@
  * docs/technical/18_sync_control_semantics.md).
  */
 
-func make_array(): int[] {
+func make_array() => int[] {
     return [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
     ]
 }
 
-func touch(var xs: int[]): int sync {
+func touch(var xs: int[]) => int sync {
     xs[0] = 9
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let big = make_array()
-    var v   = big
+    var v = big
     touch(v)
-    println("big[0] =", big[0], " v[0] =", v[0])
+    println('big[0] =', big[0], ' v[0] =', v[0])
     return 0
 }

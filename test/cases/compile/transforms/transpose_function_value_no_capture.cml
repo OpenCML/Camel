@@ -23,19 +23,19 @@
 //
 // The companion case adds the capture back; there the name is found too and the refusal moves on to
 // `reason=function-closure`. That pair is what says the capture is the remaining piece.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func double(x: float): float {
+func double(x: float) => float {
     return 2.0 * x
 }
 
-func g(x: float): float {
+func g(x: float) => float {
     let h = double
     return h(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g(1.0))
     let back = transpose(g)
     println(back(1.0))

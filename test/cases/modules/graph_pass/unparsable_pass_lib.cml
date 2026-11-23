@@ -4,7 +4,7 @@
 // as the `InvalidPassParameter` of pass resolution, never as this file's bare `SyntaxDiag`.
 
 
-export func run::<F>(p: F): F! sync {
+export func run::<F>(p: F) => F! sync {
     println(
     return p
 }

@@ -5,7 +5,7 @@
  * written as a plain loop prints step by step.
  */
 
-func count(): int.. sync {
+func count() => int.. sync {
     var i = 0
     loop i = 0 while i < 3 do {
         yield i
@@ -14,7 +14,7 @@ func count(): int.. sync {
     yield i
 }
 
-func main(): int sync {
+func main() => int sync {
     println(loop acc = 0 for v in count() do acc * 10 + v)
     return 0
 }

@@ -1,9 +1,9 @@
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func main(): void sync {
+func main() => void sync {
     let s = Shape::Circl(1.0)
     println(s)
 }

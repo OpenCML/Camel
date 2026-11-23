@@ -6,7 +6,7 @@
  */
 import { from_bytes } from str
 
-func main(): int sync {
+func main() => int sync {
     println(from_bytes([104, 105]))
     return 0
 }

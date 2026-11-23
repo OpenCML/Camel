@@ -30,18 +30,18 @@
 // zero tangent space and the reading prints which value contributes the zero. What this page said was
 // that the shape refused with `skip=state` and that the cut changing it was a different one; it was,
 // and it has landed.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func carried(x: float): float {
+func carried(x: float) => float {
     let q = 2.0 * x
-    return (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0
+    return (loop s = x, p = x for i in 0 .. 3 do (s + p, p + q)).0
 }
 
-func main(): int sync {
+func main() => int sync {
     // The algebra first, forward and un-transposed: 10 through `s`, 7 through `p`.
     println(carried(1.0))
-    let (a, b) = loop s = 1.0, p = 1.0 for i in 0..3 do (s + p, p + 2.0)
+    let (a, b) = loop s = 1.0, p = 1.0 for i in 0 .. 3 do (s + p, p + 2.0)
     println(a)
     println(b)
     let back = transpose(carried)

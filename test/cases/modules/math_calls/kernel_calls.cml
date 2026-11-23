@@ -5,10 +5,9 @@
  * `abs` have kernels of their own.
  */
 
-
 import { abs, exp, log, max, min, sign, sqrt } from math
 
-func main(): int sync {
+func main() => int sync {
     println(sqrt(f32(16.0)), sqrt(16.0), exp(0.0), exp(f32(0.0)), exp(bf16(0.0)), exp(f16(0.0)))
     println(abs(-3), abs(i32(-3)), abs(-2.5), abs(f16(-2.5)), min(3, 5), max(f32(1.5), f32(2.5)), sign(-2.5))
     println(exp(0.0 + 0.0i), exp(c64(0.0)), abs(3.0 + 4.0i), abs(c64(3.0) + c64(4.0i)), log(1.0))

@@ -6,22 +6,22 @@
  * function type.
  */
 
-func is_function::<T>(): bool {
+func is_function::<T>() => bool {
     return match type T {
         case func => true
         case _ => false
     }
 }
 
-func apply::<F>(f: F, x: int): int when is_function::<F>() {
+func apply::<F>(f: F, x: int) => int when is_function::<F>() {
     return f(x)
 }
 
-func inc(x: int): int {
+func inc(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(inc, 41))
     return 0
 }

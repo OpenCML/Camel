@@ -5,9 +5,11 @@
  * exact value; the conversion of the element uses it.
  */
 
-func firstf(xs: f32[]): f32 { return xs[0] }
+func firstf(xs: f32[]) => f32 {
+    return xs[0]
+}
 
-func main(): int sync {
+func main() => int sync {
     println(firstf([1e40, 2.0]))
     return 0
 }

@@ -4,7 +4,7 @@
  */
 import { ends_with } from str
 
-func main(): int sync {
+func main() => int sync {
     println('abc'->ends_with<'bc'>)
     return 0
 }

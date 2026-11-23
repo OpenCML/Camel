@@ -17,26 +17,30 @@
  * values this program prints and the model it exports are both checked against those by
  * ort_slice_grad_stride.py.
  */
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, sum } from tensor
 
 type P = { w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4] }
 
 with <m: P>
-func loss(): f32 {
-    return sum(m.w[range(0, 5, 2)] * m.x[range(0, 5, 2)]) + sum(m.w[range(5, 1, -2)] * m.x[range(5, 1, -2)]) +
-        sum(m.a[.., range(3, 0, -2)] * m.b[.., range(3, 0, -2)])
+func loss() => f32 {
+    return sum(m.w[range(0, 5, 2)] * m.x[range(0, 5, 2)]) + sum(m.w[range(5, 1, -2)] * m.x[range(5, 1, -2)]) + sum(m.a[.., range(3, 0, -2)] * m.b[.., range(3, 0, -2)])
 }
 
-func step(w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[...], f32[...], f32[...]) {
+func step(
+    w: f32[6],
+    x: f32[6],
+    a: f32[2, 4],
+    b: f32[2, 4]
+) => (f32[...], f32[...], f32[...]) {
     let m = { w: w, x: x, a: a, b: b }
     let vg = with_grad(loss)<m>()
     return (reshape<[1]>([f32(vg.0)]), vg.1.x, vg.1.b)
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let w = reshape<[6]>([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[])
     let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let a = reshape<[2, 4]>([1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0] as f32[])
@@ -46,10 +50,14 @@ func main(): string! sync {
     println(r.1)
     println(r.2)
     return match export_model<out: get_env('ONNX_OUT') ?? ''>(
-        func (w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]) => (f32[...], f32[...], f32[...]) { step(
-            w, x, a, b) },
-        (w, x, a, b)) {
-        case error e => { return e }
+        func (w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]) => (f32[...], f32[...], f32[...]) {
+            step(w, x, a, b)
+        },
+        (w, x, a, b)
+    ) {
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

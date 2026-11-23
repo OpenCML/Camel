@@ -7,11 +7,11 @@
 import rulesets.probe_batch
 import { vmap } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(f)(xs))
     return 0

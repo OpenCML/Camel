@@ -3,7 +3,7 @@
  * dead, and it is reported rather than silently ignored (design principles 5.5).
  */
 
-func twice::<T>(t: T): int {
+func twice::<T>(t: T) => int {
     return match type T {
         case int => 1
         case int => 2
@@ -11,7 +11,7 @@ func twice::<T>(t: T): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(1))
     return 0
 }

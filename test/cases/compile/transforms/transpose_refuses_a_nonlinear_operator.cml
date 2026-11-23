@@ -15,15 +15,15 @@
 //
 //     camel test/cases/compile/transforms/transpose_refuses_a_nonlinear_operator.cml
 import rulesets.transpose
-import { transpose } from transforms
 import { abs, sum } from tensor
+import { transpose } from transforms
 
 /// `x ↦ Σ|x|`: the operator the refusal names.
-func f_abs(x: float[3]): float {
+func f_abs(x: float[3]) => float {
     return float(sum(abs(x)))
 }
 
-func main(): int sync {
+func main() => int sync {
     let cotangent = transpose(f_abs)(1.0)
     `abs  ct=1.0  {}`->format<cotangent>->println
     return 0

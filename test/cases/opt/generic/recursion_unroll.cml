@@ -4,15 +4,15 @@
  * straight-line code. The value must not change.
  */
 
-func run(t: int, steps: int, h: float): float {
+func run(t: int, steps: int, h: float) => float {
     return if t >= steps then h else run(t + 1, steps, h * 0.5 + float(t))
 }
 
-func forward(x: float): float {
+func forward(x: float) => float {
     return run(0, 4, x)
 }
 
-func main(): int sync {
+func main() => int sync {
     'unroll={}'->format<forward(8.0)>->println
     return 0
 }

@@ -8,39 +8,41 @@
 // the first of the three ways the diagnostic names): a handle is a value, so the closure captures
 // it and writes the content it points at, which is a resource of the caller -- the reading this
 // case is about. The body that owns `c` binds it back from the handle.
+import { sort } from array
 import { exists } from fs
 import io
 import { seed, rand } from random
-import { sort } from array
 import state
 
 /// Writes the cell it is given.
-func bump(var t: int): int sync {
+func bump(var t: int) => int sync {
     t = t + 1
     return t
 }
 
 /// A recursion through a var parameter: its footprint is a fixpoint.
-func countdown(var t: int, n: int): int sync {
+func countdown(var t: int, n: int) => int sync {
     t = t + n
     return if n <= 0 then t else countdown(t, n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     var c = 0
     var d = 10
     c = c + 2
     bump(c)
     countdown(d, 3)
     let r = state::ref(c)
-    let inc = func () => void sync { state::set(r, state::get(r) + 1) }
+    let inc = func () => void sync {
+        state::set(r, state::get(r) + 1)
+    }
     inc()
     c = state::get(r)
     var xs = [3, 1, 2]
     xs = xs->sort
     seed(4)
     println(rand() < 1.0)
-    println(exists("no/such/file"))
+    println(exists('no/such/file'))
     println(c)
     println(d)
     println(xs)

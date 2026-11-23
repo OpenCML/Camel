@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     let (x, _) = (1, 2)
     let (_, w) = (3, 4)
     let (p, q) = (5, 6)

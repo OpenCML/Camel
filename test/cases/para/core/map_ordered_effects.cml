@@ -5,19 +5,19 @@
  * see map_result_order.)
  */
 
-func show(i: int): int sync {
+func show(i: int) => int sync {
     println(i)
     return i * 2
 }
 
-func even(i: int): bool sync {
+func even(i: int) => bool sync {
     println(100 + i)
     return i - (i / 2) * 2 == 0
 }
 
-func main(): int sync {
-    let doubled = (0..24)->map<show>
-    let kept = (0..24)->filter<even>
+func main() => int sync {
+    let doubled = (0 .. 24)->map<show>
+    let kept = (0 .. 24)->filter<even>
     println(len(doubled) + len(kept))
     return 0
 }

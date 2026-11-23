@@ -20,32 +20,32 @@
 
 type P = { x: int, y: int }
 
-func operator <(a: P, b: P): bool {
-    return a.x < b.x;
+func operator <(a: P, b: P) => bool {
+    return a.x < b.x
 }
 
-func f8(a9: float, a10: (int, string)[]): string {
-    return if (loop s11 = { x: 1, y: 4 } for q12 in [5, 0, 31] do { x: 1, y: q12 }) < (loop s13 = { x: 2, y: -2 }, c14 = 0 while (c14 < 0) do (s13, c14+ 1)).0 then '' else string(-2);
+func f8(a9: float, a10: (int, string)[]) => string {
+    return if (loop s11 = { x: 1, y: 4 } for q12 in [5, 0, 31] do { x: 1, y: q12 }) < (loop s13 = { x: 2, y: -2 }, c14 = 0 while (c14 < 0) do (s13, c14 + 1)).0 then '' else string(-2)
 }
 
-func w22(a23: int, var c24: int): int sync {
+func w22(a23: int, var c24: int) => int sync {
     return if a23 <= 0 then sync {
-        c24 /= 2;
-        println('L1 {} {}'->format<a23, a23>);
-        return 12;
+        c24 /= 2
+        println('L1 {} {}'->format<a23, a23>)
+        return 12
     } else sync {
-        c24 %= 10;
-        let n25 = w22(a23 -1, c24);
-        c24 -= int(2.5);
-        return n25+ 1;
-    };
+        c24 %= 10
+        let n25 = w22(a23 - 1, c24)
+        c24 -= int(2.5)
+        return n25 + 1
+    }
 }
 
-func main(): int sync {
-    var v60 = 0;
-    let n69 = f8(0.25, [(v60, 'k9')]);
-    let n70 = w22(0, v60);
-    println('L9 [{}]'->format<n69>);
-    println('L10 [{}]'->format<n70>);
-    return 0;
+func main() => int sync {
+    var v60 = 0
+    let n69 = f8(0.25, [(v60, 'k9')])
+    let n70 = w22(0, v60)
+    println('L9 [{}]'->format<n69>)
+    println('L10 [{}]'->format<n70>)
+    return 0
 }

@@ -5,17 +5,17 @@
  * `{a: (int, float), b: (float, float)}` with `a` before `b`.
  */
 
-func pairEach(t: {a: int, b: float}): {a: (int, float), b: (float, float)} {
-    return { static for n, F in fields {a: int, b: float} do (t.[n], 0.5) }
+func pairEach(t: { a: int, b: float }) => { a: (int, float), b: (float, float) } {
+    return {static for n, F in fields { a: int, b: float } do (t.[n], 0.5)}
 }
 
 /** Declaration order is part of an anonymous struct type: `a` first, `b` second. */
-func read(r: {a: (int, float), b: (float, float)}): string {
+func read(r: { a: (int, float), b: (float, float) }) => string {
     return 'a then b'
 }
 
-func main(): int sync {
-    let r = pairEach({a: 2, b: 3.5})
+func main() => int sync {
+    let r = pairEach({ a: 2, b: 3.5 })
     println(r.a.0, r.a.1, r.b.0, r.b.1)
     println(read(r))
     return 0

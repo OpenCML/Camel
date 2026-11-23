@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     var a = 5
     let b = a + 0
     a = 7

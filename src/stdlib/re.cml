@@ -24,11 +24,11 @@ export type Match = { start: int, end: int, text: string, groups: (string?)[] }
 /// @fails error `RegexInvalid` when pattern is not a regular expression
 /// @pure
 /// @example validate('[0-9]+') !! ''    // '[0-9]+'
-export func validate(pattern: string): string!
+export func validate(pattern: string) => string!
 
 #op('re:test')
 with <pattern: string>
-func has_match_kernel(text: string): bool panic
+func has_match_kernel(text: string) => bool panic
 
 // ---- matching ----
 
@@ -39,14 +39,14 @@ func has_match_kernel(text: string): bool panic
 /// @example 'room 42'->find<'[0-9]+', 6> != null    // true
 #op('re:find')
 with <pattern: string, start: int = 0>
-export func find(text: string): Match? panic
+export func find(text: string) => Match? panic
 
 /// Whether pattern matches somewhere in text.
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
 /// @example 'room 42'->has_match<'[0-9]+'>    // true
 #impl(has_match_kernel)
 with <pattern: string>
-export func has_match(text: string): bool {
+export func has_match(text: string) => bool {
     return text->find<pattern> != null
 }
 
@@ -55,12 +55,11 @@ export func has_match(text: string): bool {
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
 /// @example 'a1b22'->find_all<'[0-9]+'>->map<(m: Match): string => m.text>    // ['1', '22']
 with <pattern: string>
-export func find_all(text: string): Match[] {
-    let (found, next) = loop found = [] as Match[], next = 0 while next <= len(text) do
-        match text->find<pattern, next> {
-            case null => (found, len(text) + 1)
-            case m => (found->append<m>, if m.end > m.start then m.end else m.end + 1)
-        }
+export func find_all(text: string) => Match[] {
+    let (found, next) = loop found = [] as Match[], next = 0 while next <= len(text) do match text->find<pattern, next> {
+        case null => (found, len(text) + 1)
+        case m => (found->append<m>, if m.end > m.start then m.end else m.end + 1)
+    }
     return found
 }
 
@@ -70,9 +69,8 @@ export func find_all(text: string): Match[] {
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
 /// @example 'a1b22'->replace_with<'[0-9]+', (m: Match): string => '<' + m.text + '>'>    // 'a<1>b<22>'
 with <pattern: string, by: (m: Match) => string>
-export func replace_with(text: string): string {
-    let (out, at) = loop out = '', at = 0 for m in text->find_all<pattern> do
-        (out + text[at..m.start] + by(m), m.end)
+export func replace_with(text: string) => string {
+    let (out, at) = loop out = '', at = 0 for m in text->find_all<pattern> do (out + text[at..m.start] + by(m), m.end)
     return out + text[at..]
 }
 
@@ -80,8 +78,10 @@ export func replace_with(text: string): string {
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
 /// @example 'a1b22'->replace<'[0-9]+', '#'>    // 'a#b#'
 with <pattern: string, new: string>
-export func replace(text: string): string {
-    return text->replace_with<pattern, func (m: Match) => string { new }>
+export func replace(text: string) => string {
+    return text->replace_with<pattern, func (m: Match) => string {
+        new
+    }>
 }
 
 /// The pieces of text between the matches of pattern; one piece, the whole text, when there is
@@ -89,8 +89,7 @@ export func replace(text: string): string {
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
 /// @example 'a1b22c'->split<'[0-9]+'>    // ['a', 'b', 'c']
 with <pattern: string>
-export func split(text: string): string[] {
-    let (parts, at) = loop parts = [] as string[], at = 0 for m in text->find_all<pattern> do
-        (concat(parts, [text[at..m.start]]), m.end)
+export func split(text: string) => string[] {
+    let (parts, at) = loop parts = [] as string[], at = 0 for m in text->find_all<pattern> do (concat(parts, [text[at..m.start]]), m.end)
     return concat(parts, [text[at..]])
 }

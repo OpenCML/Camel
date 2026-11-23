@@ -1,10 +1,11 @@
 import { sum, ones, load_npy } from tensor
+
 type P = { w: f32[3], b: f32[3] }
 with <m: P>
-func f(x: f32[3]): float {
+func f(x: f32[3]) => float {
     return float(sum(m.w * x + m.b))
 }
-func main(): int sync {
+func main() => int sync {
     let p = { w: load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy') as f32[3], b: ones::<f32>([3]) }
     println(f<p>(ones::<f32>([3])))
     return 0

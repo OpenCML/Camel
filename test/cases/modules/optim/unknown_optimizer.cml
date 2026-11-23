@@ -5,25 +5,25 @@
  * rewrite deleted; there is no other optimizer to fall back to.
  */
 
-import { full } from tensor
 import { init } from optim
+import { full } from tensor
 
 type Unknown = { rate: float }
 
 type Model = { w: f32[?] }
 
-func model_at(): Model {
+func model_at() => Model {
     return { w: full([4], f32(0.5)) }
 }
 
-func init_unknown(): int {
+func init_unknown() => int {
     let opt: Unknown = { rate: 0.1 }
     let state = init(opt, model_at())
     return state.step
 }
 
-func main(): int sync {
+func main() => int sync {
     let steps = init_unknown()
-    'optim unknown optimizer init steps={}' ->format<steps> ->println
+    'optim unknown optimizer init steps={}'->format<steps>->println
     return 0
 }

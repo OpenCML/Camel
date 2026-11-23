@@ -5,11 +5,13 @@
 // `apply` expects `(a: float) => float`, so a lambda written `(a, b, ...xs)` asks for two ordinary
 // members and the position has one. The report names the rest parameter and the position it stands
 // at (3), rather than accepting the program or reading past the end of the expected type.
-func apply(g: (a: float) => float): float {
+func apply(g: (a: float) => float) => float {
     return g(1.0)
 }
 
-func main(): int sync {
-    println(apply(func (a, b, ...xs) { 0.0 }))
+func main() => int sync {
+    println(apply(func (a, b, ...xs) {
+        0.0
+    }))
     return 0
 }

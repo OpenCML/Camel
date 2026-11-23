@@ -5,7 +5,7 @@
  * -- so what is reported is the fault and nothing about the match.
  */
 
-func f(n: int): int {
+func f(n: int) => int {
     let xs = [1, 2, 3]
     return match n {
         case 1 when xs[5] > 0 => 1
@@ -13,6 +13,6 @@ func f(n: int): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }

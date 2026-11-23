@@ -8,19 +8,21 @@
 
 import stream
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func total(s: int..): int {
+func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main(): int sync {
+func main() => int sync {
     // A hint of 2, and one side reads all 20 elements before the other reads any: the buffer holds
     // 20, which is what the report shows as the peak.
     let (wide, lazy) = stream::tee<2>(count(20))

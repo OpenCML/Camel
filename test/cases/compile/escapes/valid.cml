@@ -3,7 +3,7 @@
  * escape, so the program compiles and runs without a warning.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('plain', len('\0'), len('\x41'), len('\u{1F600}'), len('\n'), len('\0x'))
     println('formatted', len(`\0`), len(`\x41`), len(`\u{1F600}`), len(`\n`), len(`\0x`))
     println('triple', len('''\0'''), len('''\x41'''), len('''\u{1F600}'''), len('''\n'''), len('''\0x'''))

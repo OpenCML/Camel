@@ -4,10 +4,10 @@
  */
 
 with <rounds: int, strict: bool = false>
-func f(x: int): int {
+func f(x: int) => int {
     return if strict then x * rounds else x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     return f<strict: true>(1)
 }

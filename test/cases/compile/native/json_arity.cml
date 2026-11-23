@@ -5,7 +5,7 @@
 
 import { decode } from json
 
-func main(): int sync {
+func main() => int sync {
     println(decode('1', 2))
     return 0
 }

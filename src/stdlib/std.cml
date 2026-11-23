@@ -18,18 +18,16 @@ import { is_function } from types
 // -----------------------------------------------------------------------------
 
 /// A pass that does nothing: the graph is handed on unchanged.
-export func nop::<F>(f: F): F! when is_function::<F>()
+export func nop::<F>(f: F) => F! when is_function::<F>()
 
 /// Expands the macro operators over functions (`grad`, `with_grad`, `vjp` of autodiff) ahead of
 /// the passes that follow.
-with <
-    /// Write the reading line of each round to stderr: the graph, its calls, the rewrites applied so
-    /// far, its branches and its loops. A run that never comes back has then said which graph it was
-    /// in before it stopped saying anything. Off by default -- a program that names the pass is
-    /// asking for the expansion, not for a line on its stderr.
-    report: bool = false
->
-export func macro::<F>(f: F): F! when is_function::<F>()
+with </// Write the reading line of each round to stderr: the graph, its calls, the rewrites applied so
+/// far, its branches and its loops. A run that never comes back has then said which graph it was
+/// in before it stopped saying anything. Off by default -- a program that names the pass is
+/// asking for the expansion, not for a line on its stderr.
+report: bool = false>
+export func macro::<F>(f: F) => F! when is_function::<F>()
 
 /// Gives every function value the form the design asks for: one variant of the enum of its type,
 /// with the values the function captured as that variant's data, so the tag is in the value's type.
@@ -47,25 +45,25 @@ with <
     /// reading of a program it cannot lower, and nothing else it writes changes.
     debug: bool = false
 >
-export func defunctionalize::<F>(f: F): F! when is_function::<F>()
+export func defunctionalize::<F>(f: F) => F! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
 // Dumps and translations of the graph
 // -----------------------------------------------------------------------------
 
 /// Prints the compact GIR of the graph and consumes it.
-export func gir::<F>(f: F): F! when is_function::<F>()
+export func gir::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the rich GIR of the graph, styled for Graphviz, and consumes it.
-export func rgir::<F>(f: F): F! when is_function::<F>()
+export func rgir::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the compact GIR with the regions (the arms, bodies and areas of a node) drawn as
 /// clusters, and consumes the graph.
-export func gir_regions::<F>(f: F): F! when is_function::<F>()
+export func gir_regions::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the rich GIR, styled for Graphviz, with the regions drawn as clusters, and consumes the
 /// graph.
-export func rgir_regions::<F>(f: F): F! when is_function::<F>()
+export func rgir_regions::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the versioned JSON GIR of the graph and consumes it.
 with <
@@ -76,24 +74,22 @@ with <
     /// community's interactive viewers open it.
     egraph: bool = false
 >
-export func jgir::<F>(f: F): F! when is_function::<F>()
+export func jgir::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the graph as Camel source and consumes it.
-with <
-    /// The longest literal the printed source may hold before it is written as a call that
-    /// rebuilds it.
-    max_literal_bytes: int = 64 * 1024
->
-export func cml::<F>(f: F): F! when is_function::<F>()
+with </// The longest literal the printed source may hold before it is written as a call that
+/// rebuilds it.
+max_literal_bytes: int = 64 * 1024>
+export func cml::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the compact GIR with the boundary roles annotated.
-export func agir::<F>(f: F): F! when is_function::<F>()
+export func agir::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the rich GIR with the boundary roles annotated.
-export func argir::<F>(f: F): F! when is_function::<F>()
+export func argir::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints `GRAPH_STATS {json}` and hands the graph on unchanged.
-export func stats::<F>(f: F): F! when is_function::<F>()
+export func stats::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the index the program's ruleset modules hold -- one `RULESET <family> <head>/<arity> ->
 /// <rule>` line per rule -- and hands the graph on unchanged. With `query` it answers lookups too,
@@ -103,7 +99,7 @@ export func stats::<F>(f: F): F! when is_function::<F>()
 /// of that name was built.
 with <
     /// The lookups to answer, empty to only list the index.
-    query: string = "",
+    query: string = '',
     /// Also print what the forward rules of the scalar operators resolve to in the index
     /// (`FORWARD <uri> <family> <head>/<arity> -> <rule>`), which is what a transform reads.
     forward: bool = false,
@@ -113,7 +109,7 @@ with <
     /// is made of interned types, component by component.
     sig: bool = false
 >
-export func rulesets::<F>(f: F): F! when is_function::<F>()
+export func rulesets::<F>(f: F) => F! when is_function::<F>()
 
 /// Profiles the run and prints the report when it ends.
 with <
@@ -138,29 +134,29 @@ with <
     /// the type it is read as, and the tag and field count it carries.
     variant_trace: bool = false
 >
-export func profile::<F>(f: F): F! when is_function::<F>()
+export func profile::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the graph as standalone C++ source and consumes it.
-export func cpp::<F>(f: F): F! when is_function::<F>()
+export func cpp::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the graph as a topological node sequence and consumes it.
-export func topo_node_seq::<F>(f: F): F! when is_function::<F>()
+export func topo_node_seq::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the task graph the parallel scheduler would build and consumes the program.
-export func tfdump::<F>(f: F): F! when is_function::<F>()
+export func tfdump::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the array type implementation's self-test and hands the graph on.
-export func arraytype::<F>(f: F): F! when is_function::<F>()
+export func arraytype::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the type identity self-test (one identity per type, one table for `as`) and hands the graph on.
-export func identitytype::<F>(f: F): F! when is_function::<F>()
+export func identitytype::<F>(f: F) => F! when is_function::<F>()
 
 namespace cpp {
-/// Builds a C++ module from the graph and consumes it.
-export func module_file::<F>(f: F): F! when is_function::<F>()
-
-/// Prints what a C++ module built from the graph exports.
-export func inspect::<F>(f: F): F! when is_function::<F>()
+    /// Builds a C++ module from the graph and consumes it.
+    export func module_file::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints what a C++ module built from the graph exports.
+    export func inspect::<F>(f: F) => F! when is_function::<F>()
 }
 
 // -----------------------------------------------------------------------------
@@ -168,48 +164,48 @@ export func inspect::<F>(f: F): F! when is_function::<F>()
 // -----------------------------------------------------------------------------
 
 namespace gc {
-/// Prints a snapshot of the allocator's heap as JSON.
-export func snapshot::<F>(f: F): F! when is_function::<F>()
-
-/// Verifies the allocator's heap and fails with the issues it finds.
-export func verify::<F>(f: F): F! when is_function::<F>()
-
-/// Runs a minor collection and prints its result.
-export func minor::<F>(f: F): F! when is_function::<F>()
-
-/// Runs a major collection and prints its result.
-export func major::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the allocator's configuration.
-export func config::<F>(f: F): F! when is_function::<F>()
-
-/// Prints a summary of the allocator's spaces.
-export func summary::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the allocator's blocks.
-export func blocks::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the allocator's views.
-export func views::<F>(f: F): F! when is_function::<F>()
-
-/// Runs the view-escape self-test of the allocator.
-export func views_escape::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the allocator's remembered set.
-export func remembered_set::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the allocator's foreign resources.
-export func foreign_resource::<F>(f: F): F! when is_function::<F>()
-
-/// Runs the allocator's poison check.
-export func poison::<F>(f: F): F! when is_function::<F>()
-
-/// Traces a tuple value whose type declares more members than the value has, and stops: the
-/// collector trusts the type's count, so a value that disagrees is a memory-safety bug. Two halves,
-/// because the reading is the pair: `tuple_members_agree` traces a value that agrees (silent, the
-/// walk runs) and `tuple_members` traces one that does not (the guard speaks and the process stops).
-export func tuple_members::<F>(f: F): F! when is_function::<F>()
-export func tuple_members_agree::<F>(f: F): F! when is_function::<F>()
+    /// Prints a snapshot of the allocator's heap as JSON.
+    export func snapshot::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Verifies the allocator's heap and fails with the issues it finds.
+    export func verify::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Runs a minor collection and prints its result.
+    export func minor::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Runs a major collection and prints its result.
+    export func major::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the allocator's configuration.
+    export func config::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints a summary of the allocator's spaces.
+    export func summary::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the allocator's blocks.
+    export func blocks::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the allocator's views.
+    export func views::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Runs the view-escape self-test of the allocator.
+    export func views_escape::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the allocator's remembered set.
+    export func remembered_set::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the allocator's foreign resources.
+    export func foreign_resource::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Runs the allocator's poison check.
+    export func poison::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Traces a tuple value whose type declares more members than the value has, and stops: the
+    /// collector trusts the type's count, so a value that disagrees is a memory-safety bug. Two halves,
+    /// because the reading is the pair: `tuple_members_agree` traces a value that agrees (silent, the
+    /// walk runs) and `tuple_members` traces one that does not (the guard speaks and the process stops).
+    export func tuple_members::<F>(f: F) => F! when is_function::<F>()
+    export func tuple_members_agree::<F>(f: F) => F! when is_function::<F>()
 }
 
 // -----------------------------------------------------------------------------
@@ -217,42 +213,40 @@ export func tuple_members_agree::<F>(f: F): F! when is_function::<F>()
 // -----------------------------------------------------------------------------
 
 /// Executes the program on the node-virtual-machine interpreter.
-export func nvm::<F>(f: F): F! when is_function::<F>()
+export func nvm::<F>(f: F) => F! when is_function::<F>()
 
 /// Executes the program on the bytecode interpreter.
-with <
-    /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
-    stats: string? = null
->
-export func fvm::<F>(f: F): F! when is_function::<F>()
+with </// Append per-graph bytecode and execution counts of the run to this file; null writes none.
+stats: string? = null>
+export func fvm::<F>(f: F) => F! when is_function::<F>()
 
 namespace fastvm {
-/// Prints the bytecode of every graph and consumes the program.
-export func bytecode::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the linked bytecode of every graph and consumes the program.
-export func linked_bytecode::<F>(f: F): F! when is_function::<F>()
-
-/// Executes the program on the bytecode interpreter with on-demand native code.
-with <
-    /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
-    stats: string? = null,
-    /// Calls from one call site before a graph is compiled; 0 compiles at the first call.
-    hot_threshold: int = 1
->
-export func jit::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the machine code the JIT generated and consumes the program.
-export func jit_asm::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the generated binary of the JIT and consumes the program.
-export func jit_bin::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the register machine IR of the JIT and consumes the program.
-export func jit_rmir::<F>(f: F): F! when is_function::<F>()
-
-/// Prints the machine IR of the JIT and consumes the program.
-export func jit_mir::<F>(f: F): F! when is_function::<F>()
+    /// Prints the bytecode of every graph and consumes the program.
+    export func bytecode::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the linked bytecode of every graph and consumes the program.
+    export func linked_bytecode::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Executes the program on the bytecode interpreter with on-demand native code.
+    with <
+        /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
+        stats: string? = null,
+        /// Calls from one call site before a graph is compiled; 0 compiles at the first call.
+        hot_threshold: int = 1
+    >
+    export func jit::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the machine code the JIT generated and consumes the program.
+    export func jit_asm::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the generated binary of the JIT and consumes the program.
+    export func jit_bin::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the register machine IR of the JIT and consumes the program.
+    export func jit_rmir::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Prints the machine IR of the JIT and consumes the program.
+    export func jit_mir::<F>(f: F) => F! when is_function::<F>()
 }
 /// Executes the program on the parallel task scheduler.
 with <
@@ -284,7 +278,7 @@ with <
     /// refusals once they repeat -- the path a wait that does not announce itself still takes.
     blocking_leaves: bool = true
 >
-export func taskflow::<F>(f: F): F! when is_function::<F>()
+export func taskflow::<F>(f: F) => F! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
 // The optimizing rewrite pipeline, implemented in C++
@@ -308,112 +302,103 @@ export func taskflow::<F>(f: F): F! when is_function::<F>()
 // docs/cli.md, and an old spelling is a name nothing answers to.
 
 namespace cxx {
-/// The standard optimization pipeline.
-with <
-    /// Keep the algebraic stage to strictly equivalent floating-point transformations
-    /// (design principles 7.4).
-    safe_fp: bool = false,
-    /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
+    /// The standard optimization pipeline.
+    with <
+        /// Keep the algebraic stage to strictly equivalent floating-point transformations
+        /// (design principles 7.4).
+        safe_fp: bool = false,
+        /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
+        /// 0 stops them (design principles 9.6).
+        growth_budget: int = 4096,
+        /// Bytes of constants folding may materialize in a graph. Folding buys run time with
+        /// compile-time memory, which a large value does not repay: a value above this is left as the
+        /// computation that builds it (design principles 9.6); 0 materializes none.
+        constant_budget: int = 8388608,
+        /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
+        /// fail if it rewrites one.
+        check_screens: bool = false,
+        /// How many runs of the rewrite in a row may each change the same graph before the pass
+        /// reports that it does not settle. This is the engine's internal bound, exposed so that a
+        /// test can prove the report happens; it is not a tuning knob, and 0 is refused rather than
+        /// read as "never report".
+        settle_runs: int = 32
+    >
+    export func opt::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Inlining only.
+    with </// Nodes specialization and inlining may copy before the remaining calls are left as calls;
     /// 0 stops them (design principles 9.6).
-    growth_budget: int = 4096,
-    /// Bytes of constants folding may materialize in a graph. Folding buys run time with
-    /// compile-time memory, which a large value does not repay: a value above this is left as the
+    growth_budget: int = 4096>
+    export func inline::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Inlining only, small targets.
+    with <growth_budget: int = 4096>
+    export func small::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Inlining only, branch-arm targets.
+    with <growth_budget: int = 4096>
+    export func arm::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Inlining only, hybrid target strategy.
+    with <growth_budget: int = 4096>
+    export func hybrid::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Devirtualization only.
+    with <growth_budget: int = 4096>
+    export func devirtualize::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Specialization only.
+    with <growth_budget: int = 4096>
+    export func specialize::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Constant folding.
+    with </// Bytes of constants this pass may materialize in a graph; a value above it is left as the
     /// computation that builds it (design principles 9.6); 0 materializes none.
-    constant_budget: int = 8388608,
-    /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
-    /// fail if it rewrites one.
-    check_screens: bool = false,
-    /// How many runs of the rewrite in a row may each change the same graph before the pass
-    /// reports that it does not settle. This is the engine's internal bound, exposed so that a
-    /// test can prove the report happens; it is not a tuning knob, and 0 is refused rather than
-    /// read as "never report".
-    settle_runs: int = 32
->
-export func opt::<F>(f: F): F! when is_function::<F>()
-
-/// Inlining only.
-with <
-    /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
-    /// 0 stops them (design principles 9.6).
-    growth_budget: int = 4096
->
-export func inline::<F>(f: F): F! when is_function::<F>()
-
-/// Inlining only, small targets.
-with <growth_budget: int = 4096>
-export func small::<F>(f: F): F! when is_function::<F>()
-
-/// Inlining only, branch-arm targets.
-with <growth_budget: int = 4096>
-export func arm::<F>(f: F): F! when is_function::<F>()
-
-/// Inlining only, hybrid target strategy.
-with <growth_budget: int = 4096>
-export func hybrid::<F>(f: F): F! when is_function::<F>()
-
-/// Devirtualization only.
-with <growth_budget: int = 4096>
-export func devirtualize::<F>(f: F): F! when is_function::<F>()
-
-/// Specialization only.
-with <growth_budget: int = 4096>
-export func specialize::<F>(f: F): F! when is_function::<F>()
-
-/// Constant folding.
-with <
-    /// Bytes of constants this pass may materialize in a graph; a value above it is left as the
-    /// computation that builds it (design principles 9.6); 0 materializes none.
-    constant_budget: int = 8388608
->
-export func fold::<F>(f: F): F! when is_function::<F>()
-
-/// Algebraic simplification (the laws of lib/rules/rules.cml, under the strict numeric policy when
-/// `safe_fp` is true).
-with <
-    /// Keep the algebraic stage to strictly equivalent floating-point transformations
-    /// (design principles 7.4).
-    safe_fp: bool = false,
-    /// Apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the
-    /// merging of like terms and constant factors (the C++ reference mode).
-    neutral_only: bool = false
->
-export func algebra::<F>(f: F): F! when is_function::<F>()
-
-/// One writing for every value that has several, chosen by a cost model.
-with <
-    /// The cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a
+    constant_budget: int = 8388608>
+    export func fold::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Algebraic simplification (the laws of lib/rules/rules.cml, under the strict numeric policy when
+    /// `safe_fp` is true).
+    with <
+        /// Keep the algebraic stage to strictly equivalent floating-point transformations
+        /// (design principles 7.4).
+        safe_fp: bool = false,
+        /// Apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the
+        /// merging of like terms and constant factors (the C++ reference mode).
+        neutral_only: bool = false
+    >
+    export func algebra::<F>(f: F) => F! when is_function::<F>()
+    
+    /// One writing for every value that has several, chosen by a cost model.
+    with </// The cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a
     /// product, a product more than a sum), or one a module registered.
-    cost: string = 'weighted'
->
-export func extract::<F>(f: F): F! when is_function::<F>()
-
-/// Saturates the standard rules library (lib/rules/rules.cml) and leaves the program in the state
-/// where a value has several writings; nothing is extracted. The dumps that accept that
-/// state draw it: `camel f.cml std::cxx::saturate std::gir`.
-with <
-    /// Rounds of saturation: every round finds all matches of the rules and applies them, and the
-    /// rounds go on while a round adds a writing. 0 applies no rule at all, so the program keeps
-    /// exactly the writings it had.
-    rounds: int = 6,
-    /// Keep the rules to the ones that hold bit for bit, as `safe_fp=true` does for
-    /// `std::opt` (design principles 7.4).
-    strict: bool = false
->
-export func saturate::<F>(f: F): F! when is_function::<F>()
-
-/// Common subexpression elimination.
-export func cse::<F>(f: F): F! when is_function::<F>()
-
-/// Dead code elimination.
-with <
-    /// Remove only the constants and pure operations that no node reads, not gates and syncs.
-    values_only: bool = false
->
-export func dce::<F>(f: F): F! when is_function::<F>()
-
-/// The transitive reduction over ordering edges (docs/design/effects/edges.cn.md 5.4): an order
-/// edge A -> C goes away when a path of order edges already orders the two ends. A sync block's
-/// statements are one chain and carry no redundancy.
-export func order::<F>(f: F): F! when is_function::<F>()
+    cost: string = 'weighted'>
+    export func extract::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Saturates the standard rules library (lib/rules/rules.cml) and leaves the program in the state
+    /// where a value has several writings; nothing is extracted. The dumps that accept that
+    /// state draw it: `camel f.cml std::cxx::saturate std::gir`.
+    with <
+        /// Rounds of saturation: every round finds all matches of the rules and applies them, and the
+        /// rounds go on while a round adds a writing. 0 applies no rule at all, so the program keeps
+        /// exactly the writings it had.
+        rounds: int = 6,
+        /// Keep the rules to the ones that hold bit for bit, as `safe_fp=true` does for
+        /// `std::opt` (design principles 7.4).
+        strict: bool = false
+    >
+    export func saturate::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Common subexpression elimination.
+    export func cse::<F>(f: F) => F! when is_function::<F>()
+    
+    /// Dead code elimination.
+    with </// Remove only the constants and pure operations that no node reads, not gates and syncs.
+    values_only: bool = false>
+    export func dce::<F>(f: F) => F! when is_function::<F>()
+    
+    /// The transitive reduction over ordering edges (docs/design/effects/edges.cn.md 5.4): an order
+    /// edge A -> C goes away when a path of order edges already orders the two ends. A sync block's
+    /// statements are one chain and carry no redundancy.
+    export func order::<F>(f: F) => F! when is_function::<F>()
 }
-

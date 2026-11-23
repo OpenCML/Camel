@@ -373,10 +373,9 @@ The compiler reached a state it has no code for. This is a defect of the compile
 
 ```camel
 // A floating-point number is not a key type (NaN, and 0.0 == -0.0).
-
-func main(): int sync {
+func main() => int sync {
     let m = [(1.5, 1)] as Map<float, int>
-    println("never printed")
+    println('never printed')
     return 0
 }
 ```
@@ -406,7 +405,7 @@ No token starts with this character. Outside strings and comments a program cons
 **Example** (`test/cases/compile/check/lexical_error.cml`, run as `camel check --lexical-only -O short test/cases/compile/check/lexical_error.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let x = 1 $ 2
     return 0
 }
@@ -439,7 +438,7 @@ A number is decimal digits without a leading zero in its whole part (an integer 
 // `007.5` (compile.precedence.leading_zero_real) and like `077`. The point does not make the
 // leading zero unambiguous, and the token is not read as an octal number either: octal is `0o77`.
 // `0.5` is a number.
-func main(): int sync {
+func main() => int sync {
     let a = 0.5
     let b = 077.5
     println(a + b)
@@ -472,7 +471,7 @@ A string ends with the quote character it starts with ({0}). Add the closing quo
 ```camel
 // A string no quote closes is an error on the line it opened on; it does not run on to the last
 // escaped quote of the file.
-func main(): int sync {
+func main() => int sync {
     let s = 'abc
     println(s)
     let t = "it\'s"
@@ -505,7 +504,7 @@ Close the comment with '*/'.
 ```camel
 /// A block comment with no end: the lexer reports the line where it starts.
 
-func main(): int {
+func main() => int {
     return 0
 }
 
@@ -535,7 +534,7 @@ A string decodes '\n', '\t', '\r', '\a', '\b', '\f', '\v', '\0', '\\', '\'', '\"
 **Example** (`test/cases/compile/escapes/unknown.cml`, run as `camel test/cases/compile/escapes/unknown.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println('\q')
     return 0
 }
@@ -604,7 +603,7 @@ Remove the '{0}', or add the '{1}' it was meant to close.
 // repairs -- remove it, or add the opener it was meant to close -- because only the writer knows
 // which of the two happened.
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 1)
     return x
 }
@@ -633,7 +632,7 @@ A conditional is written: if <condition> then <value> else <value>. Each branch 
 **Example** (`test/cases/parse/syntax/missing_then.cml`, run as `camel test/cases/parse/syntax/missing_then.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let x = 1
     return if x > 0 {
         1
@@ -670,7 +669,7 @@ Statements are separated by a line break or by one ';'. Remove the extra ';'.
 // the one before it is refused where it is written: the parser does not read it as an empty
 // statement, because a reader who wrote it meant one statement, not two.
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 1;;
     println(x)
     return 0
@@ -704,7 +703,7 @@ To compare, write '==': if x == 1 then ...
 // almost always a comparison written one `=` short. The parser refuses it at the `=` rather than
 // reading it as an assignment or as `==`, and names the operator to write instead.
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 1
     if x = 1 then
         println('one')
@@ -736,7 +735,7 @@ Choose another name, for example '{0}_'.
 **Example** (`test/cases/compile/stream/yield_keyword.cml`, run as `camel test/cases/compile/stream/yield_keyword.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let yield = 1
     println(yield)
     return 0
@@ -766,9 +765,9 @@ The items of a list (parameters, arguments, elements) are separated by ','.
 **Example** (`test/cases/compile/lambda_inference/func_type.cml`, run as `camel test/cases/compile/lambda_inference/func_type.cml`)
 
 ```camel
-func apply(f: (x) => int, x: int): int { return f(x) }
+func apply(f: (x) => int, x: int) => int { return f(x) }
 
-func main(): int sync {
+func main() => int sync {
     return apply(func (x: int) { x + 1 }, 1)
 }
 ```
@@ -800,7 +799,7 @@ A declaration binds a name to a value: let {0} = <value>, or with a type: let {0
 // nothing to bind. Refused at the name, with both forms that would fix it -- `= <value>` or
 // `: <type> = <value>` -- in the message.
 
-func main(): int sync {
+func main() => int sync {
     let x
     return 0
 }
@@ -836,7 +835,7 @@ fact depth(n) match n {
     case _            => 0
 } join max
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -867,11 +866,11 @@ The token fits nothing that can stand where it is. What the parser expected inst
 // A shape is written without `const`: the extents of an array type are expressions, so a `const`
 // in front of one is the retired spelling and the parser refuses the word there.
 
-func bad(x: f32[const 3]): int {
+func bad(x: f32[const 3]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -899,7 +898,7 @@ Something opened earlier is not finished: check the last declaration of the file
 **Example** (`test/cases/compile/fstring/bad_expr.cml`, run as `camel test/cases/compile/fstring/bad_expr.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(`value: ${1 +}`)
     return 0
 }
@@ -930,7 +929,7 @@ A '<' directly after a name, a literal or a closing bracket starts '<...>' argum
 ```camel
 /// A '<' written directly after a name opens an argument list, not a comparison.
 
-func main(): int {
+func main() => int {
     let i = 1
     let n = 2
     if i<n then { return 1 }
@@ -963,11 +962,11 @@ The '>' that closes '<...>' touches the last item or starts its line: f<a, b>. D
 ```camel
 /// A '>' after a space is read as a comparison, leaving the argument list open.
 
-func pick::<T>(a: T, b: T): T {
+func pick::<T>(a: T, b: T) => T {
     return a
 }
 
-func main(): int {
+func main() => int {
     let x = pick<int >(1, 2)
     return x
 }
@@ -998,7 +997,7 @@ A line break ends a statement unless the line is visibly unfinished. To continue
 ```camel
 /// A line that starts with '+' ends the statement of the line above.
 
-func main(): int {
+func main() => int {
     let x = 1
     + x
     return 0
@@ -1028,7 +1027,7 @@ Write an expression between '${' and '}': ${value}. For a literal '${' write '\$
 **Example** (`test/cases/compile/fstring/empty_interpolation.cml`, run as `camel test/cases/compile/fstring/empty_interpolation.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     print(`A ${}`)
     return 0
 }
@@ -1059,7 +1058,7 @@ Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_i
 ```camel
 rule guarded(x: int) { x + 0 => x } when true
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -1087,7 +1086,7 @@ The right side of '{0}' is a type; write the interval as '(a..b)'.
 **Example** (`test/cases/parse/rulings/stream_type_as_interval.cml`, run as `camel test/cases/parse/rulings/stream_type_as_interval.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let n = 3
     let r = n as int..5
     println(r)
@@ -1118,11 +1117,11 @@ A lambda is a function declaration without a name (design principles 4.4): 'func
 **Example** (`test/cases/parse/rulings/lambda_without_parentheses.cml`, run as `camel test/cases/parse/rulings/lambda_without_parentheses.cml`)
 
 ```camel
-func ident(x: int): int {
+func ident(x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let composed: (x: int) => int = ident..ident
     let written: (x: int) => int = x => ident(ident(x))
     println(composed(3))
@@ -1156,9 +1155,9 @@ In parentheses a list of types is a tuple type, and '(float, float)' is read as 
 // A function type names its parameters. Written without names, the types are a tuple type and the
 // `=>` that follows fits nothing: the refusal names the form instead.
 
-func g(x: float, y: float): float sync { return x + y }
+func g(x: float, y: float) => float sync { return x + y }
 
-func main(): int sync {
+func main() => int sync {
     let f: (float, float) => float = g
     return 0
 }
@@ -1187,10 +1186,10 @@ A range has only a bounded form (design principles 4.2): an interval is written 
 **Example** (`test/cases/parse/rulings/open_range.cml`, run as `camel test/cases/parse/rulings/open_range.cml`)
 
 ```camel
-func inc(x: int): int { return x + 1 }
-func dbl(x: int): int { return x * 2 }
+func inc(x: int) => int { return x + 1 }
+func dbl(x: int) => int { return x * 2 }
 
-func main(): int {
+func main() => int {
     let bounded = 1..4
     let composed = inc..dbl
     let open = 1..
@@ -1221,8 +1220,10 @@ A '>' after a space, at the end of a line, is the comparison operator, and the e
 **Example** (`test/cases/compile/surface/angle_then_name_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_name_line.cml`)
 
 ```camel
-func main(): int sync {
-    let total = [1, 2]->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+func main() => int sync {
+    let total = [1, 2]->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
     total->format<total>->println
     return 0
 }
@@ -1253,11 +1254,11 @@ A head names the parts of the element, in order, and may name fewer of them, nev
 **Example** (`test/cases/compile/static_expansion/indices_two_names.cml`, run as `camel test/cases/compile/static_expansion/indices_two_names.cml`)
 
 ```camel
-func bad(t: (int, int)): int {
+func bad(t: (int, int)) => int {
     return static loop acc = 0 for j, F in indices t do acc + t.[j]
 }
 
-func main(): int {
+func main() => int {
     return bad((1, 2))
 }
 ```
@@ -1285,15 +1286,15 @@ Each identifier must be declared only once in its scope.
 **Example** (`test/cases/compile/generics/err_redecl.cml`, run as `camel test/cases/compile/generics/err_redecl.cml`)
 
 ```camel
-func id::<T>(x: T): T {
+func id::<T>(x: T) => T {
     return x
 }
 
-func id(x: int): int {
+func id(x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(id(1))
     return 0
 }
@@ -1325,9 +1326,11 @@ Check if the module path is correct or add the directory to search paths.
 import { thing } from no_such_module_a
 import { other } from no_such_module_b
 
-func f(a: thing): int { return 1 }
+func f(a: thing) => int {
+    return 1
+}
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -1355,8 +1358,10 @@ Avoid using names like '__example__'; choose different identifiers. To overload 
 **Example** (`test/cases/compile/surface/reserved_function_name.cml`, run as `camel -E short test/cases/compile/surface/reserved_function_name.cml`)
 
 ```camel
-func __add__(a: int, b: int): int { return 99 }
-func main(): int sync {
+func __add__(a: int, b: int) => int {
+    return 99
+}
+func main() => int sync {
     println(1 + 2)
     return 0
 }
@@ -1387,12 +1392,14 @@ Ensure the number of variables matches the number of unpacked data elements, or 
 ```camel
 // More names than the tuple has elements is refused, not read past the end.
 with <f: (p: (int, int)) => int>
-func apply_all(ps: (int, int)[]): int[] {
+func apply_all(ps: (int, int)[]) => int[] {
     return ps->map<f>
 }
 
-func main(): int sync {
-    println(apply_all<func ((a, b, c)) { a + b + c }>([(1, 2)]))
+func main() => int sync {
+    println(apply_all<func ((a, b, c)) {
+        a + b + c
+    }>([(1, 2)]))
     return 0
 }
 ```
@@ -1420,7 +1427,7 @@ Ensure the literal '{1}' is valid and supported by the language.
 **Example** (`test/cases/compile/literals/int_base_with_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_base_with_exponent.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(0b1e5)
     return 0
 }
@@ -1449,7 +1456,7 @@ Make sure all keys in a dictionary are unique.
 **Example** (`test/cases/compile/semantic/duplicate_struct_field.cml`, run as `camel test/cases/compile/semantic/duplicate_struct_field.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let s = { x: 1, x: 2 }
     println('never printed')
     println(s)
@@ -1482,7 +1489,7 @@ Remove or rename the duplicated parameter.
 ```camel
 type Two<T, T> = (T, T)
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -1519,11 +1526,11 @@ Ensure the type is defined and visible in the current scope.
 
 import { ones } from tensor
 
-func count(t: Tensor): int {
+func count(t: Tensor) => int {
     return len(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     let ints: int[3] = [1, 2, 3]
     let floats: f32[2, 3] = ones::<f32>([2, 3])
     println(count(ints))
@@ -1555,7 +1562,7 @@ Make sure the name is declared and in scope.
 **Example** (`test/cases/compile/check/semantic_error.cml`, run as `camel check -O short test/cases/compile/check/semantic_error.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let x = undefined_name + 1
     return 0
 }
@@ -1584,11 +1591,11 @@ Ensure all branches of if-else or match-case expressions return the same type.
 **Example** (`test/cases/compile/semantic/branch_return_mismatch.cml`, run as `camel test/cases/compile/semantic/branch_return_mismatch.cml`)
 
 ```camel
-func pick(n: int): int {
+func pick(n: int) => int {
     return if n > 0 then 1 else 'oops'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(1))
     return 0
 }
@@ -1617,7 +1624,7 @@ Ensure the index is within bounds for arrays or refers to a valid field in struc
 **Example** (`test/cases/consistency/faults/tuple_index_static.cml`, run as `camel test/cases/consistency/faults/tuple_index_static.cml ${backend}`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println('not reached')
     let t = (1, 2, 3)
     println(t.5)
@@ -1648,7 +1655,7 @@ Check the type and ensure it is a tuple or a struct that supports indexing.
 **Example** (`test/cases/compile/bounds/array_member_access.cml`, run as `camel test/cases/compile/bounds/array_member_access.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     println(xs.1)
     println('never printed')
@@ -1683,13 +1690,12 @@ Check the number and types of arguments to ensure they match one of the availabl
 // candidate list of a refused call is where the text is visible.
 import tensor
 
-
-func takes(a: f32[...], b: f32[2, 3]): int {
+func takes(a: f32[...], b: f32[2, 3]) => int {
     return 0
 }
 
-func main(): int sync {
-    let s: string[] = ["a"]
+func main() => int sync {
+    let s: string[] = ['a']
     println(takes(s, s))
     return 0
 }
@@ -1719,16 +1725,16 @@ Check that the function type '{0}' matches the number and types of arguments pro
 
 ```camel
 with <k: int>
-func bad_decorator(f: (x: int) => int): int {
+func bad_decorator(f: (x: int) => int) => int {
     return k + 1
 }
 
 @bad_decorator<1>
-func base(x: int): int {
+func base(x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return base(1)
 }
 ```
@@ -1756,10 +1762,10 @@ Ensure that the value returned from the function matches the type specified in t
 **Example** (`test/cases/compile/return_type/string_as_int.cml`, run as `camel test/cases/compile/return_type/string_as_int.cml`)
 
 ```camel
-func f(): int {
+func f() => int {
     return 'abc'
 }
-func main(): int sync {
+func main() => int sync {
     println('ran')
     println(f())
     return 0
@@ -1791,7 +1797,7 @@ Ensure the data type matches the {0}'s element type, or convert the data to the 
 ```camel
 type Point = { x: float, y: float }
 
-func main(): int sync {
+func main() => int sync {
     let n: int = 1
     let p: Point = { x: n, y: 2.0 }
     println(p)
@@ -1829,7 +1835,7 @@ let area = pi * r * r
 let pi = 3.14159
 let r = 2.0
 
-func main(): int sync {
+func main() => int sync {
     println(area, twice(), offset())
     return 0
 }
@@ -1840,7 +1846,7 @@ func twice() {
 
 let k = 21
 
-func offset(): int {
+func offset() => int {
     return k + later
 }
 
@@ -1872,7 +1878,8 @@ Check that the module exports the name '{0}' or remove the import declaration.
 ```camel
 // `import <name> from <module>`: what does the single name mean?
 import T from lib
-func main(): int sync {
+
+func main() => int sync {
     println(T::root())
     return 0
 }
@@ -1901,12 +1908,12 @@ A literal the type cannot hold is not wrapped around or cut off, and a value is 
 **Example** (`test/cases/compile/generics/err_literal.cml`, run as `camel test/cases/compile/generics/err_literal.cml`)
 
 ```camel
-func zero_of::<T>(x: T): T {
+func zero_of::<T>(x: T) => T {
     let z: T = 0.5
     return z
 }
 
-func main(): int sync {
+func main() => int sync {
     println(zero_of(5))
     println(zero_of(2.5))
     return 0
@@ -1937,10 +1944,9 @@ Use types that allow safe conversion, or ensure the conversion is valid. Nothing
 
 ```camel
 // Nothing is converted implicitly: an int is not the float the map holds.
-
-func main(): int sync {
-    let m = [("a", 1)] as Map<string, float>
-    println("never printed")
+func main() => int sync {
+    let m = [('a', 1)] as Map<string, float>
+    println('never printed')
     return 0
 }
 ```
@@ -1973,7 +1979,7 @@ Check the file for syntax errors.
 // not later, and not with a pass diagnostic: nothing asked for a pass of it.
 import unparsable_pass
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -2002,11 +2008,10 @@ Use a valid operator URI in the form protocol:path (e.g. std:add).
 
 ```camel
 /// '#op' names an operator by URI: a URI without 'protocol:path' is refused.
-
 #op('stdadd')
-func add(a: int, b: int): int
+func add(a: int, b: int) => int
 
-func main(): int sync {
+func main() => int sync {
     return add(1, 2)
 }
 ```
@@ -2035,16 +2040,15 @@ Add a top-level main function or ensure it is registered as a direct root subgra
 
 ```camel
 // A library module used by 12_modules.cml.
-
 import { sqrt } from math
 
 export type Vec = { x: float, y: float }
 
-export func hypot(v: Vec): float {
+export func hypot(v: Vec) => float {
     return sqrt(v.x * v.x + v.y * v.y)
 }
 
-export func area(w: float, h: float): float {
+export func area(w: float, h: float) => float {
     return w * h
 }
 ```
@@ -2072,7 +2076,7 @@ The argument kinds match the operator's signature, but their statically known pr
 **Example** (`test/cases/compile/fstring/bad_spec.cml`, run as `camel test/cases/compile/fstring/bad_spec.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(`value: ${'text':d}`)
     return 0
 }
@@ -2105,7 +2109,7 @@ func bump(var x: int) {
     x += 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let k = 0
     bump(k)
     println(k)
@@ -2138,11 +2142,11 @@ A path is a variable followed by any number of fields and elements: 'var p = { x
 ```camel
 type P = { x: int, y: int }
 
-func point(): P {
+func point() => P {
     return { x: 1, y: 2 }
 }
 
-func main(): int sync {
+func main() => int sync {
     point().x = 9
     return 0
 }
@@ -2172,13 +2176,12 @@ What a type takes between '<' and '>' is defined by the type itself (a type argu
 
 ```camel
 // `Map` is always written with its key and value types.
-
-func size(m: Map): int {
+func size(m: Map) => int {
     return 0
 }
 
-func main(): int sync {
-    println("never printed")
+func main() => int sync {
+    println('never printed')
     return 0
 }
 ```
@@ -2207,14 +2210,15 @@ A type that leaves open what a parameter fixes is never accepted implicitly, and
 
 ```camel
 import { reshape, sum } from tensor
+
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
-func exact(a: f32[2, 3]): float {
+func exact(a: f32[2, 3]) => float {
     return float(sum(a))
 }
-func f(x: f32[?, 3], n: int): float {
+func f(x: f32[?, 3], n: int) => float {
     return exact(reshape<[n, 3]>(x))
 }
-func main(): int sync {
+func main() => int sync {
     println(f(reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]), 2))
     return 0
 }
@@ -2247,11 +2251,11 @@ A type that leaves open what the declared return type fixes is never accepted im
 // body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
 // type declares, so the two shapes do not agree.
 
-func firstTwo(x: f32[n]): f32[2] {
+func firstTwo(x: f32[n]) => f32[2] {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: f32[3] = [1.0, 2.0, 3.0]
     println(len(firstTwo(v)))
     return 0
@@ -2284,7 +2288,7 @@ Two imports that bring the same name with the same parameter types conflict, and
 import { f } from conf_b
 import { f } from conf_c
 
-func main(): int sync {
+func main() => int sync {
     println(f(1))
     return 0
 }
@@ -2313,11 +2317,11 @@ A declaration declares each type parameter once, after its name: 'func first::<T
 **Example** (`test/cases/compile/generic_head/err_duplicate_head_param.cml`, run as `camel test/cases/compile/generic_head/err_duplicate_head_param.cml`)
 
 ```camel
-func same::<T, T>(a: T, b: T): T {
+func same::<T, T>(a: T, b: T) => T {
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     println(same(1, 2))
     return 0
 }
@@ -2348,11 +2352,11 @@ A type variable must remain present in a parameter or result type. Its position 
 ```camel
 type Tag<T> = int
 
-func f::<T>(p: Tag<T>): int {
+func f::<T>(p: Tag<T>) => int {
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -2382,11 +2386,11 @@ A type variable takes the type of the argument found at its first binding positi
 ```camel
 import { ones, sum } from tensor
 
-func total(constas n: int, x: f32[n]): float {
+func total(constas n: int, x: f32[n]) => float {
     return float(sum(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     // The instance for n = 3 takes a f32[3]; this argument has extent 4.
     println(total(3, ones::<f32>([4])))
     return 0
@@ -2416,11 +2420,11 @@ A generic function may stand wherever a function is expected, also as an argumen
 **Example** (`test/cases/compile/generics/err_as_value.cml`, run as `camel test/cases/compile/generics/err_as_value.cml`)
 
 ```camel
-func id::<T>(x: T): T {
+func id::<T>(x: T) => T {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let f = id
     println([1, 2]->map<id>)
     return 0
@@ -2450,7 +2454,7 @@ Each call of a generic function with a new set of types builds a new subgraph. A
 **Example** (`test/cases/compile/generics/err_deep_types.cml`, run as `camel test/cases/compile/generics/err_deep_types.cml`)
 
 ```camel
-func churn::<T>(x: T, k: int): int {
+func churn::<T>(x: T, k: int) => int {
     let anF32: f32 = 1.0
     let anF64: f64 = 1.0
     let anI32: i32 = 1
@@ -2462,19 +2466,18 @@ func churn::<T>(x: T, k: int): int {
     let aC64: c64 = 1 - 2i
     let aC128: c128 = 1 + 2i
     return if k <= 0 then 0
-           else if k == 1 then churn(anF32, k - 1)
-           else if k == 2 then churn(anF64, k - 1)
-           else if k == 3 then churn(anI32, k - 1)
-           else if k == 4 then churn(anI64, k - 1)
-           else if k == 5 then churn(aBf16, k - 1)
-           else if k == 6 then churn(aF16, k - 1)
-           else if k == 7 then churn(aBool, k - 1)
-           else if k == 8 then churn(aString, k - 1)
-           else if k == 9 then churn(aC64, k - 1)
-           else churn(aC128, k - 1)
+    else if k == 1 then churn(anF32, k - 1)
+    else if k == 2 then churn(anF64, k - 1)
+    else if k == 3 then churn(anI32, k - 1)
+    else if k == 4 then churn(anI64, k - 1)
+    else if k == 5 then churn(aBf16, k - 1)
+    else if k == 6 then churn(aF16, k - 1)
+    else if k == 7 then churn(aBool, k - 1)
+    else if k == 8 then churn(aString, k - 1)
+    else if k == 9 then churn(aC64, k - 1) else churn(aC128, k - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(churn(0, 3))
     return 0
 }
@@ -2505,11 +2508,11 @@ A type declared with parameters, e.g. 'type Pair<T> = (T, T)', is used with one 
 ```camel
 type Pair<T> = (T, T)
 
-func f(p: Pair<int, string>): int {
+func f(p: Pair<int, string>) => int {
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -2537,16 +2540,16 @@ A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)',
 **Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
 
 ```camel
-func deco(f: (x: int) => int): (x: int) => int {
+func deco(f: (x: int) => int) => (x: int) => int {
     return f
 }
 
 @deco
-func id::<T>(x: T): T {
+func id::<T>(x: T) => T {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(id(1))
     return 0
 }
@@ -2577,11 +2580,11 @@ A type expression written with '..' stands for one type per member of a pack, an
 ```camel
 // An expansion ranges over one pack: a body that names two of them writes one type per member
 // of which pack, and nothing in the declaration says which.
-func blend::<...A, ...B>(...xs: ...A): ...{left: A, right: B} {
-    return {left: xs.[0], right: xs.[1]}
+func blend::<...A, ...B>(...xs: ...A) => ...{ left: A, right: B } {
+    return { left: xs.[0], right: xs.[1] }
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -2609,11 +2612,17 @@ Only a name that stands for exactly one function has a function value. Wrap the 
 **Example** (`test/cases/compile/function_values/literal_operator_name.cml`, run as `camel test/cases/compile/function_values/literal_operator_name.cml`)
 
 ```camel
-func inc(x: int): int { return x + 1 }
-func over(x: int): int { return x }
-func over(x: float): float { return x }
+func inc(x: int) => int {
+    return x + 1
+}
+func over(x: int) => int {
+    return x
+}
+func over(x: float) => float {
+    return x
+}
 
-func main(): int sync {
+func main() => int sync {
     let c = true
     let fs = [println, inc]
     let t = (over, 1)
@@ -2646,8 +2655,10 @@ The type '{0}' marks '{1}' twice.
 **Example** (`test/cases/compile/generic_explicit_nullable_error.cml`, run as `camel test/cases/compile/generic_explicit_nullable_error.cml`)
 
 ```camel
-func optional::<T>(x: T): T? { return null }
-func main(): int sync {
+func optional::<T>(x: T) => T? {
+    return null
+}
+func main() => int sync {
     println(optional::<int?>(null))
     return 0
 }
@@ -2676,7 +2687,7 @@ A value that may be null ('T?') or may have failed ('T!') is opened only by '??'
 **Example** (`test/cases/compile/tagged/err_member.cml`, run as `camel test/cases/compile/tagged/err_member.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     let r = parse_int('1')
     println(r.0)
@@ -2707,7 +2718,7 @@ None: choice: the operands carry tags that do not meet; the repair is in what is
 **Example** (`test/cases/compile/tagged/err_wrong_form.cml`, run as `camel test/cases/compile/tagged/err_wrong_form.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     let a = 1 as int?
     let b = a !! 7
@@ -2739,14 +2750,14 @@ A 'match' on a 'T?' has exactly the cases 'case null' and one other ('case v' bi
 **Example** (`test/cases/compile/match_guard/tagged_missing_null.cml`, run as `camel test/cases/compile/match_guard/tagged_missing_null.cml`)
 
 ```camel
-func f(x: int?): int {
+func f(x: int?) => int {
     return match x {
         case null when false => 1
         case v => v
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(null)
 }
 ```
@@ -2775,10 +2786,9 @@ The errors are reported for that module. This one follows from them and goes awa
 
 ```camel
 /// imports `short`, whose `import..lib` cannot be formed against its one-component name.
-
 import short
 
-func main(): int sync {
+func main() => int sync {
     println(short::name())
     return 0
 }
@@ -2808,10 +2818,9 @@ A key of a Map and an element of a Set must have an order and an equality that c
 
 ```camel
 // A floating-point number is not a key type (NaN, and 0.0 == -0.0).
-
-func main(): int sync {
+func main() => int sync {
     let m = [(1.5, 1)] as Map<float, int>
-    println("never printed")
+    println('never printed')
     return 0
 }
 ```
@@ -2840,10 +2849,9 @@ A map holds one value per key. In an array computed when the program runs the la
 
 ```camel
 // Two equal constant keys in a literal converted to a map are taken for a mistake.
-
-func main(): int sync {
-    let m = [("a", 1), ("b", 2), ("a", 3)] as Map<string, int>
-    println("never printed")
+func main() => int sync {
+    let m = [('a', 1), ('b', 2), ('a', 3)] as Map<string, int>
+    println('never printed')
     return 0
 }
 ```
@@ -2871,13 +2879,13 @@ A 'match' must have a default case: add 'case _ => ...' for the values the cases
 **Example** (`test/cases/compile/match_guard/not_exhaustive.cml`, run as `camel test/cases/compile/match_guard/not_exhaustive.cml`)
 
 ```camel
-func a(n: int): int {
+func a(n: int) => int {
     return match n {
         case 1 when n > 0 => 10
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return a(1)
 }
 ```
@@ -2905,7 +2913,7 @@ An 'if' without 'else' has no value: its arm may be of any type and what the arm
 **Example** (`test/cases/consistency/if_without_else/as_value_let.cml`, run as `camel -E short test/cases/consistency/if_without_else/as_value_let.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let debug = true
     let x = if debug then 1
     println(x)
@@ -2936,7 +2944,7 @@ The empty array literal takes its element type from where it stands: a declared 
 **Example** (`test/cases/consistency/entering/err_empty_array_untyped.cml`, run as `camel -E short test/cases/consistency/entering/err_empty_array_untyped.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let ys = []
     println(ys)
     return 0
@@ -2966,7 +2974,7 @@ The context arguments <{0}> cannot be bound to '{1}' as a value: {2}.
 **Example** (`test/cases/compile/surface/name_as_value_bound_operator.cml`, run as `camel -E short test/cases/compile/surface/name_as_value_bound_operator.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(len<1>)
     return 0
 }
@@ -2995,7 +3003,7 @@ A list comprehension '[e for x in xs if c]' is 'xs->filter<(x) => c>->map<(x) =>
 **Example** (`test/cases/consistency/comprehension/err_not_an_array.cml`, run as `camel -E short test/cases/consistency/comprehension/err_not_an_array.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println([x + 1 for x in 5])
     return 0
 }
@@ -3024,7 +3032,7 @@ The {1} side of '{0}' has type '{2}', not 'bool'.
 **Example** (`test/cases/compile/tagged/err_optional_operand.cml`, run as `camel test/cases/compile/tagged/err_optional_operand.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let o: bool? = true
     let p = o || false
     println(p)
@@ -3060,7 +3068,7 @@ let a = b + 1
 let b = c * 2
 let c = a - 3
 
-func main(): int sync {
+func main() => int sync {
     println(a)
     return 0
 }
@@ -3093,13 +3101,13 @@ A function that calls itself, directly or through other functions, must use a va
 // could not pass it (CaptureAfterRecursiveCall).
 var count = 0
 
-func walk(n: int): int sync {
+func walk(n: int) => int sync {
     let rest = if n > 0 then walk(n - 1) else 0
     count += 1
     return rest + count
 }
 
-func main(): int sync {
+func main() => int sync {
     println(walk(3))
     return 0
 }
@@ -3131,9 +3139,10 @@ Two 'using namespace' in force bring something of this name that cannot be told 
 // Two using-directives that bring the same name with the same signature.
 import lib
 import lib2
+
 using namespace lib::Tools
 using namespace lib2::Tools
-func main(): int sync {
+func main() => int sync {
     println(inc(1))
     return 0
 }
@@ -3166,13 +3175,13 @@ import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
 // bool. It is a `Json` now, and a condition is a bool.
-func check(a: Json): int sync {
+func check(a: Json) => int sync {
     println(if a then 1 else 2)
     return 0
 }
 
-func main(): int sync {
-    return decode('true') -> check !! 1
+func main() => int sync {
+    return decode('true')->check !! 1
 }
 ```
 
@@ -3199,14 +3208,14 @@ A case is compared with the value matched, so the type of that value must accept
 **Example** (`test/cases/compile/match_guard/case_type_mismatch.cml`, run as `camel test/cases/compile/match_guard/case_type_mismatch.cml`)
 
 ```camel
-func f(s: string): int {
+func f(s: string) => int {
     return match s {
         case 1 when true => 1
         case _ => 0
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return f('a')
 }
 ```
@@ -3237,8 +3246,10 @@ The operations of the standard library return new values and leave their argumen
 import { abs } from math
 import { unordered_foreach } from para
 
-func main(): int sync {
-    unordered_foreach<func (item: int) { abs(item) }>([-1, 2])
+func main() => int sync {
+    unordered_foreach<func (item: int) {
+        abs(item)
+    }>([-1, 2])
     return 0
 }
 ```
@@ -3268,9 +3279,13 @@ The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^'
 ```camel
 type M = { v: int }
 
-func operator &&(a: M, b: M): M { return a }
+func operator &&(a: M, b: M) => M {
+    return a
+}
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### OperatorOverloadInvalid
@@ -3298,9 +3313,13 @@ A binary operator takes two parameters and a unary one takes one ('-' may take o
 ```camel
 type M = { v: int }
 
-func operator +(a: M): M { return a }
+func operator +(a: M) => M {
+    return a
+}
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### OperatorOverloadConflict
@@ -3328,9 +3347,13 @@ The overloads of an operator from every module, the built-in ones included, are 
 ```camel
 type M = { v: int }
 
-func operator +(a: int, b: int): int { return 99 }
+func operator +(a: int, b: int) => int {
+    return 99
+}
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### AmbiguousCall
@@ -3356,15 +3379,15 @@ More than one function takes these arguments; make the choice explicit: annotate
 **Example** (`test/cases/compile/overloads/ambiguous_literal.cml`, run as `camel test/cases/compile/overloads/ambiguous_literal.cml`)
 
 ```camel
-func scale(x: f32): f32 {
+func scale(x: f32) => f32 {
     return x * 2.0
 }
 
-func scale(x: float): float {
+func scale(x: float) => float {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(scale(2))
     println('never printed')
     return 0
@@ -3400,7 +3423,7 @@ A declaration written with a type takes a value of that type; nothing is convert
 // source whose own nesting already gives the shape -- a nested literal, a constant a folded
 // `reshape` names -- is read as the shape the position states. Nothing is reshaped to fit.
 
-func main(): int sync {
+func main() => int sync {
     let flat: f32[] = [1.0, 2.0, 3.0, 4.0]
     let one = flat as f32[4]
     let b: f32[2, 2] = one
@@ -3433,7 +3456,7 @@ Each of these types needs the next one to be declared first, and the last needs 
 ```camel
 type A = { a: A }
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -3465,7 +3488,9 @@ A line that starts with '@' annotates the function declaration or the block that
 /// replaced it (design principles 7.2 made numeric permissions tags).
 
 @numeric(contract)
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### LoopSequenceNotIterable
@@ -3492,7 +3517,7 @@ A loop's 'for x in xs' visits the elements of xs in order (design principles 3.1
 
 ```camel
 // `for` takes the elements of an array, a string, a map or a tensor; an int is none of them.
-func main(): int sync {
+func main() => int sync {
     let n = loop s = 0 for x in 42 do s + x
     println(n)
     return 0
@@ -3522,12 +3547,12 @@ The initial state fixes the state type. Return that type after 'do', or change t
 **Example** (`test/cases/compile/static_expansion/static_loop_body_type.cml`, run as `camel test/cases/compile/static_expansion/static_loop_body_type.cml`)
 
 ```camel
-func bad(t: {a: int}): int {
-    return static loop acc = 0 for n, F in fields {a: int} do "not an int"
+func bad(t: { a: int }) => int {
+    return static loop acc = 0 for n, F in fields { a: int } do 'not an int'
 }
 
-func main(): int {
-    return bad({a: 1})
+func main() => int {
+    return bad({ a: 1 })
 }
 ```
 
@@ -3554,7 +3579,7 @@ The state of a loop has the type of its first value. 'null' and the empty array 
 **Example** (`test/cases/loops/err_untyped_state.cml`, run as `camel -E short test/cases/loops/err_untyped_state.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let best = loop b = null for x in [1, 2] do x
     println(best)
     return 0
@@ -3584,7 +3609,7 @@ There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 
 **Example** (`test/cases/loops/err_condition.cml`, run as `camel -E short test/cases/loops/err_condition.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let n = loop s = 3 while s do s - 1
     println(n)
     return 0
@@ -3614,12 +3639,12 @@ The names of a loop's state and the name 'for' binds to the element are declared
 **Example** (`test/cases/compile/static_expansion/static_loop_name_repeated.cml`, run as `camel test/cases/compile/static_expansion/static_loop_name_repeated.cml`)
 
 ```camel
-func bad(t: {a: int}): int {
-    return static loop n = 0 for n, F in fields {a: int} do n + 1
+func bad(t: { a: int }) => int {
+    return static loop n = 0 for n, F in fields { a: int } do n + 1
 }
 
-func main(): int {
-    return bad({a: 1})
+func main() => int {
+    return bad({ a: 1 })
 }
 ```
 
@@ -3649,10 +3674,10 @@ A variant is one of the values of its enum and is written by its name; each name
 type Shape = enum {
     Circle(float),
     Circle(int),
-    Empty,
+    Empty
 }
 
-func main(): void sync {
+func main() => void sync {
     println(Shape::Empty)
 }
 ```
@@ -3682,10 +3707,10 @@ A field of a struct variant is written by its name; each name occurs once.
 ```camel
 type Pair = enum {
     Both { a: int, a: float },
-    None,
+    None
 }
 
-func main(): void sync {
+func main() => void sync {
     println(Pair::None)
 }
 ```
@@ -3715,10 +3740,10 @@ The fields of a variant are those its declaration writes: as many, and in the sa
 ```camel
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func main(): void sync {
+func main() => void sync {
     let s = Shape::Circle(1.0, 2.0)
     println(s)
 }
@@ -3749,10 +3774,10 @@ A pattern names a variant of the enum it matches and, if that variant has fields
 ```camel
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func main(): void sync {
+func main() => void sync {
     let s = Shape::Circl(1.0)
     println(s)
 }
@@ -3784,17 +3809,17 @@ Every variant of an enum is a value of it, so a match that names variants must n
 type Shape = enum {
     Circle(float),
     Rect { w: float, h: float },
-    Empty,
+    Empty
 }
 
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => r
         case Shape::Empty => 0.0
     }
 }
 
-func main(): void sync {
+func main() => void sync {
     println(area(Shape::Empty))
 }
 ```
@@ -3825,10 +3850,10 @@ A field of a variant is taken out by matching the value and binding it in the ar
 type Shape = enum {
     Circle(float),
     Rect { w: float, h: float },
-    Empty,
+    Empty
 }
 
-func main(): void sync {
+func main() => void sync {
     let s = Shape::Circle(1.0)
     println(s.radius)
 }
@@ -3858,10 +3883,9 @@ The fields of the variant do not say what the argument is; where the value is us
 
 ```camel
 /// A variant whose fields do not say the type argument of the enum.
-
 type Option<T> = enum { Some(T), None }
 
-func main(): int sync {
+func main() => int sync {
     let x = Option::None
     return 0
 }
@@ -3892,10 +3916,10 @@ The fields of a variant are those its declaration writes.
 ```camel
 type Shape = enum {
     Circle(int),
-    Empty,
+    Empty
 }
 
-func main(): void sync {
+func main() => void sync {
     let s = Shape::Circle(1.5)
     println(s)
 }
@@ -3926,11 +3950,11 @@ A variant written with '(...)' is built from its fields in order; one written wi
 ```camel
 type Shape = enum {
     Rect { w: float, h: float },
-    Empty,
+    Empty
 }
 
-func main(): void sync {
-    let s = Shape::Rect { w: 1.0 }
+func main() => void sync {
+    let s = Shape::Rect{ w: 1.0 }
     println(s)
 }
 ```
@@ -3963,11 +3987,11 @@ A dimension name binds where it first appears in a parameter type, 'x: f32[n, 3]
 
 type Vec<T> = { data: T }
 
-func f(y: Vec<const constas n>): int {
+func f(y: Vec<const constas n>) => int {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -3998,11 +4022,11 @@ A name in a type's extents is bound by its first plain occurrence in a parameter
 // The return type writes `n`, but no parameter binds it: the caller has no argument that
 // could say what it is.
 
-func bad(x: f32[]): f32[n] {
+func bad(x: f32[]) => f32[n] {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -4033,11 +4057,11 @@ Only the first occurrence of a dimension name in the parameter types binds it; l
 // A pack name and a dimension name are separate namespaces: reusing a bound dimension name
 // for a pack says two different things with one name.
 
-func bad(x: f32[n], y: f32[...n]): int {
+func bad(x: f32[n], y: f32[...n]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -4069,11 +4093,11 @@ A shape is one value wherever it is stated. The dimensions a signature names are
 // is, and the second argument must be that same extent. Each argument states its extent where it
 // is made, which is the form the call's binding reads.
 
-func dot(x: f32[n], y: f32[n]): f32 {
+func dot(x: f32[n], y: f32[n]) => f32 {
     return x[0] + y[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: f32[] = [1.0, 2.0, 3.0]
     let w: f32[] = [4.0, 5.0]
     let a = v as f32[3]
@@ -4107,12 +4131,11 @@ Each extent is a non-negative integer, a dimension name bound by the signature, 
 
 ```camel
 // A negative extent is not a dimension: `?` is the unknown extent.
-
-func bad(x: f32[-1]): int {
+func bad(x: f32[-1]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -4143,11 +4166,11 @@ grad and with_grad differentiate the first `with` parameter of a function that r
 import { grad } from autodiff
 
 with <x: float>
-func pair_loss(): (float, float) {
+func pair_loss() => (float, float) {
     return (x * x, x * 3.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(pair_loss)<2.0>()
     println(d)
     return 0
@@ -4178,11 +4201,12 @@ Write the tag where its declaration says it belongs, or add the position to the 
 
 ```camel
 /// A tag written where its declaration does not list it (design principles 6.2).
-
 export tag shape on type
 
 #shape
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### TagUndeclared
@@ -4209,9 +4233,10 @@ A tag has a space of its own, separate from functions, types and values, and the
 
 ```camel
 /// A tag that is not declared.
-
 #nope
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### TagArgumentCount
@@ -4237,12 +4262,12 @@ Write one argument for each parameter of the tag, in the order of the declaratio
 **Example** (`test/cases/compile/native/impl_syntax_args.cml`, run as `camel test/cases/compile/native/impl_syntax_args.cml`)
 
 ```camel
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
 #impl()
-func add_with_kernel(a: int, b: int): int {
+func add_with_kernel(a: int, b: int) => int {
     return a + b
 }
 ```
@@ -4271,16 +4296,17 @@ A tag is read before the program runs: write a literal, a top-level constant or 
 
 ```camel
 /// A tag argument that is not a compile-time value.
-
 export tag width(w: int) on type
 
-func f(n: int): int {
+func f(n: int) => int {
     #width(n)
     type T = { a: int }
     return 0
 }
 
-func main(): int { return f(1) }
+func main() => int {
+    return f(1)
+}
 ```
 
 ### TagOnUnnamedField
@@ -4307,14 +4333,13 @@ Declare the struct as a type ('type S = { ... }') and tag the field in that decl
 
 ```camel
 /// A tag on a field of a struct type written inline, which is not a declaration.
-
 tag width(w: int) on field
 
-func f(x: { #width(8) a: int }): int {
+func f(x: { #width(8) a: int }) => int {
     return x.a
 }
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -4343,15 +4368,14 @@ A tag's parameters are given in the order the tag declares them: write '#tag(a, 
 
 ```camel
 /// A tag argument is positional; naming one is refused.
-
 tag width(w: int) on func
 
 #width(w: 8)
-func g(): int {
+func g() => int {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -4380,13 +4404,14 @@ A tag argument is a compile-time constant of the kind the parameter declares: wr
 
 ```camel
 /// A tag argument of a type a tag cannot hold yet (adds them).
-
 export tag width(w: int) on type
 
 #width(1.5)
 type T = { a: int }
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### TagNotAPermission
@@ -4418,7 +4443,7 @@ import { rewrite } from rewrite
 #requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[r]>
 }
 ```
@@ -4447,13 +4472,14 @@ State the permissions the rule needs as tag arguments: '#requires(reassociate)' 
 
 ```camel
 /// A tag other than `#requires` before a rule: a rule states requirements, not facts.
-
 tag fast on nodes
 
 #fast
 rule r(x: int) { x + 0 => x }
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### TagParameterType
@@ -4480,13 +4506,14 @@ Declare the parameter with the kind of the argument the tag is written with: 'ta
 
 ```camel
 /// A parameter of a kind a tag cannot carry: reported where the tag is written, not carried.
-
 tag callback(xs: int[]) on type
 
 #callback(1)
 type T = { x: int }
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}
 ```
 
 ### TagShadowsPermission
@@ -4514,7 +4541,7 @@ A numeric permission (design principles 7.2) and its group and `strict` (7.4) ar
 ```camel
 tag reassociate on func
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -4542,14 +4569,14 @@ The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is no
 **Example** (`test/cases/compile/static_expansion/match_type_exhaustive.cml`, run as `camel test/cases/compile/static_expansion/match_type_exhaustive.cml`)
 
 ```camel
-func only_composite::<T>(t: T): int {
+func only_composite::<T>(t: T) => int {
     return match type T {
         case struct => 1
         case tuple => 2
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(only_composite(1))
     return 0
 }
@@ -4578,14 +4605,14 @@ The case '{0}' selects every type the cases after it could select.
 **Example** (`test/cases/compile/static_expansion/match_type_unreachable.cml`, run as `camel test/cases/compile/static_expansion/match_type_unreachable.cml`)
 
 ```camel
-func after_leaf::<T>(t: T): int {
+func after_leaf::<T>(t: T) => int {
     return match type T {
         case #leaf => 1
         case struct => 2
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(after_leaf(1))
     return 0
 }
@@ -4615,14 +4642,13 @@ The type matched here is still '{0}' when the function is instantiated.
 
 ```camel
 /// A 'match type' whose subject is still a type variable at instantiation.
-
-func f::<T>(x: int): int {
+func f::<T>(x: int) => int {
     return match type T {
         case _ => 1
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }
 ```
@@ -4676,7 +4702,7 @@ func count::<T>(xs: T[], i: int) {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count([1, 2], 0))
     return 0
 }
@@ -4711,7 +4737,7 @@ func walk(t: int) {
     }
 }
 
-func main(): int {
+func main() => int {
     walk(1)
     return 0
 }
@@ -4741,8 +4767,11 @@ A field cannot be taken from '{0}' by a compile-time key.
 
 ```camel
 import { tree_map } from tree
-func main(): int sync {
-    println(tree_map<func (a: int, b: int) => int { a + b }>({ block: (1, 2) }, { block: 3 }))
+
+func main() => int sync {
+    println(tree_map<func (a: int, b: int) => int {
+        a + b
+    }>({ block: (1, 2) }, { block: 3 }))
     return 0
 }
 ```
@@ -4770,12 +4799,12 @@ The struct '{1}' has no field '{0}'.
 **Example** (`test/cases/compile/static_expansion/static_access_unknown_field.cml`, run as `camel test/cases/compile/static_expansion/static_access_unknown_field.cml`)
 
 ```camel
-func field(t: {a: int, b: int}): int {
-    return t.["c"]
+func field(t: { a: int, b: int }) => int {
+    return t.['c']
 }
 
-func main(): int {
-    return field({a: 1, b: 2})
+func main() => int {
+    return field({ a: 1, b: 2 })
 }
 ```
 
@@ -4802,11 +4831,11 @@ A tuple element is named by its index from 0; a 'static for' gives the decimal i
 **Example** (`test/cases/compile/static_expansion/static_access_out_of_range.cml`, run as `camel test/cases/compile/static_expansion/static_access_out_of_range.cml`)
 
 ```camel
-func element(t: (int, int)): int {
+func element(t: (int, int)) => int {
     return t.[2]
 }
 
-func main(): int {
+func main() => int {
     return element((1, 2))
 }
 ```
@@ -4834,12 +4863,12 @@ The key is a string or integer literal, the 'n' of an enclosing 'static for', or
 **Example** (`test/cases/compile/static_expansion/static_access_not_constant.cml`, run as `camel test/cases/compile/static_expansion/static_access_not_constant.cml`)
 
 ```camel
-func field(t: {a: int, b: int}, k: string): int {
+func field(t: { a: int, b: int }, k: string) => int {
     return t.[k]
 }
 
-func main(): int {
-    return field({a: 1, b: 2}, "a")
+func main() => int {
+    return field({ a: 1, b: 2 }, 'a')
 }
 ```
 
@@ -4866,12 +4895,12 @@ The block is the value of one field: its last statement must have a value. A cal
 **Example** (`test/cases/compile/static_expansion/comprehension_void_element.cml`, run as `camel test/cases/compile/static_expansion/comprehension_void_element.cml`)
 
 ```camel
-func broken(t: {a: int, b: int}) {
-    return { static for n, F in fields {a: int, b: int} do {} }
+func broken(t: { a: int, b: int }) {
+    return {static for n, F in fields { a: int, b: int } do {}}
 }
 
-func main(): int sync {
-    let r = broken({a: 1, b: 2})
+func main() => int sync {
+    let r = broken({ a: 1, b: 2 })
     return 0
 }
 ```
@@ -4900,10 +4929,9 @@ A body-less declaration is the whole signature of a C++ operator, result include
 
 ```camel
 /// A body-less declaration is a whole signature, result type included.
-
 func foo(x: int)
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -4933,7 +4961,7 @@ A body-less declaration stands for an operator of a loaded C++ module. Import th
 ```camel
 import { absent } from missing_module
 
-func main(): int {
+func main() => int {
     return absent(1)
 }
 ```
@@ -4961,8 +4989,10 @@ A lambda takes the type of a parameter it does not write from the function type 
 **Example** (`test/cases/compile/lambda_inference/no_expected.cml`, run as `camel test/cases/compile/lambda_inference/no_expected.cml`)
 
 ```camel
-func main(): int sync {
-    let g = func (x) { x + 1 }
+func main() => int sync {
+    let g = func (x) {
+        x + 1
+    }
     println(g(1))
     return 0
 }
@@ -4992,14 +5022,14 @@ An operator has one meaning for one call: which rule applies must be decided by 
 
 ```camel
 #op(':op/idx_arr')
-export func pick::<T>(xs: T[], i: int): T
+export func pick::<T>(xs: T[], i: int) => T
 
 // The same call: an array of some element type and an index. `T` and `U` are no help — every
 // call of one is a call of the other.
 #op(':op/idx_arr')
-export func pick::<U>(xs: U[], i: int): U
+export func pick::<U>(xs: U[], i: int) => U
 
-func main(): int sync {
+func main() => int sync {
     println(pick([10, 20, 30], 1))
     return 0
 }
@@ -5031,7 +5061,7 @@ A module declares only the operators it implements: a body-less declaration stan
 import bytes
 import { to_array } from bytes_tag
 
-func main(): int sync {
+func main() => int sync {
     let b = bytes::encode('abc')
     println(to_array(b))
     return 0
@@ -5061,12 +5091,12 @@ None: choice: the repair is a decision only the writer can make
 **Example** (`test/cases/compile/static_expansion/indices_not_tuple.cml`, run as `camel test/cases/compile/static_expansion/indices_not_tuple.cml`)
 
 ```camel
-func bad(t: {a: int, b: int}): int {
+func bad(t: { a: int, b: int }) => int {
     return static loop acc = 0 for j in indices t do acc + 1
 }
 
-func main(): int {
-    return bad({a: 1, b: 2})
+func main() => int {
+    return bad({ a: 1, b: 2 })
 }
 ```
 
@@ -5093,11 +5123,11 @@ A rest parameter stands for every argument left over, so no parameter can follow
 **Example** (`test/cases/compile/rest_params/rest_param_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_param_not_last.cml`)
 
 ```camel
-func bad(...ts, x: int): int {
+func bad(...ts, x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1, 2)
 }
 ```
@@ -5125,11 +5155,11 @@ A rest parameter is untyped: the tuple of the arguments left over is made at the
 **Example** (`test/cases/compile/rest_params/rest_param_typed.cml`, run as `camel test/cases/compile/rest_params/rest_param_typed.cml`)
 
 ```camel
-func bad(...ts: int): int {
+func bad(...ts: int) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }
 ```
@@ -5157,11 +5187,11 @@ The rest argument '..{0}' must be the last positional argument.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_last.cml`)
 
 ```camel
-func sum(...ts): int {
+func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main(): int sync {
+func main() => int sync {
     return sum(...(1, 2), 3)
 }
 ```
@@ -5189,11 +5219,11 @@ The rest argument '..{0}' is not a compile-time tuple.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_tuple.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_tuple.cml`)
 
 ```camel
-func sum(...ts): int {
+func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main(): int sync {
+func main() => int sync {
     return sum(...5)
 }
 ```
@@ -5221,11 +5251,11 @@ A function with a rest parameter has no runtime arity, so it has no function val
 **Example** (`test/cases/compile/rest_params/rest_as_value.cml`, run as `camel test/cases/compile/rest_params/rest_as_value.cml`)
 
 ```camel
-func sum(...ts): int {
+func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main(): int sync {
+func main() => int sync {
     let f = sum
     return f(1, 2)
 }
@@ -5254,11 +5284,11 @@ A rest parameter only stands for the arguments after the fixed ones. Give at lea
 **Example** (`test/cases/compile/rest_params/rest_too_few.cml`, run as `camel test/cases/compile/rest_params/rest_too_few.cml`)
 
 ```camel
-func first(a: int, ...ts): int {
+func first(a: int, ...ts) => int {
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     return first()
 }
 ```
@@ -5287,11 +5317,11 @@ A 'constas' parameter is a compile-time value and its type is part of the declar
 
 ```camel
 // A `constas` parameter writes its type; only `int` is supported.
-func bad(constas n): int {
+func bad(constas n) => int {
     return n
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bad(1))
     return 0
 }
@@ -5322,15 +5352,15 @@ The value selects the instance of the declaration, so it must be known before th
 ```camel
 import { ones, sum } from tensor
 
-func total(constas n: int, x: f32[n]): float {
+func total(constas n: int, x: f32[n]) => float {
     return float(sum(x))
 }
 
-func use(m: int): float {
+func use(m: int) => float {
     return total(m, ones::<f32>([3]))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(use(3))
     return 0
 }
@@ -5361,15 +5391,15 @@ The value must be known where the call is written. Call the declaration directly
 ```camel
 import { ones, sum } from tensor
 
-func total(constas n: int, x: f32[n]): float {
+func total(constas n: int, x: f32[n]) => float {
     return float(sum(x))
 }
 
-func apply(f: (x: f32[...]) => float, x: f32[...]): float {
+func apply(f: (x: f32[...]) => float, x: f32[...]) => float {
     return f(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     // The value must be known where the call is written, so `total` has no function value.
     println(apply(total, ones::<f32>([3])))
     return 0
@@ -5403,9 +5433,9 @@ import tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time
 // value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): f32[n]
+func zeros(constas n: int) => f32[n]
 
-func main(): int sync {
+func main() => int sync {
     println(zeros(3))
     return 0
 }
@@ -5436,11 +5466,11 @@ A 'constas' value is bound at the call, like any other argument, but it is not a
 ```camel
 import { ones, sum } from tensor
 
-func total(constas n: int, x: f32[n]): float {
+func total(constas n: int, x: f32[n]) => float {
     return float(sum(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total())
     return 0
 }
@@ -5469,11 +5499,11 @@ A rest parameter's tuple stands for the arguments a call left over: read it with
 **Example** (`test/cases/compile/static_expansion/static_tuple_escape.cml`, run as `camel test/cases/compile/static_expansion/static_tuple_escape.cml`)
 
 ```camel
-func first(...ts): int {
+func first(...ts) => int {
     return ts
 }
 
-func main(): int sync {
+func main() => int sync {
     return first(1, 2)
 }
 ```
@@ -5505,11 +5535,11 @@ One node has one value for a fact. Write one of the tags here, or put the other 
 /// choice left to declaration order (docs/design/gpu/plan.cn.md 2.1).
 
 #[gpu, cpu]
-func both(x: int): int {
+func both(x: int) => int {
     return x
 }
 
-func main(): int {
+func main() => int {
     return both(1)
 }
 ```
@@ -5538,12 +5568,11 @@ A pack stands for the dimensions the type does not name, so nothing can follow i
 
 ```camel
 // A pack stands for the trailing dimensions, so nothing may follow it.
-
-func bad(x: f32[...rest, 3]): int {
+func bad(x: f32[...rest, 3]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -5573,11 +5602,11 @@ A clause names a parameter of the function (the value a call touches), a resourc
 ```camel
 // A clause names a parameter, a resource the module declares, one of the standard resources, or
 // one imported from another module. `nowhere` is none of those (UnknownResource).
-func f(x: int): int uses nowhere {
+func f(x: int) => int uses nowhere {
     return x
 }
 
-func main(): int {
+func main() => int {
     return f(1)
 }
 ```
@@ -5607,11 +5636,11 @@ The signature of '{0}' says both 'pure' and 'uses'.
 ```camel
 // `pure` says a call touches no resource at all; `uses` names the resources it touches. A
 // signature cannot say both (PureAndUses).
-func f(): int pure uses fs {
+func f() => int pure uses fs {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return f()
 }
 ```
@@ -5644,7 +5673,7 @@ A group names resources, or other groups that name resources. Expand them in an 
 resource a = [b]
 resource b = [a]
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -5674,9 +5703,10 @@ A handle is a type with an identity of its own, one resource per value. Write th
 ```camel
 // `#resource` says a type is a handle: one resource per value, named by the declaration. An alias
 // has no identity of its own to name (HandleTypeNotNominal).
-#resource type Id = int
+#resource
+type Id = int
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -5707,10 +5737,10 @@ A body-less declaration is the whole signature of a C++ operator, its resources 
 import { read_text } from fs
 
 #op('fs:exists')
-export func exists(path: string): bool pure
+export func exists(path: string) => bool pure
 
-func main(): int sync {
-    println(exists("no/such/file"))
+func main() => int sync {
+    println(exists('no/such/file'))
     return 0
 }
 ```
@@ -5782,11 +5812,11 @@ A 'when' is a compile-time predicate over the declaration's type parameters and 
 **Example** (`test/cases/compile/when/non_bool.cml`, run as `camel test/cases/compile/when/non_bool.cml`)
 
 ```camel
-func bad(x: int): int when 1 {
+func bad(x: int) => int when 1 {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }
 ```
@@ -5816,11 +5846,11 @@ The condition is checked at instantiation, before the body is built, so it can o
 ```camel
 import { is_integer } from types
 
-func only_int::<T>(x: T): T when is_integerr::<T>() {
+func only_int::<T>(x: T) => T when is_integerr::<T>() {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }
@@ -5849,11 +5879,11 @@ A condition sees the declaration's type parameters and its 'with' parameters. Or
 **Example** (`test/cases/compile/when/unknown_name.cml`, run as `camel test/cases/compile/when/unknown_name.cml`)
 
 ```camel
-func bad(x: int): int when x {
+func bad(x: int) => int when x {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }
 ```
@@ -5881,18 +5911,18 @@ A predicate is evaluated when the declaration is instantiated, where every type 
 **Example** (`test/cases/compile/when/open_type.cml`, run as `camel test/cases/compile/when/open_type.cml`)
 
 ```camel
-func is_numeric::<T>(): bool {
+func is_numeric::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 | c64 | c128 => true
         case _ => false
     }
 }
 
-func bad::<T>(x: int): int when is_numeric::<T>() {
+func bad::<T>(x: int) => int when is_numeric::<T>() {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }
 ```
@@ -5922,7 +5952,7 @@ A 'when' that is false makes its declaration inapplicable, not erroneous, and th
 ```camel
 /// `when ...is_array::<A>()` asks every member of the pack: an argument that is not an array makes
 /// the declaration inapplicable, and `zip` has no other.
-func main(): int sync {
+func main() => int sync {
     println(zip([1, 2], 3))
     return 0
 }
@@ -5956,23 +5986,34 @@ import { rewrite } from rewrite
 rule add_zero(x: int) when publish_now() { x + 0 => x }
 rule drop_one(x: int) when true { x * 1 => x }
 
-func publish_now(): bool {
+func publish_now() => bool {
     let p = redex
     return match p->rewrite<[drop_one]> {
-        case error e => sync { println('inner error value: ', e.kind); return false }
-        case q => sync { return true }
+        case error e => sync {
+            println('inner error value: ', e.kind)
+            return false
+        }
+        case q => sync {
+            return true
+        }
     }
 }
 
-func redex(x: int): int {
+func redex(x: int) => int {
     return x * 1 + 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = redex
     return match p->rewrite<[add_zero]> {
-        case error e => sync { println('outer error value: ', e.kind); return 1 }
-        case q => sync { println('rewritten'); return 0 }
+        case error e => sync {
+            println('outer error value: ', e.kind)
+            return 1
+        }
+        case q => sync {
+            println('rewritten')
+            return 0
+        }
     }
 }
 ```
@@ -6000,11 +6041,10 @@ typeof {0} has no value type: {1}.
 **Example** (`test/cases/compile/static_expansion/typeof_void.cml`, run as `camel test/cases/compile/static_expansion/typeof_void.cml`)
 
 ```camel
-func nothing(): void {
-}
+func nothing() => void {}
 
-func main(): int sync {
-    static for j, C in fields typeof(nothing()) do println(j)
+func main() => int sync {
+    static for j, C in fields typeof (nothing()) do println(j)
     return 0
 }
 ```
@@ -6032,8 +6072,8 @@ typeof is written inside the larger type {0}.
 **Example** (`test/cases/compile/static_expansion/typeof_inside_type.cml`, run as `camel test/cases/compile/static_expansion/typeof_inside_type.cml`)
 
 ```camel
-func main(): int sync {
-    static for j, C in fields typeof(1)[] do println(j)
+func main() => int sync {
+    static for j, C in fields typeof (1)[] do println(j)
     return 0
 }
 ```
@@ -6067,7 +6107,7 @@ func build(t: int) {
     return N { static for n, F in fields N do t }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(build(1))
     return 0
 }
@@ -6096,15 +6136,15 @@ Write `T { static for n, F in fields T do ... }`: the generator must walk the sh
 **Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
 
 ```camel
-type A = {a: int}
-type B = {b: int, c: int}
+type A = { a: int }
+type B = { b: int, c: int }
 
 func build(u: B) {
     return A { static for n, F in fields B do u.[n] }
 }
 
-func main(): int sync {
-    println(build({b: 1, c: 2}))
+func main() => int sync {
+    println(build({ b: 1, c: 2 }))
     return 0
 }
 ```
@@ -6133,11 +6173,11 @@ A name in a 'with' argument is written as in a struct literal, 'name: value', an
 
 ```camel
 with <rounds: int = 8>
-func f(x: int): int {
+func f(x: int) => int {
     return x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     return f<round: 2>(1)
 }
 ```
@@ -6166,11 +6206,11 @@ Give each 'with' parameter once: positionally, or by name after the positional a
 
 ```camel
 with <rounds: int = 8>
-func f(x: int): int {
+func f(x: int) => int {
     return x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     return f<2, rounds: 3>(1)
 }
 ```
@@ -6199,11 +6239,11 @@ Give the parameter, or write a default where the parameter is declared ('with <n
 
 ```camel
 with <rounds: int, strict: bool = false>
-func f(x: int): int {
+func f(x: int) => int {
     return if strict then x * rounds else x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     return f<strict: true>(1)
 }
 ```
@@ -6232,11 +6272,11 @@ A default is evaluated where the declaration is, not at each call, so it can onl
 
 ```camel
 with <a: int = 1, b: int = a + 1>
-func f(x: int): int {
+func f(x: int) => int {
     return x + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }
 ```
@@ -6264,12 +6304,12 @@ The default is a value of the parameter's type, as an argument at the call would
 **Example** (`test/cases/compile/with_defaults/default_wrong_type.cml`, run as `camel test/cases/compile/with_defaults/default_wrong_type.cml`)
 
 ```camel
-with <rounds: int = "many">
-func f(x: int): int {
+with <rounds: int = 'many'>
+func f(x: int) => int {
     return x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }
 ```
@@ -6298,11 +6338,11 @@ A parameter after one with a default must have a default too, so that a call tha
 
 ```camel
 with <a: int = 1, b: int>
-func f(x: int): int {
+func f(x: int) => int {
     return x + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }
 ```
@@ -6330,7 +6370,7 @@ Name the one function the binding is for, or give the 'with' arguments positiona
 **Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     'a{}'->format<x: 1>->println
     return 0
 }
@@ -6360,11 +6400,11 @@ A function value binds the 'with' arguments it is given in order; name a paramet
 
 ```camel
 with <rounds: int = 8>
-func f(x: int): int {
+func f(x: int) => int {
     return x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = f<rounds: 2>
     return g(1)
 }
@@ -6396,7 +6436,7 @@ A condition resolves names where its declaration is written, as a call in its bo
 import predicates
 import unimported_user
 
-func main(): int sync {
+func main() => int sync {
     println(unimported_user::describe((1, 2)))
     return 0
 }
@@ -6427,11 +6467,11 @@ A condition calls a generic function whose body reduces to a constant over the t
 ```camel
 import { ready } from predicates
 
-func bad(x: int): int when ready() {
+func bad(x: int) => int when ready() {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }
 ```
@@ -6462,11 +6502,11 @@ Two imports that bring one name do not choose between them. Import the predicate
 import { is_compound } from predicates
 import { is_compound } from predicates_other
 
-func describe::<T>(x: T): string when is_compound::<T>() {
+func describe::<T>(x: T) => string when is_compound::<T>() {
     return 'compound'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describe((1, 2)))
     return 0
 }
@@ -6495,7 +6535,7 @@ An identity pattern is exact: it selects only the type it names, after the decla
 **Example** (`test/cases/compile/match_type/err_unreachable_array.cml`, run as `camel test/cases/compile/match_type/err_unreachable_array.cml`)
 
 ```camel
-func kind::<T>(): string {
+func kind::<T>() => string {
     return match type T {
         case array => 'array'
         case int[] => 'ints'
@@ -6503,7 +6543,7 @@ func kind::<T>(): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind::<int[]>())
     return 0
 }
@@ -6539,12 +6579,13 @@ import { rewrite } from rewrite
 with <cap: int = 5>
 fact capped(v: int): int match v {
     case const c => c
-    case _       => 0
-} join max
+    case _ => 0
+}
+join max
 
 rule bad_arg(x: int, y: int) when capped<y>(x) == 0 { x * y => x }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -6576,9 +6617,10 @@ import { max } from math
 
 fact sign(v: int): int match v {
     case const c => c
-} join max
+}
+join max
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -6606,15 +6648,15 @@ A call in a place that needs a compile-time constant is evaluated only when ever
 **Example** (`test/cases/compile/fold_calls/argument.cml`, run as `camel test/cases/compile/fold_calls/argument.cml`)
 
 ```camel
-func half(n: int): int {
+func half(n: int) => int {
     return n / 2
 }
 
-func at(t: (int, int, int), n: int): int {
+func at(t: (int, int, int), n: int) => int {
     return t.[half(n)]
 }
 
-func main(): int {
+func main() => int {
     return at((10, 20, 30), 4)
 }
 ```
@@ -6642,12 +6684,12 @@ Only a pure call is evaluated: a function with no effects and no reads of mutabl
 **Example** (`test/cases/compile/fold_calls/effect.cml`, run as `camel test/cases/compile/fold_calls/effect.cml`)
 
 ```camel
-func reveal(s: string): string uses var stdout {
+func reveal(s: string) => string uses var stdout {
     println(s)
     return s
 }
 
-func main(): int {
+func main() => int {
     let t = { x: 1 }
     return t.[reveal('x')]
 }
@@ -6676,11 +6718,11 @@ A call that recurses without reaching a value for the constants it is given is n
 **Example** (`test/cases/compile/fold_calls/depth_limit.cml`, run as `camel test/cases/compile/fold_calls/depth_limit.cml`)
 
 ```camel
-func spin(n: int): int {
+func spin(n: int) => int {
     return spin(n + 1)
 }
 
-func main(): int {
+func main() => int {
     let xs = (1, 2)
     return xs.[spin(0)]
 }
@@ -6709,11 +6751,11 @@ A compile-time value is a number, a bool, a string or a character. Return one of
 **Example** (`test/cases/compile/fold_calls/result_kind.cml`, run as `camel test/cases/compile/fold_calls/result_kind.cml`)
 
 ```camel
-func pair(): (int, int) {
+func pair() => (int, int) {
     return (1, 2)
 }
 
-func main(): int {
+func main() => int {
     let t = { x: 1 }
     return t.[pair()]
 }
@@ -6742,12 +6784,14 @@ The body of a folded call is read from the same constructs a 'when' condition re
 **Example** (`test/cases/compile/fold_calls/not_evaluable.cml`, run as `camel test/cases/compile/fold_calls/not_evaluable.cml`)
 
 ```camel
-func first_of_list(): int {
-    let step = func (n: int) => int { n + 1 }
+func first_of_list() => int {
+    let step = func (n: int) => int {
+        n + 1
+    }
     return step(1)
 }
 
-func main(): int {
+func main() => int {
     let t = (10, 20, 30)
     return t.[first_of_list()]
 }
@@ -6776,11 +6820,11 @@ A named argument is written as in a struct literal, 'name: value', and must be o
 **Example** (`test/cases/compile/param_defaults/unknown_name.cml`, run as `camel test/cases/compile/param_defaults/unknown_name.cml`)
 
 ```camel
-func f(a: int, b: int = 0): int {
+func f(a: int, b: int = 0) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1, z: 2)
 }
 ```
@@ -6808,11 +6852,11 @@ Give each parameter once: positionally, or by name after the positional argument
 **Example** (`test/cases/compile/param_defaults/duplicate.cml`, run as `camel test/cases/compile/param_defaults/duplicate.cml`)
 
 ```camel
-func f(a: int, b: int = 0): int {
+func f(a: int, b: int = 0) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1, a: 2)
 }
 ```
@@ -6840,11 +6884,11 @@ Give the parameter, or write a default where the parameter is declared ('name: t
 **Example** (`test/cases/compile/param_defaults/missing.cml`, run as `camel test/cases/compile/param_defaults/missing.cml`)
 
 ```camel
-func f(a: int, b: int, c: int = 3): int {
+func f(a: int, b: int, c: int = 3) => int {
     return a + b + c
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1, c: 5)
 }
 ```
@@ -6872,7 +6916,7 @@ Name one function, or give the arguments positionally.
 **Example** (`test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`, run as `camel test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(fn: 'printf')
     return 0
 }
@@ -6901,11 +6945,11 @@ Write the positional arguments first, then the named ones ('f(1, by: 2)').
 **Example** (`test/cases/compile/param_defaults/positional_after_name.cml`, run as `camel test/cases/compile/param_defaults/positional_after_name.cml`)
 
 ```camel
-func f(a: int, b: int = 0): int {
+func f(a: int, b: int = 0) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(a: 1, 2)
 }
 ```
@@ -6933,11 +6977,11 @@ A default is evaluated where the declaration is, not at each call, so it can onl
 **Example** (`test/cases/compile/param_defaults/default_not_constant.cml`, run as `camel test/cases/compile/param_defaults/default_not_constant.cml`)
 
 ```camel
-func f(a: int, b: int = a): int {
+func f(a: int, b: int = a) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }
 ```
@@ -6965,11 +7009,11 @@ The default is a value of the parameter's type, as an argument at the call would
 **Example** (`test/cases/compile/param_defaults/default_wrong_type.cml`, run as `camel test/cases/compile/param_defaults/default_wrong_type.cml`)
 
 ```camel
-func f(a: int = "x"): int {
+func f(a: int = 'x') => int {
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     return f()
 }
 ```
@@ -6997,11 +7041,11 @@ Write a default here too, so that a call that leaves '{1}' out can still give '{
 **Example** (`test/cases/compile/param_defaults/after_default.cml`, run as `camel test/cases/compile/param_defaults/after_default.cml`)
 
 ```camel
-func f(a: int = 1, b: int): int {
+func f(a: int = 1, b: int) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(2, 3)
 }
 ```
@@ -7031,11 +7075,11 @@ Reading the spelling is a capability a signature writes in the same clause as 'p
 ```camel
 import { Graph, graph_of, name } from graph
 
-func entry_name(g: Graph): string {
+func entry_name(g: Graph) => string {
     return name(g)
 }
 
-func main(): int {
+func main() => int {
     let text = entry_name(graph_of(main))
     return len(text)
 }
@@ -7064,7 +7108,7 @@ Write a value of the parameter's type; an integer may be given where a float is 
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml params::report label='x' n=1.5 std::nvm`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(21 * 2)
     return 0
 }
@@ -7095,9 +7139,9 @@ The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body.
 ```camel
 #op(':op/add_l')
 #impl(add_kernel)
-func add_kernel(a: int, b: int): int
+func add_kernel(a: int, b: int) => int
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -7126,11 +7170,11 @@ The kernel of a '#impl' function is a body-less declaration of the same module (
 
 ```camel
 #impl(nope)
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return add(1, 2)
 }
 ```
@@ -7161,11 +7205,11 @@ A kernel is the implementation detail of the function that keeps it: declare the
 import { at } from generic_module
 
 #impl(at)
-func first(xs: int[], i: int): int {
+func first(xs: int[], i: int) => int {
     return xs[i]
 }
 
-func main(): int sync {
+func main() => int sync {
     return first([1, 2, 3], 0)
 }
 ```
@@ -7194,14 +7238,14 @@ The kernel is another implementation of the very same function: same 'with' and 
 
 ```camel
 #op(':op/add_l')
-func add_kernel(a: int, b: int): int
+func add_kernel(a: int, b: int) => int
 
 #impl(add_kernel)
-func add(a: float, b: float): float {
+func add(a: float, b: float) => float {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -7229,16 +7273,16 @@ The kernel is the body-less declaration of the C++ operator that runs the functi
 **Example** (`test/cases/compile/native/impl_kernel_has_body.cml`, run as `camel test/cases/compile/native/impl_kernel_has_body.cml`)
 
 ```camel
-func helper(a: int, b: int): int {
+func helper(a: int, b: int) => int {
     return a + b
 }
 
 #impl(helper)
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func main(): int sync {
+func main() => int sync {
     return add(1, 2)
 }
 ```
@@ -7271,12 +7315,12 @@ import { rewrite } from rewrite
 with <shift: int>
 rule add_shift(x: int) { x + 0 => x }
 
-export func apply(p: () => int): (() => int)! {
+export func apply(p: () => int) => (() => int)! {
     let rules = [add_shift]
     return p->rewrite<rules>
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -7309,13 +7353,15 @@ import { rewrite } from rewrite
 
 rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[drop_by_node]>
 }
 
-func scaled(x: int): int { return x * 2 }
+func scaled(x: int) => int {
+    return x * 2
+}
 
-func main(): int sync {
+func main() => int sync {
     println(scaled(21))
     return 0
 }
@@ -7344,7 +7390,7 @@ Give every overload the same parameter names at the same positions, or give the 
 **Example** (`test/cases/compile/param_defaults/stdlib_group_names_differ.cml`, run as `camel test/cases/compile/param_defaults/stdlib_group_names_differ.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println([1, 2, 3]->contains<value: 2>)
     return 0
 }
@@ -7373,14 +7419,14 @@ A 'when' condition is what makes two declarations of one signature different ove
 **Example** (`test/cases/compile/native/when_arms_overlap.cml`, run as `camel test/cases/compile/native/when_arms_overlap.cml`)
 
 ```camel
-func is_small_int::<T>(): bool {
+func is_small_int::<T>() => bool {
     return match type T {
         case i32 => true
         case _ => false
     }
 }
 
-func is_number::<T>(): bool {
+func is_number::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 => true
         case _ => false
@@ -7388,17 +7434,17 @@ func is_number::<T>(): bool {
 }
 
 #op(':op/add_i')
-func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_small_int::<T>()
 
 #op(':op/sub_i')
-func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_number::<T>()
 
 #impl(arms_kernel)
-func combine::<T>(a: T, b: T): T {
+func combine::<T>(a: T, b: T) => T {
     return a * b
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: i32 = 19
     let y: i32 = 23
     println(combine(x, y))
@@ -7432,8 +7478,8 @@ None: choice: the repair is a decision only the writer can make
 // A text is neither a function nor an integer: `...` has no reading for it (design principles
 // 4.2), so the compiler refuses the construct and names what it does take.
 
-func main(): int sync {
-    let xs = 'a'..'b'
+func main() => int sync {
+    let xs = 'a' .. 'b'
     println(xs)
     return 0
 }
@@ -7462,14 +7508,18 @@ The composition `f <> g` (written `f..g` while the corpus spells it that way) is
 **Example** (`test/cases/compile/stream/comp_operand_not_unary.cml`, run as `camel test/cases/compile/stream/comp_operand_not_unary.cml`)
 
 ```camel
-// The left operand of `..` is unary, because the composition is the lambda `(x) => g(f(x))`
+// The left operand of `<>` is unary, because the composition is the lambda `(x) => g(f(x))`
 // (design principles 4.2): `add2` takes two parameters, so the construct has no reading.
 
-func add2(a: int, b: int): int { return a + b }
-func inc(x: int): int { return x + 1 }
+func add2(a: int, b: int) => int {
+    return a + b
+}
+func inc(x: int) => int {
+    return x + 1
+}
 
-func main(): int sync {
-    let g = add2..inc
+func main() => int sync {
+    let g = add2 <> inc
     println(g(3))
     return 0
 }
@@ -7498,7 +7548,7 @@ A stream is read one element at a time and is done when it ends. Write the strea
 **Example** (`test/cases/compile/stream/type_in_container.cml`, run as `camel test/cases/compile/stream/type_in_container.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let s: int..[3] = [1, 2, 3]
     println(0)
     return 0
@@ -7535,12 +7585,12 @@ The name of a generic function stands for no one function until a position fixes
 // settle it (design principles 5.5: a name of a generic function is an instance only
 // where a position fixes its type arguments).
 
-func ident::<T>(x: T): T {
+func ident::<T>(x: T) => T {
     return x
 }
 
-func main(): int sync {
-    let composed = ident..ident
+func main() => int sync {
+    let composed = ident <> ident
     println(composed(4))
     return 0
 }
@@ -7569,27 +7619,29 @@ A stream is read one element at a time and is done when it ends, so on each exec
 **Example** (`test/cases/compile/stream/consumed_twice.cml`, run as `camel test/cases/compile/stream/consumed_twice.cml`)
 
 ```camel
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func firstOf(p: (int, int..)?): int {
+func firstOf(p: (int, int..)?) => int {
     return match p {
         case null => 0
         case v => v.0
     }
 }
 
-func twice(s: int..): int {
+func twice(s: int..) => int {
     let first = loop acc = 0 for x in s do acc + x
     return first + firstOf(s())
 }
 
-func main(): int sync {
+func main() => int sync {
     return twice(count(3))
 }
 ```
@@ -7617,11 +7669,11 @@ The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the s
 **Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`)
 
 ```camel
-func sum(): int {
+func sum() => int {
     return static loop acc = 0 for i in range(0, 9, 0) do acc + i
 }
 
-func main(): int {
+func main() => int {
     return sum()
 }
 ```
@@ -7649,8 +7701,8 @@ A 'static loop' is unrolled where it stands, so how many rounds it has must be k
 **Example** (`test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`)
 
 ```camel
-func sumTo(n: int): int {
-    return static loop acc = 0 for i in 0..n do acc + i
+func sumTo(n: int) => int {
+    return static loop acc = 0 for i in 0 .. n do acc + i
 }
 ```
 
@@ -7680,7 +7732,7 @@ A `const` parameter means the left side matches a constant there: in the rule r(
 import { Node, type_of, type_name } from graph
 import { rewrite } from rewrite
 
-func typeText(n: Node): string {
+func typeText(n: Node) => string {
     return match type_of(n) {
         case null => ''
         case t => type_name(t)
@@ -7689,13 +7741,15 @@ func typeText(n: Node): string {
 
 rule drop_by_shape(x: int, const c: int) when typeText(node_of(c)) == 'int' { x + 1 => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[drop_by_shape]>
 }
 
-func shifted(a: int): int { return a + 1 }
+func shifted(a: int) => int {
+    return a + 1
+}
 
-func main(): int sync {
+func main() => int sync {
     println(shifted(41))
     return 0
 }
@@ -7724,7 +7778,7 @@ A slice takes every step-th element from its start, so the step decides which el
 **Example** (`test/cases/linear/faults/subscript_step_zero_const.cml`, run as `camel test/cases/linear/faults/subscript_step_zero_const.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3, 4, 5, 6]
     println(xs[range(0, 6, 0)])
     println('not reached')
@@ -7759,17 +7813,14 @@ import tags_second_width
 
 tag width(w: int) on field
 
-type Box = {
-    #width(1) #tags_second_width::width(2) marked: int,
+type Box = { #width(1) #tags_second_width::width(2) marked: int }
+
+func read(b: Box) => int {
+    return static loop acc = 0 for n, F, tags in fields Box do acc + 1
 }
 
-func read(b: Box): int {
-    return static loop acc = 0 for n, F, tags in fields Box do
-        acc + 1
-}
-
-func main(): int sync {
-    println(read({marked: 3}))
+func main() => int sync {
+    println(read({ marked: 3 }))
     return 0
 }
 ```
@@ -7800,25 +7851,24 @@ A parameter that carries a function carries the function as its graph reference:
 tag rule::<F>(f: F) on field when is_function::<F>()
 tag width(w: int) on field
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x + x
 }
 
 type Box = {
     #rule(twice) scaled: int,
-    #width(8) plain: int,
+    #width(8) plain: int
 }
 
-func read(b: Box): int {
-    return static loop acc = 0 for n, F, tags in fields Box do
-        acc + (match type typeof(tags) {
-            case { width: { w: int } } => tags.width.w
-            case _ => 0
-        })
+func read(b: Box) => int {
+    return static loop acc = 0 for n, F, tags in fields Box do acc + (match type typeof (tags) {
+        case {width:{w:int}} => tags.width.w
+        case _ => 0
+    })
 }
 
-func main(): int sync {
-    println(read({scaled: 1, plain: 2}))
+func main() => int sync {
+    println(read({ scaled: 1, plain: 2 }))
     return 0
 }
 ```
@@ -7846,11 +7896,11 @@ The type arguments of a generic function are its instance key, so a call that ha
 **Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
 
 ```camel
-func grow::<T>(x: T, n: int): int {
+func grow::<T>(x: T, n: int) => int {
     return if n <= 0 then 0 else grow([x], n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grow(1, 3))
     return 0
 }
@@ -7879,26 +7929,28 @@ A loop's condition and its body run again on every round, so a stream named in o
 **Example** (`test/cases/compile/stream/consumed_in_loop.cml`, run as `camel test/cases/compile/stream/consumed_in_loop.cml`)
 
 ```camel
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func firstOf(p: (int, int..)?): int {
+func firstOf(p: (int, int..)?) => int {
     return match p {
         case null => 0
         case v => v.0
     }
 }
 
-func twice(s: int..): int {
+func twice(s: int..) => int {
     return loop acc = 0 while acc < 2 do acc + firstOf(s())
 }
 
-func main(): int sync {
+func main() => int sync {
     return twice(count(3))
 }
 ```
@@ -7926,11 +7978,11 @@ Give the two arms one element type: write the conversion on the arm that needs i
 **Example** (`test/cases/compile/semantic/branch_element_type_mismatch.cml`, run as `camel test/cases/compile/semantic/branch_element_type_mismatch.cml`)
 
 ```camel
-func pick(flag: bool, whole: int[], real: f32[]): int[] {
+func pick(flag: bool, whole: int[], real: f32[]) => int[] {
     return if flag then whole else real
 }
 
-func main(): int sync {
+func main() => int sync {
     let picked = pick(true, [1, 2, 3] as int[], [f32(1.0), f32(2.0), f32(3.0)])
     return if picked[0] > 0 then 0 else 1
 }
@@ -7961,19 +8013,21 @@ The `tee` width '{0}' is below 1.
 ```camel
 import stream
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func total(s: int..): int {
+func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (left, right) = stream::tee<0>(count(3))
     return total(left) + total(right)
 }
@@ -8008,11 +8062,11 @@ with <tile: int>
 rule add_tile(x: int) when tile > 0 { x + tile => x }
 
 /// The factor is a parameter of the function, so it is not known while the program is compiled.
-func apply(p: () => int, tile: int): (() => int)! {
+func apply(p: () => int, tile: int) => (() => int)! {
     return p->rewrite<[add_tile<tile>]>
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8040,15 +8094,15 @@ A signature is a promise the compiler checks against the resources the function 
 **Example** (`test/cases/effects/err_promise_through_parameter.cml`, run as `camel test/cases/effects/err_promise_through_parameter.cml`)
 
 ```camel
-func applyPure(f: (x: int) => int): int pure {
+func applyPure(f: (x: int) => int) => int pure {
     return f(1)
 }
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(applyPure(twice))
     return 0
 }
@@ -8079,7 +8133,7 @@ A type may reach itself indirectly, through an array, a map, a set or an enum (d
 ```camel
 type Node = { children: Map<int, Node> }
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -8109,11 +8163,11 @@ An enum is a named type (design principles 5.3): `type Shape = enum { Circle(flo
 ```camel
 type Shape = enum { Dot, Circle(float) }
 
-func take(s: enum { Dot }): int {
+func take(s: enum { Dot }) => int {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return 0
 }
 ```
@@ -8141,11 +8195,11 @@ A struct value is written as one value per field name, and `indices` walks the p
 **Example** (`test/cases/compile/static_expansion/indices_struct_comprehension.cml`, run as `camel test/cases/compile/static_expansion/indices_struct_comprehension.cml`)
 
 ```camel
-func bad(t: (int, int)): {a: int, b: int} {
-    return { static for j in indices t do t.[j] }
+func bad(t: (int, int)) => { a: int, b: int } {
+    return {static for j in indices t do t.[j]}
 }
 
-func main(): int {
+func main() => int {
     let v = bad((1, 2))
     return v.a
 }
@@ -8174,14 +8228,14 @@ The patterns that bind are the fixed forms of the two marks (design principles 3
 **Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
 
 ```camel
-func f(n: int): int {
+func f(n: int) => int {
     return match n {
         case other => 1
         case _ => 0
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     println(f(1))
     return 0
@@ -8213,7 +8267,7 @@ A variable takes its type from where it stands, and an empty literal states no e
 ```camel
 import { show } from tensor
 
-func main(): int sync {
+func main() => int sync {
     show([])
     return 0
 }
@@ -8246,10 +8300,11 @@ import { max } from math
 
 fact one: int match v {
     case const c => c
-    case _       => 0
-} join max
+    case _ => 0
+}
+join max
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8282,9 +8337,10 @@ import { max } from math
 fact one(v: int): int match v {
     case 1 => 1
     case _ => 0
-} join max
+}
+join max
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8316,10 +8372,10 @@ import { max } from math
 
 fact sign(v: int): int match v {
     case const c => c
-    case _       => 0
+    case _ => 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8349,26 +8405,30 @@ A stream is read one element at a time and is done when it ends, so on each exec
 ```camel
 let source: int.. = count(3)
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func firstOf(p: (int, int..)?): int {
+func firstOf(p: (int, int..)?) => int {
     return match p {
         case null => 0
         case v => v.0
     }
 }
 
-func read(): () => int {
-    return func () { firstOf(source()) }
+func read() => () => int {
+    return func () {
+        firstOf(source())
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let take = read()
     println(take())
     return 0
@@ -8398,11 +8458,11 @@ A value declared without a right side (`export let inf: float`) is supplied by t
 **Example** (`test/cases/modules/math_kernels/err_value_missing/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_missing/math.cml`)
 
 ```camel
-
 import { timeit } from perf
+
 export let tau: float
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8430,11 +8490,11 @@ A value declared without a right side is the one the C++ module registers: write
 **Example** (`test/cases/modules/math_kernels/err_value_type/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_type/math.cml`)
 
 ```camel
-
 import { timeit } from perf
+
 export let inf: int
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8462,11 +8522,9 @@ A type written without '=' (`export type Graph`, `export type Txn<F>`) is the on
 **Example** (`test/cases/compile/native_types/not_provided.cml`, run as `camel test/cases/compile/native_types/not_provided.cml`)
 
 ```camel
-
-
 export type Nope
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8500,13 +8558,13 @@ A type function computes a type from types at compile time (design principles 21
 import { ParamsOf, WithOf } from types
 
 type Mix<F> = (...(ParamsOf<F>, WithOf<F>))
-type Weighted = <w: float, k: int> (a: int) => bool
+type Weighted = <w: float, k: int>(a: int) => bool
 
-func f(x: Mix<Weighted>): int {
+func f(x: Mix<Weighted>) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8538,19 +8596,18 @@ An extent written with names is evaluated where a call binds every name it uses,
 /// the padded input (8 + 2), so `(n + 2 * p - k) / s + 1` is -9, and the call is refused where it is
 /// written.
 with <constas k: int, constas s: int, constas p: int>
-func conv_len(x: f32[n]):
-    f32[(n + 2 * p - k) / s + 1] {
+func conv_len(x: f32[n]) => f32[(n + 2 * p - k) / s + 1] {
     let m = (len(x) + 2 * p - k) / s + 1
-    return [f32(i) for i in 0..m]
+    return [f32(i) for i in 0 .. m]
 }
 
-func run(x: f32[8]): int {
+func run(x: f32[8]) => int {
     let z = conv_len<20, 1, 1>(x)
     println(z)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
     return run(x as f32[8])
 }
@@ -8579,11 +8636,11 @@ The callee reads the caller's variable and writes into it, so what it writes mus
 **Example** (`test/cases/linear/byref/var_argument_shape.cml`, run as `camel test/cases/linear/byref/var_argument_shape.cml`)
 
 ```camel
-func count(var w: f32[...], v: f32): int {
+func count(var w: f32[...], v: f32) => int {
     return len(w)
 }
 
-func main(): int sync {
+func main() => int sync {
     var a: f32[] = [1.0, 2.0, 3.0]
     println(count(a, 0.0))
     return 0
@@ -8613,14 +8670,14 @@ A 'return e' is the value of the block it is written in -- a function body, a 's
 **Example** (`test/cases/compile/return_after/statement_after_return_sync.cml`, run as `camel -E short test/cases/compile/return_after/statement_after_return_sync.cml`)
 
 ```camel
-func g(): int sync {
+func g() => int sync {
     println('a')
     return 2
     println('b')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g())
     return 0
 }
@@ -8657,9 +8714,13 @@ A tag is read before the program runs, so an argument is a compile-time value --
 tag vjp::<F>(rule: F) on func when is_function::<F>()
 
 #vjp(vjp)
-func label(x: int): int { return x }
+func label(x: int) => int {
+    return x
+}
 
-func main(): int sync { return 0 }
+func main() => int sync {
+    return 0
+}
 ```
 
 ### TagNameAsValue
@@ -8691,7 +8752,7 @@ A tag is a compile-time fact attached to a declaration or to the nodes of a regi
 
 tag label(x: int) on func
 
-func main(): int sync {
+func main() => int sync {
     let f = label
     return 0
 }
@@ -8722,11 +8783,11 @@ A ruleset is a module of rules, and the transform finds a rule for a primitive b
 ```camel
 // A left side that names no one operator: the index files a rule under the head of its left side,
 // and `x` alone names nothing a primitive could look up. It is refused where it is written.
-rule id_rule(x: float) {
-    x => func (dx: float) { dx }
-}
+rule id_rule(x: float) { x => func (dx: float) {
+    dx
+} }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }
@@ -8757,15 +8818,15 @@ A transform finds a rule for a primitive by the operator its left side is writte
 ```camel
 // Two rules of one module with the same head: a transform looks a rule up by the head of its left
 // side, so the second one has no way to be chosen. It is refused where it is written.
-rule first_rule(x: float, w: float) {
-    x + w => func (dx: float, dw: float) { dx }
-}
+rule first_rule(x: float, w: float) { x + w => func (dx: float, dw: float) {
+    dx
+} }
 
-rule second_rule(x: float, w: float) {
-    x + w => func (dx: float, dw: float) { dw }
-}
+rule second_rule(x: float, w: float) { x + w => func (dx: float, dw: float) {
+    dw
+} }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }
@@ -8798,7 +8859,7 @@ func g() sync {
     yield 1
 }
 
-func main(): int sync {
+func main() => int sync {
     g()
     return 0
 }
@@ -8830,11 +8891,11 @@ A family whose transform reads a rule's callee and calls it with the batch never
 import rulesets.probe_batch
 import { vmap } from transforms
 
-func f(x: float): float {
+func f(x: float) => float {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(f)(xs))
     return 0
@@ -8864,13 +8925,13 @@ The body of a loop is cut at its yield: the pull that hands an element out stops
 **Example** (`test/cases/compile/stream/generators_loop_body_without_next_state.cml`, run as `camel test/cases/compile/stream/generators_loop_body_without_next_state.cml`)
 
 ```camel
-func g(): int.. sync {
+func g() => int.. sync {
     loop i = 0 while i < 3 do {
         yield i
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 ```
@@ -8907,11 +8968,11 @@ A 'T!' is a value that reports a failure instead of giving a result, so a call o
 import { cse } from opt
 
 with <w: float>
-func loss(x: float): float {
+func loss(x: float) => float {
     return w * x + w * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let step = loss->cse
     println(step<2.0>(3.0))
     return 0
@@ -8944,11 +9005,11 @@ Every 'with' argument the pack takes is of the type it writes, the rule an ordin
 // The pack's element type is a guard: `with <...ws: int>` refuses a `float` argument written in the
 // angle brackets, and says which pack, which type it takes, and which type it was given.
 with <...ws: int>
-func g(x: float): float {
+func g(x: float) => float {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g<1.0>(2.5))
     return 0
 }
@@ -8998,7 +9059,7 @@ Every extent of the type has to be a number written in it: `float[2, 3]` answers
 // reading of the extents.
 import rulesets.transpose
 
-func main(): int sync {
+func main() => int sync {
     let extents: int[] = extent_of::<float[]>()
     println(extents)
     return 0
@@ -9028,12 +9089,12 @@ A clause names what a call touches outside the function's own variables: the ext
 **Example** (`test/cases/effects/err_variable_in_clause.cml`, run as `camel test/cases/effects/err_variable_in_clause.cml`)
 
 ```camel
-func bump(var acc: int): int uses var acc sync {
+func bump(var acc: int) => int uses var acc sync {
     acc += 1
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     var acc = 0
     println(bump(acc))
     return 0
@@ -9065,7 +9126,7 @@ A reference is a box reclaimed by counting the handles that point at it: the las
 ```camel
 import state
 
-func main(): int sync {
+func main() => int sync {
     let inner = state::ref(1)
     let outer = state::ref(inner)
     let back = state::get(outer)
@@ -9097,28 +9158,28 @@ A function's resources are part of its type, so two values given for one type va
 **Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
 
 ```camel
-func same::<T>(a: T, b: T): T {
+func same::<T>(a: T, b: T) => T {
     return a
 }
 
-func pick(b: bool): (x: int) => int {
+func pick(b: bool) => (x: int) => int {
     return same(if b then f else g, wide)
 }
 
-func f(x: int): int {
+func f(x: int) => int {
     return x + 1
 }
 
-func g(x: int): int {
+func g(x: int) => int {
     return x + 2
 }
 
-func wide(x: int): int sync {
+func wide(x: int) => int sync {
     println(x)
     return x + 3
 }
 
-func main(): int sync {
+func main() => int sync {
     let h = pick(true)
     println(h(1))
     return 0
@@ -9148,9 +9209,9 @@ A closure holds a value, not a place, so an assignment to a name outside it woul
 **Example** (`test/cases/compile/var_closure/err_closure_assigns_captured.cml`, run as `camel test/cases/compile/var_closure/err_closure_assigns_captured.cml`)
 
 ```camel
-func make(x: int): int {
+func make(x: int) => int {
     var total = 0
-    func add(k: int): int {
+    func add(k: int) => int {
         total = total + k
         return total
     }
@@ -9158,7 +9219,7 @@ func make(x: int): int {
     a
 }
 
-func main(): int sync {
+func main() => int sync {
     println(make(3))
     return 0
 }
@@ -9187,9 +9248,11 @@ The closure holds the value `{0}` had when it was made, so this assignment canno
 **Example** (`test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     var x = 1
-    let g = func () { x }
+    let g = func () {
+        x
+    }
     x = 2
     println(g())
     return 0
@@ -9219,13 +9282,15 @@ The write stands in the callee and is handed back to `{0}` where the call is, so
 **Example** (`test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`)
 
 ```camel
-func bump(var p: int): void {
+func bump(var p: int) => void {
     p = p + 10
 }
 
-func main(): int sync {
+func main() => int sync {
     var x = 1
-    let g = func () { x }
+    let g = func () {
+        x
+    }
     bump(x)
     println(g())
     return 0
@@ -9258,12 +9323,12 @@ A `var` context parameter ('with <var total: int>') is passed in and written bac
 var total: int = 0
 
 with <var acc: int>
-func add(x: int): int sync {
+func add(x: int) => int sync {
     acc = acc + x
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = add<total>
     println(g(1), total)
     return 0
@@ -9300,11 +9365,11 @@ A `readonly` resource is only ever read (design principles 9.12, 15.5): the grap
 // `readonly_resource_read.cml` is the same program with the bare entry, and it compiles.
 export resource graph readonly
 
-func twice(f: int): int uses var graph {
+func twice(f: int) => int uses var graph {
     return f * 2
 }
 
-func main(): int {
+func main() => int {
     println(twice(21))
     return 0
 }
@@ -9355,18 +9420,20 @@ Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { .
 **Example** (`test/cases/effects/callback_write_ignored.cml`, run as `camel test/cases/effects/callback_write_ignored.cml std::nvm`)
 
 ```camel
-var counter = 0;
+var counter = 0
 
 func apply(f: (x: int) => void, v: int) {
     f(v)
 }
 
-func add(x: int): int {
-    apply(func (y: int) { counter = y }, x)
+func add(x: int) => int {
+    apply(func (y: int) {
+        counter = y
+    }, x)
     return counter
 }
 
-func main(): int sync {
+func main() => int sync {
     println(add(3))
     return 0
 }
@@ -9395,7 +9462,7 @@ An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm
 **Example** (`test/cases/compile/diag_json/warning_with_error.cml`, run as `camel --output-format json test/cases/compile/diag_json/warning_with_error.cml`)
 
 ```camel
-func count(a: int): int sync {
+func count(a: int) => int sync {
     var total = 0
     if a > 0 then sync {
         total = a
@@ -9404,7 +9471,7 @@ func count(a: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     println(count(1))
     return missing_name
 }
@@ -9433,11 +9500,11 @@ A function that returns a 'T!' reports its failure through that value. Take the 
 **Example** (`test/cases/compile/unused_values/fallible_sync.cml`, run as `camel -E short test/cases/compile/unused_values/fallible_sync.cml`)
 
 ```camel
-func check_same(a: int, b: int): bool! {
+func check_same(a: int, b: int) => bool! {
     return if a == b then true else error('Mismatch', 'not the same')
 }
 
-func main(): int sync {
+func main() => int sync {
     check_same(1, 2)
     println('done')
     return 0
@@ -9469,11 +9536,11 @@ Only a value of type 'T?' can be null. In the arm of 'if x != null' the name 'x'
 ```camel
 // A value that cannot be null may be compared with `null`: the result is fixed, and the
 // compiler warns (design principles 3.8).
-func main(): int sync {
+func main() => int sync {
     let a = 1
-    println(a == null)          // line 5: warned, always false
-    println(null != a)          // line 6: warned, always true
-    println(a + 1 == null)      // line 7: warned, a value that is not a name
+    println(a == null) // line 5: warned, always false
+    println(null != a) // line 6: warned, always true
+    println(a + 1 == null) // line 7: warned, a value that is not a name
     return 0
 }
 ```
@@ -9501,7 +9568,7 @@ Only a value of type 'T?' can be null. A plain value cannot be null, and in the 
 **Example** (`test/cases/compile/tagged/err_plain_left.cml`, run as `camel test/cases/compile/tagged/err_plain_left.cml`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     let a = 1
     let b = a ?? 7
     println(b)
@@ -9534,10 +9601,10 @@ A branch takes the first case that matches. Remove the later case, or the earlie
 ```camel
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func f(s: Shape): float {
+func f(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => r
         case Shape::Circle(r) => r * 2.0
@@ -9545,7 +9612,7 @@ func f(s: Shape): float {
     }
 }
 
-func main(): void sync {
+func main() => void sync {
     println(f(Shape::Circle(1.0)))
 }
 ```
@@ -9575,10 +9642,10 @@ This case follows 'case _': it is never taken.
 ```camel
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func f(s: Shape): float {
+func f(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => r
         case _ => -1.0
@@ -9586,7 +9653,7 @@ func f(s: Shape): float {
     }
 }
 
-func main(): void sync {
+func main() => void sync {
     println(f(Shape::Circle(1.0)))
 }
 ```
@@ -9616,10 +9683,10 @@ Naming every variant already covers every value of the enum. Remove 'case _', or
 ```camel
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func f(s: Shape): float {
+func f(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => r
         case Shape::Empty => 0.0
@@ -9627,7 +9694,7 @@ func f(s: Shape): float {
     }
 }
 
-func main(): void sync {
+func main() => void sync {
     println(f(Shape::Circle(1.0)))
 }
 ```
@@ -9658,11 +9725,11 @@ A tag only allows a pass to do something; with no such pass in the pipeline the 
 import { marked } from reads_pass
 
 #[marked]
-func f(x: int): int {
+func f(x: int) => int {
     return x
 }
 
-func main(): int {
+func main() => int {
     println(f(1))
     return 0
 }
@@ -9692,12 +9759,11 @@ A name relates the extents that write it. If the size is not a relation, write '
 
 ```camel
 // A name written once in the signature relates nothing, so the compiler suggests `?`.
-
-func first(x: f32[n]): f32 {
+func first(x: f32[n]) => f32 {
     return x[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1.0, 2.0]))
     return 0
 }
@@ -9726,11 +9792,11 @@ A type parameter is one the declaration uses in a parameter or result type; a de
 **Example** (`test/cases/compile/generic_head/err_unused_head_param.cml`, run as `camel test/cases/compile/generic_head/err_unused_head_param.cml`)
 
 ```camel
-func show::<T>(x: int): string {
+func show::<T>(x: int) => string {
     return 'x'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(show(1))
     return 0
 }
@@ -9759,13 +9825,15 @@ A value of type 'never' is never handed out: what gives it -- a fault, 'fail', o
 **Example** (`test/cases/consistency/fail_never/never_argument.cml`, run as `camel check -O short test/cases/consistency/fail_never/never_argument.cml`)
 
 ```camel
-func double(x: int): int { return x + x }
+func double(x: int) => int {
+    return x + x
+}
 
-func stop(m: string): never {
+func stop(m: string) => never {
     return fail<'Stopped'>(m)
 }
 
-func main(): int[] sync {
+func main() => int[] sync {
     return double(stop('no value to double'))
 }
 ```
@@ -9793,12 +9861,12 @@ A 'fail' raises its fault where its value is wanted, and it is no effect of its 
 **Example** (`test/cases/consistency/fail_never/fail_not_executed.cml`, run as `camel test/cases/consistency/fail_never/fail_not_executed.cml std::nvm`)
 
 ```camel
-func f(x: int): int {
+func f(x: int) => int {
     fail<'NoPremise'>('f was called with an x it cannot take')
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(1))
     return 0
 }
@@ -9827,7 +9895,7 @@ A 'fail' raises its fault and gives no value, so the statements written after it
 **Example** (`test/cases/consistency/fail_never/statement_after_fail.cml`, run as `camel test/cases/consistency/fail_never/statement_after_fail.cml std::nvm`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println('before')
     fail<'NoPremise'>('the premise of this program does not hold')
     println('after')
@@ -9858,10 +9926,10 @@ An assignment stores a value for whatever reads the variable afterwards, and not
 **Example** (`test/cases/compile/var/unused_assigned_value.cml`, run as `camel test/cases/compile/var/unused_assigned_value.cml std::nvm`)
 
 ```camel
-func main(): int {
-    var x = 0;
-    let y = x;
-    x = 1;
+func main() => int {
+    var x = 0
+    let y = x
+    x = 1
     return println(y)
 }
 ```
@@ -9899,18 +9967,18 @@ import { grad } from autodiff
 // x is the first `with` parameter of each function.
 
 with <x: float>
-func through_map(): float {
+func through_map() => float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 with <x: float>
-func beside_map(): float {
+func beside_map() => float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(beside_map)<3.0>())
     println(grad(through_map)<3.0>())
     return 0
@@ -9940,9 +10008,11 @@ Ensure the denominator is not zero before performing division.
 **Example** (`test/cases/consistency/attempt/fault_outside.cml`, run as `camel test/cases/consistency/attempt/fault_outside.cml ${backend}`)
 
 ```camel
-func risky(d: int): int { return 100 / d }
+func risky(d: int) => int {
+    return 100 / d
+}
 
-func main(): int sync {
+func main() => int sync {
     println(attempt(risky)(0) !! -1)
     println(attempt(risky)(4) !! -1)
     println(risky(0))
@@ -9974,7 +10044,7 @@ Ensure the index is within the valid range of the collection.
 **Example** (`test/cases/compile/match_guard/faulting_guard.cml`, run as `camel test/cases/compile/match_guard/faulting_guard.cml std::nvm`)
 
 ```camel
-func f(n: int): int {
+func f(n: int) => int {
     let xs = [1, 2, 3]
     return match n {
         case 1 when xs[5] > 0 => 1
@@ -9982,7 +10052,7 @@ func f(n: int): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }
 ```
@@ -10012,11 +10082,11 @@ Check for infinite recursion. A call in tail position takes no frame, so write a
 ```camel
 import { get_env } from env
 
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = int(get_env('N') ?? '')
     println('start')
     println(depth(n))
@@ -10058,14 +10128,14 @@ Check the shapes of all operands involved in the operation and ensure they are c
 
 import { zeros, reshape } from tensor
 
-func toShape::<T>(t: T[...], s: int[]): T[...] {
+func toShape::<T>(t: T[...], s: int[]) => T[...] {
     return reshape<s>(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     let no: int[] = []
-    let s  = toShape(zeros::<f32>([2]), no)
-    let n  = loop c = 0 for x in s do c + 1
+    let s = toShape(zeros::<f32>([2]), no)
+    let n = loop c = 0 for x in s do c + 1
     println(n)
     return 0
 }
@@ -10094,11 +10164,11 @@ Check the pass name for possible typos, or refer to the documentation to see the
 **Example** (`test/cases/compile/diag_json/div_zero.cml`, run as `camel --output-format json test/cases/compile/diag_json/div_zero.cml std::no_such_pass`)
 
 ```camel
-func div(a: int, b: int): int {
+func div(a: int, b: int) => int {
     return a / b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(div(1, 0))
     return 0
 }
@@ -10130,7 +10200,7 @@ A translation pass only translates the graph the preceding passes left. Run the 
 // A pure `main` that goes through a set: what the translation passes (std::cpp,
 // onnx::export) are asked to translate and must refuse with a position.
 
-func main(): int {
+func main() => int {
     let s = [3, 1, 2, 3] as Set<int>
     return len(s)
 }
@@ -10162,11 +10232,11 @@ The pass gave up without a diagnostic of its own: it built or was given a graph 
 // Used with the test-only pass test::drop_call_argument, which removes the argument of the call
 // below and commits the broken program. Structural validation at commit must reject it before
 // anything runs.
-func twice(x: int): int {
+func twice(x: int) => int {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println('main start')
     println(twice(21))
     return 0
@@ -10207,25 +10277,25 @@ This invocation selected a pass boundary check requiring equal standard ambient 
 resource db
 resource console = [db, stdout]
 
-#resource type Stream = { id: int }
+#resource
+type Stream = { id: int }
 
 /// The body touches nothing; the clause says a call writes the handle it is given.
-func consume(s: Stream): int uses var s {
+func consume(s: Stream) => int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses var console {
-}
+func tick() => void uses var console {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.
-func bump(var t: int): int sync {
+func bump(var t: int) => int sync {
     t += 1
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     let s: Stream = { id: 7 }
     consume(s)
     consume(s)
@@ -10271,18 +10341,18 @@ import { grad } from autodiff
 // x is the first `with` parameter of each function.
 
 with <x: float>
-func through_map(): float {
+func through_map() => float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 with <x: float>
-func beside_map(): float {
+func beside_map() => float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(beside_map)<3.0>())
     println(grad(through_map)<3.0>())
     return 0
@@ -10323,25 +10393,25 @@ A graph runs from its entry node to its exit node. A rewrite may replace either 
 resource db
 resource console = [db, stdout]
 
-#resource type Stream = { id: int }
+#resource
+type Stream = { id: int }
 
 /// The body touches nothing; the clause says a call writes the handle it is given.
-func consume(s: Stream): int uses var s {
+func consume(s: Stream) => int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses var console {
-}
+func tick() => void uses var console {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.
-func bump(var t: int): int sync {
+func bump(var t: int) => int sync {
     t += 1
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     let s: Stream = { id: 7 }
     consume(s)
     consume(s)
@@ -10379,7 +10449,7 @@ The parameters of 'main' are the inputs of the program. To run it, give each one
 **Example** (`test/cases/compile/entry_args/scalars.cml`, run as `camel test/cases/compile/entry_args/scalars.cml --arg n=3`)
 
 ```camel
-func main(n: int, rate: float, name: string, loud: bool): int sync {
+func main(n: int, rate: float, name: string, loud: bool) => int sync {
     println(name, n, rate, loud)
     return n + 1
 }
@@ -10408,7 +10478,7 @@ An argument is written --arg name=value, where name is a parameter of 'main' and
 **Example** (`test/cases/compile/entry_args/scalars.cml`, run as `camel test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0.5 --arg name=hi --arg loud=true --arg extra=1`)
 
 ```camel
-func main(n: int, rate: float, name: string, loud: bool): int sync {
+func main(n: int, rate: float, name: string, loud: bool) => int sync {
     println(name, n, rate, loud)
     return n + 1
 }
@@ -10476,25 +10546,25 @@ An operator node's ordinary ports are the arguments of the declaration it names,
 resource db
 resource console = [db, stdout]
 
-#resource type Stream = { id: int }
+#resource
+type Stream = { id: int }
 
 /// The body touches nothing; the clause says a call writes the handle it is given.
-func consume(s: Stream): int uses var s {
+func consume(s: Stream) => int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses var console {
-}
+func tick() => void uses var console {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.
-func bump(var t: int): int sync {
+func bump(var t: int) => int sync {
     t += 1
     return t
 }
 
-func main(): int sync {
+func main() => int sync {
     let s: Stream = { id: 7 }
     consume(s)
     consume(s)
@@ -10536,9 +10606,9 @@ The graph, permanent and meta spaces hold the compiled program (its runtime grap
 // are the two bounds walked, so two million rounds run where an `int[]` of the same interval does
 // not fit the heap cap the plan sets (`int64` x 2,000,000 is 16 MB, the cap is 8).
 
-func main(): int sync {
+func main() => int sync {
     let n = 2000000
-    println(loop acc = 0 for i in 0..n do acc + 1)
+    println(loop acc = 0 for i in 0 .. n do acc + 1)
     return 0
 }
 ```
@@ -10566,9 +10636,11 @@ The whole string must be {2}: no blanks before or after it and nothing else. A c
 **Example** (`test/cases/consistency/faults/int_text_trailing.cml`, run as `camel test/cases/consistency/faults/int_text_trailing.cml ${backend}`)
 
 ```camel
-func conv(s: string): int { return int(s) }
+func conv(s: string) => int {
+    return int(s)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(conv('12'))
     println(conv('12abc'))
     println('not reached')
@@ -10625,10 +10697,10 @@ Convert the value to a supported type before the call.
 // diagnostic naming the operator, the argument's element type and the set the kernel takes.
 // It is never narrowed to f32 (design principles 5.1, 13.1).
 
-import { reshape, ones, sum } from tensor
 import { conv2d } from nn
+import { reshape, ones, sum } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let values: f64[] = [1.0, 2.0, 3.0, 4.0]
     let x = reshape<[1, 1, 2, 2]>(values)
     let kernel = ones::<f32>([1, 1, 1, 1])
@@ -10671,9 +10743,9 @@ A struct is indexed by the name of one of its fields.
 type S = { x: int }
 
 #op(':op/idx_str')
-func field(s: S, k: string): int
+func field(s: S, k: string) => int
 
-func main(): int sync {
+func main() => int sync {
     let s: S = { x: 1 }
     return field(s, 'y')
 }
@@ -10707,9 +10779,11 @@ The operator was given an argument it cannot take; the message names the argumen
 // refusal of a constant step cannot see it (design principles 4.2). A step that is not 0 is the
 // sequence it names.
 
-func counted(k: int): int[] { return range(0, 10, k) }
+func counted(k: int) => int[] {
+    return range(0, 10, k)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(counted(3))
     println(counted(-3))
     println(counted(0))
@@ -10787,21 +10861,21 @@ A derivative rule returns a gradient of the parameter's element type. Convert th
 import { grad } from autodiff
 import { vjp } from prelude
 
-func pick_rule(xs: float[], i: int, dy: float): f32 {
+func pick_rule(xs: float[], i: int, dy: float) => f32 {
     return f32(0.0)
 }
 
 #vjp(pick_rule)
-func pick(xs: float[], i: int): float {
+func pick(xs: float[], i: int) => float {
     return xs[i]
 }
 
 with <xs: float[]>
-func loss(): float {
+func loss() => float {
     return pick(xs, 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = grad(loss)<[1.0, 2.0, 3.0]>()
     'refuse_gradient_element_type_rule grad={}'->format<g>->println
     return 0
@@ -10831,10 +10905,14 @@ A conversion whose value does not fit the target type is a fault (design princip
 **Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel test/cases/consistency/faults/float_to_int_range.cml ${backend}`)
 
 ```camel
-func conv(x: float): int { return int(x) }
-func mul(a: float, b: float): float { return a * b }
+func conv(x: float) => int {
+    return int(x)
+}
+func mul(a: float, b: float) => float {
+    return a * b
+}
 
-func main(): int sync {
+func main() => int sync {
     let inf = mul(1.0e308, 10.0)
     println('before')
     println(conv(9.0e18))
@@ -10870,7 +10948,7 @@ A value of type T! that has failed must be opened before the program ends: give 
 **Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel test/cases/consistency/entry/error_thrown.cml ${backend}`)
 
 ```camel
-func check(x: int): int! {
+func check(x: int) => int! {
     if x < 0 then {
         return error('Negative', 'the argument is negative')
     } else {
@@ -10878,7 +10956,7 @@ func check(x: int): int! {
     }
 }
 
-func main(): int! sync {
+func main() => int! sync {
     println('before')
     return check(-1)
 }
@@ -10907,9 +10985,11 @@ A bound of 'slice' is a position from 0 to the length; the end is one past the l
 **Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel test/cases/consistency/faults/slice_out_of_range.cml ${backend}`)
 
 ```camel
-func head(xs: int[], n: int): int[] { return xs[0..n] }
+func head(xs: int[], n: int) => int[] {
+    return xs[0..n]
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = [10, 20, 30]
     println(head(xs, 2))
     println(head(xs, 7))
@@ -10941,7 +11021,7 @@ A pass is written on the pipeline as its name followed by its parameters as key=
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml unparsable_pass::run std::nvm`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(21 * 2)
     return 0
 }
@@ -10970,14 +11050,14 @@ An earlier pass (a saturation) left values with several writings, which only the
 **Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::cxx::fold std::nvm`)
 
 ```camel
-func f(a: int, b: int): int {
+func f(a: int, b: int) => int {
     let p = a + 1
     let q = b + 1
     let r = a + 1
     return p * q + r
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(2, 3))
     return 0
 }
@@ -11008,18 +11088,24 @@ Name a device this machine has (--devices <ordinal>), or run on the host with --
 ```camel
 import { available, run_preferred_resident, download } from tiles
 
-func add(a: float, b: float): float { return a + b }
+func add(a: float, b: float) => float {
+    return a + b
+}
 
-func effect(x: float): float sync {
-    println("cpu effect")
+func effect(x: float) => float sync {
+    println('cpu effect')
     return x + x
 }
 
-func nested(a: float, b: float): float { return add(a, b) * 2.0 }
+func nested(a: float, b: float) => float {
+    return add(a, b) * 2.0
+}
 
-func pair(a: float, b: float): (float, float) { return (a + b, a * b) }
+func pair(a: float, b: float) => (float, float) {
+    return (a + b, a * b)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(available())
     println(download(run_preferred_resident<add>((2.0, 3.0))))
     println(download(run_preferred_resident<effect>(4.0)))
@@ -11053,7 +11139,7 @@ A pass of a module is one of the passes its `.cml` file declares — `export fun
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     println(21 * 2)
     return 0
 }
@@ -11085,7 +11171,7 @@ Write `export func {1}::<F>(f: F): F! when is_function::<F>()` in module {0}, or
 // A program to run a pass list against. It imports nothing: the passes named on the
 // pipeline are the only modules the pipeline has to find.
 
-func main(): int sync {
+func main() => int sync {
     println(42)
     return 0
 }
@@ -11124,7 +11210,7 @@ import { reshape } from tensor
 import { run_preferred_resident, download } from tiles
 
 #gpu
-func product(a: f32[...], b: f32[...]): f32[...] {
+func product(a: f32[...], b: f32[...]) => f32[...] {
     return a @ b
 }
 
@@ -11161,12 +11247,12 @@ A value that depends on a differentiated parameter must not lose its gradient (d
 import { grad } from autodiff
 
 with <w: float>
-func defaulted(): float {
+func defaulted() => float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<2, w>() * 3.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(defaulted)<5.0>())
     return 0
 }
@@ -11195,44 +11281,44 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 **Example** (`test/cases/gpu/nofallback/grad_expand.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel --devices cpu test/cases/gpu/nofallback/grad_expand.cml tiles::compile std::nvm`)
 
 ```camel
-import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff
+import { abs, reshape, sum } from tensor
 
 type M = {
     p0: f32[3],
-    x: f32[2, 3],
+    x: f32[2, 3]
 }
 
 #gpu
 with <m: M>
-func loss(): f32 sync {
+func loss() => f32 sync {
     return sum(m.x * m.p0)
 }
 
 #gpu
-func step(m: M): f32[3] sync {
+func step(m: M) => f32[3] sync {
     let vg = with_grad(loss)<m>()
     return vg.1.p0
 }
 
-func step_host(m: M): f32[3] sync {
+func step_host(m: M) => f32[3] sync {
     let vg = with_grad(loss)<m>()
     return vg.1.p0
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = {
         p0: reshape<[3]>([0.5, 0.25, 2.0] as f32[]),
-        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]),
+        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     }
     let in_scope = step(m)
     let outside = step_host(m)
     let expected = reshape<[3]>([5.0, 7.0, 9.0] as f32[])
     let zero = sum(expected - expected)
-    println("in_scope {}"->format<in_scope>)
-    println("outside {}"->format<outside>)
-    println("moved {}"->format<zero + sum(abs(in_scope - outside))>)
-    println("wrong {}"->format<zero + sum(abs(outside - expected))>)
+    println('in_scope {}'->format<in_scope>)
+    println('outside {}'->format<outside>)
+    println('moved {}'->format<zero + sum(abs(in_scope - outside))>)
+    println('wrong {}'->format<zero + sum(abs(outside - expected))>)
     return 0
 }
 ```
@@ -11262,11 +11348,12 @@ The device back end has no program for this graph, so the operator that asked fo
 ```camel
 import { reshape } from tensor
 import { source } from tiles
-func noisy(x: f32[...]): f32[...] sync {
-    println("BODY MUST NOT EXECUTE")
+
+func noisy(x: f32[...]) => f32[...] sync {
+    println('BODY MUST NOT EXECUTE')
     return x + x
 }
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(source<noisy>(x))
     return 0
@@ -11313,13 +11400,13 @@ import { reshape } from tensor
 import { benchmark } from tiles
 
 #gpu
-func pair(x: f32[3]): f32[3] {
+func pair(x: f32[3]) => f32[3] {
     let y = x * 2.0
     let z = y + 3.0
     return z - 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(benchmark<pair>(x))
     return 0
@@ -11349,11 +11436,11 @@ The fault was raised by the program itself, and its message says which premise i
 **Example** (`test/cases/consistency/fail_never/fail_located.cml`, run as `camel test/cases/consistency/fail_never/fail_located.cml ${backend}`)
 
 ```camel
-func limit(q: float): float {
+func limit(q: float) => float {
     return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(limit(-1.0))
     println('not reached')
@@ -11385,14 +11472,14 @@ A type states the extents its declaration writes and no others: `float[2, 3]` st
 
 ```camel
 import rulesets.transpose
-import { transpose } from transforms
 import { mean, sum } from tensor
+import { transpose } from transforms
 
-func loss_mean(x: float[...]): float {
+func loss_mean(x: float[...]) => float {
     return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(loss_mean)(1.0)
     'transpose should have been refused, and it answered {}'->format<back.0>->println
     return 0
@@ -11426,11 +11513,13 @@ import { rewrite } from rewrite
 
 rule retype(x: float) { x * 1.0 => [1.0, 2.0] }
 
-func target(n: float): float { n * 1.0 }
+func target(n: float) => float {
+    n * 1.0
+}
 
-func main(): int sync {
+func main() => int sync {
     let rules = [retype]
-    let g     = target->rewrite<rules> !! target
+    let g = target->rewrite<rules> !! target
     print(g(7.0))
     return 0
 }
@@ -11467,16 +11556,16 @@ A call site carries the type of the function value it calls, and a pass can leav
 // `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
 // so the commit that publishes this program has nothing of its own to refuse.
 
-func doubled(x: int): int {
+func doubled(x: int) => int {
     return x * 2
 }
 
-func announced(x: int): int sync {
+func announced(x: int) => int sync {
     println(x)
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     let quiet = doubled(21)
     let f = announced
     let noisy = f(3)
@@ -11516,16 +11605,16 @@ A commit owes the program it publishes the effect its target function declares: 
 // `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
 // so the commit that publishes this program has nothing of its own to refuse.
 
-func doubled(x: int): int {
+func doubled(x: int) => int {
     return x * 2
 }
 
-func announced(x: int): int sync {
+func announced(x: int) => int sync {
     println(x)
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     let quiet = doubled(21)
     let f = announced
     let noisy = f(3)
@@ -11565,16 +11654,16 @@ Analysis 4.1 asks a commit for order completeness: within one region, any two ac
 // `test::fold_function_type` writes on purpose. `main` still declares the console write it reaches,
 // so the commit that publishes this program has nothing of its own to refuse.
 
-func doubled(x: int): int {
+func doubled(x: int) => int {
     return x * 2
 }
 
-func announced(x: int): int sync {
+func announced(x: int) => int sync {
     println(x)
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     let quiet = doubled(21)
     let f = announced
     let noisy = f(3)
@@ -11606,7 +11695,7 @@ The unwrap is placed where the compiler has already read the tag, so a null here
 **Example** (`test/cases/compile/tagged/unwrap_null.cml`, run as `camel test/cases/compile/tagged/unwrap_null.cml`)
 
 ```camel
-func main(): int {
+func main() => int {
     let slot: int? = null
     return __unwrap__(slot)
 }
@@ -11635,17 +11724,17 @@ A scheduling pass executes the program and a translation pass translates it; nei
 **Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::cxx::inline std::fvm`)
 
 ```camel
-func before(x: int): int sync {
+func before(x: int) => int sync {
     println(x)
     return x
 }
 
-func modify(var x: int): int sync {
+func modify(var x: int) => int sync {
     x += 10
     return 0
 }
 
-func run(): int sync {
+func run() => int sync {
     var i = 1
     let a = before(i + 1)
     modify(i)
@@ -11653,7 +11742,7 @@ func run(): int sync {
     return a * 1000 + b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(run())
     return 0
 }
@@ -11684,7 +11773,7 @@ All its operands are known and computing it fails, so there is no value to put i
 ```camel
 import { now } from time
 
-func main(): int sync {
+func main() => int sync {
     let n = int(now() * 0.0) + 3
     let a = if n > 5 then 1 / 0 + n else 7
     println(a)
@@ -11716,10 +11805,9 @@ Every other operator is translated into C++ that needs only the standard library
 
 ```camel
 /// std::cpp has no standalone translation of a string operator: the program links the runtime.
-
 import str
 
-func main(): int sync {
+func main() => int sync {
     println(str::to_upper('a'))
     return 0
 }
@@ -11748,15 +11836,19 @@ A function value is lowered by giving it the form the design asks for (one varia
 **Example** (`test/cases/opt/defun/native_map.cml`, run as `camel test/cases/opt/defun/native_map.cml std::defunctionalize std::stats std::nvm`)
 
 ```camel
-func apply_n(f: (x: int) => int, xs: int[]): int[] {
+func apply_n(f: (x: int) => int, xs: int[]) => int[] {
     return xs->map<f>
 }
 
-func main(): int sync {
+func main() => int sync {
     let k = 10
-    let with_k = func (x: int) { x + k }
+    let with_k = func (x: int) {
+        x + k
+    }
     let ys = apply_n(with_k, [1, 2, 3])
-    let zs = apply_n(func (x: int) { x * 2 }, [1, 2, 3])
+    let zs = apply_n(func (x: int) {
+        x * 2
+    }, [1, 2, 3])
     let pairs = zip([1, 2], [10, 20])
     'MAP ys={} zs={} pairs={}'->format<ys, zs, pairs>->println
     return 0
@@ -11786,29 +11878,23 @@ The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTV
 **Example** (`test/cases/linear/jit/native_registers.cml`, run as `camel test/cases/linear/jit/native_registers.cml std::jit`)
 
 ```camel
-func mix(a: int, b: int, c: int, d: int, e: int, n: int): int {
-    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 3 + (e * d) / 7
-           else mix(b, c, d, e, a + n, n - 1)
+func mix(a: int, b: int, c: int, d: int, e: int, n: int) => int {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 3 + (e * d) / 7 else mix(b, c, d, e, a + n, n - 1)
 }
 
-func cmp(a: int, b: int, c: int, d: int, n: int): int {
-    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
-                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
-           else cmp(d, a, b, c, n - 1)
+func cmp(a: int, b: int, c: int, d: int, n: int) => int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) + (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0) else cmp(d, a, b, c, n - 1)
 }
 
-func fmix(a: float, b: float, c: float, d: float, e: float, n: int): float {
-    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 4.0
-           else fmix(b, c, d, e, a + 0.5, n - 1)
+func fmix(a: float, b: float, c: float, d: float, e: float, n: int) => float {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 4.0 else fmix(b, c, d, e, a + 0.5, n - 1)
 }
 
-func fcmp(a: float, b: float, c: float, d: float, n: int): int {
-    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
-                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
-           else fcmp(d, a, b, c, n - 1)
+func fcmp(a: float, b: float, c: float, d: float, n: int) => int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) + (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0) else fcmp(d, a, b, c, n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println('mix {} {} {} {}'->format<mix(3, 5, 7, 11, 13, 0), mix(3, 5, 7, 11, 13, 4), mix(3, 5, 7, 11, 13, 9), mix(0 - 3, 5, 0 - 7, 11, 0 - 13, 6)>)
     println('cmp {} {} {} {}'->format<cmp(1, 2, 3, 4, 0), cmp(1, 2, 3, 4, 3), cmp(4, 4, 4, 2, 5), cmp(9, 1, 9, 1, 6)>)
     println('fmix {} {} {}'->format<fmix(1.5, 2.5, 3.5, 4.5, 5.5, 0), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 4), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 7)>)
@@ -11840,11 +11926,11 @@ Every round of `std::opt` keeps the program's meaning, so the program that reach
 **Example** (`test/cases/opt/generic/rounds_exhausted.cml`, run as `camel test/cases/opt/generic/rounds_exhausted.cml std::opt std::fvm`)
 
 ```camel
-func total(n: int): int {
+func total(n: int) => int {
     return if n <= 0 then 0 else n + total(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(40))
     return 0
 }

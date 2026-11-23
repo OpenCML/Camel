@@ -5,23 +5,23 @@
  * `float` and takes the `float` parameter.
  */
 
-func pick(xs: f32[]): string {
+func pick(xs: f32[]) => string {
     return 'f32[]'
 }
 
-func pick(xs: float[]): string {
+func pick(xs: float[]) => string {
     return 'float[]'
 }
 
-func scale(x: f32): string {
+func scale(x: f32) => string {
     return 'f32'
 }
 
-func scale(x: float): string {
+func scale(x: float) => string {
     return 'float'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick([1.0]))
     println(scale(2.0))
     return 0

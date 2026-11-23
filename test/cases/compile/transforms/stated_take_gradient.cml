@@ -9,14 +9,14 @@
 //     x = [1.0, 2.0, 3.0, 4.0]   ->   value 4.0, dL/dx = [1.0, 0.0, 1.0, 0.0]
 //
 //     camel test/cases/compile/transforms/stated_take_gradient.cml
-import { vjp } from vjp
 import { sum, take } from tensor
+import { vjp } from vjp
 
-func total(x: float[]): float {
+func total(x: float[]) => float {
     return sum(take(x, [0, 2]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(total)([1.0, 2.0, 3.0, 4.0] as float[])
     let d = pullback(1.0).0
     `stated take value={} dL/dx={}`->format<value, d>->println

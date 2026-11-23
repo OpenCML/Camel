@@ -6,21 +6,29 @@
  * fault of the caller, outside that boundary: the enclosing `attempt` isolates it.
  */
 
-func depth(n: int): int { return if n == 0 then 0 else 1 + depth(n - 1) }
+func depth(n: int) => int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
 
-func via(f: (n: int) => int, n: int): int {
+func via(f: (n: int) => int, n: int) => int {
     return if n == 0 then 0 else 1 + f(n - 1)
 }
-func step(n: int): int { return 0 + via(step, n) }
+func step(n: int) => int {
+    return 0 + via(step, n)
+}
 
-func each(n: int): int { return (0..3)->map<depth>->reduce<func (a: int, x: int) => int { a + x }, n> }
+func each(n: int) => int {
+    return (0 .. 3)->map<depth>->reduce<func (a: int, x: int) => int {
+        a + x
+    }, n>
+}
 
 // Every level is a boundary: the fault of the innermost call is taken by the boundary below it.
-func tower(n: int): int {
+func tower(n: int) => int {
     return 1 + (attempt(tower)(n + 1) !! 0)
 }
 
-func kind(r: int!): string {
+func kind(r: int!) => string {
     return match r {
         case error e => e.kind + ' at ' + e.location
         case v => format<v>('{}')
@@ -29,14 +37,14 @@ func kind(r: int!): string {
 
 // Without the position: in a mutual recursion, which of the two calls meets the limit depends on
 // what bounds the recursion (a count, or the native stack of the thread on std::prl).
-func kind_only(r: int!): string {
+func kind_only(r: int!) => string {
     return match r {
         case error e => e.kind
         case v => format<v>('{}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind(attempt(depth)(50)))
     println(kind(attempt(depth)(1000000)))
     println(kind(attempt(depth)(50)))

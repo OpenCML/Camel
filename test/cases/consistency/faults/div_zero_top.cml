@@ -3,7 +3,7 @@
  * printed, then DivisionByZero at the division.
  */
 
-func main(): int sync {
+func main() => int sync {
     let z = 0
     println('before')
     println(7 / z)

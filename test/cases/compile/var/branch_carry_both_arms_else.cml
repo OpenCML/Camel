@@ -2,10 +2,14 @@
  * The other direction of the pair: the else arm writes 2 and the read takes 2. The two cases
  * together pin both sides of the join; one alone would pass with the join wired to a single arm.
  */
-func main(): int {
-    var x = 7;
-    let c = 0;
-    if c > 0 then { x = 1 } else { x = 2 }
-    let shown = println(x);
+func main() => int {
+    var x = 7
+    let c = 0
+    if c > 0 then {
+        x = 1
+    } else {
+        x = 2
+    }
+    let shown = println(x)
     return 0
 }

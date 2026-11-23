@@ -10,7 +10,7 @@
 // target gets.
 import { sum_to } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(`sum_to(xs, [2, 3]) = ${sum_to(xs, [2, 3]):.1f}`)
     return 0

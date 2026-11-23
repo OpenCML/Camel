@@ -7,15 +7,15 @@
 // `int[]` over. Measured 2026-11-04 on the base tree (`c4391db57`) this program stopped with
 // `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`, and it answers
 // `([1.0, 1.0, 1.0])` now.
-import { transpose } from transforms
 import rulesets.transpose
 import { sum } from tensor
+import { transpose } from transforms
 
-func total(xs: float[3]): float {
+func total(xs: float[3]) => float {
     return sum(xs)
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(total)
     println(back(1.0))
     return 0

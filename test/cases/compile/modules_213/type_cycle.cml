@@ -2,6 +2,6 @@
 // (ModuleTypeCycle), not as names that are not resolved.
 import { A } from cycle_a
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

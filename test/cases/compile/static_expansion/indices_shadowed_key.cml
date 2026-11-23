@@ -3,13 +3,13 @@
  * it, and the access through the local is refused exactly as any other runtime key is.
  */
 
-func bad(t: (int, int), k: int): int {
+func bad(t: (int, int), k: int) => int {
     return static loop acc = 0 for j in indices t do {
         let j = k
         acc + t.[j]
     }
 }
 
-func main(): int {
+func main() => int {
     return bad((1, 2), 10)
 }

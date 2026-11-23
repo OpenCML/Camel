@@ -22,22 +22,22 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func cubic(x: float): float {
+func cubic(x: float) => float {
     return x * x * x
 }
 
-func quartic(x: float): float {
+func quartic(x: float) => float {
     return x * x * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let f3 = split(jvp(cubic))
     let (y3, l3) = f3(2.0)
-    println("cubic y=", y3)
-    println("cubic dx1=", l3(1.0))
+    println('cubic y=', y3)
+    println('cubic dx1=', l3(1.0))
     let f4 = split(jvp(quartic))
     let (y4, l4) = f4(2.0)
-    println("quartic y=", y4)
-    println("quartic dx1=", l4(1.0))
+    println('quartic y=', y4)
+    println('quartic dx1=', l4(1.0))
     return 0
 }

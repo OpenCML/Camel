@@ -4,7 +4,7 @@
  * plain value; std::cxx::fold then printed a box as a float. progen finding F42.)
  */
 
-func main(): int sync {
+func main() => int sync {
     let a: float? = if false then null else 1.0
     let b = if true then 7 else null
     let c = if true then 2.5 else (3.5 as float?)

@@ -25,28 +25,29 @@ export resource rendezvous_point unordered
 /// @fails fault `InvalidArgument` when parties is below 1 or timeout is negative
 /// @example rendezvous(2, 1.0)    // 2 when another call arrived in time
 #op('test_support:rendezvous')
-export func rendezvous(parties: int, timeout: float): int panic uses var rendezvous_point
+export func rendezvous(parties: int, timeout: float) => int
+    panic uses var rendezvous_point
 
 /// The number of threads this process has, the caller included: the count the operating system
 /// reports for the process, not the number of processors. A test reads it to pin how many worker
 /// threads a run creates.
 /// @example thread_count()    // 1 at -t 1
 #op('test_support:thread_count')
-export func thread_count(): int panic uses process
+export func thread_count() => int panic uses process
 
 /// `base * 10000 + step * 100 + mode`: the three `with` values the call ended with, the defaults of
 /// the parameters it left out among them. A native operator with a generic declaration, for the
 /// tests that pin where the names and the defaults of a call come from.
 /// @example with_probe<1>(0)    // 11000
 with <base: int, step: int = 10, mode: int = 0>
-export func with_probe::<T>(x: T): int
+export func with_probe::<T>(x: T) => int
 
 /// The same for an array: the number plus the length of the array, so a test reads which of the two
 /// declarations of the name a call reached.
 /// @example with_probe<1>([5, 6])    // 11002
 #op('test_support:with_probe_array')
 with <base: int, step: int = 10, mode: int = 0>
-export func with_probe(xs: int[]): int
+export func with_probe(xs: int[]) => int
 
 /// An operator that wants a function and an example and writes `when is_function::<F>()`, the
 /// condition a pass writes: the count of ordinary parameters (a pass takes one) tells the two
@@ -55,4 +56,4 @@ export func with_probe(xs: int[]): int
 /// @example arity_probe<7, [1]>((x: int): int => x, 0)    // 71
 #op('test_support:arity_two')
 with <tag: int, extra: int[] = []>
-export func arity_probe::<F, E>(f: F, example: E): int when is_function::<F>()
+export func arity_probe::<F, E>(f: F, example: E) => int when is_function::<F>()

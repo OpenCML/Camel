@@ -9,23 +9,23 @@
 import { grad } from vjp
 
 with <x: f32[]>
-func f(): f32 {
+func f() => f32 {
     return x[0] * x[0] * x[0] + x[0] * x[1] * x[1]
 }
 
 with <x: f32[]>
-func df0(): f32 {
+func df0() => f32 {
     let g = grad(f)<x>()
     return g[0]
 }
 
 with <x: f32[]>
-func df1(): f32 {
+func df1() => f32 {
     let g = grad(f)<x>()
     return g[1]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: f32[] = [2.0, 3.0]
     let g = grad(f)<xs>()
     let r0 = grad(df0)<xs>()

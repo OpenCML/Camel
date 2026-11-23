@@ -4,7 +4,7 @@
 
 import pkg.lib
 
-func main(): int sync {
+func main() => int sync {
     println(0)
     return 0
 }

@@ -38,11 +38,11 @@
 import { grad } from vjp
 
 with <x: float>
-func square(): float {
+func square() => float {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println('nested_grad_min second={}'->format<grad(grad(square))<2.0>()>)
     return 0
 }

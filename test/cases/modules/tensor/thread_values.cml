@@ -10,15 +10,15 @@
  * expected relation is exact equality, with no tolerance.
  */
 
-import { num_threads, sum, to_bytes } from tensor
-import { next_key, normal, seed } from random
 import { sha256 } from hash
+import { next_key, normal, seed } from random
+import { num_threads, sum, to_bytes } from tensor
 
-func main(expected: int): int sync {
+func main(expected: int) => int sync {
     if num_threads() != expected then {
         return 1
     }
-
+    
     seed(20261023)
     let x = next_key()->normal::<f32><shape: [2048, 128]>
     let y = next_key()->normal::<f32><shape: [128, 128]>

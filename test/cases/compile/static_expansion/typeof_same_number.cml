@@ -13,20 +13,20 @@
  * program, is a `string` in the first module and not a `string` in the second.
  */
 
-import { is_same } from types
 import { first_label } from typeof_same_number_first
 import { second_value } from typeof_same_number_second
+import { is_same } from types
 
-func main(): int sync {
+func main() => int sync {
     // `typeof#0` of the first module: a `string`, printed as it is.
     println(first_label(1))
     // `typeof#0` of the second module: a `float[]`, indexed as one.
     println(second_value(2)[1])
     // `typeof#0` of this module: an `int`.
-    println(is_same::<typeof(1 + 2), int>())
+    println(is_same::<typeof (1 + 2), int>())
     // One name, two meanings: the first module's answer is a `string` ...
-    println(is_same::<typeof(first_label(1)), string>())
+    println(is_same::<typeof (first_label(1)), string>())
     // ... and the second module's, written the same way, is not.
-    println(is_same::<typeof(second_value(2)), string>())
+    println(is_same::<typeof (second_value(2)), string>())
     return 0
 }

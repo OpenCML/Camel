@@ -6,17 +6,17 @@
 
 import { bit_and, bit_or, bit_xor, shl, shr } from math
 
-func main(): int sync {
+func main() => int sync {
     let top = 9223372036854775807
     let bottom = -9223372036854775807 - 1
-
+    
     println(bit_and(12, 10), bit_or(12, 10), bit_xor(12, 10), ~12)
     println(bit_and(-1, 255), bit_or(0, 0), bit_xor(-1, -1), ~0, ~-1)
     println(bit_and(top, bottom), bit_or(top, bottom), bit_xor(top, bottom), ~top, ~bottom)
-
+    
     println(1->shl<0>, 1->shl<1>, 1->shl<62>, 1->shl<63>, 3->shl<62>, (-1)->shl<63>, top->shl<1>)
     println(8->shr<0>, 8->shr<1>, 8->shr<3>, 8->shr<4>, (-8)->shr<1>, (-1)->shr<63>, bottom->shr<63>, top->shr<62>)
-
+    
     // i32: the width is 32
     let one = i32(1)
     let minus = i32(-8)
@@ -24,7 +24,7 @@ func main(): int sync {
     // the count is an int, a value of the program or a literal
     let n = 4
     println(1->shl<n>, 256->shr<n>, one->shl<n>, one->shl<4>)
-
+    
     // the usual identities
     let x = 123456789
     println(bit_xor(bit_xor(x, 4242), 4242) == x, ~(~x) == x, bit_or(bit_and(x, 255), bit_and(x, ~255)) == x)

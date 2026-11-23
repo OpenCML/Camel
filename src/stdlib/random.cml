@@ -22,8 +22,8 @@
  */
 
 import { argsort } from array
-import { reshape } from tensor
 import { cos, log, sqrt } from math
+import { reshape } from tensor
 import { is_float, is_same } from types
 
 /// The global stream of keys, `seed` and `next_key` use it.
@@ -38,18 +38,18 @@ export type Key = { hi: int, lo: int }
 // counter. The draws use counters from 0 up; the derived keys use the negative counters, so a
 // key's draws and its children never share a word.
 #op('rand:philox')
-func philox(k: Key, counter: int): int[]
+func philox(k: Key, counter: int) => int[]
 
 // ---- keys ----
 
 // Two words as one 64-bit half; the product wraps on purpose.
-func pack(high: int, low: int): int {
+func pack(high: int, low: int) => int {
     return high * 4294967296 + low
 }
 
 /// The key of a seed.
 /// @example key(42)    // { hi: 0, lo: 42 }
-export func key(seed: int): Key {
+export func key(seed: int) => Key {
     return { hi: 0, lo: seed }
 }
 
@@ -57,17 +57,17 @@ export func key(seed: int): Key {
 /// not changed.
 /// @fails fault `InvalidArgument` when i is negative
 /// @example key(42)->fold(3)
-export func fold(k: Key, i: int): Key {
+export func fold(k: Key, i: int) => Key {
     return if i < 0 then fail<'InvalidArgument'>('fold needs a non-negative index') else derive(k, -3 - i)
 }
 
 /// Two independent keys derived from k: the same pair every time, and k is not changed.
 /// @example let (a, b) = split(key(42))
-export func split(k: Key): (Key, Key) {
+export func split(k: Key) => (Key, Key) {
     return (derive(k, -1), derive(k, -2))
 }
 
-func derive(k: Key, counter: int): Key {
+func derive(k: Key, counter: int) => Key {
     let w = philox(k, counter)
     return { hi: pack(w[0], w[1]), lo: pack(w[2], w[3]) }
 }
@@ -76,7 +76,7 @@ func derive(k: Key, counter: int): Key {
 
 // A float in [0, 1) with the precision of T: 53 bits for float, 24 for f32, 11 for f16 and 8 for
 // bf16, so that no rounding into T reaches 1.
-func uniform_at::<T>(k: Key, counter: int): T when is_float::<T>() {
+func uniform_at::<T>(k: Key, counter: int) => T when is_float::<T>() {
     let w = philox(k, counter)
     return match type T {
         case float => T(float(w[0] / 32 * 67108864 + w[1] / 64) * 1.1102230246251565e-16)
@@ -88,7 +88,7 @@ func uniform_at::<T>(k: Key, counter: int): T when is_float::<T>() {
 
 /// A number drawn uniformly from 0 (included) to 1 (excluded).
 /// @example key(42)->uniform::<f32>
-export func uniform::<T>(k: Key): T when is_float::<T>() {
+export func uniform::<T>(k: Key) => T when is_float::<T>() {
     return uniform_at::<T>(k, 0)
 }
 
@@ -96,37 +96,39 @@ export func uniform::<T>(k: Key): T when is_float::<T>() {
 // `fold(k, i)`, in whatever order or partition they are made (CPU and Tiles alike).
 #op('rand:uniform_array')
 with <shape: int[]>
-func uniform_array_kernel::<T>(k: Key): T[...] when is_float::<T>()
+func uniform_array_kernel::<T>(k: Key) => T[...] when is_float::<T>()
 #op('rand:normal_array')
 with <shape: int[]>
-func normal_array_kernel::<T>(k: Key): T[...] when is_float::<T>()
+func normal_array_kernel::<T>(k: Key) => T[...] when is_float::<T>()
 
 /// An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
 /// @example key(42)->uniform::<f32><shape: [3, 4]>
 #impl(uniform_array_kernel)
 with <shape: int[]>
-export func uniform::<T>(k: Key): T[...] when is_float::<T>() {
-    let n = shape->reduce<func (a: int, b: int) => int { a * b }, 1>
-    return reshape<shape>([uniform::<T>(fold(k, i)) for i in 0..n])
+export func uniform::<T>(k: Key) => T[...] when is_float::<T>() {
+    let n = shape->reduce<func (a: int, b: int) => int {
+        a * b
+    }, 1>
+    return reshape<shape>([uniform::<T>(fold(k, i)) for i in 0 .. n])
 }
 
 /// A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Muller).
 /// @example key(42)->normal::<f32>
-export func normal::<T>(k: Key): T when is_float::<T>() {
+export func normal::<T>(k: Key) => T when is_float::<T>() {
     let u = 1.0 - uniform_at::<float>(k, 0)
     let v = uniform_at::<float>(k, 1)
     return T(sqrt(-2.0 * log(u)) * cos(6.283185307179586 * v))
 }
 
 // A 62-bit number from the words of a counter.
-func bits62(k: Key, counter: int): int {
+func bits62(k: Key, counter: int) => int {
     let w = philox(k, counter)
     return w[0] % 1073741824 * 4294967296 + w[1]
 }
 
 // An integer in [0, span) without bias: a draw at or above the largest multiple of span below
 // 2^62 is thrown away and the next counter is tried.
-func below(k: Key, span: int): int {
+func below(k: Key, span: int) => int {
     let limit = 4611686018427387904 / span * span
     let (c, v) = loop c = 0, v = bits62(k, 0) while v >= limit do (c + 1, bits62(k, c + 1))
     return v % span
@@ -136,26 +138,26 @@ func below(k: Key, span: int): int {
 /// @example key(42)->normal::<f32><shape: [3, 4]>
 #impl(normal_array_kernel)
 with <shape: int[]>
-export func normal::<T>(k: Key): T[...] when is_float::<T>() {
-    let n = shape->reduce<func (a: int, b: int) => int { a * b }, 1>
-    return reshape<shape>([normal::<T>(fold(k, i)) for i in 0..n])
+export func normal::<T>(k: Key) => T[...] when is_float::<T>() {
+    let n = shape->reduce<func (a: int, b: int) => int {
+        a * b
+    }, 1>
+    return reshape<shape>([normal::<T>(fold(k, i)) for i in 0 .. n])
 }
 
 /// An integer drawn uniformly from low (included) to high (excluded).
 /// @fails fault `InvalidArgument` when high is not above low, or the range is wider than 2^62
 /// @example key(42)->randint<1, 7>
 with <low: int, high: int>
-export func randint(k: Key): int {
+export func randint(k: Key) => int {
     let span = high - low
-    return if span <= 0 || span > 4611686018427387904
-        then fail<'InvalidArgument'>('randint needs 0 < high - low <= 2^62')
-        else low + below(k, span)
+    return if span <= 0 || span > 4611686018427387904 then fail<'InvalidArgument'>('randint needs 0 < high - low <= 2^62') else low + below(k, span)
 }
 
 /// A uniformly random permutation of 0 up to, not including, n: the positions ordered by one
 /// uniform draw each (the key folded with the position), ties keeping position order. Empty when n is not positive.
 /// @example key(42)->permutation(4)
-export func permutation(k: Key, n: int): int[] {
+export func permutation(k: Key, n: int) => int[] {
     return if n <= 0 then [] else argsort(k->uniform::<float><shape: [n]> as float[])
 }
 
@@ -163,16 +165,16 @@ export func permutation(k: Key, n: int): int[] {
 // array of draws and the array of positions.
 #op('rand:shuffle_i')
 with <k: Key>
-func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, i32>()
+func shuffle_kernel::<T>(xs: T[]) => T[] when is_same::<T, i32>()
 #op('rand:shuffle_l')
 with <k: Key>
-func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, int>()
+func shuffle_kernel::<T>(xs: T[]) => T[] when is_same::<T, int>()
 #op('rand:shuffle_f')
 with <k: Key>
-func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, f32>()
+func shuffle_kernel::<T>(xs: T[]) => T[] when is_same::<T, f32>()
 #op('rand:shuffle_d')
 with <k: Key>
-func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, float>()
+func shuffle_kernel::<T>(xs: T[]) => T[] when is_same::<T, float>()
 
 /// The elements of xs in a random order, as a new array; xs is not changed. The meaning is
 /// `xs[permutation(k, len(xs))]`; numbers are shuffled by a kernel that makes the same
@@ -181,7 +183,7 @@ func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, float>()
 /// @example [1, 2, 3]->shuffle<key(42)>
 #impl(shuffle_kernel)
 with <k: Key>
-export func shuffle::<T>(xs: T[]): T[] {
+export func shuffle::<T>(xs: T[]) => T[] {
     return xs[permutation(k, len(xs))]
 }
 
@@ -189,7 +191,7 @@ export func shuffle::<T>(xs: T[]): T[] {
 /// @fails fault `InvalidArgument` when xs is empty
 /// @example ['a', 'b', 'c']->choice<key(42)>
 with <k: Key>
-export func choice::<T>(xs: T[]): T {
+export func choice::<T>(xs: T[]) => T {
     return xs[k->randint<0, len(xs)>]
 }
 
@@ -197,7 +199,7 @@ export func choice::<T>(xs: T[]): T {
 /// @fails fault `IndexOutOfRange` when n is negative or above the number of elements
 /// @example [1, 2, 3, 4]->sample<key(42), 2>
 with <k: Key, n: int>
-export func sample::<T>(xs: T[]): T[] {
+export func sample::<T>(xs: T[]) => T[] {
     let mixed = xs->shuffle<k>
     return mixed[..n]
 }
@@ -207,21 +209,21 @@ export func sample::<T>(xs: T[]): T[] {
 /// Starts the global stream: the same seed gives the same sequence of keys.
 /// @example seed(42)
 #op('rand:seed')
-export func seed(value: int): void uses var rng
+export func seed(value: int) => void uses var rng
 
 /// The next key of the global stream, and the stream moves on: two calls give two keys.
 /// @example next_key()
 #op('rand:next_key')
-export func next_key(): Key uses var rng
+export func next_key() => Key uses var rng
 
 /// A number drawn uniformly from 0 (included) to 1 (excluded) from the global stream.
 /// @example rand()
-export func rand(): float {
+export func rand() => float {
     return next_key()->uniform::<float>
 }
 
 /// A number drawn from the normal distribution with mean 0 and deviation 1, from the global stream.
 /// @example randn()
-export func randn(): float {
+export func randn() => float {
     return next_key()->normal::<float>
 }

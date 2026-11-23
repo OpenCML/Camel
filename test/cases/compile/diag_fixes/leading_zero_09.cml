@@ -5,7 +5,7 @@
  * both readings of it.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a = 09
     return a
 }

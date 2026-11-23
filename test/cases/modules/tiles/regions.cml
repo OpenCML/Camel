@@ -1,28 +1,33 @@
 import { sum } from tensor
 import { regions } from tiles
-func chain(x: f32[2, 3]): f32[2,3] {
+
+func chain(x: f32[2, 3]) => f32[2, 3] {
     let y = x + x
     return y * y
 }
-func dynamic(x: f32[...]): f32[...] { return x + x }
-func cpu(x: f32[2,3]): f32[2,3] { return x }
-func detour(x: f32[2,3]): f32[2,3] {
+func dynamic(x: f32[...]) => f32[...] {
+    return x + x
+}
+func cpu(x: f32[2, 3]) => f32[2, 3] {
+    return x
+}
+func detour(x: f32[2, 3]) => f32[2, 3] {
     let y = x + x
     return y + cpu(y)
 }
-func ordered(x: f32[2,3]): f32[2,3] sync {
+func ordered(x: f32[2, 3]) => f32[2, 3] sync {
     let y = (x + x)
     return y + y
 }
 #[contract]
-func shared_values(x: f32[2,3]): (f32[2,3], f32[2,3]) {
+func shared_values(x: f32[2, 3]) => (f32[2, 3], f32[2, 3]) {
     let y = x + x
     return (y, y * y)
 }
-func constant_axis(x: f32[2,3]): f32[2,1] {
+func constant_axis(x: f32[2, 3]) => f32[2, 1] {
     return sum<1, true>(x)
 }
-func main(): int sync {
+func main() => int sync {
     println(regions<chain>())
     println(regions<dynamic>())
     println(regions<detour>())

@@ -17,12 +17,14 @@ func apply(f: (x: int) => void, v: int) {
     f(v)
 }
 
-func void_g(x: int): void {
+func void_g(x: int) => void {
     println('void_g {}'->format<x>)
 }
 
-func main(): int sync {
+func main() => int sync {
     apply(void_g, 1)
-    apply(func (x: int) { x * 10 }, 2)
+    apply(func (x: int) {
+        x * 10
+    }, 2)
     return 0
 }

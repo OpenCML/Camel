@@ -4,20 +4,56 @@
  * read as (docs/design-principles.cn.md 3.5, 6.11).
  */
 
-func make_array(): int[] {
+func make_array() => int[] {
     return [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
     ]
 }
 
-func main(): int sync {
+func main() => int sync {
     let src = make_array()
-    var a   = src
-    var b   = src
+    var a = src
+    var b = src
     a[0] = 9
-    println("src[0] =", src[0], " a[0] =", a[0], " b[0] =", b[0])
+    println('src[0] =', src[0], ' a[0] =', a[0], ' b[0] =', b[0])
     return 0
 }

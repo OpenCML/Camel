@@ -2,7 +2,7 @@
 // principles 4.2). The built-in group has one signature, three parameters, so the
 // call is refused where it stands as any other call the overload set has no match for.
 
-func main(): int sync {
+func main() => int sync {
     let xs = range(0, 3)
     println(xs)
     return 0

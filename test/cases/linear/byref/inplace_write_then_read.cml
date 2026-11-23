@@ -11,9 +11,9 @@
  * direction is measured by setting the walk's limits to 1 (see the review of C3).
  */
 
-func main(): int sync {
+func main() => int sync {
     var v = [1, 2, 3]
     v[0] = 9
-    println("v[0] =", v[0])
+    println('v[0] =', v[0])
     return 0
 }

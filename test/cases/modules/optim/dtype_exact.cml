@@ -11,22 +11,17 @@
  * type, and which of the two element types a read of it uses is not specified.
  */
 
-import { to_bytes } from tensor
-
 import { adam, constant, init, sgd, update } from optim
+import { to_bytes } from tensor
 
 // The element type is written, the extent is not (that is the only spelling a tensor expression
 // has here, and the one a type pattern takes): the leaf is a tensor and every element is f64.
-type Wide = {
-    w: f64[?]
-}
+type Wide = { w: f64[?] }
 
 // A tree of one number, for the property below: the number path and the tensor path must agree.
-type Number = {
-    w: float
-}
+type Number = { w: float }
 
-func main(): int sync {
+func main() => int sync {
     // 16777217.0 is the smallest integer f32 cannot hold: `f32(16777217.0)` is 16777216.0.
     let numbers: f64[] = [16777217.0, 1.0]
     let gradients: f64[] = [1.0, 1.0]
@@ -37,7 +32,7 @@ func main(): int sync {
     let value = next.0.w[0]
     let width = len(to_bytes(next.0.w))
     var failures = 0
-
+    
     // The step is the exact f64 arithmetic, and the leaf is still 16 bytes (two f64 elements).
     if value != 16777216.5 then failures = failures + 1
     if width != 16 then failures = failures + 1
@@ -45,11 +40,9 @@ func main(): int sync {
     if float(f32(value)) == value then failures = failures + 1
     // The step count of the state came back too.
     if next.1.step != 1 then failures = failures + 1
-
-    'optim dtype_exact steps={} value={} f32_value={} bytes={}'
-    ->format<next.1.step, value, float(f32(value)), width>
-    ->println
-
+    
+    'optim dtype_exact steps={} value={} f32_value={} bytes={}'->format<next.1.step, value, float(f32(value)), width>->println
+    
     // One `adam` step of the same leaf: its moments are f64 as well, so the parameter is 16 bytes
     // and its value is the f64 one (a step of `0.5 / (1 + eps)` below the start, since the first
     // moments make the adaptive factor exactly one).
@@ -62,11 +55,9 @@ func main(): int sync {
     if delta > 0.000001 || delta < -0.000001 then failures = failures + 1
     if float(f32(adam_value)) == adam_value then failures = failures + 1
     if trained.1.step != 1 then failures = failures + 1
-
-    'optim dtype_exact adam steps={} value={} bytes={}'
-    ->format<trained.1.step, adam_value, adam_width>
-    ->println
-
+    
+    'optim dtype_exact adam steps={} value={} bytes={}'->format<trained.1.step, adam_value, adam_width>->println
+    
     // A tree of numbers and a tree of one-element tensors that hold the same numbers must land on
     // the same value: the leaf arithmetic is one implementation per leaf kind, and this pins the
     // number path (`adam_number`, `sgd`'s `float` arm) to the tensor path (`adam_wide`, its
@@ -84,9 +75,7 @@ func main(): int sync {
     let number_adam = update(adam_opt, number_one, number_one_gradient, init(adam_opt, number_one))
     if number_sgd.0.w != wide_sgd.0.w[0] then failures = failures + 1
     if number_adam.0.w != wide_adam.0.w[0] then failures = failures + 1
-
-    'optim dtype_exact scalar sgd={} wide_sgd={} adam={} wide_adam={}'
-    ->format<number_sgd.0.w, wide_sgd.0.w[0], number_adam.0.w, wide_adam.0.w[0]>
-    ->println
+    
+    'optim dtype_exact scalar sgd={} wide_sgd={} adam={} wide_adam={}'->format<number_sgd.0.w, wide_sgd.0.w[0], number_adam.0.w, wide_adam.0.w[0]>->println
     return failures
 }

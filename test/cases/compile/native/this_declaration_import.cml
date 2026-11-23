@@ -6,7 +6,7 @@
 
 import { zen } from this
 
-func main(): int sync {
+func main() => int sync {
     let text: string = zen()
     println(len(text) > 0)
     return 0

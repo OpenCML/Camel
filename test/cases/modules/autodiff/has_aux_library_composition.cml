@@ -19,40 +19,40 @@
  * depend on the weight at all, so the gradient is 0.0 while the auxiliary value is 9.0 -- a pass
  * that differentiated the pair instead of its first member answers 6.0 there.
  */
-import { has_aux } from vjp
 import { with_grad } from autodiff
+import { has_aux } from vjp
 
-func loss(w: float): (float, float) {
+func loss(w: float) => (float, float) {
     return (w * w, w + 10.0)
 }
 
-func frozen(w: float): (float, float) {
+func frozen(w: float) => (float, float) {
     return (1.0, w * w)
 }
 
 with <w: float>
-func loss_engine(): (float, float) {
+func loss_engine() => (float, float) {
     return (w * w, w + 10.0)
 }
 
 with <w: float>
-func frozen_engine(): (float, float) {
+func frozen_engine() => (float, float) {
     return (1.0, w * w)
 }
 
-func main(): int sync {
+func main() => int sync {
     let engine = with_grad(loss_engine, has_aux: true)<3.0>()
     let engine_pair = engine.0
     let engine_value = engine_pair.0
     let engine_aux = engine_pair.1
     let engine_grad = engine.1
-
+    
     let library = has_aux(loss)(3.0)
     let library_pair = library.0
     let library_value = library_pair.0
     let library_aux = library_pair.1
     let library_grad = library.1
-
+    
     println('has_aux_library_composition')
     println('engine value={} aux={} grad={}'->format<engine_value, engine_aux, engine_grad>)
     println('library value={} aux={} grad={}'->format<library_value, library_aux, library_grad>)
@@ -60,7 +60,7 @@ func main(): int sync {
     let same_aux = engine_aux == library_aux
     let same_grad = engine_grad == library_grad
     println('same_value={} same_aux={} same_grad={}'->format<same_value, same_aux, same_grad>)
-
+    
     let held_engine = with_grad(frozen_engine, has_aux: true)<3.0>()
     let held_engine_pair = held_engine.0
     let held_library = has_aux(frozen)(3.0)

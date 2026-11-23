@@ -6,21 +6,25 @@
 
 import { grad } from autodiff
 
-func sq(x: float): float { return x * x }
+func sq(x: float) => float {
+    return x * x
+}
 with <x: float>
-func h(): float { return sq(x) + 3.0 * sq(x + 1.0) }
+func h() => float {
+    return sq(x) + 3.0 * sq(x + 1.0)
+}
 
-func left(x: float): float sync {
+func left(x: float) => float sync {
     println('left')
     return x
 }
 
-func right(x: float): float sync {
+func right(x: float) => float sync {
     println('right')
     return x + 1.0
 }
 
-func main(x: float, flag: bool): int sync {
+func main(x: float, flag: bool) => int sync {
     let value = if flag then left(x) else right(x)
     let dh = grad(h)<value>()
     'data dh={}'->format<dh>->println

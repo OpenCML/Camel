@@ -5,11 +5,11 @@
 import { marked } from reads_pass
 
 #[marked]
-func f(x: int): int {
+func f(x: int) => int {
     return x
 }
 
-func main(): int {
+func main() => int {
     println(f(1))
     return 0
 }

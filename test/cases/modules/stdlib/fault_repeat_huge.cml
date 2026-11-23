@@ -1,6 +1,6 @@
 import { repeat } from str
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(len('ab'->repeat<9223372036854775807>))
     println('not reached')

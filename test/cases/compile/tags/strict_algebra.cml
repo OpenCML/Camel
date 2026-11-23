@@ -11,31 +11,32 @@
  * transformation exists and the sum must stay; the default policy still folds it into `x*0.4`.
  */
 
-func loose(x: float): float {
+func loose(x: float) => float {
     return x * 0.1 + x * 0.1
 }
 
 #strict
-func tight(x: float): float {
+func tight(x: float) => float {
     return x * 0.1 + x * 0.1
 }
 
-func tightBlock(x: float): float {
-    #strict {
+func tightBlock(x: float) => float {
+    #strict
+    {
         return x * 0.1 + x * 0.1
     }
 }
 
-func loosePair(x: float): float {
+func loosePair(x: float) => float {
     return x * 0.1 + x * 0.3
 }
 
 #strict
-func tightPair(x: float): float {
+func tightPair(x: float) => float {
     return x * 0.1 + x * 0.3
 }
 
-func main(): int sync {
+func main() => int sync {
     println(loose(3.0), tight(3.0), tightBlock(3.0), loosePair(3.0), tightPair(3.0))
     return 0
 }

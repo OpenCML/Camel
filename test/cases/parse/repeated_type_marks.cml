@@ -1,3 +1,9 @@
-func optional(x: int? ?): int? ? { return x }
-func fallible(x: int! !): int! ! { return x }
-func main(): int sync { return 0 }
+func optional(x: int? ?) => int? ? {
+    return x
+}
+func fallible(x: int! !) => int! ! {
+    return x
+}
+func main() => int sync {
+    return 0
+}

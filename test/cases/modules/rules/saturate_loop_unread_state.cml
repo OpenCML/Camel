@@ -6,12 +6,12 @@
  * graph has classes and extraction runs over it.
  */
 
-func both(n: int): int {
+func both(n: int) => int {
     let (a, b) = loop a = 0, b = 0 while b < n do (a + 1, b + 1)
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     println(both(3))
     return 0
 }

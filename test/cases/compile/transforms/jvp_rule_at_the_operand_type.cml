@@ -15,14 +15,14 @@
 //
 // g(x) = x * x, so g(1) = 1 and g'(1) * 1 = 2.
 import rulesets.jvp
-import { jvp } from transforms
 import { ones } from tensor
+import { jvp } from transforms
 
-func g(x: f32): f32 {
+func g(x: f32) => f32 {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     // An `f32` value, made the one way the language spells one: an element of an `f32` array.
     let a: f32[2] = ones::<f32>([2])
     let (value, tangent) = jvp(g)(a[0], a[0])

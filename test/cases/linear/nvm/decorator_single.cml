@@ -3,19 +3,18 @@
  */
 
 with <delta: int>
-func add_n(f: (x: int) => int): (x: int) => int {
+func add_n(f: (x: int) => int) => (x: int) => int {
     return func (x: int) => int {
         return f(x) + delta
     }
 }
 
 @add_n<2>
-func base(x: int): int {
+func base(x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = base(40)
     return if v == 42 then 0 else 1
 }
-

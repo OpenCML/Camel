@@ -4,7 +4,7 @@
 
 import nowhere_module
 
-func main(): int sync {
+func main() => int sync {
     println(nowhere_module::value())
     return 0
 }

@@ -11,134 +11,134 @@
 import { Graph, graphs_of, effects } from graph
 import { sum } from tensor
 
-func add_int(a: int, b: int): int {
+func add_int(a: int, b: int) => int {
     return a + b
 }
 
-func sub_int(a: int, b: int): int {
+func sub_int(a: int, b: int) => int {
     return a - b
 }
 
-func mul_int(a: int, b: int): int {
+func mul_int(a: int, b: int) => int {
     return a * b
 }
 
-func neg_int(a: int): int {
+func neg_int(a: int) => int {
     return -a
 }
 
-func mul_f32(a: f32, b: f32): f32 {
+func mul_f32(a: f32, b: f32) => f32 {
     return a * b
 }
 
-func neg_f32(a: f32): f32 {
+func neg_f32(a: f32) => f32 {
     return -a
 }
 
-func eq_int(a: int, b: int): bool {
+func eq_int(a: int, b: int) => bool {
     return a == b
 }
 
-func eq_text(a: string, b: string): bool {
+func eq_text(a: string, b: string) => bool {
     return a == b
 }
 
-func ne_text(a: string, b: string): bool {
+func ne_text(a: string, b: string) => bool {
     return a != b
 }
 
-func lt_int(a: int, b: int): bool {
+func lt_int(a: int, b: int) => bool {
     return a < b
 }
 
-func lt_text(a: string, b: string): bool {
+func lt_text(a: string, b: string) => bool {
     return a < b
 }
 
-func add_bf(a: bf16, b: bf16): bf16 {
+func add_bf(a: bf16, b: bf16) => bf16 {
     return a + b
 }
 
-func mul_f6(a: f16, b: f16): f16 {
+func mul_f6(a: f16, b: f16) => f16 {
     return a * b
 }
 
-func pow_bf(a: bf16, b: bf16): bf16 {
+func pow_bf(a: bf16, b: bf16) => bf16 {
     return a ^ b
 }
 
-func div_int(a: int, b: int): int {
+func div_int(a: int, b: int) => int {
     return a / b
 }
 
-func pow_int(a: int, b: int): int {
+func pow_int(a: int, b: int) => int {
     return a ^ b
 }
 
-func pow_f32(a: f32, b: f32): f32 {
+func pow_f32(a: f32, b: f32) => f32 {
     return a ^ b
 }
 
-func len_array(xs: int[]): int {
+func len_array(xs: int[]) => int {
     return len(xs)
 }
 
-func len_text(s: string): int {
+func len_text(s: string) => int {
     return len(s)
 }
 
-func map_has(m: Map<string, int>): bool {
+func map_has(m: Map<string, int>) => bool {
     return m->has<'a'>
 }
 
-func set_contains(s: Set<int>): bool {
+func set_contains(s: Set<int>) => bool {
     return s->contains<1>
 }
 
-func map_eq(a: Map<string, int>, b: Map<string, int>): bool {
+func map_eq(a: Map<string, int>, b: Map<string, int>) => bool {
     return a == b
 }
 
-func map_ne(a: Map<string, int>, b: Map<string, int>): bool {
+func map_ne(a: Map<string, int>, b: Map<string, int>) => bool {
     return a != b
 }
 
-func set_subset(a: Set<int>, b: Set<int>): bool {
+func set_subset(a: Set<int>, b: Set<int>) => bool {
     return is_subset(a, b)
 }
 
-func arr_contains(xs: int[]): bool {
+func arr_contains(xs: int[]) => bool {
     return xs->contains<2>
 }
 
-func str_contains(s: string): bool {
+func str_contains(s: string) => bool {
     return s->contains<'b'>
 }
 
-func bytes_len(b: Bytes): int {
+func bytes_len(b: Bytes) => int {
     return len(b)
 }
 
-func bytes_eq(a: Bytes, b: Bytes): bool {
+func bytes_eq(a: Bytes, b: Bytes) => bool {
     return a == b
 }
 
-func bytes_ne(a: Bytes, b: Bytes): bool {
+func bytes_ne(a: Bytes, b: Bytes) => bool {
     return a != b
 }
 
 /// A `tensor` operator, which declares no fault list at all: the answer that reads back is the
 /// third state, "nobody has checked, so assume it may fault".
-func tensor_sum(t: f32[...]): float {
+func tensor_sum(t: f32[...]) => float {
     return float(sum(t))
 }
 
 /// 1 when running the graph once may fault, 0 when it cannot.
-func may_fault_bit(g: Graph): int {
+func may_fault_bit(g: Graph) => int {
     return if effects(g).may_fault then 1 else 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(may_fault_bit(graphs_of(add_int)[0]))
     println(may_fault_bit(graphs_of(sub_int)[0]))
     println(may_fault_bit(graphs_of(mul_int)[0]))

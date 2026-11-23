@@ -18,16 +18,16 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func f(s: float[]): float[] {
+func f(s: float[]) => float[] {
     return loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
 }
 
-func main(): int sync {
+func main() => int sync {
     let lifted = jvp(f)
     let (value, dx) = lifted([1.0, 2.0], [1.0, 0.0])
-    println("value=", value)
-    println("dx=", dx)
+    println('value=', value)
+    println('dx=', dx)
     let (_, dy) = lifted([1.0, 2.0], [0.0, 1.0])
-    println("dy=", dy)
+    println('dy=', dy)
     return 0
 }

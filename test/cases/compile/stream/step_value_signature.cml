@@ -5,8 +5,10 @@
  * signature wide.
  */
 
-func main(): int sync {
-    let s: int.. = func (x: int) { x }
+func main() => int sync {
+    let s: int.. = func (x: int) {
+        x
+    }
     println(0)
     return 0
 }

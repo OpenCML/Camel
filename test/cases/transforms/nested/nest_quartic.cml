@@ -33,11 +33,11 @@
 import { grad } from vjp
 
 with <x: float>
-func quartic(): float {
+func quartic() => float {
     return x * x * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let d2 = grad(grad(quartic))<2.0>()
     'nested_quartic d2={}'->format<d2>->println
     return 0

@@ -6,7 +6,7 @@
  */
 
 /** The subject of `match type` is the empty tuple type; `case tuple` selects it. */
-func describeEmpty(): string {
+func describeEmpty() => string {
     return match type () {
         case tuple => 'empty tuple'
         case struct => 'struct'
@@ -14,17 +14,17 @@ func describeEmpty(): string {
     }
 }
 
-func describeTuple(e: ()): string {
+func describeTuple(e: ()) => string {
     return 'empty tuple value'
 }
 
 /** A comprehension over the empty tuple type has no round: the result is the empty tuple. */
-func noElements(): () {
-    return ( static for n, F in fields () do 0 )
+func noElements() => () {
+    return (static for n, F in fields () do 0)
 }
 
 /** The statement form expands `fields ()` zero times. */
-func zeroFields(): int {
+func zeroFields() => int {
     var rounds = 0
     static for n, F in fields () do {
         rounds = rounds + 1
@@ -32,7 +32,7 @@ func zeroFields(): int {
     return rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describeEmpty())
     println(zeroFields())
     let e: () = noElements()

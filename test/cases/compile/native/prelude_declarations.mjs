@@ -27,7 +27,7 @@ fs.cpSync(path.join(HOME, 'stdlib'), stdlib, { recursive: true })
 const prelude = path.join(stdlib, 'prelude.cml')
 fs.appendFileSync(prelude, '\nexport func broken(: int\n')
 const program = path.join(SCRATCH, 'plain.cml')
-fs.writeFileSync(program, 'func main(): int sync {\n    return 0\n}\n')
+fs.writeFileSync(program, 'func main() => int sync {\n    return 0\n}\n')
 
 const check = (extra) =>
     spawnSync(CAMEL, ['check', program], {

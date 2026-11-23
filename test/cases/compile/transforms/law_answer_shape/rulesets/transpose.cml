@@ -20,16 +20,16 @@
 // `add` is the stand-in the library itself declares for the array add (`rulesets/transpose.cml`), and
 // the rule is filed under that same head -- `tensor:add`, the uri `x + w` on two arrays carries once
 // `tensor`'s overloads are in scope, which is what the import below is for.
-import { is_float } from types
 import tensor
+import { is_float } from types
 
-func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
+func add::<T>(x: T[...], w: T[...]) => T[...] when is_float::<T>() {
     return x + w
 }
 
 /// The array add's law, answering every operand at the shape of the smaller one. One type parameter
 /// per operand, so the law's ports are the operands' own types and the check has an operand type to
 /// compare the answer with.
-export rule add_tensor_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
-    add(x, w) => func (ct: T[...]) { (ct as float[3], ct as float[3]) }
-}
+export rule add_tensor_t::<T, X, W>(x: X, w: W) when is_float::<T>() { add(x, w) => func (ct: T[...]) {
+    (ct as float[3], ct as float[3])
+} }

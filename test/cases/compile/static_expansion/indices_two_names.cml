@@ -5,10 +5,10 @@
  * syntax error.
  */
 
-func bad(t: (int, int)): int {
+func bad(t: (int, int)) => int {
     return static loop acc = 0 for j, F in indices t do acc + t.[j]
 }
 
-func main(): int {
+func main() => int {
     return bad((1, 2))
 }

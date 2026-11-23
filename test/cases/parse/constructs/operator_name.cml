@@ -6,17 +6,17 @@
 
 export type Point = { x: int, y: int }
 
-export func operator +(a: Point, b: Point): Point {
+export func operator +(a: Point, b: Point) => Point {
     return { x: a.x + b.x, y: a.y + b.y }
 }
 
 export type Table = { rows: int[] }
 
-export func operator [](t: Table, i: int): int {
+export func operator [](t: Table, i: int) => int {
     return t.rows[i]
 }
 
-func main(): int sync {
+func main() => int sync {
     let a: Point = { x: 1, y: 2 }
     let b: Point = { x: 3, y: 4 }
     let p = a + b

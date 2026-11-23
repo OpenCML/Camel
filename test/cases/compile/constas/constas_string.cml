@@ -4,11 +4,11 @@
  * two instances, `label<"w">` and `label<"h">`, each with one port (`n`) and no port for `k`.
  */
 
-func label(constas k: string, n: int): string {
+func label(constas k: string, n: int) => string {
     return k
 }
 
-func main(): int sync {
-    println(label("w", 1), label("h", 2), label("w", 3))
+func main() => int sync {
+    println(label('w', 1), label('h', 2), label('w', 3))
     return 0
 }

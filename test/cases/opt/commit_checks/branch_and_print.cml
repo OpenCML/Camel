@@ -8,17 +8,17 @@
 // re-sequences the body's write (out of the chain) and splices a write into one arm, so the write
 // left in the body is ordered against neither the branch nor what the branch now carries.
 
-func announced(b: bool): int sync {
+func announced(b: bool) => int sync {
     let y = if b then 2 else 3
     println(7)
     return y
 }
 
-func doubled(x: int): int {
+func doubled(x: int) => int {
     return x * 2
 }
 
-func main(): int {
+func main() => int {
     let quiet = doubled(21)
     let noisy = announced(true)
     return quiet + noisy

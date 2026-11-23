@@ -5,7 +5,7 @@
  * pattern text is the whole string and every backslash pair reaches the one escape table.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('0', len(`\0`))
     println('x41', len(`\x41`), `\x41`)
     println('u', len(`\u{1F600}`))

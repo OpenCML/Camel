@@ -2,13 +2,13 @@
  * A match over a bool that lists only `true` is not complete: a compile-time error.
  */
 
-func only_true(b: bool): int {
+func only_true(b: bool) => int {
     return match b {
         case true => 1
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(only_true(true))
     return 0
 }

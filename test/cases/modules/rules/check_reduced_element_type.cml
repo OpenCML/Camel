@@ -34,17 +34,13 @@
  */
 
 import { check, check_text } from rewrite
-import {
-        float_add_neg_zero, mul_one, float_combine, float_fold, float_double
-} from rules
+import { float_add_neg_zero, mul_one, float_combine, float_fold, float_double } from rules
 
 /// The report of the five laws, printed as its fixed rendering (the acceptance surface) and as
 /// the columns of its rows, so the text and the table are read here as they are everywhere else.
-func main(): int sync {
-    let report = [
-        float_add_neg_zero, mul_one, float_combine, float_fold, float_double
-    ]->check<200, 7>
+func main() => int sync {
+    let report = [float_add_neg_zero, mul_one, float_combine, float_fold, float_double]->check<200, 7>
     print(check_text(report))
-    println("rows", len(report.rows))
+    println('rows', len(report.rows))
     return 0
 }

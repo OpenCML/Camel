@@ -2,16 +2,18 @@
  * The graphs of `return e` in a function declared `T!` (an exit) and of `x -> f` (a branch on the tag of `x`).
  */
 
-func inc(x: int): int { return x + 1 }
+func inc(x: int) => int {
+    return x + 1
+}
 
-func g(x: int): int! {
+func g(x: int) => int! {
     return error('K', 'm')
 }
 
-func f(x: int!): int! {
-    return x -> inc
+func f(x: int!) => int! {
+    return x->inc
 }
 
-func main(): int! {
+func main() => int! {
     return f(g(1))
 }

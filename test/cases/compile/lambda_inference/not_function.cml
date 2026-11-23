@@ -3,8 +3,10 @@
  * diagnostic says what the type expected there is (design principles 5.9; item 2).
  */
 
-func main(): int sync {
-    let n: int = func (x) { x + 1 }
+func main() => int sync {
+    let n: int = func (x) {
+        x + 1
+    }
     println(n)
     return 0
 }

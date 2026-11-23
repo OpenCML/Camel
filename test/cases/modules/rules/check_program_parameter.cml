@@ -9,9 +9,8 @@
  * of the function `over` names: `sum_swap` has no instance at `Vec` unless the function names it,
  * which is what the two reports below differ in.
  */
-import tensor
 import { check, check_text } from rewrite
-
+import tensor
 
 type Vec = f32[3]
 
@@ -20,11 +19,11 @@ rule sum_swap::<T>(a: T, b: T) { a + b => b + a }
 
 // The program's own type: no operator group registered `Vec`, so only a program that has it can
 // add it to a law's candidate set.
-func touch(x: Vec): Vec {
+func touch(x: Vec) => Vec {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     // `over` left out: the law is checked at the types the registered operator groups give.
     println(check_text([add_zero, sum_swap]->check<100, 1>))
     // `over` given: the program's own types join the candidate set.

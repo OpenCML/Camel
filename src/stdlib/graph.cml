@@ -49,19 +49,19 @@ export type Value = Node
 
 /// The graph of a function value: its body.
 /// @example graph_of((x: int): int => x + 1)
-export func graph_of::<F>(f: F): Graph when is_function::<F>()
+export func graph_of::<F>(f: F) => Graph when is_function::<F>()
 
 /// The graph of a function value and every graph it calls, directly or not, in the order of
 /// their ids; each graph once.
 /// @example len(graphs_of((x: int): int => x + 1))
-export func graphs_of::<F>(f: F): Graph[] when is_function::<F>()
+export func graphs_of::<F>(f: F) => Graph[] when is_function::<F>()
 
 /// The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
 /// needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
 /// that would pick a function by its name takes the function value instead.
 /// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example name(graph_of((x: int): int => x + 1))
-export func name(g: Graph): string spelling
+export func name(g: Graph) => string spelling
 
 /// The nodes of the graph in canonical order: the order the graph's own structure decides, from the
 /// exit and the regions' outer accesses along the data and sync edges in port order, with what the
@@ -71,7 +71,7 @@ export func name(g: Graph): string spelling
 /// it and get one answer for both. The places of removed nodes are skipped; a node nothing reaches
 /// from the exit (a pure computation nobody uses) comes after the ones that are reached.
 /// @example nodes(graph_of((x: int): int => x + 1))
-export func nodes(g: Graph): Node[]
+export func nodes(g: Graph) => Node[]
 
 /// The node the graph hands its value out of: the node a graph returns, the port of a function that
 /// returns a parameter, or the `JOIN` a body's branches end at. It is the one anchor an edit that
@@ -80,61 +80,61 @@ export func nodes(g: Graph): Node[]
 /// that hands no value out (a function of `void`), which has no node to put anything in the place
 /// of.
 /// @example exit_of(graph_of((x: int): int => x + 1))
-export func exit_of(g: Graph): Node?
+export func exit_of(g: Graph) => Node?
 
 // ---- reading nodes ----
 
 /// The nodes whose values `n` takes as ordinary inputs, in order.
 /// @example-fragment n is a node of the surrounding pass
 /// @example inputs(n)
-export func inputs(n: Node): Node[]
+export func inputs(n: Node) => Node[]
 
 /// The nodes whose values `n` takes as with inputs.
 /// @example-fragment n is a node of the surrounding pass
 /// @example with_inputs(n)
-export func with_inputs(n: Node): Node[]
+export func with_inputs(n: Node) => Node[]
 
 /// The nodes that must run before `n` when both run, because a sync block puts them in one chain
 /// (the sync edges of design principles 3.1).
 /// @example-fragment n is a node of the surrounding pass
 /// @example sync_inputs(n)
-export func sync_inputs(n: Node): Node[]
+export func sync_inputs(n: Node) => Node[]
 
 /// The nodes that must run before `n` when both run, because they use the same resource (the
 /// order edges of design principles 3.1); an order edge never makes a node run.
 /// @example-fragment n is a node of the surrounding pass
 /// @example order_inputs(n)
-export func order_inputs(n: Node): Node[]
+export func order_inputs(n: Node) => Node[]
 
 /// The nodes that read `n` as an input of any kind, once each, in NodeId order.
 /// @example-fragment n is a node of the surrounding pass
 /// @example users(n)
-export func users(n: Node): Node[]
+export func users(n: Node) => Node[]
 
 /// The nodes that read the value of `n` (ordinary or with input), once each.
 /// @example-fragment n is a node of the surrounding pass
 /// @example len(value_users(n)) == 0
-export func value_users(n: Node): Node[]
+export func value_users(n: Node) => Node[]
 
 /// The kind of the node.
 /// @example-fragment n is a node of the surrounding pass
 /// @example kind(n) == NodeKind::Oper
-export func kind(n: Node): NodeKind
+export func kind(n: Node) => NodeKind
 
 /// The operator of an operation node, null for any other node.
 /// @example-fragment n is a node of the surrounding pass
 /// @example op(n)
-export func op(n: Node): Op?
+export func op(n: Node) => Op?
 
 /// The URI of the operator, such as `:op/add_l`.
 /// @example-fragment `o` is an operator taken from a node of the surrounding pass
 /// @example op_name(o)
-export func op_name(o: Op): string
+export func op_name(o: Op) => string
 
 /// Whether the node is an operation whose operator is declared pure.
 /// @example-fragment n is a node of the surrounding pass
 /// @example is_pure(n)
-export func is_pure(n: Node): bool
+export func is_pure(n: Node) => bool
 
 /// Whether a pass may compute the node's value itself and treat it as a value: its operator is
 /// pure *and* foldable, so folding it, merging it with an identical call or dropping it when
@@ -144,7 +144,7 @@ export func is_pure(n: Node): bool
 /// the call may also be *moved* or dropped asks `may_fault` as well.
 /// @example-fragment n is a node of the surrounding pass
 /// @example may_be_recomputed(n)
-export func may_be_recomputed(n: Node): bool
+export func may_be_recomputed(n: Node) => bool
 
 /// Whether running the node can raise a fault where the program writes it (a division by zero, an
 /// index out of range, a conversion whose value does not fit). It is the operator table's own fact
@@ -154,7 +154,7 @@ export func may_be_recomputed(n: Node): bool
 /// pass may drop, move or merge away, whatever the purity of its operator.
 /// @example-fragment n is a node of the surrounding pass
 /// @example may_fault(n)
-export func may_fault(n: Node): bool
+export func may_fault(n: Node) => bool
 
 /// Whether a pass may arrange the node anywhere: drop it, move it, merge it with an identical
 /// call, or leave it with no order edge after an inline. The node must be pure *and* unable to
@@ -166,25 +166,25 @@ export func may_fault(n: Node): bool
 /// writing `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`: the two writings drift apart.
 /// @example-fragment n is a node of the surrounding pass
 /// @example may_be_rearranged(n)
-export func may_be_rearranged(n: Node): bool
+export func may_be_rearranged(n: Node) => bool
 
 /// Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a
 /// transaction does not replace or erase it.
 /// @example-fragment n is a node of the surrounding pass
 /// @example is_anchor(n)
-export func is_anchor(n: Node): bool
+export func is_anchor(n: Node) => bool
 
 /// Whether the value of the node may be written in place: it is passed to a `var` parameter or to
 /// an operator that changes its operand, directly or through gates. A rewrite must not treat such
 /// a node as one value.
 /// @example-fragment n is a node of the surrounding pass
 /// @example is_written_slot(n)
-export func is_written_slot(n: Node): bool
+export func is_written_slot(n: Node) => bool
 
 /// Whether the node is a constant of the graph.
 /// @example-fragment n is a node of the surrounding pass
 /// @example is_constant(n)
-export func is_constant(n: Node): bool
+export func is_constant(n: Node) => bool
 
 /// The bytes the node's constant value occupies: the measure `std::opt` and `std::cxx::fold` clamp with
 /// `constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
@@ -192,16 +192,16 @@ export func is_constant(n: Node): bool
 /// node that is no constant costs 0.
 /// @example-fragment n is a node of the surrounding pass
 /// @example constant_bytes(n)
-export func constant_bytes(n: Node): int
+export func constant_bytes(n: Node) => int
 /// The type of the node's value, null when it has none.
 /// @example-fragment n is a node of the surrounding pass
 /// @example type_of(n)
-export func type_of(n: Node): TypeRef?
+export func type_of(n: Node) => TypeRef?
 
 /// The type as a program writes it.
 /// @example-fragment t is the type of a node of the surrounding pass
 /// @example type_name(t)    // 'int'
-export func type_name(t: TypeRef): string
+export func type_name(t: TypeRef) => string
 
 /// The graph a call or function node names, null for any other node, and null for a call whose
 /// function value names no graph -- a parameter of function type, a closure being assembled: which
@@ -211,12 +211,12 @@ export func type_name(t: TypeRef): string
 /// pass reaches the body it is there to rewrite without naming a graph (design principles 9.5).
 /// @example-fragment n is a node of the surrounding pass
 /// @example callee(n)
-export func callee(n: Node): Graph?
+export func callee(n: Node) => Graph?
 
 /// The attributes of the node as text (empty when there are none).
 /// @example-fragment n is a node of the surrounding pass
 /// @example tags(n)
-export func tags(n: Node): string
+export func tags(n: Node) => string
 
 // ---- the tags a declaration writes ----
 // A tag whose argument is a function (`#jvp(rule)`, `#transpose(rule)`, `#vjp(rule)`) is a fact
@@ -228,25 +228,25 @@ export func tags(n: Node): string
 /// for a declaration that writes none. The declaration's facts travel with the graph, so a pass
 /// reads them without the module that declares the function.
 /// @example declaration_tags(graph_of((x: int): int => x + 1))
-export func declaration_tags(g: Graph): Tag[]
+export func declaration_tags(g: Graph) => Tag[]
 
 /// The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
 /// not declared.
 /// @example-fragment t is a tag read from a declaration
 /// @example tag_name(t)    // 'jvp'
-export func tag_name(t: Tag): string
+export func tag_name(t: Tag) => string
 
 /// The graphs the tag's arguments name, in the order written: `#jvp(mul_jvp)` names one.
 /// @example-fragment t is a tag read from a declaration
 /// @example tag_graphs(t)
-export func tag_graphs(t: Tag): Graph[]
+export func tag_graphs(t: Tag) => Graph[]
 
 /// The rule the declaration of `g` writes for the transformation `name`: `jvp` is forward mode,
 /// `transpose` the rule of a linear function, and `vjp` the rule that gives the pullback directly.
 /// Null when the declaration writes none, when it writes that tag twice, and when what the tag
 /// names is not a function. The name is the one the program writes, or its qualified spelling.
 /// @example rule_of(graph_of((x: int): int => x + 1), 'vjp')
-export func rule_of(g: Graph, name: string): Graph?
+export func rule_of(g: Graph, name: string) => Graph?
 
 /// The source origin id of the node, 0 when unknown. This is *spelling*: it is where the node was
 /// written, so reading it needs a declaration that writes `spelling` in its clause (design
@@ -254,13 +254,13 @@ export func rule_of(g: Graph, name: string): Graph?
 /// @example-fragment n is a node of the surrounding pass
 /// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example origin(n)
-export func origin(n: Node): int spelling
+export func origin(n: Node) => int spelling
 
 /// The value of a constant node as the type T (a number, a bool or a string), null for a node
 /// that is no constant of that type. T is written (`constant::<int>(n)`).
 /// @example-fragment n is a node of the surrounding pass
 /// @example constant::<int>(n)
-export func constant::<T>(n: Node): T? when is_ordered::<T>()
+export func constant::<T>(n: Node) => T? when is_ordered::<T>()
 
 // ---- regions ----
 
@@ -268,18 +268,18 @@ export func constant::<T>(n: Node): T? when is_ordered::<T>()
 /// graph whose region table is empty.
 /// @example-fragment n is a node of the surrounding pass
 /// @example region_of(n)
-export func region_of(n: Node): Region
+export func region_of(n: Node) => Region
 
 /// The kind of the region: `Root` (the function body, region 0), `Arm`, `LoopCond`, `LoopBody`,
 /// `Inline`, `Block` or `Dead`.
 /// @example-fragment r is a region of the surrounding pass
 /// @example region_kind(r) == RegionKind::Inline
-export func region_kind(r: Region): RegionKind
+export func region_kind(r: Region) => RegionKind
 
 /// The region the region is in; null for the body (region 0).
 /// @example-fragment r is a region of the surrounding pass
 /// @example region_parent(r)
-export func region_parent(r: Region): Region?
+export func region_parent(r: Region) => Region?
 
 /// The node on one line: its id, kind, operator and type. The text is *spelling*: it shows the
 /// number the node was created with, so reading it needs a declaration that writes `spelling` in
@@ -287,7 +287,7 @@ export func region_parent(r: Region): Region?
 /// @example-fragment n is a node of the surrounding pass
 /// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example show(n)    // '%2 Oper :op/mul_l : int'
-export func show(n: Node): string spelling
+export func show(n: Node) => string spelling
 
 /// The canonical number of the node: its position in the order `nodes` gives, which the graph's own
 /// structure decides (design principles 9.5). Two programs that differ only in what the source
@@ -301,7 +301,7 @@ export func show(n: Node): string spelling
 /// @example-fragment n is a node of the surrounding pass
 /// @example id(n)
 #op('graph:id')
-export func id(h: Node): int
+export func id(h: Node) => int
 
 /// The number a graph, a node or an operator was created with inside its program: the GraphId, the
 /// NodeId or the OperId. It is stable for the program, and it is *spelling*: it says the order the
@@ -310,48 +310,48 @@ export func id(h: Node): int
 /// @example-fragment `n` is a graph, a node or an operator of the surrounding pass
 /// @example creation_id(n)
 #op('graph:creation_id')
-export func creation_id(h: Graph): int spelling
+export func creation_id(h: Graph) => int spelling
 #op('graph:creation_id')
-export func creation_id(h: Node): int spelling
+export func creation_id(h: Node) => int spelling
 #op('graph:creation_id')
-export func creation_id(h: Op): int spelling
+export func creation_id(h: Op) => int spelling
 
 // ---- facts ----
 
 /// What running the graph once does besides computing its value: `external`, `writes_variables`,
 /// `may_fault`, `may_not_terminate`.
 /// @example effects(graph_of((x: int): int => x + 1)).external
-export func effects(g: Graph): Effects
+export func effects(g: Graph) => Effects
 
 /// The shape of the node's value as text, null when its value is no array of known element type.
 /// @example-fragment n is a node of the surrounding pass
 /// @example shape_text(n)    // 'f32 [2, 3]'
-export func shape_text(n: Node): string?
+export func shape_text(n: Node) => string?
 
 /// The numeric permissions the program granted the node, as a bit set (0 for none).
 /// @example-fragment n is a node of the surrounding pass
 /// @example permissions(n)
-export func permissions(n: Node): int
+export func permissions(n: Node) => int
 
 // ---- transactions ----
 
 /// Opens a transaction on a function: a private workspace in which its graphs are edited.
 /// Nothing changes until `commit`.
 /// @example let t = open((x: int): int => x + 1)
-export func open::<F>(f: F): Txn<F> when is_function::<F>()
+export func open::<F>(f: F) => Txn<F> when is_function::<F>()
 
 /// Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
 /// ordered stays ordered.
 /// @fails fault `InvalidArgument` when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example replace(t, n, inputs(n)[0])
-export func replace::<F>(t: Txn<F>, old: Node, new: Node): void uses var t
+export func replace::<F>(t: Txn<F>, old: Node, new: Node) => void uses var t
 
 /// Removes a node whose value nobody reads.
 /// @fails fault `InvalidArgument` when the value is read, when the node anchors its graph, or when the transaction is over
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example erase(t, n)
-export func erase::<F>(t: Txn<F>, n: Node): void uses var t
+export func erase::<F>(t: Txn<F>, n: Node) => void uses var t
 
 /// Evaluates the pure operator of the node over its constant operands and gives the node holding
 /// the result, null when there is no value to compute (an operand is no constant of the graph, the
@@ -360,7 +360,7 @@ export func erase::<F>(t: Txn<F>, n: Node): void uses var t
 /// is left as written and warned about, as the C++ fold does.
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example eval(t, n)
-export func eval::<F>(t: Txn<F>, n: Node): Node? uses var t
+export func eval::<F>(t: Txn<F>, n: Node) => Node? uses var t
 
 /// Adds an ordering to the graph: when both nodes run, `before` runs before `after`. An order edge
 /// only orders and never makes a node run (the order edges of design principles 3.1), so a
@@ -372,7 +372,7 @@ export func eval::<F>(t: Txn<F>, n: Node): Node? uses var t
 /// @fails fault `InvalidArgument` when the two nodes are not of one graph, when either is gone, or when the edge would form a cycle
 /// @example-fragment t is an open transaction and a, b are nodes of its graph
 /// @example order(t, a, b)
-export func order::<F>(t: Txn<F>, before: Node, after: Node): void uses var t
+export func order::<F>(t: Txn<F>, before: Node, after: Node) => void uses var t
 
 /// Splices the body of the function value `fn` into the region `at` is in and gives the node that
 /// holds the body's value. `at` decides the place as well: a statement of its block's chain (a
@@ -384,7 +384,9 @@ export func order::<F>(t: Txn<F>, before: Node, after: Node): void uses var t
 /// @fails fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, or when the transaction is over
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example inline(t, n, () => 0)
-export func inline::<F, G>(t: Txn<F>, at: Node, fn: G): Node uses var t when is_function::<G>()
+export func inline::<F, G>(t: Txn<F>, at: Node, fn: G) => Node
+    uses var t
+    when is_function::<G>()
 
 /// Collects a group of the graph's nodes into a function of its own and puts a call of it where the
 /// value the group handed on was read: `inline`'s reverse (design 7 and 15.3). The nodes the group
@@ -400,41 +402,43 @@ export func inline::<F, G>(t: Txn<F>, at: Node, fn: G): Node uses var t when is_
 /// @fails fault `InvalidArgument` when the group is empty, when its nodes are not all of one graph the transaction holds, when one of them anchors its graph, when one of them is no pure operation, when the group hands on no value or more than one, or when the transaction is over
 /// @example-fragment t is an open transaction and ns is a group of its graph's nodes
 /// @example outline(t, ns)
-export func outline::<F>(t: Txn<F>, ns: Node[]): Node uses var t
+export func outline::<F>(t: Txn<F>, ns: Node[]) => Node uses var t
 
 /// Adds a value the transaction creates to the graph's static values and gives the node that
 /// holds it. The value is a number, a bool or a string; a string is copied into the permanent
 /// space because a value a transaction creates may be live at a safepoint where its draft is not
 /// traced.
 /// @example add_constant(open((x: int): int => x + 1), graph_of((x: int): int => x + 1), 7)
-export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node uses var t when is_ordered::<T>()
+export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T) => Node
+    uses var t
+    when is_ordered::<T>()
 
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The transaction is over.
 /// @fails error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already
 /// @example commit(open((x: int): int => x + 1))
-export func commit::<F>(t: Txn<F>): F! uses var t
+export func commit::<F>(t: Txn<F>) => F! uses var t
 
 /// Drops the transaction.
 /// @example abort(open((x: int): int => x + 1))
-export func abort::<F>(t: Txn<F>): void uses var t
+export func abort::<F>(t: Txn<F>) => void uses var t
 
 // ---- comparison ----
 // `==` of the handle types (design principles 4.3): a library defines the operators of its own
 // types. Two handles are equal when they name the same thing of the same function.
 
 #op('graph:eq')
-export func operator ==(a: Graph, b: Graph): bool
+export func operator ==(a: Graph, b: Graph) => bool
 #op('graph:eq')
-export func operator ==(a: Node, b: Node): bool
+export func operator ==(a: Node, b: Node) => bool
 #op('graph:eq')
-export func operator ==(a: Region, b: Region): bool
+export func operator ==(a: Region, b: Region) => bool
 #op('graph:eq')
-export func operator ==(a: TypeRef, b: TypeRef): bool
+export func operator ==(a: TypeRef, b: TypeRef) => bool
 #op('graph:eq')
-export func operator ==(a: Op, b: Op): bool
+export func operator ==(a: Op, b: Op) => bool
 #op('graph:eq')
-export func operator ==(a: Tag, b: Tag): bool
+export func operator ==(a: Tag, b: Tag) => bool
 
 /// The self-test of two checks that answer "a node the program has": makes a handle that claims a
 /// node the program does not have and reports whether the claim was refused where the handle was
@@ -443,7 +447,7 @@ export func operator ==(a: Tag, b: Tag): bool
 /// allowed a node that is there` (the control), `HANDLE_PROBE refused: ...` for the node that is
 /// not, then `REGION_PROBE body region of node 0: 0` and, instead of a third answer, the abort the
 /// region guard raises -- 0 is the body, so a node that is not there has no region to be given.
-export func probe_handle::<F>(f: F): F! when is_function::<F>()
+export func probe_handle::<F>(f: F) => F! when is_function::<F>()
 
 /// Explicitly checks standard ambient resource/access-mode support and matched effect ordering
 /// between two functions, plus the normal port, entry/exit and effect-credential admission checks.
@@ -453,4 +457,4 @@ export func probe_handle::<F>(f: F): F! when is_function::<F>()
 /// execution. Ordinary invocation and CLI wrappers use this same checking stage.
 /// @fails error value `PassBoundary` when the selected boundary check refuses
 /// @example check_pass_boundary
-export func check_pass_boundary::<F>(before: F, after: F): F! when is_function::<F>()
+export func check_pass_boundary::<F>(before: F, after: F) => F! when is_function::<F>()

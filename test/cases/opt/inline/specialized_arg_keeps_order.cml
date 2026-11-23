@@ -4,17 +4,17 @@
 // then no longer reads it. The second call must still be ordered after the GATE: otherwise the effects
 // before it no longer reach the exit and never run.
 // Expected output (one value per line): 1, 2, 40.
-func show(x: int): int sync {
+func show(x: int) => int sync {
     println(x)
     return 0
 }
 
-func add_show(a: int, b: int): int sync {
+func add_show(a: int, b: int) => int sync {
     println(a + b)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     let shown = show(2)
     return add_show(40, shown)

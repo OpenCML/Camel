@@ -4,7 +4,7 @@
 /// error from inside a file the run was never asked to read.
 import { value } from thing
 
-func main(): int sync {
+func main() => int sync {
     println(value)
     return 0
 }

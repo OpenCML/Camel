@@ -3,11 +3,11 @@
  * program, so no boundary turns it into an error value.
  */
 
-func unwrap_it(slot: int?): int {
+func unwrap_it(slot: int?) => int {
     return __unwrap__(slot)
 }
 
-func main(): int sync {
+func main() => int sync {
     let slot: int? = null
     println(attempt(unwrap_it)(slot) !! -12345)
     return 0

@@ -11,35 +11,35 @@
 import { ones, zeros, shape, numel, reshape, argmin, tanh, sum } from tensor
 import { is_numeric } from types
 
-func forward(x: f32[...]): f32[...] {
+func forward(x: f32[...]) => f32[...] {
     let s = shape(x)
     return zeros::<f32>([s[0]]) + 1.0
 }
 
 // The three helpers return the same string the value itself prints as, so the assertion side can
 // compare two spellings of one value without pinning the text of `println`.
-func probe::<T>(label: string, v: T[...]): string when is_numeric::<T>() sync {
+func probe::<T>(label: string, v: T[...]) => string when is_numeric::<T>() sync {
     return `${label} shape=${shape(v)} numel=${numel(v)} name=${v}`
 }
 
-func by_value(label: string, xs: float[][]): string sync {
+func by_value(label: string, xs: float[][]) => string sync {
     return `${label} ${xs}`
 }
 
-func by_declaration(label: string, xs: f32[][]): string sync {
+func by_declaration(label: string, xs: f32[][]) => string sync {
     return `${label} ${xs}`
 }
 
-func main(): int sync {
+func main() => int sync {
     // A value the declaration does not type: an array parameter whose element type is unstated.
     let rows = reshape<[2, 3]>([2.0, 0.0, 0.0, 2.0, 0.0, 0.0])
     let a = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     let b = reshape<[3, 4]>([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0])
-    println(probe("A", argmin<0, true>(rows)))
-    println(probe("B", tanh(a @ b)))
-    println(probe("C", reshape<[2, 1]>([3.0, 3.0])))
+    println(probe('A', argmin<0, true>(rows)))
+    println(probe('B', tanh(a @ b)))
+    println(probe('C', reshape<[2, 1]>([3.0, 3.0])))
     println(`D sum=${sum(forward(ones::<f32>([2, 3])))}`)
-
+    
     // Controls: a declaration that names the element type, and the rank-1 and rank-0 forms.
     let flat: float[] = [1.0, 2.0]
     println(`E flat ${flat}`)
@@ -47,14 +47,14 @@ func main(): int sync {
     println(`E2 one ${one}`)
     let empty: float[] = []
     println(`E3 empty ${empty}`)
-
+    
     // A rank-2 array: nested, and complete, whichever way the declaration is written.
     let value: float[][] = [[1.0, 2.0], [3.0, 4.0]]
-    println(by_value("F", value))
+    println(by_value('F', value))
     let rows3: float[][] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
-    println(by_value("F2", rows3))
+    println(by_value('F2', rows3))
     let f32rows: f32[][] = [[1.0, 2.0], [3.0, 4.0]]
-    println(by_declaration("F3", f32rows))
+    println(by_declaration('F3', f32rows))
     let deep: float[][][] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
     println(`F4 deep ${deep}`)
     return 0

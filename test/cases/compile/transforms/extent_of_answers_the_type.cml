@@ -12,7 +12,7 @@
 // which is a compiler's own sentence about a program that is right. The list is a constant of the
 // graph now, and the run reads it.
 
-func main(): int sync {
+func main() => int sync {
     let shape = extent_of::<float[2, 3]>()
     println(shape)
     println(shape[1])

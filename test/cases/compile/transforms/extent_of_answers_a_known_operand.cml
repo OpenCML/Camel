@@ -26,24 +26,24 @@
 
 import { shape } from tensor
 
-func from_type(): int[] {
+func from_type() => int[] {
     return extent_of::<float[2, 3]>()
 }
 
-func shape_of(t: float[2, 3]): int[] {
+func shape_of(t: float[2, 3]) => int[] {
     return extent_of::<float[2, 3]>()
 }
 
-func takes_it(f: () => int[]): int[] {
+func takes_it(f: () => int[]) => int[] {
     return f()
 }
 
-func typed_binding(): int[] {
+func typed_binding() => int[] {
     let g: () => int[] = extent_of::<float[2, 3]>
     return g()
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
     println(from_type())
     println(shape_of(xs))

@@ -13,28 +13,28 @@
  * `gather_discrete_index_zero` stays at 6.0 beside it.
  */
 
-import { reshape, sum, take } from tensor
 import { with_grad } from autodiff
+import { reshape, sum, take } from tensor
 
 type M = {
     w: f64[...],
-    labels: i64[...],
+    labels: i64[...]
 }
 
 with <m: M>
-func total(): float {
+func total() => float {
     return float(sum(m.w))
 }
 
 with <m: M>
-func gather_loss(): float {
+func gather_loss() => float {
     return float(sum(m.w[m.labels]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let model = {
         w: reshape<[2, 3]>([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f64[]),
-        labels: int([1, 0]),
+        labels: int([1, 0])
     }
     let (v1, g1) = with_grad(total)<model>()
     'total={:.1f} grad_sum={:.1f}'->format<v1, sum(g1.w)>->println

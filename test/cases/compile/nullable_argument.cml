@@ -12,44 +12,44 @@
  * branch), and `var` alone or a later leaf argument hid it.
  */
 
-func takes_str(a: string?, b: string): string sync {
-    println(a ?? '<null>', b);
-    return b;
+func takes_str(a: string?, b: string) => string sync {
+    println(a ?? '<null>', b)
+    return b
 }
 
-func takes_bool(a: bool?, b: bool): bool sync {
-    println(a ?? false, b);
-    return b;
+func takes_bool(a: bool?, b: bool) => bool sync {
+    println(a ?? false, b)
+    return b
 }
 
-func takes_int(a: int?, b: int): int sync {
-    println(a ?? -1, b);
-    return b;
+func takes_int(a: int?, b: int) => int sync {
+    println(a ?? -1, b)
+    return b
 }
 
-func bump(var c: int): int sync {
-    c = c + 1;
-    return c;
+func bump(var c: int) => int sync {
+    c = c + 1
+    return c
 }
 
-func two(): string sync {
-    return 'w';
+func two() => string sync {
+    return 'w'
 }
 
-func main(): int sync {
+func main() => int sync {
     // The `var` read stands before an argument that is a call, a branch and an operator.
-    var s = 'v';
-    takes_str(s, two());
-    takes_str(s, if true then 'x' else 'y');
-    var b = false;
-    takes_bool(b, 3 > 0);
+    var s = 'v'
+    takes_str(s, two())
+    takes_str(s, if true then 'x' else 'y')
+    var b = false
+    takes_bool(b, 3 > 0)
     // The early read is still taken before the later argument writes the variable: `1` is `n`
     // as the first argument was written, and `2` is what `bump` left in it.
-    var n = 1;
-    takes_int(n, bump(n));
-    println('n after', n);
+    var n = 1
+    takes_int(n, bump(n))
+    println('n after', n)
     // A variable whose declared type already is `T?` passes as it is.
-    var t: string? = 'q';
-    takes_str(t, 'lit');
-    return 0;
+    var t: string? = 'q'
+    takes_str(t, 'lit')
+    return 0
 }

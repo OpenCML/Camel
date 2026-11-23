@@ -7,11 +7,13 @@
 import { grad } from vjp
 
 with <x: float>
-func outer(): float {
-    return x * grad(func <y: float>() { x + y })<1.0>()
+func outer() => float {
+    return x * grad(func <y: float>() {
+        x + y
+    })<1.0>()
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(outer)<1.0>()
     'confusion x=1.0 d={}'->format<d>->println
     return 0

@@ -13,7 +13,7 @@
  *
  * Run: camel test/cases/compile/var/loop_two_states.cml std::nvm
  */
-func main(): int sync {
+func main() => int sync {
     var a = 0
     var b = 1
     let _ = loop i = 0 while i < 3 do {

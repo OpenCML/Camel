@@ -5,6 +5,6 @@
 /// fails at `graph::answer`, and this file used in place of the standard library fails at
 /// `Program` inside rules.cml.
 
-export func answer(): int {
+export func answer() => int {
     return 41
 }

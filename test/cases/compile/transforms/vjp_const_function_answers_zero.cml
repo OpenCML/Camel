@@ -28,33 +28,33 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func const_fixed(x: float[3]): float {
+func const_fixed(x: float[3]) => float {
     let _ = x
     return 1.0
 }
 
-func const_open(x: float[...]): float {
+func const_open(x: float[...]) => float {
     let _ = x
     return 1.0
 }
 
-func const_scalar(x: float): float {
+func const_scalar(x: float) => float {
     let _ = x
     return 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let fixed = [2.0, 3.0, 4.0] as float[3]
     let (fixedValue, fixedPull) = vjp(const_fixed)(fixed)
     println('fixed value=', fixedValue)
     println('fixed pullback(1.0)=', fixedPull(1.0))
     println('fixed pullback(2.0)=', fixedPull(2.0))
-
+    
     let open = [2.0, 3.0, 4.0] as float[...]
     let (openValue, openPull) = vjp(const_open)(open)
     println('open value=', openValue)
     println('open pullback(1.0)=', openPull(1.0))
-
+    
     let (scalarValue, scalarPull) = vjp(const_scalar)(2.0)
     println('scalar value=', scalarValue)
     println('scalar pullback(1.0)=', scalarPull(1.0))

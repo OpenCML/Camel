@@ -1,14 +1,14 @@
 // `!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^` and
 // `->`, tighter than the other binary operators. `!x->f` passes on first, then negates.
-func always(b: bool): bool {
+func always(b: bool) => bool {
     return true
 }
 
-func inc(x: int): int {
+func inc(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = true
     let n = 2
     println(!t->always, (!t)->always, !(t->always))

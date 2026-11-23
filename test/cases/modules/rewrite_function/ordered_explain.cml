@@ -7,11 +7,11 @@ import { Rule, run, why_not } from rewrite
 
 rule nested(a: int, b: int) { (a + 0) * b => a * b }
 rule generic_nested::<T>(a: T, b: T) { (a + 0) * b => a * b }
-func target(x: int, y: int): int {
+func target(x: int, y: int) => int {
     return (0 + x) * y
 }
 with <law: Rule, ordered: bool>
-func check(): string {
+func check() => string {
     return match target->run<[law], rounds: 0, explain: true, ordered: ordered> {
         case error e => e.message
         case r => {
@@ -20,7 +20,7 @@ func check(): string {
         }
     }
 }
-func main(): int! sync {
+func main() => int! sync {
     println('concrete ordered', check<nested, true>()->contains<'where the pattern writes a constant'>)
     println('generic ordered', check<generic_nested, true>()->contains<'where the pattern writes a constant'>)
     println('concrete default', check<nested, false>()->contains<'the left side matches and the condition holds'>)

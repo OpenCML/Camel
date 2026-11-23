@@ -25,11 +25,11 @@
 //   camel showcase/i2-diffusion-step/step.cml --arg seed=7 --arg steps=3
 //   camel showcase/i2-diffusion-step/step.cml --arg seed=7 --arg steps=3 std::prl
 
-import { numel, ones, relu, reshape, sum } from tensor
-import { fold, key, normal } from random
-import { sqrt } from math
 import { with_grad } from autodiff
+import { sqrt } from math
 import { adam, adam_state } from nn
+import { fold, key, normal } from random
+import { numel, ones, relu, reshape, sum } from tensor
 
 // The denoiser is a two-layer network over a flattened 4x4 image: 16 -> 8 -> 16.  It is a
 // parameter *tree* (a struct of tensors), so `with_grad` hands back a gradient of the same type
@@ -44,13 +44,15 @@ type Denoiser = {
 // == schedule ==
 // alpha_bar of the four timesteps: the running product of (1 - beta) with
 // beta = 0.02, 0.05, 0.10, 0.20.
-func alpha_bar(t: int): float {
+func alpha_bar(t: int) => float {
     let i = t % 4
-    return if i == 0 then 0.98 else if i == 1 then 0.931 else if i == 2 then 0.8379 else 0.67032
+    return if i == 0 then 0.98
+    else if i == 1 then 0.931
+    else if i == 2 then 0.8379 else 0.67032
 }
 
 // A timestep of the forward process: how much of the image survives, and how much noise is added.
-func weights(t: int): (float, float) {
+func weights(t: int) => (float, float) {
     let bar = alpha_bar(t)
     return (sqrt(bar), sqrt(1.0 - bar))
 }
@@ -58,7 +60,7 @@ func weights(t: int): (float, float) {
 // == model ==
 // A 4x4 image (16 values, row-major) goes in, a 4x4 noise map of the same shape comes out.
 with <m: Denoiser>
-func predicted_noise(x: float[...]): float[...] {
+func predicted_noise(x: float[...]) => float[...] {
     return relu(x @ m.w1 + m.b1) @ m.w2 + m.b2
 }
 
@@ -67,19 +69,31 @@ func predicted_noise(x: float[...]): float[...] {
 // and the noise that was actually added.  No 1/sigma weighting and no variational lower bound --
 // that is what "simplified" means, and it is the loss a diffusion trainer reports.
 with <m: Denoiser>
-func loss(x: float[...], target: float[...]): float {
+func loss(x: float[...], target: float[...]) => float {
     let difference = predicted_noise<m>(x) - target
     return float(sum(difference * difference)) / float(numel(difference))
 }
 
 // == data ==
 // One 4x4 image, written out so a reader can see the pixels: a diagonal that fades.
-func image(): float[...] {
+func image() => float[...] {
     let pixels = [
-        0.9, 0.1, 0.1, 0.1,
-        0.1, 0.8, 0.1, 0.1,
-        0.1, 0.1, 0.6, 0.1,
-        0.1, 0.1, 0.1, 0.4
+        0.9,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.8,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.6,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.4
     ] as float[]
     return reshape<[16]>(pixels)
 }
@@ -87,20 +101,20 @@ func image(): float[...] {
 // The batch is the same image four times: a diffusion step trains on images, and four copies make
 // the mean over a batch a mean over more than one sample while keeping the picture on screen.
 // (The multiplication broadcasts a [4, 1] column of ones against the [1, 16] row of pixels.)
-func batch(): float[...] {
+func batch() => float[...] {
     return ones::<float>([4, 1]) * reshape<[1, 16]>(image())
 }
 
 // == parameters ==
 // Initial weights from the seeded generator, scaled so the first loss is a number a reader can
 // follow rather than 1.0 exactly.  The biases start at zero, as they do in a real trainer.
-func initial(seed: int): Denoiser {
+func initial(seed: int) => Denoiser {
     let k = key(seed)
     return {
         w1: normal::<float><shape: [16, 8]>(fold(k, 1)) * 0.3,
-        b1: reshape<[8]>([0.0 for i in 0..8] as float[]),
+        b1: reshape<[8]>([0.0 for i in 0 .. 8] as float[]),
         w2: normal::<float><shape: [8, 16]>(fold(k, 2)) * 0.3,
-        b2: reshape<[16]>([0.0 for i in 0..16] as float[])
+        b2: reshape<[16]>([0.0 for i in 0 .. 16] as float[])
     }
 }
 
@@ -112,28 +126,26 @@ func initial(seed: int): Denoiser {
 // Every step trains on the *same* timestep and the same noise (both follow from `seed` and `t`),
 // which is what makes the three lines comparable: a curve over steps that each drew their own
 // noise would mix the noise level into the reading.  `--arg t=0..3` walks the schedule.
-func main(seed: int = 7, steps: int = 3, lr: float = 0.02, t: int = 1): int sync {
+func main(seed: int = 7, steps: int = 3, lr: float = 0.02, t: int = 1) => int sync {
     let x0 = batch()
     let model = initial(seed)
     let loss_with_grad = with_grad(loss)
-
+    
     // The forward process of this run: one timestep, one noise, fixed for every step.
     let (keep, add) = weights(t)
     let eps = normal::<float><shape: [4, 16]>(fold(key(seed), 10 + t % 4))
     let x_t = x0 * keep + eps * add
-
+    
     `i2 config seed=${seed} steps=${steps} lr=${lr:.2f} t=${t % 4} bar=${alpha_bar(t):.5f} image=4x4 batch=4`->println
-    let (trained, optimizer, final_step) = loop m = model, opt = adam_state(model), step = 0
-        while step < steps
-        do sync {
-            let (value, gradient) = loss_with_grad<m>(x_t, eps)
-            `i2 step=${step} loss=${value:.6f}`->println
-            let next = adam(m, gradient, opt, lr)
-            return (next.0, next.1, step + 1)
-        }
+    let (trained, optimizer, final_step) = loop m = model, opt = adam_state(model), step = 0 while step < steps do sync {
+        let (value, gradient) = loss_with_grad<m>(x_t, eps)
+        `i2 step=${step} loss=${value:.6f}`->println
+        let next = adam(m, gradient, opt, lr)
+        return (next.0, next.1, step + 1)
+    }
     let _ = optimizer
     let _ = final_step
-
+    
     // The same objective on the trained parameters: what a reader compares with the last line.
     let after = loss<trained>(x_t, eps)
     `i2 trained t=${t % 4} loss=${after:.6f}`->println

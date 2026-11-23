@@ -2,15 +2,15 @@
  * Verifies repeated use of the same SSA value across tuples, arrays, and calls does not alias or drop inputs during scheduling.
  */
 
-func pair(x: int): (int, int) {
+func pair(x: int) => (int, int) {
     return (x, x)
 }
 
-func double(x: int): int {
+func double(x: int) => int {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = 7
     let (a, b) = pair(x)
     let arr = [x, x]
@@ -18,4 +18,3 @@ func main(): int sync {
     'duplicate_inputs a={} b={} arr0={} arr1={} y={}'->format<a, b, arr[0], arr[1], y>->println
     return 0
 }
-

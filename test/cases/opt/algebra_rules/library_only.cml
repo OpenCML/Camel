@@ -20,115 +20,115 @@
 //     bit for bit (`mul_one`, `float_add_neg_zero`, `sub_zero`, `div_one`,
 //     `neg_neg`) beside the ones that need a permission (`float_combine`, `float_fold`).
 
-func mul_zero(x: int): int sync {
+func mul_zero(x: int) => int sync {
     let a = x * 0
     println(a)
     return 0
 }
 
-func zero_mul(x: int): int sync {
+func zero_mul(x: int) => int sync {
     let a = 0 * x
     println(a)
     return 0
 }
 
-func sub_self(x: int): int sync {
+func sub_self(x: int) => int sync {
     let a = x - x
     println(a)
     return 0
 }
 
-func div_one(x: int): int sync {
+func div_one(x: int) => int sync {
     let a = x / 1
     println(a)
     return 0
 }
 
-func neg_neg(x: int): int sync {
+func neg_neg(x: int) => int sync {
     let a = -(-x)
     println(a)
     return 0
 }
 
-func mul_zero32(x: i32): i32 sync {
+func mul_zero32(x: i32) => i32 sync {
     let a = x * 0
     println(a)
     return 0
 }
 
-func sub_self32(x: i32): i32 sync {
+func sub_self32(x: i32) => i32 sync {
     let a = x - x
     println(a)
     return 0
 }
 
-func combine(x: int): int sync {
+func combine(x: int) => int sync {
     let a = x * 3 + x * 5
     println(a)
     return 0
 }
 
-func fold(x: int): int sync {
+func fold(x: int) => int sync {
     let a = (x * 3) * 2
     println(a)
     return 0
 }
 
-func double(x: int): int sync {
+func double(x: int) => int sync {
     let a = x + x
     println(a)
     return 0
 }
 
-func mul_one_d(x: float): float sync {
+func mul_one_d(x: float) => float sync {
     let a = x * 1.0
     println(a)
     return 0
 }
 
-func add_neg_zero_d(x: float): float sync {
+func add_neg_zero_d(x: float) => float sync {
     let a = x + -0.0
     println(a)
     return 0
 }
 
-func sub_zero_d(x: float): float sync {
+func sub_zero_d(x: float) => float sync {
     let a = x - 0.0
     println(a)
     return 0
 }
 
-func div_one_d(x: float): float sync {
+func div_one_d(x: float) => float sync {
     let a = x / 1.0
     println(a)
     return 0
 }
 
-func neg_neg_d(x: float): float sync {
+func neg_neg_d(x: float) => float sync {
     let a = -(-x)
     println(a)
     return 0
 }
 
-func combine_d(x: float): float sync {
+func combine_d(x: float) => float sync {
     let a = x * 3.0 + x * 5.0
     println(a)
     return 0
 }
 
-func fold_d(x: float): float sync {
+func fold_d(x: float) => float sync {
     let a = (x * 3.0) * 2.0
     println(a)
     return 0
 }
 
-func double_d(x: float): float sync {
+func double_d(x: float) => float sync {
     let a = x + x
     println(a)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(mul_zero(3))
     println(zero_mul(4))
     println(sub_self(5))

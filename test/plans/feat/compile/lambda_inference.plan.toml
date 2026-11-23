@@ -69,7 +69,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
 expect_diagnostic_code = "0x0300017E"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 12
 expect_diagnostic_column = 25
 expect_output_contains = ["the expected type '(x: int, y: int) => int' takes 2 parameters and the lambda 1"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
@@ -97,7 +97,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
 expect_diagnostic_code = "0x0300017E"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 17
 expect_diagnostic_column = 24
 expect_output_contains = ["The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
@@ -201,7 +201,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
 expect_diagnostic_code = "0x0300017E"
 expect_diagnostic_line = 18
-expect_diagnostic_column = 69
+expect_diagnostic_column = 67
 expect_output_contains = ["the expected type '<__pack_0_0: float> () => (float, float)' ends before the parameter at position 3, which the lambda writes"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

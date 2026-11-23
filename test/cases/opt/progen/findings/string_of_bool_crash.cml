@@ -4,7 +4,7 @@
  * Expected output: true
  */
 
-func main(): int sync {
+func main() => int sync {
     println(string(true))
     return 0
 }

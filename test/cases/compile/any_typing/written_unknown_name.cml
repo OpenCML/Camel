@@ -2,12 +2,12 @@
 // ordinary unknown-type error (design principles 5.10; deleted AnyNotAllowed). The
 // annotation is in the body because a name first written in a parameter type binds a type
 // variable instead (design principles 5.5).
-func keep(x: int): int {
+func keep(x: int) => int {
     let y: any = x
     return y
 }
 
-func main(): int sync {
+func main() => int sync {
     println(keep(3))
     return 0
 }

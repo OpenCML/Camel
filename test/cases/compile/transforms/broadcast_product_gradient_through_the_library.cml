@@ -21,15 +21,14 @@ import rulesets.transpose
 import { numel, sum } from tensor
 import { vjp } from vjp
 
-func total(w: float[2, 2, 3]): float {
+func total(w: float[2, 2, 3]) => float {
     return sum(w * ([1.0, 2.0, 3.0] as float[3]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let start = [[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]] as float[2, 2, 3]
     let (value, pullback) = vjp(total)(start)
     let d = pullback(1.0).0
-    `broadcast library value={:.1f} numel={} d000={:.1f} d001={:.1f} d002={:.1f} d11_2={:.1f}`
-        ->format<value, numel(d), d[0][0][0], d[0][0][1], d[0][0][2], d[1][1][2]>->println
+    `broadcast library value={:.1f} numel={} d000={:.1f} d001={:.1f} d002={:.1f} d11_2={:.1f}`->format<value, numel(d), d[0][0][0], d[0][0][1], d[0][0][2], d[1][1][2]>->println
     return 0
 }

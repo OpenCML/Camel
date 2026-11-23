@@ -6,12 +6,12 @@
  * effects again.
  */
 
-func speak(n: int): int sync {
+func speak(n: int) => int sync {
     println('speak')
     return n
 }
 
-func pick(n: int): int sync {
+func pick(n: int) => int sync {
     return match speak(n) {
         case 1 when false => 10
         case 2 when false => 20
@@ -20,7 +20,7 @@ func pick(n: int): int sync {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(5))
     println(pick(1))
     return 0

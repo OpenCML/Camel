@@ -23,7 +23,7 @@ import { is_numeric, ElementOf } from types
 // Whether a value of type `T` can be held by a checkpoint: the leaf types the files are written
 // in, and a struct or a tuple of such. Asked where the call is compiled, so a tree with any other
 // leaf is refused there.
-func has_ckpt_form::<T>(): bool {
+func has_ckpt_form::<T>() => bool {
     return match type T {
         case Bytes | string | bool | i32 | int | f32 | float => true
         case array => is_numeric::<ElementOf<T>>()
@@ -33,7 +33,7 @@ func has_ckpt_form::<T>(): bool {
 }
 
 // Every member of a struct or tuple can be held by a checkpoint.
-func every_member_ckpt::<T>(): bool {
+func every_member_ckpt::<T>() => bool {
     return static loop every = true for n, F in fields T do every && has_ckpt_form::<F>()
 }
 
@@ -51,7 +51,9 @@ func every_member_ckpt::<T>(): bool {
 /// @example { w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>
 #op('ckpt:save_tree')
 with <dir: string, dataset_manifest_sha256: string? = null>
-export func save_tree::<T>(tree: T): void! panic uses var fs when has_ckpt_form::<T>()
+export func save_tree::<T>(tree: T) => void!
+    panic uses var fs
+    when has_ckpt_form::<T>()
 
 /// Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
 /// types, the sizes and the SHA-256 sums first: nothing is partly loaded. A
@@ -63,4 +65,6 @@ export func save_tree::<T>(tree: T): void! panic uses var fs when has_ckpt_form:
 /// @example 'out/ckpt'->load_tree::<{ w: float, step: int }> !! { w: 0.0, step: 0 }
 #op('ckpt:load_tree')
 with <dataset_manifest_sha256: string? = null>
-export func load_tree::<T>(dir: string): T! panic uses fs, var stderr when has_ckpt_form::<T>()
+export func load_tree::<T>(dir: string) => T!
+    panic uses fs, var stderr
+    when has_ckpt_form::<T>()

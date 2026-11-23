@@ -4,7 +4,7 @@
  * design principles 3.8).
  */
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     let b = null ?? 7
     println(b)

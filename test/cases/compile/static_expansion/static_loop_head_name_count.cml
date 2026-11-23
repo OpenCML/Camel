@@ -7,10 +7,10 @@
 
 type Box = { low: int, high: int }
 
-func bad(b: Box): int {
+func bad(b: Box) => int {
     return static loop acc = 0 for n, F, tags, extra in fields Box do acc + 1
 }
 
-func main(): int {
-    return bad({low: 1, high: 2})
+func main() => int {
+    return bad({ low: 1, high: 2 })
 }

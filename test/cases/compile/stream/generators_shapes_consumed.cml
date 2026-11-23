@@ -11,14 +11,14 @@
  * `fib()` sums the ten values it hands out below 50 to 88. A fold at base 100 does not write the
  * leading zeros of a small element, which is what a hand-written loop prints too.
  */
-func three(n: int): int.. sync {
+func three(n: int) => int.. sync {
     loop i = 0, s = 0, t = 0 while i < n do {
         yield i + s + t
         (i + 1, s + i, t + s)
     }
 }
 
-func nested(): int.. sync {
+func nested() => int.. sync {
     loop i = 0 while i < 3 do {
         loop j = 0 while j < 3 do {
             yield i * 10 + j
@@ -28,14 +28,14 @@ func nested(): int.. sync {
     }
 }
 
-func fib(): int.. sync {
+func fib() => int.. sync {
     loop a = 0, b = 1 while a < 50 do {
         yield a
         (b, a + b)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(loop acc = 0 for x in three(5) do acc * 10 + x)
     println(loop acc = 0 for x in nested() do acc * 100 + x)
     println(loop acc = 0 for x in fib() do acc + x)

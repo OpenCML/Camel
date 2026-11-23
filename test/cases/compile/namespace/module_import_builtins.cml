@@ -2,19 +2,19 @@
  * Checks bare built-in module imports expose symbols through module:: references.
  */
 
-import tensor
 import nn
+import tensor
 
-func main(): int sync {
+func main() => int sync {
     let a = tensor::ones::<f32>([2, 2])
     let b = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let v = nn::sgd(tensor::zeros::<f32>([2, 2]), tensor::ones::<f32>([2, 2]), 0.5)
-
+    
     let a0 = tensor::shape(a)[0]
     let b1 = tensor::shape(b)[1]
     let v0 = tensor::shape(v)[0]
     'module_import_builtins shape={} {} {}'->format<a0, b1, v0>->println
-
+    
     if a0 != 2 then {
         return 1
     } else if b1 != 2 then {

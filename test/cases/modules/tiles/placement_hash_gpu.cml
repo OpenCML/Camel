@@ -3,12 +3,13 @@
 /// portable graph hash must differ (docs/design/gpu/plan.cn.md 4); it did not while the hash
 /// ignored region facts.
 
-func other(): int {
+func other() => int {
     return 5
 }
 
-func main(): int {
-    #gpu {
+func main() => int {
+    #gpu
+    {
         7
     }
     return other()

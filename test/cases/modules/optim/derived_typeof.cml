@@ -6,11 +6,11 @@
 
 import { Adam, AdamState, adam, constant, init } from optim
 
-func make_state::<P>(opt: Adam, params: P): AdamState<typeof(params)> {
+func make_state::<P>(opt: Adam, params: P) => AdamState<typeof (params)> {
     return init(opt, params)
 }
 
-func main(): int sync {
+func main() => int sync {
     let state = make_state(adam(constant(0.1)), { w: 1.0 })
     println(state.step)
     println(state.m.w)

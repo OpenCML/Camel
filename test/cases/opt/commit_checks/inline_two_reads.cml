@@ -21,15 +21,16 @@
  */
 import { load_npy, numel } from tensor
 
-func reads_two(first: string, second: string): int {
+func reads_two(first: string, second: string) => int {
     let a = load_npy::<f32>(first)
     let b = load_npy::<f32>(second)
     return numel(a) + numel(b)
 }
 
-func main(): int {
+func main() => int {
     println(reads_two(
         'test/cases/modules/tensor/shape_types/x3.npy',
-        'test/cases/compile/entry_args/b.npy'))
+        'test/cases/compile/entry_args/b.npy'
+    ))
     return 0
 }

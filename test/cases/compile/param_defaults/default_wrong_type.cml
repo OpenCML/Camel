@@ -3,10 +3,10 @@
  * (design principles 4.4).
  */
 
-func f(a: int = "x"): int {
+func f(a: int = 'x') => int {
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     return f()
 }

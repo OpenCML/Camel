@@ -9,18 +9,18 @@
 
 import { is_complex, is_float, is_integer, is_numeric, is_ordered } from types
 
-func classify::<T>(x: T): string when is_numeric::<T>() {
-    return "numeric"
+func classify::<T>(x: T) => string when is_numeric::<T>() {
+    return 'numeric'
 }
 
-func main(): int sync {
+func main() => int sync {
     let z: c64 = 1 + 2i
     println(classify(z))
-    println(if is_integer::<c64>() then "integer" else "not integer")
-    println(if is_float::<c64>() then "float" else "not float")
-    println(if is_complex::<c64>() then "complex" else "not complex")
-    println(if is_numeric::<c64>() then "numeric" else "not numeric")
-    println(if is_ordered::<c64>() then "ordered" else "not ordered")
-    println(if is_numeric::<string>() then "numeric" else "not numeric")
+    println(if is_integer::<c64>() then 'integer' else 'not integer')
+    println(if is_float::<c64>() then 'float' else 'not float')
+    println(if is_complex::<c64>() then 'complex' else 'not complex')
+    println(if is_numeric::<c64>() then 'numeric' else 'not numeric')
+    println(if is_ordered::<c64>() then 'ordered' else 'not ordered')
+    println(if is_numeric::<string>() then 'numeric' else 'not numeric')
     return 0
 }

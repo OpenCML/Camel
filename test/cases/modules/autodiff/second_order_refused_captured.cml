@@ -18,18 +18,20 @@
 import { grad } from autodiff
 
 with <x: float>
-func cube(): float {
+func cube() => float {
     return x * x * x
 }
 
 with <x: float>
-func dcube(): float {
+func dcube() => float {
     return grad(cube)<x>()
 }
 
-func main(): int sync {
+func main() => int sync {
     let slope = dcube
-    let twice = func <x: float>() { slope<x>() }
+    let twice = func <x: float>() {
+        slope<x>()
+    }
     println(grad(twice)<2.0>())
     return 0
 }

@@ -102,7 +102,7 @@ case = "../../../cases/compile/namespace_rules/p09_import_alias.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "ns.p10_import_as"
@@ -149,7 +149,7 @@ case = "../../../cases/compile/namespace_rules/p24_using_scope.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 9
 expect_diagnostic_column = 12
 
 [[tests]]
@@ -160,7 +160,7 @@ case = "../../../cases/compile/namespace_rules/p14_using_conflict.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousName"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["The name 'inc' is ambiguous here: lib::Tools::inc, lib2::Tools::inc"]
 
@@ -180,7 +180,7 @@ kind = "negative"
 case = "../../../cases/compile/namespace_rules/p25_overload_merge.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["p25_overload_merge.cml:6:16: [Error]: No matching function found for argument types: <> (int)", "name=SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["p25_overload_merge.cml:9:16: [Error]: No matching function found for argument types: <> (int)", "name=SemanticDiag::NoMatchingFunction"]
 
 [[tests]]
 name = "ns.p16_import_named_ns"
@@ -217,7 +217,7 @@ case = "../../../cases/compile/namespace_rules/p19_unexported.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 5
 expect_output_not_contains = ["hidden.cml"]
 
 [[tests]]
@@ -273,7 +273,7 @@ case = "../../../cases/compile/namespace_rules/p29_using_block.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 13
 expect_diagnostic_column = 12
 
 [[tests]]
@@ -329,7 +329,7 @@ case = "../../../cases/compile/namespace_rules/p33_reopen_using.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 14
 expect_output_contains = ["Unresolved reference: 'inc'"]
 
 [[tests]]
@@ -340,7 +340,7 @@ case = "../../../cases/compile/namespace_rules/p34_ambiguous_qualified.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousName"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 9
 expect_output_contains = ["The name 'inc' is ambiguous here: lib::Tools::inc, lib2::Tools::inc"]
 
 [[tests]]
@@ -351,5 +351,5 @@ case = "../../../cases/compile/namespace_rules/p35_ambiguous_type.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousName"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 8
 expect_output_contains = ["The name 'P' is ambiguous here: libt1::Shapes::P, libt2::Shapes::P"]

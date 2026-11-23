@@ -4,7 +4,7 @@
  * lines. `\${`, `\`` and `\u{...}` are escapes; a format string nests another one.
  */
 
-func main(): int sync {
+func main() => int sync {
     let name = 'Camel'
     let n = 42
     let pi = 3.5

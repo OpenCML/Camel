@@ -5,18 +5,18 @@
  * fallback this rewrite deleted; there is no other optimizer to fall back to.
  */
 
-import { full } from tensor
 import { adam, constant, init, update } from optim
+import { full } from tensor
 
 type Unknown = { rate: float }
 
 type Model = { w: f32[?] }
 
-func model_at(): Model {
+func model_at() => Model {
     return { w: full([4], f32(0.5)) }
 }
 
-func update_unknown(): int {
+func update_unknown() => int {
     let opt: Unknown = { rate: 0.1 }
     let model = model_at()
     let grad = model_at()
@@ -25,8 +25,8 @@ func update_unknown(): int {
     return after.step
 }
 
-func main(): int sync {
+func main() => int sync {
     let steps = update_unknown()
-    'optim unknown optimizer update steps={}' ->format<steps> ->println
+    'optim unknown optimizer update steps={}'->format<steps>->println
     return 0
 }

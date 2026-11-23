@@ -2,11 +2,10 @@
 // named; `other` can. The module compiles: what is wrong is the declaration, not the
 // module.
 
-
-func run::<F>(p: F): F! {
+func run::<F>(p: F) => F! {
     return p
 }
 
-export func other::<F>(p: F): F! {
+export func other::<F>(p: F) => F! {
     return p
 }

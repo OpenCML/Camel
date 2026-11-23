@@ -10,7 +10,7 @@
 /// The current time, in seconds since the epoch.
 /// @effect reads the clock
 /// @example now()    // 1791806400.25
-export func now(): float
+export func now() => float
 
 /// The moment written with a strftime format, in UTC.
 /// @pure
@@ -18,11 +18,11 @@ export func now(): float
 /// @example 0.0->strftime<'%Y-%m-%d'>    // '1970-01-01'
 #op('time:strftime')
 with <format: string>
-export func strftime(timestamp: float): string panic
+export func strftime(timestamp: float) => string panic
 
 /// The moment a text gives when read with a strptime format; the fields are taken as UTC.
 /// @pure
 /// @fails error value `ParseError` when the text does not have the format, or gives a moment outside the range of calendar time
 /// @example '1970-01-02'->strptime<'%Y-%m-%d'> !! 0.0    // 86400.0
 with <format: string>
-export func strptime(text: string): float!
+export func strptime(text: string) => float!

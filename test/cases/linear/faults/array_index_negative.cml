@@ -3,9 +3,11 @@
  * value it wraps to.
  */
 
-func at(xs: int[], i: int): int { return xs[i] }
+func at(xs: int[], i: int) => int {
+    return xs[i]
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     println(at(xs, 2))
     println(at(xs, 0 - 1))

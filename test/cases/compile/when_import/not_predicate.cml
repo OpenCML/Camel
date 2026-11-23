@@ -6,10 +6,10 @@
 
 import { ready } from predicates
 
-func bad(x: int): int when ready() {
+func bad(x: int) => int when ready() {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return bad(1)
 }

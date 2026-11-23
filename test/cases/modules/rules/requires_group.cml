@@ -10,6 +10,6 @@ tag fast = [reassociate, contract]
 #requires(fast)
 rule mul_one(x: float) { x * 1.0 => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[mul_one]>
 }

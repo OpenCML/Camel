@@ -14,7 +14,7 @@
 
 import { sleep } from process
 
-func work(x: int): int sync {
+func work(x: int) => int sync {
     println(format<x>('start {}'))
     let d = if x == 0 then 0 else 1
     let q = 100 / d
@@ -23,25 +23,29 @@ func work(x: int): int sync {
     return q + x
 }
 
-func bad(x: int): int {
-    return if x % 2 == 0
-        then 10 / (x - x)
-        else 20 % (x - x)
+func bad(x: int) => int {
+    return if x % 2 == 0 then 10 / (x - x) else 20 % (x - x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
-    let ys = attempt(func () { (0..48)->map<work> })() !! [-1]
+    let ys = attempt(func () {
+        (0 .. 48)->map<work>
+    })() !! [-1]
     println('isolated')
     println(ys)
-    let r = attempt(func () { (0..64)->map<bad> })()
+    let r = attempt(func () {
+        (0 .. 64)->map<bad>
+    })()
     let text = match r {
         case error e => e.kind
         case v => 'no fault'
     }
     println(text)
     // The schedulers are as they were: a map of the same size, with no fault.
-    println((1..49)->map<work>->reduce<func (a: int, x: int) => int { a + x }, 0>)
+    println((1 .. 49)->map<work>->reduce<func (a: int, x: int) => int {
+        a + x
+    }, 0>)
     println('after')
     return 0
 }

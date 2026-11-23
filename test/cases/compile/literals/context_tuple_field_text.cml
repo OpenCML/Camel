@@ -3,7 +3,7 @@
  * mismatch, reported at that element, not at the whole literal (design principles 5.1).
  */
 
-func main(): int sync {
+func main() => int sync {
     let t: (float, float) = ('1.5', 2.0)
     println(t.0)
     return 0

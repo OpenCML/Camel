@@ -17,19 +17,25 @@
  * the pull that produced the first element.
  */
 
-func counted(): int.. sync {
+func counted() => int.. sync {
     yield 1
-    println("a")
+    println('a')
     yield 2
-    println("b")
+    println('b')
     yield 3
-    println("c")
+    println('c')
 }
 
-func main(): int sync {
-    loop acc = 0 for v in counted() while acc < 2 do sync { println(v); acc + 1 }
-    println("-")
-    loop acc = 0 for v in counted() while acc < 1 do sync { println(v); acc + 1 }
-    println("end")
+func main() => int sync {
+    loop acc = 0 for v in counted() while acc < 2 do sync {
+        println(v)
+        acc + 1
+    }
+    println('-')
+    loop acc = 0 for v in counted() while acc < 1 do sync {
+        println(v)
+        acc + 1
+    }
+    println('end')
     return 0
 }

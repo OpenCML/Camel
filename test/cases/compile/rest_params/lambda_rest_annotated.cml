@@ -3,16 +3,20 @@
 // `(a: float, b: float) => float`, so `...xs` stands for both parameters, in their types, and
 // `(...ys: float[...])` gets one.
 
-func apply(f: (a: float, b: float) => float): float {
+func apply(f: (a: float, b: float) => float) => float {
     return f(1.0, 2.0)
 }
 
-func apply_one(f: (x: float) => float): float {
+func apply_one(f: (x: float) => float) => float {
     return f(3.0)
 }
 
-func main(): int sync {
-    let sum = apply(func (...xs) { 0.0 })
-    let one = apply_one(func (...ys: float[...]) { 1.0 })
+func main() => int sync {
+    let sum = apply(func (...xs) {
+        0.0
+    })
+    let one = apply_one(func (...ys: float[...]) {
+        1.0
+    })
     return 0
 }

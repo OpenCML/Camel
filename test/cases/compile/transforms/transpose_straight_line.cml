@@ -9,18 +9,18 @@
 // need the value it is transposing at (a branch's condition is a value), so the shape is
 // `transpose(f)(x, 1.0)`. A straight-line function does not use `x`; the port is there anyway,
 // because that shape is the same for every function.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func sum_of_scaled(x: float): float {
+func sum_of_scaled(x: float) => float {
     return 2.0 * x + 3.0 * x
 }
 
-func scaled_chain(x: float): float {
+func scaled_chain(x: float) => float {
     return (x * 2.0 + x * 3.0) * 4.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(sum_of_scaled)
     println(back(1.0))
     let chain_back = transpose(scaled_chain)

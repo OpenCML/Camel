@@ -5,25 +5,29 @@
  * rule asks for (growable-array-vs-tensor-in-the-onnx-exporter) — and the model is
  * written. The last statement reads `ks[1]` out of the returned array, which is 7 at k = 6.
  */
-import { reshape, sum, tanh } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, sum, tanh } from tensor
 
-func walk(h: float[...], k: int): (float[...], int[]) {
+func walk(h: float[...], k: int) => (float[...], int[]) {
     return if k >= 6 || float(sum(h * h)) < 1.0 then (h, [k, k + 1]) else walk(tanh(h) * 0.3 + h * 0.6, k + 1)
 }
 
-func model(x: float[...]): (float[...], int) {
+func model(x: float[...]) => (float[...], int) {
     let (h, ks) = walk(x, 0)
     return (h, ks[1])
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
     let r = model(x)
     println(r.1)
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => (float[...], int) { model(x) }, (x)) {
-        case error e => { return e }
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => (float[...], int) {
+        model(x)
+    }, (x)) {
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

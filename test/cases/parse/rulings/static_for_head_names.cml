@@ -7,7 +7,7 @@ tag width(w: int) on field
 
 type Box = {
     #width(8) low: int,
-    high: int,
+    high: int
 }
 
 type Pair = (int, string)
@@ -20,7 +20,7 @@ func names(b: Box) {
 }
 
 /// Two names: the field's type is usable in a type position (`let v: F`).
-func total(b: Box): int {
+func total(b: Box) => int {
     var sum = 0
     static for n, F in fields Box do {
         let v: F = b.[n]
@@ -31,11 +31,11 @@ func total(b: Box): int {
 
 /// Three names: `tags` is the field's tags as a compile-time struct, so `low` gives
 /// `{width: {w: 8}}` and the untagged `high` gives `{}`.
-func widths(b: Box): int {
+func widths(b: Box) => int {
     var sum = 0
     static for n, F, tags in fields Box do {
-        sum = sum + (match type typeof(tags) {
-            case { width: { w: int } } => tags.width.w
+        sum = sum + (match type typeof (tags) {
+            case {width:{w:int}} => tags.width.w
             case _ => 0
         })
     }
@@ -49,10 +49,10 @@ func positions(p: Pair) {
     }
 }
 
-func main(): int sync {
-    names({low: 1, high: 2})
-    println(total({low: 1, high: 2}))
-    println(widths({low: 1, high: 2}))
+func main() => int sync {
+    names({ low: 1, high: 2 })
+    println(total({ low: 1, high: 2 }))
+    println(widths({ low: 1, high: 2 }))
     positions((10, 'x'))
     return 0
 }

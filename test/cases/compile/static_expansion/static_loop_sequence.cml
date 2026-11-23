@@ -8,45 +8,44 @@
  * constant: it is an ordinary `int` value and a `t.[i]` key at the same time.
  */
 
-func sumTo5(): int {
-    return static loop acc = 0 for i in 0..5 do acc + i
+func sumTo5() => int {
+    return static loop acc = 0 for i in 0 .. 5 do acc + i
 }
 
-func stepped(): int {
-    return static loop acc = 0 for i in 2..5 do acc + i * 10
+func stepped() => int {
+    return static loop acc = 0 for i in 2 .. 5 do acc + i * 10
 }
 
 /* An empty interval unrolls to no round at all: the loop's value is the first value. */
-func empty(): int {
-    return static loop acc = 7 for i in 3..3 do acc + 1
+func empty() => int {
+    return static loop acc = 7 for i in 3 .. 3 do acc + 1
 }
 
 /* `i` is a key: the trip count is the interval's, not the tuple's. */
-func prefix(t: (int, int, int)): int {
-    return static loop acc = 0 for i in 0..2 do acc + t.[i]
+func prefix(t: (int, int, int)) => int {
+    return static loop acc = 0 for i in 0 .. 2 do acc + t.[i]
 }
 
-func indexed(t: (int, int, int)): int {
-    return static loop acc = 0 for i in 0..3 do acc + t.[i]
+func indexed(t: (int, int, int)) => int {
+    return static loop acc = 0 for i in 0 .. 3 do acc + t.[i]
 }
 
 /* A name bound once to a constant is a sequence bound the compiler knows. */
-func fromBinding(): int {
+func fromBinding() => int {
     let bound = 4
-    return static loop acc = 0 for i in 0..bound do acc + i
+    return static loop acc = 0 for i in 0 .. bound do acc + i
 }
 
-func several(t: (int, int, int)): (int, int) {
-    return static loop total = 0, last = 0 for i in 0..3 do (total + t.[i], i)
+func several(t: (int, int, int)) => (int, int) {
+    return static loop total = 0, last = 0 for i in 0 .. 3 do (total + t.[i], i)
 }
 
 /* A sequence loop nested in another one: the inner bound is the outer round's constant. */
-func triangular(): int {
-    return static loop acc = 0 for i in 0..4 do
-        acc + (static loop inner = 0 for j in 0..i do inner + 1)
+func triangular() => int {
+    return static loop acc = 0 for i in 0 .. 4 do acc + (static loop inner = 0 for j in 0 .. i do inner + 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sumTo5())
     println(stepped())
     println(empty())

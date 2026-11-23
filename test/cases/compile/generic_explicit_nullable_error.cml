@@ -1,5 +1,7 @@
-func optional::<T>(x: T): T? { return null }
-func main(): int sync {
+func optional::<T>(x: T) => T? {
+    return null
+}
+func main() => int sync {
     println(optional::<int?>(null))
     return 0
 }

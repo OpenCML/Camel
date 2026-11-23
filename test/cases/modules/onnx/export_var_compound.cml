@@ -7,11 +7,11 @@
  * type where it meets it -- `f32(s)`, `f32(k)` -- and the graph carries the Cast for it (P4: the
  * conversion is written, not assumed).
  */
-import { reshape, sum } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, sum } from tensor
 
-func forward(x: f32[...]): f32[...] sync {
+func forward(x: f32[...]) => f32[...] sync {
     var k = 1
     k += 2
     var s = 0.5
@@ -22,11 +22,15 @@ func forward(x: f32[...]): f32[...] sync {
     return x * f32(s) + f32(k)
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0] as f32[])
     println(forward(x))
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { forward(x) }, x) {
-        case error e => { return e }
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
+        forward(x)
+    }, x) {
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

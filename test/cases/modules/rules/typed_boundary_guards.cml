@@ -3,18 +3,26 @@
  * product that underflows to zero, a product that overflows, and a mixed pair whose sum is zero.
  */
 
-func f32_combine_over(x: f32): f32 { return x * 3.0e38 + x * 3.0e38 }
+func f32_combine_over(x: f32) => f32 {
+    return x * 3.0e38 + x * 3.0e38
+}
 
 #[no_infs]
-func f32_fold_zero(x: f32): f32 { return (x * 1.0e-30) * 1.0e-30 }
+func f32_fold_zero(x: f32) => f32 {
+    return (x * 1.0e-30) * 1.0e-30
+}
 
 #[no_infs]
-func f32_fold_over(x: f32): f32 { return (x * 1.0e30) * 1.0e30 }
+func f32_fold_over(x: f32) => f32 {
+    return (x * 1.0e30) * 1.0e30
+}
 
 #[finite_math]
-func f32_mixed_zero(x: f32): f32 { return x * 3.0 + x * -3.0 }
+func f32_mixed_zero(x: f32) => f32 {
+    return x * 3.0 + x * -3.0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(f32_combine_over(0.0))
     println(f32_fold_zero(1.0e30))
     println(f32_fold_over(1.0e-30))

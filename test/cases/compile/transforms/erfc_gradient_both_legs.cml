@@ -29,21 +29,21 @@
 //
 //     camel test/cases/compile/transforms/erfc_gradient_both_legs.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, erfc, sum } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 with <x: float[...]>
-func total(): float {
+func total() => float {
     return sum(erfc(x))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[4]): float {
+func total_plain(x: float[4]) => float {
     return sum(erfc(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let engine = grad(total)<[0.5, 0.0, -1.25, -2.0] as float[]>()
     `erfc engine={}`->format<engine>->println
     let (_, pullback) = vjp(total_plain)([0.5, 0.0, -1.25, -2.0] as float[4])

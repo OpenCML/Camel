@@ -7,32 +7,32 @@
  * Reduced by test/tools/progen from seed 927 (generator version 1, all features).
  */
 
-func f1(a2: (float, bool)[]): bool {
-    let n3 = (2.0 < 1.0);
-    return n3 && ([0]->contains<7>);
+func f1(a2: (float, bool)[]) => bool {
+    let n3 = (2.0 < 1.0)
+    return n3 && ([0]->contains<7>)
 }
 
-func k17(a18: int): (a0: int) => int sync {
+func k17(a18: int) => (a0: int) => int sync {
     return func (p20: int) => int sync {
-        return 0;
-    };
+        return 0
+    }
 }
 
-func main(): int sync {
-    let n26 = [('', false)];
+func main() => int sync {
+    let n26 = [('', false)]
     let n42 = if false then sync {
         if f1([(1.0, false)]) then sync {
-            null;
+            null
         } else sync {
-            let n34 = k17(7);
-            var v35 = n26[1].0;
-            null;
-        };
-        let n36 = k17(0);
-        return [{ x: 0, y: 0 }];
+            let n34 = k17(7)
+            var v35 = n26[1].0
+            null
+        }
+        let n36 = k17(0)
+        return [{ x: 0, y: 0 }]
     } else sync {
-        println('');
-        return [{ x: 0, y: 0 }];
-    };
-    return 0;
+        println('')
+        return [{ x: 0, y: 0 }]
+    }
+    return 0
 }

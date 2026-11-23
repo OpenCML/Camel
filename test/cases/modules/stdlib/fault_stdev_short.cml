@@ -1,6 +1,6 @@
 import { stdev } from statistics
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(stdev([5.0]))
     println('not reached')

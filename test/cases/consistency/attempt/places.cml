@@ -5,32 +5,48 @@
  * one becomes the error value of the `attempt` that encloses it, and the program goes on.
  */
 
-func leaf(d: int): int { return 100 / d }
-func mid(d: int): int { return leaf(d) + 1 }
-func top(d: int): int { return mid(d) * 2 }
-
-func arm(d: int): int { return if d > 5 then d else 30 / d }
-
-func divider(d: int): (x: int) => int {
-    return func (x: int) => int { x / d }
+func leaf(d: int) => int {
+    return 100 / d
+}
+func mid(d: int) => int {
+    return leaf(d) + 1
+}
+func top(d: int) => int {
+    return mid(d) * 2
 }
 
-func inv(x: int): int { return 60 / (x - 3) }
-func keep(x: int): bool { return 12 / (x - 2) > 0 }
-func step(acc: int, x: int): int { return acc + 12 / (3 - x) }
+func arm(d: int) => int {
+    return if d > 5 then d else 30 / d
+}
 
-func spin(i: int, n: int, acc: int): int {
+func divider(d: int) => (x: int) => int {
+    return func (x: int) => int {
+        x / d
+    }
+}
+
+func inv(x: int) => int {
+    return 60 / (x - 3)
+}
+func keep(x: int) => bool {
+    return 12 / (x - 2) > 0
+}
+func step(acc: int, x: int) => int {
+    return acc + 12 / (3 - x)
+}
+
+func spin(i: int, n: int, acc: int) => int {
     return if i > n then acc else spin(i + 1, n, acc + 1000 / (500 - i))
 }
 
-func kind(r: int!): string {
+func kind(r: int!) => string {
     return match r {
         case error e => e.kind + ' at ' + e.location
         case v => format<v>('{}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind(attempt(top)(4)))
     println(kind(attempt(top)(0)))
     println(kind(attempt(arm)(9)))
@@ -39,15 +55,29 @@ func main(): int sync {
     let by0 = divider(0)
     println(kind(attempt(by2)(10)))
     println(kind(attempt(by0)(10)))
-    println(kind(attempt(func (x: int) => int { x / (x - x) })(5)))
-
-    println(attempt(func () { (4..8)->map<inv> })() !! [-1])
-    println(attempt(func () { (0..8)->map<inv> })() !! [-1])
-    println(attempt(func () { (3..8)->filter<keep> })() !! [-2])
-    println(attempt(func () { (0..8)->filter<keep> })() !! [-2])
-    println(attempt(func () { (4..8)->reduce<step, 0> })() !! -3)
-    println(attempt(func () { (0..8)->reduce<step, 0> })() !! -3)
-
+    println(kind(attempt(func (x: int) => int {
+        x / (x - x)
+    })(5)))
+    
+    println(attempt(func () {
+        (4 .. 8)->map<inv>
+    })() !! [-1])
+    println(attempt(func () {
+        (0 .. 8)->map<inv>
+    })() !! [-1])
+    println(attempt(func () {
+        (3 .. 8)->filter<keep>
+    })() !! [-2])
+    println(attempt(func () {
+        (0 .. 8)->filter<keep>
+    })() !! [-2])
+    println(attempt(func () {
+        (4 .. 8)->reduce<step, 0>
+    })() !! -3)
+    println(attempt(func () {
+        (0 .. 8)->reduce<step, 0>
+    })() !! -3)
+    
     println(kind(attempt(spin)(0, 400, 0)))
     println(kind(attempt(spin)(0, 1000, 0)))
     println('end')

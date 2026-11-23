@@ -4,13 +4,15 @@
 // would either fail (no `tree_paths` there) or, worse, silently use it instead of
 // `stdlib/tree.cml`.
 
-import { tree_paths, tree_map } from tree
 import { tree_leaves } from ckpt
+import { tree_paths, tree_map } from tree
 
-func main(): int sync {
+func main() => int sync {
     let p = { w: 3.0, block: (4.0, 5.0) }
     println(tree_paths(p))
     println(tree_leaves(p))
-    println(tree_map<func (x: float) => float { x + 1.0 }>(p))
+    println(tree_map<func (x: float) => float {
+        x + 1.0
+    }>(p))
     return 0
 }

@@ -9,7 +9,7 @@
 // entries that name this case read the refusal now; `dead_write_held.cml` is the shape the judgement
 // is read on.
 
-func probe(): int sync {
+func probe() => int sync {
     var c = 0
     let h = func () => int sync {
         println(c)
@@ -20,7 +20,7 @@ func probe(): int sync {
     return w + p.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(probe())
     return 0
 }

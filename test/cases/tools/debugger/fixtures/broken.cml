@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     println(missing_name)
     return 0
 }

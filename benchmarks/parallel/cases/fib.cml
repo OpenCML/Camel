@@ -2,11 +2,11 @@
 // A light graph by the granularity rule: no tasks; this measures the per-call cost of the
 // scheduler's own evaluator.
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(fib(30))
     return 0
 }

@@ -3,17 +3,19 @@
 // type. The probe reads whether the resolution happens in an order that has it; its control is
 // `gen_two_locals_no_dependency.cml`.
 
-func gen(): int.. sync {
+func gen() => int.. sync {
     let a = 1
     let b = a + 1
     yield b
 }
 
-func drain(): int sync {
-    loop acc = 0 for v in gen() do sync { acc + v }
+func drain() => int sync {
+    loop acc = 0 for v in gen() do sync {
+        acc + v
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     // The value is printed, and the exit code stays zero: a program's exit code here is what it
     // returns, which the first reading of these probes mistook for a failure (3 and 2).
     println(drain())

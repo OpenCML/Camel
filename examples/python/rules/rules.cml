@@ -15,21 +15,20 @@
  */
 
 /// The discount a basket earns, one threshold per tier.
-export func discount(total: float): float {
+export func discount(total: float) => float {
     return if total >= 2000.0 then 0.20
-           else if total >= 1000.0 then 0.15
-           else if total >= 500.0 then 0.10
-           else if total >= 100.0 then 0.05
-           else 0.0
+    else if total >= 1000.0 then 0.15
+    else if total >= 500.0 then 0.10
+    else if total >= 100.0 then 0.05 else 0.0
 }
 
 /// Shipping is free above the threshold and a flat rate below it.
-export func shipping(total: float): float {
+export func shipping(total: float) => float {
     return if total >= 300.0 then 0.0 else 9.90
 }
 
 /// What the customer pays before tax: the discount, then shipping.
-export func net_total(total: float): float {
+export func net_total(total: float) => float {
     return total * (1.0 - discount(total)) + shipping(total)
 }
 
@@ -37,6 +36,8 @@ export func net_total(total: float): float {
 ///
 /// Each element is read as f32, the rules themselves work in f64, and the answer is rounded once
 /// back into the element type, so the array answer is the same one the scalar entry point gives.
-export func net_totals(totals: f32[]): f32[] {
-    return totals->map<func (total: f32) => f32 { f32(net_total(float(total))) }>
+export func net_totals(totals: f32[]) => f32[] {
+    return totals->map<func (total: f32) => f32 {
+        f32(net_total(float(total)))
+    }>
 }

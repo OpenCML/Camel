@@ -5,7 +5,7 @@
  * order even though `r` is discarded and its value is the constant 10.
  */
 
-func main(): int sync {
+func main() => int sync {
     let r = (println(5) + println(6)) - 1
     return 0
 }

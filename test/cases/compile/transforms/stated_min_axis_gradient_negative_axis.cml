@@ -20,21 +20,21 @@
 //
 //     camel test/cases/compile/transforms/stated_min_axis_gradient_negative_axis.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, min, sum } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 with <w: float[...]>
-func total(): float {
+func total() => float {
     return sum(min<-1, false>(w))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[...]): float {
+func total_plain(x: float[...]) => float {
     return sum(min<-1, false>(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[2.0, 1.0, 1.0], [5.0, 4.0, 6.0]] as float[2, 3]
     let engine = grad(total)<[[2.0, 1.0, 1.0], [5.0, 4.0, 6.0]] as float[2, 3]>()
     let (value, pullback) = vjp(total_plain)(x)

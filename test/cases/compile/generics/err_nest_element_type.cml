@@ -10,11 +10,11 @@
  * call of `nest`, at the level whose type argument contains the one the open instance holds.
  */
 
-func nest::<T>(xs: T[n], k: int): int {
+func nest::<T>(xs: T[n], k: int) => int {
     return if k <= 0 then len(xs) else nest([xs], k - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(nest([1.0, 2.0], 3))
     return 0
 }

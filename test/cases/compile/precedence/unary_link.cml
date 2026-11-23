@@ -4,15 +4,15 @@
  * sign is applied to what the call gives, for a name and for a literal alike.
  */
 
-func always(x: bool): bool {
+func always(x: bool) => bool {
     return true
 }
 
-func absolute(x: int): int {
+func absolute(x: int) => int {
     return if x < 0 then 0 - x else x
 }
 
-func main(): int sync {
+func main() => int sync {
     let b = 5
     let t = true
     println(-b->absolute, ~b->absolute, !t->always, -2->absolute, -b ^ 2, -b * 2)

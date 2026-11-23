@@ -14,16 +14,16 @@
 import { grad, with_grad, stop_gradient } from autodiff
 
 with <x: float>
-func square(): float {
+func square() => float {
     return x * x
 }
 
 with <x: float>
-func stopped(): float {
+func stopped() => float {
     return x * x + stop_gradient(x * 10.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(square)<2.0>()
     let vg = with_grad(square)<2.0>()
     let ds = grad(stopped)<2.0>()

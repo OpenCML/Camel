@@ -3,16 +3,32 @@
  * equal.
  */
 
-func mul(a: float, b: float): float { return a * b }
-func sub(a: float, b: float): float { return a - b }
-func eq(a: float, b: float): bool { return a == b }
-func ne(a: float, b: float): bool { return a != b }
-func lt(a: float, b: float): bool { return a < b }
-func le(a: float, b: float): bool { return a <= b }
-func gt(a: float, b: float): bool { return a > b }
-func ge(a: float, b: float): bool { return a >= b }
+func mul(a: float, b: float) => float {
+    return a * b
+}
+func sub(a: float, b: float) => float {
+    return a - b
+}
+func eq(a: float, b: float) => bool {
+    return a == b
+}
+func ne(a: float, b: float) => bool {
+    return a != b
+}
+func lt(a: float, b: float) => bool {
+    return a < b
+}
+func le(a: float, b: float) => bool {
+    return a <= b
+}
+func gt(a: float, b: float) => bool {
+    return a > b
+}
+func ge(a: float, b: float) => bool {
+    return a >= b
+}
 
-func main(): int sync {
+func main() => int sync {
     let inf = mul(1.0e308, 10.0)
     let nan = sub(inf, inf)
     let nzero = mul(-1.0, 0.0)
@@ -24,6 +40,8 @@ func main(): int sync {
     println(eq(0.5, 0.5), ne(0.5, 0.25), le(0.5, 0.5), ge(0.25, 0.5))
     println(nan == nan, nan != nan, nzero == 0.0)
     println(if nan == nan then 'equal' else 'not equal')
-    println([1.0, nan, 3.0]->filter<func (x: float) => bool { x == x }>)
+    println([1.0, nan, 3.0]->filter<func (x: float) => bool {
+        x == x
+    }>)
     return 0
 }

@@ -3,8 +3,7 @@
  * it, and the run ends with the failure unhandled (exit code 1).
  */
 
-
-func main(): int sync {
+func main() => int sync {
     println('before')
     fail<'Stop'>('stopped')
 }

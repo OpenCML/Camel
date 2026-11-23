@@ -10,21 +10,31 @@
  */
 
 with <k: int>
-func scale(x: int): int { return x * k }
+func scale(x: int) => int {
+    return x * k
+}
 
 with <k: f32>
-func scale(x: f32): f32 { return x * k }
+func scale(x: f32) => f32 {
+    return x * k
+}
 
 with <xs: float[]>
-func at(i: int): float { return xs[i] * 2.0 }
+func at(i: int) => float {
+    return xs[i] * 2.0
+}
 
 with <xs: f32[]>
-func at(i: int): f32 { return xs[i] }
+func at(i: int) => f32 {
+    return xs[i]
+}
 
 with <k: f32>
-func half(x: f32): f32 { return x * k }
+func half(x: f32) => f32 {
+    return x * k
+}
 
-func main(): int sync {
+func main() => int sync {
     // exact: the int overload, not the f32 one
     let s = scale<2>
     println(s(3))

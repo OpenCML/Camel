@@ -4,6 +4,6 @@
 
 export let five = 5
 
-export func nine(): int {
+export func nine() => int {
     return 9
 }

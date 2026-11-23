@@ -11,7 +11,7 @@
 
 import state
 
-func apart(): int {
+func apart() => int {
     let a = state::ref(1)
     let b = state::ref(2)
     let x = state::set(a, 11)
@@ -19,14 +19,14 @@ func apart(): int {
     return x + y
 }
 
-func same(): int {
+func same() => int {
     let a = state::ref(1)
     let x = state::set(a, 11)
     let y = state::set(a, 22)
     return x + y + state::get(a)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(apart())
     println(same())
     return 0

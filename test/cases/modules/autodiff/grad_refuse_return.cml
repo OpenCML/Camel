@@ -2,11 +2,11 @@
 import { grad } from autodiff
 
 with <x: float>
-func rounded(): int {
+func rounded() => int {
     return int(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(rounded)<3.0>())
     return 0
 }

@@ -5,11 +5,11 @@
  * its body still reports.
  */
 
-func never_called::<T>(x: T): T {
+func never_called::<T>(x: T) => T {
     return x + no_such_name
 }
 
-func main(): int sync {
+func main() => int sync {
     println('ok')
     return 0
 }

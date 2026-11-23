@@ -28,15 +28,15 @@
 // and not a half of the pair, and `split`'s loop cut takes one state
 // (`modules/transforms/split_loop_cut.cpp#readLoopCut`, `ports.size() != 2`). Nothing in this case
 // needs that cut, and the mark would not make it exist.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func carried_p(x: float): float {
+func carried_p(x: float) => float {
     let q = 2.0 * x
-    return (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1
+    return (loop s = x, p = x for i in 0 .. 3 do (s + p, p + q)).1
 }
 
-func main(): int sync {
+func main() => int sync {
     // The algebra first, forward and un-transposed: 7 is the value this case reads out.
     println(carried_p(1.0))
     let back = transpose(carried_p)

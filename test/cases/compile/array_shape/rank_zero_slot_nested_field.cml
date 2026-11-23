@@ -9,7 +9,7 @@
 type Inner = { v: f32[...] }
 type Outer = { inner: Inner }
 
-func main(): int sync {
+func main() => int sync {
     let one: f32 = 1.0
     let two: f32 = 2.5
     let writtenLow: Outer = { inner: { v: 1.0 } }

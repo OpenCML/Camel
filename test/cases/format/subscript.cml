@@ -1,35 +1,35 @@
-func part(xs: int[], a: int, b: int): int[] {
-return xs[a..b]
+func part(xs: int[], a: int, b: int) => int[] {
+    return xs[a..b]
 }
 
-func until(xs: int[], b: int): int[] {
-  return xs[..b]
+func until(xs: int[], b: int) => int[] {
+    return xs[..b]
 }
 
-func whole(xs: int[]): int[] {
+func whole(xs: int[]) => int[] {
     return xs[..]
 }
 
-func stepped(xs: int[], a: int): int[] {
+func stepped(xs: int[], a: int) => int[] {
     return xs[range(a, 4, 1)]
 }
 
-func reversed(xs: int[]): int[] {
+func reversed(xs: int[]) => int[] {
     return xs[range(len(xs) - 1, -1, -1)]
 }
 
-func everyOther(xs: int[]): int[] {
+func everyOther(xs: int[]) => int[] {
     return xs[range(0, len(xs), 2)]
 }
 
-func after(xs: int[], start: int): int[] {
+func after(xs: int[], start: int) => int[] {
     return xs[start..]
 }
 
-func window(xs: int[], a: int, b: int, step: int): int[] {
+func window(xs: int[], a: int, b: int, step: int) => int[] {
     return xs[range(a, b, step)]
 }
 
-func rows(xs: int[], idx: int[]): int[] {
+func rows(xs: int[], idx: int[]) => int[] {
     return xs[idx]
 }

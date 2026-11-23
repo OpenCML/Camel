@@ -7,9 +7,11 @@
 
 type Point = { x: float, y: float }
 
-func px(p: Point): float { return p.x }
+func px(p: Point) => float {
+    return p.x
+}
 
-func main(): int sync {
+func main() => int sync {
     println(px({ y: 2.0, x: '1.5' }))
     return 0
 }

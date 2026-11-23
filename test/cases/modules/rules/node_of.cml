@@ -29,19 +29,19 @@ import { rewrite } from rewrite
 
 /// The condition on the coefficient's value: the type is the parameter's own, so no dummy sample
 /// value tells `constant` which type to read.
-func positive(c: float): bool {
+func positive(c: float) => bool {
     return c > 0.0 && c - c == 0.0
 }
 
 /// The condition on the coefficient's node: `node_of(c)` is the hidden node parameter of `c`.
-func typeText(n: Node): string {
+func typeText(n: Node) => string {
     return match type_of(n) {
         case null => ''
         case t => type_name(t)
     }
 }
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
@@ -52,31 +52,42 @@ rule drop_positive(x: float, const c: float) when positive(c) { x * c => x }
 
 /// An `int` coefficient is a constant node of the `int` multiplier: `type_of` of it says `int`,
 /// and no float rule has such a node.
-rule drop_int_coefficient(x: int, const c: int) when typeText(node_of(c)) == 'int' && is_constant(node_of(c)) { x * c => x }
+rule drop_int_coefficient(x: int, const c: int)
+    when typeText(node_of(c)) == 'int' && is_constant(node_of(c)) { x * c => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[drop_positive, drop_int_coefficient]>
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
-    return len(nodes(found[0])->filter<func (n: Node) => bool { opText(n) == operator }>)
+func countOf::<F>(p: F, function: string, operator: string) => int spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
+    return len(nodes(found[0])->filter<func (n: Node) => bool {
+        opText(n) == operator
+    }>)
 }
 
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     println('positive', countOf(p, 'positive_coefficient', ':op/mul_d'))
     println('int', countOf(p, 'int_coefficient', ':op/mul_l'))
     println('negative', countOf(p, 'negative_coefficient', ':op/mul_d'))
     return p
 }
 
-func positive_coefficient(x: float): float { return x * 3.0 }
+func positive_coefficient(x: float) => float {
+    return x * 3.0
+}
 
-func int_coefficient(x: int): int { return x * 2 }
+func int_coefficient(x: int) => int {
+    return x * 2
+}
 
-func negative_coefficient(x: float): float { return x * -2.0 }
+func negative_coefficient(x: float) => float {
+    return x * -2.0
+}
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     println(positive_coefficient(5.0), int_coefficient(5), negative_coefficient(5.0))
     return 0
 }

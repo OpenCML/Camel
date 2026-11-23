@@ -1,11 +1,11 @@
 // Item A's third rewrite: a copy of `apply` is declared and the copy is called instead, so the
 // text has one more declaration and one more call site and no new node. Same five lines.
 
-func apply_copy(f: (x: int) => int, x: int): int sync {
+func apply_copy(f: (x: int) => int, x: int) => int sync {
     return f(x)
 }
 
-func run(n: int, base: int): int sync {
+func run(n: int, base: int) => int sync {
     let label = 'step'
     let twice = base * 2
     let thrice = base * 3
@@ -23,7 +23,7 @@ func run(n: int, base: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = run(3, 10)
     return 0
 }

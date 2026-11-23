@@ -29,34 +29,36 @@ rule leaks(x: int) { x * 1 => (2 * 3) + (1 / 0) }
 /// The control: a left side of its own, a right side the engine can build.
 rule drops(x: int) { x + 0 => x }
 
-export func apply_leaks::<F>(p: F): F! {
+export func apply_leaks::<F>(p: F) => F! {
     return p->rewrite<[leaks]>
 }
 
-export func apply_drops::<F>(p: F): F! {
+export func apply_drops::<F>(p: F) => F! {
     return p->rewrite<[drops]>
 }
 
-func countOf::<F>(p: F, function: string): int spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func countOf::<F>(p: F, function: string) => int spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return len(nodes(found[0]))
 }
 
 /// The node count of both functions, so the same reading can be taken before and after each pass.
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     println('leak', countOf(p, 'leak_probe'), 'drop', countOf(p, 'drop_probe'))
     return p
 }
 
-func leak_probe(a: int): int {
+func leak_probe(a: int) => int {
     return a * 1
 }
 
-func drop_probe(a: int): int {
+func drop_probe(a: int) => int {
     return a + 0
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     println(leak_probe(7), drop_probe(7))
     return 0
 }

@@ -2,15 +2,16 @@
  * Verifies macro evaluation skips non-static inputs while leaving the macro call executable by the runtime fallback path.
  */
 
-func seed(): int {
+func seed() => int {
     return 41
 }
 
-#macro func add_one(x: int): int {
+#macro
+func add_one(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let value = add_one(seed())
     'macro_runtime_boundary value={}'->format<value>->println
     return 0

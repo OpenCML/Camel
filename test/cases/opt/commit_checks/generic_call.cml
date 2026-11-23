@@ -5,15 +5,15 @@
 // type that says nothing" (no violation) and "a reading the checker cannot name" (a decline), and
 // the two must not be one line of code.
 
-func apply(g: (x: int) => int, x: int): int {
+func apply(g: (x: int) => int, x: int) => int {
     return g(x)
 }
 
-func loud(x: int): int sync {
+func loud(x: int) => int sync {
     println(x)
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return apply(loud, 3)
 }

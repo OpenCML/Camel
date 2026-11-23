@@ -9,40 +9,40 @@
  * has one. A chain (`chain` -> `mid` -> `deep`) is the same reading one call deeper, where the
  * rewritten function is not the graph that changed.
  */
-import { Rule, rewrite } from rewrite
 import { Graph, Node, constant, graphs_of, inputs, name, nodes, op, op_name } from graph
+import { Rule, rewrite } from rewrite
 import { ends_with } from str
 
 rule drop_one(x: int) { x + 1 => x }
 
-func target(x: int): int {
+func target(x: int) => int {
     return x + 1
 }
 
-func user(n: int): int spelling {
+func user(n: int) => int spelling {
     return target(n)
 }
 
-func deep(x: int): int {
+func deep(x: int) => int {
     return x + 1
 }
 
-func mid(n: int): int spelling {
+func mid(n: int) => int spelling {
     return deep(n)
 }
 
-func chain(n: int): int spelling {
+func chain(n: int) => int spelling {
     return mid(n)
 }
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func isOne(n: Node): bool {
+func isOne(n: Node) => bool {
     return match constant::<int>(n) {
         case null => false
         case v => v == 1
@@ -50,27 +50,29 @@ func isOne(n: Node): bool {
 }
 
 /// The `x + 1` of a `target` or a `deep`: an int addition whose second operand is the constant 1.
-func isAddOne(n: Node): bool spelling {
+func isAddOne(n: Node) => bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
 }
 
 /// How many `+ 1` nodes the graph of a function has.
-func addOnes(g: Graph): int {
+func addOnes(g: Graph) => int {
     return len(nodes(g)->filter<isAddOne>)
 }
 
-func named(label: string, g: Graph): bool spelling {
+func named(label: string, g: Graph) => bool spelling {
     return name(g)->ends_with<label>
 }
 
 /// The graph of the function `label` that `p` reaches.
-func graphNamed::<F>(p: F, label: string): Graph spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { named(label, g) }>
+func graphNamed::<F>(p: F, label: string) => Graph spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        named(label, g)
+    }>
     return found[0]
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let rules: Rule[] = [drop_one]
     let q = user->rewrite<rules> !! user
     println(`one: ${addOnes(graphNamed(q, 'target'))} ${q(5)}`)

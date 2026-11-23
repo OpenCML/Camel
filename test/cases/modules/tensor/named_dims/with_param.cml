@@ -1,10 +1,11 @@
 import { ones, sum } from tensor
+
 // A `with` parameter binds a name like a normal one, and the normal parameters write it.
 with <w: f32[n]>
-func scale(x: f32[n]): float {
+func scale(x: f32[n]) => float {
     return float(sum(x)) + float(sum(w))
 }
-func main(): int sync {
+func main() => int sync {
     println(scale<ones::<f32>([3])>(ones::<f32>([3])))
     return 0
 }

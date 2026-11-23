@@ -3,7 +3,7 @@
  * others were unresolved references).
  */
 
-func main(): int sync {
+func main() => int sync {
     let a, b = 1, 2
     var c, d = 3, 4
     c = c + 10

@@ -4,11 +4,11 @@
  * the division (line 9, column 28), not a hardware exception.
  */
 
-func f(a: int, b: int): int {
+func f(a: int, b: int) => int {
     return if a < 2 then a / b else f(a - 1, b) + a / b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(30, 3))
     let z = 0
     println(f(30, z))

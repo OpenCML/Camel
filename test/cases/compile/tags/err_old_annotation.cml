@@ -1,5 +1,5 @@
 /// The old `@name(...)` form of a tag: a located diagnostic points at `#[...]`.
-
 @kernel(base)
-
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}

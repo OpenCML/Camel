@@ -6,7 +6,7 @@
 
 import { to_upper } from str
 
-func main(): int sync {
+func main() => int sync {
     println(to_upper(42))
     return 0
 }

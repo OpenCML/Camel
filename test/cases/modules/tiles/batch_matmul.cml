@@ -1,24 +1,36 @@
-import { sum, mean, abs, reshape, shape, set_num_threads } from tensor
-import { next_key, normal, seed } from random
 import { with_grad } from autodiff
-import { source, run_preferred_resident, download } from tiles
 import { exit } from process
+import { next_key, normal, seed } from random
+import { sum, mean, abs, reshape, shape, set_num_threads } from tensor
+import { source, run_preferred_resident, download } from tiles
 
 type Pair = { a: f32[...], b: f32[...] }
-func pair(a: f32[...], b: f32[...]): Pair { return { a: a, b: b } }
-func product(a: f32[...], b: f32[...]): f32[...] { return a @ b }
+func pair(a: f32[...], b: f32[...]) => Pair {
+    return { a: a, b: b }
+}
+func product(a: f32[...], b: f32[...]) => f32[...] {
+    return a @ b
+}
 with <w: Pair>
-func loss(target: f32[...]): float {
+func loss(target: f32[...]) => float {
     let e = w.a @ w.b - target
     return float(mean(e * e))
 }
-func derivative(w: Pair, target: f32[...]): (float, Pair) {
+func derivative(w: Pair, target: f32[...]) => (float, Pair) {
     return with_grad(loss)<w>(target)
 }
-func check(name: string, a: f32[...], b: f32[...], target: f32[...], run_gpu: bool): int sync {
+func check(
+    name: string,
+    a: f32[...],
+    b: f32[...],
+    target: f32[...],
+    run_gpu: bool
+) => int sync {
     let w = pair(a, b)
     let code = source<derivative>((w, target))
-    if len(code) == 0 then sync { exit(1) }
+    if len(code) == 0 then sync {
+        exit(1)
+    }
     if run_gpu then sync {
         let forward_error = sum(abs(download(run_preferred_resident<product>((a, b))) - a @ b))
         let cpu = derivative(w, target)
@@ -29,11 +41,13 @@ func check(name: string, a: f32[...], b: f32[...], target: f32[...], run_gpu: bo
         let fd = (loss<plus>(target) - loss<minus>(target)) / 0.002
         let fd_error = float(sum(abs(reshape<[1]>([f32(fd - float(sum(gpu.1.a)) + float(sum(gpu.1.b)))]))))
         println('BATCH {} forward_l1={} gradient_l1={} directional_error={}'->format<name, forward_error, gradient_error, fd_error>)
-        if forward_error > 0.0001 || gradient_error > 0.0001 || fd_error > 0.002 then sync { exit(1) }
+        if forward_error > 0.0001 || gradient_error > 0.0001 || fd_error > 0.002 then sync {
+            exit(1)
+        }
     }
     return 0
 }
-func main(run_gpu: bool): int sync {
+func main(run_gpu: bool) => int sync {
     set_num_threads(1)
     seed(173)
     check('equal3', next_key()->normal::<f32><shape: [2, 3, 4]>, next_key()->normal::<f32><shape: [2, 4, 5]>, next_key()->normal::<f32><shape: [2, 3, 5]>, run_gpu)
@@ -47,11 +61,17 @@ func main(run_gpu: bool): int sync {
         let a = reshape<[2, 2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0] as f32[])
         let expected = reshape<[2, 2, 2]>([22.0, 28.0, 49.0, 64.0, 220.0, 244.0, 301.0, 334.0] as f32[])
         let known_error = sum(abs(download(run_preferred_resident<product>((a, reshape<[2, 3, 2]>(a)))) - expected))
-        if known_error != 0.0 then sync { exit(1) }
+        if known_error != 0.0 then sync {
+            exit(1)
+        }
         let empty_k = download(run_preferred_resident<product>((next_key()->normal::<f32><shape: [2, 3, 0]>, next_key()->normal::<f32><shape: [2, 0, 4]>)))
-        if sum(abs(empty_k)) != 0.0 then sync { exit(1) }
+        if sum(abs(empty_k)) != 0.0 then sync {
+            exit(1)
+        }
         let empty_batch = download(run_preferred_resident<product>((next_key()->normal::<f32><shape: [0, 3, 4]>, next_key()->normal::<f32><shape: [1, 4, 5]>)))
-        if shape(empty_batch)[0] != 0 then sync { exit(1) }
+        if shape(empty_batch)[0] != 0 then sync {
+            exit(1)
+        }
     }
     println('BATCH MATMUL CHECKS PASS')
     return 0

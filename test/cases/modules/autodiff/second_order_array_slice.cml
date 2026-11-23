@@ -17,7 +17,7 @@
 import { grad } from autodiff
 
 with <w: float>
-func f(): float {
+func f() => float {
     let xs = [w, w * 2.0, w * 3.0, w * 4.0]
     let k = int(w)
     let s = xs[0..k]
@@ -26,23 +26,23 @@ func f(): float {
 
 // Depends on w only through a discrete bound: the length of the slice. Exactly zero, both orders.
 with <w: float>
-func bound_only(): float {
+func bound_only() => float {
     let xs = [10.0, 20.0, 30.0, 40.0]
     let s = xs[0..int(w)]
     return float(len(s))
 }
 
 with <v: float>
-func df(): float {
+func df() => float {
     return grad(f)<v>()
 }
 
 with <v: float>
-func dbound(): float {
+func dbound() => float {
     return grad(bound_only)<v>()
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = grad(f)<2.0>()
     let h = grad(df)<2.0>()
     let b = grad(bound_only)<2.0>()
@@ -51,6 +51,7 @@ func main(): int sync {
         g,
         h,
         b,
-        b2>->println
+        b2
+    >->println
     return 0
 }

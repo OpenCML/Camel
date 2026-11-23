@@ -6,7 +6,7 @@
 
 import { now } from time
 
-func chain(n: int, xs: float[], fn: () => void): float[] sync {
+func chain(n: int, xs: float[], fn: () => void) => float[] sync {
     if n <= 0 then {
         return xs
     } else sync {
@@ -18,11 +18,11 @@ func chain(n: int, xs: float[], fn: () => void): float[] sync {
     }
 }
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main(): int sync {
+func main() => int sync {
     let warm = fib(20)
     if warm != 6765 then {
         return 1
@@ -30,7 +30,9 @@ func main(): int sync {
         let durations = chain(20, [], func () => void {
             fib(20)
         })
-        let total = durations->reduce<func (acc: float, d: float) => float { acc + d }, 0.0>
+        let total = durations->reduce<func (acc: float, d: float) => float {
+            acc + d
+        }, 0.0>
         if total < 0.0 then {
             return 2
         } else {

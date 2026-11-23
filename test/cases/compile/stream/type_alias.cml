@@ -13,27 +13,27 @@
 
 type Ints = int..
 
-func take(s: Ints): int {
+func take(s: Ints) => int {
     return 0
 }
 
-func give(s: int..): int {
+func give(s: int..) => int {
     return 0
 }
 
-func pick(x: int): int {
+func pick(x: int) => int {
     return 0
 }
 
-func pick(x: int..): int {
+func pick(x: int..) => int {
     return 1
 }
 
-func pick(x: int[]): int {
+func pick(x: int[]) => int {
     return 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(2)
     return 0
 }

@@ -4,12 +4,12 @@
  * executed (it is executed).
  */
 
-func report(tag: string): int sync {
+func report(tag: string) => int sync {
     println(tag)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     report('first')
     println('second')
     return 0

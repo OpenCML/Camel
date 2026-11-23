@@ -8,9 +8,6 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
-| lane/nn-element-type | 作者裁定：nn 算子的元素类型随入参（`conv2d` 一族、`pool` 一族、`bn` 一族、`shapedLike`、两个 softmax 梯度）；`conv2d_shape_error` 的返回声明改 `f64[...]`，它问的是几何 | `export_train_step_conv` 红→绿；`feat/modules` 44 红，逐名对 base `0d72639d9` 只差这一条（另一条只在车道上的 `compiled_region_parallel` 是 tiles 并行 SIGSEGV，单跑 `tiles.plan.toml` 绿、用例不 import nn） | `feat/modules` 2082/2028/44/7/3、`feat/compile` 2672/2666/1红/5known（那 1 红是既有 `vmap_batches_the_element_of_a_row.prl`）、`smoke` 10/10/0、`feat/parse` 125/126（红在 `src/stdlib/prelude.cml` 的旧记录行，base 就有，属语料那一笔） | `export_train_step_bn` 仍红在 BN 反向；`prelude.cml` 那行等语料那一笔覆盖，不在这里重录 | 2026-11-23 19:33 |
-| lane/notation-corpus | `D-1123-31` 第 4 条：4,252 个 `.cml` 的旧返回类型写法与残留 `f..g` 用格式化器一次过，**然后**再删解析器旧分支；冲突时重跑格式化器 | 语料 **4254 → 0**、解析器旧分支已删（`eb20efab7`、`0b93cbf6f`）；`camel-format` 改 4,163 文件；幂等 4253/4254，唯一例外 `comparison_across_lines.cml` 是**故意保留换行**（它钉的就是行尾 `>`）；`f..g` 14 处手改为 `<>`（格式化器只加空格、分不出区间）；`ast_hashes.txt` 用 `-UpdateAstHashes` 重录 4,097 行 | `feat/parse` 126/126/0、`smoke` 10/10/0；`feat/compile` 2669 里 **130 红**，逐条判完 **甲 12 / 乙 1** | **修 `camel-format` 的 `visitStrayPositional`**（见下），再按 CST 逐文件对照证明没丢第二处，然后重录一次 | 2026-11-23 18:36 |
-
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |
@@ -21,6 +18,7 @@
 | lane/range-value | `28e3cb377` | `export type Range` **0→1**、三个函数；`smoke` 10/10/0、`stream` 150/150/0、`feat/parse` 126/126/0、`feat/compile` 2672/2666/1红/5known | 两条否决式：`let r: Range = 1..5` 报 `DeclaredTypeMismatch` 0x03000110；`map(1..5, f)` 仍走**算子组**。乙（五条 `:range/…` 算子 + C++ 内核）留作下一笔 |
 | lane/onnx-lowering（含 `device-programs`、`oper-identity-write` 一摞） | `ce7f79bd9` | 61 文件 +2798/−1016；`feat/modules` **2026/48 → 2082/2032/40**；与 `develop` 逐名 13 红 → **5**（3 已知 + 并行族 2 条随负载）；`feat/compile` 2669/2663/1红/5known | `dy` 无 rank 的根在 `tensor:shape` 的 `inferenceTypeOf` 答开口 `int[]`（丢掉「列表有 2 项」，而 `sum_to` 的 rank 取自该长度），同族另补两处桥；「动态参数没有静态范域」那个前提**被读代码推翻**（`lowerSumTo` 早有两条路），修的是本车道自相矛盾，**4 条真绿**、2 条重钉到 ONNX Loop 的固定 dtype/shape 墙；两堵墙现在只剩 `float`/`f32` 一堵，在那页问题里等作者 |
 | lane/facts-effects | `a82121b23` | 8 处 → **1**（私头可达，读者自算即编译错）；逐节点 **2,467,119 + 341,975 读 / 0 异**、图 43 / 区 68 / 算符 14 全 0 异；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` 2669/2663/1红/5known | 四个 kind（图/节点/区域/算符子句）；`valid=` 多出**正好是 OPER 节点数**（main 11、layer 1、total 2、count 2、twice 1）—— 因为边界检查现在会读因而会存一条 `core.nodeEffects`。探针已删（`src/` 下 0 行） |
+| lane/notation-corpus | `fb8399904f` | 语料 **4,254 → 0**、解析器旧分支已删（旧写法报 `Unexpected ':'; expected a declaration or the end of the file`，`:` 在第 15 列）；`feat/compile` **2808/2802/1红/5known**（那 1 红 = 既有 SIGSEGV）、`feat/parse` 126/126/0、`smoke` 10/10/0；131 条判完 **甲 130 / 乙 1**，乙那条是格式化器丢 `StrayPositional`（`f(a: 1, 2)` → `f(a: 1)`），已修 | **`camel-format` 不改语法，只改排版** ⇒ 「冲突时重跑格式化器」**不足以**恢复语料，必须**先**重跑 `): T → => T` 那支改写，再格式化 —— 这次 5 个文件就是照这条补回来的（`e7ade53e72`）。另：21 个 harness 仍写旧写法（生成程序 10、LSP 5、探针 1、被当源码读 1、只写不解析 1、仅注释 3），下一跑会红 |
 
 
 

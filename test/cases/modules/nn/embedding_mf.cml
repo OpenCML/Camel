@@ -5,8 +5,8 @@
  */
 
 import { grad, with_grad } from autodiff
-import { full, reshape, sum } from tensor
 import { embedding, sgd } from nn
+import { full, reshape, sum } from tensor
 
 type EmbeddingMf = {
     user_table: f64[...],
@@ -14,47 +14,53 @@ type EmbeddingMf = {
 }
 
 with <model: EmbeddingMf>
-func score(user_ids: i64[...], item_ids: i64[...]): float {
+func score(user_ids: i64[...], item_ids: i64[...]) => float {
     let users = embedding(model.user_table, user_ids)
     let items = embedding(model.item_table, item_ids)
     return float(sum(users * items))
 }
 
-func mse_loss(pred: float, rating: float): float {
+func mse_loss(pred: float, rating: float) => float {
     let diff = pred - rating
     return diff * diff
 }
 
 with <model: EmbeddingMf>
-func model_loss(user_ids: i64[...], item_ids: i64[...], rating: float): float {
+func model_loss(user_ids: i64[...], item_ids: i64[...], rating: float) => float {
     let pred = score<model>(user_ids, item_ids)
     return mse_loss(pred, rating)
 }
 
-func init(): EmbeddingMf {
+func init() => EmbeddingMf {
     return {
         user_table: full([3, 2], 0.1),
         item_table: full([4, 2], 0.2)
     }
 }
 
-func train(model: EmbeddingMf, u: i64[...], i: i64[...], rating: float, steps: int): EmbeddingMf {
+func train(
+    model: EmbeddingMf,
+    u: i64[...],
+    i: i64[...],
+    rating: float,
+    steps: int
+) => EmbeddingMf {
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(u, i, rating), 0.2), u, i, rating, steps - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let model = init()
     let user_ids = reshape<[2]>([1, 1])
     let item_ids = reshape<[2]>([0, 1])
     let rating = 1.0
-
+    
     let before = model_loss<model>(user_ids, item_ids, rating)
     let vg = with_grad(model_loss)<model>(user_ids, item_ids, rating)
     let stepped = sgd(model, vg.1, 0.2)
     let after = model_loss<stepped>(user_ids, item_ids, rating)
     let trained = train(model, user_ids, item_ids, rating, 10)
     let after_train = model_loss<trained>(user_ids, item_ids, rating)
-
+    
     'embedding_mf metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'embedding_mf user_table={}'->format<stepped.user_table>->println
     'embedding_mf item_table={}'->format<stepped.item_table>->println

@@ -29,16 +29,16 @@
 import { grad, with_grad } from autodiff
 
 with <w: float>
-func loss(): (float, float) {
+func loss() => (float, float) {
     return (w * w, w + 10.0)
 }
 
 with <w: float>
-func frozen(): (float, float) {
+func frozen() => (float, float) {
     return (1.0, w * w)
 }
 
-func main(): int sync {
+func main() => int sync {
     let pair = grad(loss, has_aux: true)<3.0>()
     let gradient = pair.0
     let aux = pair.1

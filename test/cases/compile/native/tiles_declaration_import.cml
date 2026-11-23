@@ -8,12 +8,12 @@
 
 import { available, device } from tiles
 
-func description(): string {
+func description() => string {
     let text: string = device() !! 'no device'
     return text
 }
 
-func main(): int sync {
+func main() => int sync {
     let possible: bool = available()
     println(possible)
     println(description())

@@ -16,26 +16,26 @@
  * Both gradients are printed with `{}`, so each is compared with its adjoint element by element.
  */
 
-import { sum } from tensor
 import { grad } from autodiff
+import { sum } from tensor
 
 with <xs: float[]>
-func plain(): float {
+func plain() => float {
     let t = f32(xs)
     return float(sum(t))
 }
 
 with <w: float[]>
-func weighted(): float {
+func weighted() => float {
     let t = f32(w)
     let c = f32([2.0, 3.0, 4.0] as f64[])
     return float(sum(t * c))
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1.0, 2.0, 3.0]
-    let g  = grad(plain)<xs>()
-    let w  = [3.0, 4.0, 5.0]
+    let g = grad(plain)<xs>()
+    let w = [3.0, 4.0, 5.0]
     let gw = grad(weighted)<w>()
     'adjoint_cast_array g={} gw={}'->format<g, gw>->println
     return 0

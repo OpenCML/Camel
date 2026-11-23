@@ -5,7 +5,7 @@
  * the standard error stream, where diagnostics go, not standard output.
  */
 
-func main(): int sync {
+func main() => int sync {
     let first = eprintln('to stderr', 1)
     println('value:', first)
     return 0

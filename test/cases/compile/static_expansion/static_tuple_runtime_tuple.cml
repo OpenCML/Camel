@@ -4,14 +4,14 @@
  * a tuple literal can be spread.
  */
 
-func sum3(a: int, b: int, c: int): int {
+func sum3(a: int, b: int, c: int) => int {
     return a + b + c
 }
 
-func viaTuple(t: (int, int, int)): int {
+func viaTuple(t: (int, int, int)) => int {
     return sum3(...t)
 }
 
-func main(): int sync {
+func main() => int sync {
     return viaTuple((1, 2, 3))
 }

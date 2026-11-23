@@ -7,17 +7,35 @@
 type Mask = { bits: int }
 type Vec = { x: float, y: float }
 
-func operator &(a: Mask, b: Mask): Mask { return { bits: a.bits * b.bits } }
-func operator |(a: Mask, b: Mask): Mask { return { bits: a.bits + b.bits } }
-func operator !(m: Mask): Mask { return { bits: 1 - m.bits } }
-func operator +(a: Vec, b: Vec): Vec { return { x: a.x + b.x, y: a.y + b.y } }
-func operator -(a: Vec, b: Vec): Vec { return { x: a.x - b.x, y: a.y - b.y } }
-func operator -(a: Vec): Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }
-func operator *(k: float, v: Vec): Vec { return { x: k * v.x, y: k * v.y } }
-func operator [](v: Vec, i: int): float { return if i == 0 then v.x else v.y }
-func operator <(a: Vec, b: Vec): bool { return a.x < b.x }
+func operator &(a: Mask, b: Mask) => Mask {
+    return { bits: a.bits * b.bits }
+}
+func operator |(a: Mask, b: Mask) => Mask {
+    return { bits: a.bits + b.bits }
+}
+func operator !(m: Mask) => Mask {
+    return { bits: 1 - m.bits }
+}
+func operator +(a: Vec, b: Vec) => Vec {
+    return { x: a.x + b.x, y: a.y + b.y }
+}
+func operator -(a: Vec, b: Vec) => Vec {
+    return { x: a.x - b.x, y: a.y - b.y }
+}
+func operator -(a: Vec) => Vec {
+    return { x: 0.0 - a.x, y: 0.0 - a.y }
+}
+func operator *(k: float, v: Vec) => Vec {
+    return { x: k * v.x, y: k * v.y }
+}
+func operator [](v: Vec, i: int) => float {
+    return if i == 0 then v.x else v.y
+}
+func operator <(a: Vec, b: Vec) => bool {
+    return a.x < b.x
+}
 
-func main(): int sync {
+func main() => int sync {
     let m: Mask = { bits: 1 }
     let n: Mask = { bits: 0 }
     println((m & n).bits, (m | n).bits, (!n).bits)

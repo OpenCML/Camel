@@ -10,12 +10,16 @@
 tag jvp::<F>(rule: F) on func when is_function::<F>()
 
 with <k: float>
-rule scale_rule(x: float) { x * k => func (dx: float) { dx * k } }
+rule scale_rule(x: float) { x * k => func (dx: float) {
+    dx * k
+} }
 
 #jvp(scale_rule)
-func mul(x: float, w: float): float { return x * w }
+func mul(x: float, w: float) => float {
+    return x * w
+}
 
-func main(): int sync {
+func main() => int sync {
     println(mul(2.0, 3.0))
     return 0
 }

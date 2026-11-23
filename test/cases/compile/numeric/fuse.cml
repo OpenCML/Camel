@@ -11,15 +11,16 @@
 
 import { reshape, sum } from tensor
 
-func pair(x: f32[...], w: f32[...], b: f32[...]): (f32[...], f32[...]) {
+func pair(x: f32[...], w: f32[...], b: f32[...]) => (f32[...], f32[...]) {
     let loose = x @ w + b
-    #strict {
+    #strict
+    {
         let tight = x @ w + b
         return (loose, tight)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[])
     let b = reshape<[2]>([0.1, -0.2] as f32[])

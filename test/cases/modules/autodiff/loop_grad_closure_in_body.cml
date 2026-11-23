@@ -16,7 +16,7 @@ import { grad, with_grad } from autodiff
 type P = { a: float, b: float }
 
 with <x: float>
-func structToStruct(): float {
+func structToStruct() => float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
         let g = func (t: P) => P { a: t.a * d, b: t.b }
         g(q)
@@ -25,7 +25,7 @@ func structToStruct(): float {
 }
 
 with <x: float>
-func readsState(): float {
+func readsState() => float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
         let g = func () => P { a: q.a * d, b: q.b }
         g()
@@ -34,16 +34,18 @@ func readsState(): float {
 }
 
 with <x: float>
-func scalarIn(): float {
+func scalarIn() => float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
-        let g = func (u: float) => float { u * d }
+        let g = func (u: float) => float {
+            u * d
+        }
         { a: g(q.a), b: q.b }
     }
     return q.a
 }
 
 with <x: float>
-func scalarToStruct(): float {
+func scalarToStruct() => float {
     let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
         let g = func (u: float) => P { a: u * d, b: u }
         g(q.a)
@@ -51,12 +53,11 @@ func scalarToStruct(): float {
     return q.a
 }
 
-func main(): int sync {
-    let vg    = with_grad(structToStruct)<1.0>()
+func main() => int sync {
+    let vg = with_grad(structToStruct)<1.0>()
     let gRead = grad(readsState)<1.0>()
-    let gIn   = grad(scalarIn)<1.0>()
-    let gOut  = grad(scalarToStruct)<1.0>()
-    'loop_grad_closure_in_body vg={} reads={} scalarIn={} scalarOut={}'->format<
-        vg, gRead, gIn, gOut>->println
+    let gIn = grad(scalarIn)<1.0>()
+    let gOut = grad(scalarToStruct)<1.0>()
+    'loop_grad_closure_in_body vg={} reads={} scalarIn={} scalarOut={}'->format<vg, gRead, gIn, gOut>->println
     return 0
 }

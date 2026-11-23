@@ -14,16 +14,16 @@
  * printed sum is `3 * k`.
  */
 
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
+import { reshape, sum } from tensor
 
 with <m: (f32[...], int)>
-func loss(): float {
+func loss() => float {
     let (p, k) = m
     return float(sum(p)) * float(k)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     let model = (x, 2)
     let (value, gradient) = with_grad(loss)<model>()
@@ -32,6 +32,7 @@ func main(): int sync {
     'grad_tuple_discrete_member value={:.1f} grad_sum={:.1f} k={}'->format<
         value,
         sum(gp),
-        gk>->println
+        gk
+    >->println
     return 0
 }

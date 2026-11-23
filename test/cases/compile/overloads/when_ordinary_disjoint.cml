@@ -11,29 +11,29 @@
  * a compiler that took the pair by the order it is written in would be free to take either.
  */
 
-func is_int::<T>(): bool {
+func is_int::<T>() => bool {
     return match type T {
         case int => true
         case _ => false
     }
 }
 
-func is_text::<T>(): bool {
+func is_text::<T>() => bool {
     return match type T {
         case string => true
         case _ => false
     }
 }
 
-func label(x: int): string when is_int::<int>() {
+func label(x: int) => string when is_int::<int>() {
     return 'integer'
 }
 
-func label(x: int): string when is_text::<int>() {
+func label(x: int) => string when is_text::<int>() {
     return 'text'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(label(7))
     return 0
 }

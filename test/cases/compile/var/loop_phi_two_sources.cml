@@ -14,7 +14,7 @@
  *
  * Run: camel test/cases/compile/var/loop_phi_two_sources.cml std::nvm
  */
-func main(): int sync {
+func main() => int sync {
     var total = 5
     total = total * 2
     let _ = loop i = 0 while i < 3 do {

@@ -16,15 +16,15 @@
 
 type T = float
 
-rule plus_any::<T>(x: T, w: T) {
-    x + w => func (dx: T, dw: T) { dx }
-}
+rule plus_any::<T>(x: T, w: T) { x + w => func (dx: T, dw: T) {
+    dx
+} }
 
-rule plus_float(x: T, w: T) {
-    x + w => func (dx: T, dw: T) { dw }
-}
+rule plus_float(x: T, w: T) { x + w => func (dx: T, dw: T) {
+    dw
+} }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

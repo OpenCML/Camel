@@ -15,19 +15,19 @@
 // between the two is another value, while the `3` written twice is one value after the sweep.
 // The number is the source's own: `written(4)` is `4 * 3 + 5 * 3 = 27`.
 
-func shared(x: int): int {
+func shared(x: int) => int {
     let a = x * 7
     let b = x * 7
     return a + b
 }
 
-func literals(): int {
+func literals() => int {
     let a = 3 + 4
     let b = 3 + 4
     return a * b
 }
 
-func written(x: int): int sync {
+func written(x: int) => int sync {
     var cell = x
     let a = cell * 3
     cell = cell + 1
@@ -35,11 +35,11 @@ func written(x: int): int sync {
     return a + b
 }
 
-func apart(x: int): int {
+func apart(x: int) => int {
     return (x + 1) * (x + 2)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(shared(3))
     println(literals())
     println(written(4))

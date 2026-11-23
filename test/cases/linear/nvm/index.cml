@@ -9,11 +9,11 @@ func process(signals: Signal[]) sync {
     return [res1, res2]
 }
 
-func comp1(signal: Signal): Signal {
+func comp1(signal: Signal) => Signal {
     return (signal.0 * 2, signal.1 * 2)
 }
 
-func comp2(signal: Signal): Signal {
+func comp2(signal: Signal) => Signal {
     return (signal.0 - 1, signal.1 - 1)
 }
 

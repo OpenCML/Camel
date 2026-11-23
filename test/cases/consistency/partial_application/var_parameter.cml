@@ -16,13 +16,13 @@
 import state
 
 with <total: state::Ref<int>>
-func add(x: int): int sync {
+func add(x: int) => int sync {
     let next = state::get(total) + x
     state::set(total, next)
     return next
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = state::ref(0)
     let g = add<t>
     println(g(1), g(2), g(3), state::get(t))

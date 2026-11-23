@@ -12,18 +12,18 @@
  * The element-wise reading is printed too (`2, 4, 6, 8` summed by hand), because a sum is blind to a
  * permutation: the case is about an array cotangent crossing the walk, not about addition.
  */
-import { vjp } from vjp
 import { sum } from array
+import { vjp } from vjp
 
-func gf(v: f32[4]): f32 {
+func gf(v: f32[4]) => f32 {
     return v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]
 }
 
-func gd(v: float[4]): float {
+func gd(v: float[4]) => float {
     return v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]
 }
 
-func main(): int sync {
+func main() => int sync {
     let vsf: f32[4] = [1.0, 2.0, 3.0, 4.0]
     let vsd: float[4] = [1.0, 2.0, 3.0, 4.0]
     let pf = vjp(gf)(vsf).1(1.0).0

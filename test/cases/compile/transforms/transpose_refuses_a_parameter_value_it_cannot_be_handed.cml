@@ -28,14 +28,14 @@
 // A parameter whose type states **no** extents (`float[...]`) is the other side of the same rule: no
 // law can state the length, so the build refuses by name
 // (`RuntimeDiag::TransposeNeedsParameterShape`, pinned by `transpose_needs_parameter_shape`).
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func pick(x: float[3]): float {
+func pick(x: float[3]) => float {
     return x[1]
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(pick)
     println(back(1.0))
     return 0

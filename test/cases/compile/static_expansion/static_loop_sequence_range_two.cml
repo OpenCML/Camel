@@ -5,10 +5,10 @@
  * is written, pointing at the name, before the sequence is worked out.
  */
 
-func sum(): int {
+func sum() => int {
     return static loop acc = 0 for i in range(0, 3) do acc + i
 }
 
-func main(): int {
+func main() => int {
     return sum()
 }

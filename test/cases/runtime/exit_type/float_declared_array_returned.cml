@@ -21,11 +21,13 @@ import { rewrite } from rewrite
 
 rule retype(x: float) { x * 1.0 => [1.0, 2.0] }
 
-func target(n: float): float { n * 1.0 }
+func target(n: float) => float {
+    n * 1.0
+}
 
-func main(): int sync {
+func main() => int sync {
     let rules = [retype]
-    let g     = target->rewrite<rules> !! target
+    let g = target->rewrite<rules> !! target
     print(g(7.0))
     return 0
 }

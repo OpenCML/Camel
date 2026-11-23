@@ -4,13 +4,13 @@
 
 import { reshape, where, maximum, relu, sum, shape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let col = reshape<[3, 1]>([1.0, 2.0, 3.0])
     let row = reshape<[2]>([10.0, 20.0])
     let grid = col + row
     let mask = grid > 15.0
     let clipped = where(mask, grid, 0.0)
-    let ints = f32(0..4) - 1.5
+    let ints = f32(0 .. 4) - 1.5
     'broadcast shape={} sum={}'->format<shape(grid), sum(grid)>->println
     'broadcast mask_sum={} clipped_sum={}'->format<sum(int(mask)), sum(clipped)>->println
     'broadcast relu_sum={} max_sum={}'->format<sum(relu(ints)), sum(maximum(ints, 0.0))>->println

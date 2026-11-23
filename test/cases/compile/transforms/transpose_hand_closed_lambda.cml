@@ -18,21 +18,23 @@ import rulesets.jvp
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
 
-func g(x: float): float {
+func g(x: float) => float {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     // The cut's second half: closed over the residuals, which hold x = 3.
     let (_, lin) = split(jvp(g))(3.0)
     let byCut = transpose(lin)
-    println("cut ct1=", byCut(1.0))
-    println("cut ct3=", byCut(3.0))
+    println('cut ct1=', byCut(1.0))
+    println('cut ct3=', byCut(3.0))
     // The same map, closed by hand over the same value.
     let x = 3.0
-    let hand = func (dx: float) { 2.0 * x * dx }
+    let hand = func (dx: float) {
+        2.0 * x * dx
+    }
     let byHand = transpose(hand)
-    println("hand ct1=", byHand(1.0))
-    println("hand ct3=", byHand(3.0))
+    println('hand ct1=', byHand(1.0))
+    println('hand ct3=', byHand(3.0))
     return 0
 }

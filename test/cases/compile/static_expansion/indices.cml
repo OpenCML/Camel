@@ -5,32 +5,32 @@
  * held by a type parameter gives a count known only at instantiation.
  */
 
-func sum(t: (int, int, int)): int {
+func sum(t: (int, int, int)) => int {
     return static loop acc = 0 for j in indices t do acc + t.[j]
 }
 
-func positions(t: (int, string)): (int, int) {
-    return ( static for j in indices t do j )
+func positions(t: (int, string)) => (int, int) {
+    return (static for j in indices t do j)
 }
 
-func count::<T>(t: T): int {
+func count::<T>(t: T) => int {
     return static loop acc = 0 for j in indices t do acc + 1
 }
 
-func empty(t: ()): int {
+func empty(t: ()) => int {
     return static loop acc = 7 for j in indices t do acc + 1
 }
 
 /* `j` takes part in the arithmetic, not only as the key. */
-func weighted(t: (int, int, int)): int {
+func weighted(t: (int, int, int)) => int {
     return static loop acc = 0 for j in indices t do acc + t.[j] * (j + 1)
 }
 
 /* An `indices` generator inside a `fields` body: the inner tuple is a local value. */
-func nested(t: {p: (int, int)}): int {
+func nested(t: { p: (int, int) }) => int {
     var sum = 0
     sync {
-        static for n, F in fields {p: (int, int)} do {
+        static for n, F in fields { p: (int, int) } do {
             let sub = t.[n]
             sum = sum + (static loop acc = 0 for j in indices sub do acc + sub.[j])
         }
@@ -38,7 +38,7 @@ func nested(t: {p: (int, int)}): int {
     return sum
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum((1, 2, 3)))
     let (a, b) = positions((10, 'x'))
     println(a, b)
@@ -46,6 +46,6 @@ func main(): int sync {
     println(count((true, false)))
     println(empty(()))
     println(weighted((1, 2, 3)))
-    println(nested({p: (5, 6)}))
+    println(nested({ p: (5, 6) }))
     return 0
 }

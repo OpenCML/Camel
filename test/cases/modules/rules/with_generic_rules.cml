@@ -20,26 +20,30 @@ import { Run, check, explain_all, rule_name, run, check_text } from rewrite
 with <tile: int>
 rule tile_scale::<T>(x: T) when tile > 0 { x * tile => x + x * (tile - 1) }
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func nodesOf::<F>(p: F, function: string) => Node[] spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    return len(nodesOf(p, function)->filter<func (n: Node) => bool { opText(n) == operator }>)
+func countOf::<F>(p: F, function: string, operator: string) => int spelling {
+    return len(nodesOf(p, function)->filter<func (n: Node) => bool {
+        opText(n) == operator
+    }>)
 }
 
 /// One line per function: how many additions and how many products it holds. The pattern of the
 /// rule bound to 2 matches the products of `wide` and `again` and not the one of `thrice`, and the
 /// replacement it builds from the value adds an addition -- what the value was read for.
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     println('wide', countOf(p, 'wide', ':op/add_l'), countOf(p, 'wide', ':op/mul_l'))
     println('again', countOf(p, 'again', ':op/add_l'), countOf(p, 'again', ':op/mul_l'))
     println('thrice', countOf(p, 'thrice', ':op/add_l'), countOf(p, 'thrice', ':op/mul_l'))
@@ -49,14 +53,18 @@ export func report::<F>(p: F): F! spelling sync {
 
 /// The rule bound to 2: the proof of the application, whose steps name the instance each rewrite
 /// came from -- the one instance of the two sites, `tile_scale<int>(tile = 2)`.
-export func counted_two::<F>(p: F): F! sync {
+export func counted_two::<F>(p: F) => F! sync {
     let rules = [tile_scale<2>]
     return match p->run<rules, explain: true> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<2>))
             return match explain_all(r) {
-                case error e => { return e }
+                case error e => {
+                    return e
+                }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -68,14 +76,18 @@ export func counted_two::<F>(p: F): F! sync {
 
 /// The same rule bound to 3: another instance of the one declaration, `tile_scale<int>(tile = 3)`,
 /// which fires once.
-export func counted_three::<F>(p: F): F! sync {
+export func counted_three::<F>(p: F) => F! sync {
     let rules = [tile_scale<3>]
     return match p->run<rules, explain: true> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<3>))
             return match explain_all(r) {
-                case error e => { return e }
+                case error e => {
+                    return e
+                }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -87,14 +99,18 @@ export func counted_three::<F>(p: F): F! sync {
 
 /// The same rule bound to 0: its pattern matches `x * 0`, its condition refuses, and nothing is
 /// rewritten -- the third instance, and the value is what the run differs by.
-export func counted_zero::<F>(p: F): F! sync {
+export func counted_zero::<F>(p: F) => F! sync {
     let rules = [tile_scale<0>]
     return match p->run<rules, explain: true> {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<0>))
             return match explain_all(r) {
-                case error e => { return e }
+                case error e => {
+                    return e
+                }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -106,7 +122,7 @@ export func counted_zero::<F>(p: F): F! sync {
 
 /// What `check` says about the rule bound to 2: one row per instance, each named with the type it
 /// was made at and the value it was bound to.
-export func checked::<F>(p: F): F! sync {
+export func checked::<F>(p: F) => F! sync {
     let rules = [tile_scale<2>]
     println(check_text(rules->check<100, 7>))
     return p

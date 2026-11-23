@@ -1,17 +1,21 @@
 /** Reads the committed checkpoint fixture: bytes written before this branch, loaded by the
  * current native `ckpt` code. The test that runs it hashes the fixture before and after.
  */
-import { to_bytes } from tensor
 import { to_array } from bytes
 import { load_tree } from ckpt
 import { sha256 } from hash
+import { to_bytes } from tensor
 
 type Record = {
-    w: f32[...], odd: int[...], empty: f32[...],
-    note: string, cursor: (int, float), enabled: bool
+    w: f32[...],
+    odd: int[...],
+    empty: f32[...],
+    note: string,
+    cursor: (int, float),
+    enabled: bool
 }
 
-func main(dir: string): int sync {
+func main(dir: string) => int sync {
     let loaded = dir->load_tree::<Record>
     return match loaded {
         case error e => sync {

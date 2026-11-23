@@ -19,14 +19,14 @@
 // Whether a value-level `transpose` should be handed the forward arguments as the type law writes
 // them (`Transpose<F> = (...ParamsOf<F>, ct) => ...`) while the printed type says `(float) => ...` is
 // the open half; this entry pins today's answer and names it.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func g(x: float[], n: float): float {
+func g(x: float[], n: float) => float {
     return n * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(g)
     println(back(1.0))
     return 0

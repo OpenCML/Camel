@@ -3,7 +3,7 @@
  * and needs no import.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(float([1]))
     println('never printed')
     return 0

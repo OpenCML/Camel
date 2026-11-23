@@ -5,10 +5,10 @@
 type Box = enum {
     Empty,
     One(int),
-    Two { left: Box, right: Box },
+    Two { left: Box, right: Box }
 }
 
-func weight(b: Box): int {
+func weight(b: Box) => int {
     return match b {
         case Box::Empty => 0
         case Box::One(n) => n
@@ -16,19 +16,19 @@ func weight(b: Box): int {
     }
 }
 
-func build(depth: int): Box {
+func build(depth: int) => Box {
     return if depth <= 0 then {
         Box::Empty
     } else if depth == 1 then {
         Box::One(depth)
     } else {
-        Box::Two {
+        Box::Two{
             left: build(depth - 1),
-            right: build(depth - 2),
+            right: build(depth - 2)
         }
     }
 }
-func main(): void sync {
+func main() => void sync {
     var total = 0
     let _ = loop i = 0 while i < 12 do sync {
         total += weight(build(i))
@@ -38,12 +38,12 @@ func main(): void sync {
     // Dropped values: the collector reclaims what no longer has a reader.
     var dropped = 0
     let _ = loop i = 0 while i < 2000 do sync {
-        let b = Box::Two { left: Box::One(i), right: Box::Empty }
+        let b = Box::Two{ left: Box::One(i), right: Box::Empty }
         dropped += weight(b)
         i + 1
     }
     println(dropped)
-    let kept = Box::Two { left: Box::One(3), right: Box::One(4) }
+    let kept = Box::Two{ left: Box::One(3), right: Box::One(4) }
     println(kept)
     println(weight(kept))
 }

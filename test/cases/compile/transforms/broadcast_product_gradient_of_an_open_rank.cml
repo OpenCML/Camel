@@ -31,11 +31,11 @@
 import { numel, sum } from tensor
 import { vjp } from vjp
 
-func total(x: float[...], w: float[...]): float {
+func total(x: float[...], w: float[...]) => float {
     return sum(x * w)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(total)([1.0, 2.0, 3.0] as float[...], [2.0] as float[...])
     let (dx, dw) = pullback(1.0)
     `open value={} d/dx numel={} d/dx={} d/dw numel={} d/dw={}`->format<value, numel(dx), dx, numel(dw), dw>->println

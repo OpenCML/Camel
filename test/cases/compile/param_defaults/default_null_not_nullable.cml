@@ -4,10 +4,10 @@
  * as some universal "no value".
  */
 
-func f(p: int = null): int {
+func f(p: int = null) => int {
     return p
 }
 
-func main(): int sync {
+func main() => int sync {
     return f()
 }

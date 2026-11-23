@@ -7,32 +7,40 @@
 
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
-func combine(x: float): float { return x * 3.0 + x * 5.0 }
-func double(x: float): float { return x * 3.0 + x * 3.0 }
+func combine(x: float) => float {
+    return x * 3.0 + x * 5.0
+}
+func double(x: float) => float {
+    return x * 3.0 + x * 3.0
+}
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
+func nodesOf::<F>(p: F, function: string) => Node[] spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int spelling {
-    return len(nodesOf(p, function)->filter<func (n: Node) => bool { opText(n) == operator }>)
+func countOf::<F>(p: F, function: string, operator: string) => int spelling {
+    return len(nodesOf(p, function)->filter<func (n: Node) => bool {
+        opText(n) == operator
+    }>)
 }
 
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     println('combine', countOf(p, 'combine', ':op/add_d'), countOf(p, 'combine', ':op/mul_d'))
     println('double', countOf(p, 'double', ':op/add_d'), countOf(p, 'double', ':op/mul_d'))
     return p
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     println(combine(2.0), double(2.0))
     return 0
 }

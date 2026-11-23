@@ -3,7 +3,7 @@
  * implementation used to compile and then do nothing, or fault, when run.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(int(true))
     println('never printed')
     return 0

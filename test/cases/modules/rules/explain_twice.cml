@@ -3,11 +3,11 @@
  * round of the zero law rewrites both, and a proof that reports one step is missing a rewrite.
  */
 
-func g(x: int, y: int): int {
+func g(x: int, y: int) => int {
     return (x + 0) + (y + 0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g(5, 7))
     return 0
 }

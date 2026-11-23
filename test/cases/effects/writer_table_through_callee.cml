@@ -16,10 +16,12 @@ func apply(f: (x: int) => void, v: int) {
     f(v)
 }
 
-func main(): int sync {
+func main() => int sync {
     let counter = state::ref(0)
     println(state::get(counter))
-    apply(func (x: int) { state::set(counter, x) }, 41)
+    apply(func (x: int) {
+        state::set(counter, x)
+    }, 41)
     println(state::get(counter))
     return 0
 }

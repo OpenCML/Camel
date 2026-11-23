@@ -19,31 +19,36 @@ import { rewrite } from rewrite
 
 fact depth::<T>(v: T): int match v {
     case const c => 1
-    case x + y   => max(depth::<T>(x), depth::<T>(y)) + 1
-    case _       => 0
-} join max
+    case x + y => max(depth::<T>(x), depth::<T>(y)) + 1
+    case _ => 0
+}
+join max
 
 rule drop_deep::<T>(y: T, x: T) when depth(y) > 1 { x + y => x }
 
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func addsOf::<F>(p: F, function: string): int spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
-    let adds = nodes(found[0])->filter<func (n: Node) => bool { opText(n) == ':op/add_l' }>
+func addsOf::<F>(p: F, function: string) => int spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
+    let adds = nodes(found[0])->filter<func (n: Node) => bool {
+        opText(n) == ':op/add_l'
+    }>
     // A node read out of a graph states no value type, so the query writes the type argument.
     return loop total = 0 for n in adds do total + depth::<int>(n)
 }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[drop_deep]>
 }
 
-export func report::<F>(p: F): F! spelling sync {
+export func report::<F>(p: F) => F! spelling sync {
     println('target', addsOf(p, 'target'), 'keep', addsOf(p, 'keep'))
     return p
 }

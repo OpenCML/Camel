@@ -11,16 +11,15 @@
  */
 
 with <k: int>
-func bad_decorator(f: (x: int) => int): int {
+func bad_decorator(f: (x: int) => int) => int {
     return k + 1
 }
 
 @bad_decorator<1>
-func base(x: int): int {
+func base(x: int) => int {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return base(1)
 }
-

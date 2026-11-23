@@ -2,10 +2,14 @@
  * Conversion to int of a float outside the range of int, of an infinity and of NaN.
  */
 
-func conv(x: float): int { return int(x) }
-func mul(a: float, b: float): float { return a * b }
+func conv(x: float) => int {
+    return int(x)
+}
+func mul(a: float, b: float) => float {
+    return a * b
+}
 
-func main(): int sync {
+func main() => int sync {
     let inf = mul(1.0e308, 10.0)
     println('before')
     println(conv(9.0e18))

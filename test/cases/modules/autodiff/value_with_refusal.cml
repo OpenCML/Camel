@@ -8,12 +8,12 @@
 import { grad } from autodiff
 
 with <w: float>
-func defaulted(): float {
+func defaulted() => float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<2, w>() * 3.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(defaulted)<5.0>())
     return 0
 }

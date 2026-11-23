@@ -4,13 +4,13 @@
  * rewriting sub-pass, each built to tempt that sub-pass.
  */
 
-func bump(var c: int, by: int): int sync {
+func bump(var c: int, by: int) => int sync {
     c += by
     return by
 }
 
 // fold: everything is a constant except that the variable changes between the reads.
-func fold_case(): int sync {
+func fold_case() => int sync {
     var c = 3
     let a = c + 0
     c += 2
@@ -21,7 +21,7 @@ func fold_case(): int sync {
 }
 
 // cse: identical reads on both sides of a write, and two identical writes.
-func cse_case(var c: int): int sync {
+func cse_case(var c: int) => int sync {
     let a = c + 1
     c += 1
     let b = c + 1
@@ -31,7 +31,7 @@ func cse_case(var c: int): int sync {
 }
 
 // dce: writes whose own value nobody uses; the last one is seen only by the caller.
-func dce_case(var c: int): int sync {
+func dce_case(var c: int) => int sync {
     c += 1
     let a = c + 0
     c += 10
@@ -40,7 +40,7 @@ func dce_case(var c: int): int sync {
 }
 
 // inline / specialize: the same writer called with constants, reads between the calls.
-func call_case(var c: int): int sync {
+func call_case(var c: int) => int sync {
     let a = c + 0
     let r1 = bump(c, 1)
     let b = c + 0
@@ -51,7 +51,7 @@ func call_case(var c: int): int sync {
 }
 
 // devirtualize: the writer is called through a function value.
-func value_case(var c: int): int sync {
+func value_case(var c: int) => int sync {
     let f = bump
     let a = c + 0
     let r1 = f(c, 2)
@@ -61,14 +61,19 @@ func value_case(var c: int): int sync {
 }
 
 // branch: a write in one arm only, reads before and after.
-func branch_case(var c: int, flag: bool): int sync {
+func branch_case(var c: int, flag: bool) => int sync {
     let a = c + 0
-    let r = if flag then sync { c += 7; 1 } else sync { 2 }
+    let r = if flag then sync {
+        c += 7
+        1
+    } else sync {
+        2
+    }
     let b = c + 0
     return a * 10000 + b * 100 + r
 }
 
-func main(): int sync {
+func main() => int sync {
     println('fold {}'->format<fold_case()>)
     var c1 = 1
     let x1 = cse_case(c1)

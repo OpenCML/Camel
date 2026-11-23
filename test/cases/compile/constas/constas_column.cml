@@ -6,16 +6,16 @@
  * instances, `column<"w">` and `column<"h">`, and each picks the field its value names.
  */
 
-func column(constas n: string, ...ts): (int, int) {
-    return ( static for j in indices ts do ts.[j].[n] )
+func column(constas n: string, ...ts) => (int, int) {
+    return (static for j in indices ts do ts.[j].[n])
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = { w: 1, h: 2 }
     let b = { w: 3, h: 4 }
-    let (x, y) = column("w", a, b)
+    let (x, y) = column('w', a, b)
     println(x, y)
-    let (p, q) = column("h", a, b)
+    let (p, q) = column('h', a, b)
     println(p, q)
     return 0
 }

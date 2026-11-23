@@ -23,7 +23,7 @@ func bump_twice(var y: int) {
     bump(y)
 }
 
-func bump_then(var z: int, k: int): int sync {
+func bump_then(var z: int, k: int) => int sync {
     z += 10
     return k + 1
 }
@@ -32,18 +32,18 @@ func replace(var t: (int, int), a: int) {
     t = (a, a + 1)
 }
 
-func show(x: int): int sync {
+func show(x: int) => int sync {
     println(x)
     return 0
 }
 
-func spin(n: int, acc: int): int sync {
+func spin(n: int, acc: int) => int sync {
     var s = acc
     bump(s)
     return if n == 0 then s else spin(n - 1, s)
 }
 
-func main(): int sync {
+func main() => int sync {
     var c = 0
     bump(c)
     println(c)

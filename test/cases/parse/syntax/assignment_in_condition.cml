@@ -2,7 +2,7 @@
 // almost always a comparison written one `=` short. The parser refuses it at the `=` rather than
 // reading it as an assignment or as `==`, and names the operator to write instead.
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 1
     if x = 1 then
         println('one')

@@ -36,7 +36,7 @@
 // carries the batch, lane-chainplace at 19e6876a6: `exit=1` and the arm-invariant sentence without the
 // fix, `exit=0` with `compile_ms=0.5404949188232422` and three `latency_ms` lines with it.
 
-func pick(x: int): int sync {
+func pick(x: int) => int sync {
     if x > 0 then sync {
         'pick: positive'->println
         return 10
@@ -46,7 +46,7 @@ func pick(x: int): int sync {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let first = pick(1)
     'after {}'->format<first>->println
     let second = pick(-1)

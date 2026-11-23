@@ -1,6 +1,6 @@
 /// a module root reached with `-I` (relative to the entry file's directory, here
 /// `entry/`). `deep/helper.cml` imports `lib` and finds this one.
 
-export func name(): string {
+export func name() => string {
     return 'root1'
 }

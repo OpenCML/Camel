@@ -3,15 +3,17 @@
 
 namespace Shapes {
     namespace Area {
-        func square(s: int): int { return s * s }
+        func square(s: int) => int {
+            return s * s
+        }
     }
-    func both(s: int): int {
+    func both(s: int) => int {
         using namespace Area
         return square(s) + Area::square(s) + p30_using_own_nested::Shapes::Area::square(s)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(Shapes::both(2))
     return 0
 }

@@ -6,6 +6,10 @@ tag rule::<F>(f: F) on func when is_function::<F>()
 type Wide = { a: int }
 
 #rule(Wide)
-func use_it(x: int): int { return x }
+func use_it(x: int) => int {
+    return x
+}
 
-func main(): int sync { return 0 }
+func main() => int sync {
+    return 0
+}

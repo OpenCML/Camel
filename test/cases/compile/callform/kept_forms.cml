@@ -4,7 +4,7 @@
  * on two operands of equal standing take both as ordinary arguments.
  */
 
-func main(): int sync {
+func main() => int sync {
     let m = [('a', 1), ('b', 2)] as Map<string, int>
     let s = [3, 1, 2] as Set<int>
     // before the parentheses

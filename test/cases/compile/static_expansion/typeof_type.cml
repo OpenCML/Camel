@@ -5,24 +5,24 @@
  */
 
 /// A pair of the type parameter: `(T, T)` is not a name the function could write.
-func pair_of::<T>(t: T): (T, T) {
+func pair_of::<T>(t: T) => (T, T) {
     return (t, t)
 }
 
 /// Two rounds: the fields of the type of the call.
-func width::<T>(t: T): int {
-    return static loop n = 0 for j, C in fields typeof(pair_of(t)) do n + 1
+func width::<T>(t: T) => int {
+    return static loop n = 0 for j, C in fields typeof (pair_of(t)) do n + 1
 }
 
 /// The same type in a `match type` subject.
-func describe::<T>(t: T): string {
-    return match type typeof(pair_of(t)) {
+func describe::<T>(t: T) => string {
+    return match type typeof (pair_of(t)) {
         case tuple => 'pair'
         case _ => 'other'
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(width(7))
     println(describe(7))
     println(width('x'))

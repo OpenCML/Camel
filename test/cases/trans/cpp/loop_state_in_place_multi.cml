@@ -2,51 +2,50 @@
 // (the shapes of test/cases/loops/state_in_place_multi.cml), 5 rounds. std::cpp translates the
 // owned append to its copying `append` -- the standalone Array copies a block another holder
 // shares -- so the values are the interpreter's, which agree_with_fvm checks against std::fvm.
-func threeTyped(n: int): (int[], int, bool, float) {
-    return loop xs = [0], count = 0, flip = true, total = 0.0 while len(xs) < n do
-        (xs->append<count>, count + 1, !flip, total + 0.25)
+func threeTyped(n: int) => (int[], int, bool, float) {
+    return loop xs = [0], count = 0, flip = true, total = 0.0 while len(xs) < n do (xs->append<count>, count + 1, !flip, total + 0.25)
 }
 
-func growMixed(n: int): (int[], float[]) {
+func growMixed(n: int) => (int[], float[]) {
     return loop xs = [0], ys = [0.5] while len(xs) < n do (xs->append<1>, ys->append<0.25>)
 }
 
-func growStructState(n: int): (int, int) {
+func growStructState(n: int) => (int, int) {
     let s = loop s = { xs: [0], n: 0 } while len(s.xs) < n do { xs: s.xs->append<7>, n: s.n + 1 }
     return (len(s.xs), s.n)
 }
 
-func growPairs(n: int): (int, int) {
+func growPairs(n: int) => (int, int) {
     let ps = loop ps = [{ a: 0 }] while len(ps) < n do ps->append<{ a: 1 }>
     return (len(ps), ps[n - 1].a)
 }
 
-func growFromElement(rows: int[][], n: int): int[] {
+func growFromElement(rows: int[][], n: int) => int[] {
     return loop xs = rows[0] while len(xs) < n do xs->append<7>
 }
 
-func peekOld(n: int): (int[], int) {
+func peekOld(n: int) => (int[], int) {
     return loop xs = [0], seen = -1 while len(xs) < n do (xs->append<7>, len(xs))
 }
 
-func readStateAfter(n: int): int {
+func readStateAfter(n: int) => int {
     let (xs, count) = loop xs = [0], c = 0 while len(xs) < n do (xs->append<c>, c + 1)
     return xs[0] + xs[len(xs) - 1] + count
 }
 
-func constMiddle(n: int): (int[], int, int[]) {
+func constMiddle(n: int) => (int[], int, int[]) {
     return loop xs = [0], c = 5, zs = [10] while len(xs) < n do (xs->append<1>, 0, zs->append<2>)
 }
 
-func arrayLast(n: int): (int, int, int[]) {
+func arrayLast(n: int) => (int, int, int[]) {
     return loop a = 3, b = 4, xs = [0] while len(xs) < n do (0, 0, xs->append<7>)
 }
 
-func sameLiteral(n: int): (int[], int[]) {
+func sameLiteral(n: int) => (int[], int[]) {
     return loop a = [0], b = [0] while len(a) < n do (a->append<1>, b->append<2>)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (xs, count, flip, total) = threeTyped(5)
     let (ms, fs) = growMixed(5)
     let (sn, sl) = growStructState(5)

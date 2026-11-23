@@ -2,7 +2,7 @@
  * A tuple index past the end is known at compile time: a compile-time error, nothing runs.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('not reached')
     let t = (1, 2, 3)
     println(t.5)

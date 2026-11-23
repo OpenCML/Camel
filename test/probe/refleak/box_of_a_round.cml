@@ -7,11 +7,11 @@ import state
 // This is the other half of `call_box_loop_outer.cml`, and the one the count has to answer
 // per round rather than per graph: the producing node runs three times, so the three references
 // are three and not one.
-func escaped_box(i: int): state::Ref<int> {
+func escaped_box(i: int) => state::Ref<int> {
     return state::ref(i)
 }
 
-func box_of_the_last_round(): int sync {
+func box_of_the_last_round() => int sync {
     var last = escaped_box(0)
     loop i = 0 while i < 3 do sync {
         last = escaped_box(i)
@@ -20,7 +20,7 @@ func box_of_the_last_round(): int sync {
     return state::get(last)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(box_of_the_last_round())
     return 0
 }

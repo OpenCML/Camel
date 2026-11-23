@@ -6,21 +6,19 @@
  */
 
 with <rounds: int = 8>
-func show(x: int): string {
+func show(x: int) => string {
     return string(x * rounds)
 }
 
 with <rounds: int = 8>
-func show(x: string): string {
+func show(x: string) => string {
     return x + string(rounds)
 }
 
-func main(): int sync {
+func main() => int sync {
     let number = show<rounds: 2>(3)
     let positional = show<2>(3)
     let text = show<rounds: 2>('a')
-    'with named_across_overloads number={} positional={} text={}'
-    ->format<number, positional, text>
-    ->println
+    'with named_across_overloads number={} positional={} text={}'->format<number, positional, text>->println
     return 0
 }

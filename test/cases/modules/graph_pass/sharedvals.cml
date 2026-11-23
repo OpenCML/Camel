@@ -3,15 +3,15 @@
 // other's entities. `twice` is a generic function, so
 // both builders also make an instance of it for the same type.
 
-export func bump(x: int): int {
+export func bump(x: int) => int {
     return x + 1
 }
 
-export func twice::<T>(x: (T)): T {
+export func twice::<T>(x: (T)) => T {
     return x + x
 }
 
-export func run::<F>(p: F): F! sync {
+export func run::<F>(p: F) => F! sync {
     println(bump(41))
     println(twice(5))
     return p

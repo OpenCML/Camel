@@ -8,7 +8,7 @@
  *
  * Run: camel test/cases/compile/var/loop_write_outside_read_let.cml std::nvm
  */
-func main(): int sync {
+func main() => int sync {
     let (i, total) = loop i = 0, total = 0 while i < 3 do (i + 1, total + i * 7)
     println(total)
     return 0

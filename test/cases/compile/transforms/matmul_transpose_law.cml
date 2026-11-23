@@ -30,46 +30,46 @@
 // Every one of these is exact in binary floating point, so "equal" below means equal.
 //
 //     camel test/cases/compile/transforms/matmul_transpose_law.cml
-import { matmul, sum } from tensor
-import { vjp } from vjp
 import { with_grad } from autodiff
 import { abs, max } from math
+import { matmul, sum } from tensor
+import { vjp } from vjp
 
 /// A product under a sum: `a · b` is the only operator here that needs a transpose law.
-func sum_of_product(x: float[2, 2], w: float[2, 2]): float {
+func sum_of_product(x: float[2, 2], w: float[2, 2]) => float {
     return sum(matmul(x, w))
 }
 
 /// The step itself, every value an ordinary parameter.
-func step_plain(x: float[2, 2], t: float[2, 2], w: float[2, 2]): float {
+func step_plain(x: float[2, 2], t: float[2, 2], w: float[2, 2]) => float {
     let e = matmul(x, w) - t
     return 0.5 * sum(e * e)
 }
 
 /// The same step for the engine's pullback: `with_grad` differentiates `w`.
 with <w: float[2, 2]>
-func step_with(x: float[2, 2], t: float[2, 2]): float {
+func step_with(x: float[2, 2], t: float[2, 2]) => float {
     let e = matmul(x, w) - t
     return 0.5 * sum(e * e)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
-
+    
     // Leg A: the product alone, both of its operands read back.
     let (value_a, pullback_a) = vjp(sum_of_product)(x, w)
     let (dx_a, dw_a) = pullback_a(1.0)
     `matmul_t sum_prod value={} dL/dx={} dL/dw={}`->format<value_a, dx_a, dw_a>->println
-
+    
     // Leg B: the step, with the engine's pullback beside it for the same four numbers.
     let (value_b, pullback_b) = vjp(step_plain)(x, t, w)
     let (dx_b, dt_b, dw_b) = pullback_b(1.0)
     let (engine_value, engine_w) = with_grad(step_with)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>(x, t)
     `matmul_t step value={} dL/dx={} dL/dt={} dL/dw={}`->format<value_b, dx_b, dt_b, dw_b>->println
     `matmul_t engine value={} dL/dw={}`->format<engine_value, engine_w>->println
-
+    
     let dv = abs(value_b - engine_value)
     let d00 = abs(dw_b[0][0] - engine_w[0][0])
     let d01 = abs(dw_b[0][1] - engine_w[0][1])

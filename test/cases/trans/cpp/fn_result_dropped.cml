@@ -9,8 +9,10 @@ func apply(f: (x: int) => void) sync {
     f(3)
 }
 
-func main(): int sync {
-    apply(func (x: int) { x * 10 })
+func main() => int sync {
+    apply(func (x: int) {
+        x * 10
+    })
     println('done')
     return 0
 }

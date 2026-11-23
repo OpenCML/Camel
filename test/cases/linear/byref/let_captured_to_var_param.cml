@@ -8,7 +8,7 @@ func bump(var x: int) {
     x += 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let k = 0
     let f = func () => int sync {
         bump(k)

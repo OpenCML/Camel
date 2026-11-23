@@ -13,8 +13,8 @@
 with <
     flag: bool,
     n: int = 5,
-    label: string = "x",
+    label: string = 'x',
     axes: int[]? = null,
     target: string? = null
 >
-export func declared::<F>(f: F): F! when is_function::<F>()
+export func declared::<F>(f: F) => F! when is_function::<F>()

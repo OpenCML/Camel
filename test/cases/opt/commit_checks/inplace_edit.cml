@@ -9,18 +9,18 @@
 // them ordered, and the commit must publish. A commit whose tier was "did the draft make a node"
 // asked nothing in either half and published the first one.
 
-func twice(x: int): int sync {
+func twice(x: int) => int sync {
     println(x)
     println(x)
     return x
 }
 
-func carries(x: int): int sync {
+func carries(x: int) => int sync {
     let first = println(x)
     println(first)
     return first
 }
 
-func main(): int {
+func main() => int {
     return twice(3) + carries(4)
 }

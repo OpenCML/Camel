@@ -3,6 +3,6 @@
 
 import lib
 
-export func n(): int {
+export func n() => int {
     return lib::n()
 }

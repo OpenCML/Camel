@@ -2,11 +2,11 @@
 // ordinary parameters follow (design principles 4.4, 5.6): the pack stands for the `with`
 // arguments a call gives beyond the fixed ones.
 with <...ws>
-func ident(x: float): float {
+func ident(x: float) => float {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(ident(2.5))
     return 0
 }

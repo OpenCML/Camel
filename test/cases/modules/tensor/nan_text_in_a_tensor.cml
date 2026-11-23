@@ -8,23 +8,29 @@
 
 import tensor
 
-func mul(a: float, b: float): float { return a * b }
-func sub(a: float, b: float): float { return a - b }
-func div(a: float, b: float): float { return a / b }
+func mul(a: float, b: float) => float {
+    return a * b
+}
+func sub(a: float, b: float) => float {
+    return a - b
+}
+func div(a: float, b: float) => float {
+    return a / b
+}
 
-func main(): int sync {
+func main() => int sync {
     let inf = mul(1.0e308, 10.0)
     let ninf = mul(-1.0e308, 10.0)
     let nan = sub(inf, inf)
-    println("scalar")
+    println('scalar')
     println(nan)
-    println("array")
+    println('array')
     println([nan])
-    println("tensor-f64")
+    println('tensor-f64')
     println(float([nan]))
-    println("tensor-f64-specials")
+    println('tensor-f64-specials')
     println(float([nan, inf, ninf, div(-1.0, inf), div(1.0, inf)]))
-    println("tensor-f32")
+    println('tensor-f32')
     println(f32([f32(nan)]))
     return 0
 }

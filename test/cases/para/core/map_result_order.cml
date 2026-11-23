@@ -4,15 +4,19 @@
  * element functions concurrently (the order of effects inside them is then not defined).
  */
 
-func slow_square(i: int): int {
+func slow_square(i: int) => int {
     // more work for the first elements, so that later ones tend to finish first
-    let spin = (0..((40 - i) * 200))->reduce<func (acc: int, k: int) => int { acc + k - k }, 0>
+    let spin = (0 .. ((40 - i) * 200))->reduce<func (acc: int, k: int) => int {
+        acc + k - k
+    }, 0>
     return i * i + spin
 }
 
-func main(): int sync {
-    let squares = (0..40)->map<slow_square>
-    let kept = (0..40)->filter<func (i: int) => bool { i - (i / 3) * 3 == 0 }>
+func main() => int sync {
+    let squares = (0 .. 40)->map<slow_square>
+    let kept = (0 .. 40)->filter<func (i: int) => bool {
+        i - (i / 3) * 3 == 0
+    }>
     println(squares)
     println(kept)
     return 0

@@ -4,7 +4,7 @@ func walk(t: int) {
     }
 }
 
-func main(): int {
+func main() => int {
     walk(1)
     return 0
 }

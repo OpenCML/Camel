@@ -84,14 +84,14 @@ const a = run(
         'site_a.cml': `import tensor
 
 #op('tensor:log_softmax')
-func log_softmax_kernel(x: f32[...], axis: int): f32[...]
+func log_softmax_kernel(x: f32[...], axis: int) => f32[...]
 
 #impl(log_softmax_kernel)
-func log_softmax_here(x: f32[...], axis: int): f32[...] {
+func log_softmax_here(x: f32[...], axis: int) => f32[...] {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 `,
@@ -126,14 +126,14 @@ const b = run(
         'site_b.cml': `import nn
 
 #op('nn:adam')
-func adam_kernel::<P>(params: P, grads: P): P
+func adam_kernel::<P>(params: P, grads: P) => P
 
 #impl(adam_kernel)
-func adam_here::<P>(params: P, grads: P): P {
+func adam_here::<P>(params: P, grads: P) => P {
     return params
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 `,
@@ -157,17 +157,17 @@ if (bFound) check('B. the refusal is the catalog code', bFound.code === '0x03000
 // ---- C: the tensor module's own file declares the kernel and holds the body ----
 const cFiles = {
     'tensor.cml': `#op('tensor:log_softmax')
-func log_softmax_kernel(x: f32[...], axis: int): f32[...]
+func log_softmax_kernel(x: f32[...], axis: int) => f32[...]
 
 #impl(log_softmax_kernel)
-export func log_softmax(x: f32[...], axis: int): f32[...] {
+export func log_softmax(x: f32[...], axis: int) => f32[...] {
     return x
 }
 `,
     'main.cml': `import tensor
 
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }
 `,

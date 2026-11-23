@@ -6,7 +6,7 @@
  * rather than about the declaration alone.
  */
 
-func main(): int sync {
+func main() => int sync {
     let empty = [] as Map<string, int>
     let one = [('a', 1)] as Map<string, int>
     println(empty->has<'a'>)

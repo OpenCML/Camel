@@ -20,27 +20,27 @@
  * are locked by `std::jgir` in the plan.
  */
 
-func count(s: int..): int {
+func count(s: int..) => int {
     return 0
 }
 
-func shapes(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[...]..): int {
+func shapes(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[...]..) => int {
     return 0
 }
 
-func teePair(pair: (int.., int)): int {
+func teePair(pair: (int.., int)) => int {
     return 0
 }
 
-func first::<T>(s: T..): T? {
+func first::<T>(s: T..) => T? {
     return null
 }
 
-func openRank(rows: f32[...]): int {
+func openRank(rows: f32[...]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     return 0
 }

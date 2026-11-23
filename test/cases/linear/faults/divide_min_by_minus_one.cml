@@ -4,11 +4,11 @@
  * and 0 for the remainder, not SIGFPE; `f` is what the JIT compiles after std::cxx::inline.
  */
 
-func f(a: int, b: int, n: int): int {
+func f(a: int, b: int, n: int) => int {
     return if n <= 0 then a / b else f(a, b, n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let h = 4611686018427387904
     let m = (0 - h) * 2
     let d = 0 - 1

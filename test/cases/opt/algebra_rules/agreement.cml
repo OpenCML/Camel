@@ -15,67 +15,67 @@
 // (`divergence.cml`) — here the two implementations must reach the same graph, and the plan holds
 // them to it node for node and edge for edge.
 
-func add_zero(x: int): int sync {
+func add_zero(x: int) => int sync {
     let a = x + 0
     println(a)
     return 0
 }
 
-func zero_add(x: int): int sync {
+func zero_add(x: int) => int sync {
     let a = 0 + x
     println(a)
     return 0
 }
 
-func sub_zero(x: int): int sync {
+func sub_zero(x: int) => int sync {
     let a = x - 0
     println(a)
     return 0
 }
 
-func mul_one(x: int): int sync {
+func mul_one(x: int) => int sync {
     let a = x * 1
     println(a)
     return 0
 }
 
-func one_mul(x: int): int sync {
+func one_mul(x: int) => int sync {
     let a = 1 * x
     println(a)
     return 0
 }
 
-func add_zero32(x: i32): i32 sync {
+func add_zero32(x: i32) => i32 sync {
     let a = x + 0
     println(a)
     return 0
 }
 
-func zero_add32(x: i32): i32 sync {
+func zero_add32(x: i32) => i32 sync {
     let a = 0 + x
     println(a)
     return 0
 }
 
-func sub_zero32(x: i32): i32 sync {
+func sub_zero32(x: i32) => i32 sync {
     let a = x - 0
     println(a)
     return 0
 }
 
-func mul_one32(x: i32): i32 sync {
+func mul_one32(x: i32) => i32 sync {
     let a = x * 1
     println(a)
     return 0
 }
 
-func one_mul32(x: i32): i32 sync {
+func one_mul32(x: i32) => i32 sync {
     let a = 1 * x
     println(a)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(add_zero(3))
     println(zero_add(4))
     println(sub_zero(5))

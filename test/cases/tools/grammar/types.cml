@@ -1,5 +1,4 @@
 // Type declarations and type expressions.
-
 type Point = {
     x: int,
     y: int
@@ -7,7 +6,7 @@ type Point = {
 type Signal = (int, int)
 type Pair<T> = (T, T)
 type Entry<K, V> = { key: K, value: V }
-type Tight<T>= T[]
+type Tight<T> = T[]
 type Predicate = (p: Point) => bool
 type Effect = (x: int) => void
 type Grid = float[][]
@@ -16,15 +15,15 @@ type Lookup = Map<string, Set<i64>>
 type Maybe = (int?)[]
 type Words = string[]
 
-func or_else::<T>(x: T?, d: T): T {
+func or_else::<T>(x: T?, d: T) => T {
     return x ?? d
 }
 
-func sum_pair(p: Pair<int>): int {
+func sum_pair(p: Pair<int>) => int {
     return p.0 + p.1
 }
 
-func build(): Entry<string, Point> {
+func build() => Entry<string, Point> {
     let (a, b) = (1, 2)
     let s = { x: a, y: b }
     let xs = [a, b]

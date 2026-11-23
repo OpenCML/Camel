@@ -24,11 +24,11 @@
  * tangent has the element type of the parameter it belongs to.
  */
 
-import { numel, sum, to_bytes } from tensor
+import { with_grad } from autodiff
 import { to_array } from bytes
 import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, update } from optim
-import { with_grad } from autodiff
+import { numel, sum, to_bytes } from tensor
 
 // The two leaves: the element type is written, the extent is not (the only spelling a tensor
 // expression has here, and the one the native walk reads).
@@ -41,11 +41,11 @@ type Leaves = {
 // of both leaves -- in the element type of the leaf it belongs to, which the case checks before it
 // steps with it.
 with <m: Leaves>
-func total(): float {
+func total() => float {
     return float(sum(m.wide)) + float(sum(m.narrow))
 }
 
-func main(): int sync {
+func main() => int sync {
     let model: Leaves = {
         wide: [16777217.0, 1.0] as f64[],
         narrow: [f32(16777217.0), f32(1.0)]
@@ -55,7 +55,7 @@ func main(): int sync {
     var failures = 0
     var leaves = 0
     var elements = 0
-
+    
     // The gradient of a written f64 leaf is f64 and of a written f32 leaf f32: 16 bytes and 8. A
     // gradient read at the wrong width is not the derivative (modules.tensor.dtype,
     // gather_grad_f64), so the step below is only meaningful with this held.
@@ -63,12 +63,12 @@ func main(): int sync {
     elements = elements + 4
     if len(to_bytes(gradient.wide)) != 8 * numel(gradient.wide) then failures = failures + 1
     if len(to_bytes(gradient.narrow)) != 4 * numel(gradient.narrow) then failures = failures + 1
-
+    
     // ---- one `sgd` step of each leaf, through the native path ----
     let stepped = native_sgd(model, gradient, 0.5)
     let wide = to_array(to_bytes(stepped.wide))
     let narrow = to_array(to_bytes(stepped.narrow))
-
+    
     // The f64 leaf is 8 bytes an element and the f32 leaf 4: the element size is the element type.
     // The bytes are printed and decoded in the plan, where the f64 leaf's value is read as a double
     // and the f32 leaf's as a float -- a length alone would not say what the bytes hold.
@@ -76,13 +76,11 @@ func main(): int sync {
     elements = elements + 4
     if len(to_bytes(stepped.wide)) != 8 * numel(stepped.wide) then failures = failures + 1
     if len(to_bytes(stepped.narrow)) != 4 * numel(stepped.narrow) then failures = failures + 1
-
-    'optim native_dtype_exact sgd leaves={} elements={} wide_bytes={} narrow_bytes={} wide_elements={} total={}'
-    ->format<leaves, elements, len(to_bytes(stepped.wide)), len(to_bytes(stepped.narrow)), numel(stepped.wide), value>
-    ->println
+    
+    'optim native_dtype_exact sgd leaves={} elements={} wide_bytes={} narrow_bytes={} wide_elements={} total={}'->format<leaves, elements, len(to_bytes(stepped.wide)), len(to_bytes(stepped.narrow)), numel(stepped.wide), value>->println
     'optim native_dtype_exact wide_bytes={}'->format<wide>->println
     'optim native_dtype_exact narrow_bytes={}'->format<narrow>->println
-
+    
     // ---- two `adam` steps of the same leaves: the native path against the Camel f64 arm ----
     // The counters are per step kind, so each line says what that check looked at.
     leaves = 0
@@ -96,7 +94,7 @@ func main(): int sync {
     let narrow_second = to_array(to_bytes(second.0.narrow))
     let agrees_wide = if wide_second == to_array(to_bytes(camel_second.0.wide)) then 1 else 0
     let agrees_narrow = if narrow_second == to_array(to_bytes(camel_second.0.narrow)) then 1 else 0
-
+    
     // An f64 leaf keeps its own arithmetic: after two steps it is the same 16 bytes the Camel
     // module's f64 arm gives, bit for bit. An f32 leaf stays f32: the same 8 bytes, and its step
     // is the f32 one (the Camel module's f32 arm narrows once, as the native kernel does).
@@ -106,10 +104,8 @@ func main(): int sync {
     if len(to_bytes(second.0.narrow)) != 4 * numel(second.0.narrow) then failures = failures + 1
     if agrees_wide != 1 then failures = failures + 1
     if agrees_narrow != 1 then failures = failures + 1
-
-    'optim native_dtype_exact adam leaves={} elements={} wide_bytes={} narrow_bytes={} wide_agrees={} narrow_agrees={}'
-    ->format<leaves, elements, len(to_bytes(second.0.wide)), len(to_bytes(second.0.narrow)), agrees_wide, agrees_narrow>
-    ->println
+    
+    'optim native_dtype_exact adam leaves={} elements={} wide_bytes={} narrow_bytes={} wide_agrees={} narrow_agrees={}'->format<leaves, elements, len(to_bytes(second.0.wide)), len(to_bytes(second.0.narrow)), agrees_wide, agrees_narrow>->println
     'optim native_dtype_exact failures={}'->format<failures>->println
     return failures
 }

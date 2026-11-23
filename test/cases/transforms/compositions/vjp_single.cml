@@ -14,11 +14,11 @@
  */
 import { vjp } from vjp
 
-func f(x: float): float {
+func f(x: float) => float {
     return x * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (y, pullback) = vjp(f)(3.0)
     let cotangents = pullback(1.0)
     let dx = cotangents.0

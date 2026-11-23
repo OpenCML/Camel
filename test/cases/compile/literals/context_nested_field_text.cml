@@ -6,7 +6,7 @@
 type Point = { x: float, y: float }
 type Outer = { nest: Point, tag: int }
 
-func main(): int sync {
+func main() => int sync {
     let o: Outer = { nest: { x: '1.5', y: 2.0 }, tag: 1 }
     println(o.tag)
     return 0

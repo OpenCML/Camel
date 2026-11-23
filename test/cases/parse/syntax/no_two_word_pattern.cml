@@ -5,14 +5,14 @@
  * naming the one two-word pattern.
  */
 
-func f(n: int): int {
+func f(n: int) => int {
     return match n {
         case a b => 1
         case _ => 0
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     println(f(1))
     return 0

@@ -4,12 +4,12 @@
 // one here (design principles 5.5: the refusal names the operand whose instance no
 // position fixes).
 
-func ident::<T>(x: T): T {
+func ident::<T>(x: T) => T {
     return x
 }
 
-func main(): int sync {
-    let composed = ident::<int>..ident
+func main() => int sync {
+    let composed = ident::<int> .. ident
     println(composed(4))
     return 0
 }

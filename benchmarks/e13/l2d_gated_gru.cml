@@ -17,22 +17,31 @@
  * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
  */
 
-import { sigmoid, tanh, reshape, shape, zeros, mean, abs, save_npy } from tensor
 import { with_grad } from autodiff
-import { sgd, save_params } from nn
 import { get_env } from env
+import { sgd, save_params } from nn
 import { export_model } from onnx
+import { sigmoid, tanh, reshape, shape, zeros, mean, abs, save_npy } from tensor
 
 type Gru = {
-    w_ir: f32[...], w_iz: f32[...], w_in: f32[...],
-    w_hr: f32[...], w_hz: f32[...], w_hn: f32[...],
-    b_ir: f32[...], b_iz: f32[...], b_in: f32[...],
-    b_hr: f32[...], b_hz: f32[...], b_hn: f32[...],
-    fc_w: f32[...], fc_b: f32[...]
+    w_ir: f32[...],
+    w_iz: f32[...],
+    w_in: f32[...],
+    w_hr: f32[...],
+    w_hz: f32[...],
+    w_hn: f32[...],
+    b_ir: f32[...],
+    b_iz: f32[...],
+    b_in: f32[...],
+    b_hr: f32[...],
+    b_hz: f32[...],
+    b_hn: f32[...],
+    fc_w: f32[...],
+    fc_b: f32[...]
 }
 
 with <m: Gru>
-func cell(xt: f32[...], h: f32[...]): f32[...] {
+func cell(xt: f32[...], h: f32[...]) => f32[...] {
     let r = sigmoid(xt @ m.w_ir + m.b_ir + h @ m.w_hr + m.b_hr)
     let z = sigmoid(xt @ m.w_iz + m.b_iz + h @ m.w_hz + m.b_hz)
     let n = tanh(xt @ m.w_in + m.b_in + r * (h @ m.w_hn + m.b_hn))
@@ -41,38 +50,38 @@ func cell(xt: f32[...], h: f32[...]): f32[...] {
 
 /// One time step: update the hidden state only when the step's input is large.
 with <m: Gru, x: f32[...]>
-func gated(t: int, h: f32[...]): f32[...] {
+func gated(t: int, h: f32[...]) => f32[...] {
     let xt = reshape<[shape(x)[0], shape(x)[2]]>(slice(x, 1, t, t + 1))
     return if mean(abs(xt)) > 0.5 then cell<m>(xt, h) else h
 }
 
 with <m: Gru, x: f32[...]>
-func run(t: int, steps: int, h: f32[...]): f32[...] {
+func run(t: int, steps: int, h: f32[...]) => f32[...] {
     return if t >= steps then h else run<m, x>(t + 1, steps, gated<m, x>(t, h))
 }
 
 with <m: Gru>
-func forward(x: f32[...]): f32[...] {
+func forward(x: f32[...]) => f32[...] {
     let h = run<m, x>(0, shape(x)[1], zeros::<f32>([shape(x)[0], shape(m.w_hr)[0]]))
     return h @ m.fc_w + m.fc_b
 }
 
 with <m: Gru>
-func loss(x: f32[...]): float {
+func loss(x: f32[...]) => float {
     let y = forward<m>(x)
     return float(mean(y * y))
 }
 
-func fwd(m: Gru, x: f32[...]): float {
+func fwd(m: Gru, x: f32[...]) => float {
     return loss<m>(x)
 }
 
-func step(m: Gru, x: f32[...]): (float, Gru) {
+func step(m: Gru, x: f32[...]) => (float, Gru) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func load(): Gru {
+func load() => Gru {
     return {
         w_ir: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
         w_iz: reshape<[2, 3]>([0.25, 0.5, -0.75, -0.5, 1.0, 0.5]),
@@ -91,16 +100,14 @@ func load(): Gru {
     }
 }
 
-func input_a(): f32[...] {
-    return reshape<[2, 3, 2]>(
-        [1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0])
+func input_a() => f32[...] {
+    return reshape<[2, 3, 2]>([1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0])
 }
 
-func do_run(m: Gru): int sync {
+func do_run(m: Gru) => int sync {
     let dump = get_env('DUMP') ?? ''
     let xa = input_a()
-    let xb = reshape<[2, 3, 2]>(
-        [1.0, -0.75, 0.75, 1.0, -1.0, 0.75, 0.75, -1.0, 1.0, -0.75, 0.75, 1.0])
+    let xb = reshape<[2, 3, 2]>([1.0, -0.75, 0.75, 1.0, -1.0, 0.75, 0.75, -1.0, 1.0, -0.75, 0.75, 1.0])
     let x0 = zeros::<f32>([2, 3, 2])
     save_params(m, dump + '/init')
     save_npy(xa, dump + '/xa.npy')
@@ -119,7 +126,7 @@ func do_run(m: Gru): int sync {
     return 0
 }
 
-func do_export(m: Gru): int sync {
+func do_export(m: Gru) => int sync {
     let out = get_env('ONNX_OUT') ?? ''
     return if (get_env('WHAT') ?? '') == 'fwd' then sync {
         let r = export_model<out: out>(fwd, (m, input_a()))
@@ -148,7 +155,7 @@ func do_export(m: Gru): int sync {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = load()
     return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

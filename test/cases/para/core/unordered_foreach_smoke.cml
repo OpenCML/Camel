@@ -5,12 +5,12 @@
 import { unordered_foreach } from para
 import { pi_hits } from sim
 
-func main(): int sync {
+func main() => int sync {
     let workers = 8
     let samples_per_worker = 1000000
     let base_seed = 20260504
-    let jobs = 0..workers
-
+    let jobs = 0 .. workers
+    
     unordered_foreach<func (i: int) sync {
         let hits = pi_hits(samples_per_worker, base_seed + i * 7919)
         if hits < 0 then {
@@ -19,6 +19,6 @@ func main(): int sync {
             ''
         }
     }>(jobs)
-
+    
     return 0
 }

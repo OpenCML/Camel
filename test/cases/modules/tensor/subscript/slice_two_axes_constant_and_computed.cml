@@ -14,19 +14,19 @@
  */
 import { reshape, shape, sum } from tensor
 
-func block(a: f32[?, 2]): float {
+func block(a: f32[?, 2]) => float {
     return float(sum(a))
 }
 
-func cut(m: f32[2, 3], k: int): float {
+func cut(m: f32[2, 3], k: int) => float {
     return block(m[0..k, 0..2])
 }
 
-func main(): int sync {
+func main() => int sync {
     println('ran')
     let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     println(shape(m[0..2, 0..2]))
-    println("value={}"->format<block(m[0..2, 0..2])>)
-    println("computed={}"->format<cut(m, 2)>)
+    println('value={}'->format<block(m[0..2, 0..2])>)
+    println('computed={}'->format<cut(m, 2)>)
     return 0
 }

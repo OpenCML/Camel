@@ -26,7 +26,7 @@ export type Json
 // tuple one of the forms of its members, a struct and a map with string keys a JSON object of
 // the forms of their members; nothing else is (a function, a tensor, a `T!`). A type is asked
 // where the call is compiled, so a type without a form is refused there.
-func has_json_form::<T>(): bool {
+func has_json_form::<T>() => bool {
     return match type T {
         case Json | bool | int | i32 | float | f32 | string => true
         case nullable => has_json_form::<PayloadOf<T>>()
@@ -39,7 +39,7 @@ func has_json_form::<T>(): bool {
 
 // Every member of a struct or tuple has a JSON form. The walk is static, like every walk over a
 // known shape: the answer is a constant of the instantiation.
-func every_member_json::<T>(): bool {
+func every_member_json::<T>() => bool {
     return static loop every = true for n, F in fields T do every && has_json_form::<F>()
 }
 
@@ -49,16 +49,16 @@ func every_member_json::<T>(): bool {
 /// @pure
 /// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep)
 /// @example (decode('{"port": 80}')->get<key: 'port'>->as_int ?? 0) !! -1    // 80
-export func decode(text: string): Json!
+export func decode(text: string) => Json!
 
 /// The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 /// @pure
 /// @example decode('[1]') -> kind !! ''    // 'array'
-export func kind(j: Json): string
+export func kind(j: Json) => string
 
 /// Whether a Json is the JSON null.
 /// @example decode('null') -> is_null !! false    // true
-export func is_null(j: Json): bool {
+export func is_null(j: Json) => bool {
     return kind(j) == 'null'
 }
 
@@ -67,13 +67,13 @@ export func is_null(j: Json): bool {
 /// @pure
 /// @example (decode('{"a": 1}')->get<key: 'a'>->as_int ?? 0) !! -1    // 1
 with <key: string>
-export func get(j: Json): Json?
+export func get(j: Json) => Json?
 with <key: string>
-export func get(j: Json?): Json?
+export func get(j: Json?) => Json?
 with <key: string>
-export func get(j: Json!): Json!?
+export func get(j: Json!) => Json!?
 with <key: string>
-export func get(j: Json!?): Json!?
+export func get(j: Json!?) => Json!?
 
 /// The element key of an array; null when j is not an array, the index is out of range, or j is
 /// null itself. The with-parameter is called `key` as in the member form above: which member of
@@ -81,61 +81,61 @@ export func get(j: Json!?): Json!?
 /// @pure
 /// @example (decode('[5, 6]')->get<key: 1>->as_int ?? 0) !! -1    // 6
 with <key: int>
-export func get(j: Json): Json?
+export func get(j: Json) => Json?
 with <key: int>
-export func get(j: Json?): Json?
+export func get(j: Json?) => Json?
 with <key: int>
-export func get(j: Json!): Json!?
+export func get(j: Json!) => Json!?
 with <key: int>
-export func get(j: Json!?): Json!?
+export func get(j: Json!?) => Json!?
 
 /// The bool a Json holds; null for any other kind.
 /// @pure
 /// @example (decode('true')->as_bool ?? false) !! false    // true
-export func as_bool(j: Json): bool?
-export func as_bool(j: Json?): bool?
-export func as_bool(j: Json!): bool!?
-export func as_bool(j: Json!?): bool!?
+export func as_bool(j: Json) => bool?
+export func as_bool(j: Json?) => bool?
+export func as_bool(j: Json!) => bool!?
+export func as_bool(j: Json!?) => bool!?
 
 /// The integer a Json holds; null for any other kind (a number with a fraction is not an int).
 /// @pure
 /// @example (decode('42')->as_int ?? 0) !! 0    // 42
-export func as_int(j: Json): int?
-export func as_int(j: Json?): int?
-export func as_int(j: Json!): int!?
-export func as_int(j: Json!?): int!?
+export func as_int(j: Json) => int?
+export func as_int(j: Json?) => int?
+export func as_int(j: Json!) => int!?
+export func as_int(j: Json!?) => int!?
 
 /// The number a Json holds, an integer included; null for any other kind.
 /// @pure
 /// @example (decode('2')->as_float ?? 0.0) !! 0.0    // 2.0
-export func as_float(j: Json): float?
-export func as_float(j: Json?): float?
-export func as_float(j: Json!): float!?
-export func as_float(j: Json!?): float!?
+export func as_float(j: Json) => float?
+export func as_float(j: Json?) => float?
+export func as_float(j: Json!) => float!?
+export func as_float(j: Json!?) => float!?
 
 /// The string a Json holds; null for any other kind.
 /// @pure
 /// @example (decode('"hi"')->as_string ?? '') !! ''    // 'hi'
-export func as_string(j: Json): string?
-export func as_string(j: Json?): string?
-export func as_string(j: Json!): string!?
-export func as_string(j: Json!?): string!?
+export func as_string(j: Json) => string?
+export func as_string(j: Json?) => string?
+export func as_string(j: Json!) => string!?
+export func as_string(j: Json!?) => string!?
 
 /// The elements of a JSON array; null for any other kind.
 /// @pure
 /// @example len((decode('[1, "a"]')->as_array ?? []) !! [])    // 2
-export func as_array(j: Json): Json[]?
-export func as_array(j: Json?): Json[]?
-export func as_array(j: Json!): Json[]!?
-export func as_array(j: Json!?): Json[]!?
+export func as_array(j: Json) => Json[]?
+export func as_array(j: Json?) => Json[]?
+export func as_array(j: Json!) => Json[]!?
+export func as_array(j: Json!?) => Json[]!?
 
 /// The members of a JSON object, by name; null for any other kind.
 /// @pure
 /// @example len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))    // 2
-export func as_object(j: Json): Map<string, Json>?
-export func as_object(j: Json?): Map<string, Json>?
-export func as_object(j: Json!): Map<string, Json>!?
-export func as_object(j: Json!?): Map<string, Json>!?
+export func as_object(j: Json) => Map<string, Json>?
+export func as_object(j: Json?) => Map<string, Json>?
+export func as_object(j: Json!) => Map<string, Json>!?
+export func as_object(j: Json!?) => Map<string, Json>!?
 
 /// The JSON text of a value, on one line, or indented by `indent` spaces per level when an indent
 /// is given. The type of the value must have a JSON form: numbers, bool, string, null, a Json, and
@@ -148,7 +148,7 @@ export func as_object(j: Json!?): Map<string, Json>!?
 /// @example [1, 2]->encode<indent: 2>    // '[\n  1,\n  2\n]'
 #op('json:encode')
 with <indent: int? = null>
-export func encode::<T>(value: T): string panic when has_json_form::<T>()
+export func encode::<T>(value: T) => string panic when has_json_form::<T>()
 
 /// The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
 /// T typed `Json` takes whatever is there. T is given where the call is written or taken from
@@ -156,5 +156,5 @@ export func encode::<T>(value: T): string panic when has_json_form::<T>()
 /// @pure
 /// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit
 /// @example decode_as::<Map<string, int>>('{"a": 1}')    // {a: 1}
-export func decode_as::<T>(source: string): T! when has_json_form::<T>()
-export func decode_as::<T>(source: Json): T! when has_json_form::<T>()
+export func decode_as::<T>(source: string) => T! when has_json_form::<T>()
+export func decode_as::<T>(source: Json) => T! when has_json_form::<T>()

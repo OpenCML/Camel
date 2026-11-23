@@ -4,7 +4,7 @@
  * -1, with `/=` and `%=` (no hardware trap).
  */
 
-func main(): int sync {
+func main() => int sync {
     let half = 4611686018427387904
     let min = 0 - half - half
     let max = half - 1 + half

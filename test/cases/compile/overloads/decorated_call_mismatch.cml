@@ -3,14 +3,18 @@
  * decorators return. They were not checked: the float was read as an int.
  */
 
-func twice(f: (x: int) => int): (x: int) => int {
-    return func (x: int) { f(f(x)) }
+func twice(f: (x: int) => int) => (x: int) => int {
+    return func (x: int) {
+        f(f(x))
+    }
 }
 
 @twice
-func scale(x: int): int { return x * 3 }
+func scale(x: int) => int {
+    return x * 3
+}
 
-func main(): int sync {
+func main() => int sync {
     println(scale(1.5))
     println('never printed')
     return 0

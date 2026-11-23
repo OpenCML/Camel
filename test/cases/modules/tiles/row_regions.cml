@@ -1,42 +1,43 @@
-import { exp, sum, mean, max, sqrt, abs, reshape } from tensor
 import { next_key, seed, uniform } from random
+import { exp, sum, mean, max, sqrt, abs, reshape } from tensor
 import { inspect, run_preferred_resident, download } from tiles
-func softmax(x: f32[...]): f32[...] {
+
+func softmax(x: f32[...]) => f32[...] {
     let e = exp(x - max<1, true>(x))
     return e / sum<1, true>(e)
 }
-func normalize(x: f32[...], scale: f32[...], bias: f32[...]): f32[...] {
+func normalize(x: f32[...], scale: f32[...], bias: f32[...]) => f32[...] {
     let centered = x - mean<1, true>(x)
     let variance = mean<1, true>(centered * centered)
     return centered / sqrt(variance + 0.00001) * scale + bias
 }
-func reused(x: f32[...]): f32[...] {
+func reused(x: f32[...]) => f32[...] {
     let centered = x - mean<1, true>(x)
     return centered + centered * centered
 }
-func ordered_fallback(x: f32[...]): f32[...] {
+func ordered_fallback(x: f32[...]) => f32[...] {
     return x * 0.0 + sum<1, true>(x)
 }
-func main(): int sync {
+func main() => int sync {
     seed(161)
     let x = (next_key()->uniform::<f32><shape: [5, 257]> * 6.0 - 3.0)
-    let scale = (next_key()->uniform::<f32><shape: [1,257]> + 0.5)
+    let scale = (next_key()->uniform::<f32><shape: [1, 257]> + 0.5)
     let bias = (next_key()->uniform::<f32><shape: [257]> * 0.2 - 0.1)
     println(inspect<softmax>(x))
     println(inspect<normalize>((x, scale, bias)))
     println(inspect<reused>(x))
     println(sum(abs(download(run_preferred_resident<softmax>(x)) - softmax(x))))
-    println(sum(abs(download(run_preferred_resident<normalize>((x,scale,bias))) - normalize(x,scale,bias))))
+    println(sum(abs(download(run_preferred_resident<normalize>((x, scale, bias))) - normalize(x, scale, bias))))
     println(sum(abs(download(run_preferred_resident<reused>(x)) - reused(x))))
-    let small = (next_key()->uniform::<f32><shape: [1,3]> * 6.0 - 3.0)
+    let small = (next_key()->uniform::<f32><shape: [1, 3]> * 6.0 - 3.0)
     println(sum(abs(download(run_preferred_resident<softmax>(small)) - softmax(small))))
-    let tail = (next_key()->uniform::<f32><shape: [65537,2]> * 2.0 - 1.0)
+    let tail = (next_key()->uniform::<f32><shape: [65537, 2]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<reused>(tail)) - reused(tail))))
-    let narrow = (next_key()->uniform::<f32><shape: [3,1]> * 2.0 - 1.0)
+    let narrow = (next_key()->uniform::<f32><shape: [3, 1]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<softmax>(narrow)) - softmax(narrow))))
-    let wide = (next_key()->uniform::<f32><shape: [2,2049]> * 2.0 - 1.0)
+    let wide = (next_key()->uniform::<f32><shape: [2, 2049]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<reused>(wide)) - reused(wide))))
-    let cancellation = reshape<[1,4]>([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0] as f32[])
+    let cancellation = reshape<[1, 4]>([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0] as f32[])
     println(sum(download(run_preferred_resident<ordered_fallback>(cancellation))))
     println(sum(abs(download(run_preferred_resident<ordered_fallback>(cancellation)) - ordered_fallback(cancellation))))
     return 0

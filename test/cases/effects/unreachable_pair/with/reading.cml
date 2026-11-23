@@ -13,18 +13,18 @@
 
 var counter = 0
 
-func apply(x: int): int sync {
+func apply(x: int) => int sync {
     var local = x
     local = local + counter
     return local
 }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(1))
     return 0
 }
 
-func bump(): int sync {
+func bump() => int sync {
     counter = counter + 1
     return 0
 }

@@ -4,13 +4,13 @@
  */
 
 #op(':op/add_l')
-func add_kernel(a: int, b: int): int
+func add_kernel(a: int, b: int) => int
 
 #impl(add_kernel)
-func add(a: float, b: float): float {
+func add(a: float, b: float) => float {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

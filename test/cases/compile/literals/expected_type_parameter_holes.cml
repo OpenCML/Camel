@@ -9,15 +9,27 @@
 
 type P = { n: int, t: (f32, f32) }
 
-func takeStruct(p: P): f32 { return p.t.0 }
-func takeTuple(t: (f32, f32)): f32 { return t.0 }
-func takeArray(xs: f32[]): f32 { return xs[0] }
+func takeStruct(p: P) => f32 {
+    return p.t.0
+}
+func takeTuple(t: (f32, f32)) => f32 {
+    return t.0
+}
+func takeArray(xs: f32[]) => f32 {
+    return xs[0]
+}
 
-func returnedStruct(n: int): P { return { n: n, t: (1.0000000596046447753906251, 2.0) } }
-func returnedTuple(n: int): (f32, f32) { return (1.0000000596046447753906251, f32(n)) }
-func returnedArray(n: int): f32[] { return [1.0000000596046447753906251, f32(n)] }
+func returnedStruct(n: int) => P {
+    return { n: n, t: (1.0000000596046447753906251, 2.0) }
+}
+func returnedTuple(n: int) => (f32, f32) {
+    return (1.0000000596046447753906251, f32(n))
+}
+func returnedArray(n: int) => f32[] {
+    return [1.0000000596046447753906251, f32(n)]
+}
 
-func main(): int sync {
+func main() => int sync {
     let n = 1
     // the parameter position, for a struct, a tuple and an array
     println('{:.9g}'->format<takeStruct({ n: n, t: (1.0000000596046447753906251, 2.0) })>)

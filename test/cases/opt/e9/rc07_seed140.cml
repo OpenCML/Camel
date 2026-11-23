@@ -1,14 +1,14 @@
-func f10(a11: int, a12: bool): int {
-    return (loop s15 = (-0), c16 = 0 while false do (0, 0)).0;
+func f10(a11: int, a12: bool) => int {
+    return (loop s15 = (-0), c16 = 0 while false do (0, 0)).0
 }
 
-func q43(a44: int, a45: bool): bool sync {
-    println('');
-    return false;
+func q43(a44: int, a45: bool) => bool sync {
+    println('')
+    return false
 }
 
-func main(): int sync {
-    let n56 = q43(100, true);
-    q43(f10(3, true), false);
-    return 0;
+func main() => int sync {
+    let n56 = q43(100, true)
+    q43(f10(3, true), false)
+    return 0
 }

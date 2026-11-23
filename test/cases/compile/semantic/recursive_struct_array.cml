@@ -12,7 +12,7 @@
 type Node = { value: int, children: Node[] }
 
 // Reading the tree: recursion through an element of the array.
-func total(node: Node): int sync {
+func total(node: Node) => int sync {
     var acc = node.value
     let _ = loop i = 0 while i < len(node.children) do sync {
         acc += total(node.children[i])
@@ -21,19 +21,19 @@ func total(node: Node): int sync {
     return acc
 }
 
-func main(): void sync {
+func main() => void sync {
     // A leaf and a tree with two levels, built with the empty array taken from the field type.
     let leaf: Node = { value: 4, children: [] }
     let tree: Node = {
         value: 1,
         children: [
             { value: 2, children: [] },
-            { value: 3, children: [leaf] },
-        ],
+            { value: 3, children: [leaf] }
+        ]
     }
     println(total(tree))
     println(tree)
-
+    
     // Path assignment into the tree: `children[i]` and `.value` combined. The struct and its
     // array are copied on the way (value semantics), so `tree` is unchanged.
     var grown = tree

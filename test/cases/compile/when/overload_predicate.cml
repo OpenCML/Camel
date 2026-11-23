@@ -4,19 +4,19 @@
  * not the answer to every call (design principles 4.3).
  */
 
-func pick::<T>(a: int): bool {
+func pick::<T>(a: int) => bool {
     return false
 }
 
-func pick::<T>(a: string): bool {
+func pick::<T>(a: string) => bool {
     return true
 }
 
-func only::<T>(x: T): T when pick::<T>('s') {
+func only::<T>(x: T) => T when pick::<T>('s') {
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(only(5))
     return 0
 }

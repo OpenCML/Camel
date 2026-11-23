@@ -12,7 +12,7 @@ import { commit, open } from graph
 import { is_function } from types
 
 /// Opens a transaction on the program and commits it unchanged.
-export func touch::<F>(p: F): F! when is_function::<F>() sync {
+export func touch::<F>(p: F) => F! when is_function::<F>() sync {
     let t = open(p)
     return commit(t)
 }

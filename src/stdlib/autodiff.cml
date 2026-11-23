@@ -67,7 +67,7 @@ import { is_float } from types
 /// `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
 /// argument's own type.
 /// @example stop_gradient(3.0)    // 3.0
-export func stop_gradient::<T>(x: T): T pure
+export func stop_gradient::<T>(x: T) => T pure
 
 // ---- the local rules of the scalar arithmetic ----
 // One law, written once: the pattern names the primitive and the right side what the transform
@@ -87,31 +87,31 @@ export func stop_gradient::<T>(x: T): T pure
 
 /// The tangent of `x + w` along `(dx, dw)`: `dx + dw`.
 /// @example add_tangent(3.0, 5.0, 1.0, 0.0)    // 1.0
-export func add_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
+export func add_tangent::<T>(x: T, w: T, dx: T, dw: T) => T when is_float::<T>() {
     return dx + dw
 }
 
 /// The tangent of `x - w` along `(dx, dw)`: `dx - dw`.
 /// @example sub_tangent(3.0, 5.0, 1.0, 0.0)    // 1.0
-export func sub_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
+export func sub_tangent::<T>(x: T, w: T, dx: T, dw: T) => T when is_float::<T>() {
     return dx - dw
 }
 
 /// The tangent of `x * w` along `(dx, dw)`: `dx * w + x * dw`.
 /// @example mul_tangent(3.0, 5.0, 1.0, 0.0)    // 5.0
-export func mul_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
+export func mul_tangent::<T>(x: T, w: T, dx: T, dw: T) => T when is_float::<T>() {
     return dx * w + x * dw
 }
 
 /// The tangent of `x / w` along `(dx, dw)`: `dx / w - x * dw / (w * w)`.
 /// @example div_tangent(6.0, 4.0, 1.0, 0.0)    // 0.25
-export func div_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
+export func div_tangent::<T>(x: T, w: T, dx: T, dw: T) => T when is_float::<T>() {
     return dx / w - x * dw / (w * w)
 }
 
 /// The tangent of `-x` along `dx`: `-dx`.
 /// @example neg_tangent(3.0, 1.0)    // -1.0
-export func neg_tangent::<T>(x: T, dx: T): T when is_float::<T>() {
+export func neg_tangent::<T>(x: T, dx: T) => T when is_float::<T>() {
     return -dx
 }
 
@@ -123,31 +123,31 @@ export func neg_tangent::<T>(x: T, dx: T): T when is_float::<T>() {
 /// the transposed loop body answer a rule whose other operand is the round's own state (design
 /// principles: a value the walk does not carry costs nothing unless the rule reads it).
 /// @example add_cotangent(2.0)    // 2.0
-export func add_cotangent::<T>(ct: T): T when is_float::<T>() {
+export func add_cotangent::<T>(ct: T) => T when is_float::<T>() {
     return ct
 }
 
 /// The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
 /// @example sub_cotangent(2.0)    // 2.0
-export func sub_cotangent::<T>(ct: T): T when is_float::<T>() {
+export func sub_cotangent::<T>(ct: T) => T when is_float::<T>() {
     return ct
 }
 
 /// The cotangent of `x` in `x * c`: `ct * c`.
 /// @example mul_cotangent(5.0, 2.0)    // 10.0
-export func mul_cotangent::<T>(c: T, ct: T): T when is_float::<T>() {
+export func mul_cotangent::<T>(c: T, ct: T) => T when is_float::<T>() {
     return ct * c
 }
 
 /// The cotangent of `x` in `x / c`: `ct / c`.
 /// @example div_cotangent(4.0, 2.0)    // 0.5
-export func div_cotangent::<T>(c: T, ct: T): T when is_float::<T>() {
+export func div_cotangent::<T>(c: T, ct: T) => T when is_float::<T>() {
     return ct / c
 }
 
 /// The cotangent of `x` in `-x`: `-ct`.
 /// @example neg_cotangent(2.0)    // -2.0
-export func neg_cotangent::<T>(ct: T): T when is_float::<T>() {
+export func neg_cotangent::<T>(ct: T) => T when is_float::<T>() {
     return -ct
 }
 
@@ -167,24 +167,24 @@ export func neg_cotangent::<T>(ct: T): T when is_float::<T>() {
 
 /// The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
 /// @example add_cotangent_c(2.0)    // 2.0
-export func add_cotangent_c::<T>(ct: T): T when is_float::<T>() {
+export func add_cotangent_c::<T>(ct: T) => T when is_float::<T>() {
     return ct
 }
 
 /// The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(ct)`.
 /// @example sub_cotangent_c(2.0)    // -2.0
-export func sub_cotangent_c::<T>(ct: T): T when is_float::<T>() {
+export func sub_cotangent_c::<T>(ct: T) => T when is_float::<T>() {
     return -ct
 }
 
 /// The cotangent of `c` in `x * c`: `ct * x`.
 /// @example mul_cotangent_c(3.0, 2.0)    // 6.0
-export func mul_cotangent_c::<T>(x: T, ct: T): T when is_float::<T>() {
+export func mul_cotangent_c::<T>(x: T, ct: T) => T when is_float::<T>() {
     return ct * x
 }
 
 /// The cotangent of `c` in `x / c`: `-(ct * x / (c * c))`.
 /// @example div_cotangent_c(6.0, 4.0, 2.0)    // -0.75
-export func div_cotangent_c::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+export func div_cotangent_c::<T>(x: T, c: T, ct: T) => T when is_float::<T>() {
     return -(ct * x / (c * c))
 }

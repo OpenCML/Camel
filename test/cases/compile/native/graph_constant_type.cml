@@ -5,7 +5,7 @@
 
 import { constant } from graph
 
-func main(): int sync {
+func main() => int sync {
     println(constant::<int>(0))
     return 0
 }

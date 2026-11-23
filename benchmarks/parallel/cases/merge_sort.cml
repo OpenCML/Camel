@@ -2,10 +2,10 @@
 // 1e6 sorted by array::sort, the two halves of every split independent of each other. The
 // shuffle and the merges are sequential; they bound what the parallel scheduler can gain.
 
-import { seed, shuffle, next_key } from random
 import { sort, merge_sorted } from array
+import { seed, shuffle, next_key } from random
 
-func mergesort(arr: int[]): int[] {
+func mergesort(arr: int[]) => int[] {
     return if len(arr) <= 1000000 then sort(arr) else {
         let mid = len(arr) / 2
         let lhs = arr[0..mid]->mergesort
@@ -14,9 +14,9 @@ func mergesort(arr: int[]): int[] {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     seed(1)
-    let arr = (0..8000000)->shuffle<next_key()>
+    let arr = (0 .. 8000000)->shuffle<next_key()>
     let res = mergesort(arr)
     res[0..16]->println
     res[len(res) - 4..len(res)]->println

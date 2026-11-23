@@ -22,55 +22,56 @@
  *   zero=1.0 when the four zero gradients are exactly 0.0 (a NaN would print nan, not 0.0).
  */
 
-import { argmax, one_hot, reshape, sum, where } from tensor
 import { with_grad } from autodiff
+import { argmax, one_hot, reshape, sum, where } from tensor
 
 type Model = {
     weights: f32[...],
-    labels: i64[...], // the integer index array
+    labels: i64[...] // the integer index array
+    
 }
 
 // The labels are an ordinary parameter of the helper: the pullback plan for a callee returns a
 // tangent for every port that has one, so this is the shape the naive example had -- labels is
 // an active i64 index array and one_hot must return zero for it, not refuse.
 with <m: Model>
-func label_rows(labels: i64[...]): float {
+func label_rows(labels: i64[...]) => float {
     let oh = one_hot(labels, 3)
     return float(sum(m.weights * oh))
 }
 
 with <m: Model>
-func one_hot_loss(): float {
+func one_hot_loss() => float {
     return label_rows<m>(m.labels)
 }
 
 with <m: Model>
-func argmax_loss(): float {
+func argmax_loss() => float {
     let picked = argmax<-1>(m.weights)
     return float(sum(f32(picked)))
 }
 
 with <m: Model>
-func mask_loss(): float {
+func mask_loss() => float {
     let mask = m.weights > 0.0
     return float(sum(f32(mask)))
 }
 
 with <m: Model>
-func where_loss(): float {
+func where_loss() => float {
     let mask = m.weights > 0.0
     return float(sum(where(mask, m.weights, 0.0)))
 }
 
 with <m: Model>
-func gather_loss(): float {
+func gather_loss() => float {
     return float(sum(m.weights[m.labels]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let model = {
         weights: reshape<[2, 3]>([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f32[]),
-        labels: int([1, 0]),
+        labels: int([1, 0])
     }
     let (v1, g1) = with_grad(one_hot_loss)<model>()
     let (v2, g2) = with_grad(argmax_loss)<model>()
@@ -84,10 +85,7 @@ func main(): int sync {
     let where_grad = sum(g4.weights)
     let gather_grad = sum(g5.weights)
     let index_grad = sum(f32(g5.labels))
-    let zero =
-        if label_grad == 0.0 && argmax_grad == 0.0 && mask_grad == 0.0 && index_grad == 0.0
-        then 1.0
-        else 0.0
+    let zero = if label_grad == 0.0 && argmax_grad == 0.0 && mask_grad == 0.0 && index_grad == 0.0 then 1.0 else 0.0
     'discrete_zero one_hot=({:.1f},{:.1f},{:.1f}) argmax=({:.1f},{:.1f}) mask=({:.1f},{:.1f}) where=({:.1f},{:.1f}) gather=({:.1f},{:.1f},{:.1f}) zero={:.1f}'->format<
         v1,
         label_grad,
@@ -101,6 +99,7 @@ func main(): int sync {
         v5,
         gather_grad,
         index_grad,
-        zero>->println
+        zero
+    >->println
     return 0
 }

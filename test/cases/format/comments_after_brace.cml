@@ -1,4 +1,4 @@
-func arms::<T>(x: T): T when is_numeric::<T>() {
+func arms::<T>(x: T) => T when is_numeric::<T>() {
     return match type T {
         // the integer and complex arms
         // share this rule, and this
@@ -8,13 +8,13 @@ func arms::<T>(x: T): T when is_numeric::<T>() {
     }
 }
 
-func body(): int {
+func body() => int {
     // the body's comment
     // second line
     return 0
 }
 
-func nested(): int {
+func nested() => int {
     if 1 > 0 then {
         // inside the nested block
         // second nested line

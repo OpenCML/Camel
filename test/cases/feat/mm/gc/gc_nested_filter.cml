@@ -9,38 +9,48 @@
 
 type Row = int[]
 
-func is_even(x: int): bool {
+func is_even(x: int) => bool {
     return x % 2 == 0
 }
 
-func total_of(xs: int[]): int {
-    return xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+func total_of(xs: int[]) => int {
+    return xs->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
 }
 
-func rows(n: int, k: int): Row[] {
-    return (0..n)->map<func (i: int) => int[] { (0..n)->map<func (j: int) => int { i + j + k }>->filter<func (x: int) => bool { is_even(x) }> }>
+func rows(n: int, k: int) => Row[] {
+    return (0 .. n)->map<func (i: int) => int[] {
+        (0 .. n)->map<func (j: int) => int {
+            i + j + k
+        }>->filter<func (x: int) => bool {
+            is_even(x)
+        }>
+    }>
 }
 
-func probe_rows(t: Row[], n: int): int {
-    return (0..n)
-        ->map<func (i: int) => int { len(t[i]) + t[i][0] + t[i][len(t[i]) - 1] }>
-        ->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+func probe_rows(t: Row[], n: int) => int {
+    return (0 .. n)->map<func (i: int) => int {
+        len(t[i]) + t[i][0] + t[i][len(t[i]) - 1]
+    }>->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
 }
 
-func kept(n: int, k: int): int[] {
-    return (0..n)->filter<func (i: int) => bool {
-        let row = (0..n)->map<func (j: int) => int { i + j + k }>
+func kept(n: int, k: int) => int[] {
+    return (0 .. n)->filter<func (i: int) => bool {
+        let row = (0 .. n)->map<func (j: int) => int {
+            i + j + k
+        }>
         return total_of(row) % 3 == 0
     }>
 }
 
-func repeat(n: int, left: int, total: int): int {
-    return if left == 0
-        then total
-        else repeat(n, left - 1, total + probe_rows(rows(n, left), n) + len(kept(n, left)) + total_of(kept(n, left)))
+func repeat(n: int, left: int, total: int) => int {
+    return if left == 0 then total else repeat(n, left - 1, total + probe_rows(rows(n, left), n) + len(kept(n, left)) + total_of(kept(n, left)))
 }
 
-func main(reps: int): int sync {
+func main(reps: int) => int sync {
     println('gc_nested_filter total={}'->format<repeat(128, reps, 0)>)
     return 0
 }

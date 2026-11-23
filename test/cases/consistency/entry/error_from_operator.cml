@@ -3,7 +3,7 @@
  * located at `main`.
  */
 
-func main(): int! sync {
+func main() => int! sync {
     println('before')
     return parse_int('12abc')
 }

@@ -8,7 +8,7 @@
 import { get_env } from env
 import { read_text, write_text } from fs
 
-func main(): int sync {
+func main() => int sync {
     let path = get_env('CAMEL_TIMEIT_COUNTER') ?? ''
     let count = int(path->read_text !! '0')
     let next = count + 1

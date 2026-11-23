@@ -6,8 +6,10 @@
  * types, so this case also covers the rule that a call fills its with-arguments' types.
  */
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
-    println(xs->map<func (x) { x * x }>)
+    println(xs->map<func (x) {
+        x * x
+    }>)
     return 0
 }

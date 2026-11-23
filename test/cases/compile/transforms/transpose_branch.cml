@@ -7,10 +7,11 @@
 // side only -- `2*x + 5*x` then, `4*x` else -- so the two sides answer 7 and 4: the sum of two
 // cotangents happens inside one arm, and the two arms' cotangents are joined, not added, because
 // only the arm that ran contributed one.
-import { jvp, split, transpose } from transforms
+import rulesets.jvp
 import rulesets.transpose
+import { jvp, split, transpose } from transforms
 
-func pick(x: float): float {
+func pick(x: float) => float {
     if x > 0.0 then {
         return 2.0 * x
     } else {
@@ -18,15 +19,15 @@ func pick(x: float): float {
     }
 }
 
-func merged(x: float): float {
+func merged(x: float) => float {
     if x > 0.0 then {
         return 2.0 * x + 5.0 * x
     } else {
         return 4.0 * x
     }
 }
-import rulesets.jvp
-func main(): int sync {
+
+func main() => int sync {
     // The value each arm reads is captured by the half the cut returns, so the transpose of that half
     // takes the cotangent and nothing else: 2 at a positive x, 3 at a negative one, 7 and 4 for the
     // function that reads its parameter twice on one side.

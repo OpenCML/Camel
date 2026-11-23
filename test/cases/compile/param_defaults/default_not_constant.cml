@@ -3,10 +3,10 @@
  * parameter of the same declaration (design principles 4.4).
  */
 
-func f(a: int, b: int = a): int {
+func f(a: int, b: int = a) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }

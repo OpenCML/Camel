@@ -2,14 +2,20 @@
 // body -- runs with its own region, and is ordered by `sync` only if it says `sync` itself.
 // Run: camel docs/tutorial/examples/10_sync_block.cml
 
-func report(second: bool): int sync {
+func report(second: bool) => int sync {
     println('the body is a sync block')
-    if second then { println('three'); println('four') }
-    if second then sync { println('five'); println('six') }
+    if second then {
+        println('three')
+        println('four')
+    }
+    if second then sync {
+        println('five')
+        println('six')
+    }
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(report(true))
     return 0
 }

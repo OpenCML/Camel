@@ -4,7 +4,7 @@
  * `std::cxx::dce` may not drop the effect together with the unread subtraction.
  */
 
-func main(): int sync {
+func main() => int sync {
     let r = println(5) - 1
     return 7
 }

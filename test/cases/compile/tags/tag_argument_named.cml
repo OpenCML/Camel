@@ -1,12 +1,11 @@
 /// A tag argument is positional; naming one is refused.
-
 tag width(w: int) on func
 
 #width(w: 8)
-func g(): int {
+func g() => int {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return 0
 }

@@ -4,13 +4,17 @@
  * that imports it receives both.
  */
 
-export func twice(f: (x: int) => int): (x: int) => int {
+export func twice(f: (x: int) => int) => (x: int) => int {
     return func (x: int) => int {
         return f(f(x))
     }
 }
 
 @twice
-export func bump(x: int): int { return x + 1 }
+export func bump(x: int) => int {
+    return x + 1
+}
 
-export func bump(x: float): float { return x + 0.5 }
+export func bump(x: float) => float {
+    return x + 0.5
+}

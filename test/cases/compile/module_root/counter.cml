@@ -6,11 +6,11 @@
 var cnt = 0
 let step = 2
 
-export func bump(): int sync {
+export func bump() => int sync {
     cnt += step
     return cnt
 }
 
-export func current(): int {
+export func current() => int {
     return cnt
 }

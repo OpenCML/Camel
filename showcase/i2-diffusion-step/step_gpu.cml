@@ -11,8 +11,8 @@
  * the loop carries the optimizer state, which the device path does not have yet.
  */
 
-import { relu, sum } from tensor
 import { next_key, seed, uniform } from random
+import { relu, sum } from tensor
 import { device, download, run_preferred_resident, upload } from tiles
 
 // The denoiser's inputs travel as one aggregate: `run_preferred_resident` takes one argument, and
@@ -26,12 +26,12 @@ type Inputs = {
 }
 
 // `relu(x @ w1 + b1) @ w2 + b2`, the expression `step.cml` writes.
-func denoise(p: Inputs): f32[4, 16] {
+func denoise(p: Inputs) => f32[4, 16] {
     let hidden = relu(p.x @ p.w1 + p.b1)
     return hidden @ p.w2 + p.b2
 }
 
-func main(): int sync {
+func main() => int sync {
     seed(7)
     let p = {
         x: next_key()->uniform::<f32><shape: [4, 16]> as f32[4, 16],

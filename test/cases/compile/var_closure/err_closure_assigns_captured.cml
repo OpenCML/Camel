@@ -9,9 +9,9 @@
  * value, write the state as a loop's carried state or a `fold`, or hold it in a `Ref`.
  */
 
-func make(x: int): int {
+func make(x: int) => int {
     var total = 0
-    func add(k: int): int {
+    func add(k: int) => int {
         total = total + k
         return total
     }
@@ -19,7 +19,7 @@ func make(x: int): int {
     a
 }
 
-func main(): int sync {
+func main() => int sync {
     println(make(3))
     return 0
 }

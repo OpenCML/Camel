@@ -9,7 +9,7 @@
 
 import { show } from tensor
 
-func main(): int sync {
+func main() => int sync {
     show([])
     return 0
 }

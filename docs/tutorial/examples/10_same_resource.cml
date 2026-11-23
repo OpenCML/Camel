@@ -1,11 +1,11 @@
 // Two effects on the same resource (stdout) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
 
-func report(): int {
+func report() => int {
     return 5->println->println
 }
 
-func main(): int sync {
+func main() => int sync {
     println(report())
     return 0
 }

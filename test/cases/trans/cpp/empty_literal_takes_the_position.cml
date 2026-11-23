@@ -5,7 +5,7 @@
 //
 // Run: camel test/cases/trans/cpp/empty_literal_takes_the_position.cml std::cpp
 
-func main(): int sync {
+func main() => int sync {
     let xs = []->append<1>
     println(len(xs), xs->contains<1>, xs->contains<2>)
     return 0

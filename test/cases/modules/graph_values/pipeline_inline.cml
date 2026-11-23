@@ -4,20 +4,22 @@
  * inlining and optimising, every holder computes what the source says.
  */
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2 + x * 2
 }
 
-func a(x: int): int {
+func a(x: int) => int {
     return twice(x) + 1
 }
 
-func b(x: int): int {
+func b(x: int) => int {
     return twice(x) * 3
 }
 
-func main(): int sync {
-    let held = func (x: int) => int { twice(x) - 1 }
+func main() => int sync {
+    let held = func (x: int) => int {
+        twice(x) - 1
+    }
     println(`${twice(5)} ${a(5)} ${b(5)} ${held(5)}`)
     return 0
 }

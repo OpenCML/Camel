@@ -15,13 +15,17 @@
 // the caller gave it. 3.0 and 6.0 are different numbers, so a spread that dropped the fixed
 // arguments, or that put the pack's member where a fixed argument belongs, shows as a wrong line
 // and not as the right one twice.
-func add3(a: float, b: float, c: float = 0.0): float {
+func add3(a: float, b: float, c: float = 0.0) => float {
     return a + b + c
 }
 
-func main(): int sync {
-    let none: () => float = func (...ys) { add3(1.0, 2.0, ...ys) }
-    let one: (v: float) => float = func (...ys) { add3(1.0, ...ys) }
+func main() => int sync {
+    let none: () => float = func (...ys) {
+        add3(1.0, 2.0, ...ys)
+    }
+    let one: (v: float) => float = func (...ys) {
+        add3(1.0, ...ys)
+    }
     println('rest empty {}'->format<none()>)
     println('rest onemember {}'->format<one(5.0)>)
     return 0

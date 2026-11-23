@@ -1,14 +1,14 @@
 // Outside a sync block a `T!` whose value nothing uses still loses the error it may hold.
-func parse(s: string): int! {
+func parse(s: string) => int! {
     return parse_int(s)
 }
 
-func quiet(s: string): int {
+func quiet(s: string) => int {
     let r = parse(s)
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(quiet('zz'))
     return 0
 }

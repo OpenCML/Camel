@@ -3,6 +3,6 @@
  * `x + x` has only the operators visible in this module (design principles 5.7).
  */
 
-export func twice::<T>(x: T): T {
+export func twice::<T>(x: T) => T {
     return x + x
 }

@@ -7,16 +7,18 @@
 // an expanded body's rest parameter.
 import { WithOf, ParamsOf } from types
 
-type PairOf<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)
+type PairOf<F> = <...WithOf<F>>(...ParamsOf<F>) => (float, float)
 
 with <w: float, k: float>
-func twice(): float {
+func twice() => float {
     return w * k
 }
 
-func main(): int sync {
-    let g: PairOf<<w: float, k: float> () => float> = func <w, ...rest> () {
-        let second = func () { rest.[0] }
+func main() => int sync {
+    let g: PairOf<<w: float, k: float>() => float> = func <w, ...rest>() {
+        let second = func () {
+            rest.[0]
+        }
         (second(), 1.0)
     }
     let (read, constant) = g<2.0, 3.0>()

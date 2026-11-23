@@ -7,12 +7,12 @@
 
 var total: int = 0
 
-func bump(k: int): int sync {
+func bump(k: int) => int sync {
     let w = (total = k) * 0
     return w + k
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bump(41))
     println(total)
     return 0

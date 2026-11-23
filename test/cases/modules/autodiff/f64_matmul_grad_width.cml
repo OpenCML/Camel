@@ -34,44 +34,44 @@
  * not the column sums of x, or the gradient of `x` loses the row of w.
  */
 
-import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff
+import { abs, reshape, sum } from tensor
 
 type M = {
     x: f64[2, 3],
-    w: f64[3, 1],
+    w: f64[3, 1]
 }
 
 with <m: M>
-func loss(): float sync {
+func loss() => float sync {
     return float(sum(m.x @ m.w))
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = {
         x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f64[]),
-        w: reshape<[3, 1]>([1.0, 1.0, 1.0] as f64[]),
+        w: reshape<[3, 1]>([1.0, 1.0, 1.0] as f64[])
     }
     let gw = reshape<[3, 1]>([5.0, 7.0, 9.0] as f64[])
     let gx = reshape<[2, 3]>([1.0, 1.0, 1.0, 1.0, 1.0, 1.0] as f64[])
     let vg = with_grad(loss)<m>()
     let g = vg.1
-
+    
     // The wide pair: the two rows of x add to a value f32 cannot hold.
     let mw = {
         x: reshape<[2, 3]>([16777216.0, 1.0, 0.0, 1.0, 0.0, 0.0] as f64[]),
-        w: reshape<[3, 1]>([1.0, 1.0, 1.0] as f64[]),
+        w: reshape<[3, 1]>([1.0, 1.0, 1.0] as f64[])
     }
     let wgw = reshape<[3, 1]>([16777217.0, 1.0, 0.0] as f64[])
     let wvg = with_grad(loss)<mw>()
     let wg = wvg.1.w
-
+    
     let a_w = sum(gw - gw) + sum(abs(g.w - gw))
     let a_x = sum(gx - gx) + sum(abs(g.x - gx))
     let wa = sum(wgw - wgw) + sum(abs(wg - wgw))
-
-    println("f64_matmul_grad_width value={} a_w={} a_x={} wa={}"->format<vg.0, a_w, a_x, wa>)
-    println("gw {}"->format<g.w>)
-    println("wg {}"->format<wg>)
+    
+    println('f64_matmul_grad_width value={} a_w={} a_x={} wa={}'->format<vg.0, a_w, a_x, wa>)
+    println('gw {}'->format<g.w>)
+    println('wg {}'->format<wg>)
     return 0
 }

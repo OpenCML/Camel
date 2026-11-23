@@ -1,16 +1,14 @@
-
-
 import { is_float, is_complex } from types
 
-func kind::<T>(x: T): string when is_float::<T>() {
+func kind::<T>(x: T) => string when is_float::<T>() {
     return 'float'
 }
 
-func kind::<T>(x: T): string when is_complex::<T>() {
+func kind::<T>(x: T) => string when is_complex::<T>() {
     return 'complex'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(kind('text'))
     return 0
 }

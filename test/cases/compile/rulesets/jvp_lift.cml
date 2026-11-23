@@ -3,7 +3,7 @@
 import { Lift, lift, div_jvp, mul_jvp, sub_jvp } from rulesets.jvp
 
 // Rank zero is the element itself: an open-rank pattern selects a plain `f32` too.
-func open_rank::<T>(x: T): int {
+func open_rank::<T>(x: T) => int {
     return match type T {
         case f32[?] => 1
         case f32[...] => 2
@@ -11,7 +11,7 @@ func open_rank::<T>(x: T): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let a: Lift<float> = lift(3.0)
     println(a.0)
     println(a.1)

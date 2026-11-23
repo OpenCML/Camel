@@ -39,14 +39,25 @@
 // struct's, and it is not a spelling's.
 //
 //     camel test/cases/compile/transforms/transformer_step_gradient_stops_at_split.cml
-import { matmul, mean, relu, softmax, sqrt, sum, transpose } from tensor
 import rulesets.jvp
+import { matmul, mean, relu, softmax, sqrt, sum, transpose } from tensor
 import { vjp } from vjp
 
-func loss_plain(wq1: float[4, 2], wk1: float[4, 2], wv1: float[4, 2],
-                wq2: float[4, 2], wk2: float[4, 2], wv2: float[4, 2],
-                wo1: float[2, 4], wo2: float[2, 4], g: float[4],
-                w1: float[4, 4], b1: float[4], w2: float[4, 4], b2: float[4]): float {
+func loss_plain(
+    wq1: float[4, 2],
+    wk1: float[4, 2],
+    wv1: float[4, 2],
+    wq2: float[4, 2],
+    wk2: float[4, 2],
+    wv2: float[4, 2],
+    wo1: float[2, 4],
+    wo2: float[2, 4],
+    g: float[4],
+    w1: float[4, 4],
+    b1: float[4],
+    w2: float[4, 4],
+    b2: float[4]
+) => float {
     let x = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]] as float[2, 4]
     let s1 = ((x @ wq1) @ transpose(x @ wk1)) / 2.0
     let s2 = ((x @ wq2) @ transpose(x @ wk2)) / 2.0
@@ -63,7 +74,7 @@ func loss_plain(wq1: float[4, 2], wk1: float[4, 2], wv1: float[4, 2],
     return sum((ln + (h @ w2 + b2)) * [[1.0, 2.0, 4.0, 8.0], [1.0, 3.0, 5.0, 7.0]] as float[2, 4])
 }
 
-func main(): int sync {
+func main() => int sync {
     let wq1 = [[0.25, 0.0], [0.0, 0.25], [-0.25, 0.5], [0.5, -0.25]] as float[4, 2]
     let wk1 = [[0.5, -0.25], [0.25, 0.0], [0.0, -0.25], [-0.25, 0.5]] as float[4, 2]
     let wv1 = [[0.0, 0.5], [0.25, -0.25], [-0.5, 0.0], [0.25, 0.75]] as float[4, 2]
@@ -77,7 +88,7 @@ func main(): int sync {
     let b1 = [1.0, 1.5, 2.0, 2.5] as float[4]
     let w2 = [[0.25, 0.0, 0.5, 0.25], [0.5, 0.25, 0.0, 0.25], [0.25, 0.5, 0.25, 0.0], [0.0, 0.25, 0.25, 0.5]] as float[4, 4]
     let b2 = [1.0, 2.0, 3.0, 4.0] as float[4]
-
+    
     let (value, pullback) = vjp(loss_plain)(wq1, wk1, wv1, wq2, wk2, wv2, wo1, wo2, g, w1, b1, w2, b2)
     let cotangents = pullback(1.0)
     `transformer step library loss={} dL/db1={}`->format<value, cotangents.11>->println

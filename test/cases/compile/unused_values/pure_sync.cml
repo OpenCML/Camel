@@ -4,7 +4,7 @@
  * diagnostic -- the statement is not an effect and it holds no `T!`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a = 1
     a + 2
     println(a)

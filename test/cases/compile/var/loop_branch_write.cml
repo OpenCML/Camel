@@ -16,10 +16,14 @@
  *
  * Run: camel test/cases/compile/var/loop_branch_write.cml std::nvm
  */
-func main(): int sync {
+func main() => int sync {
     var total = 0
     let _ = loop i = 0 while i < 4 do {
-        if i % 2 == 0 then { total = total + 10 } else { total = total + 1 }
+        if i % 2 == 0 then {
+            total = total + 10
+        } else {
+            total = total + 1
+        }
         i + 1
     }
     println(total)

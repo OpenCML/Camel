@@ -12,8 +12,8 @@
 
 var n = 0
 
-func main(): int sync {
-    func bump(x: int): int pure sync {
+func main() => int sync {
+    func bump(x: int) => int pure sync {
         n = n + x
         return n
     }

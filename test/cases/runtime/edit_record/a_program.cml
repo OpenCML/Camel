@@ -1,5 +1,5 @@
 // The case of `test::edit_record`: the program is handed to the pass and computes nothing. What the
 // pass reads is the edit record of the drafts it makes, which no program can see.
-func main(): int sync {
+func main() => int sync {
     return 0
 }

@@ -10,7 +10,7 @@
 // gone. What this probe reads is unchanged: the write nobody computes with (`(c = 41) * 0`) is kept
 // because the call of `h` reads the cell, so both lines print 41.
 
-func probe(): int sync {
+func probe() => int sync {
     var c = 0
     let w = (c = 41) * 0
     let h = func () => int sync {
@@ -20,7 +20,7 @@ func probe(): int sync {
     return w + h()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(probe())
     return 0
 }

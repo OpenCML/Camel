@@ -3,10 +3,11 @@
 // `throw` are not keywords: they are ordinary names, so they appear
 // below as values.
 
-import { now } from time
-import os
 import math_tools from .local.tools
+import os
 import os as system
+import { now } from time
+
 export { helper }
 using namespace std::io
 
@@ -24,7 +25,7 @@ let outer = 5
 let atomic = 6
 let shared = 7
 
-func plain(x: int): int {
+func plain(x: int) => int {
     return if x > 0 then x else 0 - x
 }
 
@@ -32,7 +33,7 @@ func effect(var target: int) {
     target += 1
 }
 
-func control(dir: string, xs: int[]): int! {
+func control(dir: string, xs: int[]) => int! {
     let picked = match dir {
         case 'w' => 1
         case 'a' | 'd' => 2
@@ -51,6 +52,6 @@ func control(dir: string, xs: int[]): int! {
     return error('Failed', 'failed')
 }
 
-func generic::<T>(x: T, y: T, z: f32[...]): T {
+func generic::<T>(x: T, y: T, z: f32[...]) => T {
     return x
 }

@@ -5,15 +5,14 @@
  *   0
  */
 
-
 var cnt: int = 0
 
-func quiet(): int {
+func quiet() => int {
     cnt = cnt + 1
     return 5
 }
 
-func main(): int sync {
+func main() => int sync {
     println(quiet())
     println(cnt)
     return 0

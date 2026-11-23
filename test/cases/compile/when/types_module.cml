@@ -8,11 +8,11 @@
 
 import { is_numeric } from types
 
-func describe::<T>(x: T): string when is_numeric::<T>() {
-    return "numeric"
+func describe::<T>(x: T) => string when is_numeric::<T>() {
+    return 'numeric'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describe(1))
     return 0
 }

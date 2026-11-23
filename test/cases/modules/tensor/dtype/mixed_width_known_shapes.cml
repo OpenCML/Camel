@@ -7,11 +7,11 @@
 
 import { reshape, sum } from tensor
 
-func both(x: f64[2], y: f32[2]): float {
+func both(x: f64[2], y: f32[2]) => float {
     return float(sum(x * y))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0] as f64[])
     let y = reshape<[2]>([1.0, 2.0] as f32[])
     println(both(x, y))

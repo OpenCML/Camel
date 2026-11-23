@@ -6,7 +6,7 @@
 import { fold, key, normal } from random
 import { sum, zeros } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let drawn = normal::<float><shape: [2, 2]>(fold(key(7), 1))
     let zeroed = zeros::<float>([2, 2])
     println(`normal + zeros = ${sum(drawn + zeroed):.6f}`)

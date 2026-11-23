@@ -1,5 +1,5 @@
 // `x == null` and `x != null` are ordinary comparisons to the parser.
-func main(): int sync {
+func main() => int sync {
     let n: int? = null
     println(n == null, n != null)
     return 0

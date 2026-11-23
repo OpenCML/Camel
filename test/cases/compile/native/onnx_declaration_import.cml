@@ -7,11 +7,11 @@
 
 import { supported_operators } from onnx
 
-func count(): int {
+func count() => int {
     let uris: string[] = supported_operators()
     return len(uris)
 }
 
-func main(): int {
+func main() => int {
     return count()
 }

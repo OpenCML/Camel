@@ -4,10 +4,14 @@
  * while it might succeed -- the errors of a candidate nobody wanted are not the program's -- and
  * what it collected is reported when there is no candidate left.
  */
-func pick::<T>(x: T, y: T): T { return len(x) }
-func pick::<T>(x: int, y: T): T { return len(y) }
+func pick::<T>(x: T, y: T) => T {
+    return len(x)
+}
+func pick::<T>(x: int, y: T) => T {
+    return len(y)
+}
 
-func main(): int sync {
+func main() => int sync {
     let f: (x: int, y: int) => int = pick
     println(f(1, 2))
     return 0

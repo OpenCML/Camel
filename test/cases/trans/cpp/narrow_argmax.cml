@@ -17,7 +17,7 @@
  */
 import { argmax, argmin, argsort } from array
 
-func main(): int sync {
+func main() => int sync {
     let xs: bf16[] = [0.5, -1.5, 2.0]
     println(argsort(xs))
     println(argmax(xs))
@@ -26,25 +26,25 @@ func main(): int sync {
     println(argsort(hs))
     println(argmax(hs))
     println(argmin(hs))
-
+    
     // Ties keep the order they stand: the earlier position wins.
     let ties: bf16[] = [1.5, 1.5, 1.5]
     println(argsort(ties))
     println(argmax(ties))
     println(argmin(ties))
-
+    
     // -0 is below +0: the order `min` and `max` state, read as positions.
     let zeros: bf16[] = [0.0, -0.0]
     println(argsort(zeros))
     println(argmax(zeros))
     println(argmin(zeros))
-
+    
     // Every NaN is after every number, so argmax finds it and argmin names it first.
     let nans: f16[] = [1.0, f16('nan'), 2.0]
     println(argsort(nans))
     println(argmax(nans))
     println(argmin(nans))
-
+    
     // A value of several dimensions is read in row-major order, and the position is that order's.
     let m: bf16[2, 2] = [[0.5, 1.5], [2.5, 3.5]]
     println(argmax(m))

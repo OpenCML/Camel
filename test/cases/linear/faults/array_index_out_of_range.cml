@@ -3,9 +3,11 @@
  * index and the length in the message, on every back end.
  */
 
-func at(xs: int[], i: int): int { return xs[i] }
+func at(xs: int[], i: int) => int {
+    return xs[i]
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1, 2, 3]
     println(at(xs, 1))
     println(at(xs, 5))

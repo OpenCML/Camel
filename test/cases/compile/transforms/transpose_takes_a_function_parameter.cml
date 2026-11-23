@@ -26,19 +26,19 @@
 import rulesets.transpose
 import { transpose } from transforms
 
-func twice(y: float): float {
+func twice(y: float) => float {
     return y * 2.0
 }
 
-func apply(fn: (y: float) => float, x: float): float {
+func apply(fn: (y: float) => float, x: float) => float {
     return fn(x) + fn(x)
 }
 
-func f(x: float): float {
+func f(x: float) => float {
     return apply(twice, x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(3.0))
     // 4.0: the derivative of `4x`, a number no forward line prints.
     println(transpose(f)(1.0))

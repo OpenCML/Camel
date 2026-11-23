@@ -10,14 +10,14 @@
  */
 
 #op(':op/sub_l')
-func sub_kernel(a: int, b: int): int
+func sub_kernel(a: int, b: int) => int
 
 #impl(sub_kernel)
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     let by_body = add
     let k = add(19, 23)
     let b = by_body(19, 23)

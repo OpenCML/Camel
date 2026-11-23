@@ -19,11 +19,11 @@ import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp
 
-func both(xs: float[3]): float {
+func both(xs: float[3]) => float {
     return xs[1] * xs[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(both)([3.0, 2.0, 5.0])
     let cotangents = pullback(1.0)
     let dxs = cotangents.0

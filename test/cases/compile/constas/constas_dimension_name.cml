@@ -3,10 +3,10 @@
 
 type Vec<T> = { data: T }
 
-func f(y: Vec<const constas n>): int {
+func f(y: Vec<const constas n>) => int {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return 0
 }

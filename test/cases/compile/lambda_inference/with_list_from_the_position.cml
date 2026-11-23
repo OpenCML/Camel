@@ -6,15 +6,15 @@
 // Before this, the first line was an invariant violation, not a wrong answer: the completion read the
 // expected type's ordinary slots at the lambda's own numbering, so the second of the two parameters
 // read past the end (`normTypeAt`, `index < normCount_`).
-func apply(g: <w: float> (x: float) => float): float {
+func apply(g: <w: float>(x: float) => float) => float {
     return g<2.0>(3.0)
 }
 
-func apply_two(g: <w: float, v: float> (x: float) => float): float {
+func apply_two(g: <w: float, v: float>(x: float) => float) => float {
     return g<2.0, 3.0>(1.5)
 }
 
-func main(): int sync {
+func main() => int sync {
     // A rest hole stands for the position's ordinary parameters, and the `with` list is the
     // position's: nothing of the body reads either here.
     println(`rest_hole ${apply(func (...xs) { 7.0 })}`)

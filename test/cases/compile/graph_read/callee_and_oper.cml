@@ -3,11 +3,11 @@
 // the result (an OPER node with an operator), and answers the sum (a cast, a port, an exit); the
 // front end also leaves the placeholders (`Dref`) a draft holds and an encoded graph does not, so
 // the check is asked of a graph where the two numberings differ.
-func twice(x: float): float {
+func twice(x: float) => float {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     let doubled = twice(2.0)
     println(doubled + 1.0)
     return 0

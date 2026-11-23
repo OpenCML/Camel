@@ -8,11 +8,11 @@
 import { reshape, relu } from tensor
 import { regions } from tiles
 
-func linear(x: f32[2, 3], w: f32[3, 2], b: f32[2]): f32[2, 2] {
+func linear(x: f32[2, 3], w: f32[3, 2], b: f32[2]) => f32[2, 2] {
     return relu(x @ w + b)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(regions<linear>())
     return 0
 }

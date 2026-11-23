@@ -4,13 +4,14 @@
  * waits, and names the `tiles:` operator the device work happened inside.
  */
 
-
 import { sum } from tensor
 import { upload, download, run_preferred_resident } from tiles
 
-func step(x: f32[...]): f32[...] { return x * 2.0 + 1.0 }
+func step(x: f32[...]) => f32[...] {
+    return x * 2.0 + 1.0
+}
 
-func main(): int sync {
+func main() => int sync {
     let x = [1.0, 2.0, 3.0, 4.0] as f32[]
     let d = upload(x)
     let y = run_preferred_resident<step>(d)

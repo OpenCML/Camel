@@ -11,7 +11,7 @@
 
 import { add } from impl_cross_module_lib
 
-func main(): int sync {
+func main() => int sync {
     let k = add(19, 23)
     'kernel={}'->format<k>->println
     return 0

@@ -2,7 +2,7 @@
 // repairs -- remove it, or add the opener it was meant to close -- because only the writer knows
 // which of the two happened.
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 1)
     return x
 }

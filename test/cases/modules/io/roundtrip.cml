@@ -6,7 +6,7 @@
 
 import { set_terminal_raw_mode, has_input, get_char, get_chars } from io
 
-func main(): int sync {
+func main() => int sync {
     println(has_input())
     let first = get_char() ?? ''
     let rest = get_chars(4)

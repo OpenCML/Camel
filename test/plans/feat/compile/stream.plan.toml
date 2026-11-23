@@ -106,7 +106,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CompOperandNotUnary"
 expect_diagnostic_code = "0x030001E2"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 12
 expect_diagnostic_column = 13
 expect_output_contains = ["'..' and '<>' compose a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
@@ -274,7 +274,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandGenericWithoutType"
 expect_diagnostic_code = "0x030001E4"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 20
-expect_output_contains = ["'..' composes two functions, and its left operand, the generic function 'ident', has no instance here: write its type arguments ('ident::<int>'), or give the whole expression an expected function type."]
+expect_output_contains = ["'<>' composes two functions, and its left operand, the generic function 'ident', has no instance here: write its type arguments ('ident::<int>'), or give the whole expression an expected function type."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "'void'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -753,7 +753,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::StreamConsumedTwice"
 expect_diagnostic_code = "0x030001E5"
-expect_diagnostic_line = 24
+expect_diagnostic_line = 26
 expect_diagnostic_column = 28
 expect_output_contains = ["consumed twice", "the stream is consumed here first", "s->tee<n>"]
 expect_output_not_contains = ["UnknownInternalError"]
@@ -762,7 +762,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.two_loops_consume"
-expect_diagnostic_line = 18
+expect_diagnostic_line = 20
 expect_diagnostic_column = 45
 desc = "Two `for`s over one stream are two consumers (design principles 5.4). One `for` is one consumer however many edges the machine it builds reads the value on -- the sequence it is handed and the slot of its state that holds it back are one read -- but a second `for` pulls the same stream again, so it is refused with both places named."
 kind = "negative"
@@ -796,7 +796,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::StreamConsumedInLoop"
 expect_diagnostic_code = "0x030001ED"
-expect_diagnostic_line = 25
+expect_diagnostic_line = 27
 expect_diagnostic_column = 56
 expect_output_contains = ["consumed once per round of this loop", "the loop this use stands in", "loop acc = 0, rest = s while", "for x in s"]
 expect_output_not_contains = ["UnknownInternalError"]
@@ -866,7 +866,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.tee_result_consumed_twice"
-expect_diagnostic_line = 24
+expect_diagnostic_line = 26
 expect_diagnostic_column = 13
 desc = "The streams a `tee` gives are streams like any other (design principles 5.4): a `tee` makes two streams, one for each reader, and each is still read once. Reading one side twice is two consumers of that side, so it is refused exactly as reading any other stream twice is."
 kind = "negative"
@@ -900,7 +900,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TeeHintNotPositive"
 expect_diagnostic_code = "0x030001EF"
-expect_diagnostic_line = 24
+expect_diagnostic_line = 26
 expect_diagnostic_column = 37
 expect_output_contains = ["width '0' is below 1", "buffers the elements the other has not read yet", "the default of 8"]
 expect_output_not_contains = ["UnknownInternalError"]

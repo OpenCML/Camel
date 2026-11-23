@@ -1,26 +1,32 @@
 // The standard library: strings, arrays and numbers.
 // Run: camel docs/tutorial/examples/12_stdlib.cml
 
-import { split, trim, to_upper, replace, index_of } from str
 import { sort_by, take, sum, reverse, unique } from array
-import { abs, hypot, bit_and, pi } from math
 import { mean } from array
+import { abs, hypot, bit_and, pi } from math
+import { split, trim, to_upper, replace, index_of } from str
 
-func main(): int sync {
+func main() => int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
-    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<func (w: string) => string { trim(w) }>
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<func (w: string) => string {
+        trim(w)
+    }>
     println(words)
-    println(words->unique->sort_by<func (w: string) => int { len(w) }>->take<2>)
+    println(words->unique->sort_by<func (w: string) => int {
+        len(w)
+    }>->take<2>)
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
-
+    
     // A result that may not exist is a T?.
     let at_l = 'hello'->index_of<'l'> ?? -1
     let at_z = 'hello'->index_of<'z'> ?? -1
     println(at_l, at_z)
-
+    
     // Arrays and numbers.
     let xs = [3, -1, 4, -1, 5]
-    println(sum(xs), reverse(xs), xs->map<func (x: int) => int { abs(x) }>)
+    println(sum(xs), reverse(xs), xs->map<func (x: int) => int {
+        abs(x)
+    }>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println(`${pi:.4f}`)
     return 0

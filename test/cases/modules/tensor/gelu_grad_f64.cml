@@ -23,16 +23,20 @@
  * must keep these numbers (the f32 kernel's bits are pinned shape by shape in gelu_grad_bits.cml).
  */
 
-import { gelu, sum } from tensor
 import { grad } from autodiff
+import { gelu, sum } from tensor
 
 with <x: f64[...]>
-func loss64(): float { return float(sum(gelu(x))) }
+func loss64() => float {
+    return float(sum(gelu(x)))
+}
 
 with <x: f32[...]>
-func loss32(): float { return float(sum(gelu(x))) }
+func loss32() => float {
+    return float(sum(gelu(x)))
+}
 
-func main(): int sync {
+func main() => int sync {
     let x = [-1.0, 0.0, 1.0] as f64[]
     println('gelu_grad_f64 forward={}'->format<gelu(x)>)
     println('gelu_grad_f64 grad={}'->format<grad(loss64)<x>()>)

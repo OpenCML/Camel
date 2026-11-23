@@ -12,22 +12,22 @@
  * the callee of the program it was taken from reads "gr 1 0" beside "val 6 6": the graph query
  * says the rewrite reached the callee and the run says it did not.
  */
-import { Rule, rewrite } from rewrite
 import { Graph, Node, constant, graphs_of, inputs, name, nodes, op, op_name } from graph
+import { Rule, rewrite } from rewrite
 import { ends_with } from str
 
 rule drop_one(x: int) { x + 1 => x }
 
-func target(x: int): int {
+func target(x: int) => int {
     return x + 1
 }
 
-func user(n: int): int spelling {
+func user(n: int) => int spelling {
     return target(n)
 }
 
 /// The text of a node's operator, or '' for a node that is not an operator.
-func opText(n: Node): string {
+func opText(n: Node) => string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
@@ -35,7 +35,7 @@ func opText(n: Node): string {
 }
 
 /// Whether a node is the constant 1.
-func isOne(n: Node): bool {
+func isOne(n: Node) => bool {
     return match constant::<int>(n) {
         case null => false
         case v => v == 1
@@ -43,27 +43,27 @@ func isOne(n: Node): bool {
 }
 
 /// The `x + 1` of a `target`: an int addition whose second operand is the constant 1.
-func isAddOne(n: Node): bool spelling {
+func isAddOne(n: Node) => bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
 }
 
 /// How many `+ 1` nodes the graph of a function has.
-func addOnes(g: Graph): int {
+func addOnes(g: Graph) => int {
     return len(nodes(g)->filter<isAddOne>)
 }
 
-func isTarget(g: Graph): bool spelling {
+func isTarget(g: Graph) => bool spelling {
     return name(g)->ends_with<'target'>
 }
 
 /// The graph of `target` that `p` reaches.
-func targetIn::<F>(p: F): Graph {
+func targetIn::<F>(p: F) => Graph {
     let found = graphs_of(p)->filter<isTarget>
     return found[0]
 }
 
-func main(): int spelling sync {
+func main() => int spelling sync {
     let rules: Rule[] = [drop_one]
     let q = user->rewrite<rules> !! user
     println('gr', addOnes(targetIn(user)), addOnes(targetIn(q)))

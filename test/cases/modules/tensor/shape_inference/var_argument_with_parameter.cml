@@ -8,12 +8,12 @@
 import { reshape, sum } from tensor
 
 with <var acc: f64[]>
-func step(d: float): float sync {
+func step(d: float) => float sync {
     acc = acc + d
     return float(sum(acc))
 }
 
-func main(): int sync {
+func main() => int sync {
     var w = reshape<[2]>([0.0, 0.0])
     let r = step<w>(0.5)
     println('{} {}'->format<r, sum(w)>)

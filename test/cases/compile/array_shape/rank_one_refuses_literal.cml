@@ -4,7 +4,7 @@
 // same refusal written with a literal instead of a name, which is the other place a declaration
 // gives its value a type.
 
-func main(): int sync {
+func main() => int sync {
     let y: f32[] = 1.0
     println(y)
     return 0

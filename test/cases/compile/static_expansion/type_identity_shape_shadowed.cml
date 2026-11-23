@@ -6,7 +6,7 @@
 
 type Point = { x: int }
 
-func kind::<T>(t: T): int {
+func kind::<T>(t: T) => int {
     return match type T {
         case struct => 1
         case Point => 2
@@ -14,7 +14,7 @@ func kind::<T>(t: T): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let p: Point = { x: 1 }
     println(kind(p))
     return 0

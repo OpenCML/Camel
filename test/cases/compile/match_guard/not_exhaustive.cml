@@ -8,12 +8,12 @@
  * case (`case 1 when n > 0` read `when` as the second word of the pattern).
  */
 
-func a(n: int): int {
+func a(n: int) => int {
     return match n {
         case 1 when n > 0 => 10
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     return a(1)
 }

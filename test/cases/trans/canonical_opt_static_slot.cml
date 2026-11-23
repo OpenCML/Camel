@@ -3,4 +3,10 @@
 // argument of one of them is a Data node in the same static area as the function values. Reading
 // that slot as a function pointer crashed the export on 167 corpus programs; a slot whose type is
 // not a function is not a callee.
-func main(): int { let n = 3; let fs = [func (x: int) => int { x + n }]; return fs[0](4) }
+func main() => int {
+    let n = 3
+    let fs = [func (x: int) => int {
+        x + n
+    }]
+    return fs[0](4)
+}

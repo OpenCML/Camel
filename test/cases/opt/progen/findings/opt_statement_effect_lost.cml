@@ -7,18 +7,18 @@
  * Reduced by test/tools/progen from seed 299 (generator version 1, all features).
  */
 
-func r1(a2: int, a3: int): int {
-    return if false then a3 else 0;
+func r1(a2: int, a3: int) => int {
+    return if false then a3 else 0
 }
 
-func f4(a5: (string, int)[]): int {
-    return r1(8, 0 * (-3));
+func f4(a5: (string, int)[]) => int {
+    return r1(8, 0 * (-3))
 }
 
-func main(): int sync {
-    println('');
+func main() => int sync {
+    println('')
     let n23 = if false then sync {
-        return f4([('', 0)]);
-    } else 0;
-    return 0;
+        return f4([('', 0)])
+    } else 0
+    return 0
 }

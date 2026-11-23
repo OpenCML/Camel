@@ -6,17 +6,19 @@
  * has to read the operands of a node before the node whatever order the pass wrote them in --
  * reading the places in id order meets the reader first.
  */
-import rulesets.vmap
 import { map } from array
+import rulesets.vmap
 import { vmap } from transforms
 
-func h(x: float): float {
+func h(x: float) => float {
     return (x * 2.0 + x * 3.0) * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[4] = [1.0, 2.0, 3.0, 0.5]
     println(vmap(h)(xs))
-    println(xs->map<func (x: float) { h(x) }>)
+    println(xs->map<func (x: float) {
+        h(x)
+    }>)
     return 0
 }

@@ -2,7 +2,7 @@
  * The largest int written as a literal.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(9223372036854775807)
     println(9223372036854775806)
     return 0

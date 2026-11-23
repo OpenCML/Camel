@@ -6,11 +6,12 @@
 // answers `isMacro` without a flag written beside it. This is the macro side of the pair whose
 // other side (`ordinary_function_graph`) must print and exit 0; together they make the refusal a
 // reading of the fact rather than a property the pass always has.
-#macro func twice(x: int): int {
+#macro
+func twice(x: int) => int {
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     print(twice(3))
     0
 }

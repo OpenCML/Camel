@@ -4,31 +4,31 @@
  * struct, a nullable and the result of a function.
  */
 
-func pair(c: bool): (int[], int) {
+func pair(c: bool) => (int[], int) {
     return if c then ([1, 2], 0) else ([1, 2, 3], 0)
 }
 
-func record(c: bool): { xs: int[], n: int } {
+func record(c: bool) => { xs: int[], n: int } {
     return if c then { xs: [1, 2], n: 1 } else { xs: [1, 2, 3], n: 2 }
 }
 
-func two(): int[2] {
+func two() => int[2] {
     let xs = [1, 2]
     return xs as int[2]
 }
 
-func three(): int[3] {
+func three() => int[3] {
     let xs = [1, 2, 3]
     return xs as int[3]
 }
 
-func maybe(c: bool): int[]? {
+func maybe(c: bool) => int[]? {
     let a: int[2]? = two()
     let b: int[3]? = three()
     return if c then a else b
 }
 
-func producer(c: bool): (x: int) => int[] {
+func producer(c: bool) => (x: int) => int[] {
     let a = func (x: int) => int[2] {
         let xs = [x, x]
         return xs as int[2]
@@ -40,7 +40,7 @@ func producer(c: bool): (x: int) => int[] {
     return if c then a else b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pair(true), pair(false))
     println(record(true).xs, record(false).xs)
     println(maybe(true), maybe(false))

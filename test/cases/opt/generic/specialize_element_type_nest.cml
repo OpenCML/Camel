@@ -12,11 +12,11 @@
 
 import { get_env } from env
 
-func nest::<T>(xs: T[n], k: int): int {
+func nest::<T>(xs: T[n], k: int) => int {
     return if k <= 0 then len(xs) else nest([xs], k - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(nest([1.0, 2.0], int(get_env('H476_NEST_DEPTH') ?? '')))
     return 0
 }

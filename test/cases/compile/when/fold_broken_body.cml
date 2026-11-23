@@ -3,11 +3,11 @@
  * and the call is not given a value computed from a body that has a diagnostic.
  */
 
-func broken(): int {
+func broken() => int {
     return missing_name
 }
 
-func main(): int sync {
+func main() => int sync {
     let t = (10, 20, 30)
     println(t.[broken()])
     return 0

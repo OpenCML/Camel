@@ -9,11 +9,11 @@
  * a 32 MiB thread stack usable on Windows).
  */
 
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(depth(1000))
     println(depth(400000))
     println('done')

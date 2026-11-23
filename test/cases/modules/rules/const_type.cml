@@ -12,8 +12,8 @@
  * coefficient of its own type and leaving the other one alone.
  */
 
-import { reshape, sum } from tensor
 import { rewrite } from rewrite
+import { reshape, sum } from tensor
 
 type Vec = f32[3]
 
@@ -25,21 +25,25 @@ rule takes_f32(x: Vec, const c: f32) { x * c => x }
 /// that one and not the tensor's, so the pair tells the two apart.
 rule takes_f64(x: float, const c: float) { x * c => x }
 
-export func by_f32::<F>(p: F): F! {
+export func by_f32::<F>(p: F) => F! {
     return p->rewrite<[takes_f32]>
 }
 
-export func by_f64::<F>(p: F): F! {
+export func by_f64::<F>(p: F) => F! {
     return p->rewrite<[takes_f64]>
 }
 
 /// `x * 3.0`: 18 in all, 6 when the coefficient's own rule drops the product.
-func scaled(x: Vec): Vec { return x * 3.0 }
+func scaled(x: Vec) => Vec {
+    return x * 3.0
+}
 
 /// The scalar product: 15 in all, 5 when its own rule drops it.
-func scaled_scalar(x: float): float { return x * 3.0 }
+func scaled_scalar(x: float) => float {
+    return x * 3.0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(sum(scaled(reshape<[3]>([1.0, 2.0, 3.0] as f32[]))))
     println(scaled_scalar(5.0))
     return 0
