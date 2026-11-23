@@ -116,7 +116,12 @@ async function buildPanelOf(repo, stateDir) {
         }
     }
     const runs = [...latest.values()]
-    const open = runs.filter((row) => !row.finishedAt)
+    // A run with no finish whose record has not been touched for a while is one whose process ended
+    // without writing it (a crash, a closed window), not one that is still going: counting it would
+    // show a busy host that is idle. The writer refreshes `updatedAt` as it goes.
+    const touched = (row) => Date.parse(row.updatedAt || row.startedAt || '') || 0
+    const open = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) < 20 * 60_000)
+    const abandoned = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) >= 20 * 60_000).length
     // The two queues the build-queue panel draws, read from the same files it reads: who holds the
     // build or test slot on this machine and who is waiting, with how long.
     const queue = async (name) => {
@@ -144,6 +149,7 @@ async function buildPanelOf(repo, stateDir) {
         buildQueue: await queue('build-state.json'),
         testQueue: await queue('test-state.json'),
         unfinished: open.length,
+        abandoned,
         total: runs.length,
         // Each run still going: where it is, which slot it holds, and how long it has waited for one.
         // A queue that is long, or two runs whose phases overlap, is read here rather than assumed.
