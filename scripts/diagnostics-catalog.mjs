@@ -33,12 +33,18 @@
 // are in the registry" is not "the words the user sees", and "a needle quotes the sentence" is not
 // "the sentence is composed right".
 //
-// --check runs in two places, so a hand-edited number cannot reach a build or a test run: the
-// build (CMakeLists.txt makes it a dependency of libcamel_objects, before anything compiles
-// against the enums) and the compile.diag_catalog plan, which also runs the failure-path proof.
-// --generate is what `npm run build` runs first: it fills in the number of a declaration that
-// has none and emits the headers and tables. --write is --generate plus the reference page;
-// both refuse every defect named above before writing anything.
+// --check runs in three places, so a hand-edited number cannot reach a build or a test run: the
+// build, twice -- `npm run build` checks before CMake configures (scripts/common.js), and
+// CMakeLists.txt makes it a dependency of libcamel_objects, before anything compiles against the
+// enums -- and the compile.diag_catalog plan, which also runs the failure-path proof. The build
+// checks and never writes: these emitted files are tracked and compiled, so a build that regenerated
+// them would compile tables that are not in the commit, and "the tree I tested is the commit" would
+// be false for exactly the files the diagnostics are compiled from. (It was: `semantic.cpp` was
+// regenerated at the top of a build, and the run was green while --check on the same commit was red.)
+// --write is what a person runs when a declaration is added or a message changes: it fills in the
+// number of a declaration that has none and emits the headers, the tables and the reference page.
+// --generate is the same without the page; both refuse every defect named above before writing
+// anything, and the emitted diff is committed like any other change.
 //
 // A declaration is one line: section, name, number, severity, message, help. The number of an
 // existing diagnostic is its published value and never moves. A declaration with no number gets

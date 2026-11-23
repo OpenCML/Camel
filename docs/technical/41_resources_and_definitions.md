@@ -34,7 +34,8 @@ and for the operator: how its result relates to the operands' resources (`Fresh`
 its own, `uri@1.0`, when it has none; otherwise one minor version up). Check 5 of
 `declareSemantics` refuses a spec that is inconsistent in itself (`sem::checkResources`: an
 ambient resource has a name and no operand, the others an operand and no name; an `Unknown`
-class is not a declaration; a `Same` or `View` result names its operand) or with the traits: a
+class is not a declaration; a `Same` or `View` result names its operand; no access is bound to
+the operand that carries a `functionOperand`, since a function value is not a resource) or with the traits: a
 pure operator touches nothing; any other touches, allocates or affects something; an external
 effect only where the traits allow one. The converse is a refinement: the traits of an
 assignment count it as external (no trait says "writes a variable"), its resources say it writes

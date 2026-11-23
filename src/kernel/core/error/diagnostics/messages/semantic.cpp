@@ -585,8 +585,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::LoopSequenceNotIterable,
             {
                 "LoopSequenceNotIterable",
-                "'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'.",
-                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; and the elements of a stream, one pull of its step function per round (5.4). 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).",
+                "'for' takes the elements of an array, a string, a map, a tensor, a stream, or a value of a named type that says how to walk it; '{0}' has type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; the elements of a stream, one pull of its step function per round (5.4); and the integers of a value whose type declares how to walk it -- a range's iterator is such a declaration (5.4, 5.7). 'a..b' is the range value of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it counts them without building the array (4.2).",
             },
         },
         {

@@ -188,7 +188,12 @@ struct ResourceSpec {
     /// type, which is the rule a call through a function value already follows
     /// (`Builder::reachOfCall`); a reader that has only the table reads it conservatively
     /// (`signatureOf` reports an external effect that itemizes nothing), because a static answer
-    /// cannot be narrower than "unknown function". `accesses` is empty when this is set.
+    /// cannot be narrower than "unknown function".
+    ///
+    /// `accesses` may be stated beside it, and a node's effect is then the union of the two (design
+    /// principles 3.3): the driver an operator touches itself, and the accesses of the function it
+    /// runs. Neither replaces the other, and `checkResources` refuses only an access bound to the
+    /// operand that carries the function, which names a value and not a resource.
     std::optional<ResourceBinding> functionOperand;
 
     /// Touches no resource: no access, nothing allocated, no external effect, no function operand
@@ -308,6 +313,14 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source);
 /// `writesForTheRegion`).
 bool reachesOutside(ResourceClass cls);
 
+/// Whether the declaration itself says the operator reaches outside the program: an
+/// `externalEffect` that itemizes nothing, or an access whose resource class is outside it. This is
+/// the half of a node's effect that belongs to the declaration; the other half is the function
+/// operand's value (`ResourceSpec::functionOperand`), and a node's effect is the union of the two
+/// (design principles 3.3). Asked wherever a reader must not mistake "the operator states no
+/// external effect" for "the operator has none".
+bool declaresOutside(const ResourceSpec &spec);
+
 /// Whether what a signature describes writes a resource the region that runs it owes (design
 /// principles 3.1, "对外部资源与句柄的写由所在区域用到"): a write of state outside the program --
 /// the console, the file system, a module's own state, a resource nobody itemized -- or a write of
@@ -378,7 +391,10 @@ conservativeResources(size_t normCount, size_t withCount, bool pure, bool extern
 /// The problem with a spec in words (design 4.4), nullopt when it is consistent in itself: a
 /// Foreign or Ambient resource has a name and the others have none; an ambient access is bound
 /// to no operand and every other access is; an Unknown class is not declared (it is the
-/// conservative reading, not a declaration); a Same or View result names an operand.
+/// conservative reading, not a declaration); a Same or View result names an operand; and no access
+/// is bound to the operand that carries a function operand (`functionOperand`), because a function
+/// value is not a resource. Stating accesses beside a function operand is allowed and means the
+/// union (design principles 3.3).
 std::optional<std::string> checkResources(const ResourceSpec &spec);
 
 /// Whether the spec writes the resource that the ordinary (or with) operand `index` names.
