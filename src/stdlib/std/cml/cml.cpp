@@ -34,6 +34,7 @@
 #include "camel/execute/pass/registration.h"
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/runtime/control_regions.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/effects.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
@@ -1215,6 +1216,18 @@ class CmlPrinter {
 
     // ---- needs ---------------------------------------------------------------------------
 
+    /// The facts of the program being printed (camel/runtime/facts.h): where a region's effects are
+    /// read from. A printer built without the context cannot ask for one, and says so instead of
+    /// computing a second answer beside the store.
+    camel::runtime::fact::FactStore &facts() const {
+        if (context_ == nullptr) {
+            throw std::logic_error(
+                "std::cml: the context this program was compiled on is not available, so there is "
+                "no fact store to read a region's effects from");
+        }
+        return context_->facts();
+    }
+
     bool isEffectful(const GCGraph *graph) {
         auto found = effectful_.find(graph);
         if (found != effectful_.end()) {
@@ -1368,18 +1381,21 @@ class CmlPrinter {
         }
         case camel::runtime::GCNodeKind::Join: {
             const auto *body = graph_->nodeBodyAs<camel::runtime::GCJoinBody>(ref);
+            bool anyArm      = false;
             for (const uint32_t arm : control_->armsOf(body->brch)) {
-                if (arm != 0 &&
-                    !camel::runtime::effectSummaryOfRegion(program_, graph_, arm).pure()) {
-                    return true;
-                }
+                anyArm = anyArm || arm != 0;
             }
-            return false;
+            if (!anyArm) {
+                return false;
+            }
+            // The arms' effects are one fact at the node that owns the regions
+            // (`core.regionEffects`): a region is not an anchor of its own.
+            return !camel::runtime::fact::regionEffectsOf(facts(), program_, *graph_, ref).arms.pure();
         }
         case camel::runtime::GCNodeKind::Loop: {
-            const camel::runtime::LoopView view(*graph_, ref);
-            return !camel::runtime::effectSummaryOfRegion(program_, graph_, view.bodyRegion()).pure() ||
-                   !camel::runtime::effectSummaryOfRegion(program_, graph_, view.condRegion()).pure();
+            const camel::runtime::fact::RegionEffects regions =
+                camel::runtime::fact::regionEffectsOf(facts(), program_, *graph_, ref);
+            return !regions.body.pure() || !regions.cond.pure();
         }
         default:
             return false;

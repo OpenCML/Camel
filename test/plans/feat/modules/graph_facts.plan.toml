@@ -112,9 +112,14 @@ const num = (re, what) => { const m = out.match(re); assert(m, `missing ${what}`
 for (const l of [
   'FACTS seeded core.shape 18', 'FACTS seeded core.instance 5', 'FACTS seeded core.reorder 2',
   'FACTS seeded core.effects 6', 'FACTS seeded core.loopDomain 2', 'FACTS seeded core.resources 4',
-  'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
-  'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=8 revalidated=0 stale=0',
-  'FACTS graph main valid=6 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+  // Each graph also holds one `core.nodeEffects` fact per OPER node: every pass's effect-boundary
+  // check reads them (pass.cpp, collectEffects), so seeding and inlining store them. The per-graph
+  // counts below are the earlier ones plus that many: layer +1, total +2, count +2, twice +1,
+  // main +11.
+  'FACTS seeded core.nodeEffects 11',
+  'FACTS graph layer valid=7 revalidated=0 stale=0', 'FACTS graph total valid=6 revalidated=0 stale=0',
+  'FACTS graph count valid=4 revalidated=0 stale=0', 'FACTS graph twice valid=9 revalidated=0 stale=0',
+  'FACTS graph main valid=17 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   // The kinds of main, fact by fact: the conservative rule reads declarations and the graph, so
   // every such fact on main is stale; a shape is about its node's own version, so the six nodes
   // inlining left in place keep theirs and the three it touched do not.
@@ -161,7 +166,9 @@ const revision = (prefix, graph) => num(new RegExp(`FACTS ${prefix} revision ${g
 // fact may depend on how an operator is declared, so any new declaration invalidates it.
 const readsDeclarations = new Set(['core.instance', 'core.reorder', 'core.effects'])
 for (const l of [
-  'FACTS graph main valid=0 revalidated=0 stale=15', 'FACTS gone 0', '60.0',
+  // main also holds the eleven core.nodeEffects facts its OPER nodes got from the passes'
+  // effect-boundary checks; they are valid here (main's rewrite touches nodes, not operators).
+  'FACTS graph main valid=6 revalidated=0 stale=25', 'FACTS gone 0', '60.0',
 ]) line(l)
 
 // Why: the graphs the case asserts about did not change, but std::opt's algebra phase loads the
@@ -215,7 +222,9 @@ const num = (re, what) => { const m = out.match(re); assert(m, `missing ${what}`
 const revision = (prefix, graph) => num(new RegExp(`FACTS ${prefix} revision ${graph} (\\d+)`), `${prefix} revision of ${graph}`)
 const readsDeclarations = new Set(['core.instance', 'core.reorder', 'core.effects'])
 for (const l of [
-  'FACTS graph main valid=0 revalidated=0 stale=15', 'FACTS gone 0', '60.0',
+  // main also holds the eleven core.nodeEffects facts its OPER nodes got from the passes'
+  // effect-boundary checks; they are valid here (main's rewrite touches nodes, not operators).
+  'FACTS graph main valid=6 revalidated=0 stale=25', 'FACTS gone 0', '60.0',
 ]) line(l)
 const seedEpoch = num(/FACTS epoch seed=(\d+)/, 'seed epoch')
 const checkEpoch = num(/FACTS epoch check=(\d+)/, 'check epoch')

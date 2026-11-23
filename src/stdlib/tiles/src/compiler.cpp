@@ -409,8 +409,11 @@ class Compiler {
     }
     Value loop(Frame &frame, rt::gc_node_ref_t id) {
         const rt::LoopView view(*frame.graph, id);
-        if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
-            !rt::effectSummaryOfRegion(*runtimeProgram, frame.graph, view.bodyRegion()).pure())
+        // The body's effects are the `core.regionEffects` fact at the loop that owns the region: a
+        // region is not an anchor of its own, and this must not compute a copy of the answer.
+        const rt::fact::RegionEffects regions =
+            rt::fact::regionEffectsOf(facts, *runtimeProgram, *frame.graph, id);
+        if (view.kind() != core::LoopKind::For || view.stateCount() == 0 || !regions.body.pure())
             throw UnsupportedComputation("tiles requires a pure static For loop");
         // The body is a region of the graph that has the node.
         auto *body = frame.graph;
