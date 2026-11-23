@@ -1,9 +1,9 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-#include "split_internal.h"
 #include "node_operator.h"
 #include "refusal_readings.h"
+#include "split_internal.h"
 
 namespace camel::transforms {
 
@@ -121,6 +121,13 @@ gc_node_ref_t ungated(const rt::GCGraph *graph, gc_node_ref_t ref) {
 
 /// The data ports of `ref`, in port order: the ordinary ones and then the context ones. The effect
 /// runs are not here on purpose -- a node that has one is refused, never copied without it.
+///
+/// Read from the frozen graph, and not from `GraphView`: a joined BRCH is not a node of the view,
+/// and what a join carries out of its arms is one of its **with** ports. `walkRegion` walks every
+/// node of a region -- a join among them -- and counts what each reads from outside it, which is
+/// what a cut must carry; the walk that follows a value to the exit meets the join the same way. A
+/// face that answers nothing for a join would quietly drop those ports from both, so this one
+/// reader stays on the graph (`C-1123-17`, which names the same wall for the numbered walks).
 std::vector<gc_node_ref_t> dataInputsOf(const rt::GCGraph *graph, gc_node_ref_t ref) {
     std::vector<gc_node_ref_t> inputs;
     for (gc_node_ref_t input : graph->normInputsOf(ref)) {
@@ -177,20 +184,16 @@ camel::core::type::FunctionType *liftedSignatureOf(const camel::core::type::Type
 /// type is the only thing a cut can read about it: which graph it stands for is answered when the
 /// program runs, so the halves name the signature and call the transform that answers the graph --
 /// `split(v)` -- instead of reading it.
-camel::core::type::FunctionType *callValueSignatureOf(const rt::GCGraph &graph, gc_node_ref_t ref) {
-    if (ref >= graph.nodeCount() || graph.node(ref) == nullptr ||
-        graph.node(ref)->kind != rt::GCNodeKind::Call) {
+camel::core::type::FunctionType *
+callValueSignatureOf(const camel::graph::GraphView &view, gc_node_ref_t ref) {
+    if (!view.contains(ref) || view.kindOf(ref) != camel::graph::NodeKind::Call) {
         return nullptr;
     }
-    const std::span<const gc_node_ref_t> with = graph.withInputsOf(ref);
+    const std::span<const gc_node_ref_t> with = view.inputs(ref, camel::graph::PortGroup::Context);
     if (with.empty()) {
         return nullptr;
     }
-    const rt::GCNode *value = graph.node(with.front());
-    if (value == nullptr) {
-        return nullptr;
-    }
-    return liftedSignatureOf(value->dataType());
+    return liftedSignatureOf(view.typeOf(with.front()));
 }
 
 /// The **value** ports of a lifted signature, read from the type by the law the lift is written
@@ -308,7 +311,7 @@ ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type
         return halves;
     }
     const std::span<const gc_node_ref_t> members = graph.withInputsOf(exit);
-    const LiftedShape shape = liftedShapeOf(const_cast<Type *>(exitType));
+    const LiftedShape shape                      = liftedShapeOf(const_cast<Type *>(exitType));
     if (shape.pair) {
         if (members.size() != 2) {
             halves.why =
@@ -365,7 +368,7 @@ calleeGraphOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_
 /// no graph to ask yet. Which graph the value turns out to be is asked at run time by `split(v)`
 /// itself, which refuses there, by name, when the graph does not answer a pair.
 bool answersAPairByValueAt(const rt::GCGraph &graph, gc_node_ref_t ref) {
-    camel::core::type::FunctionType *valueType = callValueSignatureOf(graph, ref);
+    camel::core::type::FunctionType *valueType = callValueSignatureOf(graph.view(), ref);
     if (valueType == nullptr) {
         return false;
     }
@@ -414,7 +417,7 @@ tangentArgumentsOf(const rt::GCGraph &graph, const rt::Program *program, gc_node
     const size_t half                    = ordinary / 2;
     const auto *callee                   = calleeGraphOf(graph, program, ref);
     const FunctionType *calleeType =
-        callee != nullptr ? callee->funcType() : callValueSignatureOf(graph, ref);
+        callee != nullptr ? callee->funcType() : callValueSignatureOf(graph.view(), ref);
     std::vector<gc_node_ref_t> tangents;
     tangents.reserve(half);
     for (size_t i = half; i < ordinary; ++i) {
@@ -451,7 +454,6 @@ pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_
     return reads.back();
 }
 
-
 /// `lin`: the backward graph, closed over the residuals the forward half computed.
 ///
 /// A FILL of the `FunctionClosure` kind -- the kind a rule's right side already builds for its
@@ -464,8 +466,8 @@ pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_
 /// Here because *two* builds write this shape, not one: the cut hands `lin` out of the forward
 /// half, and a call site that transposes a pair-answering callee closes the same graph over the
 /// same values
-/// (`transpose/walk.cpp`, `transposePairCall`). One writer, so a closure a cut made and a closure a call
-/// site made are the same value.
+/// (`transpose/walk.cpp`, `transposePairCall`). One writer, so a closure a cut made and a closure a
+/// call site made are the same value.
 gc_node_ref_t buildLinearClosure(
     rt::GraphDraft &draft, const rt::Program *program, GraphId backwardId,
     const camel::core::type::TupleType *closure, FunctionType *linType,
@@ -481,8 +483,8 @@ gc_node_ref_t buildLinearClosure(
     return value;
 }
 
-std::vector<Residual> residualsOf(
-    const rt::GCGraph &lifted, const rt::Program *program, std::string *why) {
+std::vector<Residual>
+residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *why) {
     std::vector<Residual> residuals;
     if (lifted.funcType() == nullptr) {
         return residuals;
@@ -496,8 +498,7 @@ std::vector<Residual> residualsOf(
     if (nodeOperatorOf(lifted, exit) != NodeOperator::Fill) {
         return residuals;
     }
-    const ExitHalves exitHalves =
-        exitHalvesOf(lifted, exit, lifted.funcType()->exitType());
+    const ExitHalves exitHalves = exitHalvesOf(lifted, exit, lifted.funcType()->exitType());
     if (!exitHalves.ok()) {
         return residuals;
     }
@@ -609,14 +610,14 @@ std::vector<Residual> residualsOf(
             // inside the callee stay inside it, in its closure.
             if (const gc_node_ref_t call = pairTangentReadOf(lifted, program, ref);
                 call != rt::kInvalidNodeRef) {
-                const auto *calleeGraph        = calleeGraphOf(lifted, program, call);
+                const auto *calleeGraph = calleeGraphOf(lifted, program, call);
                 // The linear half's type is the callee's own backward half. A call through a value
                 // has no callee graph to ask, so the type comes from the value's signature -- the
                 // same halves, read from the only place that exists before the program runs.
                 const FunctionType *linearOf =
                     calleeGraph != nullptr && calleeGraph->funcType() != nullptr
                         ? calleeGraph->funcType()
-                        : callValueSignatureOf(lifted, call);
+                        : callValueSignatureOf(lifted.view(), call);
                 Type *linType = linearOf != nullptr
                                     ? splitHalvesOf(const_cast<FunctionType *>(linearOf)).backward
                                     : nullptr;
@@ -654,10 +655,10 @@ std::vector<Residual> residualsOf(
                 // then read its own argument out of the closure, and `twice(c + y)` was transposed
                 // as `3*(c+y)` instead of `3*(dc+dy)`.
                 std::vector<gc_node_ref_t> onward;
-                const GraphId lateCalleeId    = lifted.calleeIdOf(ref);
-                const auto *lateCallee        = program != nullptr && rt::isValid(lateCalleeId)
-                                                    ? program->graph(lateCalleeId)
-                                                    : nullptr;
+                const GraphId lateCalleeId = lifted.calleeIdOf(ref);
+                const auto *lateCallee     = program != nullptr && rt::isValid(lateCalleeId)
+                                                 ? program->graph(lateCalleeId)
+                                                 : nullptr;
                 const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
                 const size_t withArguments                 = lifted.withInputsOf(ref).size();
                 const size_t ordinary =
@@ -673,7 +674,7 @@ std::vector<Residual> residualsOf(
                     // tangent spaces is not a lift, and the walk then stops with a name rather
                     // than halving the list.
                     const camel::core::type::FunctionType *lateType =
-                        callValueSignatureOf(lifted, ref);
+                        callValueSignatureOf(lifted.view(), ref);
                     if (lateType == nullptr && lateCallee != nullptr) {
                         lateType = lateCallee->funcType();
                     }
@@ -715,8 +716,7 @@ std::vector<Residual> residualsOf(
                 continue;
             }
             if (!behindCut && beforeCut[ref] != 0 &&
-                std::find(
-                    exitHalves.tangent.begin(), exitHalves.tangent.end(), ref) ==
+                std::find(exitHalves.tangent.begin(), exitHalves.tangent.end(), ref) ==
                     exitHalves.tangent.end() &&
                 portIndex[ref] == Residual::kNotAParameter) {
                 // A call of a callee that answers the pair (value, tangent) reads both sides of the
@@ -741,10 +741,10 @@ std::vector<Residual> residualsOf(
                 // The port branch below is the one that states what a port
                 // contributes: the value port of its own parameter, which is the only thing the
                 // forward half can hand over.
-                const GraphId calleeId         = lifted.calleeIdOf(ref);
-                const auto *calleeGraph        = program != nullptr && rt::isValid(calleeId)
-                                                     ? program->graph(calleeId)
-                                                     : nullptr;
+                const GraphId calleeId  = lifted.calleeIdOf(ref);
+                const auto *calleeGraph = program != nullptr && rt::isValid(calleeId)
+                                              ? program->graph(calleeId)
+                                              : nullptr;
                 if (!answersAPair(calleeGraph) && !answersAPairByValueAt(lifted, ref)) {
                     found.push_back(ref);
                     continue;
@@ -761,7 +761,7 @@ std::vector<Residual> residualsOf(
                 const size_t valueArguments =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
                 const camel::core::type::FunctionType *calleeType =
-                    callValueSignatureOf(lifted, ref);
+                    callValueSignatureOf(lifted.view(), ref);
                 if (calleeType == nullptr && calleeGraph != nullptr) {
                     calleeType = calleeGraph->funcType();
                 }
@@ -854,9 +854,8 @@ std::vector<Residual> residualsOf(
                 // is `lin`, which only exists because the forward half made that call.
                 return false;
             }
-            const GraphId calleeId = lifted.calleeIdOf(ref);
-            const auto *calleeGraph =
-                rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
+            const GraphId calleeId  = lifted.calleeIdOf(ref);
+            const auto *calleeGraph = rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
             return answersAPair(calleeGraph) || answersAPairByValueAt(lifted, ref);
         });
     }
@@ -900,8 +899,8 @@ std::vector<Residual> residualsOf(
         // would read the wrong slot and answer `dL/dx=0.0`. The ordering below puts a parameter's
         // value in the prefix, so the values added here are in the prefix in port order and nothing
         // the walk numbered is displaced by more than the count of parameters it did not reach. The
-        // transposed half reads them by counting its own parameters (`transpose/walk.cpp`, the zero of
-        // an unread parameter -- one reader, and it checks the type before it uses one).
+        // transposed half reads them by counting its own parameters (`transpose/walk.cpp`, the zero
+        // of an unread parameter -- one reader, and it checks the type before it uses one).
         {
             const size_t half =
                 lifted.funcType() != nullptr ? lifted.funcType()->normTypesCount() / 2 : 0;
@@ -985,11 +984,11 @@ std::vector<Residual> residualsOf(
         if (std::find(linearHalves.begin(), linearHalves.end(), ref) != linearHalves.end()) {
             // The linear half of a call: its type is the callee's own backward half, `(tangents) =>
             // tangent`, and its name is the call because that is what it is the second answer of.
-            const auto *calleeGraph        = calleeGraphOf(lifted, program, ref);
+            const auto *calleeGraph = calleeGraphOf(lifted, program, ref);
             const FunctionType *linearOf =
                 calleeGraph != nullptr && calleeGraph->funcType() != nullptr
                     ? calleeGraph->funcType()
-                    : callValueSignatureOf(lifted, ref);
+                    : callValueSignatureOf(lifted.view(), ref);
             residual.parameter  = Residual::kNotAParameter;
             residual.linearHalf = true;
             residual.type       = linearOf != nullptr
@@ -1027,8 +1026,7 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
     if (nodeOperatorOf(graph, exit) != NodeOperator::Fill || graph.funcType() == nullptr) {
         return callees;
     }
-    const ExitHalves answerHalves =
-        exitHalvesOf(graph, exit, graph.funcType()->exitType());
+    const ExitHalves answerHalves = exitHalvesOf(graph, exit, graph.funcType()->exitType());
     if (!answerHalves.ok()) {
         return callees;
     }
@@ -1057,7 +1055,8 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
             // then the call's `with` arguments, which that reading does not name.
             const auto *callee =
                 program != nullptr && rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
-            const camel::core::type::FunctionType *calleeType = callValueSignatureOf(graph, ref);
+            const camel::core::type::FunctionType *calleeType =
+                callValueSignatureOf(graph.view(), ref);
             if (calleeType == nullptr && callee != nullptr) {
                 calleeType = callee->funcType();
             }
@@ -1398,8 +1397,6 @@ bool buildHalfBranch(
     return true;
 }
 
-
-
 /// The whole cut of a branch: both halves, each with its own branch, the condition crossing as a
 /// residual so the backward half picks the arm the forward half took.
 SplitGraph cutBranchGraph(
@@ -1617,9 +1614,9 @@ SplitGraph cutBranchGraph(
         draft.setReturnNode(join, rt::GCReturnKind::Self);
     }
     group.encode();
-    const auto *forwardMade         = group.encoded(forwardId);
-    const auto *backwardMade        = group.encoded(backwardId);
-    built.residuals                 = cuts.size();
+    const auto *forwardMade  = group.encoded(forwardId);
+    const auto *backwardMade = group.encoded(backwardId);
+    built.residuals          = cuts.size();
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId) << " type="
        << (forwardMade != nullptr && forwardMade->funcType() != nullptr
@@ -1852,16 +1849,18 @@ bool answersAPair(const rt::GCGraph *callee, std::string *why) {
 /// value it needs out of `lin`'s closure, where `residualsOf` put it as a residual, so it has no
 /// port of its own to give it and no list to state; `lin` being an ordinary function of the
 /// tangents is what keeps the pullback's type free of the `with` list.
-bool addWithPorts(Half &half, const rt::GCGraph *function) {
-    if (function == nullptr || function->funcType() == nullptr) {
+bool addWithPorts(Half &half, const camel::graph::GraphView &view) {
+    const FunctionType *type = view.funcType();
+    if (type == nullptr) {
         return true;
     }
-    const FunctionType *type = function->funcType();
-    const size_t withCount   = type->withTypesCount();
+    const size_t withCount = type->withTypesCount();
     if (withCount == 0) {
         return true;
     }
-    const std::span<const gc_node_ref_t> sourceWith = function->withPorts();
+    // A vector, not a span: the face answers a port list it builds, so the list has to be held here
+    // for as long as it is read (the frozen graph's `withPorts` was a span of its own table).
+    const std::vector<gc_node_ref_t> sourceWith = view.ports(camel::graph::PortGroup::Context);
     for (size_t i = 0; i < withCount && i < sourceWith.size(); ++i) {
         Type *withType = type->withTypeAt(i);
         if (withType == nullptr) {
@@ -2241,8 +2240,7 @@ SplitGraph buildSplitGraph(
     // The two sides of the answer, read from the lifted type: the pair (value, tangent), or a tuple
     // of member lifts whose value members give their two legs to the two halves and whose function
     // member belongs to the forward half alone (`exitHalvesOf`).
-    const ExitHalves answerHalves =
-        exitHalvesOf(*function, exit, function->funcType()->exitType());
+    const ExitHalves answerHalves = exitHalvesOf(*function, exit, function->funcType()->exitType());
     if (!answerHalves.ok()) {
         os << "REINTERP split function=" << function->name()
            << " skip=" << refusalCauseName(RefusalCause::Exit) << " (" << answerHalves.why << ")\n";
@@ -2361,7 +2359,7 @@ SplitGraph buildSplitGraph(
         auto &draft = group.transaction(forwardId).edit();
         draft.setFuncType(halves.forward);
         Half forward(draft, function, program, false, nullptr, nullptr, &calleeCuts);
-        if (!addWithPorts(forward, function)) {
+        if (function != nullptr && !addWithPorts(forward, function->view())) {
             os << "REINTERP split function=" << function->name()
                << " skip=" << refusalCauseName(RefusalCause::Forward)
                << " (a `with` parameter of the source has no type)\n";
@@ -2408,10 +2406,10 @@ SplitGraph buildSplitGraph(
             answerMembers.push_back(forward.copyOf[root]);
         }
         const auto *forwardExitType = tt::as_ptr<TupleType>(halves.forward->exitType());
-        Type *answerType = forwardExitType != nullptr && forwardExitType->size() > 0
-                               ? const_cast<Type *>(forwardExitType->typeAt(0))
-                               : nullptr;
-        gc_node_ref_t answerValue = rt::kInvalidNodeRef;
+        Type *answerType            = forwardExitType != nullptr && forwardExitType->size() > 0
+                                          ? const_cast<Type *>(forwardExitType->typeAt(0))
+                                          : nullptr;
+        gc_node_ref_t answerValue   = rt::kInvalidNodeRef;
         if (answerMembers.size() == 1 && answerType != nullptr) {
             answerValue = answerMembers.front();
         } else if (answerType != nullptr) {
@@ -2589,9 +2587,9 @@ SplitGraph buildSplitGraph(
         }
         Half backward(draft, function, program, true, &graphResiduals, &residualIndexOf);
         addResidualCaptures(draft, graphResiduals, backward);
-        // The tangent ports: every ordinary port that is not a value port (`valuePortsOf`) and whose
-        // type is a tangent space. A `()` slot is an answer this half gives, never an argument it
-        // takes.
+        // The tangent ports: every ordinary port that is not a value port (`valuePortsOf`) and
+        // whose type is a tangent space. A `()` slot is an answer this half gives, never an
+        // argument it takes.
         std::vector<char> isValuePort(sourcePorts.size(), 0);
         for (size_t i : valuePortsOf(function->funcType())) {
             if (i < isValuePort.size()) {
@@ -2655,9 +2653,9 @@ SplitGraph buildSplitGraph(
         }
     }
     group.encode();
-    const auto *forwardMade         = group.encoded(forwardId);
-    const auto *backwardMade        = group.encoded(backwardId);
-    built.residuals                 = graphResiduals.size();
+    const auto *forwardMade  = group.encoded(forwardId);
+    const auto *backwardMade = group.encoded(backwardId);
+    built.residuals          = graphResiduals.size();
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId) << " type="
        << (forwardMade != nullptr && forwardMade->funcType() != nullptr

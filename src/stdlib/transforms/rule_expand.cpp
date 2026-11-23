@@ -3,6 +3,8 @@
 
 #include "rule_expand.h"
 
+#include "graph/graph_view.h"
+
 #include "node_operator.h"
 
 #include "camel/core/derivative.h"
@@ -478,7 +480,7 @@ struct RuleRightSide {
 bool findRuleRightSide(
     const camel::compile::gir::GenericRuleInstance &instance, RuleRightSide &found,
     std::string &why) {
-    const auto *rhs        = instance.rhs;
+    const auto *rhs = instance.rhs;
     // The exit node is the graph's value-producing node; a gate may stand in front of it when the
     // value is carried out of a block.
     // The walk is camel::runtime::valueBehindGates (camel/runtime/graph.h): a gate's first input
@@ -551,13 +553,20 @@ bool findRuleRightSide(
 /// of `x * c` are not both available where a loop body's own state stands in one of them, while the
 /// answer that position needs reads only the other -- the constant -- and the rule says so by
 /// naming only that one.
-std::vector<bool> portsReadByBody(const rt::GCGraph &body, const std::vector<bool> &keep) {
-    std::vector<bool> read(body.nodeCount(), false);
-    for (gc_node_ref_t ref = 0; ref < body.nodeCount(); ++ref) {
-        if (body.node(ref) == nullptr || (!keep.empty() && !keep[ref])) {
+std::vector<bool>
+portsReadByBody(const camel::graph::GraphView &body, const std::vector<bool> &keep) {
+    // The nodes of the view, in number order: a place that is not a node is skipped, exactly as the
+    // walk skipped it. A joined BRCH is not a node of the view either; what the stored join holds
+    // is one ordinary input, the BRCH node it joins (`builder_control.cpp#linkNodes`), and this map
+    // is read only at a **port** (where a capture is bound, and where the copy enters a port), so
+    // leaving the join out marks no port read that the stored graph marked read.
+    std::vector<bool> read(body.nodeSlotCount(), false);
+    for (const camel::graph::NodeRef ref : body.nodes()) {
+        if (!keep.empty() && !keep[ref]) {
             continue;
         }
-        for (gc_node_ref_t input : body.normInputsOf(ref)) {
+        for (const camel::graph::NodeRef input :
+             body.inputs(ref, camel::graph::PortGroup::Normal)) {
             if (input < read.size()) {
                 read[input] = true;
             }
@@ -722,7 +731,7 @@ gc_node_ref_t expandRuleRightSide(
     // callee through this program's table: the graphs the rule was instantiated into belong to the
     // program this lift builds on, the way a callee the lifted function calls does.
     group.adopt(*instance.program);
-    const auto *body        = right.body;
+    const auto *body = right.body;
     // Which node of the body is *this* answer. A rule's left side names N values, and its right
     // side answers N cotangents: a tuple, in the order the left side writes them. Position `i` is
     // that tuple's i-th component, and only the nodes that component needs are copied -- so a
@@ -901,7 +910,7 @@ gc_node_ref_t expandRuleRightSide(
     // called with: the operands, in the order the left side writes them. Only the captures the body
     // actually reads are bound: a right side that names one operand asks for that one only, and the
     // caller may have no value for the other (a transposed loop body's own state).
-    const auto read     = portsReadByBody(*body, keep);
+    const auto read     = portsReadByBody(body->view(), keep);
     const auto rhsPorts = instance.rhs->normPorts();
     // The law's own ports, in the order its left side writes them: the operand types the instance
     // was made at, which is where a stated shape lives (`statedShapeOf`).
