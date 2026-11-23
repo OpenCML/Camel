@@ -13,7 +13,7 @@
 ## 每 15 分钟的检查（八步）
 
 1. 合 develop：`git fetch git@github.com:OpenCML/Camel.git develop:refs/remotes/gh/develop`，有新提交就合进 fsh-dev；设计文档冲突以我方为底再套 develop 的改动；问题页索引用 `node scripts/check-doc-links.mjs --questions-index --write` 重建。
-2. `sh decision-tools/pace.sh`：速度、结构读数、车道在跑数（经通道读，目标 6–8）、未回执、构建主机负载、backlog 卡住与停滞。
+2. `sh decision-tools/pace.sh`：速度、结构读数、车道在跑数（经通道读，目标 6–8）、主机上的运行与构建/测试队列（谁占着、谁在排队）、未回执、主机负载、当前提醒、backlog 卡住与停滞。判实际车道数要两边对照：活子代理在跑数，和主机上真在构建或测试、或排队的运行数——子代理在跑而主机上没有它的运行，多半是在读代码或卡住了。
 3. 派工、催办、返工只经通道：`coord.sh say D-日期-序号 "…"`。车道不足 6 当轮补派（不用问负责人）；主机满载就别催开车道。
 4. 新问题页当轮答在页上；原则、语义类转负责人。
 5. 抽查新合入代码的机制形状：第二份真相、按名字的特例、后端各自推导语义、内核为单个库加字段、为让检查变绿而改语义。
