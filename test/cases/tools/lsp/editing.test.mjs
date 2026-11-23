@@ -235,7 +235,7 @@ ${body}
         ['11:5-11:8', '15:5-15:8', '32:14-32:17', '33:15-33:18'],
         'overloads share their name: all are renamed, with the calls of each')
     we = await ls.request('textDocument/rename', { ...pos(') => T', 1, 5), newName: 'U' })
-    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['6:16-6:17', '6:22-6:23', '6:26-6:27'],
+    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['6:16-6:17', '6:22-6:23', '6:28-6:29'],
         'a type parameter: its head declaration and its uses')
     we = await ls.request('textDocument/rename', { ...pos('type Pair', 1, 5), newName: 'Entry' })
     checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['3:5-3:9', '34:14-34:18'], 'a type alias')
@@ -317,8 +317,8 @@ func main() sync {
     checkEq(tok(34, 'Pair'), 'type', 'its use')
     checkEq(tok(3, 'int'), 'type defaultLibrary', 'a built-in type')
     checkEq(tok(6, 'T'), 'typeParameter declaration', 'a type variable')
-    checkEq(tok(38, 'println'), 'function defaultLibrary', 'a library function')
-    checkEq(tok(38, 'i'), 'variable readonly', 'a with-argument')
+    checkEq(tok(40, 'println'), 'function defaultLibrary', 'a library function')
+    checkEq(tok(40, 'i'), 'variable readonly', 'a with-argument')
     checkEq(tok(25, '3'), 'number', 'a number')
     checkEq(tok(31, "'text'"), 'string', 'a string')
     checkEq(tok(24, 'main'), 'function declaration', 'main')
