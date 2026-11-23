@@ -26,4 +26,12 @@
   2. `lane/facts-b2`：先把 `facts.h` 的定义写出来（现在全树零定义），草稿上能挂事实，配用例；再按阶段 3 计划 3b 搬五样分析、清 33 处绕过事实层的纯度判断。
   3. `lane/notation-b3`：记号余项——返回类型写 `=> 类型`、函数组合 `f <> g`（删 `f..g`、`?..`、禁 `f<>`）、按空格规则跑格式化器、按名字的类型实参 `f::<T: int>`、算子 URI 统一为 `模块:路径`（登记时查模块、诊断显示 Camel 名字）。`.cml` 的机械改写仍单独一笔、由合并位排空档。
   4. `lane/3a-b2`：阶段 3a 下一批，变换、重写、执行、工具里直接读 `GCGraph`/`GraphDraft` 的地方继续迁，注意 C-1123-17（视图编号有空号，用 `nodes()` 遍历，不按 `0..nodeCount`）。
-- **D-1123-25（催）** 在跑 5 条，其中 4 条压在翻转一摞上，`packed-view-lifetime` 已两小时没更新。D-1123-24 的四条只开了 `facts-b2`，请当轮再开 `graph-read-b2`、`notation-b3`、`3a-b2`；并先把 fsh-dev 整枝合进 develop（领先 17 笔，含 D-1123-20 起的各条与三页问题的答复）。
+- **D-1123-25（催，第二轮；`graph-read-b2` 已合入，余 `notation-b3`、`3a-b2` 两条未开）** 在跑 5 条，其中 4 条压在翻转一摞上，`packed-view-lifetime` 已两小时没更新。D-1123-24 的四条只开了 `facts-b2`，请当轮再开 `graph-read-b2`、`notation-b3`、`3a-b2`；并先把 fsh-dev 整枝合进 develop（领先 17 笔，含 D-1123-20 起的各条与三页问题的答复）。
+- **D-1123-26（开车道：在跑只剩 3 条——`3a-b2`、`flip-consumers`、`packed-view-lifetime`）** 当轮开四条，开了在车道表加行、backlog 标 `doing`：
+  1. `lane/facts-b3`：阶段 3 计划 3b 的余下部分——效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取五样挪进事实框架，原各自的缓存删除；与已落地的"可自由安排"同一套 kind。
+  2. `lane/record-uses`：按问题页 `what-a-read-of-a-cell-costs` 的答复，登记时把 `OperatorTable` 的效应语义作为 C++ 入口的陈述写进 `Record::uses`，事实层只读记录；加一条检查列出两个入口都没说的算子。
+  3. `lane/3a-b3`：与 `3a-b2` 分目录并行（如 `src/stdlib/std/{nvm,fvm,prl}` 与 `src/tools`），直接读 `GCGraph`/`GraphDraft` 的引用（现 2,730 处）继续减。
+  4. `lane/tooling`：backlog 里的工具欠账一并清——`C-1123-15`（远端只带回一份基准）、`C-1123-16`（构建戳不标识构建）、`C-1123-7`（`-AstOnly` 参数绑定），这三条是"重录后绿、再跑就红"一类问题的根，修了以后各车道的读数才可信。
+  另：记号的语料改写（返回类型 `:` → `=>` 等，约 4,248 个文件）等翻转那一摞合入后，由合并位排空档一笔做完，然后删掉旧写法。
+- **D-1123-27** 车道表去重后在跑的是 5 条（`tooling`、`flip-consumers`、`facts-arrangeable`、`record-uses`、`onnx-lowering`，前三条各重复了一行）。请删重复行，并补开 D-1123-26 的 `3a-b3`；`C-1123-33`（5 个用例、1 处注释还写 `[a:b]`）顺手在一条车道里改成 `[a..b]`。
+- **D-1123-28（在跑只剩 3 条：`onnx-lowering`、`oper-identity-write`、`device-programs`）** 先把 fsh-dev 整枝合进 develop（领先 15 笔，含 D-1123-25 起的派工与三页问题的答复），再当轮开到 6 条以上：`3a-b3`（直接读 `GCGraph`/`GraphDraft` 的引用继续减，分目录）、`facts-b3`（效应汇总、使用索引、执行计划、`ControlRegions`、写法提取五样挪进事实框架）、`slice-cleanup`（`C-1123-33` 的 6 处 `[a:b]`，加 25 个真沉默算子逐个补 `uses`/`pure` 声明）。
