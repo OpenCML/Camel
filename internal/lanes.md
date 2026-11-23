@@ -8,7 +8,11 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
-| lane/fact-slots | 事实的读路径按槽位:`GCGraph` 自己一张固定槽表(登记时给的 `KindId` 作下标,存裸指针),节点级事实放一张按节点号稠密的数组,框架仍是唯一主人(登记、过期、随图销毁都不出 `camel/facts`) | `feat/modules/graph_facts` **9/9**(新增 `slots`,15 条检查全 ok:发布、单条失效清槽、`invalidateGraph`(= `~GCGraph` 走的那条)清两张槽、清后再发布);`smoke` 10/10/0;`feat/parse` **125/126**;`feat/compile` 2666/2672/1红/5known/1信号;三计划合计 2808/2801/2/5/1信号。那 2 红都不是本笔:1 条既有 `vmap_batches_the_element_of_a_row.prl` SIGSEGV;1 条 `frontend.ast_snapshot` 对 `test/cases/modules/nn/conv2d_shape_error.cml` —— `32a4a4f968` 记 `6692c1c6ea1a5a1b`,合并 `1e7d0dc2a3` 改了这个 case 却只留 `a41f58173fb1bc0b`,文件今天算 `2e4b0e5e1ae57d83`,基准树上就红 | 无(未合入) | 合入 `develop`;性能读数等一条在安静主机上的车道(作者 `515b0c7a0f` 撤回了本笔的基线) | 20:20 |
+| lane/fact-slots-grow | `D-1123-42` 返工槽表:不定死 32 格。`GCGraph` 只留一个原子指针指向 `{容量, 槽[]}`,首次有事实写入才分配,登记新种类时分配更大的表、复制、原子换指针,旧表留到图销毁时释放,删掉 `kFactSlotCount` 与「超出 32 就走存储」 | 建在 `975918aa4`;未报读数 | 未合入 | 扩容后旧指针仍可读的那条交错测 | 21:00 |
+| lane/nn-kernels | `D-1123-38` 三件:内核按元素类型模板化(f64 能算)、声明改 `::<T>` 并真正编译检查、删掉 C++ 推导规则;加 f64 卷积与 BN 训练一步的用例 | 6 ahead / 2 behind;已合过一次 `develop` | 未合入 | 三件各自的判据与读数 | 21:00 |
+| lane/range-rn | `D-1123-41` 2(a) 名字解析:同层 `#op` 声明与同名有体声明合成一个重载集;prelude 导出的类型免导入 | `len([1,2,3])`=3、`"xy"->len()`=2、`r->len()`=3、`r->map<dbl>`=[0,2,4]、`[1,2]->map<dbl>`=[2,4];`prelude::len: (r: Range) => int` 那条红字消失;`feat/parse` 因 prelude 加了四个函数体报 125/126,已准本笔带 `-AstOnly src/stdlib/prelude.cml` 重录 | 未合入 | 重录后 `feat/parse` 126/126/0 | 21:00 |
+| lane/range-ri | `D-1123-41` 2(b) `a..b` 产 `Range`、`for` 走一个 `__iter__`、转置反向循环、C++ 后端、`cml` 打印 | 建在 `6b844be42`;未报读数 | 未合入 | 接收 `range-rx` 交来的三处(range 名字判断、`sliceIndices`、静态 for 的 `callee->name()`) | 21:00 |
+| lane/range-rx（已合） | `D-1123-41` 2(c) 与 `D-1123-35`:切片规则收成一个函数、删掉按 `range` 名字的判断 | `feat/compile` 2672/2666/1红/5known/1信号、`feat/parse` 125/126、`smoke` 10/10/0、四计划合一 2920/2894/21/5/1 跑前跑后逐项相同 | `74fdda145` | 下标逐维按类型分派与删除解析器切片路径,**转 `range-ri`** —— `a..b` 仍落成 `int[]`,今天删了 `t[a..b]` 会退化成 `take` | 21:01 |
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |
