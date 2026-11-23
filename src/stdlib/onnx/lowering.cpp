@@ -1049,15 +1049,29 @@ Value lowerScalarCast(const LowerContext &ctx) {
         {intAttr("to", static_cast<int64_t>(elemTypeOf(target)))});
 }
 
+/// The exit of an island the export target has no f64 kernel for: `capabilities/onnxruntime-cpu.json`
+/// lists `Conv` and `AveragePool` under `no_kernel.float64` and every other node this module emits
+/// with an f64 kernel. The island computes in f32 -- the only element type the target runs it in --
+/// and this cast hands the result back at the element type the program stated, so the graph keeps
+/// one type per edge and a later lowering reads a value whose label and actual dtype agree.
+std::string castOutOfF32Island(Emitter &e, const std::string &name, TypeCode f) {
+    if (f == TypeCode::Float32) {
+        return name;
+    }
+    return e.node("Cast", {name}, {intAttr("to", static_cast<int64_t>(elemTypeOf(f)))});
+}
+
 Value lowerConv2d(const LowerContext &ctx) {
     const int64_t stride  = ctx.constInt(3, 1);
     const int64_t padding = ctx.constInt(4, 0);
-    return ctx.emit(
+    const TypeCode f      = *ctx.elementDtype();
+    const std::string conv = ctx.emitter().node(
         "Conv",
         {ctx.input(0, TypeCode::Float32),
          ctx.input(1, TypeCode::Float32),
          ctx.input(2, TypeCode::Float32)},
         {ints("strides", {stride, stride}), ints("pads", {padding, padding, padding, padding})});
+    return ctx.result(castOutOfF32Island(ctx.emitter(), conv, f));
 }
 
 LowerFn poolOp(std::string opType) {
@@ -1072,24 +1086,33 @@ LowerFn poolOp(std::string opType) {
         if (opType == "AveragePool") {
             attrs.push_back(intAttr("count_include_pad", 1)); // the kernel divides by k*k
         }
-        return ctx.emit(opType, {ctx.input(0, TypeCode::Float32)}, std::move(attrs));
+        // Max pooling has an f64 kernel; average pooling does not, so it is the f32 island here.
+        const TypeCode f = *ctx.elementDtype();
+        const std::string pooled = ctx.emitter().node(
+            opType,
+            {ctx.input(0, opType == "AveragePool" ? TypeCode::Float32 : f)},
+            std::move(attrs));
+        return ctx.result(
+            opType == "AveragePool" ? castOutOfF32Island(ctx.emitter(), pooled, f) : pooled);
     };
 }
 
 Value lowerBatchNorm(const LowerContext &ctx) {
     // Camel order: (input, mean, var, gamma, beta); ONNX order: (X, scale, B, mean, var).
-    const auto f = TypeCode::Float32;
+    const auto f = ctx.elementDtype();
     return ctx.emit(
         "BatchNormalization",
         {ctx.input(0, f), ctx.input(3, f), ctx.input(4, f), ctx.input(1, f), ctx.input(2, f)},
         {Attribute::makeFloat("epsilon", static_cast<float>(ctx.constNumber(5, 1e-5)))});
 }
 
-/// A float32 scalar constant operand.
-std::string f32Const(Emitter &e, double v) {
+/// A scalar constant operand of element type `dtype`: a model's constants are written in the
+/// element type the call computes in, so a batch-norm decomposition of an f64 model adds f64
+/// constants to f64 statistics rather than an f32 one the graph cannot mix in.
+std::string floatConst(Emitter &e, double v, TypeCode dtype) {
     return e.operand(
         Value::constant(rtdata::toSlot(static_cast<rtdata::Float64>(v)), type::Type::Float64()),
-        TypeCode::Float32);
+        dtype);
 }
 
 /// ReduceSum/ReduceMean of `x` over `axes`, in the form the opset takes.
@@ -1137,7 +1160,8 @@ int64_t bnChannelCount(const LowerContext &ctx, size_t index) {
 /// a constant when the input shape is static, a Shape -> Gather -> Cast -> ReduceProd chain
 /// otherwise. A static M < 2 is rejected like PyTorch's "more than 1 value per channel".
 std::string bnUnbiasedVarFactor(
-    Emitter &e, const LowerContext &ctx, const std::string &x, size_t rank, double momentum) {
+    Emitter &e, const LowerContext &ctx, const std::string &x, size_t rank, double momentum,
+    TypeCode f) {
     const auto facts = ctx.facts(0);
     double count     = 1.0;
     bool known       = facts.shape.has_value();
@@ -1160,7 +1184,7 @@ std::string bnUnbiasedVarFactor(
                     "'{}': expects more than 1 value per channel when training",
                     ctx.uri()));
         }
-        return f32Const(e, momentum * count / (count - 1.0));
+        return floatConst(e, momentum * count / (count - 1.0), f);
     }
     const std::string dims =
         e.node("Gather", {e.node("Shape", {x}), e.int64s(bnStatAxes(rank))}, {intAttr("axis", 0)});
@@ -1172,9 +1196,9 @@ std::string bnUnbiasedVarFactor(
                         {intAttr("keepdims", 0)})
                   : e.node("ReduceProd", {dims}, {ints("axes", {0}), intAttr("keepdims", 0)});
     const std::string m =
-        e.node("Cast", {total}, {intAttr("to", static_cast<int64_t>(ElemType::Float))});
-    const std::string ratio = e.node("Div", {m, e.node("Sub", {m, f32Const(e, 1.0)})});
-    return e.node("Mul", {f32Const(e, momentum), ratio});
+        e.node("Cast", {total}, {intAttr("to", static_cast<int64_t>(elemTypeOf(f)))});
+    const std::string ratio = e.node("Div", {m, e.node("Sub", {m, floatConst(e, 1.0, f)})});
+    return e.node("Mul", {floatConst(e, momentum, f), ratio});
 }
 
 // batch_norm_train(x, gamma, beta, running_mean, running_var, momentum = 0.1, eps = 1e-5)
@@ -1184,7 +1208,10 @@ std::string bnUnbiasedVarFactor(
 // (M/(M-1)) variance blended into the running variance.
 Value lowerBatchNormTrain(const LowerContext &ctx) {
     Emitter &e        = ctx.emitter();
-    const auto f      = TypeCode::Float32;
+    // The element type the call computes in, read off its operands: a lowering that answers a
+    // tuple labels every member with it, because the next operator reads these members as
+    // operands and a pair of two element types matches no arm (support.h, refuseMixedElementTypes).
+    const TypeCode f  = *ctx.elementDtype();
     const size_t rank = ctx.rank(0);
     if (rank < 2) {
         throw ExportError(std::format("'{}': expects input of rank >= 2", ctx.uri()));
@@ -1201,7 +1228,7 @@ Value lowerBatchNormTrain(const LowerContext &ctx) {
     const std::string xc2  = e.node("Mul", {xc, xc});
     const std::string var1 = reduceAxes(e, "ReduceMean", xc2, axes, true);
     const std::string inv1 =
-        e.node("Reciprocal", {e.node("Sqrt", {e.node("Add", {var1, f32Const(e, eps)})})});
+        e.node("Reciprocal", {e.node("Sqrt", {e.node("Add", {var1, floatConst(e, eps, f)})})});
     const std::string xhat            = e.node("Mul", {xc, inv1});
     const std::vector<int64_t> cShape = bnChannelShape(rank, C);
     const std::string g4              = e.node("Reshape", {ctx.input(1, f), e.int64s(cShape)});
@@ -1211,10 +1238,10 @@ Value lowerBatchNormTrain(const LowerContext &ctx) {
     // The running statistics are [C] vectors: biased mean, UNBIASED variance, momentum blend.
     const std::string muC  = reduceAxes(e, "ReduceMean", x, axes, false);
     const std::string varC = reduceAxes(e, "ReduceMean", xc2, axes, false);
-    const std::string keep = f32Const(e, 1.0 - momentum), mix = f32Const(e, momentum);
+    const std::string keep = floatConst(e, 1.0 - momentum, f), mix = floatConst(e, momentum, f);
     const std::string newRm =
         e.node("Add", {e.node("Mul", {ctx.input(3, f), keep}), e.node("Mul", {muC, mix})});
-    const std::string varFactor = bnUnbiasedVarFactor(e, ctx, x, rank, momentum);
+    const std::string varFactor = bnUnbiasedVarFactor(e, ctx, x, rank, momentum, f);
     const std::string newRv =
         e.node("Add", {e.node("Mul", {ctx.input(4, f), keep}), e.node("Mul", {varC, varFactor})});
 

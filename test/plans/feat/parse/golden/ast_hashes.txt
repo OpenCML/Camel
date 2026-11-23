@@ -3190,6 +3190,7 @@ c14a1f79d17ee6f4 ok test/cases/modules/module_resolution/only_cml_and_cmo/py_bes
 47c63cd3af7180bd ok test/cases/modules/nn/adam_update_bits.cml
 23dbb1ec9403ef63 ok test/cases/modules/nn/autoencoder.cml
 5a8d99a5be2fa651 ok test/cases/modules/nn/autograd_linear_demo.cml
+284df2fa3de80a67 ok test/cases/modules/nn/bn_train_f64.cml
 727fb33dfb305208 ok test/cases/modules/nn/bn_train_grad_sanity.cml
 22bdeb5585ab30bb ok test/cases/modules/nn/checkpoint_fixture_load.cml
 46ff32f1a156610b ok test/cases/modules/nn/checkpoint_interrupted.cml
@@ -3197,6 +3198,7 @@ c14a1f79d17ee6f4 ok test/cases/modules/module_resolution/only_cml_and_cmo/py_bes
 b08fce1ddfd4e39f ok test/cases/modules/nn/checkpoint_tensor.cml
 248a4989d7f292dc ok test/cases/modules/nn/checkpoint_unsupported_leaf.cml
 00903ed6af0af540 ok test/cases/modules/nn/checkpoint_unsupported_load.cml
+1161b14817a19c4b ok test/cases/modules/nn/conv2d_f64.cml
 2bd68b5639559cab ok test/cases/modules/nn/conv2d_grad_sanity.cml
 2e4b0e5e1ae57d83 ok test/cases/modules/nn/conv2d_shape_error.cml
 0772d4720314f08b ok test/cases/modules/nn/embedding_grad_sanity.cml
@@ -3713,7 +3715,7 @@ ca5873970d3501ed ok test/cases/modules/tensor/dtype/bf16_cast_under_strict.cml
 a263afc7b28bb6df ok test/cases/modules/tensor/dtype/bf16_modulo.cml
 4ade5e99b837b908 ok test/cases/modules/tensor/dtype/bf16_storage.cml
 fd1c58a84a3cd0ac ok test/cases/modules/tensor/dtype/compare_mixed_width.cml
-7442f8f075186d09 ok test/cases/modules/tensor/dtype/f32_only.cml
+a00df09a2103fb55 ok test/cases/modules/tensor/dtype/f32_only.cml
 e7541c8283cbbf56 ok test/cases/modules/tensor/dtype/f32_works.cml
 a3b2be1dff597225 ok test/cases/modules/tensor/dtype/f64_exact.cml
 2f7c3b57c7a9467c ok test/cases/modules/tensor/dtype/f64_variable_beside_f32_tensor.cml

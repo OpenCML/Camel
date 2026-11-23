@@ -1406,3 +1406,59 @@ expect_exit = 0
 expect_stdout = "[[0.0], [0.0]]\n[[0.8], [0.8]]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The element type follows the call: the spatial kernels are one source instantiated for f32 and
+# f64, so an f64 program computes in f64 instead of being refused.
+
+[[tests]]
+name = "conv2d_f64"
+desc = "conv2d on f64 tensors computes in f64, forward and both gradients: the sum of the two feature maps is 1.3200000000000001 and the sum of their squares 0.70460000000000023. An f32 convolution of the same values answers 1.3200000524520874, so the 1e-12 window these assertions leave is five orders of magnitude below what an f32 kernel, or an f32 rounding anywhere on the path, would print. The kernel is one source instantiated per element type, not a second implementation; the two gradients are the transposed products, so they are also where the f64 GEMM's transpose arguments are read, and each is compared against a central difference of the forward."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const out = input.normalized.stdout
+const found = match(/conv2d_f64 total=([0-9.eE+-]+) squares=([0-9.eE+-]+)/, out)
+const total = Number(found[1])
+const squares = Number(found[2])
+assert(approx(total, 1.32, 1e-12), `the f64 sum should be 1.3200000000000001, got ${total}`)
+assert(approx(squares, 0.7046, 1e-12), `the f64 sum of squares should be 0.70460000000000023, got ${squares}`)
+assert(Math.abs(total - 1.3200000524520874) > 1e-9, `the sum is the f32 one: ${total}`)
+const g = match(/conv2d_f64 grad_x=([0-9.eE+-]+) fd_x=([0-9.eE+-]+) grad_k=([0-9.eE+-]+) fd_k=([0-9.eE+-]+)/, out)
+const [gx, fdX, gk, fdK] = g.slice(1, 5).map(Number)
+assert(approx(gx, fdX, 1e-6), `dL/dx ${gx} should match the central difference ${fdX}`)
+assert(approx(gk, fdK, 1e-6), `dL/dkernel ${gk} should match the central difference ${fdK}`)
+assert(Math.abs(gx) > 1e-3 && Math.abs(gk) > 1e-3, `a gradient is zero: ${gx} ${gk}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "bn_train_f64"
+desc = "The batch-norm training step on f64 tensors: batch_norm_train (normalize and running statistics) agrees with a manual decomposition into primitive tensor ops to 1e-12, and the gradient operator answers values none of which is zero. An f32 batch norm differs from that decomposition by around 1e-7, so the window is what proves the f64 instance ran -- before, the kernel refused an f64 tensor outright and this program could not run at all."
+kind = "behavior"
+case = "../../../cases/modules/nn/bn_train_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const out = input.normalized.stdout
+const fwd = match(/bn_train_f64 fwd=([0-9.eE+-]+) rm=([0-9.eE+-]+) rv=([0-9.eE+-]+)/, out)
+assert(Number(fwd[1]) < 1e-12, `forward differs from the manual decomposition: ${fwd[1]}`)
+assert(Number(fwd[2]) < 1e-12, `running mean differs: ${fwd[2]}`)
+assert(Number(fwd[3]) < 1e-12, `running variance differs (UNBIASED correction?): ${fwd[3]}`)
+const value = match(/bn_train_f64 y=([0-9.eE+-]+) rm=([0-9.eE+-]+) rv=([0-9.eE+-]+)/, out)
+assert([1, 2, 3].every((i) => Number.isFinite(Number(value[i]))), `the value line is not finite: ${value[0]}`)
+const grad = match(/bn_train_f64 dx=([0-9.eE+-]+) dgamma=([0-9.eE+-]+) dbeta=([0-9.eE+-]+)/, out)
+assert([1, 2, 3].every((i) => Number.isFinite(Number(grad[i]))), `the gradient line is not finite: ${grad[0]}`)
+const abs3 = match(/bn_train_f64 dx_abs=([0-9.eE+-]+) dgamma_abs=([0-9.eE+-]+) dbeta_abs=([0-9.eE+-]+)/, out)
+assert(Number(abs3[1]) > 0 && Number(abs3[2]) > 0 && Number(abs3[3]) > 0, `a gradient is all zeros: ${abs3[0]}`)
+}
+"""
+timeout_ms = 10000
