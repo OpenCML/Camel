@@ -109,6 +109,12 @@ const std::unordered_map<core::OperId, std::string> &operations() {
             result.emplace(table.intern(std::string("tensor:") + name), name);
         result.emplace(table.intern("tensor:sum"), "sum_all");
         result.emplace(table.intern("tensor:mean"), "mean_all");
+        // `zeros_like` / `ones_like` are lowered without a kernel: the compiler writes their
+        // result as one constant read through the operand's shape with every stride zero
+        // (`compiler.cpp`, `operation`). They are in this list because a device program for one
+        // exists, and `eligibility` answers a use of them from the operand's type alone.
+        result.emplace(table.intern("tensor:zeros_like"), "zeros_like");
+        result.emplace(table.intern("tensor:ones_like"), "ones_like");
         return result;
     }();
     return result;
@@ -175,6 +181,26 @@ std::string eligibility(
         return "unsupported_operator";
     if (!touchesNothing(oper))
         return "effect";
+    // The two fill-by-shape operators have no index instance and no lowering of their own: the
+    // compiler writes their result as one constant read through the operand's extents with every
+    // stride zero (`compiler.cpp`, `operation`). The operand's type is the whole answer -- its
+    // extents are the result's, and its element is the constant read through them -- so neither an
+    // instance nor the operator's own contract is asked for.
+    if (found->second == "zeros_like" || found->second == "ones_like") {
+        const auto inputs = rt::kernelArgumentsOf(graph, id).norm;
+        if (inputs.size() != 1)
+            return "operand_arity";
+        ty::Type *source  = graph.node(inputs[0])->dataType();
+        if (!source || !shape(source))
+            return "unresolved_input_type";
+        if (narrowElementType(source))
+            return "device_element_kernel_missing";
+        if (source->code() == ty::TypeCode::Float64)
+            return "scalar_tensor_operand";
+        if (!shape(node->dataType()))
+            return "unresolved_type";
+        return {};
+    }
     const auto *decl = table.semantics(oper);
     if (!decl || decl->key.major != 1)
         return "semantic_declaration";
@@ -329,6 +355,19 @@ bool touchesNothing(core::OperId oper) {
         return false;
     }
     return record->pure() && !record->external();
+}
+bool structuralOperator(core::OperId oper) {
+    // The operator forms the front end writes that run nothing of their own: a conversion, a
+    // construction, and the two member reads (by place, by name). Each answers a value it was
+    // given -- the operand read under a type, an aggregate built from its template and fields, or
+    // one member of an aggregate -- so there is no element for a kernel to compute and no shape to
+    // index. The specialization reads them where the value lives (`compiler.cpp`, the CAST, FILL
+    // and ACCS cases and the `:op/cast`, `:op/fill` and `:op/access` branches), so a device scope
+    // is not refused for holding one; what a conversion cannot do is convert an element type this
+    // back end has no width for, and that stays a refusal of the use, not of the form.
+    const std::string uri(core::OperatorTable::instance().uri(oper));
+    return uri == ":op/cast" || uri == ":op/fill" || uri == ":op/access" ||
+           uri == ":op/access_key";
 }
 bool deviceCapable(core::OperId oper) {
     return operations().find(oper) != operations().end() && touchesNothing(oper);

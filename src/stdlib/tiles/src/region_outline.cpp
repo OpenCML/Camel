@@ -564,6 +564,14 @@ const runtime::Program *outlineRegions(
                 // the value it observes is downloaded there (docs/design/gpu/plan.cn.md 2.4).
                 if (!touchesNothing(oper))
                     continue;
+                // A conversion or a member read computes nothing the device would have to run: its
+                // result is the value it was given, or one of that value's members, and the
+                // specialization answers both where the value lives (`compiler.cpp`). Neither
+                // device work nor a host effect, so a scope is not refused for holding one: what a
+                // conversion cannot do is convert an element type the back end has no width for,
+                // and that is refused where the use is, as a shape.
+                if (structuralOperator(oper))
+                    continue;
                 if (!deviceCapable(oper)) {
                     // A device answer on the node itself is the operator having no device
                     // implementation; an untagged graph the scope reaches adds this operator to a
