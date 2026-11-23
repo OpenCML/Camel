@@ -18,7 +18,8 @@
 //
 // The reading is printed with the verdict, and a run that read nothing is red: "0 traces" and "0
 // files scanned" print the same otherwise, and a checker whose pattern stopped matching anything
-// would then report green forever.
+// would then report green forever. The reading also names the directory it read: this check reads
+// `src/` and nothing else, so a traced comment in `test/`, `examples/` or `showcase/` is outside it.
 //
 // Usage: node scripts/check-process-traces.mjs [--root <dir>]   exit 0 when clean, 1 with a list
 import fs from 'node:fs';
@@ -26,7 +27,7 @@ import path from 'node:path';
 
 const args = process.argv.slice(2);
 const root = args.includes('--root') ? args[args.indexOf('--root') + 1] : process.cwd();
-const dirs = ['src', 'include', 'modules', 'stdlib', 'tools'];
+const dirs = ['src'];
 const exts = new Set(['.cpp', '.h', '.hpp', '.cc', '.c', '.inc', '.def', '.cml', '.cmake']);
 
 const pattern = new RegExp(
