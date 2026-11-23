@@ -23,6 +23,7 @@ import { judgeTree, markChildrenNested, readTreeState, readTreeStateAsync, start
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
+import { normalizeReading, READING_NORMAL_VERSION } from './reading-normal.mjs'
 import { describeRefusals, formatRefusalSpec, matchesRefusal, parseRefusalSpec, refusals } from './reading-refusal.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -3966,9 +3967,20 @@ async function executePlans(plans, options, sharedVars, logDir) {
         // printed as `known`: the run's own word for it is the plan's mark, and the list is a
         // reading of the marks, not a second vocabulary.
         if (options.listKnownRows) {
+            // `reading` is the comparable form of this verdict's first line, and it is present for
+            // every verdict rather than for failures only: `known -> fail` is one of the moves a
+            // merge gate has to see, and a field that exists only once something is red cannot see
+            // it. A `skip` carries its reason, a pass carries nothing, and both say so instead of
+            // being absent -- an absent key and a null one read the same to a careless comparison,
+            // and only one of them means "this run had nothing to say".
+            const first = outcome.status === 'skip'
+                ? outcome.reason
+                : Array.isArray(outcome.failures) && outcome.failures.length > 0 ? outcome.failures[0] : null
             options.listKnownRows.push({
                 name: listedName(plan, test),
                 verdict: outcome.status === 'xfail' ? 'known' : outcome.status,
+                reading: normalizeReading(first),
+                reading_version: READING_NORMAL_VERSION,
             })
         }
         if (plan !== printedPlan) {
