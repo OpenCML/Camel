@@ -4723,7 +4723,11 @@ class CmlPrinter {
         }
         signature += ")";
         if (type->hasExitType()) {
-            signature += ": " + writtenTypeText(type->exitType());
+            // The result type is written after `=>` and nowhere else: a colon there is a
+            // syntax error, so a signature printed with one is a program the front end
+            // refuses. That is what the round trip measured: every printed file failed at
+            // its first function header.
+            signature += " => " + writtenTypeText(type->exitType());
         }
         // A function graph whose body has a control edge between its own nodes was written with
         // a body that is a sync block: the modifier says so, and it is the only mark of it.

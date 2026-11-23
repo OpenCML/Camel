@@ -72,7 +72,7 @@ void regionClosure(
         if (!inside.insert(ref).second) {
             continue;
         }
-        for (gc_node_ref_t input : dataInputsOf(graph, ref)) {
+        for (gc_node_ref_t input : dataInputsOf(graph->view(), ref)) {
             if (input >= graph->nodeCount() || graph->node(input) == nullptr) {
                 continue;
             }
@@ -289,7 +289,7 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
                 }
                 continue;
             }
-            for (gc_node_ref_t input : dataInputsOf(function, ref)) {
+            for (gc_node_ref_t input : dataInputsOf(function->view(), ref)) {
                 stack.push_back(input);
             }
         }
@@ -346,7 +346,7 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
             if (node == nullptr || node->kind == rt::GCNodeKind::Data) {
                 continue;
             }
-            const std::vector<gc_node_ref_t> inputs = dataInputsOf(function, ref);
+            const std::vector<gc_node_ref_t> inputs = dataInputsOf(function->view(), ref);
             const bool readsTheCellsValue =
                 std::any_of(inputs.begin(), inputs.end(), [&cut](gc_node_ref_t input) {
                     return std::find(
