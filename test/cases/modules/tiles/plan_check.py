@@ -1,18 +1,17 @@
 """Run the native plan verifier built by npm run build."""
-import os
-from pathlib import Path
 import subprocess
+import sys
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[4]
-# The module's build directory follows the module: `build/modules/tiles` while it lives in
-# `modules/tiles`, `build/lib/tiles` now that it lives in `lib/tiles`. Either answers, so this case
-# runs against both trees.
-build = next((p for p in (root / 'build/lib/tiles', root / 'build/modules/tiles') if p.is_dir()), root / 'build/lib/tiles')
-name = 'tiles-plan-check.exe' if os.name == 'nt' else 'tiles-plan-check'
-candidates = [build / 'Release' / name, build / name]
-binary = next((p for p in candidates if p.is_file()), candidates[0])
-env = os.environ.copy()
-env['PATH'] = os.pathsep.join([str(root / 'out/latest/bin'), str(root / 'out/latest/libs'), env.get('PATH', '')])
-if os.name != 'nt':
-    env['LD_LIBRARY_PATH'] = str(root / 'out/latest/libs') + os.pathsep + env.get('LD_LIBRARY_PATH', '')
-subprocess.run([str(binary)], env=env, check=True)
+sys.path.insert(0, str(root / 'test' / 'tools'))
+
+from native_check import environment, resolve  # noqa: E402
+
+# The verifier is collected into the install's `bin/` by scripts/collect-out.js, from the list the
+# build writes; this launcher asks the install rather than spelling a build directory. A launcher
+# that spelled one (`build/lib/tiles/Release/...`) started failing the entry with "no such file"
+# once the module moved to `src/stdlib/tiles/`, and that failure reads like a check refusing to hold
+# while the check body had not started at all. See test/tools/native_check.py.
+binary = resolve(root, 'tiles-plan-check.exe' if sys.platform == 'win32' else 'tiles-plan-check')
+subprocess.run([str(binary)], env=environment(root), check=True)

@@ -81,7 +81,7 @@ const PLAN_FIELDS = new Set([
 ])
 const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
-    'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
+    'skip_unless', 'skip_unless_timeout_ms', 'require_artifacts', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
     'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
     'known_fail_ends_when',
@@ -1750,6 +1750,74 @@ async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
     }
     const detail = `${proc.stdout || ''}${proc.stderr || ''}`.trim() || proc.error?.message || `exit ${proc.status}`
     return `precondition not met (${test.skip_unless.join(' ')}): ${detail}`
+}
+
+/**
+ * The artifacts one test reads out of this build: `require_artifacts` is a list of paths, expanded
+ * like `args` and resolved from the repository root, where a leading `<install>` is the install this
+ * run measures (`out/latest`, `out/debug`, or the root `--camel` named) and a last segment may carry
+ * `*`. Returns the paths that are not there, empty when every one of them is.
+ *
+ * A missing one fails this test and never skips it:
+ *
+ *   产物的缺失是一个读数(读不到),不是一个结论(不用测)。
+ *   A missing product is a reading -- "nothing could be read" -- and not a conclusion -- "nothing to
+ *   test".
+ *
+ * The difference is the whole subject: a skip and a pass are the same number in a run's summary, so
+ * an entry whose product stopped being produced keeps its place in the green count while the check
+ * body inside it never starts. That is not hypothetical -- three launchers spelled a build directory
+ * the layout had moved, and two probes asked for an extension module before the test that imports
+ * it, and neither shape could be told apart from a test that held.
+ *
+ * `skip_unless` stays for the other question: a host's device, its compiler, an optional package --
+ * conditions outside the code under test. This field is for the code's own products.
+ */
+function missingArtifacts(test, sharedVars, scratchRelative, options) {
+    if (!Array.isArray(test.require_artifacts) || test.require_artifacts.length === 0) return []
+    const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    const scope = { ...sharedVars, case: casePath, test_tmp: scratchRelative }
+    const install = camelInstall(options)
+    const missing = []
+    for (const entry of expandArgs(test.require_artifacts, scope)) {
+        const named = String(entry)
+        const fromInstall = named.startsWith('<install>')
+        const target = fromInstall
+            ? path.join(install, named.slice('<install>'.length).replace(/^[\\/]/, ''))
+            : path.resolve(REPO_ROOT, named)
+        if (!artifactIsThere(target)) missing.push(named.includes('<install>') ? `${named} (${target})` : target)
+    }
+    return missing
+}
+
+/** Whether `target` is a file, or matches when its last segment carries a `*`. */
+function artifactIsThere(target) {
+    if (!target.includes('*')) return fs.existsSync(target)
+    const directory = path.dirname(target)
+    const pattern = path.basename(target)
+    const source = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
+    let entries
+    try {
+        entries = fs.readdirSync(directory)
+    } catch {
+        return false
+    }
+    const shape = new RegExp(`^${source}$`)
+    return entries.some((name) => shape.test(name))
+}
+
+/** The failure a test whose artifact is missing reports: the paths first, then what it means. */
+function missingArtifactResult(casePath, missing) {
+    return runnerErrorResult(
+        casePath,
+        [
+            'the artifact this test reads was not built:',
+            ...missing.map((entry) => `  ${entry}`),
+            'a missing product is a reading (nothing could be read), not a conclusion (nothing to ' +
+                'test): the entry fails here instead of skipping, because a skip and a pass are the ' +
+                'same number in the summary',
+        ].join('\n'),
+    )
 }
 
 function sanitizeSegment(value) {
@@ -4021,6 +4089,15 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     scratch = createTestScratchDir(entry.test)
                     clock.scratchAt = performance.now()
                     const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+                    // Before the probe, and before the card: "is my product there" is a question
+                    // about this build and not about the host, and its answer fails the test.
+                    const absent = missingArtifacts(entry.test, sharedVars, scratchRelative, options)
+                    if (absent.length > 0) {
+                        const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                        const result = missingArtifactResult(casePath, absent)
+                        entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
+                        return
+                    }
                     // The host checks begin here: the card selection and the `skip_unless` probe
                     // are both questions about the machine, and they are counted as such.
                     clock.probeAt = performance.now()
@@ -4054,6 +4131,15 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     scratch = createTestScratchDir(entry.test)
                     clock.scratchAt = performance.now()
                     const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+                    // The same question the probe branch asks first, and for the same reason: a
+                    // product this test reads is this build's, not the host's, and its absence fails.
+                    const absent = missingArtifacts(entry.test, sharedVars, scratchRelative, options)
+                    if (absent.length > 0) {
+                        const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                        const result = missingArtifactResult(casePath, absent)
+                        entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
+                        return
+                    }
                     // A serial test (or one with no probe) picks its card inside its own slot:
                     // nothing may run next to a serial test, and the selection is a child process.
                     const deviceSkip = await selectCudaDeviceFor(entry.test)

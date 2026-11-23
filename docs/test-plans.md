@@ -779,6 +779,22 @@ Every `[[tests]]` entry may use these common fields:
   `skip_unless = ["${python}", "-c", "import onnxruntime"]`.
 - `skip_unless_timeout_ms`
   Optional timeout for the precondition command. Default is `120000`.
+- `require_artifacts`
+  Optional string array of paths this test reads out of the build, with the same variable expansion
+  as `args` and resolved from the repository root. A leading `<install>` is the install this run
+  measures (`out/latest`, `out/debug`, or the root a `--camel <path>` named), and a last segment may
+  carry `*`: `require_artifacts = ["<install>/bin/tiles-plan-check*"]`.
+
+  A path that is not there **fails** the test, and the failure prints every path it looked for. It is
+  not a precondition and never a skip: 产物的缺失是一个读数(读不到),不是一个结论(不用测) -- a
+  missing product is a reading ("nothing could be read") and not a conclusion ("nothing to test"),
+  because a skip and a pass are the same number in the summary. An entry that skipped over a product
+  its build had stopped producing therefore kept its place in the green count while the check body
+  inside it never started; the entries that do that are indistinguishable from the ones that hold.
+
+  The division with `skip_unless` is the subject of the question: use `skip_unless` for the host's
+  conditions -- a device, a compiler, an optional Python package -- and this field for the build's own
+  products. A case's launcher asks the install for the same reason (`test/tools/native_check.py`).
 - `cuda_devices`
   Optional boolean, default `false`: `true` declares that this test's Python child wants the
   machine's CUDA devices, and the runner then leaves `CUDA_VISIBLE_DEVICES` exactly as it found it.

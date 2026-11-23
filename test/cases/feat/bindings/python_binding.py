@@ -40,7 +40,13 @@ REPO = HERE.parents[4]
 
 # The binding needs the extension built beside libcamel, and Camel needs its install for the
 # standard library and the module search roots. Both are the install the build collected.
-sys.path.insert(0, str(REPO / "pypi" / "camel-lang" / "src"))
+#
+# The package is read from its directory in this tree (`packaging/pypi/camel-lang/src`), which is
+# not a build product: no generator names it, so there is nothing to ask and the path is spelled
+# here. It moved into `packaging/` with the rest of the packaging trees, and this line kept the
+# directory it had before the move -- the entry then failed on `import camel` with the module
+# sitting one directory away.
+sys.path.insert(0, str(REPO / "packaging" / "pypi" / "camel-lang" / "src"))
 os.environ.setdefault("CAMEL_HOME", str(REPO / "out" / "latest"))
 
 import camel  # noqa: E402

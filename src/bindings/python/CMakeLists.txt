@@ -74,3 +74,14 @@ set_target_properties(camel_python_ext PROPERTIES
 # already be the delivered one; otherwise the copied file names build/ and finds no libcamel in
 # out/<tag>/libs.
 set_property(TARGET camel_python_ext PROPERTY BUILD_WITH_INSTALL_RPATH TRUE)
+
+# The file scripts/collect-out.js copies into `out/<tag>/python/`, written down by the build.
+#
+# The install step used to guess at it by scanning directories, and the first directory it looked in
+# (`build/src/stdlib/python`) exists in every build for a different target, so the install it made
+# had an empty `python/` and every entry that imports the extension skipped for want of a file the
+# build had produced. `$<TARGET_FILE:...>` is the generator's own answer, so nothing downstream has
+# to keep a directory spelling in step with this target's output directory.
+file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/camel-python-outputs-$<CONFIG>.txt"
+    CONTENT "$<TARGET_FILE:camel_python_ext>\n")
