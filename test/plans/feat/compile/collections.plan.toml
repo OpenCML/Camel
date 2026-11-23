@@ -507,12 +507,12 @@ timeout_ms = 12000
 
 [[tests]]
 name = "graph_shape"
-desc = "On the graph the conversion is a CAST node and every operation one OPER node: `m[k]` is `:coll/map_idx`, an array subscript stays `:op/idx_arr`."
+desc = "On the graph the conversion is the `:op/cast` operator and every operation one OPER node: `m[k]` is `:coll/map_idx`, an array subscript stays `:op/idx_arr`."
 kind = "behavior"
 case = "../../../cases/compile/collections/graph_shape.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
-expect_stdout_contains = ["type=\"CAST\"", "label=\":coll/map_idx\", type=\"OPER\"", "label=\":coll/map_put\", type=\"OPER\"", "label=\":coll/set_contains\", type=\"OPER\"", "label=\":op/idx_arr\", type=\"OPER\"", "label=\":op/tag_is_null\", type=\"OPER\"", "type=\"BRCH\""]
+expect_stdout_contains = ["label=\":op/cast\", type=\"OPER\"", "label=\":coll/map_idx\", type=\"OPER\"", "label=\":coll/map_put\", type=\"OPER\"", "label=\":coll/set_contains\", type=\"OPER\"", "label=\":op/idx_arr\", type=\"OPER\"", "label=\":op/tag_is_null\", type=\"OPER\"", "type=\"BRCH\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 12000
 

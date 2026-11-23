@@ -133,7 +133,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_expansion_has_no_static_nodes"
-desc = "The expansion is straight-line code: the GIR contains ACCS nodes for the fields and no SFOR or SACC node, and the declaration order is kept."
+desc = "The expansion is straight-line code: the GIR reads every field through the member-read operator and has no SFOR or SACC node, and the declaration order is kept."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/fields_and_access.cml"
 args = ["${case}", "std::jgir"]
@@ -251,7 +251,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "comprehension_graph"
-desc = "The graph of a comprehension is straight-line: `t.[n].[m]` reads its parent once (one `.p` ACCS, then `.0` and `.1`), one FILL per struct or tuple, and no SFOR, SACC, LOOP, BRCH or CASE node."
+desc = "The graph of a comprehension is straight-line: `t.[n].[m]` reads its parent once (one read by name, then the two reads by position), one FILL per struct or tuple, and no SFOR, SACC, LOOP, BRCH or CASE node."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/comprehensions_graph.cml"
 args = ["${case}", "std::gir"]
@@ -266,10 +266,12 @@ const indent = lines[at - 1].match(/^\s*/)[0]
 const end = lines.findIndex((line, i) => i > at && line === indent + "}")
 assert(end > at, "the graph of pairUp has no end")
 const nodes = lines.slice(at, end).filter((line) => /\[label=".*", type=/.test(line))
+// A member read is the operator that reads the member, not the node kind a read used to wear:
+// `:op/access` reads an element by position, `:op/access_key` a field by name.
 const labels = nodes
-  .filter((line) => line.includes('type="ACCS"'))
+  .filter((line) => /label=":op\/access(_key)?"/.test(line))
   .map((line) => line.match(/\[label="([^"]*)"/)[1])
-assert(labels.join(",") === ".p,.0,.1", `field accesses changed: ${labels.join(",")}`)
+assert(labels.join(",") === ":op/access_key,:op/access,:op/access", `field accesses changed: ${labels.join(",")}`)
 const fills = nodes.filter((line) => line.includes('type="FILL"')).length
 assert(fills === 2, `expected one FILL per struct/tuple, got ${fills}`)
 const left = nodes.filter((line) => /type="(SFOR|SACC|LOOP|BRCH|CASE)"/.test(line))
@@ -804,7 +806,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_tuple_builds_no_value_node"
-desc = "`indices ts` and `ts.[j]` over a rest parameter build the argument nodes only: the graph of `main` has no FILL for `ts` and no ACCS for its elements, and the expansion is the hand-written sum."
+desc = "`indices ts` and `ts.[j]` over a rest parameter build the argument nodes only: the graph of `main` has no FILL for `ts` and no member read for its elements, and the expansion is the hand-written sum."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_tuple_graph.cml"
 args = ["${case}", "std::gir"]
@@ -821,8 +823,8 @@ assert(end > at, "the graph of main has no end")
 const body = lines.slice(at, end)
 const fills = body.filter((line) => line.includes('type="FILL"'))
 assert(fills.length === 0, `a FILL was built for the build-time tuple: ${fills[0]}`)
-const accesses = body.filter((line) => line.includes('type="ACCS"'))
-assert(accesses.length === 0, `an ACCS was built for a build-time tuple element: ${accesses[0]}`)
+const accesses = body.filter((line) => /label=":op\/access(_key)?"/.test(line))
+assert(accesses.length === 0, `a member read was built for a build-time tuple element: ${accesses[0]}`)
 const calls = body.filter((line) => line.includes('type="CALL"') && line.includes('sum'))
 assert(calls.length === 0, `the rest call was not expanded: ${calls[0]}`)
 const adds = body.filter((line) => line.includes('label=":op/add_l"'))
@@ -844,7 +846,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_tuple_function_materializes"
-desc = "A tuple comprehension returned by a function is a value: one FILL materializes it at the `return`, and the caller sees an ordinary tuple through the function value (FUNC then ACCS), not a build-time tuple."
+desc = "A tuple comprehension returned by a function is a value: one FILL materializes it at the `return`, and the caller sees an ordinary tuple through the function value (a FUNC and then the member read), not a build-time tuple."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_tuple_function.cml"
 args = ["${case}", "std::gir"]
@@ -867,7 +869,7 @@ assert(fills.length === 1, `the returned tuple was not materialized by one FILL:
 const caller = graphBody("firstPosition")
 const functions = caller.filter((line) => line.includes('type="FUNC"') && line.includes('positions'))
 assert(functions.length === 1, `the caller does not read the function value: ${functions.length}`)
-const accesses = caller.filter((line) => line.includes('type="ACCS"'))
+const accesses = caller.filter((line) => /label=":op\/access(_key)?"/.test(line))
 assert(accesses.length === 1, `the caller does not project the returned tuple: ${accesses.length}`)
 }
 """
@@ -897,7 +899,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_tuple_forward_builds_no_value_node"
-desc = "Forwarding `...ts` builds no value node for the build-time tuple: `main` has no FILL, no ACCS and no call to either rest function, only the three argument nodes and the three additions."
+desc = "Forwarding `...ts` builds no value node for the build-time tuple: `main` has no FILL, no member read and no call to either rest function, only the three argument nodes and the three additions."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_tuple_forward.cml"
 args = ["${case}", "std::gir"]
@@ -913,7 +915,7 @@ const end = lines.findIndex((line, i) => i > at && line === indent + "}")
 assert(end > at, "the graph of main has no end")
 const body = lines.slice(at, end)
 assert(!body.some((line) => line.includes('type="FILL"')), "a FILL was built for the forwarded tuple")
-assert(!body.some((line) => line.includes('type="ACCS"')), "an ACCS was built for a forwarded element")
+assert(!body.some((line) => /label=":op\/access(_key)?"/.test(line)), "a member read was built for a forwarded element")
 assert(!body.some((line) => line.includes('label="forward"') || line.includes('label="sum"')), "a rest function was not expanded")
 const adds = body.filter((line) => line.includes('label=":op/add_l"'))
 assert(adds.length === 3, `the expansion lost an addition: ${adds.length}`)

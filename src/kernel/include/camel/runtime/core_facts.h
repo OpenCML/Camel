@@ -23,7 +23,16 @@
  *                                 the law with the permissions granted. Reads declarations.
  *                                 Encodable.
  *   core.effects      Graph, (ii) the effect summary of a graph, through what it calls and the
- *                                 loops it runs (effectSummaryOf). Encodable.
+ *                                 loops it runs (effectwalk::ofGraph). Encodable.
+ *   core.nodeEffects  Node, (ii)  what running one node does besides computing its value: an
+ *                                 operator's record, the graph a call names, the conservative
+ *                                 answer for a call through a value, fault and non-termination for
+ *                                 a loop. Read on demand; nothing reads it in bulk.
+ *   core.regionEffects Node, (ii) the regions a control node runs -- a JOIN's arms, a LOOP's body
+ *                                 and condition -- each with its own summary. A region is not an
+ *                                 anchor a fact can name, so the answer is kept at its owner.
+ *   core.operatorEffects Node, (ii) the clause of the operator a node runs, without the node's own
+ *                                 operands: what `graph.is_pure` asks for.
  *   core.loopDomain   CrossGraph, (ii)  a LOOP node and its body graph (design 11.3): the form,
  *                                 the Sequential dim of For/ForWhile, `t < len(xs)`, with the
  *                                 extent — `shape[0]`, the rows of a constant array — and the
@@ -49,6 +58,7 @@
 #include "camel/core/index_semantics.h"
 #include "camel/core/loop_kind.h"
 #include "camel/core/type/base.h"
+#include "camel/runtime/effects.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/resources.h"
@@ -111,14 +121,50 @@ struct LoopDomain {
 
 /// The ids of the core's kinds (registered on the first call).
 struct CoreKinds {
-    KindId shape, instance, reorder, effects, loopDomain, permissions, resources;
+    KindId shape, instance, reorder, effects, nodeEffects, regionEffects, operatorEffects,
+        loopDomain, permissions, resources;
 };
 const CoreKinds &coreKinds();
+
+/// The effects of running `graph`, a graph of `program`, once: the `core.effects` fact
+/// (nullptr: none). This is the graph-level answer, through the graphs it calls and the loops it
+/// runs.
+EffectSummary graphEffects(FactStore &facts, const Program &program, const GCGraph *graph);
+/// What running one node of `graph` does besides computing its value: the `core.nodeEffects` fact.
+/// An operator's answer is its record's, a call's is the graph it names, a call through a value is
+/// the conservative one, and a loop's is that it may fault and may not end. A branch, and a loop's
+/// body, are regions of this graph, so what runs inside them is in `regionEffectsOf` and not here.
+EffectSummary
+nodeEffects(FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node);
+
+/// The effects of the regions a control node runs (`core.regionEffects`): a JOIN's arms, a LOOP's
+/// body and condition. Empty for every other node. A region is not an anchor a fact can name, so
+/// the answer is stored at the node that owns the regions and each field is the region's own
+/// summary.
+struct RegionEffects {
+    /// JOIN: the union of its arms.
+    EffectSummary arms;
+    /// LOOP: its body region.
+    EffectSummary body;
+    /// LOOP: its condition region.
+    EffectSummary cond;
+    bool operator==(const RegionEffects &) const = default;
+};
+RegionEffects regionEffectsOf(
+    FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node);
+
+/// The clause of the operator the node runs, without the node's own operands: the
+/// `core.operatorEffects` fact, and the answer `graph.is_pure` asks for. An operator that takes its
+/// accesses from a function operand is read conservatively here -- what the operand is, is the
+/// node's to say.
+EffectSummary operatorEffectsOf(
+    FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node);
 
 /// Text forms of the values (what camel inspect --facts prints as "value").
 std::string toString(const TensorShape &shape);
 std::string toString(const Reorder &reorder);
 std::string toString(const EffectSummary &effects);
+std::string toString(const RegionEffects &effects);
 std::string toString(const LoopDomain &domain);
 
 } // namespace camel::runtime::fact

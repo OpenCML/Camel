@@ -435,12 +435,6 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    node_handle_t accsNode{};
-    if (gct->accessByIndex()) {
-        accsNode = currGraph_->addAccsNode(elemType, static_cast<uint32_t>(gct->accessIndex()));
-    } else {
-        accsNode = currGraph_->addAccsNode(elemType, gct->accessKey());
-    }
     // `typeof` infers a type and evaluates nothing, and the graph it builds is dropped: a value
     // that lives in the graph the type is used in is borrowed by name, not by node. Linking the
     // outer node here would leave an edge in this graph pointing at a node it does not own, which
@@ -453,7 +447,13 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
             "$typeof" + std::to_string(++typeofStandIns),
             false);
     }
-    linkNodes(LinkType::Norm, accsSource, accsNode);
+    node_handle_t accsNode{};
+    if (gct->accessByIndex()) {
+        accsNode = memberReadNodeOf(
+            accsSource, elemType, static_cast<uint32_t>(gct->accessIndex()), gct);
+    } else {
+        accsNode = memberReadNodeOf(accsSource, elemType, gct->accessKey(), gct);
+    }
     registerNodeOrigin(context_, accsNode, gct, "gir.accs");
     if (readConstant != nullptr) {
         rememberConstant(accsNode, readConstant);

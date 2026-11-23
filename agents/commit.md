@@ -33,3 +33,21 @@
 
 ## Language
 - **Commit messages are English.** The repository is public, and the author ruled it on 2026-11-02 12:10 after a batch of perf: commits arrived in Chinese: one language, English. This applies to every lane from that point on. History is not rewritten to comply -- no rebase, no amend -- so the Chinese subjects that already landed stay as they are, and a merge message does not translate them.
+## Writing the message without eating it
+
+**A message, a document or a note is written through a SINGLE-quoted here-string (`@'...'@`), never a
+double-quoted one.** In PowerShell a backtick is an escape inside double quotes: `` `t `` becomes a tab,
+`` `n `` a newline, `` `0 `` a NUL byte, and a pair of backticks becomes one. Markdown code spans use
+backticks, so a message written through a double-quoted here-string arrives with every code span flattened
+and some of them turned into invisible control characters.
+
+This has happened twice, and the second time cost a document its binary/text status: a lane table was
+committed as binary because one code span became a NUL byte, and the file had to be rewritten and committed
+again as a new commit rather than repaired in place — `develop` is never rewritten. The same escape turned
+`tensor:shape` into a tab plus `ensor:shape` inside a commit message, where it cannot be fixed at all without
+rewriting history, so it stayed.
+
+**The check, before committing:** if the message contains a backtick, look at the text you are about to pass.
+If it went through a double-quoted string, the code spans are already gone, and the commit is not what you
+wrote. A message that has lost its code spans is still a commit with the right content — which is exactly why
+it will not be noticed.

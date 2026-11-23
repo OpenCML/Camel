@@ -9,7 +9,7 @@
  * compares is what a user would notice: the exit status and every byte of standard output.
  *
  * The eight cases of the author's defect list (A7) are the ones that behaved differently after a
- * print; a ninth (`src/compile/escapes/raw_roundtrip`) is the printer's raw form for a string with
+ * print; a ninth (`compile/escapes/raw_roundtrip`) is the printer's raw form for a string with
  * several backslashes, which is a literal rather than a graph shape. They are green today, and
  * this tool is the lock, not the fix. Its own discriminability is
  * checked by `--negative <case>`: the printed body has two of its `println` statements swapped and
@@ -83,7 +83,10 @@ const CAMEL = camelBinary()
 const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest') }
 
 /// The eight cases of A7. Each is a `test/cases/**.cml` path; the printed program goes to a scratch
-/// directory of our own, so the tree the runner handed us is not written to.
+/// directory of our own, so the tree the runner handed us is not written to. The path is the one the
+/// tree has: two entries named `src/...`, a directory the cases do not live under, so both answered
+/// `unmeasurable` for a reason that is not a defect (the plan's own expected line names
+/// `compile/escapes/raw_roundtrip`, which is where the file is).
 ///
 /// Nine readings were recorded when this list was made. The ninth, `effects/writer_table_through_callee`,
 /// measured "a call writes state and the read after it takes that version", and the 2026-11-16
@@ -101,10 +104,10 @@ const CASES = [
     'linear/runtime/var_read_before_region',
     'linear/runtime/var_read_before_write',
     'linear/runtime/order_edges_regions',
-    'src/parse/rulings/power',
+    'parse/rulings/power',
     'trans/cpp/exec/print_formats',
     'consistency/values/float_special',
-    'src/compile/escapes/raw_roundtrip',
+    'compile/escapes/raw_roundtrip',
 ]
 
 const SCRATCH = path.join(tmpdir(), `camel-roundtrip-${process.pid}`)

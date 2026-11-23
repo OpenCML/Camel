@@ -187,6 +187,15 @@ type::Type *inferenceTypeOf(const Value &value) {
         return value.camelType;
     }
     if (value.isSymbolic() && value.form == Value::Form::IntArray) {
+        // The length of a symbolic int list is a fact the value states (`Value::symbolicIntArray`),
+        // and the operators that take a list read it: `tensor:shape` of a rank-2 answer is an
+        // `int64[2]`, and `sum_to` learns the rank of its own answer from that length. The open
+        // `int[]` said only "a list of int64", so the reduction to a list's shape came back with no
+        // rank, and the gradient operand it feeds inherited that -- `dy` at `matmul_grad_rhs`,
+        // which the gradient lowerings read a rank of and refuse without one.
+        if (value.shape) {
+            return tensor::ops::tensorOf(type::TypeCode::Int64, value.shape);
+        }
         static type::ArrayType *intArray = type::ArrayType::create(type::Type::Int64());
         return intArray;
     }

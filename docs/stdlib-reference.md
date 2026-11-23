@@ -681,25 +681,26 @@ holds the construction under.
 #### `access`
 
 ```camel
-access: (at: int, x: T) => U panic
+access: <at: int> (x: T) => U panic
 ```
 
 A member read as an ordinary operator: the ACCS node kind written as a call of the operator
 that does the same thing (plan 2.3, step 2). The position is a compile-time parameter of the
-node and an ordinary operand of the call: an `int` for the element of a tuple, a `string` for
-the field of a struct. It comes first because the compiler makes the node before it links the
-value the node reads (`lib/std/builtin/operators/struct.cpp`).
+operator and a `with` argument of the call: an `int` for the element of a tuple, a `string`
+for the field of a struct. The value the read reads is the call's one ordinary operand; the
+compiler puts the member in `with` and links the value as the call's operand
+(`lib/std/builtin/operators/struct.cpp`).
 
 A program writes a member read as `t[0]` or `s.x`, and those reach this operator through the
 language's own rules; the call form is the name a graph holds the read under.
 
 - Pure.
-- Example: `access::<(int, int), int>(0, (1, 2))` gives `1`
+- Example: `access::<(int, int), int><0>((1, 2))` gives `1`
 
 #### `access_key`
 
 ```camel
-access_key: (key: string, x: T) => U panic
+access_key: <key: string> (x: T) => U panic
 ```
 
 The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
@@ -709,7 +710,7 @@ it holds -- the operand's type would answer the same question, but a rule that h
 the type to know what it does is what the node kinds were.
 
 - Pure.
-- Example: `access_key::<{ x: int, y: int }, int>('y', { x: 1, y: 2 })` gives `2`
+- Example: `access_key::<{ x: int, y: int }, int><'y'>({ x: 1, y: 2 })` gives `2`
 
 ### Arrays
 
@@ -729,6 +730,53 @@ array; this call builds one.
 - Failure: fault `InvalidArgument` when the step is 0.
 - Example: `range(0, 10, 3)` gives `[0, 3, 6, 9]`
 - Example: `range(10, 0, -3)` gives `[10, 7, 4, 1]`
+
+### Ranges
+
+A range is a value of its own type, not an array (design principles 5.4): `Range` writes the
+three numbers that name it down, and `to_array` is the one conversion from it to the integers it
+names. Nothing else in the library is renamed or retyped here: the interval `a..b` still builds
+the array `range(a, b, 1)`, and the functions a range shares with an `int[]` (`map`, `filter`,
+`reduce`, `len`, `print`) are not this round's -- a function of one of those names declared
+beside the operator group of the same name is not an overload of it, it shadows it.
+
+These names are written by a program only after `import { ... } from prelude`: the prelude's
+types and its functions that are not operators are not brought along unasked.
+
+#### `to_range`
+
+```camel
+to_range: (start: int, stop: int, step: int) => Range
+```
+
+The range from start up to, not including, stop, taken in steps of step: the step of
+`range(a, b, s)`, and 1 for the interval `a..b`.
+
+- Example: `to_range(1, 5, 1)->to_array()` gives `[1, 2, 3, 4]`
+
+#### `to_array`
+
+```camel
+to_array: (r: Range) => int[]
+```
+
+The integers of r as an array: the conversion from a range to the array it is not, and the only
+one -- nothing turns an array into a range. A range whose end is left out names no array (an
+open end is a bound of the axis the range is a subscript of), so the call faults instead of
+inventing one.
+
+- Failure: fault `RangeWithoutEnd` when start or stop is null.
+- Example: `to_range(1, 5, 1)->to_array()` gives `[1, 2, 3, 4]`
+
+#### `is_empty`
+
+```camel
+is_empty: (r: Range) => bool
+```
+
+Whether r holds no integer.
+
+- Example: `to_range(3, 3, 1)->is_empty()` gives `true`
 
 #### `last`
 

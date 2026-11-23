@@ -42,6 +42,46 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
+name = "stream.range_value"
+desc = "A range is a value of the library's own type `Range` (design principles 5.4): `to_range(1, 5, 1)` writes the three numbers down, `to_array` is the one conversion from it to the integers it names, and `is_empty` says whether it names any. The type is not ambient, so the case imports it and annotates the binding with it."
+kind = "behavior"
+case = "../../../cases/compile/stream/range_value.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "[1, 2, 3, 4]\nfalse\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.range_value_is_not_the_interval"
+desc = "The interval is still an `int[]` and `Range` is not one: `let r: Range = 1..5` is a DeclaredTypeMismatch that names both sides, because `..` was not retyped and there is no implicit conversion from an array to a range."
+kind = "negative"
+case = "../../../cases/compile/stream/range_value_is_not_the_interval.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_code = "0x03000110"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'int[]', which is not the declared type 'Range'."]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.range_value_map_still_the_interval"
+desc = "The new type changes no call that was already written: `1..5` is still the array `range(1, 5, 1)` builds, so `map<dbl>(1..5)` and `(1..5)->map<dbl>` still resolve through the operator group of `map` at `int[]`. A `map` written for `Range` would be an operator of its own, and there is none."
+kind = "behavior"
+case = "../../../cases/compile/stream/range_value_map_still_the_interval.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "[2, 4, 6, 8]\n[2, 4, 6, 8]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "stream.comp_operand_mismatch"
 desc = "`..` has two readings and takes nothing else: two texts are neither two functions nor two integers, so the compiler refuses the construct and names both operand types."
 kind = "negative"

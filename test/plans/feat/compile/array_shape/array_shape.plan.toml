@@ -414,8 +414,10 @@ verify_script = """
   const data = (type) => lines.filter((l) => l.includes('type="DATA"') && l.includes(`value_type="${type}"`))
   assert(data('f32[3]').length === 1, `no f32[3] literal: ${data('f32[3]').join(' | ')}`)
   assert(data('f32[2, 2]').length === 1, `no f32[2, 2] literal: ${data('f32[2, 2]').join(' | ')}`)
-  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="f32[...]"'))
-  assert(casts.length === 1, `no CAST to f32[...]: ${lines.filter((l) => l.includes('type="CAST"')).join(' | ')}`)
+  // A conversion is an operator now (`:op/cast`), so the node kind the builder used to write is
+  // gone: what the assertion asks for is the conversion, and its label is where it says so.
+  const casts = lines.filter((l) => l.includes('label=":op/cast"') && l.includes('value_type="f32[...]"'))
+  assert(casts.length === 1, `no conversion to f32[...]: ${lines.filter((l) => l.includes('label=":op/cast"')).join(' | ')}`)
   assert(data('f32[]').length === 0, `a literal kept the unknown shape: ${data('f32[]').join(' | ')}`)
 }
 """
@@ -442,8 +444,8 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
   const lines = input.normalized.stdout.split(String.fromCharCode(10))
-  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="f32[n]"'))
-  assert(casts.length === 1, `no CAST to f32[n]: ${lines.filter((l) => l.includes('type="CAST"')).join(' | ')}`)
+  const casts = lines.filter((l) => l.includes('label=":op/cast"') && l.includes('value_type="f32[n]"'))
+  assert(casts.length === 1, `no conversion to f32[n]: ${lines.filter((l) => l.includes('label=":op/cast"')).join(' | ')}`)
   const ports = lines.filter((l) => l.includes('value_type="f32[n]"'))
   assert(ports.length >= 2, `the parameter and the binding are not f32[n]: ${ports.join(' | ')}`)
 }
