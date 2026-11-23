@@ -1,0 +1,43 @@
+/**
+ * conv2d on f64 tensors, forward and both gradients. The convolution, its unfolding and its GEMM
+ * are one source instantiated for the element type the call states (f32 or f64), so this prints
+ * f64 numbers: the sum of the two feature maps and the sum of their squares.
+ *
+ * The window the assertions leave out is the point of the case: an f32 convolution of the same
+ * values answers 1.3200000524520874, five orders of magnitude away from the 1.3200000000000001
+ * below. The numbers are f64 because a convolution with f64 tensors either computes in f64 or is
+ * refused, and never narrowed to f32 (design principles 5.1).
+ *
+ * The two gradients are the transposed products (dL/dx is W^T @ dy, dL/dkernel is dy @ cols^T),
+ * so they are also where the f64 GEMM's transpose arguments are read: each is compared against a
+ * central difference of the forward at one element, h = 1e-6.
+ *
+ * x [1,1,3,3], kernel [2,1,2,2], bias [2], stride 1, padding 0: the result is [1,2,2,2].
+ */
+
+import { conv2d, conv2d_input_grad, conv2d_kernel_grad } from nn
+import { reshape, sum, ones } from tensor
+
+func loss(x: float[...], kernel: float[...], bias: float[...]) => float {
+    return sum(conv2d(x, kernel, bias, 1, 0))
+}
+
+func main() => int sync {
+    let x = reshape<[1, 1, 3, 3]>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+    let kernel = reshape<[2, 1, 2, 2]>([0.3, -0.2, 0.1, 0.4, -0.1, 0.5, 0.2, -0.3])
+    let bias = reshape<[2]>([0.05, -0.15])
+    let y = conv2d(x, kernel, bias, 1, 0)
+    'conv2d_f64 total={} squares={}'->format<sum(y), sum(y * y)>->println
+
+    // dL/dy = 1 everywhere, so the gradients are the two transposed products themselves.
+    let dy = ones::<float>([1, 2, 2, 2])
+    let xMask = reshape<[1, 1, 3, 3]>([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    let kMask = reshape<[2, 1, 2, 2]>([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    let h = 0.000001
+    let gx = sum(conv2d_input_grad(x, kernel, dy, 1, 0) * xMask)
+    let gk = sum(conv2d_kernel_grad(x, kernel, dy, 1, 0) * kMask)
+    let fdX = (loss(x + xMask * h, kernel, bias) - loss(x - xMask * h, kernel, bias)) / (2.0 * h)
+    let fdK = (loss(x, kernel + kMask * h, bias) - loss(x, kernel - kMask * h, bias)) / (2.0 * h)
+    'conv2d_f64 grad_x={} fd_x={} grad_k={} fd_k={}'->format<gx, fdX, gk, fdK>->println
+    return 0
+}

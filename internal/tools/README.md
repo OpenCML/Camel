@@ -194,3 +194,27 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
 - `run-registry.jsonl` is one compact JSON line per run snapshot, keyed by `runId`, so several
   concurrent host runs are a list instead of one overwritten slot;
 - all three are advisory: a locked or unwritable file never fails a build or a plan.
+## The two DSH plugins
+
+Two directories here are loaded as plugins by the agent runtime rather than run as scripts. Their
+source lives here so what they compute is reviewable, and the profile links to these directories
+rather than holding copies:
+
+| Directory | What it computes | Who reads it |
+|---|---|---|
+| `camel-lanes/` | the lane table's gates, plus `GET /camel/state` and `POST /camel/say` | every step of a coordinating session |
+| `build-queue/` | the build and test panel: build slots, waiters, the recent timeline, CPU and memory | the Web GUI panel |
+
+```powershell
+$base = "$env:USERPROFILE\.dsh\profiles\web\node_modules\@local"
+New-Item -ItemType Junction -Path "$base\camel-lanes"     -Target "<repo>\internal\tools\camel-lanes"
+New-Item -ItemType Junction -Path "$base\dsh-build-queue" -Target "<repo>\internal\tools\build-queue"
+```
+
+`camel-lanes` reads the same three files this document describes, and takes their directory from
+`camel-gate.local.json`'s `stateDir` rather than holding a second copy of that decision -- two
+readers naming different directories is indistinguishable from an idle machine.
+
+`run-registry.jsonl` is the one that carries concurrent runs, one line per snapshot keyed by
+`runId`. The two state files are a single slot each, so a coordinator reading only those sees one
+run where there are three.

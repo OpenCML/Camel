@@ -15,7 +15,7 @@
 // remote moved.
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 // The row's config is merged over the defaults below, so there is no schema export here:
@@ -38,6 +38,11 @@ const DEFAULTS = {
     // The session a network message lands in. Empty means "the single root, and refuse if there
     // is more than one" -- a guess between two conversations is worse than a refusal.
     sessionId: '',
+    // The two files the build panel reads, written by the remote run as it starts and finishes.
+    // Relative paths resolve beside the repository, not inside it, because they are run state and
+    // not something anybody commits.
+    buildStatePath: 'Camel-wt/build-state.json',
+    testStatePath: 'Camel-wt/test-state.json',
 }
 
 // The gates the coordinator works to. Each one counts something that must not exceed a limit;
@@ -173,7 +178,19 @@ function branchesAlreadyMerged(repo) {
 }
 
 /// Everything one beat measures. Each entry is a reading or an object saying it was unreadable.
-export function measure({ repo, lanesFiles, staleMinutes, fetch }) {
+export function measure({
+    repo,
+    lanesFiles,
+    staleMinutes,
+    fetch,
+    // The build panel's three files. `stateDir` names the directory; empty means "read it from the
+    // gate's machine-local settings", which is where the scripts that write them got it. A hard
+    // path here would be a second copy of a decision that already has an owner.
+    stateDir = '',
+    buildStatePath = 'build-state.json',
+    testStatePath = 'test-state.json',
+    runRegistryPath = 'run-registry.jsonl',
+}) {
     const now = new Date()
     const at = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
         now.getDate(),
@@ -237,6 +254,80 @@ export function measure({ repo, lanesFiles, staleMinutes, fetch }) {
         }),
         merged: attempt(() => branchesAlreadyMerged(repo)),
         fshDev: attempt(() => git(repo, ['rev-parse', '--short=9', 'origin/fsh-dev'])),
+        // What the build host is doing, read from the same three files the build panel reads. The
+        // age of each file is part of the reading: a queue that stopped being written reports an
+        // idle machine, and "idle" and "nobody has written this since" are different facts that
+        // look the same in the numbers alone.
+        //
+        // `run-registry.jsonl` is the one that carries concurrent runs -- one line per run snapshot
+        // keyed by runId -- so the two state files are the single-slot view and the registry is the
+        // list. Reading only the first two is how a busy host reads as an empty one.
+        build: attempt(() => {
+            // Where the state files are. Named outright when configured; otherwise taken from the
+            // gate's own machine-local settings, so this plugin and the scripts that write the
+            // files cannot disagree about the directory -- one of them reading a different one is
+            // indistinguishable from a machine that is idle.
+            const dir = (() => {
+                if (stateDir) return stateDir
+                try {
+                    const settings = JSON.parse(readText(path.join(repo, 'internal', 'tools', 'camel-gate.local.json')))
+                    if (typeof settings.stateDir === 'string' && settings.stateDir !== '') return settings.stateDir
+                } catch {
+                    // Falls through to the repository-relative guess below.
+                }
+                return path.resolve(repo, '..', 'camel-gate-state')
+            })()
+            const resolve = (name) => (path.isAbsolute(name) ? name : path.join(dir, name))
+            const read = (name) => {
+                const file = resolve(name)
+                try {
+                    const stat = statSync(file)
+                    return {
+                        file,
+                        ageSeconds: Math.round((Date.now() - stat.mtimeMs) / 1000),
+                        state: JSON.parse(readText(file)),
+                    }
+                } catch (error) {
+                    return { file, unreadable: String(error && error.message ? error.message : error) }
+                }
+            }
+            const readRuns = (name) => {
+                const file = resolve(name)
+                try {
+                    const stat = statSync(file)
+                    const lines = readText(file).split('\n').filter((line) => line.trim() !== '')
+                    // The last line per runId is that run's current snapshot; earlier lines are its
+                    // history, and a history is not a state.
+                    const latest = new Map()
+                    for (const line of lines) {
+                        let row
+                        try {
+                            row = JSON.parse(line)
+                        } catch {
+                            continue
+                        }
+                        const key = row.runId || row.startedAt || `${latest.size}`
+                        latest.set(key, row)
+                    }
+                    const runs = [...latest.values()]
+                    return {
+                        file,
+                        ageSeconds: Math.round((Date.now() - stat.mtimeMs) / 1000),
+                        total: runs.length,
+                        unfinished: runs.filter((row) => !row.finishedAt).length,
+                        runs,
+                    }
+                } catch (error) {
+                    return { file, unreadable: String(error && error.message ? error.message : error) }
+                }
+            }
+            return {
+                dir,
+                queue: read(buildStatePath),
+                tests: read(testStatePath),
+                runs: readRuns(runRegistryPath),
+            }
+        }),
         // An item is claimed by deleting it from the inbox and entering it in the backlog under the
         // same number. Both halves are needed: the inbox is what nobody has taken, the backlog is
         // what someone is doing. A number that appears in both is an item that was taken and not

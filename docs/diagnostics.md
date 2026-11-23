@@ -10693,18 +10693,22 @@ Convert the value to a supported type before the call.
 **Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
 
 ```camel
-// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
-// diagnostic naming the operator, the argument's element type and the set the kernel takes.
-// It is never narrowed to f32 (design principles 5.1, 13.1).
+// The spatial kernels -- `conv2d` and its gradients, the pooling ones and the batch-norm ones --
+// take f32 and f64 tensors, and no other element type. An integer tensor is refused at the call
+// with a diagnostic naming the operator, the argument's element type and the set the kernel
+// takes. It is never narrowed to f32 (design principles 5.1, 13.1).
+//
+// The file keeps the name it had when the set was f32 alone: it was the case that pinned an f64
+// tensor being refused, and f64 is one of the two element types these kernels are instantiated
+// for now, so what it pins is the other side of the same set.
 
 import { conv2d } from nn
-import { reshape, ones, sum } from tensor
+import { reshape, sum } from tensor
 
 func main() => int sync {
-    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
-    let x = reshape<[1, 1, 2, 2]>(values)
-    let kernel = ones::<f32>([1, 1, 1, 1])
-    let bias = ones::<f32>([1])
+    let x = reshape<[1, 1, 2, 2]>([1, 2, 3, 4])
+    let kernel = reshape<[1, 1, 1, 1]>([1])
+    let bias = reshape<[1]>([0])
     let y = conv2d(x, kernel, bias, 1, 0)
     println(sum(y))
     return 0

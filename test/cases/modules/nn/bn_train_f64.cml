@@ -1,0 +1,76 @@
+/**
+ * The batch-norm training step on f64 tensors: `batch_norm_train` (the normalize and the running
+ * statistics) and its gradient operator, each against a manual decomposition into primitive
+ * tensor ops. The kernel is the same source the f32 case runs, instantiated for f64, so the
+ * differences printed below are around 1e-16 -- an f32 batch norm of the same values differs from
+ * this decomposition by around 1e-7 -- and the values themselves are f64 numbers.
+ *
+ * The finite differences that pin the formula are in `bn_train_grad_sanity` (f32); this case pins
+ * the width, which is what a type that says f64 and a kernel that computed in f32 used to
+ * disagree about. x [2,2,2,2] (8 values per channel), momentum 0.1, eps 1e-5.
+ */
+
+import { batch_norm_train, batch_norm_train_grad } from nn
+import { reshape, mean, sum, abs, sqrt } from tensor
+
+// The fixed loss weights: loss = sum(y * w), so dL/dy = w.
+func w() => float[...] {
+    return reshape<[2, 2, 2, 2]>([0.5, -1.0, 0.25, 2.0, -0.75, 1.5, 0.125, -0.5, 1.0, 0.0, -2.0, 0.75, 0.5, 0.5, -0.25, 1.25])
+}
+
+// Values that no f32 holds exactly, so a kernel that rounded to f32 would show in the differences.
+func x() => float[...] {
+    return reshape<[2, 2, 2, 2]>([0.1, 0.5, -0.7, 2.3, 0.0, 1.7, -1.0, 0.25, 0.75, -0.25, 1.3, 0.5, -0.9, 0.0, 2.0, -0.5])
+}
+
+// Per-channel mean over (batch, spatial) of a rank-4 NCHW tensor: [N,C,H,W] -> [C].
+func bmean(t: float[...]) => float[...] {
+    return mean<1>(mean<1>(mean<0>(t)))
+}
+
+// The manual decomposition: biased batch variance for the normalize, UNBIASED (M/(M-1))
+// variance for the running variance, running <- (1-m)*running + m*batch_stat.
+func reference(
+    t: float[...],
+    g: float[...],
+    b: float[...],
+    rm: float[...],
+    rv: float[...],
+    m: float,
+    eps: float
+) => (float[...], float[...], float[...]) {
+    let mu = bmean(t)
+    let xc = t - reshape<[1, 2, 1, 1]>(mu)
+    let va = bmean(xc * xc)
+    let xhat = xc / reshape<[1, 2, 1, 1]>(sqrt(va + eps))
+    let y = xhat * reshape<[1, 2, 1, 1]>(g) + reshape<[1, 2, 1, 1]>(b)
+    let new_rm = (1.0 - m) * rm + m * mu
+    let new_rv = (1.0 - m) * rv + m * va * (8.0 / 7.0)
+    return (y, new_rm, new_rv)
+}
+
+func main() => int sync {
+    let g = reshape<[2]>([1.2, 0.8])
+    let b = reshape<[2]>([0.3, -0.2])
+    let rm = reshape<[2]>([0.1, -0.4])
+    let rv = reshape<[2]>([1.5, 0.9])
+
+    let got = batch_norm_train(x(), g, b, rm, rv, 0.1, 0.00001)
+    let ref = reference(x(), g, b, rm, rv, 0.1, 0.00001)
+    let dY = sum(abs(got.0 - ref.0))
+    let dRm = sum(abs(got.1 - ref.1))
+    let dRv = sum(abs(got.2 - ref.2))
+
+    // The gradient operator on dL/dy = w. Its sums are printed so the run shows values and not
+    // only differences: none of the three is zero.
+    let manual = batch_norm_train_grad(x(), g, w(), 0.00001)
+    let dX = sum(abs(manual.0))
+    let dG = sum(abs(manual.1))
+    let dB = sum(abs(manual.2))
+
+    'bn_train_f64 fwd={} rm={} rv={}'->format<dY, dRm, dRv>->println
+    'bn_train_f64 y={} rm={} rv={}'->format<sum(got.0), sum(got.1), sum(got.2)>->println
+    'bn_train_f64 dx={} dgamma={} dbeta={}'->format<sum(manual.0), sum(manual.1), sum(manual.2)>->println
+    'bn_train_f64 dx_abs={} dgamma_abs={} dbeta_abs={}'->format<dX, dG, dB>->println
+    return 0
+}

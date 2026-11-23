@@ -191,14 +191,14 @@ verify_script = '''
 # A kernel whose declaration is f32 only says so where it is called: it never converts.
 
 [[tests]]
-name = "f32_only_kernel_refuses_f64"
-desc = "`conv2d` computes in f32 only; an f64 tensor is refused at the call with RuntimeDiag::OperandTypeUnsupported, naming the operator, the argument's element type and the supported set. Before, the kernel silently cast the tensor to f32 (design principles 5.1, 13.1)."
+name = "spatial_kernel_refuses_an_integer_tensor"
+desc = "The spatial kernels take f32 and f64 tensors and no other element type: an integer tensor is refused at the call with RuntimeDiag::OperandTypeUnsupported, naming the operator, the argument's element type and the supported set, and it is never narrowed to f32 (design principles 5.1, 13.1). It used to be `conv2d` refusing f64 -- f64 is one of the two element types the kernels are instantiated for now, so the refusal this entry pins is the other side of the same set."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/f32_only.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
-expect_output_contains = ["'conv2d' does not support a value of type 'f64[...]'", "it takes f32 tensors."]
+expect_output_contains = ["'conv2d' does not support a value of type 'i64[...]'", "it takes f32 and f64 tensors."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
