@@ -51,13 +51,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "operator_records.member_reads"
-desc = "Struct and tuple member reads, by place and by name (`fields_and_access.cml`): 24 OPER nodes over 8 graphs, 22 of which name an operator. The two that do not are **copies**, and the label says why this is the one shape the origin cannot name: a copy node carries the `gir.data` origin of the constant it copies, not a `gir.copy` of its own (`norm=1 with=0` is an operand and no `with`). So the two front-end copy sites that never ask `:op/copy` -- declared since `prelude.cml:961` -- are visible here by their label rather than by a name of their own."
+desc = "Struct and tuple member reads, by place and by name (`fields_and_access.cml`): 24 OPER nodes over 8 graphs, all 24 of which name an operator. The two copies this program makes are calls of `:op/copy` now, so the reading that used to single them out -- `gir.data` labels where an operator was expected -- has nothing left to report, and the entry pins that absence."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/fields_and_access.cml"
 args = ["${case}", "test::operator_records", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["[OO] oper=24 answered=22 missing=2 graphs=8 ok=1", "[OO] built-by gir.data=2"]
+expect_output_contains = ["[OO] oper=24 answered=24 missing=0 graphs=8 ok=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

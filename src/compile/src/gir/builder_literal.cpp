@@ -582,9 +582,9 @@ Builder::compositeLiteralInType(node_handle_t node, Type *target, const GCT::nod
     }
     node_handle_t result = currGraph_->addStaticDataNode(typed);
     if (varied_ && currGraph_->outerGraph().get() != nullptr) {
-        node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
-        linkNodes(LinkType::Norm, result, copyNode);
-        result = copyNode;
+        // A constant read in a varied graph is copied into the round that reads it, and that copy
+        // is a call of `copy` rather than the node kind it used to be (plan 2.3, step 1).
+        result = copyNodeOf(result, typed->type());
     }
     registerNodeOrigin(context_, result, origin, "gir.data.literal");
     return result;

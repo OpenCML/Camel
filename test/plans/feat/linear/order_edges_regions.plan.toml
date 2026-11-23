@@ -145,11 +145,12 @@ const onLoop = edges.filter((edge) => edge.toKind === 'LOOP')
 assert(onBrch.length === 1, `expected one order edge on a BRCH, got ${onBrch.length}`)
 assert(onLoop.length === 0, `expected no order edge on a LOOP, got ${onLoop.length}: a write to a var is not a resource (design principles 3.1, the ruling of 2026-11-16), so the loop orders nothing`)
 // The read before the branch is gone from this graph: the fold gave its user the value the write
-// produced, and the node that carries that value now is the COPY. An order edge belongs to the
-// node that holds the value and runs with it, so the edge the read used to carry is the COPY's.
-// Both ends are named, so the assertion says which node the edge hangs on and not merely that one
-// exists.
-assert(onBrch[0].from === 'COPY' && onBrch[0].to === 'BRCH', `the order edge the branch waits on is ${onBrch[0].from} -> ${onBrch[0].to}, not COPY -> BRCH: the COPY carries the value of the read before the branch, and the edge went with the value`)
+// produced, and the node that carries that value now is the copy -- a call of `:op/copy`, since a
+// copy is an operator and no longer a kind of its own (plan 2.3, step 1). An order edge belongs to
+// the node that holds the value and runs with it, so the edge the read used to carry is the
+// copy's. Both ends are named, so the assertion says which node the edge hangs on and not merely
+// that one exists.
+assert(onBrch[0].from === ':op/copy' && onBrch[0].to === 'BRCH', `the order edge the branch waits on is ${onBrch[0].from} -> ${onBrch[0].to}, not :op/copy -> BRCH: the copy carries the value of the read before the branch, and the edge went with the value`)
 // What an order edge inside a control region is for: the statements an arm runs keep their order
 // among themselves. The pair of writes in the first arm (`x = 3; x = 4`) is no longer two
 // `:op/assn_l` nodes to hang such an edge on -- the branch there is written as a statement, so it

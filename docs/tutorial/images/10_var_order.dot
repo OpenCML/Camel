@@ -24,7 +24,7 @@ digraph GraphIR {
             }
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
             N06 [label="0", type="DATA", shape=circle, style=solid, value_type="int", tooltip="0"];
-            N07 [label="COPY", type="COPY", shape=diamond, style=solid, value_type="int", tooltip="COPY"];
+            N07 [label=":op/\ncopy", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":op/copy"];
             N08 [label=":var\n/new", type="OPER", shape=diamond, style=solid, value_type="var int", tooltip=":var/new"];
             N09 [label="bump", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", tooltip="bump"];
             N0A [label="bump", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", tooltip="bump"];
