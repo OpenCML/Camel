@@ -178,6 +178,15 @@ class Module : public std::enable_shared_from_this<Module> {
 
     bool loaded_;
     std::string name_;
+    /// A second name for the module, and a debt. The intent was never written down: `setDeclaredName`
+    /// has no caller, so this string is read and never written, and `declaredName()` answers ""
+    /// for every module. On 2026-11-23 that cost a wrong diagnosis -- a lookup that could not reach
+    /// the prelude was read as "the module has two names and they differ", and a fix was written
+    /// for a second name that does not exist (the real gap was the set of modules searched:
+    /// `declaringModulesOf` names the prelude, `moduleNamed` did not look at it). Not deleted here
+    /// because a field that looks live is a decision, not a typo: either write the name into it and
+    /// say which name wins, or delete it and the accessor (design principles 10.1: one module, one
+    /// name, the file's).
     std::string declaredName_;
     std::string path_;
     context_ptr_t context_;

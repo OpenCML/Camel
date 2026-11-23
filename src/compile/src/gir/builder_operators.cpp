@@ -227,24 +227,32 @@ Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normT
 }
 
 module_ptr_t Builder::moduleNamed(const std::string &name) {
-    // A module answers to the name its file gives it and to the name it declares (design
-    // principles 10.1: `declaredName` is what the module writes itself to be). The prelude's two
-    // are not the same string, and a type declared there names it by the second, so reading only
-    // the first made every declaring-module lookup of the prelude miss.
-    const auto isNamed = [&name](const module_ptr_t &candidate) {
-        return candidate && (candidate->name() == name || candidate->declaredName() == name);
-    };
-    if (isNamed(module_)) {
+    // One module, one name: the name its file gives it (design principles 10.1). What went wrong
+    // here was the set of modules searched, not the number of names: it was the current unit and
+    // the modules written in Camel, and the prelude is neither, so a type the prelude declares
+    // named a module this lookup could not reach -- every declaring-module lookup of the prelude
+    // (design principles 5.7) missed, which is why the operators of a prelude type were reached
+    // some other way. `importedModules` is the builtin module and every module loaded, so one
+    // search covers them all.
+    if (module_ && module_->name() == name) {
         return module_;
     }
     if (context_) {
         for (const module_ptr_t &candidate : context_->allUserModules()) {
-            if (isNamed(candidate)) {
+            if (candidate && candidate->name() == name) {
                 return candidate;
             }
         }
-        if (const module_ptr_t &prelude = context_->preludeModule(); isNamed(prelude)) {
+        // The prelude is neither the current unit nor a user module: the context holds it on its
+        // own, and that is the whole of what this search was missing.
+        if (const module_ptr_t &prelude = context_->preludeModule();
+            prelude && prelude->name() == name) {
             return prelude;
+        }
+        for (const module_ptr_t &candidate : context_->importedModules()) {
+            if (candidate && candidate->name() == name) {
+                return candidate;
+            }
         }
     }
     // The type came from the module, so it is loaded: this lookup never loads one.
