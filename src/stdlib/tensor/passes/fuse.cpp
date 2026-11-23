@@ -29,7 +29,6 @@
 namespace camel::tensor::passes {
 
 using camel::runtime::gc_node_ref_t;
-using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::GraphTransaction;
@@ -214,7 +213,7 @@ TensorFusePass::apply(const camel::runtime::Program *program, std::ostream &) {
         safeFp_ ? sem::NumericPolicy::strict() : sem::NumericPolicy::relaxed();
     RuntimeGraphDraftSession session(context_, program);
     size_t changed = 0, library = 0, canonical = 0, groups = 0;
-    for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
+    for (auto *g : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(g);
         changed += markKernels(transaction, policy, library, canonical);
         groups += markGroups(transaction);

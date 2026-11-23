@@ -17,6 +17,7 @@
 #include "camel/execute/pass/params.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/facts/facts.h"
 #include "camel/init.h"
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/parse.h"
@@ -145,6 +146,38 @@ std::optional<bool> entryDeclaresReturnType(const AST::node_ptr_t &node, int dep
         }
     }
     return std::nullopt;
+}
+
+/// `text` as a JSON string literal: what `inspect --facts`'s readers parse.
+std::string jsonText(std::string_view text) {
+    std::string out = "\"";
+    for (const char c : text) {
+        switch (c) {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            out += c;
+        }
+    }
+    return out + "\"";
+}
+
+/// One `FACT-KIND-ABSENT` line: the tool was asked for a kind by name and no store registers one
+/// under that key. A key nobody registered and a table with no rows are different answers -- an
+/// enumeration of the kinds that are registered never mentions the one that is not -- so the
+/// absence is printed as its own line and fails the command instead of passing over it.
+std::string factKindAbsent(std::string_view kind, std::string_view why) {
+    return "FACT-KIND-ABSENT {\"kind\":" + jsonText(kind) + ",\"reason\":" + jsonText(why) + "}";
 }
 
 } // namespace
@@ -403,7 +436,8 @@ int runCommand(int argc, char *argv[]) {
             }
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
                 !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags &&
-                !Inspect::dumpAttrs && !Inspect::dumpTies && !Inspect::dumpCopies) {
+                !Inspect::dumpAttrs && !Inspect::dumpTies && !Inspect::dumpCopies &&
+                Inspect::factKind.empty()) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -420,7 +454,8 @@ int runCommand(int argc, char *argv[]) {
             }
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags ||
-                Inspect::dumpAttrs || Inspect::dumpTies || Inspect::dumpCopies) {
+                Inspect::dumpAttrs || Inspect::dumpTies || Inspect::dumpCopies ||
+                !Inspect::factKind.empty()) {
                 camel::core::module::compileForLoad(mainModule, CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
@@ -477,11 +512,85 @@ int runCommand(int argc, char *argv[]) {
                     camel::core::tag::dump(*module, os);
                 }
             }
-            if (Inspect::dumpFacts) {
-                if (ctx->runtimeProgram()->root()) {
-                    camel::runtime::fact::FactStore &facts = ctx->facts();
-                    camel::runtime::fact::computeFacts(facts, *ctx->runtimeProgram());
-                    camel::runtime::fact::dumpFacts(facts, *ctx->runtimeProgram(), os);
+            if (Inspect::dumpFacts || !Inspect::factKind.empty()) {
+                // Two stores, one command. The older store (`camel/runtime/facts.h`,
+                // `Context::facts()`) has the seven kinds it always had and no successor for them
+                // yet; the fact framework (`camel/facts/facts.h`) has the kinds its readers ask
+                // it. Those seven are the baseline the remaining moves are measured against, so
+                // retiring them here would delete the comparison before it is made, and printing
+                // only them is what the framework's own header calls a framework with no reader.
+                // Both, and every line names the store that answered ("library"), because the two
+                // agree on kind names.
+                bool factsFailed = false;
+                // The kind asked for by name, when one was (`--fact`). An enumeration of the
+                // registered kinds cannot report a kind nobody registered, so the absence is
+                // resolved here, by name, and printed as its own answer.
+                std::vector<camel::facts::KindId> wantedFacts;
+                std::vector<camel::runtime::fact::KindId> wantedOlder;
+                const bool allKinds = Inspect::dumpFacts;
+                if (!allKinds) {
+                    const camel::facts::KindId kind = camel::facts::findKind(Inspect::factKind);
+                    if (kind != camel::facts::kNoKind) {
+                        wantedFacts.push_back(kind);
+                    } else if (
+                        const camel::runtime::fact::KindId older =
+                            camel::runtime::fact::findKind(Inspect::factKind);
+                        older != camel::runtime::fact::kNoKind) {
+                        wantedOlder.push_back(older);
+                    } else {
+                        os << factKindAbsent(
+                                  Inspect::factKind,
+                                  "no such fact kind: no store registers a kind under this key")
+                           << "\n";
+                        factsFailed = true;
+                    }
+                }
+                if (allKinds || !wantedOlder.empty()) {
+                    camel::runtime::fact::FactStore &olderStore = ctx->facts();
+                    camel::runtime::fact::computeFacts(olderStore, *ctx->runtimeProgram());
+                    camel::runtime::fact::dumpFacts(
+                        olderStore, *ctx->runtimeProgram(), os, wantedOlder);
+                }
+                if (allKinds || !wantedFacts.empty()) {
+                    camel::runtime::GCGraph *root = ctx->runtimeProgram()->root();
+                    camel::facts::Store *store =
+                        root != nullptr ? camel::facts::storeHolding(*root) : nullptr;
+                    if (store == nullptr) {
+                        // No store holds this graph, so the framework has nothing to answer with:
+                        // a red, not an empty half of the table.
+                        os << factKindAbsent(
+                                  Inspect::factKind.empty() ? "core.*" : Inspect::factKind,
+                                  root == nullptr
+                                      ? "the program compiled to no root graph"
+                                      : "no fact store holds the program's root graph")
+                           << "\n";
+                        factsFailed = true;
+                    } else {
+                        // One kind at a time, so a kind whose computation refuses the graph is one
+                        // line about that kind instead of the end of the table. A refusal is an
+                        // answer ("this graph has no plan until its values are extracted"), so it
+                        // fails the command only when that kind was asked for by name.
+                        const std::vector<camel::facts::KindId> kinds =
+                            allKinds ? camel::facts::registeredKinds() : wantedFacts;
+                        for (const camel::facts::KindId kind : kinds) {
+                            const std::vector<camel::facts::KindId> one{kind};
+                            try {
+                                camel::facts::computeAll(*store, *root, root->view(), one);
+                            } catch (const std::exception &error) {
+                                os << "FACT-KIND-REFUSED {\"kind\":"
+                                   << jsonText(camel::facts::kindInfo(kind).key)
+                                   << ",\"reason\":" << jsonText(error.what()) << "}\n";
+                                factsFailed = factsFailed || !Inspect::factKind.empty();
+                            }
+                        }
+                        // An empty list asks the dump for every registered kind.
+                        const std::vector<camel::facts::KindId> dumpKinds =
+                            allKinds ? std::vector<camel::facts::KindId>{} : wantedFacts;
+                        camel::facts::dump(*store, *root, root->view(), os, dumpKinds);
+                    }
+                }
+                if (factsFailed) {
+                    return 1;
                 }
             }
             if (Inspect::dumpTies) {

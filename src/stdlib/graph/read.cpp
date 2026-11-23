@@ -207,15 +207,15 @@ TupleType *nullableOf(Type *payload) { return TupleType::nullable(payload); }
 slot_t graphsOfKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *function   = norm.get<::Function *>(0);
     const Program *program = function->program();
-    GCGraph *root          = function->graph();
+    auto *root             = function->graph();
     if (program == nullptr || root == nullptr) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.graphs_of",
             "the function has no graph");
     }
-    std::vector<GCGraph *> graphs = camel::runtime::collectReachableGraphs(*program, root);
-    std::sort(graphs.begin(), graphs.end(), [](const GCGraph *a, const GCGraph *b) {
+    auto graphs = camel::runtime::collectReachableGraphs(*program, root);
+    std::sort(graphs.begin(), graphs.end(), [](const auto *a, const auto *b) {
         return toValue(a->id()) < toValue(b->id());
     });
     std::vector<Handle *> items;

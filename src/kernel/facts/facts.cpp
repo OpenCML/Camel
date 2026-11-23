@@ -231,7 +231,7 @@ std::string factJson(
     const StoredFact *stored,
     const std::function<std::string(const graph::Graph *)> &labelOf) {
     std::string out = std::format(
-        "{{\"kind\":{},\"version\":{},\"class\":{},\"anchors\":[",
+        "{{\"library\":\"facts\",\"kind\":{},\"version\":{},\"class\":{},\"anchors\":[",
         jsonString(kind.key),
         kind.version,
         jsonString(className(kind.cls)));
@@ -276,7 +276,10 @@ std::string factJson(
     for (size_t i = 0; i < stored->reads.records.size(); ++i) {
         out += std::format("{}{}", i ? "," : "", stored->reads.records[i]);
     }
-    out += std::format("]}},\"epoch\":{},\"target\":{}", stored->epoch, stored->target);
+    // The epoch and the target are fields of the stamp, not of the fact, and the fact's own
+    // closing brace follows the stamp's: a reader parses a FACT line as one object.
+    out += "]},\"epoch\":" + std::to_string(stored->epoch) + ",\"target\":" +
+           std::to_string(stored->target) + "}}";
     return out;
 }
 
@@ -731,8 +734,13 @@ void Store::resetCounts() {
 
 // ---- Bulk computation and the dump -----------------------------------------------------------
 
-void computeAll(Store &store, const graph::Graph &root, const graph::GraphView &rootView) {
+void computeAll(
+    Store &store, const graph::Graph &root, const graph::GraphView &rootView,
+    std::span<const KindId> only) {
     for (KindId kind : registeredKinds()) {
+        if (!only.empty() && std::find(only.begin(), only.end(), kind) == only.end()) {
+            continue;
+        }
         const KindInfo &info = kindInfo(kind);
         if (!info.compute || info.cls == Class::Content) {
             continue;
@@ -743,16 +751,25 @@ void computeAll(Store &store, const graph::Graph &root, const graph::GraphView &
     }
 }
 
-void dump(Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os) {
+void dump(
+    Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os,
+    std::span<const KindId> only) {
     const std::function<std::string(const graph::Graph *)> labelOf =
         [&root](const graph::Graph *graph) {
             return graph == &root ? std::string("root") : std::string("outside-the-walk");
         };
+    // The kinds a dump prints: every one, or the ones the caller named.
+    const auto wanted = [only](KindId kind) {
+        return only.empty() || std::find(only.begin(), only.end(), kind) != only.end();
+    };
 
     // The stored facts about this graph whose stamps hold for it.
     std::vector<StoredFact> stored;
     store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
     for (const StoredFact &fact : stored) {
+        if (!wanted(fact.kind)) {
+            continue;
+        }
         bool here = true;
         for (const Anchor &anchor : fact.anchors) {
             here = here && anchor.graph == &root;
@@ -769,6 +786,9 @@ void dump(Store &store, const graph::Graph &root, const graph::GraphView &rootVi
 
     // Graph content (class i): read from the graph each time.
     for (KindId kind : registeredKinds()) {
+        if (!wanted(kind)) {
+            continue;
+        }
         const KindInfo &info = kindInfo(kind);
         if (info.cls != Class::Content) {
             continue;
@@ -999,4 +1019,14 @@ KindId arrangeableKind() {
     return id;
 }
 
+} // namespace camel::facts
+
+namespace camel::facts {
+namespace {
+// Registered when the library loads, not on the first reader's call. A kind that exists only
+// after somebody has asked for it is a kind `registeredKinds` cannot name, so `computeAll` never
+// fills it and `camel inspect --facts` prints a table with this kind missing -- and a missing
+// kind reads the same as a graph that has none.
+[[maybe_unused]] const KindId kArrangeableKind = arrangeableKind();
+} // namespace
 } // namespace camel::facts
