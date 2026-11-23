@@ -427,7 +427,7 @@ try {
     # comparing. That is the one failure the three sets cannot show -- the change against itself,
     # 0/0/0, a green that measured one tree twice -- and in a batch it would be four lanes' worth of
     # it, so the guard is not decoration here.
-    $cacheDir = Join-Path $commonDir 'camel-readings'
+    $cacheDir = Join-Path (Invoke-Git $ToolTree @('rev-parse', '--path-format=absolute', '--git-common-dir')).Text 'camel-readings'
     if (-not (Test-Path -LiteralPath $cacheDir)) { New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null }
     $probe = @(& node $comparer --cache $cacheDir --develop $base --plans $planSetFile --probe 2>&1)
     $probeExit = $LASTEXITCODE
