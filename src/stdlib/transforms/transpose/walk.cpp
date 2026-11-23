@@ -858,17 +858,19 @@ bool buildTransposeMember(
                 return rt::kInvalidNodeRef;
             }
             if (nodeOperatorOf(*function, ref) == NodeOperator::Accs) {
-                const auto *accs = accsBodyOf(*function, ref);
-                const auto norm  = function->normInputsOf(ref);
-                if (accs == nullptr || norm.empty()) {
+                const std::optional<MemberRead> read = memberReadOf(*function, ref);
+                if (!read.has_value()) {
                     complete = false;
                     return rt::kInvalidNodeRef;
                 }
-                const gc_node_ref_t tuple = forward(norm.front());
+                const gc_node_ref_t tuple = forward(read->value);
                 if (tuple == rt::kInvalidNodeRef) {
                     return rt::kInvalidNodeRef;
                 }
-                const gc_node_ref_t part = draft.addAccsNode(node->dataType(), accs->value);
+                const gc_node_ref_t part =
+                    read->kind == rt::GCAccsKind::StructKey
+                        ? draft.addAccsNode(node->dataType(), read->key)
+                        : draft.addAccsNode(node->dataType(), read->place);
                 draft.setNormInputs(part, std::span<const gc_node_ref_t>(&tuple, 1));
                 forwardOf[ref] = part;
                 return part;
@@ -1186,6 +1188,20 @@ bool buildTransposeMember(
                                     }
                                     operands.push_back(copied);
                                 }
+                                // The operator's `<>` arguments are ports of the same node, after
+                                // the ordinary ones, and a rebuild that dropped them would build a
+                                // *different* operator: `softmax(x)` for `softmax<1>(x)`, a member
+                                // read with no member. The forward walk copies them for exactly this
+                                // reason, and an arm reads the same operators.
+                                std::vector<gc_node_ref_t> context;
+                                for (gc_node_ref_t input : function->withInputsOf(value)) {
+                                    const gc_node_ref_t copied = forwardInArm(input);
+                                    if (copied == rt::kInvalidNodeRef) {
+                                        allForwarded = false;
+                                        break;
+                                    }
+                                    context.push_back(copied);
+                                }
                                 if (allForwarded) {
                                     const gc_node_ref_t rebuilt = draft.addOperNode(
                                         sourced->dataType(),
@@ -1195,6 +1211,9 @@ bool buildTransposeMember(
                                         draft.setNormInputs(
                                             rebuilt,
                                             std::span<const gc_node_ref_t>(operands));
+                                    }
+                                    if (!context.empty()) {
+                                        draft.setWithInputs(rebuilt, context);
                                     }
                                     return rebuilt;
                                 }
@@ -1780,14 +1799,13 @@ bool buildTransposeMember(
                 // (design principles 9.9). Resolving the name here is the one place the mapping
                 // lives: this is the only node that says which member was read, so it is the only
                 // place that can turn a name into the place the answer has for it.
-                const auto norm  = function->normInputsOf(ref);
-                const auto *body = function->nodeBodyAs<rt::GCAccsBody>(ref);
-                if (body == nullptr || norm.empty() || function->nodeRegion(norm.front()) != 0) {
+                const std::optional<MemberRead> read = memberReadOf(*function, ref);
+                if (!read.has_value() || function->nodeRegion(read->value) != 0) {
                     break;
                 }
-                const gc_node_ref_t holder = norm.front();
-                size_t member              = body->value;
-                if (body->accsKind == rt::GCAccsKind::StructKey) {
+                const gc_node_ref_t holder = read->value;
+                size_t member              = read->place;
+                if (read->kind == rt::GCAccsKind::StructKey) {
                     const camel::runtime::GCNode *const namedHolder = function->node(holder);
                     const Type *const holderType =
                         namedHolder != nullptr ? namedHolder->dataType() : nullptr;
@@ -1801,10 +1819,10 @@ bool buildTransposeMember(
                     }
                     const auto field =
                         tt::as_ptr<camel::core::type::StructType>(const_cast<Type *>(holderType))
-                            ->findField(body->key());
+                            ->findField(read->key);
                     if (!field.has_value()) {
                         refuse(TransposeRefusalCause::Component);
-                        os << " node=" << ref << " holder=" << holder << " key=" << body->key()
+                        os << " node=" << ref << " holder=" << holder << " key=" << read->key
                            << " why=no-such-field\n";
                         return false;
                     }

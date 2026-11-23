@@ -1754,19 +1754,18 @@ bool liftGraph(
                 // forms
                 // (`addAccsNode(type, tupleIndex)` and `addAccsNode(type, structKey)`), and reading
                 // a keyed access by the number the payload carries would project another member.
-                const auto *body = nodeBodyOrNull<rt::GCAccsBody>(function, ref);
-                const auto inputs = function.normInputsOf(ref);
-                const bool tupleIndexed =
-                    body != nullptr && body->accsKind == rt::GCAccsKind::TupleIndex;
-                const bool keyed = body != nullptr && body->accsKind == rt::GCAccsKind::StructKey;
-                if ((!tupleIndexed && !keyed) || inputs.size() != 1 ||
+                const std::optional<MemberRead> read = memberReadOf(function, ref);
+                const auto inputs                    = function.normInputsOf(ref);
+                if (!read.has_value() || inputs.size() != 1 ||
                     inputs.front() >= function.nodeCount() || !copied[inputs.front()]) {
                     break;
                 }
-                const auto project = [&](gc_node_ref_t from) {
+                const bool tupleIndexed = read->kind == rt::GCAccsKind::TupleIndex;
+                const bool keyed        = read->kind == rt::GCAccsKind::StructKey;
+                const auto project      = [&](gc_node_ref_t from) {
                     const gc_node_ref_t projection =
-                        keyed ? draft.addAccsNode(node->dataType(), body->key())
-                              : draft.addAccsNode(node->dataType(), body->value);
+                        keyed ? draft.addAccsNode(node->dataType(), read->key)
+                              : draft.addAccsNode(node->dataType(), read->place);
                     draft.setNormInputs(projection, std::span<const gc_node_ref_t>(&from, 1));
                     return projection;
                 };
@@ -1792,10 +1791,10 @@ bool liftGraph(
                 // component, as `(loop t = (x, x) ...).1` would).
                 const auto memberHalf = [&](gc_node_ref_t from) -> gc_node_ref_t {
                     const auto at = tupleIndexed ? membersOfFill.find(from) : membersOfFill.end();
-                    if (at == membersOfFill.end() || body->value >= at->second.size()) {
+                    if (at == membersOfFill.end() || read->place >= at->second.size()) {
                         return rt::kInvalidNodeRef;
                     }
-                    return at->second[body->value];
+                    return at->second[read->place];
                 };
                 if (!aggregate.pair) {
                     const LiftedShape memberShape = liftedShapeOf(node->dataType());
@@ -1807,8 +1806,8 @@ bool liftGraph(
                         copyOf[ref] = valueMember;
                     } else {
                         const gc_node_ref_t liftedAggregate = copyOf[tuple];
-                        copyOf[ref] = keyed ? draft.addAccsNode(memberShape.type, body->key())
-                                            : draft.addAccsNode(memberShape.type, body->value);
+                        copyOf[ref] = keyed ? draft.addAccsNode(memberShape.type, read->key)
+                                            : draft.addAccsNode(memberShape.type, read->place);
                         draft.setNormInputs(
                             copyOf[ref],
                             std::span<const gc_node_ref_t>(&liftedAggregate, 1));
