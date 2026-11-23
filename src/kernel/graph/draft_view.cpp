@@ -15,9 +15,10 @@
  *  - a node the draft no longer holds is a gap: `alive` refuses an erased place and the encoder's
  *    table refuses a placeholder, and neither is a node of the view.
  *
- * The four kinds that are operators once plan 2.3 declares them answer `NodeKind::Oper` and refuse
- * `operatorOf`, exactly as the frozen adapter does: the refusal is the one place the transition is
- * visible, and it is here twice because the two representations store the same four kinds.
+ * The four kinds that are operators once plan 2.3 has finished removing them answer
+ * `NodeKind::Oper` and `kNoOper` from `operatorOf`, exactly as the frozen adapter does -- those
+ * nodes carry no operator identity, which `graph_view.h` says at length: it is here twice because
+ * the two representations store the same four kinds.
  */
 
 #include "graph/draft_view.h"
@@ -498,10 +499,11 @@ CalleeRef DraftGraphAdapter::calleeOf(NodeRef ref) const {
 camel::core::OperId DraftGraphAdapter::operatorOf(NodeRef ref) const {
     const GraphDraft &draft     = *graph_;
     const DraftNodeHeader *head = draft.header(sourceOf(ref));
-    // `kNoOper` for a kind with no operator record; the four kinds the view folds into
-    // `NodeKind::Oper` keep their own payload in both representations (`GCCastBody` and its
-    // siblings), and the old face answered an empty URI for them. The frozen adapter's comment says
-    // the same thing at the same place: one comment, two readers of the same refusal.
+    // `kNoOper` for a kind that names no operator record; the four kinds the view folds into
+    // `NodeKind::Oper` keep their own payload in both representations -- a CAST and a COPY none at
+    // all, a FILL and an ACCS a kind and a place -- and the old face answered an empty URI for
+    // them. The frozen adapter's comment says the same thing at the same place: one comment, two
+    // readers of one answer.
     if (head == nullptr || head->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
     }

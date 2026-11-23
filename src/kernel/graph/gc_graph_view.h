@@ -55,12 +55,14 @@
  *
  * The four kinds and `operatorOf`: `kindOf` answers `NodeKind::Oper` for a CAST, a COPY, a FILL and
  * an ACCS (so the shape of the graph is already the target's), and `operatorOf` answers `kNoOper`
- * for them, because neither representation gives those four an operator record yet -- they keep
- * their own payload (a kind, a place, a template). That is what the old face said too (an empty URI
- * from `operUriOf`, which asked a stored OPER), so a reader that asks "which operator does this node
- * name" gets exactly the answer it got before, and a reader that asks "is this an operator" asks the
- * kind. Plan 2.3 declares the four as operators with records, and that is the change which fills
- * this gap -- in one place, here.
+ * for them, because none of the four carries an operator record -- they keep their own payload (a
+ * kind, a place, a template), and a CAST and a COPY keep none at all. That is what the old face
+ * said too (an empty URI from `operUriOf`, which asked a stored OPER), so a reader that asks "which
+ * operator does this node name" gets exactly the answer it got before. The kind alone does not
+ * answer "is this a stored OPER record": `NodeKind::Oper` with a `kNoOper` is one of the four, and
+ * `graph_view.h` writes that two-step reading out together with why the face may not name the
+ * operator that replaces one of them. Plan 2.3's remaining step -- the front end and the passes
+ * stop building the four kinds -- is the change which fills this gap.
  *
  * `view()` on the graph (`camel/graph/graph.h`) hands out this adapter: a reader holding a
  * `const Graph *` -- the callee of a FUNC node, the anchor of a fact -- reads that graph again

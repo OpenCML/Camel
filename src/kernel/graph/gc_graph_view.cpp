@@ -17,8 +17,9 @@
  *    `regionNodes` walks the column (a graph stores the region *of* a node, not the nodes of a
  *    region: the view answers a vector for that reason, and says so).
  *
- * The four kinds that are operators once plan 2.3 declares them answer `NodeKind::Oper` and refuse
- * `operatorOf` (the header's refusal), and the three kinds the view does not have -- a JOIN, a
+ * The four kinds that are operators once plan 2.3 has finished removing them answer
+ * `NodeKind::Oper` and `kNoOper` from `operatorOf` -- they carry no operator identity, which
+ * `graph_view.h` says at length -- and the three kinds the view does not have -- a JOIN, a
  * draft's placeholder, a removed node -- are not nodes here at all: `contains` is false and the id
  * is a gap between two numbers.
  */
@@ -419,13 +420,12 @@ CalleeRef FrozenGraphAdapter::calleeOf(NodeRef ref) const {
 
 camel::core::OperId FrozenGraphAdapter::operatorOf(NodeRef ref) const {
     const GCNode *node = graph_.node(static_cast<camel::runtime::gc_node_ref_t>(ref));
-    // `kNoOper` for a kind that has no operator record. That is every non-OPER node, and the four
-    // kinds this view folds into `NodeKind::Oper` -- a CAST, a COPY, a FILL and an ACCS keep their
-    // own payload (a kind and a place), not an operator, in both representations today, and the old
-    // face answered an empty URI for them for the same reason (`operUriOf` asks only an OPER). Plan
-    // 2.3 declares those four as operators and gives them records; when it does, this is the one
-    // place that changes, and until then a reader asking one of the four gets `kNoOper` -- "no
-    // operator record" -- rather than a guess.
+    // `kNoOper` for a kind that names no operator record: every non-OPER node, and the four kinds
+    // this view folds into `NodeKind::Oper`. A CAST and a COPY keep no payload at all and a FILL
+    // and an ACCS keep their own kind and a place, in both representations, so there is no operator
+    // on one of them to answer -- and answering the operator that replaces it would be the guess
+    // the face is not allowed to make (graph_view.h says why, and what a caller asks instead). The
+    // old face answered an empty URI for them for the same reason (`operUriOf` asks a stored OPER).
     if (node == nullptr || node->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
     }
