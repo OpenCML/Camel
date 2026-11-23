@@ -1,45 +1,56 @@
 # camel-oversight
 
-A DSH plugin that lets the decision-maker, running on another machine, see what this session is doing and
-leave it messages without waiting for a git round trip.
+The collaboration engine between the decision-maker (another machine) and the coordinator (a session in
+this DSH process). How the two use it is in `internal/collab/SKILL.md`; this page is about the plugin.
+
+## Three parts
+
+**The channel.** The decision-maker reads state and sends dispatches; the coordinator acknowledges and
+speaks back, and both are pushed as they happen.
 
 | Route | Method | Answers |
 |---|---|---|
-| `/oversee/state` | GET | the target session's status (`idle`/`running`) and since when, every live agent, one summary per recent turn (tools called, how it ended), unacknowledged message ids, the build host's load |
-| `/oversee/tail?n=50` | GET | the last n session events, one line each (turn start/end, user and assistant text, tool calls and results) |
-| `/oversee/say` | POST | `{"id": "D-1123-43", "text": "...", "mode": "queue"}` queues a user message prefixed `[decision-maker · D-1123-43]`; `mode: "steer"` delivers it at the nearest step instead of the next turn; neither cancels the running turn; a repeated id is dropped |
-| `/oversee/acks` | GET | what the model answered for each message, and the messages it sent of its own accord |
-| `/oversee/events` | GET | a server-sent event stream: each acknowledgement, each `oversight_tell`, and the claimed session ending, pushed as it happens (`data: {json}` per event, a comment every 25 s) |
+| `/oversee/state` | GET | the claimed session (idle/running, since when), its live lanes (subagents), open alerts, recent reminders, the latest measurements, every root session, recent turns, unacknowledged dispatches |
+| `/oversee/tail?n=50` | GET | the last n session events, one line each |
+| `/oversee/say` | POST | `{"id": "D-1123-43", "text": "...", "mode": "queue"}` queues a dispatch prefixed `[decision-maker · D-1123-43]`; `mode: "steer"` delivers at the nearest step; a repeated id is dropped |
+| `/oversee/acks` | GET | acknowledgements and the coordinator's own messages |
+| `/oversee/events` | GET | server-sent events: acknowledgements, `oversight_tell`, reminders, the claimed session ending, and a `beat` after each measurement |
 
-The model gets three tools: `oversight_claim()`, which makes the calling session the target;
-`oversight_ack(id, status, note)` with status `taken`, `declined` or `done`; and `oversight_tell(text, urgent)`
-for what it has to say of its own accord, pushed at once to whoever holds `/oversee/events` open. The target session also gets a
-system-prompt paragraph naming the messages it has not acknowledged yet.
+Model tools: `oversight_claim`, `oversight_ack`, `oversight_tell`, `oversight_readings`.
 
-## Which session is the target
+**The watch.** Every `watchSeconds` (300) the plugin measures the repository (develop's age, fsh-dev not
+yet merged, the main checkout, lane branches ahead and behind, merged branches not deleted), the backlog,
+the lanes and the build host (`measure.js`), and runs the rules (`rules.js`). A rule that finds nothing
+says nothing, so a healthy hour costs the coordinator no context. A finding becomes a reminder once it has
+held for the rule's `hold` and was not delivered within its `cooldown`; all reminders due in one beat go
+out as one message prefixed `[oversight · 提醒]`, at the loudest level among them:
 
-A process may hold many sessions, and none is guessed at. The target is the session that last called
-`oversight_claim` (the coordinator does so at the start of each session, as its skill
-`internal/coordinator/SKILL.md` says), or the session a request names (`session` in the `say` body or the
-`tail` query). `/oversee/state` lists every root session with its directory, status and last activity, and
-marks the claimed one. With no claim, `say` refuses and lists the sessions instead of delivering to an
-unrelated one.
+| Level | Delivery |
+|---|---|
+| quiet | `agent.inject`: context at the coordinator's next step; never wakes it |
+| wake | the same while it runs; `agent.followup` (a new turn) when it is idle |
+| urgent | `agent.steer`: the nearest step |
+
+Once an hour, while the coordinator is at work, the watch also re-states the standing rules from
+`internal/collab/rules.md` (read fresh each time), so a long context does not drift from them. This
+replaces the coordinator's scheduled prompts; the thresholds live in `rules.js` and nowhere else.
+
+**The panel** (`client.js`). Above the composer of the claimed session, a band: the coordinator idle or
+running, lanes running/total, develop's age, unacknowledged dispatches, the build host's load, open alerts;
+click it for each alert, the recent reminders and the lanes. Toasts at the top right for every reminder,
+acknowledgement and coordinator message; an urgent reminder stays until clicked.
 
 ## Setup on the machine that runs DSH
 
-1. Add the plugin to the profile once (this directory's `cordis.patch.yml`, or the profile's own insert, not
-   both). Machine-local values go in `%USERPROFILE%\.camel-oversight\config.json`, which overrides the
-   patch: `{"buildHost": "<ssh target of the build server>"}` to report its load (key-based ssh, no prompt),
-   and optionally `logFile`.
-2. Keep the web server on loopback and publish it on the tailnet: `tailscale serve --bg <port>`. The routes
-   sit outside the GUI's login; the tailnet is the gate, so its ACL decides who reaches them.
-3. `camel-lanes` also registers `/camel/state` and `/camel/say`; set its `http: false` once this plugin is in,
-   so there is one channel.
+1. Install as a bundle (the profile's `bundles` list and a `link:` dependency), mounted in one place.
+2. Machine-local values in `%USERPROFILE%\.camel-oversight\config.json`:
+   `{"repo": "D:\\Projects\\Camel", "buildHost": "<ssh target>"}`; `repo` turns the watch on, `buildHost`
+   (key-based ssh) adds the build host's load. Optional: `logFile`, `stateDir`, `watchSeconds`, `limits`.
+3. Keep the web server on loopback and publish it on the tailnet with `tailscale serve --bg <port>`. The
+   routes are outside the GUI's login; the tailnet is the gate.
+4. After a code change, reload the DSH process; a session sees new tools only once it starts afresh.
 
-## Calling it
-
-```sh
-curl -s https://<host>.ts.net/oversee/state
-curl -s -H 'content-type: application/json' \
-     -d '{"id":"D-1123-43","text":"...","mode":"queue"}' https://<host>.ts.net/oversee/say
-```
+DSH conventions this plugin depends on: a tool's `render(args, value)` returns content blocks
+(`[{ type: 'text', text }]`); `agent.inject` / `followup` / `steer` take a user message
+(`{ id, role: 'user', source: { kind: 'user' }, content }`); client components register into slots with
+`ctx.slots.inject(name, () => ctx.slots.register({ name, id }, Component))`.

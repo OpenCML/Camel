@@ -87,3 +87,10 @@
 |---|---|---|---|
 | `D-1123-48` | 返工 `e93a627d9d`：查清 prelude 的 `declaredName` 为何不等于文件名，让模块只有一个名字（10.1），`moduleNamed` 只比这一个，删掉两个名字的分支，全树量出不一致的模块 | `lane/range-ri` | doing |
 | `D-1123-49` | `__iter__` 改成 `func operator for(r: Range): int..`（运算符重载，同 `operator []`）；`prelude` 的 `iter` 函数换掉；7.4.5 加 `for`；补两条用例 | `lane/range-ri`（排 48 之后） | todo |
+
+## 2026-11-23 22:15 装协作机制（`D-1123-50`）
+
+| 编号 | 事 | 车道 | 状态 |
+|---|---|---|---|
+| `D-1123-50` | ①②③ 已装（合 fsh-dev 装 0.2、删定时任务与 watch-fsh-dev、撤 camel-lanes、skill 合成 `internal/collab`），`ae0e9501b` | — | done |
+| `D-1123-50④` | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感计划独占主机、pre-push 限合并位 | `lane/host-locks` | doing |

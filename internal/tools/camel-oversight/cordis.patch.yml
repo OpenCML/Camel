@@ -1,6 +1,8 @@
 - insert:
     - id: camel-oversight
       name: '@local/camel-oversight'
-      # Machine-local values (buildHost, logFile) go in %USERPROFILE%\.camel-oversight\config.json,
-      # for example {"buildHost": "88zjwei"}; that file overrides anything written here.
+      # Machine-local values go in %USERPROFILE%\.camel-oversight\config.json, which overrides
+      # anything written here, for example:
+      #   {"repo": "D:\\Projects\\Camel", "buildHost": "88zjwei", "logFile": "..."}
+      # Without "repo" the watch is off and only the channel runs.
       config: {}

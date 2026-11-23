@@ -8,15 +8,15 @@
 
 | 位置 | 谁写 | 内容 |
 |---|---|---|
-| 决策者通道（`tools/camel-oversight/`） | 双方 | 派工与回执、协调者的主动消息、车道与会话的实时状态；日志在协调者机器上 |
+| 决策者通道（`tools/camel-oversight/`） | 双方 | 派工与回执、协调者的主动消息、插件的提醒、车道与会话的实时状态；日志在协调者机器上 |
 | `backlog.md` | 协调者 | 手上的全部工作，一条一行 |
 | `questions/` | 施工方提问，决策者答 | 一题一页；`questions/README.md` 是待答表（脚本生成） |
 | `plans/` | 决策者 | 施工计划 |
 | `reports/` | 施工方 | 读数与报告 |
 | `reviews/` | — | 历次裁定与审查（只读；`questions-2026-10-29.md` 是封存的旧长页） |
 | `archive/` | — | 只读：旧批次任务书、m2–m5 笔记、旧的待做清单、标准库笔记等 |
-| `tools/` | — | 内部脚本与 DSH 插件（`camel-oversight/` 是通道，`camel-lanes/` 把分支闸门放到代理面前） |
-| `coordinator/` | 协调者 | 协调者自己的操作说明（`SKILL.md`，兼作运行时装载的那份技能）：分工、机器、路径、流程、坑 |
+| `tools/` | — | 内部脚本与 DSH 插件（`camel-oversight/` 是协作引擎：通道、提醒、界面） |
+| `collab/` | 双方 | 协作技能：`SKILL.md` 是共同的协议，`decision-maker.md`、`coordinator.md` 各是一方的操作说明，`rules.md` 是插件每小时复读的铁律；两边的运行环境都链接到这个目录 |
 
 ## 流转
 
