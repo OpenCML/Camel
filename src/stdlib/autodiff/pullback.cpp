@@ -32,6 +32,10 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/type.h"
+// The two payload readings that answer both spellings of a construction and of a member read
+// (`transforms/node_operator.h`): a node built as one kind says it in its body, and the call the
+// front end writes says it in its operands.
+#include "node_operator.h"
 
 #include <algorithm>
 #include <atomic>
@@ -890,17 +894,77 @@ class ForwardRewrite {
     // and every caller passed exactly `draft()`.
 
     /// Whether `node` reads a version a call handed on: an access node that takes a component past
-    /// the callee's value (callValueTypeOf).
+    /// the callee's value (callValueTypeOf). Either form of the read is one: the ACCS node, whose
+    /// place is in its body, and the operator `:op/access`, whose place is a `with` argument (a
+    /// constant the builder put there, `Builder::memberReadNodeOf`).
     bool readsCallVersion(gc_node_ref_t node) const {
-        if (kindOf(transaction_, node) != GCNodeKind::Accs) {
+        if (kindOf(transaction_, node) == GCNodeKind::Accs) {
+            const auto payload = draft().payloadOf(node);
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                return false;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
+        }
+        if (kindOf(transaction_, node) != GCNodeKind::Oper) {
             return false;
         }
+        const std::optional<uint32_t> place = operAccessPlaceOf(node);
+        return place.has_value() && *place >= 1;
+    }
+
+    /// The place an operator's member read takes, when `node` is `:op/access` by a constant place
+    /// and the graph has it: the constant the builder linked as the call's `with` argument.
+    /// nullopt for any other node, for a read by name, and for a place the program computes.
+    std::optional<uint32_t> operAccessPlaceOf(gc_node_ref_t node) const {
         const auto payload = draft().payloadOf(node);
-        if (payload.size() < sizeof(rt::GCAccsBody)) {
-            return false;
+        if (payload.size() < sizeof(rt::GCOperBody) ||
+            reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri() != ":op/access") {
+            return std::nullopt;
         }
-        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-        return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
+        const auto with = draft().withInputsOf(node);
+        if (with.size() != 1) {
+            return std::nullopt;
+        }
+        const auto *place = draft().node(with.front());
+        if (place == nullptr || place->header.kind != GCNodeKind::Data ||
+            place->header.dataIndex >= 0) {
+            return std::nullopt;
+        }
+        const size_t slot = static_cast<size_t>(-place->header.dataIndex);
+        if (slot >= draft().staticSlots().size()) {
+            return std::nullopt;
+        }
+        const int64_t at = camel::core::rtdata::fromSlot<int64_t>(draft().staticSlots()[slot]);
+        if (at < 0) {
+            return std::nullopt;
+        }
+        return static_cast<uint32_t>(at);
+    }
+
+    /// The component a projection of a value reads, in either form the tree has: the ACCS node,
+    /// and the member read that is an operator (`:op/access` by place, the URI prelude.cml
+    /// declares for the read the programme wrote). nullopt for anything else, including a read by
+    /// name -- which names a field of a struct and never a component of a tuple.
+    ///
+    /// The operator carries its place in its `with` list, a constant the builder put there, and
+    /// the value it reads is the call's one ordinary operand (`Builder::memberReadNodeOf`).
+    std::optional<uint32_t> projectedComponentOf(gc_node_ref_t user) const {
+        const auto payload = draft().payloadOf(user);
+        if (kindOf(transaction_, user) == GCNodeKind::Accs) {
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                return std::nullopt;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            if (accs->accsKind != rt::GCAccsKind::TupleIndex) {
+                return std::nullopt;
+            }
+            return accs->value;
+        }
+        if (kindOf(transaction_, user) != GCNodeKind::Oper) {
+            return std::nullopt;
+        }
+        return operAccessPlaceOf(user);
     }
 
     /// The projection of `node`'s value: the access node that takes component `index` of it, or
@@ -908,15 +972,8 @@ class ForwardRewrite {
     /// component (the builder caches the access node it makes for a call's value).
     gc_node_ref_t componentProjectionOf(gc_node_ref_t node, uint32_t index) const {
         for (gc_node_ref_t user : draft().normUsersOf(node)) {
-            if (kindOf(transaction_, user) != GCNodeKind::Accs) {
-                continue;
-            }
-            const auto payload = draft().payloadOf(user);
-            if (payload.size() < sizeof(rt::GCAccsBody)) {
-                continue;
-            }
-            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-            if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
+            const std::optional<uint32_t> component = projectedComponentOf(user);
+            if (component && *component == index) {
                 return user;
             }
         }
@@ -958,18 +1015,19 @@ class ForwardRewrite {
     }
 
     /// The function a function value is, where the graph itself says so: a constant function, or a
-    /// closure built in this graph (FILL) over a constant function. Null for anything else (a
-    /// port, the result of a branch or of a call, an element of a container).
+    /// closure built in this graph (a construction over a constant function). Null for anything
+    /// else (a port, the result of a branch or of a call, an element of a container).
     ::Function *evidentFunction(gc_node_ref_t node) const {
         node = ungated(draft(), node);
         if (!isFunctionType(typeOf(transaction_, node))) {
             return nullptr;
         }
         gc_node_ref_t constant = node;
-        if (kindOf(transaction_, node) == GCNodeKind::Fill) {
-            const auto *body =
-                reinterpret_cast<const rt::GCFillBody *>(draft().payloadOf(node).data());
-            if (body->fillKind != rt::GCFillKind::FunctionClosure ||
+        // The construction's kind is asked of `fillPayloadOf`, which answers a FILL node and a
+        // `:op/fill` call alike: asking the kind alone left every call-built closure unread, and
+        // reading a call's bytes as a fill body read the operator's id as a kind.
+        if (const auto built = transforms::fillPayloadOf(draft(), node); built.has_value()) {
+            if (built->fillKind != rt::GCFillKind::FunctionClosure ||
                 draft().normInputsOf(node).size() != 1) {
                 return nullptr;
             }
@@ -1554,7 +1612,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
             }
         }
         const gc_node_ref_t closure = ungated(draft(), withInputs.front());
-        if (kindOf(transaction_, closure) == GCNodeKind::Fill &&
+        if (transforms::fillPayloadOf(draft(), closure).has_value() &&
             std::ranges::any_of(draft().withInputsOf(closure), evident)) {
             return true;
         }
@@ -2445,26 +2503,33 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     draft().setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
     draft().setNodeDataType(loop, valueType);
     draft().setNodeDataIndex(loop, draft().allocateRuntimeSlot(valueType));
-    // The loop's users see the state alone; the tape is read through the node below. The
-    // builder already inserted that projection when it normalised the loop; reuse it rather
-    // than redirect it to itself (a cycle), and add one only for a loop that has none.
-    // The projection is the user whose type is the state's value; with one struct state the
-    // programme's own field reads (`q.a`) are ACCS users of the loop node too, and one of them
-    // is a float, not the state (the state is the struct, not its fields).
-    gc_node_ref_t state = kInvalidNodeRef;
-    for (gc_node_ref_t user : draft().normUsersOf(loop)) {
-        if (k == 1 && kindOf(transaction_, user) == GCNodeKind::Accs &&
-            typeOf(transaction_, user) == bodyPlan.stateValueType) {
-            state = user;
-            break;
+    // The loop's users see the state alone; the tapes are read through the node below. A loop that
+    // already handed back a tuple -- the states, then the collections it collected before this
+    // rewrite -- keeps the readers it has: component 0 is still the state, so a projection of it
+    // still names the state, and redirecting it again would make it project its own projection
+    // (`:op/access` of an array, which is no read at all). Only a loop that handed back the state
+    // itself has readers naming the value, and those take the projection added below.
+    const bool valueWasTheState = k == 1 && bodyPlan.existingCollectionTypes.empty();
+    const uint64_t origin       = draft().nodeOrigin(loop);
+    gc_node_ref_t state         = kInvalidNodeRef;
+    if (k > 1) {
+        // More than one state: the value was a tuple of them and stays one, so the readers it has
+        // already project it, and the fill that gathers the first k components is the state.
+        for (gc_node_ref_t user : draft().normUsersOf(loop)) {
+            if (transforms::fillPayloadOf(draft(), user).has_value() &&
+                typeOf(transaction_, user) == bodyPlan.stateValueType) {
+                state = user;
+                break;
+            }
         }
-        if (k > 1 && kindOf(transaction_, user) == GCNodeKind::Fill &&
-            typeOf(transaction_, user) == bodyPlan.stateValueType) {
-            state = user;
-            break;
-        }
+    } else if (!valueWasTheState) {
+        // One state, and the value was already a tuple (the loop collected before this rewrite):
+        // component 0 is still the state, so the projection the programme's own reads use still
+        // names it. Reusing that read keeps them where they are; adding a second projection and
+        // redirecting onto it would put a read of a read in their place -- `:op/access` of an
+        // array, which `__access_value__` refuses because an array has no members.
+        state = componentProjectionOf(loop, 0u);
     }
-    const uint64_t origin = draft().nodeOrigin(loop);
     if (state == kInvalidNodeRef) {
         if (k == 1) {
             state = draft().addAccsNode(bodyPlan.stateTypes.front(), 0u);
@@ -2605,20 +2670,21 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     const gc_node_ref_t fill = ungated(draft(), withInputs.front());
     auto calleeValue         = staticValue(transaction_, fill);
     auto *function           = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
-    // A closure built in this graph: FILL(function, captured values...).
+    // A closure built in this graph: a construction of a function value with the captured values.
     std::vector<gc_node_ref_t> filled; // captured values by closure slot, where filled here
     bool builtHere = false;
-    if (function == nullptr && kindOf(transaction_, fill) == GCNodeKind::Fill &&
-        draft().normInputsOf(fill).size() == 1) {
-        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft().payloadOf(fill).data());
+    if (function == nullptr && draft().normInputsOf(fill).size() == 1) {
+        // The kind, the slots and the values come from `fillPayloadOf`, which answers both
+        // spellings of a construction; the template is not a captured value either way.
+        const auto built = transforms::fillPayloadOf(draft(), fill);
         const auto base  = staticValue(transaction_, draft().normInputsOf(fill).front());
         auto *target     = base ? fromSlot<::Function *>(*base) : nullptr;
-        if (body->fillKind == rt::GCFillKind::FunctionClosure && target != nullptr &&
-            target->graph() != nullptr) {
+        if (built.has_value() && built->fillKind == rt::GCFillKind::FunctionClosure &&
+            target != nullptr && target->graph() != nullptr) {
             engine_.graphOf(target);
-            const auto slots  = body->slots();
-            const auto values = draft().withInputsOf(fill);
-            const size_t n    = target->graph()->closureNodes().size();
+            const auto &slots  = built->slots;
+            const auto &values = built->values;
+            const size_t n     = target->graph()->closureNodes().size();
             filled.assign(n, kInvalidNodeRef);
             builtHere = slots.size() == values.size();
             for (size_t k = 0; builtHere && k < slots.size(); ++k) {
@@ -3436,8 +3502,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     // instead (visitAccs seeds it from its source). A loop with a tangent is the same: its
     // differentiable state can be read, and a read of a state with no channel is the loss.
     const auto structural = [&](gc_node_ref_t node, Type *type) {
-        const GCNodeKind kind = kindOf(forwardTransaction_, node);
-        if (kind != GCNodeKind::Fill) {
+        if (!transforms::fillPayloadOf(forward, node).has_value()) {
             return false;
         }
         return (type->code() == TypeCode::Tuple || type->code() == TypeCode::Struct) &&
@@ -3795,7 +3860,7 @@ gc_node_ref_t Backward::activeFunctionInput(gc_node_ref_t call) const {
     auto withInputs = forward().withInputsOf(call);
     if (kindOf(forwardTransaction_, call) == GCNodeKind::Call && !withInputs.empty()) {
         const gc_node_ref_t closure = ungated(forward(), withInputs.front());
-        if (kindOf(forwardTransaction_, closure) == GCNodeKind::Fill) {
+        if (transforms::fillPayloadOf(forward(), closure).has_value()) {
             for (gc_node_ref_t captured : forward().withInputsOf(closure)) {
                 if (carries(captured)) {
                     return captured;
@@ -3848,7 +3913,7 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
     }
     const gc_node_ref_t callee = ungated(forward(), withInputs.front());
     if (kindOf(forwardTransaction_, callee) == GCNodeKind::Data ||
-        kindOf(forwardTransaction_, callee) == GCNodeKind::Fill) {
+        transforms::fillPayloadOf(forward(), callee).has_value()) {
         // The function called is known; the call was left alone all the same.
         if (const gc_node_ref_t input = activeFunctionInput(call); input != kInvalidNodeRef) {
             return std::string(head) + std::string(passed) + whyNotEvident(input);
@@ -3863,6 +3928,15 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
 
 std::string Backward::whyNotEvident(gc_node_ref_t function) const {
     function = ungated(forward(), function);
+    // A member read is an operator now (`:op/access` by place, `:op/access_key` by name), and the
+    // sentence about it is about what the read is, not about the kind it wears: asking the kind
+    // alone said "the function is computed at run time" about a function read out of a tuple, and
+    // a refusal with the wrong reason sends the next reader after the wrong thing. The read is
+    // asked of `memberReadOf`, which answers the operator and a node of the old ACCS kind alike --
+    // which is why the kind's own case below has nothing left to answer.
+    if (transforms::memberReadOf(forward(), function).has_value()) {
+        return "the function is read from a tuple, a struct or an array";
+    }
     switch (kindOf(forwardTransaction_, function)) {
     case GCNodeKind::Port:
         if (!scope_.recursive.empty()) {
@@ -3891,8 +3965,6 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         break;
     case GCNodeKind::Join:
         return "the function is chosen by a branch at run time";
-    case GCNodeKind::Accs:
-        return "the function is read from a tuple, a struct or an array";
     case GCNodeKind::Oper:
         if (camel::core::oper::isVariableRead(operId(function))) {
             return "the function is read from a variable";
@@ -4285,16 +4357,24 @@ void Backward::visitOper(gc_node_ref_t node) {
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {
-    const gc_node_ref_t source = forward().normInputsOf(node).front();
+    // A member read's shape is the declared one: one ordinary operand, the value, and the member
+    // as the call's `with` argument (`__access_value__`, builtin/operators/struct.cpp), while an
+    // ACCS node keeps the same two things in its body and its one ordinary input. `memberReadOf`
+    // answers both and names the value, so the value is not guessed from an operand's position --
+    // and a node that is not a member read at all (an OPER of some other operator, reached because
+    // the dispatch was widened) says so here instead of having its bytes read as one.
+    const auto read = transforms::memberReadOf(forward(), node);
+    if (!read.has_value()) {
+        return;
+    }
+    const gc_node_ref_t source = read->value;
     Type *sourceType           = typeOf(forwardTransaction_, source);
     if (!isAggregate(sourceType) || !active_.contains(source)) {
         return;
     }
-    const auto payload = forward().payloadOf(node);
-    const auto *body   = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-    size_t index       = body->value;
-    if (body->accsKind == rt::GCAccsKind::StructKey) {
-        const auto field = tt::as_ptr<StructType>(sourceType)->findField(body->key());
+    size_t index = read->place;
+    if (read->kind == rt::GCAccsKind::StructKey) {
+        const auto field = tt::as_ptr<StructType>(sourceType)->findField(read->key);
         ASSERT(field.has_value(), "autodiff: struct field lookup failed.");
         index = *field;
     }
@@ -4308,10 +4388,22 @@ void Backward::visitAccs(gc_node_ref_t node) {
 }
 
 void Backward::visitFill(gc_node_ref_t node) {
-    const auto payload = forward().payloadOf(node);
-    const auto *body   = reinterpret_cast<const rt::GCFillBody *>(payload.data());
-    Type *type         = typeOf(forwardTransaction_, node);
-    if (body->fillKind == rt::GCFillKind::Array) {
+    // The construction's kind, its values and the slot each value fills: from the body of a FILL
+    // node, from the operands of a `:op/fill` call (`fillPayloadOf`). Reading the with-inputs
+    // alone answered an empty list for the call -- a construction whose gradient then went
+    // nowhere -- and reading the body alone read a `GCOperBody`'s bytes as a slot list.
+    const auto built = transforms::fillPayloadOf(forward(), node);
+    if (!built.has_value()) {
+        failAt(
+            forward().nodeOrigin(node),
+            std::format(
+                "a construction of '{}' states neither the slots its values fill nor what it hands "
+                "the template, so its gradient cannot be taken apart{}",
+                typeOf(forwardTransaction_, node)->toString(),
+                whereIs(forward().nodeOrigin(node))));
+    }
+    Type *type = typeOf(forwardTransaction_, node);
+    if (built->fillKind == rt::GCFillKind::Array) {
         // An array literal built from active values: the gradient of the array is the array of
         // its elements' gradients, so each element's gradient is read back out at its position
         // (design principles 9.9). An array whose element type has no tangent never has a
@@ -4320,8 +4412,8 @@ void Backward::visitFill(gc_node_ref_t node) {
         if (moved.value == kInvalidNodeRef) {
             return;
         }
-        const auto values    = copyOf(forward().withInputsOf(node));
-        const auto slots     = body->slots();
+        const auto &values   = built->values;
+        const auto &slots    = built->slots;
         const auto *array    = tt::as_ptr<type::ArrayType>(type);
         Type *elementTangent = machineryTangentTypeOf(array->elemType());
         if (elementTangent == nullptr) {
@@ -4341,13 +4433,13 @@ void Backward::visitFill(gc_node_ref_t node) {
         }
         return;
     }
-    if (body->fillKind != rt::GCFillKind::Tuple && body->fillKind != rt::GCFillKind::Struct) {
+    if (built->fillKind != rt::GCFillKind::Tuple && built->fillKind != rt::GCFillKind::Struct) {
         fail("cannot differentiate through this kind of literal yet");
     }
-    Tangent moved     = std::move(gradients_[node]);
-    const auto values = copyOf(forward().withInputsOf(node));
-    const auto slots  = body->slots();
-    for (size_t i = 0; i < values.size(); ++i) {
+    Tangent moved    = std::move(gradients_[node]);
+    const auto &values = built->values;
+    const auto &slots  = built->slots;
+    for (size_t i = 0; i < values.size() && i < slots.size(); ++i) {
         const auto slot = static_cast<size_t>(slots[i]);
         auto element    = moved.elements.find(slot);
         if (element == moved.elements.end() || element->second.empty()) {
@@ -4750,17 +4842,17 @@ LoopBodyPlan Engine::buildLoopBody(
     // still flows through the states alone, so the backward pass below is seeded with the state
     // value, not with the whole tuple.
     const gc_node_ref_t value  = view.nextState();
+    // The construction's kind, slots and values, whichever spelling the body wrote it in
+    // (`fillPayloadOf`): its values are the states followed by the collections the builder gave
+    // the loop, and the count of the latter is what the tape leaves out. They are read from the
+    // payload and not from the with-inputs, which a call-shaped construction does not have.
+    std::vector<gc_node_ref_t> existingComponents;
     size_t existingCollections = 0;
-    if (kindOf(transaction, value) == GCNodeKind::Fill) {
-        const auto withIns = draft.withInputsOf(value);
-        const auto payload = draft.payloadOf(value);
-        if (payload.size() >= sizeof(rt::GCFillBody)) {
-            const auto *fill = reinterpret_cast<const rt::GCFillBody *>(payload.data());
-            if (fill->fillKind == rt::GCFillKind::Tuple && fill->slots().size() == withIns.size() &&
-                withIns.size() > stateCount) {
-                existingCollections = withIns.size() - stateCount;
-            }
-        }
+    if (const auto built = transforms::fillPayloadOf(transaction.graph(), value);
+        built.has_value() && built->fillKind == rt::GCFillKind::Tuple &&
+        built->values.size() > stateCount && built->slots.size() == built->values.size()) {
+        existingCollections = built->values.size() - stateCount;
+        existingComponents = built->values;
     }
     const uint32_t savedRegion = draft.insertRegion();
     draft.setInsertRegion(bodyRegion);
@@ -4771,7 +4863,6 @@ LoopBodyPlan Engine::buildLoopBody(
                            ? value
                            : addAccs(transaction, plan.stateTypes[j], value, j);
     }
-    const auto existingComponents = draft.withInputsOf(value);
     for (size_t c = 0; c < existingCollections; ++c) {
         const gc_node_ref_t collection = existingComponents[stateCount + c];
         existingValues.push_back(collection);

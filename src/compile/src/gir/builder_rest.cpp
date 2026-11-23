@@ -105,21 +105,27 @@ std::vector<node_handle_t> Builder::expandRestArgument(
         throw BuildAbortException();
     }
     Type *type = valueTypeOf(nodeTypeOf(value));
-    // A tuple comprehension is packed into a FILL whose With inputs are all its elements. A
-    // tuple literal has already been expanded at GCT, so a FILL here has no constant slots.
-    if (nodeIsKind(value, runtime::GCNodeKind::Fill) && type->code() == TypeCode::Tuple) {
-        const auto payload = nodeDraftOf(value)->payloadOf(nodeIdOf(value));
-        if (payload.size() >= sizeof(runtime::GCFillBody)) {
-            const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-            const auto with  = withInputsOf(value);
-            if (fill->fillKind == runtime::GCFillKind::Tuple &&
-                with.size() == tt::as_ptr<TupleType>(type)->size()) {
+    // A tuple comprehension is packed into a construction whose values are all of its elements. A
+    // tuple literal has already been expanded at GCT, so a construction here has no constant
+    // components, and a component the template supplied is not one of the spread's arguments.
+    if (type->code() == TypeCode::Tuple) {
+        const auto kind = constructionKindOf(value, type);
+        if (kind.has_value() && *kind == runtime::GCFillKind::Tuple) {
+            const auto components = constructionValuesOf(value);
+            if (components.size() == tt::as_ptr<TupleType>(type)->size()) {
                 std::vector<node_handle_t> values;
-                values.reserve(with.size());
-                for (const auto ref : with) {
-                    values.push_back(nodeDraftOf(value)->ref(ref));
+                values.reserve(components.size());
+                bool inOrder = true;
+                for (const auto &[component, componentValue] : components) {
+                    if (component != values.size()) {
+                        inOrder = false;
+                        break;
+                    }
+                    values.push_back(componentValue);
                 }
-                return values;
+                if (inOrder) {
+                    return values;
+                }
             }
         }
     }

@@ -1059,8 +1059,10 @@ const thrown = idOf(':op/tag_throw')
 const next = lines.find((l) => l.trim().startsWith(thrown + ' -> '))
 assert(next, 'the thrown value is used')
 const cast = next.trim().split(' ')[2]
-assert(lines.some((l) => l.trim().startsWith(cast + ' [label="CAST"')), 'throw feeds a CAST')
-assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the CAST is the exit of the graph')
+// The conversion is an operator (`:op/cast`) rather than a node kind of its own, and the graph is
+// the same graph: the throw's value is the operand of the conversion, which is the exit.
+assert(lines.some((l) => l.trim().startsWith(cast + ' [label=":op/cast"')), 'throw feeds a conversion')
+assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the conversion is the exit of the graph')
 assert(out.includes('label="graph_throw_pass.cml:8:12"'), 'the position of error(...) is a constant argument')
 }
 """

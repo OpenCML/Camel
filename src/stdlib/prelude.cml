@@ -996,16 +996,18 @@ export func fill::<T, ...F>(template: T, ...fields: ...F): T panic
 
 /// A member read as an ordinary operator: the ACCS node kind written as a call of the operator
 /// that does the same thing (plan 2.3, step 2). The position is a compile-time parameter of the
-/// node and an ordinary operand of the call: an `int` for the element of a tuple, a `string` for
-/// the field of a struct. It comes first because the compiler makes the node before it links the
-/// value the node reads (`lib/std/builtin/operators/struct.cpp`).
+/// operator and a `with` argument of the call: an `int` for the element of a tuple, a `string`
+/// for the field of a struct. The value the read reads is the call's one ordinary operand; the
+/// compiler puts the member in `with` and links the value as the call's operand
+/// (`lib/std/builtin/operators/struct.cpp`).
 ///
 /// A program writes a member read as `t[0]` or `s.x`, and those reach this operator through the
 /// language's own rules; the call form is the name a graph holds the read under.
 /// @pure
-/// @example access::<(int, int), int>(0, (1, 2))    // 1
+/// @example access::<(int, int), int><0>((1, 2))    // 1
 #op(':op/access')
-export func access::<T, U>(at: int, x: T): U panic
+with <at: int>
+export func access::<T, U>(x: T): U panic
 
 /// The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
 /// second URI rather than a second rule of `:op/access`, because the two read different things of
@@ -1013,9 +1015,10 @@ export func access::<T, U>(at: int, x: T): U panic
 /// it holds -- the operand's type would answer the same question, but a rule that has to be asked
 /// the type to know what it does is what the node kinds were.
 /// @pure
-/// @example access_key::<{ x: int, y: int }, int>('y', { x: 1, y: 2 })    // 2
+/// @example access_key::<{ x: int, y: int }, int><'y'>({ x: 1, y: 2 })    // 2
 #op(':op/access_key')
-export func access_key::<T, U>(key: string, x: T): U panic
+with <key: string>
+export func access_key::<T, U>(x: T): U panic
 
 // ---- arrays ----
 
