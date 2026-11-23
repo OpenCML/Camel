@@ -561,11 +561,15 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
     r.allocates = spec.allocates;
     r.external  = spec.externalEffect;
     if (spec.functionOperand) {
-        // An operator that runs a function the program hands it has that function's accesses and
-        // none of its own (design principles 3.3; `checkResources` refuses the two together), so
-        // this node's footprint is read off the value the declaration names. Reading the spec's
+        // An operator that runs a function the program hands it has that function's accesses *as
+        // well as* the ones it declares for itself (design principles 3.3): a node's effect is the
+        // union of the two, and neither replaces the other. The value's half is read off the value
+        // the declaration names, where a call through a value reads its callee; reading the spec's
         // empty access list here is what made such a node "touches nothing" while it ran code.
-        return fromFunctionOperand(graph, ref, spec, s);
+        const NodeResources fromValue = fromFunctionOperand(graph, ref, spec, s);
+        r.accesses.assign(fromValue.accesses.begin(), fromValue.accesses.end());
+        r.external = r.external || fromValue.external;
+        r.declared = fromValue.declared;
     }
     for (const sem::ResourceAccess &access : spec.accesses) {
         NodeAccess a{.resource = access.resource, .mode = access.mode, .region = access.region};
@@ -648,7 +652,10 @@ NodeResources Resolver::fromFunctionOperand(
         for ([[maybe_unused]] uint8_t capture : signature.captures) {
             r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
         }
-        r.declared = false;
+        // A use of a parameter that cannot be placed is "some resource of its class", which is the
+        // conservative reading; a clause that names nothing has no such use, so its reading is the
+        // clause's own (`pure`) and the accesses above are the statement, not a fallback.
+        r.declared = signature.params.empty() && signature.ambient.empty();
     }
     // What the operator gives back is the operator's: `map` answers a new array even through a
     // callback that hands its argument back, so the function's result alias is not this node's.

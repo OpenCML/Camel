@@ -225,11 +225,14 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                 facts != nullptr && facts->resources && facts->resources->functionOperand) {
                 // The clause at the operand the declaration names, read through the builder's one
                 // lookup (`functionValueAt`): the same lookup, and the same function, the Call case
-                // below makes for a call's value.
+                // below makes for a call's value. What the operator declares for itself is the
+                // other half of this node's effect, and the two are united (design principles
+                // 3.3): a `map` over a pure function is not an effect unless the operator itself
+                // reaches outside the program.
                 const auto at = functionValueAt(
                     graph->transaction(), nodeIdOf(node), *facts->resources->functionOperand);
                 if (at.has_value() && at->site.clause.has_value()) {
-                    return !at->site.clause->pure();
+                    return !at->site.clause->pure() || sem::declaresOutside(*facts->resources);
                 }
             }
         }
