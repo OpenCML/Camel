@@ -13,6 +13,7 @@
 #include "camel/execute/pass/warnings.h"
 #include "camel/execute/shaped_operators.h"
 #include "camel/utils/path.h"
+#include "graph/graph_view.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -31,6 +32,8 @@ using camel::runtime::GCNodeKind;
 using camel::runtime::kInvalidNodeRef;
 
 namespace {
+
+using camel::graph::PortGroup;
 
 bool isAnonymous(const std::string &name) {
     return name.size() >= 4 && name.starts_with("__") && name.ends_with("__");
@@ -190,7 +193,7 @@ ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {
     // The call is the root's result; when main gives nothing, only its completion point.
     gc_node_ref_t call = root->returnNodeRef();
     for (gc_node_ref_t candidate :
-         {root->returnNodeRef(), root->exitNodeRef(), root->outputNodeRef()}) {
+         {root->returnNodeRef(), root->view().exit(), root->outputNodeRef()}) {
         const auto *node = candidate != kInvalidNodeRef ? root->node(candidate) : nullptr;
         if (node != nullptr &&
             (node->kind == GCNodeKind::Call || node->kind == GCNodeKind::Func)) {
@@ -215,16 +218,16 @@ ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {
         return entry;
     }
     if (callNode == nullptr || callNode->kind != GCNodeKind::Call ||
-        root->withInputsOf(call).empty()) {
+        root->view().inputs(call, PortGroup::Context).empty()) {
         throw Refusal{root, call, "the program has no call of 'main' std::cpp can find", false};
     }
-    const gc_node_ref_t callee = root->withInputsOf(call).front();
+    const gc_node_ref_t callee = root->view().inputs(call, PortGroup::Context).front();
     const auto *calleeNode     = root->node(callee);
     if (camel::execute::shapeOfKind(calleeNode->kind) == camel::execute::OperShape::Construction &&
         root->nodeBodyAs<GCFillBody>(callee)->fillKind == GCFillKind::FunctionClosure &&
-        !root->normInputsOf(callee).empty()) {
-        entry.main = functionConstant(root, root->normInputsOf(callee).front());
-        for (gc_node_ref_t arg : root->withInputsOf(callee)) {
+        !root->view().inputs(callee, PortGroup::Normal).empty()) {
+        entry.main = functionConstant(root, root->view().inputs(callee, PortGroup::Normal).front());
+        for (gc_node_ref_t arg : root->view().inputs(callee, PortGroup::Context)) {
             entry.args.push_back(arg);
         }
     } else {
@@ -301,7 +304,7 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
         for (const auto *callee : probes[i]->tailCallees()) {
             calls[graph].push_back(const_cast<GCGraph *>(callee));
         }
-        result[graph] = parts_.values.type(graph->funcType()->exitType()).value_or("");
+        result[graph] = parts_.values.type(graph->view().funcType()->exitType()).value_or("");
     }
 
     // The strongly connected components of "calls in tail position" (Tarjan).
@@ -375,15 +378,15 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     // line (design principles 10.6; camel/standalone/entry.h), in the order `camel` names them
     // (unboundEntryParameters: the `with` ones, then the others).
     const std::vector<std::string> names = camel::execute::unboundEntryParameters(root);
-    const size_t withCount               = root->withPorts().size();
-    const auto *rootType                 = root->funcType();
+    const size_t withCount               = root->view().ports(PortGroup::Context).size();
+    const auto *rootType                 = root->view().funcType();
     std::unordered_map<gc_node_ref_t, std::string> parameterValue;
     std::string parameters;
     std::string numberText;
     for (size_t i = 0; i < names.size(); ++i) {
         const bool isWith        = i < withCount;
         const size_t k           = isWith ? i : i - withCount;
-        const gc_node_ref_t port = isWith ? root->withPorts()[k] : root->normPorts()[k];
+        const gc_node_ref_t port = isWith ? root->view().ports(PortGroup::Context)[k] : root->view().ports(PortGroup::Normal)[k];
         const bool declared =
             rootType != nullptr &&
             (isWith ? k < rootType->withTypesCount() : k < rootType->normTypesCount());
@@ -495,21 +498,21 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
         // parameters of `main` as its own, in the order of a direct call (the normal ones,
         // then the `with` ones).
         call = std::format("{}(0", parts_.functionNames.at(root));
-        for (gc_node_ref_t port : root->normPorts()) {
+        for (gc_node_ref_t port : root->view().ports(PortGroup::Normal)) {
             call += ", " + parameterValue.at(port);
         }
-        for (gc_node_ref_t port : root->withPorts()) {
+        for (gc_node_ref_t port : root->view().ports(PortGroup::Context)) {
             call += ", " + parameterValue.at(port);
         }
     } else {
         // The arguments of main in the order of a direct call: the normal ones, the `with`
         // ones, then what it captures.
         call = std::format("{}(0", parts_.functionNames.at(entry.main));
-        const auto withInputs = root->withInputsOf(entry.call);
+        const auto withInputs = root->view().inputs(entry.call, PortGroup::Context);
         // A CALL node keeps its callee in `with` 0, so its arguments start after it; a FUNC node
         // names its callee in the node itself and every `with` input is an argument of main.
         const size_t first = root->node(entry.call)->kind == GCNodeKind::Func ? 0 : 1;
-        for (gc_node_ref_t arg : root->normInputsOf(entry.call)) {
+        for (gc_node_ref_t arg : root->view().inputs(entry.call, PortGroup::Normal)) {
             call += ", " + argumentText(arg);
         }
         for (size_t i = first; i < withInputs.size(); ++i) {
@@ -525,7 +528,7 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     // principles 9.8): an integer or a bool is the exit code, any other value is printed. A
     // declared `T!` that failed is an error nobody handled: reported on standard error, exit
     // code 1 (src/execute/entry_args.cpp, writeEntryResultTo).
-    const Type *type    = entry.main->funcType()->exitType();
+    const Type *type    = entry.main->view().funcType()->exitType();
     const bool declared = context_->entryResultDeclared();
     std::string body;
     std::string value = call;
@@ -598,7 +601,7 @@ std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, 
         // value only a literal could be -- is a hole, not a limit of the language.
         std::vector<gc_node_ref_t> topLevel = entry.args;
         if (root->node(entry.call)->kind == GCNodeKind::Func) {
-            const auto given = root->normInputsOf(entry.call);
+            const auto given = root->view().inputs(entry.call, PortGroup::Normal);
             topLevel.insert(topLevel.end(), given.begin(), given.end());
         }
         const bool computed =
