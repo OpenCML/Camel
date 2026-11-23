@@ -110,8 +110,32 @@ async function buildPanelOf(repo, stateDir) {
     }
     const runs = [...latest.values()]
     const open = runs.filter((row) => !row.finishedAt)
+    // The two queues the build-queue panel draws, read from the same files it reads: who holds the
+    // build or test slot on this machine and who is waiting, with how long.
+    const queue = async (name) => {
+        const file = path.join(dir, name)
+        try {
+            const doc = JSON.parse(await readFile(file, 'utf8'))
+            const holder = doc.holder && typeof doc.holder.worktree === 'string' && doc.holder.worktree.trim()
+                ? { worktree: doc.holder.worktree.trim(), phase: doc.holder.phase || '', startedAt: doc.holder.startedAt || null }
+                : null
+            const waiters = Array.isArray(doc.waiters)
+                ? doc.waiters
+                      .filter((item) => item && typeof item.worktree === 'string' && item.worktree.trim())
+                      .map((item) => ({
+                          worktree: item.worktree.trim(),
+                          waitedSeconds: item.since ? Math.round((Date.now() - Date.parse(item.since)) / 1000) : null,
+                      }))
+                : []
+            return { holder, waiters }
+        } catch (error) {
+            return { unreadable: firstLine(error) }
+        }
+    }
     return {
         ageSeconds: Math.round((Date.now() - info.mtimeMs) / 1000),
+        buildQueue: await queue('build-state.json'),
+        testQueue: await queue('test-state.json'),
         unfinished: open.length,
         total: runs.length,
         // Each run still going: where it is, which slot it holds, and how long it has waited for one.

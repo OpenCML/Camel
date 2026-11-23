@@ -151,6 +151,15 @@ window.__ModuleLoader__.load({
                     ? h('div', { style: { opacity: 0.7 } }, '无')
                     : reminders.map((e, i) => h('div', { key: i, style: { opacity: 0.85 } },
                           `${ago(e.at)} · ${e.mode} · ${(e.rules || []).join('、')}`)),
+                h('div', { style: { fontWeight: 600, marginTop: 6 } }, '构建与测试队列'),
+                h('div', { style: { opacity: 0.85 } }, ['buildQueue', 'testQueue'].map((key) => {
+                    const q = s.reading && s.reading.panel && s.reading.panel[key]
+                    const label = key === 'buildQueue' ? '构建' : '测试'
+                    if (!q || q.unreadable) return `${label}：读不到`
+                    const holder = q.holder ? `${q.holder.worktree}（${q.holder.phase || '进行中'}）` : '空闲'
+                    const waiting = (q.waiters || []).map((w) => `${w.worktree}${w.waitedSeconds ? ` ${Math.round(w.waitedSeconds / 60)} 分钟` : ''}`).join('、')
+                    return `${label}：${holder}${waiting ? `；排队 ${waiting}` : ''}`
+                }).join('　')),
                 h('div', { style: { fontWeight: 600, marginTop: 6 } }, '主机上在跑的'),
                 h('div', { style: { opacity: 0.85 } },
                     ((s.reading && s.reading.panel && s.reading.panel.running) || [])
