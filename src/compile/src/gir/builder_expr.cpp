@@ -1077,6 +1077,21 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         LEAVE("DREF");
         return valueOf(node);
     }
+    // A name a body-less `#op` declaration and a declaration with a body both write is one
+    // overload set (design principles 6.4): the rules of its operator group and the functions
+    // its body declarations make are the candidates of one call. They were two pools, and the
+    // lookup kept the one it found first -- a declaration with a body hid the operator group of
+    // the same name, so a call only the declaration took found no function at all. The DREF is
+    // the group, and what the program declares under the name is resolved beside it
+    // (`operatorOverloads_`), which is how an operator of the program is resolved already.
+    if (auto merged = mergedOverloadsNamed(name); merged.has_value()) {
+        node_handle_t drefNode{currGraph_->addDrefNode(
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{merged->ops})};
+        registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+        operatorOverloads_[drefNode] = std::move(*merged);
+        LEAVE("DREF");
+        return drefNode;
+    }
     auto &graph = currGraph_;
     if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
         // The name of a generic function stands for a template, which has no graph. Called,

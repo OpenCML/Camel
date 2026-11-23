@@ -304,3 +304,36 @@ expect_output_contains = ["Function of type '(x: int) => int' cannot be called w
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+# ---- A `#op` declaration and a declaration with a body of one name: one overload set ----
+#
+# The two used to be two pools, and the name resolved to one of them: a declaration with a body
+# of the name hid the operator group of the same name, so a call that only the `#op` declaration
+# takes found no function at all. `#op` and a body of one name at one layer are one overload set.
+
+[[tests]]
+name = "op_body_overloads"
+desc = "A `#op` declaration and a declaration with a body of one name are one overload set: the call whose arguments take the declaration reaches the operator, and the call whose arguments take the body reaches the body. The body used to hide the operator group, and the first call found no function."
+kind = "behavior"
+case = "../../../cases/compile/overloads/op_body_overloads.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "20\nbody text\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "op_body_no_match"
+desc = "One overload set is not every call: a call whose arguments fit neither the `#op` declaration nor the body declaration of the name is still refused at the call, and the report lists both."
+kind = "negative"
+case = "../../../cases/compile/overloads/op_body_no_match.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 17
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "(float)"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+

@@ -1,0 +1,17 @@
+/**
+ * The reverse of `op_body_overloads`: one overload set does not mean every call is taken. A
+ * call whose arguments fit neither the `#op` declaration nor the declaration with a body is
+ * still refused at the call.
+ */
+
+#op(':op/idx_arr')
+export func pick::<T>(xs: T[], i: int) => T
+
+export func pick(s: string) => string {
+    return 'body ' + s
+}
+
+func main() => int sync {
+    println(pick(1.5))
+    return 0
+}

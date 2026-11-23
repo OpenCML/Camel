@@ -3541,6 +3541,16 @@ class Builder {
 
     /// Collects the overloads of the operator `group` visible here.
     OperatorOverloads operatorOverloadsOf(const std::string &group);
+    /// The one overload set `name` stands for when a body-less `#op` declaration of it and a
+    /// declaration of it with a body are both reachable here (design principles 6.4): the rules
+    /// of its operator group and the functions its body declarations make, as the candidates of
+    /// one call. The two used to be two pools of which the name lookup kept the one it found
+    /// first -- a declaration with a body hid the operator group of the same name, so a call
+    /// only the declaration took found no function at all.
+    ///
+    /// Nullopt when either side is absent: a name with no operator group is resolved as the
+    /// functions it declares, exactly as before.
+    std::optional<OperatorOverloads> mergedOverloadsNamed(const std::string &name);
     /// The entity a name the current module imports stands for in this program
     /// (ProgramExports::importedEntity): the import bindings resolved against this program's
     /// exported entities. The same module in two programs may see different graphs (task).
