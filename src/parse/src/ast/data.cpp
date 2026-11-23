@@ -190,6 +190,8 @@ std::string to_string(ReservedDataOp op) {
         return "::<>";
     case ReservedDataOp::Comp:
         return "..";
+    case ReservedDataOp::Compose:
+        return "<>";
     case ReservedDataOp::As:
         return "AS";
     default:

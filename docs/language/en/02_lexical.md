@@ -17,7 +17,7 @@ This chapter describes the lexical structure of source code. The token table is 
   A next line that starts with `-`, `+`, `!`, `~`, `@`, `(`, `[`, `{`, a name, a literal or a statement keyword is a **new statement**. To write an addition or a subtraction on two lines, leave the operator at the end of the first (`a +`, then `b`); a line that starts with `+` is not a statement and gives `SyntaxDiag::LineStartsWithOperator`.
 - A `;` still separates statements on one line. Two statements on one line may also have nothing between them (the first ends where its expression cannot go on), but `;` is clearer.
 - **A call, a subscript or angle-bracket arguments must directly follow the expression before them**, with no whitespace in between: `f(1)`, `xs[0]`, `scale<3>`. `f (1)` is the two expressions `f` and `(1)`.
-- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison (`<=>` is the two-way arrow of a rule declaration, see [8](08_top_level_and_grammar.md)). Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x) => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space.
+- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison (`<=>` is the two-way arrow of a rule declaration, see [8](08_top_level_and_grammar.md)). Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x) => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space. **`<>` is one token**, not a pair of empty angle brackets: `f<>` is `f` followed by a composition with no operands, and the parse fails; the composition is written `f <> g` ([4.2](../../design-principles.en.md)).
 - **A `<` after `::` opens a list too.** Type parameters and explicit type arguments are both written `::<…>` ([7.5](07_statements.md#75-generic-functions)): `func first::<T>(xs: T[]): T`, `first::<int>(xs)`, `let f = id::<int>`. `x::<y` is therefore not read as a comparison: a `<` after `::` (other than `<=`) always opens an angle-bracket argument list.
 - Source files are read as UTF-8.
 
@@ -235,10 +235,11 @@ The long form of the same call is still written `'{} + {} = {}'->format<1, 2, 1 
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Assignment and compound assignment |
 | `??` `!!` | Unwrap a nullable value, unwrap a fallible value |
 | `->` | Pipe: the value on the left becomes an argument of the function on the right; a `T?` or `T!` on the left that the function does not accept carries its null or error along |
-| `..` `?..` | Function composition (see [6.5](06_expressions.md#65-pipes)) |
+| `..` | Interval and slice: half-open `[a, b)`, and the same spelling inside a slice (see [6.5](06_expressions.md#65-pipes)) |
+| `<>` | Function composition `f <> g`: `(f <> g)(x)` is `g(f(x))` (see [6.5](06_expressions.md#65-pipes)) |
 | `.` | Field and tuple member access |
 | `::` | Qualified name |
-| `=>` | Lambda and function type, the arrow of `case`, the one-way arrow of a rule |
+| `=>` | Lambda and function type, a function's return type (`func f(...) => T`), the arrow of `case`, the one-way arrow of a rule |
 | `<=>` | The two-way arrow of a rule |
 | `?` `!` (after a type) | `T?` may be null, `T!` may fail |
 | `@` (before a function declaration) | Annotation, see [7.6](07_statements.md#76-annotations) |

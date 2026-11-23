@@ -115,7 +115,7 @@ namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDec
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'?
-                     'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+                     'func' (identRef | operatorName) typeParams? parentParams (('=>' | ':') typeExpr)?
                      resourceClause? whenClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
                      ('read_by' tagReaders)? whenClause?
@@ -162,7 +162,7 @@ orExpr             : andExpr ('|' andExpr)*
 andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
-rangeExpr          : additiveExpr ('..' additiveExpr)*
+rangeExpr          : additiveExpr (('..' | '<>') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
@@ -193,7 +193,7 @@ sliceIndices       : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | 'range' '('
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
 typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
-namedTypeArgument  : IDENTIFIER '=' typeExpr
+namedTypeArgument  : IDENTIFIER (':' | '=') typeExpr
 arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)?
                      ']'
 structData         : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'

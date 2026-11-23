@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     let name = 'Camel'
     let n = 1 + 2
     println(`hello, ${name}!`)

@@ -122,7 +122,7 @@ total = 35
 ```
 
 - A pipe `x -> f` over a `T?` or a `T!` carries a null or an error along, see [6.6](#66-operators-for-null-and-errors).
-- `f..g` is function composition: `(f..g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; with integers on both sides `a..b` is the half-open interval, giving `int[]`, and a step is written `range(a, b, step)`. `for i in 0..n` is fused by the compiler and materialises no array. `..` binds looser than `+` and `-` (6.12): `1..n+1` is `1..(n+1)`, as it reads in other languages; it is also looser than `->`, so `x->f..g` reads as `(x->f)..g`; in a pipeline write `x->f->g`, which is the same function.
+- `f <> g` is function composition: `(f <> g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; `<>` is written with spaces on both sides and means nothing else (`f<>` is not an empty argument list, it is a composition missing its operands). `..` is the half-open interval `a..b` when both sides are integers, giving `int[]`, and a step is written `range(a, b, step)`. `..` and `<>` are one level, looser than `+` and `-` (6.12): `1 .. n+1` is `1 .. (n+1)`, as it reads in other languages; they are also looser than `->`, so `x->(f <> g)` is the same function as `x->f->g`. `for i in 0..n` is fused by the compiler and materialises no array.
 
 ## 6.6 Operators for null and errors
 
