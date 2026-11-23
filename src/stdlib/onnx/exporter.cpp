@@ -3799,67 +3799,6 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
 
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     auto *g       = act.graph;
-    const std::string_view probeUri = operUriOf(act.graph, ref);
-    if (probeUri == "tensor:matmul_grad_rhs" || probeUri == "tensor:sum_to") {
-        const auto args = camel::runtime::kernelArgumentsOf(*act.graph, ref);
-        std::fprintf(
-            stderr,
-            "PROBE %s ref=%llu result=%s\n",
-            std::string(probeUri).c_str(),
-            static_cast<unsigned long long>(ref),
-            act.graph->node(ref)->dataType() != nullptr
-                ? act.graph->node(ref)->dataType()->toString().c_str()
-                : "-");
-        for (size_t i = 0; i < args.norm.size(); ++i) {
-            const gc_node_ref_t a = args.norm[i];
-            const auto *rec         = act.graph->node(a);
-            std::fprintf(
-                stderr,
-                "PROBE   norm[%zu] ref=%llu kind=%d uri=%s type=%s\n",
-                i,
-                static_cast<unsigned long long>(a),
-                static_cast<int>(rec->kind),
-                std::string(operUriOf(act.graph, a)).c_str(),
-                rec->dataType() != nullptr ? rec->dataType()->toString().c_str() : "-");
-        }
-        for (size_t i = 0; i < args.with.size(); ++i) {
-            const gc_node_ref_t a = args.with[i];
-            const auto *rec         = act.graph->node(a);
-            std::fprintf(
-                stderr,
-                "PROBE   with[%zu] ref=%llu kind=%d uri=%s type=%s\n",
-                i,
-                static_cast<unsigned long long>(a),
-                static_cast<int>(rec->kind),
-                std::string(operUriOf(act.graph, a)).c_str(),
-                rec->dataType() != nullptr ? rec->dataType()->toString().c_str() : "-");
-        }
-        // The chain above argument 0: the producer of `dy`, then its own ordinary operands, so a
-        // reading names the node that made the value and what fed it.
-        std::function<void(gc_node_ref_t, int)> walk = [&](gc_node_ref_t at, int depth) {
-            if (depth > 2) {
-                return;
-            }
-            const auto nested = camel::runtime::kernelArgumentsOf(*act.graph, at);
-            for (size_t i = 0; i < nested.norm.size(); ++i) {
-                const gc_node_ref_t a = nested.norm[i];
-                const auto *rec       = act.graph->node(a);
-                std::fprintf(
-                    stderr,
-                    "PROBE   [d%d] norm[%zu] ref=%llu kind=%d uri=%s type=%s\n",
-                    depth,
-                    i,
-                    static_cast<unsigned long long>(a),
-                    static_cast<int>(rec->kind),
-                    std::string(operUriOf(act.graph, a)).c_str(),
-                    rec->dataType() != nullptr ? rec->dataType()->toString().c_str() : "-");
-                walk(a, depth + 1);
-            }
-        };
-        if (!args.norm.empty()) {
-            walk(args.norm.front(), 0);
-        }
-    }
     const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
     if (core::oper::isVariableRead(body->oper)) {
         return evalVariableRead(act, ref);
@@ -3945,32 +3884,6 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     const camel::runtime::KernelArguments kernelArguments = camel::runtime::kernelArgumentsOf(*g, ref);
     std::vector<Value> norm = evalAll(act, kernelArguments.norm);
     std::vector<Value> with = evalAll(act, kernelArguments.with);
-    if (probeUri == "tensor:matmul_grad_rhs" || probeUri == "tensor:sum_to") {
-        for (size_t i = 0; i < norm.size(); ++i) {
-            const Value &v = norm[i];
-            std::string shape = "none";
-            if (v.shape) {
-                shape = "[";
-                for (size_t k = 0; k < v.shape->size(); ++k) {
-                    if (k != 0) {
-                        shape += ",";
-                    }
-                    shape += (*v.shape)[k] ? std::to_string(*(*v.shape)[k]) : std::string("?");
-                }
-                shape += "]";
-            }
-            std::fprintf(
-                stderr,
-                "PROBE   value[%zu] kind=%d form=%d name=%s dtype=%d shape=%s camel=%s\n",
-                i,
-                static_cast<int>(v.kind),
-                static_cast<int>(v.form),
-                v.name.c_str(),
-                v.dtype ? static_cast<int>(*v.dtype) : -1,
-                shape.c_str(),
-                v.camelType != nullptr ? v.camelType->toString().c_str() : "-");
-        }
-    }
     return applyOper(act, uri, std::move(norm), g->node(ref)->dataType(), std::move(with));
 }
 
@@ -4013,11 +3926,21 @@ Value Evaluator::applyOper(
     TensorFacts facts;
     std::vector<type::Type *> types;
     std::vector<std::optional<tensor::ops::ConstArg>> constants;
+    std::vector<std::optional<tensor::ops::PartialInts>> partials;
     for (const Value &v : norm) {
         types.push_back(inferenceTypeOf(v));
         constants.push_back(constArgOf(v));
+        // A list the graph computes keeps the entries it knows (`Value::elements` is
+        // `[dim<0>(t), -1]`'s first entry and a `-1`), and an operator's inference reads them the
+        // way it reads a constant list's: a target written in place, and a reshape past a `-1`.
+        // Handing inference only the length left every such list all-unknown, so a reshape whose
+        // input it knew exactly still answered "extents unknown".
+        partials.push_back(
+            v.isSymbolic() && v.form == Value::Form::IntArray
+                ? std::optional<tensor::ops::PartialInts>(v.elements)
+                : std::nullopt);
     }
-    tensor::ops::InferContext inferContext(types, constants);
+    tensor::ops::InferContext inferContext(types, constants, partials);
     // A creation operator's element type was settled by the call (`zeros::<f32>(shape)`): it is
     // the element type of the type its node carries.
     if (def != nullptr && def->elementFromCall && resultType != nullptr) {
@@ -4045,11 +3968,16 @@ Value Evaluator::applyOper(
             unsupported(act, std::format("'{}': {}", uri, e.what()));
         }
     }
-    // A type name applied to an array is the core's conversion, not a tensor definition: the
-    // type its node was resolved to is the answer (extents of the input, element type of the name).
+    // A type name applied to an array is the core's conversion, not a tensor definition: extents
+    // of the input, element type of the name. The node's own type is the generic one for a name
+    // applied to an array -- the element type it writes, every extent unknown -- so reading it
+    // lost extents the value has (a conversion moves no element).
     if (def == nullptr && uri.starts_with(":op/ato") && resultType != nullptr) {
-        if (type::Type *answer = camel::core::type::valueTypeOf(resultType); tensor::isTensorType(answer)) {
-            facts = tensor::tensorFactsOf(answer);
+        if (type::Type *answer = camel::core::type::valueTypeOf(resultType);
+            tensor::isTensorType(answer)) {
+            const TensorFacts named = tensor::tensorFactsOf(answer);
+            const TensorFacts given = norm.empty() ? TensorFacts{} : factsOf(norm.front());
+            facts = given.shape ? TensorFacts{named.dtype, given.shape} : named;
         }
     }
     // The operator's index semantics declaration for this call: lowerings read the rules of
