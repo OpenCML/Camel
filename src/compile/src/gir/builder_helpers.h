@@ -149,6 +149,30 @@ inline std::vector<std::pair<size_t, node_handle_t>> constructionValuesOf(node_h
     return values;
 }
 
+/// Whether `node` reads a member of a value, in whichever spelling the front end wrote it: an ACCS
+/// node, or a call of `:op/access` / `:op/access_key`. A reader that asked the kind alone answered
+/// "not a read" for every call-form read, and then treated the read's own value as the member's --
+/// measured in `builder_refs.cpp`: the walk that looks for a reference inside a content stopped
+/// unwrapping projections, so a struct field whose value is a member read was handed to the reader
+/// of a closure and came back as "the graph is not one this program holds".
+inline bool isMemberRead(node_handle_t node) {
+    if (node == nullptr) {
+        return false;
+    }
+    if (nodeIsKind(node, runtime::GCNodeKind::Accs)) {
+        return true;
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return false;
+    }
+    const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
+    if (op == nullptr) {
+        return false;
+    }
+    const std::string_view uri = op->uri();
+    return uri == ":op/access" || uri == ":op/access_key";
+}
+
 /// The part of `type` a member read reads, when it reads one: `s.x` of a struct, `t.0` of a tuple.
 /// It answers both spellings -- the operator (`:op/access_key` / `:op/access`, member first, value
 /// last) and the node kind (member in the payload, value as the one input) -- because a reader that

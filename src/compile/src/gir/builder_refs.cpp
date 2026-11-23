@@ -387,8 +387,10 @@ optional<string> Builder::refInsideACapturedValue(node_handle_t call, Type *cont
             continue;
         }
         // A projection names a member of a value rather than a value of its own: the walk goes on
-        // at the member it reads, and the projection's type says what that member is held as.
-        if (nodeIsKind(item.value, runtime::GCNodeKind::Accs)) {
+        // at the member it reads, and the projection's type says what that member is held as. The
+        // question is asked of `isMemberRead`, not of the kind: a call-form read is an operator, and
+        // asking the kind skipped the unwrapping, so the read itself was handed on as the value.
+        if (isMemberRead(item.value)) {
             const node_handle_t member = memberBehindProjection(item.value);
             if (member == nullptr) {
                 return unreadableCaptureClause(
