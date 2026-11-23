@@ -180,7 +180,10 @@ function doWrite() {
         gates,
         measuredAt: new Date().toISOString(),
         host: os.hostname(),
-        // Which merge position wrote this: one lane or a batch. A record cannot be read back`r`n        // correctly without knowing whether the reading beside `sha` is that commit's own or its`r`n        // batch tip's, and the batch fields say the second -- this says who asked.`r`n        writtenBy: arg('--written-by') || 'internal/tools/merge-lane.ps1',
+        // Which merge position wrote this: one lane, or a batch. A reader needs it to know whether the
+        // reading beside `sha` is that commit's own or its batch tip's -- the batch fields say the
+        // second, and this says who asked.
+        writtenBy: arg('--written-by') || 'internal/tools/merge-lane.ps1',
     }
     fs.mkdirSync(outDir, { recursive: true })
     const target = path.join(outDir, `${merge}.json`)
