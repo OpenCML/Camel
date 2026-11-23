@@ -359,8 +359,8 @@ calleeGraphOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_
 /// the same question `answersAPair` asks of a callee graph, asked of the signature where there is
 /// no graph to ask yet. Which graph the value turns out to be is asked at run time by `split(v)`
 /// itself, which refuses there, by name, when the graph does not answer a pair.
-bool answersAPairByValueAt(const rt::GCGraph &graph, gc_node_ref_t ref) {
-    camel::core::type::FunctionType *valueType = callValueSignatureOf(graph.view(), ref);
+bool answersAPairByValueAt(const camel::graph::GraphView &graph, gc_node_ref_t ref) {
+    camel::core::type::FunctionType *valueType = callValueSignatureOf(graph, ref);
     if (valueType == nullptr) {
         return false;
     }
@@ -377,7 +377,7 @@ bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_nod
         return false;
     }
     if (graph.node(ref)->kind == rt::GCNodeKind::Call) {
-        return answersAPairByValueAt(graph, ref);
+        return answersAPairByValueAt(graph.view(), ref);
     }
     if (graph.node(ref)->kind != rt::GCNodeKind::Func) {
         return false;
@@ -655,7 +655,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 const size_t withArguments                 = lifted.withInputsOf(ref).size();
                 const size_t ordinary =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
-                if (answersAPair(lateCallee) || answersAPairByValueAt(lifted, ref)) {
+                if (answersAPair(lateCallee) || answersAPairByValueAt(lifted.view(), ref)) {
                     // Which of the call's ordinary arguments are values is the callee's
                     // signature's answer, read from its type by the one reader of that law
                     // (`valuePortsOf`): the arguments the second half walks into are those ports,
@@ -737,7 +737,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 const auto *calleeGraph = program != nullptr && rt::isValid(calleeId)
                                               ? program->graph(calleeId)
                                               : nullptr;
-                if (!answersAPair(calleeGraph) && !answersAPairByValueAt(lifted, ref)) {
+                if (!answersAPair(calleeGraph) && !answersAPairByValueAt(lifted.view(), ref)) {
                     found.push_back(ref);
                     continue;
                 }
@@ -848,7 +848,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
             }
             const GraphId calleeId  = lifted.calleeIdOf(ref);
             const auto *calleeGraph = rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
-            return answersAPair(calleeGraph) || answersAPairByValueAt(lifted, ref);
+            return answersAPair(calleeGraph) || answersAPairByValueAt(lifted.view(), ref);
         });
     }
     // The linear halves are the remaining members of the list: a computed value like any other, in

@@ -4,6 +4,8 @@
 #include "jvp.h"
 #include "camel/runtime/graph.h"
 
+#include "graph/graph_view.h"
+
 #include "lift.h"
 #include "node_operator.h"
 
@@ -139,7 +141,7 @@ camel::core::type::Type *emptyTupleType() { return camel::core::type::TupleType:
 /// constant has no tangent, and that is what lets the rule expansion drop the term it multiplies
 /// (`rule_expand.cpp#expandRuleRightSide`) instead of computing it and multiplying by zero.
 bool isStructuralZeroTangent(
-    camel::runtime::GraphDraft &draft, const std::unordered_set<gc_node_ref_t> &zeroMade,
+    const camel::graph::GraphView &draft, const std::unordered_set<gc_node_ref_t> &zeroMade,
     gc_node_ref_t ref) {
     if (ref == rt::kInvalidNodeRef) {
         return false;
@@ -147,25 +149,26 @@ bool isStructuralZeroTangent(
     if (zeroMade.count(ref) != 0) {
         return true;
     }
-    const rt::DraftNode *node = draft.node(ref);
-    if (node == nullptr || node->header.kind != rt::GCNodeKind::Data ||
-        node->header.dataIndex >= 0 || node->header.dataType == nullptr) {
+    // The reading is the face's: a DATA node of a constant, `constantOf` answering the word the
+    // graph keeps for it -- the same `staticSlots[-dataIndex]` this asked for before, with the
+    // indexing (`dataIndex`, the static area) left to the adapter that stores it.
+    const camel::core::type::Type *type = draft.typeOf(ref);
+    if (draft.kindOf(ref) != camel::graph::NodeKind::Data || type == nullptr) {
         return false;
     }
-    const std::optional<slot_t> zero = camel::core::zeroTangentConstantOf(node->header.dataType);
+    const std::optional<slot_t> zero = camel::core::zeroTangentConstantOf(
+        const_cast<camel::core::type::Type *>(type));
     if (!zero.has_value()) {
         return false;
     }
-    const std::span<const slot_t> slots = draft.staticSlots();
-    const auto rawIndex                 = -static_cast<std::ptrdiff_t>(node->header.dataIndex);
-    const size_t index                  = static_cast<size_t>(rawIndex);
-    if (rawIndex < 0 || index >= slots.size()) {
+    const std::optional<slot_t> constant = draft.constantOf(ref);
+    if (!constant.has_value()) {
         return false;
     }
     // The constant *is* the zero its space registers, bit for bit: `-0.0` is a different constant
     // from the `0.0` the registry states, and nothing in this transform writes one (a lift writes
     // `zeroTangentConstantOf`, a law writes its own literal).
-    return slots[index] == *zero;
+    return *constant == *zero;
 }
 
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
@@ -1286,9 +1289,13 @@ bool liftGraph(
             draft.addDependency(liftedCallee);
             return true;
         };
-        for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
-            const rt::GCNode *node = nodeOf(function, ref);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Func) {
+        // The FUNC nodes, read off the view: `nodes()` is every place the view has a node at, and
+        // `kindOf` answers `Func` for exactly the places the stored kind said `Func` for -- the
+        // places the view does not have (a JOIN, a placeholder, a tombstone) cannot be a FUNC node,
+        // so the set of nodes this loop lifts is the same one the numbering walk lifted
+        // (`C-1123-17`).
+        for (const camel::graph::NodeRef ref : function.view().nodes()) {
+            if (function.view().kindOf(ref) != camel::graph::NodeKind::Func) {
                 continue;
             }
             if (!liftFuncValue(ref)) {
@@ -1916,8 +1923,11 @@ bool liftGraph(
                     // because it sits on the `sync` chain, and a print among them is why the chain
                     // exists (`modules/transforms/jvp.cpp`, the operator case).
                     std::vector<gc_node_ref_t> waits;
-                    for (const rt::GCGraphSyncEdge &sync : function.syncPredsOf(ref)) {
-                        const gc_node_ref_t edge = sync.pred;
+                    // The waits are the node's `sync` predecessors, one query of the view
+                    // (`predecessors(ref, Sync)` answers the same `edge.pred` list this read out
+                    // of the frozen edge records, in the same order).
+                    for (const camel::graph::NodeRef edge : function.view().predecessors(
+                             ref, camel::graph::EdgeKind::Sync)) {
                         if (edge < function.nodeCount() && copied[edge]) {
                             waits.push_back(copyOf[edge]);
                         }
@@ -2419,8 +2429,8 @@ bool liftGraph(
                 // time without it.
                 {
                     std::vector<gc_node_ref_t> waits;
-                    for (const rt::GCGraphSyncEdge &sync : function.syncPredsOf(ref)) {
-                        const gc_node_ref_t edge = sync.pred;
+                    for (const camel::graph::NodeRef edge : function.view().predecessors(
+                             ref, camel::graph::EdgeKind::Sync)) {
                         if (edge < function.nodeCount() && copied[edge]) {
                             waits.push_back(copyOf[edge]);
                         }
@@ -2487,7 +2497,7 @@ bool liftGraph(
                 // (`rule_expand.cpp#expandRuleRightSide`).
                 std::unordered_set<gc_node_ref_t> structurallyZero;
                 for (const gc_node_ref_t tangent : tangents) {
-                    if (isStructuralZeroTangent(draft, zeroMade, tangent)) {
+                    if (isStructuralZeroTangent(draft.view(), zeroMade, tangent)) {
                         structurallyZero.insert(tangent);
                     }
                 }
@@ -2511,7 +2521,7 @@ bool liftGraph(
                 // (the array's rows are the batch, not the type of the rule). `rule_types.h` is
                 // that answer, and it is the same one `vmap` asks for.
                 Type *ruleElementType = camel::transforms::rules::ruleElementTypeOf(
-                    camel::transforms::rules::firstOperandTypeOf(function, ref));
+                    camel::transforms::rules::firstOperandTypeOf(function.view(), ref));
                 // The configuration the node carries, port for port, so a law that wrote a `<>`
                 // value of its own is checked against it (`rule_expand.h#chooseRuleAmong`): a port
                 // the node passes a value to is `nullopt`, and a port its `<>` configuration fills
@@ -2969,8 +2979,8 @@ bool liftGraph(
             draft.setNormInputs(
                 gate,
                 std::span<const gc_node_ref_t>(gateInputs.data(), gateInputs.size()));
-            for (const rt::GCGraphSyncEdge &sync : function.syncPredsOf(originalExit)) {
-                const gc_node_ref_t edge = sync.pred;
+            for (const camel::graph::NodeRef edge :
+                 function.view().predecessors(originalExit, camel::graph::EdgeKind::Sync)) {
                 if (edge < function.nodeCount() && copied[edge]) {
                     (void)draft.appendChainStatement(gate, copyOf[edge]);
                 }

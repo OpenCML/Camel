@@ -16,6 +16,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/resource_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -1644,13 +1645,19 @@ const std::unordered_map<std::string, std::vector<GCGraph *>> &Engine::implBodie
     // and the kernel of that instance is the very `math:exp_d` the body calls) has no meaning
     // beyond the atom: the kernel is the primitive operator there, and keeps its rule. Expanding
     // such a call would expand the body's own call again.
-    const auto callsItsKernel = [](GCGraph *body, const std::string &uri) {
-        for (rt::gc_cnt_t id = 0; id < body->nodeCount(); ++id) {
-            const rt::GCNode *node = body->node(id);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+    // The body is read through its view: the nodes it has (`nodes()`, which skips the places that
+    // are not nodes -- a JOIN, a placeholder, a tombstone), the kind of each, and the operator it
+    // names. Every question here is one the view answers, and the places it skips cannot be an
+    // OPER node (a JOIN is a merge point, a tombstone is not a node), so the set of nodes this
+    // predicate can answer for is the same one the numbering walk asked about.
+    const auto callsItsKernel = [](const camel::graph::GraphView &body, const std::string &uri) {
+        for (const camel::graph::NodeRef id : body.nodes()) {
+            if (body.kindOf(id) != camel::graph::NodeKind::Oper) {
                 continue;
             }
-            if (body->nodeBodyAs<rt::GCOperBody>(id)->uri() == uri) {
+            // The URI of an OPER node is its operator id's, read out of the table that stores it
+            // once per operator (`GCOperBody::uri()` asks the same table).
+            if (camel::core::OperatorTable::instance().uri(body.operatorOf(id)) == uri) {
                 return true;
             }
         }
@@ -1658,7 +1665,7 @@ const std::unordered_map<std::string, std::vector<GCGraph *>> &Engine::implBodie
     };
     for (auto *body : program->implBodies()) {
         const std::string &uri = body->implKernelUri();
-        if (!uri.empty() && !callsItsKernel(body, uri)) {
+        if (!uri.empty() && !callsItsKernel(body->view(), uri)) {
             implBodies_[uri].push_back(body);
         }
     }

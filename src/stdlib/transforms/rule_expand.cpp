@@ -9,6 +9,7 @@
 
 #include "camel/core/derivative.h"
 #include "camel/core/mm.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/equality.h"
@@ -665,19 +666,28 @@ bool isProductUri(std::string_view uri) {
 /// the coefficient has no real value at all (the scalar `log(x)` at a negative `x`, and its
 /// elementwise form on an array, which this expansion cannot collapse for the same reason: the
 /// zero it would have to write is the shape of a value).
-bool isCollapsibleProduct(const rt::GCGraph &body, gc_node_ref_t ref) {
-    const rt::GCNode *node = body.node(ref);
-    if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+bool isCollapsibleProduct(const camel::graph::GraphView &body, gc_node_ref_t ref) {
+    // The kind and the type are the view's answers. `NodeKind::Oper` is also what it says for the
+    // four kinds a conversion, a copy, a construction and a member read are built as -- and
+    // `operatorOf` answers `kNoOper` for exactly those four (they carry no operator record), whose
+    // URI is the empty one. The empty URI is not a product, so the answer there is the same `false`
+    // the stored-kind test gave.
+    if (body.kindOf(ref) != camel::graph::NodeKind::Oper) {
         return false;
     }
-    if (node->dataType() == nullptr) {
+    const camel::core::type::Type *type = body.typeOf(ref);
+    if (type == nullptr) {
         return false;
     }
-    if (!camel::core::zeroTangentConstantOf(node->dataType()).has_value()) {
+    if (!camel::core::zeroTangentConstantOf(const_cast<camel::core::type::Type *>(type))
+             .has_value()) {
         return false;
     }
-    const auto *oper = body.nodeBodyAs<rt::GCOperBody>(ref);
-    return oper != nullptr && isProductUri(oper->uri());
+    // The URI of a node that names no operator record is the empty one (`GCOperBody::uri()` asks
+    // the operator table for the id it holds), so this is the same reading the payload gave.
+    const std::string_view uri =
+        camel::core::OperatorTable::instance().uri(body.operatorOf(ref));
+    return isProductUri(uri);
 }
 
 /// The zero of a type, written into this graph: what a collapsed product answers with. The value
@@ -701,10 +711,12 @@ ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
     if (!findRuleRightSide(instance, side, why) || side.body == nullptr) {
         return ports;
     }
-    for (const gc_node_ref_t port : side.body->normPorts()) {
-        const rt::GCNode *node = side.body->node(port);
+    // The body's ordinary ports and each port's type: two answers of the view, so the reading
+    // names no representation (`ports(Normal)` is the graph's `normPorts`, in the same order).
+    for (const camel::graph::NodeRef port :
+         side.body->view().ports(camel::graph::PortGroup::Normal)) {
         ports.push_back(
-            node != nullptr ? const_cast<camel::core::type::Type *>(node->dataType()) : nullptr);
+            const_cast<camel::core::type::Type *>(side.body->view().typeOf(port)));
     }
     return ports;
 }
@@ -823,11 +835,17 @@ gc_node_ref_t expandRuleRightSide(
         bool grew = true;
         while (grew) {
             grew = false;
-            for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
-                if (collapsed[ref] || !isCollapsibleProduct(*body, ref)) {
+            // The places the view does not have -- a BRCH's JOIN, a draft's placeholder, a
+            // tombstone -- are not operators, carry no type and name no operator record, so
+            // `isCollapsibleProduct` answers false for every one of them and no pass of this fixed
+            // point could mark one. So the walk reads the nodes of the view, and the set it can
+            // mark is the same one the numbering walk marked (`C-1123-17`).
+            for (const camel::graph::NodeRef ref : body->view().nodes()) {
+                if (collapsed[ref] || !isCollapsibleProduct(body->view(), ref)) {
                     continue;
                 }
-                for (const gc_node_ref_t input : body->normInputsOf(ref)) {
+                for (const gc_node_ref_t input :
+                     body->view().inputs(ref, camel::graph::PortGroup::Normal)) {
                     if (input < zeroValue.size() && zeroValue[input]) {
                         collapsed[ref] = true;
                         zeroValue[ref] = true;

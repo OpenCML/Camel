@@ -103,8 +103,10 @@ parameterOfPort(const camel::core::type::FunctionType *liftedType, size_t port);
 const rt::GCGraph *
 calleeGraphOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref);
 
-/// Whether the value a call at `ref` passes is a function that answers a pair.
-bool answersAPairByValueAt(const rt::GCGraph &graph, gc_node_ref_t ref);
+/// Whether the value a call at `ref` passes is a function that answers a pair. It reads the graph
+/// through `GraphView`: the call's value signature is one query of that face (`callValueSignatureOf`)
+/// and nothing here asks the representation.
+bool answersAPairByValueAt(const camel::graph::GraphView &graph, gc_node_ref_t ref);
 
 /// Whether `ref` is a call to a function that answers a pair -- by the value it passes or by the
 /// callee it names.
@@ -656,7 +658,7 @@ struct Half {
             // Which graph `v` is is asked at run time by the operator, never read here. The answer
             // is `(result, lin)`, and the tangent the source read is the second half's call of that
             // `lin` (`residualsOf` carries it as the call's linear half).
-            if (!tangent && answersAPairByValueAt(*source, ref)) {
+            if (!tangent && answersAPairByValueAt(source->view(), ref)) {
                 camel::core::type::FunctionType *valueType =
                     callValueSignatureOf(source->view(), ref);
                 FunctionType *splitType =

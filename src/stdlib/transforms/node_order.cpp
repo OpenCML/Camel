@@ -3,6 +3,8 @@
 
 #include "node_order.h"
 
+#include "graph/graph_view.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -22,12 +24,16 @@ namespace {
 /// The data inputs of a node: the ordinary ports and the context ones. The effect runs are not
 /// here on purpose -- a sync or order edge orders two statements but does not make one's *value*
 /// the other's input, and a copy walk needs values.
+///
+/// One query of the view: `predecessors(ref, Data)` is defined as the ordinary group followed by
+/// the context one, which is the order this walk has always read, and it answers for a JOIN too
+/// (a place the view has no kind for still has ports). The walk itself stays on the numbering:
+/// a JOIN is one item of the order, and `nodes()` would drop it (`C-1123-17`).
 void appendDataInputsOf(
-    const GCGraph &graph, gc_node_ref_t ref, std::vector<gc_node_ref_t> &out) {
-    const std::span<const gc_node_ref_t> norm = graph.normInputsOf(ref);
-    out.insert(out.end(), norm.begin(), norm.end());
-    const std::span<const gc_node_ref_t> with = graph.withInputsOf(ref);
-    out.insert(out.end(), with.begin(), with.end());
+    const camel::graph::GraphView &graph, gc_node_ref_t ref, std::vector<gc_node_ref_t> &out) {
+    const std::vector<gc_node_ref_t> inputs =
+        graph.predecessors(ref, camel::graph::EdgeKind::Data);
+    out.insert(out.end(), inputs.begin(), inputs.end());
 }
 
 } // namespace
@@ -59,7 +65,7 @@ std::vector<gc_node_ref_t> dependencyOrderOf(const GCGraph &graph) {
             continue;
         }
         inputs.clear();
-        appendDataInputsOf(graph, ref, inputs);
+        appendDataInputsOf(graph.view(), ref, inputs);
         for (gc_node_ref_t input : inputs) {
             if (!isNode(input)) {
                 continue; // not a node: it places nothing and waits for nothing
