@@ -1,7 +1,16 @@
-// camel-oversight: a narrow channel through which a supervising agent on another machine reads what
-// this DSH process is doing and leaves it messages.
+// camel-oversight: the collaboration engine between the decision-maker (another machine) and the
+// coordinator (a session in this DSH process). Three parts:
 //
-// Four HTTP routes on the web server the GUI already has, and one tool for the model:
+//   the channel  -- the decision-maker reads the coordinator's state and sends it dispatches; the
+//                   coordinator acknowledges and speaks back, pushed as it happens;
+//   the watch    -- every few minutes the plugin measures the repository, the backlog, the lanes and
+//                   the build host itself (rules.js), and reminds the coordinator only of what is
+//                   off: a healthy hour costs it no context at all. It also re-states the standing
+//                   rules (internal/collab/rules.md) once an hour, against a long context forgetting
+//                   them. This replaces the coordinator's own scheduled prompts;
+//   the panel    -- client.js draws the readings, the alerts and every reminder in the GUI.
+//
+// HTTP routes on the web server the GUI already has, and the model's tools:
 //   GET  /oversee/state  the target session's status (idle or running, and since when), its live lanes
 //                        (subagents, running or inactive), every root session, a summary of each recent
 //                        turn, the messages not yet acknowledged, and the build host's load;
@@ -11,7 +20,7 @@
 //                        sent of its own accord;
 //   GET  /oversee/events a server-sent event stream that pushes each acknowledgement, each message
 //                        the model sends, and the claimed session ending, as they happen;
-//   tools oversight_claim, oversight_ack, oversight_tell  the model's side.
+//   tools oversight_claim, oversight_ack, oversight_tell, oversight_readings  the model's side.
 //
 // The routes are raw web-server routes, outside the GUI's launch-token login. The gate is the network:
 // the web server stays on loopback and `tailscale serve` publishes it to the tailnet, whose ACL decides
@@ -21,22 +30,31 @@
 // nearest step). Neither cancels the running turn. Each message carries an id; a second delivery
 // of the same id is acknowledged and dropped, so a retried request does not start a second turn.
 
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { measure } from './measure.js'
+import { DEFAULT_LIMITS, LEVELS, RULES } from './rules.js'
 
 export const name = 'camel-oversight'
-export const inject = ['agents', 'webServer', 'tools', 'systemPrompt']
+export const inject = ['agents', 'webServer', 'tools', 'systemPrompt', 'timer']
 
 const DEFAULTS = {
     logFile: path.join(os.homedir(), '.camel-oversight', 'log.jsonl'),
     sender: 'decision-maker',
     tailLimit: 400,
     turnsInState: 8,
+    // The repository the watch measures; empty turns the watch off (the channel still works).
+    repo: '',
+    watchSeconds: 300,
+    stateDir: '',
     buildHost: '',
     buildProbe: 'cat /proc/loadavg; nproc; pgrep -fc "ctest|camel" || true',
+    rulesFile: 'internal/collab/rules.md',
+    rulesRefreshMinutes: 60,
+    limits: {},
 }
 
 const clip = (text, n) => {
@@ -184,29 +202,6 @@ export function apply(ctx, rawConfig) {
         }))
     }
 
-    // ---- the build host ------------------------------------------------------------------------
-    let build = { unconfigured: true }
-    let buildAt = 0
-    const probeBuild = () => {
-        if (!config.buildHost) return
-        if (Date.now() - buildAt < 60_000) return
-        buildAt = Date.now()
-        execFile(
-            'ssh',
-            ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', config.buildHost, config.buildProbe],
-            { timeout: 10_000 },
-            (error, stdout) => {
-                if (error) {
-                    build = { unreadable: clip(error.message, 160), at: Date.now() }
-                    return
-                }
-                const [loadavg = '', cores = '', jobs = ''] = stdout.split('\n')
-                const [one, five, fifteen] = loadavg.split(' ').map(Number)
-                build = { load: [one, five, fifteen], cores: Number(cores), testProcesses: Number(jobs), at: Date.now() }
-            },
-        )
-    }
-
     const answer = (res, status, value) => {
         const body = JSON.stringify(value)
         res.writeHead(status, {
@@ -293,18 +288,190 @@ export function apply(ctx, rawConfig) {
         }
     }
 
+    // ---- the watch ----------------------------------------------------------------------------------
+    // Every watchSeconds the plugin measures and runs the rules. An alert becomes a reminder once its
+    // condition has held for the rule's `hold` and the same alert was not delivered within its
+    // `cooldown` (an alert whose reading changed is new). All reminders due in one beat are delivered
+    // as one message, at the loudest level among them.
+    const limits = { ...DEFAULT_LIMITS, ...(config.limits || {}) }
+    let reading = null
+    let lanesNow = { unreadable: 'not measured yet' }
+    const alerts = new Map() // rule id -> {since, key, text, level, lastDelivered, lastKey}
+    const reminders = [] // the most recent deliveries, newest last
+    let lastRefresh = 0
+    let beating = false
+
+    const unackedOlderThan = (minutes) =>
+        [...delivered.values()]
+            .filter((entry) => !acks.has(entry.id) && Date.now() - entry.at > minutes * 60_000)
+            .map((entry) => entry.id)
+    // Only dispatch-shaped ids are items; an id a session made up for itself can never have a backlog row.
+    const takenIds = () =>
+        [...acks.values()]
+            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 15 * 60_000)
+            .map((entry) => entry.id)
+    const backlogOpen = () =>
+        reading && reading.backlog instanceof Map ? [...reading.backlog.values()].filter((row) => !row.done).length : 0
+
+    const sendToTarget = (agent, level, text) => {
+        const message = Object.freeze({
+            id: randomUUID(),
+            role: 'user',
+            source: Object.freeze({ kind: 'user' }),
+            content: Object.freeze([Object.freeze({ type: 'text', text })]),
+        })
+        if (level === 'urgent') return agent.steer(message), 'steer'
+        if (level === 'wake' && agent.status !== 'running') return agent.followup(message), 'followup'
+        return agent.inject(message), 'inject'
+    }
+
+    const deliver = (due, now) => {
+        const agent = target()
+        const level = due.reduce((top, alert) => (LEVELS[alert.level] > LEVELS[top] ? alert.level : top), 'quiet')
+        const text = `[oversight · 提醒]\n${due.map((alert) => `- ${alert.text}`).join('\n')}`
+        const mode = agent ? sendToTarget(agent, level, text) : 'held (no claimed session)'
+        const entry = { kind: 'reminder', at: now, level, mode, rules: due.map((alert) => alert.id), text }
+        record(entry)
+        emit(entry)
+        reminders.push(entry)
+        if (reminders.length > 50) reminders.splice(0, reminders.length - 50)
+        if (!agent) return
+        for (const alert of due) {
+            const state = alerts.get(alert.id)
+            state.lastDelivered = now
+            state.lastKey = alert.key
+        }
+    }
+
+    // The standing rules, re-stated once an hour while the coordinator is at work: a long context
+    // forgets what it read at the start. Read from the repository each time, so an edit to the
+    // rules reaches the next refresh without a reload.
+    const refreshRules = async (now) => {
+        const agent = target()
+        if (!agent || !config.repo || now - lastRefresh < config.rulesRefreshMinutes * 60_000) return
+        const tail = tails.get(String(agent.id)) || []
+        const active = tail.length > 0 && now - tail[tail.length - 1].time < 60 * 60_000
+        if (!active) return
+        const rules = await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
+        if (!rules.trim()) return
+        lastRefresh = now
+        sendToTarget(agent, 'quiet', `[oversight · 铁律复读]\n${rules.trim()}`)
+        const entry = { kind: 'reminder', at: now, level: 'quiet', mode: 'inject', rules: ['rules-refresh'], text: '铁律复读' }
+        record(entry)
+        reminders.push(entry)
+    }
+
+    const beat = async () => {
+        if (beating || !config.repo) return
+        beating = true
+        try {
+            const now = Date.now()
+            reading = await measure({
+                repo: config.repo,
+                fetch: config.fetch !== false,
+                stateDir: config.stateDir,
+                buildHost: config.buildHost,
+                buildProbe: config.buildProbe,
+            })
+            const agent = target()
+            lanesNow = await lanesOf(agent ? String(agent.id) : null)
+            const facts = {
+                m: reading,
+                lanes: lanesNow,
+                limits,
+                now,
+                unacked: unackedOlderThan(20),
+                taken: takenIds(),
+                backlogOpen: backlogOpen(),
+                target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
+            }
+            const due = []
+            for (const rule of RULES) {
+                let found = null
+                try {
+                    found = rule.check(facts)
+                } catch (error) {
+                    found = null
+                    ctx.logger && ctx.logger.warn(`camel-oversight: rule ${rule.id} failed: ${error.message}`)
+                }
+                if (rule.id === 'coordinator-idle' && found && facts.target && facts.target.since !== null) {
+                    // The idle rule's hold runs from when the session went idle, not from when the
+                    // watch first noticed it.
+                    if (now - facts.target.since < rule.hold * 60_000) found = null
+                }
+                if (!found) {
+                    alerts.delete(rule.id)
+                    continue
+                }
+                const state = alerts.get(rule.id) || { since: now, lastDelivered: null, lastKey: null }
+                Object.assign(state, { key: found.key, text: found.text, level: rule.level })
+                alerts.set(rule.id, state)
+                const held = rule.id === 'coordinator-idle' || now - state.since >= rule.hold * 60_000
+                const cooled = state.lastDelivered === null || now - state.lastDelivered >= rule.cooldown * 60_000 || state.lastKey !== found.key
+                if (held && cooled) due.push({ id: rule.id, level: rule.level, key: found.key, text: found.text })
+            }
+            if (due.length > 0) deliver(due, now)
+            await refreshRules(now)
+            emit({ kind: 'beat', at: now, alerts: [...alerts.keys()] })
+        } finally {
+            beating = false
+        }
+    }
+    ctx.effect(() => ctx.timer.interval(() => void beat(), Math.max(60, config.watchSeconds) * 1000))
+    ctx.effect(() => ctx.timer.timeout(() => void beat(), 20_000))
+
+    const readingSummary = () => {
+        if (!reading) return null
+        const value = (v) => (v && v.unreadable ? { unreadable: v.unreadable } : v)
+        const backlog = reading.backlog instanceof Map ? reading.backlog : null
+        return {
+            at: reading.at,
+            fetched: reading.fetched,
+            develop: value(reading.develop),
+            fshDev: value(reading.fshDev),
+            checkout: value(reading.checkout),
+            worktrees: value(reading.worktrees),
+            branches: reading.branches && !reading.branches.unreadable
+                ? { unmerged: reading.branches.unmerged, maxBehind: reading.branches.maxBehind }
+                : value(reading.branches),
+            merged: reading.merged && !reading.merged.unreadable
+                ? { local: reading.merged.mergedLocal.length, remote: reading.merged.mergedRemote.length }
+                : value(reading.merged),
+            backlog: backlog
+                ? {
+                      rows: backlog.size,
+                      doing: [...backlog.values()].filter((row) => row.doing).length,
+                      blocked: [...backlog.values()].filter((row) => row.blocked).length,
+                      open: [...backlog.values()].filter((row) => !row.done).length,
+                  }
+                : value(reading.backlog),
+            panel: value(reading.panel),
+            host: value(reading.host),
+        }
+    }
+    const alertsNow = () =>
+        [...alerts.entries()].map(([id, state]) => ({
+            id,
+            level: state.level,
+            text: state.text,
+            since: state.since,
+            lastDelivered: state.lastDelivered,
+        }))
+
     route('/oversee/state', 'GET', async (req, res) => {
-        probeBuild()
         const agent = target()
         const id = agent ? String(agent.id) : null
         answer(res, 200, {
             at: Date.now(),
             target: agent ? { id, cwd: headerOf(agent).cwd ?? null, status: agent.status, since: since.get(id) ?? null } : null,
-            lanes: await lanesOf(id),
+            lanes: id ? await lanesOf(id) : lanesNow,
+            alerts: alertsNow(),
+            reminders: reminders.slice(-10),
+            reading: readingSummary(),
             sessions: sessionsNow(),
             recentTurns: id ? recentTurns(id, config.turnsInState) : [],
             unacknowledged: pending(),
-            build,
+            watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
         })
     })
 
@@ -450,8 +617,29 @@ export function apply(ctx, rawConfig) {
                 const waiting = pending()
                 const head =
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +
-                    'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit).'
-                return waiting.length === 0 ? head : `${head} Not yet acknowledged: ${waiting.join(', ')}.`
+                    'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit). ' +
+                    'Messages prefixed "[oversight · …]" are the plugin\'s own reminders from its measurements; act on them, no acknowledgement needed. oversight_readings gives the measurements on demand.'
+                const open = [...alerts.keys()]
+                const parts = [head]
+                if (waiting.length > 0) parts.push(`Not yet acknowledged: ${waiting.join(', ')}.`)
+                if (open.length > 0) parts.push(`Open alerts: ${open.join(', ')}.`)
+                return parts.join(' ')
+            },
+        }),
+    )
+
+    ctx.effect(() =>
+        ctx.tools.register({
+            name: 'oversight_readings',
+            description:
+                'The latest measurements of the repository, backlog, lanes and build host, and the open alerts, in one call. Use it instead of running git and shell commands to count lanes, branches or backlog rows.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+            output: {
+                schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+                render: (_args, value) => [{ type: 'text', text: value.result }],
+            },
+            async execute() {
+                return { result: JSON.stringify({ reading: readingSummary(), lanes: lanesNow, alerts: alertsNow(), unacknowledged: pending() }, null, 2) }
             },
         }),
     )

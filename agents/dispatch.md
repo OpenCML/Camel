@@ -86,7 +86,7 @@
 
 - 决策者的派工、催办、返工经决策者通道（`internal/tools/camel-oversight/`）直接送进协调者会话；协调者当轮用 `oversight_ack` 回执，接手的以同一编号记进 `internal/backlog.md`。
 - 手上全部的活（包括自己发现的红基线、闸门欠账、`known_fail`、搁置的分支）只记在 `internal/backlog.md`。车道在跑与否由通道实时读出，不手写表；车道的读数写进合并提交说明。
-- 流转与格式见 `internal/README.md`；通道的用法见 `internal/coordinator/SKILL.md` 的"决策者通道"一节。本清单 §0 说的"先读索引、先搜裁定"照旧，位置是 `internal/questions/` 与 `internal/reviews/`。
+- 流转与格式见 `internal/README.md`；协作协议与通道的用法见 `internal/collab/SKILL.md`。本清单 §0 说的"先读索引、先搜裁定"照旧，位置是 `internal/questions/` 与 `internal/reviews/`。
 
 ## 8. 闸门、分支卫生、合并位（只追加，2026-11-23 由协调者从私有工作流并入）
 
