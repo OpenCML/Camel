@@ -383,6 +383,18 @@ try {
         [System.IO.File]::WriteAllText($planSetFile, ($planTargets -join "`n") + "`n",
             (New-Object System.Text.UTF8Encoding($false)))
     }
+    # The change itself, as file names, written down once. The merged run diffs this same tree for
+    # itself; the seeding run is handed this list instead (`-ChangedList`), so the two cannot disagree
+    # about what the merge touches -- the one thing that has to agree for the comparison to mean
+    # anything. A base ref cannot promise it: the baseline tree and the merged tree differ by the
+    # lane's own files, so a diff taken there names those files too and selects more plans than the
+    # merge does (measured once as `smoke`-plus-`docs.links` against `docs.links`, 31 cases against
+    # 21, and every comparison after it refused -- correctly -- as two runs of different things).
+    $changedFilesFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-changed-$PID.txt")
+    $changedFiles = @(& git diff --name-only 'HEAD^1' 2>$null) |
+        ForEach-Object { "$_".Trim().Replace('\', '/') } | Where-Object { $_ }
+    [System.IO.File]::WriteAllText($changedFilesFile, (($changedFiles -join "`n") + "`n"),
+        (New-Object System.Text.UTF8Encoding($false)))
     if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
         # Not a red and not a green: the selection itself did not answer, so the plans this merge
         # touches are unknown and nothing about the change has been measured. Same shape as the
@@ -474,14 +486,15 @@ try {
         $seedRows = 0
         $seedReds = 0
         if ($null -eq $worktreeProblem) {
-            Write-Host ("  no baseline for develop {0}: measuring it there, on a detached checkout at {1} (same plan set)" -f `
+            Write-Host ("  no baseline for develop {0}: measuring it there, in a worktree at {1} on the gate's own branch" -f `
                 $developTip.Substring(0, 9), $baselinePath)
             $seedStarted = Get-Date
-            # The same plan set the merged run will select: `-Changed` lists the change against the
-            # same base (`$head`, the lane) on a tree that does not have it yet, so the two runs differ
-            # in the merge and in nothing else -- which is what makes the comparison a comparison.
+            # The same change, named once and handed to both runs. `-ChangedList` is the file list this
+            # merge touches, measured in the merge position a few lines above: the baseline tree does
+            # not hold the lane's files, so a diff taken *there* against any base names them too.
             $seedRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
-                -Path $baselinePath -Changed -ChangedBase $head -ListKnown -NoGpuWatch 2>&1)
+                -Path $baselinePath -Changed -ChangedBase $developTip -ChangedList $changedFilesFile `
+                -ListKnown -NoGpuWatch 2>&1)
             $seedExit = $LASTEXITCODE
             $seedSeconds = ((Get-Date) - $seedStarted).TotalSeconds
             [System.IO.File]::WriteAllText($seedTranscript,
@@ -644,5 +657,6 @@ finally {
     if ($transcript) { Remove-Item -LiteralPath $transcript -Force -ErrorAction SilentlyContinue }
     if ($seedTranscript) { Remove-Item -LiteralPath $seedTranscript -Force -ErrorAction SilentlyContinue }
     if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
+    if ($changedFilesFile) { Remove-Item -LiteralPath $changedFilesFile -Force -ErrorAction SilentlyContinue }
     Pop-Location
 }
