@@ -214,25 +214,30 @@ optional<vector<HeldMember>> membersOf(node_handle_t value) {
 /// its own: a fill may hold the projection rather than what it projects (a literal written as one
 /// type and entered into another is copied field by field, `builder_expr.cpp`), so the walk goes on
 /// at the member it names. `nullptr` when the base is not a value this graph spells out.
+///
+/// The member is asked of `accessedPartOf`, which answers both spellings a read has (the operator
+/// with the member as its first operand, the ACCS kind with it in the payload); the value it reads
+/// is the last ordinary operand either way, which is the port this walk starts from.
 node_handle_t memberBehindProjection(node_handle_t projection) {
     const auto inputs = normInputsOf(projection);
     if (inputs.empty()) {
         return nullptr;
     }
-    const auto payload = nodeDraftOf(projection)->payloadOf(nodeIdOf(projection));
-    if (payload.size() < sizeof(runtime::GCAccsBody)) {
-        return nullptr;
-    }
-    const auto members = membersOf(nodeDraftOf(projection)->ref(inputs.front()));
+    const node_handle_t base = nodeDraftOf(projection)->ref(inputs.back());
+    const auto members       = membersOf(base);
     if (!members.has_value()) {
         return nullptr;
     }
-    const auto *accs = reinterpret_cast<const runtime::GCAccsBody *>(payload.data());
+    Type *const baseType = valueTypeOf(nodeTypeOf(base));
+    if (baseType == nullptr) {
+        return nullptr;
+    }
+    const std::optional<size_t> slot = accessedPartOf(projection, baseType);
+    if (!slot.has_value()) {
+        return nullptr;
+    }
     for (const HeldMember &member : members.value()) {
-        const bool same = accs->accsKind == runtime::GCAccsKind::StructKey
-                              ? member.name == accs->key()
-                              : member.slot == accs->value;
-        if (same) {
+        if (member.slot == *slot) {
             return member.value;
         }
     }

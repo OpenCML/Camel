@@ -149,6 +149,13 @@ inline std::vector<std::pair<size_t, node_handle_t>> constructionValuesOf(node_h
     return values;
 }
 
+/// The part of `type` a member read reads, when it reads one: `s.x` of a struct, `t.0` of a tuple.
+/// It answers both spellings -- the operator (`:op/access_key` / `:op/access`, member first, value
+/// last) and the node kind (member in the payload, value as the one input) -- because a reader that
+/// asked only one of them answered "no member" for every read of the other. Defined in
+/// `builder_control.cpp`, where the aggregate helpers it stands on live.
+std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type);
+
 inline void setGraphReturnFromResult(
     const compile_graph_ptr_t &graph, draft_node_ref_t outputNode, draft_node_ref_t valueNode,
     Type *resultType) {

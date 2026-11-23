@@ -15,6 +15,72 @@
 
 namespace camel::transforms {
 
+/// The three fields of a node record these readings ask, on the three faces a graph presents: a
+/// frozen graph and a `GraphRead` hand out a record whose `kind`, `dataType()` and `dataIndex` are
+/// members, and a draft hands out `DraftNode`, which keeps the same three under `header`. Asking
+/// them through these keeps every reader below written once, for all three.
+namespace payload_detail {
+
+template <typename Node> inline runtime::GCNodeKind kindOf(const Node *node) noexcept {
+    if constexpr (requires { node->kind; }) {
+        return node->kind;
+    } else {
+        return node->header.kind;
+    }
+}
+
+template <typename Node>
+inline camel::core::type::Type *dataTypeOf(const Node *node) noexcept {
+    if constexpr (requires { node->dataType(); }) {
+        return node->dataType();
+    } else {
+        return node->header.dataType;
+    }
+}
+
+template <typename Node> inline runtime::gc_slot_idx_t dataIndexOf(const Node *node) noexcept {
+    if constexpr (requires { node->dataIndex; }) {
+        return node->dataIndex;
+    } else {
+        return node->header.dataIndex;
+    }
+}
+
+/// Whether node `ref` has a payload. A `GraphRead` answers it of the graph (`hasPayload(ref)`), a
+/// frozen graph of the record (`GCNode::hasPayload`), and a draft's record holds the count.
+template <typename Graph>
+inline bool hasPayloadOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
+    if constexpr (requires { graph.hasPayload(ref); }) {
+        return graph.hasPayload(ref);
+    } else if constexpr (requires { graph.node(ref)->hasPayload(); }) {
+        const auto *node = graph.node(ref);
+        return node != nullptr && node->hasPayload();
+    } else {
+        const auto *node = graph.node(ref);
+        return node != nullptr && node->header.payloadBytes > 0;
+    }
+}
+
+/// The URI of an operator node: out of the body a frozen graph points at (`nodeBodyAs`), out of the
+/// URI a `GraphRead` answers, or out of the payload bytes a draft keeps -- the same `GCOperBody`.
+template <typename Graph>
+inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
+    if constexpr (requires { graph.template nodeBodyAs<runtime::GCOperBody>(ref); }) {
+        const auto *body = graph.template nodeBodyAs<runtime::GCOperBody>(ref);
+        return body == nullptr ? std::string_view() : std::string_view(body->uri());
+    } else if constexpr (requires { graph.operUriOf(ref); }) {
+        return graph.operUriOf(ref);
+    } else {
+        const std::span<const std::byte> bytes = graph.payloadOf(ref);
+        if (bytes.size() < sizeof(runtime::GCOperBody)) {
+            return std::string_view();
+        }
+        return std::string_view(reinterpret_cast<const runtime::GCOperBody *>(bytes.data())->uri());
+    }
+}
+
+} // namespace payload_detail
+
 /*
  * The four node kinds that become **ordinary operators** -- a conversion (CAST), a copy (COPY), a
  * construction (FILL) and a member read (ACCS) -- read as the operators they are becoming. The
@@ -174,8 +240,9 @@ inline NodeOperator nodeOperatorOf(std::string_view uri) noexcept {
 
 /// Which of the four operators node `ref` of `graph` is. A ref that is not a node is `NotOne`.
 ///
-/// `Graph` is a frozen graph or a `GraphRead`: both answer `nodeCount()` and the record
-/// `node(ref)` hands out, and the record's `kind` is the same field in both (see the file comment).
+/// `Graph` is a frozen graph, a `GraphRead` or a draft: all three answer `nodeCount()` and a record
+/// for `node(ref)`, and the three fields these readings ask of that record are `kind`, `dataType`
+/// and `dataIndex` in all three (a draft keeps them under `header`, see `payload_detail`).
 template <typename Graph>
 inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
     if (ref >= graph.nodeCount()) {
@@ -185,24 +252,18 @@ inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t re
     if (node == nullptr) {
         return NodeOperator::NotOne;
     }
-    if (node->kind == runtime::GCNodeKind::Oper) {
+    if (payload_detail::kindOf(node) == runtime::GCNodeKind::Oper) {
         // An operator node is one of the four by the URI its record holds, and every other operator
         // -- the overwhelming majority -- is `NotOne`, which is what makes a reader that only wants
-        // a yes/no keep working. A frozen graph reads the URI in place out of `GCOperBody`; a
-        // `GraphRead` copies the same body out of its payload and answers the URI as a value, so
-        // its answer is asked and used in one expression here.
-        if constexpr (requires { graph.template nodeBodyAs<runtime::GCOperBody>(ref); }) {
-            if (!node->hasPayload()) {
-                return NodeOperator::NotOne;
-            }
-            const auto *body = graph.template nodeBodyAs<runtime::GCOperBody>(ref);
-            return body == nullptr ? NodeOperator::NotOne : nodeOperatorOf(body->uri());
-        } else {
-            const std::string uri = graph.operUriOf(ref);
-            return nodeOperatorOf(uri);
+        // a yes/no keep working. The URI is read where the face keeps it (`payload_detail::uriOf`):
+        // in place out of `GCOperBody` on a frozen graph, out of the copy a `GraphRead` answered,
+        // or out of the payload bytes a draft holds -- the same body either way.
+        if (!payload_detail::hasPayloadOf(graph, ref)) {
+            return NodeOperator::NotOne;
         }
+        return nodeOperatorOf(payload_detail::uriOf(graph, ref));
     }
-    return nodeOperatorOf(node->kind);
+    return nodeOperatorOf(payload_detail::kindOf(node));
 }
 
 /// Which case node `ref` is. A ref that is not a node is `Other`, the case a walk's `default:`
@@ -225,7 +286,7 @@ inline NodeCase nodeCaseOf(const Graph &graph, runtime::gc_node_ref_t ref) noexc
         return NodeCase::Other;
     }
     const auto *node = graph.node(ref);
-    return node == nullptr ? NodeCase::Other : nodeCaseOf(node->kind);
+    return node == nullptr ? NodeCase::Other : nodeCaseOf(payload_detail::kindOf(node));
 }
 
 /// What a construction says: which kind of aggregate it builds, the values it writes, and the slot
@@ -277,11 +338,12 @@ std::span<const std::byte> bytesOf(const Graph &graph, runtime::gc_node_ref_t re
 template <typename Graph>
 const ::slot_t *constantOf(const Graph &graph, runtime::gc_node_ref_t ref) {
     const auto *node = graph.node(ref);
-    if (node == nullptr || node->kind != runtime::GCNodeKind::Data || node->dataIndex >= 0) {
+    if (node == nullptr || payload_detail::kindOf(node) != runtime::GCNodeKind::Data ||
+        payload_detail::dataIndexOf(node) >= 0) {
         return nullptr;
     }
     const auto slots = graph.staticSlots();
-    const size_t at  = static_cast<size_t>(-static_cast<int64_t>(node->dataIndex));
+    const size_t at  = static_cast<size_t>(-static_cast<int64_t>(payload_detail::dataIndexOf(node)));
     return at < slots.size() ? &slots[at] : nullptr;
 }
 
@@ -314,7 +376,7 @@ std::optional<FillPayload> fillPayloadOf(const Graph &graph, runtime::gc_node_re
         return std::nullopt;
     }
     FillPayload payload;
-    if (node->kind == runtime::GCNodeKind::Fill) {
+    if (payload_detail::kindOf(node) == runtime::GCNodeKind::Fill) {
         const std::span<const std::byte> bytes = payload_detail::bytesOf(graph, ref);
         if (bytes.size() < sizeof(runtime::GCFillBody)) {
             return std::nullopt;
@@ -336,7 +398,7 @@ std::optional<FillPayload> fillPayloadOf(const Graph &graph, runtime::gc_node_re
     if (norm.empty()) {
         return std::nullopt;
     }
-    payload.fillKind = payload_detail::fillKindOfType(node->dataType());
+    payload.fillKind = payload_detail::fillKindOfType(payload_detail::dataTypeOf(node));
     payload.values.assign(norm.begin() + 1, norm.end());
     payload.slots.resize(payload.values.size());
     for (size_t i = 0; i < payload.slots.size(); ++i) {
@@ -354,7 +416,7 @@ std::optional<AccsPayload> accsPayloadOf(const Graph &graph, runtime::gc_node_re
         return std::nullopt;
     }
     AccsPayload payload;
-    if (node->kind == runtime::GCNodeKind::Accs) {
+    if (payload_detail::kindOf(node) == runtime::GCNodeKind::Accs) {
         const std::span<const std::byte> bytes = payload_detail::bytesOf(graph, ref);
         if (bytes.size() < sizeof(runtime::GCAccsBody)) {
             return std::nullopt;
@@ -374,7 +436,7 @@ std::optional<AccsPayload> accsPayloadOf(const Graph &graph, runtime::gc_node_re
     }
     const ::slot_t *constant = payload_detail::constantOf(graph, norm.front());
     const auto *position     = graph.node(norm.front());
-    const auto *positionType = position == nullptr ? nullptr : position->dataType();
+    const auto *positionType = position == nullptr ? nullptr : payload_detail::dataTypeOf(position);
     if (constant == nullptr || positionType == nullptr) {
         return std::nullopt;
     }

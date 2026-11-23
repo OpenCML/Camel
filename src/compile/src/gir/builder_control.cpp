@@ -373,69 +373,6 @@ std::string aggregatePartName(const Type *type, size_t index) {
     return std::to_string(index);
 }
 
-/// The part of `type` a member read reads, when it reads one: `s.x` of a struct, `t.0` of a
-/// tuple, of exactly the part's type.
-///
-/// A member read is an operator now (`:op/access_key` by name, `:op/access` by place): the member
-/// is the call's *first* ordinary operand, a constant the builder wrote there, and the value it
-/// reads is the second. So the node is an OPER and the access node's payload -- which held the
-/// member when the read had a kind of its own -- is not where the member is any more. Both
-/// spellings answer the same question, and the value operand is the last one either way, which is
-/// what tells the caller the read is of the value it asked about.
-std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
-    if (type == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        return std::nullopt;
-    }
-    const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
-    if (op == nullptr) {
-        return std::nullopt;
-    }
-    const std::string_view uri = op->uri();
-    const bool byName          = uri == ":op/access_key";
-    if (!byName && uri != ":op/access") {
-        return std::nullopt;
-    }
-    const auto norm = normInputsOf(node);
-    if (norm.size() != 2) {
-        return std::nullopt;
-    }
-    const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(norm.front()));
-    if (!member.has_value()) {
-        return std::nullopt;
-    }
-    size_t index = 0;
-    if (type->code() == TypeCode::Struct) {
-        if (!byName) {
-            return std::nullopt;
-        }
-        const auto *key = camel::core::rtdata::fromSlot<String *>(*member);
-        if (key == nullptr) {
-            return std::nullopt;
-        }
-        const auto field = tt::as_ptr<const StructType>(type)->findField(std::string(key->view()));
-        if (!field.has_value()) {
-            return std::nullopt;
-        }
-        index = *field;
-    } else if (type->code() == TypeCode::Tuple) {
-        if (byName) {
-            return std::nullopt;
-        }
-        const int64_t at = camel::core::rtdata::fromSlot<int64_t>(*member);
-        if (at < 0 || static_cast<uint64_t>(at) >= tt::as_ptr<const TupleType>(type)->size()) {
-            return std::nullopt;
-        }
-        index = static_cast<size_t>(at);
-    } else {
-        return std::nullopt;
-    }
-    Type *part = aggregatePartType(type, index);
-    Type *read = valueTypeOf(nodeTypeOf(node));
-    if (part == nullptr || read == nullptr || (read != part && !read->equals(part))) {
-        return std::nullopt;
-    }
-    return index;
-}
 
 /// The next value of the part `step` of `value` (`value` is a struct or tuple FILL, or any value
 /// of that type). A FILL's parts are its With inputs, which is what lets an `append` among them
@@ -489,6 +426,101 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
 }
 
 } // namespace
+
+// A reader of a member read that sits outside this file asks it too (`builder_refs.cpp`), so it
+// is defined after the helpers it stands on rather than beside them.
+/// The part of `type` a member read reads, when it reads one: `s.x` of a struct, `t.0` of a
+/// tuple, of exactly the part's type.
+///
+/// A member read is an operator now (`:op/access_key` by name, `:op/access` by place): the member
+/// is the call's *first* ordinary operand, a constant the builder wrote there, and the value it
+/// reads is the second. The node-kind spelling says the same thing from its payload, with the value
+/// as its one ordinary input -- a graph built before the read had a kind of its own, or built by the
+/// shape fixture, still reads that way. Both spellings answer the same question, and the value
+/// operand is the last one either way, which is what tells the caller the read is of the value it
+/// asked about.
+std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
+    if (type == nullptr || node == nullptr) {
+        return std::nullopt;
+    }
+    const bool structType = type->code() == TypeCode::Struct;
+    const bool tupleType  = type->code() == TypeCode::Tuple;
+    if (!structType && !tupleType) {
+        return std::nullopt;
+    }
+    size_t index = 0;
+    if (nodeIsKind(node, runtime::GCNodeKind::Accs)) {
+        const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
+        if (payload.size() < sizeof(runtime::GCAccsBody) || normInputsOf(node).size() != 1) {
+            return std::nullopt;
+        }
+        const auto *body  = reinterpret_cast<const runtime::GCAccsBody *>(payload.data());
+        const bool byName = body->accsKind == runtime::GCAccsKind::StructKey;
+        if (byName != structType) {
+            return std::nullopt;
+        }
+        if (byName) {
+            const std::string_view key = body->key();
+            const auto field = tt::as_ptr<const StructType>(type)->findField(std::string(key));
+            if (!field.has_value()) {
+                return std::nullopt;
+            }
+            index = *field;
+        } else {
+            index = body->value;
+            if (static_cast<uint64_t>(index) >= tt::as_ptr<const TupleType>(type)->size()) {
+                return std::nullopt;
+            }
+        }
+    } else if (nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
+        if (op == nullptr) {
+            return std::nullopt;
+        }
+        const std::string_view uri = op->uri();
+        const bool byName          = uri == ":op/access_key";
+        if (!byName && uri != ":op/access") {
+            return std::nullopt;
+        }
+        if (byName != structType) {
+            return std::nullopt;
+        }
+        const auto norm = normInputsOf(node);
+        if (norm.size() != 2) {
+            return std::nullopt;
+        }
+        const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(norm.front()));
+        if (!member.has_value()) {
+            return std::nullopt;
+        }
+        if (byName) {
+            const auto *key = camel::core::rtdata::fromSlot<String *>(*member);
+            if (key == nullptr) {
+                return std::nullopt;
+            }
+            const auto field =
+                tt::as_ptr<const StructType>(type)->findField(std::string(key->view()));
+            if (!field.has_value()) {
+                return std::nullopt;
+            }
+            index = *field;
+        } else {
+            const int64_t at = camel::core::rtdata::fromSlot<int64_t>(*member);
+            if (at < 0 || static_cast<uint64_t>(at) >= tt::as_ptr<const TupleType>(type)->size()) {
+                return std::nullopt;
+            }
+            index = static_cast<size_t>(at);
+        }
+    } else {
+        return std::nullopt;
+    }
+    Type *part = aggregatePartType(type, index);
+    Type *read = valueTypeOf(nodeTypeOf(node));
+    if (part == nullptr || read == nullptr || (read != part && !read->equals(part))) {
+        return std::nullopt;
+    }
+    return index;
+}
 
 
 void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
