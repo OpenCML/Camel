@@ -1734,9 +1734,19 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
             .commit(written, sources);
         throw BuildAbortException();
     }
-    // Layer 5: what the built-in module and the modules of operators bring along.
+    // Layer 5: what the built-in module and the modules of operators bring along, and what the
+    // prelude exports with them (the prelude is the built-in module's declaration file, so a
+    // name of it needs no import -- design principles 10.2). The prelude's own names are its own
+    // layer where it is written, so this asks only for the modules that read it.
     if (const auto ambient = module_->getImportedType(ref, ImportLayer::Ambient)) {
         return report(ambient.value(), 0);
+    }
+    if (context_ != nullptr && context_->preludeModule() != nullptr &&
+        context_->preludeModule().get() != module_.get()) {
+        if (const auto fromPrelude =
+                context_->preludeModule()->getExportedType(Reference(written))) {
+            return report(fromPrelude.value(), 0);
+        }
     }
     if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
         throw BuildAbortException();

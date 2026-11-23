@@ -3567,6 +3567,12 @@ class Builder {
         camel::core::module::ImportLayer layer = camel::core::module::ImportLayer::All) {
         return exports_->importedEntity(*module_, ref, layer);
     }
+    /// A name the prelude exports, as the last layer carries it: the prelude is the built-in
+    /// module's declaration file, and what it exports is what every module has unasked
+    /// (design principles 10.2, layer 5). Null for a name the prelude does not export, for a
+    /// tag (a tag does not enter the value namespace, 6.2), and inside the prelude itself,
+    /// whose own names are layer 2.
+    std::optional<camel::core::module::entity> preludeEntity(const std::string &name);
     /// The type an imported name stands for. A type declaration is the module's own and the
     /// same in every program, so this does not consult the program's table.
     std::optional<Type *> importedType(

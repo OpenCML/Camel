@@ -1248,6 +1248,16 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
         importedName = true;
         opt          = importedEntity(written, ImportLayer::Ambient);
+    } else if (auto fromPrelude = preludeEntity(name); fromPrelude.has_value()) {
+        // The prelude is what the built-in module brings, and what it exports comes along unasked
+        // (design principles 10.2, layer 5): a name of it needs no import. The tool is the export
+        // table's own reading of a name (`ProgramExports::exportedEntity`: what this program
+        // declared for the module, merged with the module's own entity), so the prelude's
+        // declarations reach a name without a second mechanism beside that one. A name the layer
+        // above already answers under -- a spelling the built-in module has an operator group of,
+        // `map` -- is that layer's answer and is not read here.
+        importedName = true;
+        opt          = fromPrelude;
     }
     if (importedName) {
         // An import of this name does not imply that the imported module exported it.

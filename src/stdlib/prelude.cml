@@ -1041,9 +1041,10 @@ export func range(start: int, end: int, step: int) => int[] panic
 // names, and `to_range` is the constructor the interval `a..b` itself is built with (with a step
 // of 1).
 //
-// These names are written by a program only after `import { ... } from prelude`: the prelude's
-// types and its functions that are not operators are not brought along unasked. `to_range` is an
-// operator, so it is ambient like the rest of them, and the compiler writes its name for `a..b`.
+// These names are written without an `import`: the prelude is the built-in module's declaration
+// file, and what it exports comes along with the built-in rules it declares (design principles
+// 10.2, the last layer) -- the types with the functions. `to_range` is an operator as well, so the
+// compiler writes its name for `a..b` like any other operator's.
 
 /// The three numbers naming a step of integers: `start`, `start + step`, ... up to, not
 /// including, `stop`. An end is null when a range is written without it (`..b`, `a..`, `..`), and
@@ -1077,13 +1078,16 @@ export func is_empty(r: Range) => bool {
 }
 
 // The functions a range shares with an `int[]` are ordinary functions of the same names, declared
-// beside the operators of those names: the two declarations of one name are one overload set, and
-// the type of the argument chooses between them. What each does is the array's own, on the array
-// the range names -- a range is a value and `to_array` is the one conversion from it, so a range
-// gets no second implementation of these.
+// beside the operators of those names. What each does is the array's own, on the array the range
+// names -- a range is a value and `to_array` is the one conversion from it, so a range gets no
+// second implementation of these.
 //
-// A program writes them after `import { ... } from prelude` like the rest of the prelude's
-// functions that are not operators.
+// They are the prelude's exports like the rest, so no `import` is written for them either. They
+// are functions of this module and not rules of the operator group of the same spelling, though:
+// a call from another module resolves the name through that group, which has no rule for a range,
+// so `(0 .. 3)->map<f>` there reports no matching function today (`:mark/map_arr` is the only
+// candidate). Making a range reachable under these names is a rule in the group -- an operator's
+// work -- and not a change to these declarations.
 
 /// f applied to every integer r names; the calls have no order among them, and the result is by
 /// position, as `map` on the array the range names.
