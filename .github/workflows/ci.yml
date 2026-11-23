@@ -38,6 +38,34 @@ permissions:
   contents: read
 
 jobs:
+  # A missing or stale source header (scripts/headers.mjs) is a defect of the tree, not of a
+  # platform, and deciding it costs a second -- so it is decided once, for the whole run, here.
+  # Until 2026-11-24 it was the step before the build inside every leg, which meant one file
+  # missing its two header lines stopped all three legs at that step: the whole run was red in
+  # 35 s with no build, no test executed and no `test/results/log/*/fail/` for anyone to read
+  # (run 45206572656). `needs: []` is the point and must stay: a header defect is reported by
+  # this job's own name, while every leg still builds and still produces test readings. The run
+  # is then red on this job, which is right -- a tree with a bad header is red, not green -- and
+  # the redness is in a name rather than in the absence of every reading. Nothing aggregates the
+  # jobs below, so no summary `if` has to be told about this one; making a leg `needs: headers`
+  # would put the failure back where it came from.
+  headers:
+    name: Source headers
+    needs: []
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check source headers
+        run: node scripts/headers.mjs --check
+
   build-test:
     name: Build and test (${{ matrix.cfg.slug }})
     strategy:

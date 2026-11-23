@@ -84,11 +84,12 @@ jobs:
           node-version: "20"
           cache: npm
 
-      # The header of every hand-written source (scripts/headers.mjs). Checked before the build:
-      # a missing or stale header fails here in a second instead of after thirteen minutes of
-      # compiling, and the step names every file that is wrong.
-      - name: Check source headers
-        run: node scripts/headers.mjs --check
+      # No header check here, deliberately. It was this step, before the build, and on 2026-11-24
+      # one source file with the wrong header ended the whole run here: all three legs, 35 s,
+      # nothing built and not one test reading. A header is a property of the tree, not of a
+      # platform, so it is checked once for the whole run by the `headers` job in ci.yml, which
+      # does not gate these legs. A leg must reach its tests even when the tree's headers are
+      # wrong; only the run's conclusion may be red.
 
       - name: Set up Python
         uses: actions/setup-python@v5
