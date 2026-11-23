@@ -13,6 +13,7 @@
 
 #include "camel/runtime/graph.h"
 #include "camel/facts/arrangeable.h"
+#include "camel/facts/control_regions.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/exec_plan.h"
@@ -3538,6 +3539,9 @@ const ExecPlan &GCGraph::execPlan() const {
 }
 
 GCGraph::~GCGraph() {
+    // The facts anchored on this graph end here: an address is a graph only while the graph is
+    // there, so the store must not answer about this one afterwards (camel/facts/control_regions.h).
+    camel::facts::forgetGraph(this);
     // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
     // graph, so it goes before the graph does. `GraphView` is complete in this file
     // (graph/gc_graph_view.h), which is why the deleting is here rather than in the header.
