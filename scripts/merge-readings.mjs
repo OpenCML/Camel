@@ -679,7 +679,22 @@ if (changed.length > 0) {
 const out = arg('--out')
 if (out) {
     fs.mkdirSync(out, { recursive: true })
-    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({ fixed, new: regressed, changed, added: addedGreen, addedRed, removed }, null, 2))
+// The three sets are the judgement; the plan set and the baseline are what makes the judgement
+    // checkable by a reader who was not here. A pass record built from this file carries all of it,
+    // because "passed" on its own is indistinguishable from no record at all.
+    //
+    // `--plans` is optional here and required for a record: a comparison between two row files
+    // (`--baseline` plus `--current`) can be made without naming a plan set at all, and the plan set
+    // is then reported as absent rather than filled in from nothing.
+    const planNames = planSet
+        ? (fs.existsSync(planSet) ? fs.readFileSync(planSet, 'utf8').split('\n') : planSet.split(',')).filter(Boolean)
+        : []
+    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({
+        planSet: planNames.length ? { names: planNames, hash: planSetHash(planNames) } : null,
+        baseline: { sha: develop, file: baseFile, cases: base.rows.size, normal: base.version },
+        fixed, new: regressed, changed,
+        added: addedGreen, addedRed, removed,
+    }, null, 2))
 }
 
 console.log(
