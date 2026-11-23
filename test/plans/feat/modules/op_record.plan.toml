@@ -22,3 +22,14 @@ expect_exit = 0
 expect_stdout_contains = ["the registration's second argument reaches the record: `mayFault()` is false where it was the conservative true before", "the kernel the registration handed over is the one Registry::kernel(id) hands back", "a Camel declaration stating `panic = true` where the C++ entrance stated false is refused, naming the item", "a completed record refuses a later statement", "bind refuses a key whose major version this process does not have", "oprecord self-check: passed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+[[tests]]
+name = "op_record.uses_reach_the_record"
+desc = "The effect every declaration states is in the operator record, and the operators whose two entrances both said nothing are named: `camel inspect --ops` prints, per operator, what the declaration in the table says (`purity`, `accesses_declared`) and what the record carries (`record`, `uses_stated`, `clause_pure`). A reader that asks the record -- the scheduling judgement `core.arrangeable` and the device's placement question -- reads the second group, so this case holds the copy to the statement: no declared access list may be missing from the record, `purity` and `clause_pure` must read alike where a record exists, and the operators with no clause at all are printed one per line with their module, because those are the declarations still to write."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/feat/modules/oprecord_uses.py"
+args = ["${case}", "test/cases/modules/stdlib/registry_all.cml", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["uses stated in the record:", "purity disagreed between the declaration and the record: ", "declared accesses that are not in the record: ", "oprecord uses: PASS"]
+expect_output_not_contains = ["FAIL", "Traceback"]
+timeout_ms = 300000
