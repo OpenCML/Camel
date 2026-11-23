@@ -100,35 +100,36 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
-name = "writings.driver_extracts"
-desc = "A program in the state with several writings (a pass left `a + 1` also written `1 + a`) reaches the back end with one writing per value: the pipeline driver extracts before a pass that consumes the program, and the program prints what it printed."
+name = "writings.driver_refuses_a_backend"
+desc = "A program in the state with several writings (a pass left `a + 1` also written `1 + a`) reaches a back end with nothing extracted: the driver stops with PassNeedsExtraction, because what a writing costs is the target's judgement and the kernel has no cost to extract by. The same program with an extraction the pipeline names runs and prints what it printed."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
 args = ["${case}", "test::tabled", "std::nvm"]
 
-expect_exit = 0
-expect_stdout_contains = ["15"]
+expect_exit = 1
+expect_output_contains = ["PassNeedsExtraction", "std::nvm", "rewrite::extract cost="]
+expect_output_not_contains = ["15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
 name = "writings.driver_refuses_rewrite"
-desc = "A rewrite pass that does not know the state with several writings does not get the program: the driver stops with PassNeedsExtraction, naming the pass and the extraction to put before it."
+desc = "A rewrite pass that does not know the state with several writings does not get the program: the driver stops with PassNeedsExtraction, naming the pass and the extraction to put before it -- `rewrite::extract cost=<module>::<function>`, the only extraction there is."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
 args = ["${case}", "test::tabled", "std::cxx::fold", "std::nvm"]
 
 expect_exit = 1
-expect_output_contains = ["PassNeedsExtraction", "std::cxx::fold", "std::cxx::extract"]
+expect_output_contains = ["PassNeedsExtraction", "std::cxx::fold", "rewrite::extract cost="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
 name = "writings.extract_pass"
-desc = "std::cxx::extract chooses one writing for every value, so the rewrite pass after it gets a program it knows; its cost parameter names the model, and an unknown model is an error."
+desc = "`rewrite::extract cost=rules::nodes` chooses one writing for every value, so the rewrite pass after it gets a program it knows: the cost is a function value the pipeline names, and the count of nodes is the library's own judgement."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
-args = ["${case}", "test::tabled", "std::cxx::extract cost=\"nodes\"", "std::cxx::fold", "std::nvm"]
+args = ["${case}", "test::tabled", "rewrite::extract cost=rules::nodes", "std::cxx::fold", "std::nvm"]
 
 expect_exit = 0
 expect_stdout_contains = ["15"]
@@ -179,6 +180,18 @@ backends = ["nvm", "fvm"]
 
 expect_exit = 0
 expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=1 mul=1", "SATURATE strict_coefficients add=1 mul=2", "SATURATE relaxed_coefficients add=1 mul=2", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=0", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.extract_default_cost"
+desc = "`rewrite::extract cost=rules::default` chooses one writing for every value by the cost the standard library supplies: one run of a node as the operator states it in the operator's record (a division dearer than a multiplication, dearer than an addition), plus the costs of the values it reads. The operator is read through its record and never by its name, so the extraction runs on a program whose operators nobody priced by hand, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::tabled", "rewrite::extract cost=rules::default", "std::cxx::fold", "std::nvm"]
+
+expect_exit = 0
+expect_stdout_contains = ["15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -277,43 +290,43 @@ timeout_ms = 30000
 
 [[tests]]
 name = "draw_classes.gir"
-desc = "`std::cxx::saturate` leaves the program in the state with several writings and `std::gir` draws it: every class is one dashed cluster with one class node and two or more writings inside, all of them naming that class and all of one type; exactly one writing of a class is marked `chosen=\"true\"`, and for the class that holds `x + x` and `x * 2` it is the add — the writing the cost model the pipeline itself extracts by likes (an add costs 1.0 and reads its value twice at 0.1, a product 3.0 and reads it once plus a constant, so 1.2 against 3.2), and the dump says which model chose (`writings_cost=\"weighted\"`); the value the graph returns is read from its class node and not from a writing."
+desc = "`std::cxx::saturate` leaves the program in the state with several writings and `std::gir` draws it: every class is one dashed cluster with one class node and two or more writings inside, all of them naming that class and all of one type; no writing is marked and no cost is printed — no `chosen`, no `writings_cost`, not even `unknown` — because the cost is the target library's judgement and the kernel has none; the class that holds `x + x` and `x * 2` is one class with two writings; the value the graph returns is read from its class node and not from a writing."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
 args = ["${case}", "gir"]
 expect_exit = 0
-expect_stdout_contains = ["draw classes gir: PASS", "DRAW gir classes=", "pair=add+mul", "marked=1", "cost=weighted"]
+expect_stdout_contains = ["draw classes gir: PASS", "DRAW gir classes=", "pair=add+mul", "marked=0", "cost=none"]
 expect_output_not_contains = ["FAIL"]
 timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.rgir"
-desc = "The styled dump of the same state draws the class dashed and gives the writing extraction would take a heavier border: the same properties as `draw_classes.gir`, plus `style=dashed` on the class and `penwidth=2` on the marked writing."
+desc = "The styled dump of the same state draws the class dashed: the same properties as `draw_classes.gir`, plus `style=dashed` on the class, and the same absence of a mark and of a cost."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
 args = ["${case}", "rgir"]
 expect_exit = 0
-expect_stdout_contains = ["draw classes rgir: PASS", "pair=add+mul", "dashed=1", "heavy=1"]
+expect_stdout_contains = ["draw classes rgir: PASS", "pair=add+mul", "marked=0", "cost=none", "dashed=1"]
 expect_output_not_contains = ["FAIL"]
 timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.jgir"
-desc = "`std::jgir` carries the classes too: each is an entry with its id, its writings and the one extraction would take among them, and a cost; the class that holds `x + x` and `x * 2` is one entry and its chosen writing is the add, as in the DOT dumps. A graph with one writing per value gains no `classes` key, so no existing reader changes."
+desc = "`std::jgir` carries the classes too: each is an entry with its id and its writings and nothing else — no `chosen`, no `cost`; the class that holds `x + x` and `x * 2` is one entry, as in the DOT dumps. A graph with one writing per value gains no `classes` key, so no existing reader changes."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
 args = ["${case}", "jgir"]
 expect_exit = 0
-expect_stdout_contains = ["draw classes jgir: PASS", "pair=add+mul", "chosen=add"]
+expect_stdout_contains = ["draw classes jgir: PASS", "pair=add+mul", "chosen=none", "cost=none"]
 expect_output_not_contains = ["FAIL"]
 timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.egraph"
-desc = "`std::jgir egraph=true` writes the document `egraph-serialize` reads instead of the display document: exactly `nodes`, `root_eclasses` and `class_data`; every child of a node is an e-class of the document and every root is one; every class says what computing its value costs; and the two writings `x + x` and `x * 2` are one e-class, which is what makes the export worth opening in the community's viewer."
+desc = "`std::jgir egraph=true` writes the document `egraph-serialize` reads instead of the display document: exactly `nodes`, `root_eclasses` and `class_data`; every child of a node is an e-class of the document and every root is one; `class_data` is empty and no node carries a cost, because the kernel reports none; and the two writings `x + x` and `x * 2` are one e-class, which is what makes the export worth opening in the community's viewer."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
@@ -349,12 +362,12 @@ timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.extract"
-desc = "The pass extracts nothing: the program it leaves is in the state with several writings, a pass that consumes it (`std::nvm`) is given one writing per value by the driver and prints 42, `std::cxx::extract` before it does the same, and a rewrite pass that does not declare that it accepts the state (`std::cxx::fold`) is still refused with `PassNeedsExtraction` — the new rule is about a pass that asked for the state, not about every pass."
+desc = "The pass extracts nothing and nothing extracts on the way: `std::nvm` after it is refused with `PassNeedsExtraction`, naming `rewrite::extract cost=`; with `rewrite::extract cost=rules::nodes` the program prints 42; and a rewrite pass that does not declare that it accepts the state (`std::cxx::fold`) is refused too — the rule is about every pass that did not ask for the state."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
 args = ["${case}", "extract"]
 expect_exit = 0
-expect_stdout_contains = ["draw classes extract: PASS", "DRAW extract printed=42 refused_fold=1"]
+expect_stdout_contains = ["draw classes extract: PASS", "DRAW extract printed=42 refused_fold=1 refused_backend=1"]
 expect_output_not_contains = ["FAIL"]
 timeout_ms = 60000

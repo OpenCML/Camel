@@ -47,7 +47,9 @@
 #   * `-Clean` drops one checkout by name when a task is finished.
 #
 # Exit code is the exit code of the build or of the plan run, or -- when -Check was given and the
-# plan was green -- of the first checker that failed. 5 means the gpu observation read a case red
+# plan was green -- of the first checker that failed. 6 means the tree under test changed while the
+# run held it, or the probe that reads that could not read it (see "the tree under test is the tree
+# this run handed over"). 5 means the gpu observation read a case red
 # that its baseline does not name (see "the gpu layer is observed, and never gates"; the known reds
 # never decide a run). 4 means the -NoBuild guard refused before anything ran; 3 means the host is
 # short of disk; 2 means the worktree, the push or the transfer failed, or -Check named a checker
@@ -109,6 +111,38 @@
 # refusing would block every old worktree. With git unavailable the stamp records no revision and
 # says so; the fingerprint still works (it is file content), so the guard stays effective.
 #
+# --- the tree under test is the tree this run handed over --------------------
+# A build or a test that writes a tracked file changes, without saying so, both what is compiled and
+# what is asserted: the reading this run reports is then a reading of a tree that is not the commit
+# it was given. That is not hypothetical. `npm run build` ran `scripts/diagnostics-catalog.mjs
+# --generate` before CMake configured, and on a registry.tsv that had moved ahead of its tables it
+# rewrote `src/kernel/core/error/diagnostics/messages/semantic.cpp` (md5 045daa5c… -> a5a33101…)
+# inside the build: the build was green, and `--check` on the commit it was given was red, and no
+# run ever said so.
+#
+# So the host reads one thing twice, in the checkout it builds and tests (`$R`):
+# `git status --porcelain --untracked-files=no`, once at hand-over -- after the checkout, the patch
+# and the untracked files are in place, so a lane's own uncommitted change is the baseline and not a
+# finding -- and again after the build and after the plan. Only lines that are *new* against that
+# baseline are reported, so this measures "written during this run" and not "dirty when it started".
+#
+#   * only tracked paths are asked about (`--untracked-files=no`): build outputs are ignored or
+#     untracked by construction, and a wall that reds on them is one readers learn to skip. The
+#     files that must be caught are the *tracked* generated ones (`registry.tsv`, `semantic.cpp`),
+#     because those are what gets compiled;
+#   * the names are printed, not just the fact: "a tracked file changed" sends the next reader to
+#     `git checkout -- .`, which erases the reading and leaves the writer in place, while the name
+#     points at the generator that wrote it;
+#   * a probe that could not read its own status is red, never green -- an unread reading is not a
+#     clean tree;
+#   * the after-plan probe is not taken under `-UpdateGolden` / `-UpdateAstHashes`: those modes exist
+#     to record into tracked files (the goldens, the AST hashes), so the run prints that it stood
+#     down and why instead of reporting the recording as a defect. A silent skip would be a green
+#     that proves nothing.
+#
+# The reading is `TREE_STATE=clean stage=after-build|after-plan` or `TREE_STATE=dirty` followed by
+# one `[TREE]` line per file; a dirty or unread probe is exit 6.
+
 # --- -Check runs the repository's own checkers there ------------------------
 # The static checkers have to run against the tree this run just built and patched, and a lane that
 # opens its own ssh session to do it carries a hand-written copy of every checker's command line
@@ -367,6 +401,14 @@ param(
     # gate's own readings without that extra sweep -- and it names what it left out, because an
     # absent line and a green one read the same from the outside.
     [switch]$NoGpuWatch,
+    # Carry one row per case back from the plan stage: `--list-known` goes to the runner, and the rows
+    # travel on this run's own stream between two markers, after the plan's output and before the
+    # checkers. The block's presence is the only sign the channel ran -- a consumer must not read a
+    # transcript without one as "no reds" -- so the markers are printed exactly when this switch is
+    # given and a plan was selected, and the run's own narration is printed unchanged either way.
+    # The rows are what `scripts/merge-readings.mjs` compares case by case; nothing in this script
+    # reads them.
+    [switch]$ListKnown,
     # Which dirty tracked files a run may carry from the MAIN checkout. The patch this script sends
     # is `git diff HEAD`, i.e. the working tree, not the commit: a file somebody edited and did not
     # commit is built and measured as part of the change. In a lane's own worktree that is the point
@@ -436,6 +478,15 @@ $remoteName = $sshHost
 $Plan = @(Split-CamelArgList -Values $Plan)
 $AstOnly = @(Split-CamelArgList -Values $AstOnly)
 $AstDrop = @(Split-CamelArgList -Values $AstDrop)
+
+# -ListKnown asks for the rows one plan run produced, so it needs a plan run: with neither -Plan nor
+# -Changed this run would build and stop, the caller would get no marker block, and the only reading
+# it could take from that is "the row channel did not run" -- which is the same sentence a broken
+# channel prints. A request that cannot be answered is refused here, where the answer is still known.
+if ($ListKnown -and $Plan.Count -eq 0 -and -not $Changed) {
+    Write-Host '[camel-remote] -ListKnown needs -Plan or -Changed: the row channel reports the cases one plan run read, and this run would start no plan.'
+    exit 2
+}
 
 # The checkers -Check knows, in the order `all` runs them. Every entry is the invocation the
 # repository already uses, so this channel cannot drift into checking something else than the gate
@@ -510,6 +561,19 @@ $checkers = [ordered]@{
     # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
     # going red is what says it went up.
     'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
+    # CI's own compiler on this tree's own compile lines (D-1123-84). The local gate compiles with one
+    # toolchain on one platform, so a diagnostic only another one reports -- `-Wc++11-narrowing` at
+    # `src/stdlib/onnx/lowering_grad.cpp:480` is the one that cost a day -- stayed invisible until a CI
+    # run, and CI runs are the slowest reading in this project. The host's clang is a newer major and
+    # does not report what 19 does (measured on `5f68184983`: clang 23 exit 0, clang 19 red), so the
+    # script runs clang 19 from the image it names. It reads no install -- so `compiler` is false and
+    # the entry is meaningful under `-NoBuild` -- and it reads the flags from
+    # `build/compile_commands.json` rather than carrying a copy of `cmake/Warnings.cmake`, which is the
+    # only way it cannot drift from CI by a flag somebody forgot. `--changed` is the change's units plus
+    # every unit that includes a changed header, from the build's own dependency graph; a file the graph
+    # cannot answer for widens it to every unit rather than narrowing it to "fast but leaky". Not in
+    # `all`: it takes minutes over the whole tree, and the reading a merge needs is the change's.
+    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true }
     # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
     # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
     # tool `frontend.ast_snapshot` itself starts -- with the line
@@ -775,16 +839,28 @@ if ($astProblems.Count -gt 0) {
 }
 
 # One checkout per worktree name, kept for its incremental build directory. `-Clean` throws that
-# away when a task is finished; the stale ones are removed automatically at the start of every run
-# (a checkout whose local worktree is gone is only disk).
+# away when a task is finished; the stale ones are reclaimed at the start of a run, but only those
+# that carry a creation record (`~/camel-work/.records/`) and that no run is inside -- a checkout
+# whose local worktree is gone is only disk, and "looks only like disk" is not a reading.
 if ($Clean) {
     $cleanScript = @"
 : "`${HOME:=`$(getent passwd "`$(id -un)" | cut -d: -f6)}"
-d=`$HOME/$($cfg.hostWorkRoot)/$name
+root=`$HOME/$($cfg.hostWorkRoot)
+d=`$root/$name
+# `-Clean` removes a checkout because a person named it, which is not the guess rule 12 forbids.
+# What it must still never remove is what lives beside the checkouts:
+#   * the shared staging bare `~/camel-work/Camel.git`. On 2026-11-23 a lane cleared exactly that
+#     while clearing a temporary checkout, and every lane pushes through it. A bare is not a
+#     checkout: HEAD and objects sit at its top level.
+#   * the bookkeeping this mechanism keeps (`tmp/`, the root; `.records/`, the creation records).
+case "`$d" in "`$root"/?*) ;; *) echo "refusing to remove `$d: it is not under `$root"; exit 3;; esac
+case "`$d" in */tmp|*/.records) echo "refusing to remove `$d: it is the cleanup root's own bookkeeping"; exit 3;; esac
+if [ -f "`$d/HEAD" ] && [ -d "`$d/objects" ]; then echo "refusing to remove `$d: it is a bare repository, not a checkout"; exit 3; fi
 # Never gate the removal on `[ -d ]`: a half-removed checkout (a leftover tmp/ or test/results/)
 # makes the test false while the directory still exists, and the next clone then refuses a
 # non-empty destination. Report what was there and remove it either way.
 if [ -e "`$d" ]; then n=`$(du -sm "`$d" 2>/dev/null | cut -f1); rm -rf "`$d"; if [ -e "`$d" ]; then echo "still there after rm -rf: `$d"; else echo "removed `$n MB"; fi; else echo 'already gone'; fi
+rm -f "`$root/.records/$name"
 "@
     # A here-string carries its line endings verbatim, and a carriage return before a newline
     # makes the remote shell read `d` with a trailing CR: `[ -e "$d" ]` is false for a directory
@@ -792,8 +868,11 @@ if [ -e "`$d" ]; then n=`$(du -sm "`$d" 2>/dev/null | cut -f1); rm -rf "`$d"; if
     # script goes through the same normalization when it is written out.
     $cleanScript = $cleanScript -replace "`r`n", "`n"
     $freed = & $sshExe -o ConnectTimeout=20 $sshHost $cleanScript 2>&1
+    $cleanExit = $LASTEXITCODE
     Write-Host "[camel-remote] host checkout $name`: $freed"
-    exit 0
+    # A refusal is not a cleanup: report it as one, so a script calling `-Clean` cannot read
+    # "nothing to remove" as "the disk is free".
+    exit $cleanExit
 }
 
 # --- published state --------------------------------------------------------
@@ -1021,6 +1100,10 @@ $buildFinishedAt = $null
 $planStartedAt = $null
 $buildExit = $null
 $code = 2
+# Whether the tree probe caught a tracked file written by this run (`__CAMEL_REMOTE_TREE_FAILED__`).
+# It decides the registry entry for a build-only run, whose own exit is the build's 0: without this,
+# a run that failed on the probe would be recorded as a green build.
+$treeFailed = $false
 # Phase marks for the summary line: transfer ends at the sync marker, the plan starts at its own.
 $syncedAt = $null
 # The checker stage's own clock and results. The start is the stage's marker; the results are read
@@ -1055,6 +1138,13 @@ $goldenPath = ''
 $goldenBuf = $null
 $goldenCount = -1
 $goldenState = ''
+# The row channel (`-ListKnown`): whether the block is open, whether it reached its end marker, and
+# how many rows arrived inside it. Read here rather than by a later consumer, because a truncated
+# stream leaves an open block and nothing else would say so.
+$rowsChannel = $false
+$rowsOpen = $false
+$rowsEnded = $false
+$rowsSeen = 0
 $lastRunPublish = [datetime]::MinValue
 
 # One line per run for the panel's run registry. The fields that say *how* this run was scheduled
@@ -1133,10 +1223,14 @@ try {
         remote    = $remoteName
     })
 
-    $scratch = Join-Path $env:TEMP "camel-remote-$name"
-    if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
+    # The workstation half of the scratch. Its name carries this run's id, so the delete below can
+    # only reach a directory that a run with this exact id left behind -- the creation record, not
+    # "looks unused" (rule 12). It used to be the fixed `camel-remote-<name>`, cleared at the start
+    # of every run, which deleted the scratch of a second run on the same worktree while that run
+    # was still using it (two runs on one worktree are refused later by the tree lock, not here).
+    $scratch = Join-Path $env:TEMP "camel-remote-$name-$($run.runId)"
+    if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force }
     New-Item -ItemType Directory -Path $scratch | Out-Null
-    $stamp = Get-Date -Format 'HHmmss'
     $patchFile = Join-Path $scratch 'changes.patch'
     $untrackedTar = Join-Path $scratch 'untracked.tar'
 
@@ -1336,7 +1430,9 @@ try {
     # --- carry it over ------------------------------------------------------
     # The patch, the untracked files and the run script travel in one scp: each ssh/scp costs a
     # connection, and there is no ControlMaster on the Windows client to amortise it.
-    $remoteScratch = "/tmp/camel-remote-$name-$stamp"
+    # The name carries this run's id, so two runs on one worktree started in the same second cannot
+    # share -- and then remove -- one scratch directory.
+    $remoteScratch = "/tmp/camel-remote-$name-$($run.runId)"
 
     # What the checkout should be at afterwards, and which host checkouts are still wanted. `-s` on
     # the patch and `-f` on the tar are the fast path's guard: a clean tree needs neither.
@@ -1368,6 +1464,11 @@ try {
         if ($p) { $planArgs += " '$p'" }
     }
     $tierArg = if ($Tier) { " --tier '$Tier'" } else { '' }
+    # The row channel, in all three ways a plan can be selected: `--list-known` is the runner's own
+    # word for "one line per case", and it travels in the same argument list as the targets so the
+    # three branches cannot drift into recording in one and not in another. Empty when the channel
+    # was not asked for, which is what keeps the block out of an ordinary run's output.
+    $listKnownArg = if ($ListKnown) { ' --list-known' } else { '' }
     # `-StackTrace` is the one entry point of a diagnostic build: it passes `--stack-trace` to build.js, which
 # adds `-DCAMEL_STACK_TRACE=ON` and nothing else. Leave it off for any reading that decides green or red:
 # a diagnostic build is a different build.
@@ -1379,19 +1480,19 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # the plan slot instead of a 32-wide one that oversubscribes a host whose cores are all spoken
     # for. width `$jobsBudget` (below) sets it, between the slot hold and this line.
     $runPlan = if ($UpdateGolden) {
-        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs " + "`$CAMEL_JOBS$tierArg"
+        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
     } elseif ($Changed) {
         # The list above travels with the patch: the host has the lane's commits but not the base
         # branch, so a selection made there answered "cannot read origin/develop" and the run fell
         # back to the whole fast layer. `CAMEL_TEST_BASE` stays for the sentences the runner prints
         # -- the list is the one taken against that base -- but the list is what it reads.
-        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --changed-files '$remoteScratch/changed.txt' --jobs " + "`$CAMEL_JOBS$tierArg"
+        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --changed-files '$remoteScratch/changed.txt' --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
     } elseif ($planArgs) {
         # No CAMEL_TEST_EXTRA_LIB_DIRS here any more: the install a 26888783c-or-later build writes
         # carries the toolchain's libstdc++.so.6 in its `libs/` and finds it through its own
         # `$ORIGIN` rpath (2026-11-03 15:35 ruling), so the plan step needs no extra directory --
         # and `-Changed` and `-UpdateGolden`, which never had one, now read exactly like this branch.
-        "cd `$R/ && node scripts/test.js $planArgs --jobs " + "`$CAMEL_JOBS$tierArg"
+        "cd `$R/ && node scripts/test.js $planArgs --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
     } else {
         ':'
     }
@@ -1429,6 +1530,43 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # Markers delimit the phases for the state writer; they are consumed locally and not printed.
     # The plan marker is only emitted when a plan will actually run.
     $planMarker = if ($planArgs -or $Changed) { "echo '__CAMEL_REMOTE_PLAN_START__'" } else { ':' }
+
+    # --- the plan stage, and the rows when they were asked for -------------------
+    # `-ListKnown` makes the plan stage carry one line per case back to this side, and the block
+    # below is the whole of that channel: two markers, and the runner's `{`-lines between them.
+    # Three things about it are deliberate:
+    #
+    #   * the run is piped through `tee` and not written to a file and printed afterwards. The plan
+    #     panel on this side reads this stream while the plan runs; a run whose output arrives only
+    #     when it ends is a run that looks stalled for twenty minutes, and the panel exists because
+    #     that was read as a hang;
+    #   * the exit status is `${PIPESTATUS[0]}`. After a pipeline, `$?` is `tee`'s status, so a plan
+    #     that failed would report success -- the one reading a gate must never get wrong. The
+    #     statuses of this bash are the same ones `$runPlan 2>&1` alone produced, because `cd $R/ &&
+    #     cmd | tee` is `cd $R/ && (cmd | tee)`: a failing `cd` is still the command's status;
+    #   * `grep` is allowed to match nothing. A plan set with no case in it prints no row, and that
+    #     has to arrive as "0 rows" for the consumer to refuse (exit 2); a `grep` that failed here
+    #     would turn it into a host error instead, which is a different fact about a different thing.
+    #
+    # The block is emitted only when this run really selected a plan: with no `-Plan` and no
+    # `-Changed` the stage below is the plain run, and no marker appears at all. That is the one
+    # thing a consumer may rely on -- the presence of the block is the evidence that it was asked
+    # for, and its absence is not evidence about the tree.
+    $rowsChannel = [bool]($ListKnown -and ($planArgs -or $Changed))
+    $planRunStage = if ($rowsChannel) {
+        @'
+RUNPLAN 2>&1 | tee 'TEETMP'
+code=${PIPESTATUS[0]}
+echo '__CAMEL_REMOTE_ROWS_START__'
+grep '^{' 'TEETMP' || true
+echo '__CAMEL_REMOTE_ROWS_END__'
+'@.Replace('RUNPLAN', $runPlan).Replace('TEETMP', "$remoteScratch/rows.txt")
+    } else {
+        @'
+RUNPLAN 2>&1
+code=${PIPESTATUS[0]}
+'@.Replace('RUNPLAN', $runPlan)
+    }
 
     # The width the plan is started at, decided by the slot the host script holds and not by -Jobs:
     # the plan slot allows 16, an exclusive run all 32, and -Jobs only narrows either. This is the
@@ -1495,6 +1633,11 @@ echo '[camel-remote] -FetchFile: the host has no FETCHREL (whatever writes it mu
 fi
 '@.Replace('FETCHREL', $fetchRel)
 } else { ':' }
+    # Whether the after-plan tree probe is taken. Two modes write tracked files on purpose, and the
+    # host script prints that it stood down instead of calling the recording a defect; every other run
+    # takes it. The after-build probe is never skipped: no mode here writes a source file during the
+    # build, which is the defect this probe exists for.
+    $treeProbeAfterPlan = -not ($UpdateGolden -or $UpdateAstHashes)
     $astStage = if ($UpdateAstHashes) {
         @'
 echo '__CAMEL_REMOTE_AST_START__'
@@ -1585,6 +1728,24 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
     $checkBlocks = ''
     foreach ($checkName in $checkNames) {
         $entry = $checkers[$checkName]
+        # A `--changed` checker reads a diff, and a diff needs two different commits. When this
+        # checkout's HEAD is already contained in the base it compares against (a lane that has
+        # been merged once, or a checkout sitting on develop itself) that diff is empty forever, and
+        # the checker's own `units=0` would then be a green that measured nothing -- the shape this
+        # gate exists to remove. The base the host sees is useless for the question (the host's base
+        # ref is the commit this run just pushed), so the question is asked here, on the caller's
+        # checkout, before anything is transferred.
+        if ($entry.changed) {
+            $headSha = "$(& git -C $Path rev-parse HEAD 2>$null)".Trim()
+            $baseSha = "$(& git -C $Path merge-base 'origin/develop' HEAD 2>$null)".Trim()
+            if ($headSha -and $baseSha -and $headSha -eq $baseSha) {
+                Write-Host ''
+                Write-Host "[camel-remote] ${checkName}: the base and this tree are the same commit ($($headSha.Substring(0, 10))): there was no change to measure, so nothing was checked" -ForegroundColor Yellow
+                Write-Host "[camel-remote] this checkout's HEAD is already in origin/develop, so a diff against it is empty: the check can only pass by measuring nothing. Commit the change you want read (or read it against the commit it adds to) and run this again."
+                Write-Host ''
+                exit 2
+            }
+        }
         # No per-checker LD_LIBRARY_PATH prefix any more (2026-11-03 15:35 ruling): the install a
         # current build writes carries the toolchain's libstdc++.so.6 in `libs/` with a `$ORIGIN`
         # rpath, so the checker that starts the tree's binary starts it in the run's own
@@ -1622,7 +1783,7 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
         $checkBlocks += @"
 
 echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
-$shownCommand
+$shownCommand 2>&1
 c=`$?
 if [ `$c -ne 0 ] && [ `$checkfail -eq 0 ]; then checkfail=`$c; fi
 echo "[camel-remote] --- ${checkName}: exit `$c ---"
@@ -1798,6 +1959,12 @@ cleanup_host_checkouts() {
         # The runner's scratch root lives next to the checkouts and is regenerated every run:
         # removing it here is not a cleanup, and it would invalidate the cached size measurement.
         case "$n" in *-test-tmp) continue;; esac
+        # The cleanup root and the creation records are this mechanism's own bookkeeping, not
+        # checkouts: `tmp/` holds per-run directories that only `camel-cleanup.sh` may remove, and
+        # `.records/` is the bookkeeping this sweep itself reads. A sweep that walked into either
+        # would delete the record it judges by (and `tmp/` has no HEAD/objects, so nothing else
+        # would stop it).
+        case "$n" in tmp|.records) continue;; esac
         # A bare repository is not a checkout: HEAD and objects sit at its top level, and removing it
         # would take the staging remote every lane pushes through.
         if [ -f "$dd/HEAD" ] && [ -d "$dd/objects" ]; then continue; fi
@@ -1831,10 +1998,20 @@ cleanup_host_checkouts() {
             echo "[camel-remote] keeping host checkout $n: a file in it changed in the last 10 minutes"
             continue
         fi
+        # (d) The creation record; everything above is a guess about whether anyone is using this,
+        # and a guess is what deleted a live checkout and the shared bare. A run writes
+        # `~/camel-work/.records/<name>` when it creates (or takes over) a checkout, and this sweep
+        # removes only what carries one. A directory without a record is not this sweep's to delete,
+        # however idle it looks: it is named and left, and `-Clean` is the explicit way to reclaim it.
+        if [ ! -f "$root/.records/$n" ]; then
+            echo "[camel-remote] keeping host checkout $n: no creation record ($root/.records/$n); run -Clean on its worktree when you know it is done"
+            continue
+        fi
         # The lock is taken again for the removal itself: a run that grabbed it in the last
         # millisecond must not have its checkout disappear underneath it.
         if flock -n "$lockf" rm -rf "$dd" 2>/dev/null; then
             reclaimed=1
+            rm -f "$root/.records/$n"
             echo "[camel-remote] removing host checkout $n, its worktree is gone"
         else
             echo "[camel-remote] keeping host checkout $n: a run took its lock while it was being removed"
@@ -1867,7 +2044,15 @@ V=`$HOME/$($cfg.hostBuildEnv)
 B=`$HOME/$($cfg.hostBenchEnv)
 $cleanupGuard
 cleanup_host_checkouts "`$HOME/$($cfg.hostWorkRoot)" '$($liveNames -join ' ')' '$liveTrustedFlag' '$bareLeaf'
-find /tmp -maxdepth 1 -name 'camel-remote-*' -mtime +0 -exec rm -rf {} + 2>/dev/null || true
+# Other runs' scratch directories in /tmp are not this run's to remove (rule 12): the run that left
+# one an hour ago may still be the tree a person is reading, and a directory older than a day is not
+# evidence that nobody is using it. Name what is old and leave it; the run's own scratch goes at the
+# end of the run (see the `rm -rf` beside `exit`), and its name carries its own run id.
+for old in /tmp/camel-remote-*; do
+    [ -d "`$old" ] || continue
+    [ -n "`$(find "`$old" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || continue
+    echo "[camel-remote] leaving old scratch `$old: not created by this run (remove it yourself when you know it is done)"
+done
 freekb=`$(df -P -k "`$HOME" 2>/dev/null | awk 'NR==2{print `$4}')
 # The footprint of the checkouts is informational, but measuring it walks every file under
 # ~/camel-work (43 GB here, ~50 s on a loaded host, once per run). Keep the number in a small
@@ -1891,10 +2076,21 @@ case "`$freekb" in
         ;;
 esac
 mkdir -p "`$R"
+# The creation record this sweep and every later sweep judge by (rule 12), written before the
+# clone because this is the line that creates the checkout. A run that takes over a checkout
+# created before this record existed adopts it here: the run knows the directory is real and in
+# use, which is exactly the reading the sweep cannot take from the outside.
+mkdir -p "`$HOME/$($cfg.hostWorkRoot)/.records"
+printf '%s\t%s\t%s\n' '$($run.runId)' "`$(date -Is)" "`$R" > "`$HOME/$($cfg.hostWorkRoot)/.records/`$(basename "`$R")"
 # `git clone` refuses a non-empty destination, and a half-removed checkout (a leftover tmp/ or
 # test/results/) leaves exactly that: on 2026-10-24 a lane's run died with exit 2 because the
 # destination existed without a `.git`. Clear the path first; the branch's content comes from the
 # bare repository and the patch below, so nothing of value is in the way.
+# What must not be cleared is the shared staging bare itself: on 2026-11-23 a lane cleared
+# `~/camel-work/Camel.git` while clearing a temporary checkout, and every lane pushes through it.
+if [ -f "`$R/HEAD" ] && [ -d "`$R/objects" ]; then
+    echo "[camel-remote] refusing to clear `$R: it is a bare repository (the shared staging remote is $bare)"; exit 2
+fi
 if [ ! -d "`$R/.git" ]; then rm -rf "`$R"; mkdir -p "`$R"; git clone -q "$bare" "`$R" || { echo '[camel-remote] clone failed'; exit 2; }; fi
 cd "`$R" || exit 2
 cur=`$(git rev-parse HEAD 2>/dev/null || true)
@@ -1916,6 +2112,46 @@ else
     if [ -s '$remoteScratch/changes.patch' ]; then git apply --whitespace=nowarn '$remoteScratch/changes.patch' || { echo '[camel-remote] patch did not apply'; exit 2; }; fi
     if [ -f '$remoteScratch/untracked.tar' ]; then tar -xf '$remoteScratch/untracked.tar' -C "`$R" || exit 2; fi
 fi
+# --- the tree under test, as it was handed over -----------------------------
+# The baseline for `tree_probe` below, taken once the tree is in the state this run asked for: the
+# commit, this lane's own uncommitted change (the patch above), and its untracked files. A porcelain
+# line that shows up in a later reading but not in this one was written *during* this run, which is
+# the question -- a lane's own dirty tree is its business, not the build's doing.
+tree_handover='$remoteScratch/tree-handover'
+git -C "`$R" status --porcelain --untracked-files=no > "`$tree_handover" 2>/dev/null ||
+    echo '[camel-remote] the hand-over listing could not be read; the tree probe below will say so'
+# `--untracked-files=no` is the discrimination the whole probe rests on: build outputs are ignored or
+# untracked by construction, so they never appear here, while the tracked generated files
+# (`registry.tsv`, `semantic.cpp`) are exactly what a generator that runs inside the build must not
+# touch. Dropping the flag would turn the probe into noise about `out/`, and a wall that reds on
+# build outputs is one readers learn to skip.
+tree_probe() {
+    probe_stage=`$1
+    probe_now='$remoteScratch/tree-now'
+    if ! git -C "`$R" status --porcelain --untracked-files=no > "`$probe_now" 2>/dev/null; then
+        echo "[TREE] state=unread stage=`$probe_stage: git status could not be read in `$R, so whether this is still the tree the run was given is not known; an unread probe is not a clean tree" >&2
+        echo "TREE_STATE=unread stage=`$probe_stage"
+        return 2
+    fi
+    grep -vxF -f "`$tree_handover" "`$probe_now" > "`$probe_now.new" 2>/dev/null
+    probe_grep=`$?
+    if [ "`$probe_grep" -gt 1 ]; then
+        echo "[TREE] state=unread stage=`$probe_stage: the hand-over listing could not be compared (grep exit `$probe_grep)" >&2
+        echo "TREE_STATE=unread stage=`$probe_stage"
+        return 2
+    fi
+    # grep selected nothing (exit 1) is the clean reading, not a failure: every line was in the
+    # hand-over listing, so nothing was written.
+    if [ ! -s "`$probe_now.new" ]; then
+        echo "TREE_STATE=clean stage=`$probe_stage"
+        return 0
+    fi
+    echo "[TREE] state=dirty stage=`$probe_stage: this run wrote tracked files in the tree it is testing, so the tree it built and tested is not the tree it was given"
+    sed 's/^/[TREE]   /' "`$probe_now.new"
+    echo '[TREE] a build or a plan that writes a tracked file is the defect, not the file: fix the writer, regenerate, and commit the result -- never carry the dirty tree forward'
+    echo "TREE_STATE=dirty stage=`$probe_stage"
+    return 1
+}
 export PATH="`$HOME/$($cfg.hostLocalBin):`$B:`$V:`$C/bin:`$HOME/$($cfg.hostWorkRoot)/bin:`$PATH"
 # Until 26888783c the tree's `camel` binary needed a libstdc++ newer than the host's system one
 # (GLIBCXX_3.4.31/32/35/36 not found), and only two things ever provided it: the plan step, through
@@ -2127,6 +2363,14 @@ if [ '$NoBuild' != 'True' ]; then
     # the exception and releases nothing here -- its hold covers the plan, which is the whole point.
     if [ "`$held_all" = 0 ]; then exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null; fi
     if [ `$code -ne 0 ]; then echo '__CAMEL_REMOTE_BUILD_FAILED__'; exit `$code; fi
+    # What the build was handed, and what it left behind: a generator that ran inside it would have
+    # rewritten a tracked file here, and every target compiled from that file would be compiled from
+    # bytes that are not in the commit. This is the reading that says so, before the plan runs against
+    # the same rewritten tree.
+    if ! tree_probe after-build; then
+        echo '__CAMEL_REMOTE_TREE_FAILED__'
+        exit 6
+    fi
 fi
 # The AST snapshot record (only with -UpdateAstHashes): before the plan, because the plan reads the
 # record this stage writes.
@@ -2170,9 +2414,22 @@ $planMarker
 # why -- a red that says nothing, indistinguishable from a run that measured nothing. Do not remove
 # the `2>&1`: it is what puts the reason on the same stream as RUN_EXIT, in the order it happened.
 $goldenMark
-$runPlan 2>&1
-code=`$?
+$planRunStage
 echo "RUN_EXIT=`$code"
+# After the plan, because a test can write a tracked file too -- a golden re-recorded from the wrong
+# parser, a case that touches a source file. Only the two record modes write tracked files on purpose
+# (`-UpdateGolden` rewrites goldens, `-UpdateAstHashes` the AST record), and those runs say they stood
+# the probe down instead of reporting the recording as this defect.
+if [ '$($treeProbeAfterPlan.ToString())' = 'True' ]; then
+    if ! tree_probe after-plan; then
+        echo '__CAMEL_REMOTE_TREE_FAILED__'
+        # A red plan keeps its own exit code, the way a red checker does; the tree reading still
+        # reaches the caller through the marker and the printed block.
+        if [ "`$code" -eq 0 ]; then code=6; fi
+    fi
+else
+    echo '[TREE] the after-plan probe is not taken: this run records into tracked files on purpose (-UpdateGolden / -UpdateAstHashes); the after-build probe was taken'
+fi
 $goldenStage
 $fetchStage
 # Released here, before the checkers: they read a finished run and need no exclusion. A
@@ -2201,8 +2458,10 @@ fi
 # thing it does not do is touch `code` -- `checkfail` is untouched by it, so no reading it prints can
 # decide this run.
 $gpuBlock
-# The scratch directory goes with the run: doing it here saves a connection, and a run that dies
-# before this line leaves something the day-old prune in /tmp sweeps up.
+# The scratch directory goes with the run: doing it here saves a connection. The path carries this
+# run's id (`/tmp/camel-remote-<name>-<stamp>`, made above by `scp -r`), so this is the one
+# `rm -rf` here that removes a directory this run created -- a run that dies before this line
+# leaves its own directory behind, and a later run names it instead of deleting it.
 cd /tmp && rm -rf '$remoteScratch'
 exit `$code
 "@
@@ -2305,6 +2564,36 @@ exit `$code
                     Write-Host $line
                 }
                 return
+            }
+            # The row channel (`-ListKnown`): the rows arrive twice on this stream and only one copy
+            # is for a person. `--list-known` prints them inline at the end of the run, and the host
+            # then repeats them inside the marker block. The inline copy is dropped here and the
+            # block is printed verbatim, so the console reads exactly as it did before this channel
+            # existed and a caller that captures this output (the merge position does) still gets
+            # the rows, between markers it can find.
+            #
+            # Row-shaped is `{"name":` at the start of a line: that is the runner's own row
+            # (`test/tools/run-tests.mjs`, `listedName`), and it is matched only while this run asked
+            # for the channel -- an ordinary run's stream is filtered by nothing at all.
+            if ($rowsChannel) {
+                if ($line -match '__CAMEL_REMOTE_ROWS_START__') {
+                    $rowsOpen = $true
+                    $rowsSeen = 0
+                    Write-Host $line
+                    return
+                }
+                if ($line -match '__CAMEL_REMOTE_ROWS_END__') {
+                    $rowsOpen = $false
+                    $rowsEnded = $true
+                    Write-Host $line
+                    return
+                }
+                if ($rowsOpen) {
+                    $rowsSeen++
+                    Write-Host $line
+                    return
+                }
+                if ($cleanLine -match '^\{"name"') { return }
             }
             if ($line -match '^AST_UPDATE_EXIT=(\d+)\s*$') {
                 $astExit = [int]$Matches[1]
@@ -2468,6 +2757,17 @@ exit `$code
                 Set-BuildPhase 'fail' "[camel-remote] build failed on $sshHost"
                 $run.phase = 'fail'
                 $run.lastLine = "[camel-remote] build failed on $sshHost"
+                Publish-Run
+                return
+            }
+            if ($line -match '__CAMEL_REMOTE_TREE_FAILED__') {
+                # The [TREE] block above already names the files; this is only what the panel and the
+                # registry show, so it says the one thing that decides the run: the tree under test is
+                # not the commit it was given.
+                $treeFailed = $true
+                $run.phase = 'fail'
+                $run.lastLine = "[camel-remote] the tree under test changed during the run on $sshHost (a tracked file was written)"
+                Set-BuildPhase 'fail' $run.lastLine
                 Publish-Run
                 return
             }
@@ -2981,6 +3281,7 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
         # history shows slot wait + compile, never transfer + queue folded into compile time; a
         # checks run is credited with its own stage, because it is work this entry must not hide.
         $recordedExit = if ($null -ne $astExit -and $astExit -ne 0) { $astExit }
+            elseif ($treeFailed) { $code }
             elseif ($null -ne $buildExit -and $checkNames.Count -eq 0) { $buildExit } else { $code }
         $buildStartForPanel = if ($null -ne $buildStartedAt) { $buildStartedAt } elseif ($null -ne $syncedAt) { $syncedAt } else { $startedAt }
         $queueForPanel = if ($null -ne $queueStartedAt) { $queueStartedAt } else { $startedAt }

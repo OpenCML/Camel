@@ -423,13 +423,46 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_cml"
-desc = "`std::cml` cannot print a program that holds a range value yet, and the refusal names the reason: a `Range` carries `int?` ends, so the value is a tagged/nullable tuple, which the printer does not print. The line is a pin on the printer's limit, not on the value's meaning -- the value itself is pinned by stream.interval and stream.range_value. When the printer learns the nullable tuple, this entry becomes the `let span: Range = 1..(n + 1)` spelling it had."
-kind = "negative"
+desc = "`std::cml` prints a program that holds a range value (design principles 4.2, 5.4): `1 .. (n + 1)` is written as the interval it is, a `let` of a `Range` carries no annotation -- `1..(n + 1)` is a `Range` by what `..` is -- and `.step` is read off the value. This entry used to pin the printer's refusal, because a `Range` carries `int?` ends and the value is a tagged/nullable tuple the printer would not print; the nullable tuple is what this reading's change taught it, which is the end condition the refusal named. The round trip of the printed program is pinned by feat.trans.cml, over this same case."
+kind = "behavior"
 case = "../../../cases/trans/cml/interval.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["let span = 1..(n + 1)", "return span.step"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.nullable_value_cml"
+desc = "Accepting a `T?` is accepting a type and a value, and the value is the payload (design principles 3.9): `let a: int? = 3` prints `let a: int? = (3 as int?)` -- the type is named because `T?` is a type the language writes, the value is the payload that enters it, and the position boxes the payload -- and `let b: string? = 'q'` prints the same shape. What is *not* printed is a tuple: `(3,)` is a one-element tuple and not a `T?`. The payload is checked by the same `checkType`, so a payload the printer cannot write is still refused: what changed is the tuple's own answer, not the answer for what it carries."
+kind = "behavior"
+case = "../../../cases/trans/cml/nullable_value.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["let a: int? = (3 as int?)", "let b: string? = ('q' as string?)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.nullable_null_cml"
+desc = "The counter-reading to `stream.nullable_value_cml`: a `T?` that holds nothing is not a value this printer writes, and the refusal names the node. The language reaches a `T?`'s emptiness through the operator that tests its tag -- `??` on an absent value is `:op/tag_is_null` -- so the graph holds an operator node and not a `null` constant, and the program is refused there. Widening the printer to name `T?` must not widen it to invent a value that is not there: `constantText`'s `null` arm is reachable only from a constant the graph holds, and this is why no case here reaches it."
+kind = "negative"
+case = "../../../cases/trans/cml/nullable_null.cml"
 args = ["${case}", "std::cml"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CmlUnsupportedConstruct"
-expect_output_contains = ["tagged, nullable or cell tuple"]
+expect_output_contains = ["':op/tag_is_null'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.struct_let_annotation_cml"
+desc = "The dropped annotation is the interval's own, not every `let`'s: a `Range` carries no annotation because `1..(n + 1)` is a `Range` by what `..` is, while `{ x: 1, y: 2 }` is an unnamed struct unless the declaration names its type (design principles 5.2), so a `let` of a named struct still writes `: Point`. A widening that dropped this too would print a value of an unnamed type where the program had a named one."
+kind = "behavior"
+case = "../../../cases/trans/cml/struct_let_annotation.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["let p: Point = {"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 

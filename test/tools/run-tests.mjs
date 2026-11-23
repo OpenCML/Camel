@@ -23,6 +23,7 @@ import { judgeTree, markChildrenNested, readTreeState, readTreeStateAsync, start
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
+import { normalizeReading, READING_NORMAL_VERSION } from './reading-normal.mjs'
 import { describeRefusals, formatRefusalSpec, matchesRefusal, parseRefusalSpec, refusals } from './reading-refusal.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -902,13 +903,15 @@ function parseArgs(argv) {
         // widening is what let `changed: 0 target(s)` run 336 plan files and print a green summary.
         // Only `test/runner.mjs` passes this flag, and it is refused beside a target.
         selectionEmpty: false,
-        // `--list-known` answers one question in one line per test, `{name, verdict}`: which named
-        // case came out which way. The question "is the known set the same set" was answered only
-        // by the `[XFAIL]` lines, so a before/after comparison had to be picked out of a full
+        // `--list-known` answers one question in one line per test, `{name, verdict, reading}`: which
+        // named case came out which way. The question "is the known set the same set" was answered
+        // only by the `[XFAIL]` lines, so a before/after comparison had to be picked out of a full
         // transcript by hand -- and two runs whose known *counts* agreed were read as "nothing
-        // moved" while one case had changed the way it fails. Off by default: unset, the run
-        // prints exactly what it printed before. `options.listKnownRows` is where `printResult`
-        // collects the verdicts while it prints them.
+        // moved" while one case had changed the way it fails. It is additive: the run prints
+        // everything it prints without the flag, and the rows come last. The wrapper that carries
+        // them back (`internal/tools/camel-remote.ps1 -ListKnown`) brackets them with two markers,
+        // which is what removes the need for a mode that suppresses the narration.
+        // `options.listKnownRows` is where `printResult` collects the verdicts while it prints them.
         listKnown: false,
     }
     for (let i = 0; i < argv.length; i++) {
@@ -1582,20 +1585,6 @@ function printTreeVerdict(verdict) {
 function listedName(plan, test) {
     const planId = test.__planId || plan.id || path.basename(plan.__planPath, '.plan.toml')
     return `${planId}/${test.name}`
-}
-
-/**
- * Silence the run's own narration on stdout for the length of one `--list-known` run, and give back
- * the function that ends it. `console.log` and not a flag inside every printer: the narration comes
- * from a dozen places (this file and the helpers it calls), and a mode that had to be honoured at
- * each of them would be one forgotten call away from mixing a `[PASS]` line into a list whose whole
- * purpose is to be read by something other than a person. stderr is deliberately left alone: a
- * refusal on it is a reason to act on, never a verdict about a test.
- */
-function muteRunNarration() {
-    const narrate = console.log
-    console.log = () => {}
-    return () => { console.log = narrate }
 }
 
 function printRunSummary(summary) {
@@ -3966,9 +3955,20 @@ async function executePlans(plans, options, sharedVars, logDir) {
         // printed as `known`: the run's own word for it is the plan's mark, and the list is a
         // reading of the marks, not a second vocabulary.
         if (options.listKnownRows) {
+            // `reading` is the comparable form of this verdict's first line, and it is present for
+            // every verdict rather than for failures only: `known -> fail` is one of the moves a
+            // merge gate has to see, and a field that exists only once something is red cannot see
+            // it. A `skip` carries its reason, a pass carries nothing, and both say so instead of
+            // being absent -- an absent key and a null one read the same to a careless comparison,
+            // and only one of them means "this run had nothing to say".
+            const first = outcome.status === 'skip'
+                ? outcome.reason
+                : Array.isArray(outcome.failures) && outcome.failures.length > 0 ? outcome.failures[0] : null
             options.listKnownRows.push({
                 name: listedName(plan, test),
                 verdict: outcome.status === 'xfail' ? 'known' : outcome.status,
+                reading: normalizeReading(first),
+                reading_version: READING_NORMAL_VERSION,
             })
         }
         if (plan !== printedPlan) {
@@ -4346,17 +4346,15 @@ async function main() {
         process.exitCode = 1
         return 1
     }
-    // `--list-known` speaks from here on: one line per test, `{name, verdict}`, and the `[SUMMARY]`
-    // the run would have ended with. The narration between this line and the end -- the layer line,
-    // the plan headers, the status and detail lines, the timing lines -- is stdout, and every one
-    // of them is a line a per-name comparison would have to filter out, which is the work this mode
-    // exists to remove. It is switched off here and not at the top of this function so that the
-    // refusals above keep their own words: a target that names no plan, a plan whose argument the
-    // CLI does not take, a plan that starts nothing -- those exit before this line, print why, and
-    // are a selection error rather than a list of verdicts. Nothing else changes: the same tests
-    // run in the same order, the same log files and summary.json are written, and the exit code is
-    // decided by the same lines.
-    const restoreNarration = options.listKnown ? muteRunNarration() : null
+    // `--list-known` adds a list from here on: one line per test, `{name, verdict, reading}`, after
+    // the run's own output. The narration is kept, and that is a change of contract with a reason:
+    // the list used to replace the narration because its only reader was a person filtering a whole
+    // transcript, and a status line among the rows would have been one more thing to filter. The
+    // job that reads it now (`internal/tools/camel-remote.ps1 -ListKnown`, then
+    // `scripts/merge-readings.mjs`) brackets the rows between two markers on the way back, so
+    // nothing has to be filtered and the run that records rows is still a run whose console a
+    // person can watch. Nothing else changes: the same tests in the same order, the same log files
+    // and summary.json, the same exit code.
     if (options.listKnown) options.listKnownRows = []
     // What the layer declares against what this run starts. The two numbers differ for a reason
     // that is not a defect -- `backends` expands one entry into several tests, `compare_to` pulls a
@@ -4636,14 +4634,13 @@ async function main() {
     // carries to the host on the next run. A tree that could not be read at all counts as the
     // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
     const exitCode = outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
-    // The whole of `--list-known`'s output, emitted after everything else so that no narration can
-    // land between the lines: one `{name, verdict}` per test, then the `[SUMMARY]` a normal run ends
-    // with -- through the same function, so the two runs' summary lines are the same line and a
-    // list can be checked against the count beside it.
-    if (restoreNarration) {
-        restoreNarration()
+    // The whole of `--list-known`'s output, emitted last: one `{name, verdict, reading}` per test.
+    // Last because the reader is a program that takes the lines after this point, and every line
+    // before it is the run a person reads -- the summary, the tree verdict, the roster, the
+    // timings are all already printed, through their own functions, exactly as they are in a run
+    // without the flag.
+    if (options.listKnown) {
         for (const row of options.listKnownRows) console.log(JSON.stringify(row))
-        printRunSummary(outcome.summary)
     }
     process.exit(exitCode)
 }

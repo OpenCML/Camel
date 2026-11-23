@@ -75,6 +75,10 @@ struct PassParam {
 struct PassFunction {
     std::string name; // `<module>::<function>`, as written
     slot_t value = 0; // the function value (`::Function *`)
+    /// The function's type, as the library declares it (`(n: Node, inputs: float[]) => float` for
+    /// `rules::nodes`): what a pass hands on when it gives the value to something that calls it,
+    /// rather than calling it itself (`rewrite::extract` builds a cost model over the value).
+    camel::core::type::Type *type = nullptr;
     /// Keeps the value alive, and where it is after every safepoint, while this argument lives.
     /// The pipeline makes it; a pass only reads `value`.
     std::shared_ptr<void> root;

@@ -3,18 +3,44 @@ order = 344
 tier = "fast"
 tags = ["feat", "compile", "effects", "hof"]
 
-# The pair: the same `map`, once over a function that writes no clause and once over one that
-# writes `stdout`. What a higher-order operator's call touches is the function operand's
-# (design principles 3.3; author 2026-11-19), so the declaration names the operand
-# (`sem::ResourceSpec::functionOperand`) and every reader takes the clause from that value's type:
-# the builder's ordering (`Builder::reachOfOper`, `Builder::isEffectNode`), the node-role registry
-# and the effect summary (`EffectWalk::ofNodes`), all through the builder's one operand lookup
-# (`Builder::functionValueAt`) and `camel::core::functionValueClauseAt` under it. The runtime's
-# resource footprint reads the same clause one
-# step further down, in `Resolver::oper` (src/runtime/resources.cpp): it binds the clause's
-# parameters where a call through a value binds them, so the `map` node carries the callback's
-# write and a body holding it is not measured as touching nothing. Before that, the declaration said
-# "external, itemizes nothing" and every `map` was an effect, whatever the callback.
+# The two sources of a node's effect, and the union they make (design principles 3.3; author
+# 2026-11-19): what a higher-order operator touches is what the function the program hands it
+# touches, read off the value's type at the operand the declaration names
+# (`sem::ResourceSpec::functionOperand`), *plus* whatever the operator declares for itself.
+# `checkResources` allows the two beside each other -- it refuses only an access bound to the
+# operand that carries the function -- and every reader states the union: the builder's ordering
+# (`Builder::reachOfOper`, `Builder::isEffectNode`), the node-role registry, the effect summary
+# (`EffectWalk::ofNodes`) and the runtime's resource footprint (`Resolver::oper`).
+#   * `map` over a function that writes no clause has no `effect` role; over one that writes
+#     `stdout` it keeps both, and the runtime footprint carries the write. Before `fd1c9838ca` the
+#     declaration said "external, itemizes nothing" and every `map` was an effect, whatever the
+#     callback.
+#   * `state:update` declares both halves: the box it writes (a handle) and the function it runs
+#     (ordinary operand 1). The function its parameter type admits is `pure`, so the union is the
+#     box alone -- and the reading says exactly that, with no external effect.
+[[tests]]
+name = "state.update_union"
+desc = "`state:update` declares both halves of its node's effect -- the box it writes and the function it runs (`functionOperand`, ordinary operand 1) -- and the runtime footprint reads the union: the handle, with no external effect and nothing unplaceable, because the function it can be handed is declared `pure`."
+case = "../../../cases/compile/ref/ref_float.cml"
+kind = "behavior"
+args = ["${case}", "test::resources"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const lines = input.normalized.stdout.split('\n')
+    const updates = lines.filter((l) => /^RESOURCES node main \d+ state:update: /.test(l))
+    assert(updates.length === 1,
+        `expected one state:update node to touch something, got ${updates.length}: ${updates.join(' | ')}`)
+    const line = updates[0]
+    assert(/^RESOURCES node main \d+ state:update: rmw handle \S*Ref \(node \d+\); result unknown$/.test(line),
+        `the update node's reading is not its declared handle and its result: ${line}`)
+    assert(!line.includes('external') && !line.includes('(any)') && !line.includes('conservative'),
+        `the union of a handle write and a pure callback is not external: ${line}`)
+}
+"""
+
 [[tests]]
 name = "map.runtime_footprint"
 desc = "The runtime's resource footprint reads the same clause: the `map` over a callback that writes `stdout` carries that write, the one over a callback that writes nothing carries nothing, and neither is read as touching nothing."

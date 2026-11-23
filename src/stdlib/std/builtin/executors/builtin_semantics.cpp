@@ -257,6 +257,13 @@ struct CppPanicStatement {
     bool panic; // false: a call of it raises nothing
 };
 
+/// One operator's `cost`: the whole URI and the number, both as literals, for the reason the
+/// fault table above writes them as literals -- a statement a check can read in the source.
+struct CppCostStatement {
+    std::string_view uri;
+    double cost; // one run of it, next to the cheapest run of the same machine
+};
+
 /**
  * The fault table of the built-in operators (docs/design/op-semantics/README.cn.md 4.2): an operator
  * that can raise nothing declares an empty table, and that is the one place "never faults" is
@@ -413,6 +420,25 @@ void declareBuiltinOperatorFaults() {
                 "The operator '" + std::string(statement.uri) +
                 "' states `panic` one way at the record and the other in its fault table.");
         }
+    }
+    // How dear a run of the arithmetic is, relative to the cheapest run of the same machine: the
+    // property a cost function reads instead of the operator's name (design principles 9.11, "the
+    // cost of an extraction"). A division and a remainder cost eight, a multiplication three, and
+    // everything else is left silent and therefore costs one (`Record::relativeCostOf`). The
+    // numbers are the ones the kernel's retired `weighted` model held, stated here -- where the
+    // operator's owner says it -- instead of by comparing the letters of a URI.
+    static constexpr CppCostStatement kCppCostStatements[] = {
+        {":op/div_i", 8.0},  {":op/div_l", 8.0},  {":op/div_f", 8.0},  {":op/div_d", 8.0},
+        {":op/div_c", 8.0},  {":op/div_z", 8.0},  {":op/div_bf", 8.0}, {":op/div_f6", 8.0},
+        {":op/mod_i", 8.0},  {":op/mod_l", 8.0},  {":op/mod_f", 8.0},  {":op/mod_d", 8.0},
+        {":op/mod_bf", 8.0}, {":op/mod_f6", 8.0}, {":op/mul_i", 3.0},  {":op/mul_l", 3.0},
+        {":op/mul_f", 3.0},  {":op/mul_d", 3.0},  {":op/mul_c", 3.0},  {":op/mul_z", 3.0},
+        {":op/mul_bf", 3.0}, {":op/mul_f6", 3.0},
+    };
+    for (const CppCostStatement &statement : kCppCostStatements) {
+        camel::ops::CppRegistration registration(statement.uri);
+        registration.relativeCost(statement.cost);
+        camel::ops::Registry::instance().registerOperator(registration);
     }
     // The same statement for the operators that can fault and that no Camel declaration names: the
     // core's own syntax forms (the compound assignments, the generic divisor forms, the two index

@@ -40,9 +40,13 @@
  *   entryNode / exitNode                     exit
  *   closureNodes                             ports(Capture)
  *   closureType                              nothing: the captures' types are ports(Capture)
- *   staticSlots                              constantOf, per DATA node (read from staticSlots)
- *   DraftNodeHeader::dataIndex               nothing: which slot a value sits in is the execution
- *                                            plan's (section 13)
+ *   staticSlots                              constantOf and staticIndexOf, per DATA node, and
+ *                                            staticSlotCount for how many there are
+ *   DraftNodeHeader::dataIndex               staticIndexOf for its negative half (the static
+ *                                            area's index, which is content); nothing for its
+ *                                            non-negative one, which is the execution plan's slot
+ *                                            (section 13)
+ *   (nothing: a draft has no name)           name, empty -- the name is `encode`'s argument
  *
  * `kept`, when it is given, is the same id table the encoder builds (`liveDraftNodes`): `kept[i]`
  * is the draft's node the runtime graph's node `i` is built from. A draft read beside the graph it
@@ -98,12 +102,15 @@ class DraftGraphAdapter final : public GraphView {
     camel::core::type::FunctionType *funcType() const override;
     std::vector<NodeRef> ports(PortGroup group) const override;
     NodeRef exit() const override;
+    std::string_view name() const override;
 
     std::uint32_t nodeSlotCount() const override;
     bool contains(NodeRef ref) const override;
     NodeKind kindOf(NodeRef ref) const override;
     const camel::core::type::Type *typeOf(NodeRef ref) const override;
     std::optional<::slot_t> constantOf(NodeRef ref) const override;
+    std::optional<std::uint32_t> staticIndexOf(NodeRef ref) const override;
+    std::uint32_t staticSlotCount() const override;
     std::uint64_t originOf(NodeRef ref) const override;
 
     std::span<const NodeRef> inputs(NodeRef ref, PortGroup group) const override;

@@ -196,6 +196,7 @@ class GraphModule final : public BuiltinModule {
                 {"op", true},
                 {"op_name", true},
                 {"is_pure", true},
+                {"relative_cost", true},
                 {"may_be_recomputed", true},
                 {"may_fault", true},
                 {"may_be_rearranged", true},

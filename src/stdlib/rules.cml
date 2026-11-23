@@ -38,7 +38,7 @@
  * is no rule per operand order and no rule for commutation or association (rewrite design 6).
  */
 
-import { Node } from graph
+import { Node, relative_cost } from graph
 import { abs, exp, expm1, log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { exp as exp_array, log as log_array, log_softmax, sigmoid, softmax } from tensor
@@ -430,6 +430,21 @@ export func fusion::<F>(f: F) => F! when is_function::<F>() {
 /// @example f->extract<nodes>
 export func nodes(n: Node, inputs: float[]) => float {
     return 1.0 + inputs->reduce<func (a, b) {
+        a + b
+    }, 0.0>
+}
+
+/// The default cost an extraction uses when the pipeline does not name another one: what one run of
+/// the node costs, as the operator states it in its record (`relative_cost`), plus the costs of the
+/// values it reads -- a division dearer than a multiplication, dearer than an addition. The operator
+/// is read through its record and never by its name, so renaming an operator changes nothing, and a
+/// target library that prices its own operators (CPU, tiles, GPU) gets its own numbers into the same
+/// function by stating them at registration. A target with a different measure writes its own
+/// function and names it in `rewrite::extract cost=<module>::<function>`.
+/// @example-fragment used as the cost of an extraction
+/// @example f->extract<default>
+export func default(n: Node, inputs: float[]) => float {
+    return relative_cost(n) + inputs->reduce<func (a, b) {
         a + b
     }, 0.0>
 }

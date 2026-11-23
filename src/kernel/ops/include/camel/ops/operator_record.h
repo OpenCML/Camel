@@ -334,6 +334,18 @@ struct Record {
     Stated<bool> panic;
 
     /**
+     * `cost`: how dear one run of the operator is next to the cheapest run of the same target,
+     * as the operator's own registration states it (design principles 9.11, "the cost of an
+     * extraction"). It is the property a cost function reads instead of the operator's name: the
+     * writing of a value costs this number plus the costs of the values it reads, so a target
+     * says once, here, that a division is dearer than a multiplication -- and the same number
+     * holds on every target that does not state its own. Not stated: nobody said, and one run
+     * costs as much as the cheapest one (1.0), which is how a node was counted before this
+     * number existed. Read through `relativeCostOf()`.
+     */
+    Stated<double> relativeCost;
+
+    /**
      * The type of a call. The type rule below answers it for a call whose argument types are
      * known; this is what the declaration stated, which is what a pass reads when it asks about
      * the operator rather than about one call.
@@ -458,6 +470,10 @@ struct Record {
 
     /// A call of it may fail: `panic` is stated true, or nobody stated it.
     bool mayFault() const { return !panic.stated() || panic.value; }
+
+    /// How dear one run of it is: what `cost` states, and 1.0 when nobody stated it. The one
+    /// reader of the property, so a target's silence reads the same everywhere.
+    double relativeCostOf() const { return relativeCost.stated() ? relativeCost.value : 1.0; }
 
     /// Whether running it is visible outside the program, which is what orders two effects of
     /// one resource and keeps them where the program wrote them.
@@ -592,6 +608,15 @@ class CppRegistration {
      */
     CppRegistration(std::string_view uri, bool mayFault);
 
+    /**
+     * A registration that states only the items its setters name: no `panic`, so the operator
+     * must already be registered, and the items stated here are merged into its record (a target
+     * restating a cost, a pass stating what nobody had stated). `complete` still refuses a
+     * record whose items disagree, and stating an item the C++ entrance already stated is
+     * refused the same way.
+     */
+    explicit CppRegistration(std::string_view uri);
+
     /// `uses` is the empty access list: running the operator touches nothing but its operands.
     CppRegistration &pure();
     /// `uses`: the accesses it lists. `pure()` and this are the same item.
@@ -603,6 +628,11 @@ class CppRegistration {
     CppRegistration &signature(const type::FunctionType &type, bool fallible = false);
     /// The type rule: the type of a call whose argument types are known.
     CppRegistration &resolver(type::resolver_ptr_t rule);
+
+    /// `cost`: how dear one run of it is, as this target measures it. A number greater than
+    /// zero; 1.0 is the cheapest run and is what an operator whose registration states nothing
+    /// is read as (`Record::relativeCostOf`).
+    CppRegistration &relativeCost(double cost);
 
     CppRegistration &folder(TypeFolder folder);
     CppRegistration &inPlaceForm(std::string_view form);

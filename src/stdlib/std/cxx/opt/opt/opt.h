@@ -30,8 +30,9 @@ class OptimizeRewritePass : public RuntimeGraphRewritePass {
 /// standard rules of stdlib/rules.cml applied both ways to the writings of every value, for at
 /// most `rounds` rounds, with no extraction. The program it hands on has values with several
 /// writings; the whole point of the pass is to stop there, so the dumps that follow can draw the
-/// classes (`std::gir`, `std::rgir`, `std::jgir`). `std::cxx::extract` (or the driver, before a
-/// pass that runs or translates the program without accepting that state) brings it back.
+/// classes (`std::gir`, `std::rgir`, `std::jgir`). An extraction the pipeline names --
+/// `rewrite::extract cost=...` -- brings it back, and nothing does on its own: a pass that needs
+/// one writing per value is refused with `PassNeedsExtraction` until the pipeline says how.
 class OptimizeSaturatePass : public GraphIRPass {
   public:
     OptimizeSaturatePass(

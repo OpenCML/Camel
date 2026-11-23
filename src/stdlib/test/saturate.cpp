@@ -18,6 +18,7 @@
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/writings.h"
+#include "camel/passes/test/cost.h"
 
 #include <array>
 #include <bit>
@@ -244,7 +245,7 @@ const Program *saturateProgram(
                   .count()
            << "\n";
         const auto t1 = std::chrono::steady_clock::now();
-        const ExtractStats extracted = writings.extract(*findCostModel("nodes"), ctx.get());
+        const ExtractStats extracted = writings.extract(camel::test::NodeCountCost{}, ctx.get());
         os << "SATURATE-TIME " << graph->name() << " extract_ms="
            << std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::steady_clock::now() - t1).count() << "\n";
@@ -315,7 +316,7 @@ const Program *saturateProgramChecked(
         saturated += stats.saturated ? 1 : 0;
         fixpoint += fixed ? 1 : 0;
         stable += same ? 1 : 0;
-        const ExtractStats extracted = writings.extract(*findCostModel("nodes"), ctx.get());
+        const ExtractStats extracted = writings.extract(camel::test::NodeCountCost{}, ctx.get());
         os << "SATURATE-INFO " << graph->name() << " rounds=" << stats.rounds
            << " matches=" << stats.matches << " writings=" << stats.newWritings
            << " unions=" << stats.unions << " saturated=" << stats.saturated

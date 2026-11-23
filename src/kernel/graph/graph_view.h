@@ -21,9 +21,10 @@
  * Four readings left this face in the interface review, and each says where it went
  * so that a reader does not look for it here: a macro is read from the record of the callee or of
  * the operator (2.2 keeps macros in the records only), a constant is the node's kind and its
- * inputs, which slot a value sits in belongs to the execution plan (section 13), and the static
- * area is not handed out at all -- a reader asks the DATA node for its value, and the adapter reads
- * the area it keeps.
+ * inputs, which slot a value sits in belongs to the execution plan (section 13) for the runtime
+ * half of the field and to the graph for the static half (`staticIndexOf`), and the static area's
+ * slots are not handed out -- a reader asks the DATA node for its value, and asks how many slots
+ * the area has (`staticSlotCount`) without the array itself.
  *
  * The vocabulary is nine kinds, three kinds of edge and "which region a node is in" (section 1).
  * Four readings differ from today's graph, and every reader still using the old reading is what the
@@ -47,10 +48,15 @@
  *    each of them repeats are gone.
  *  - DREF and DEAD do not appear: a dead place is a tombstone of the numbering, not a node, and a
  *    draft's placeholder is the front end's -- the encoder drops it before a graph exists.
- *  - a control input is not an edge. What it said -- "this node belongs to that arm", "this one
- *    runs after that one" -- is said by the region a node belongs to, plus the sync edge. A GATE's
- *    value is its single data input and what it waits for is a sync edge, so nothing counts "the
- *    first input is the value" any more.
+ *  - a control input is not an edge. What it said first -- "this node belongs to that arm" -- is
+ *    said by the region a node belongs to. What it said second -- "this one runs after that one" --
+ *    is a wait, and a wait is not one kind: a representation keeps the third run of the node's
+ *    input table beside its sync edges, which is why `GCGraph::waitInputsOf` unions the two rather
+ *    than answering either one. This face has three edge kinds and no `Wait`, so
+ *    `predecessors(Sync)` is the sync half and a reader that needs the whole wait reads the
+ *    representation until such a kind exists. What the face does answer is the other half of the
+ *    old reading: a GATE's value is its single data input, so nothing counts "the first input is
+ *    the value" any more.
  *
  * A fifth one was added by the interface review: a callee is the graph it names, by
  * name (an entry of the environment table) or by value, where the stored graph names it by a
@@ -73,6 +79,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace camel::core::type {
@@ -267,6 +274,18 @@ struct CalleeRef {
     const Graph *graph = nullptr;
 };
 
+/// The arguments of an OPER node as its kernel reads them (`GraphView::kernelArgumentsOf`). The
+/// shape is declared here, on the face, and `runtime/operator_instance.h` names it again as
+/// `camel::runtime::KernelArguments`: one definition, two spellings, so that the answer read off a
+/// representation and the answer read off the face cannot order a kernel's arguments differently.
+struct KernelArguments {
+    /// The ordinary arguments, and the `with` ones after them when the operator declares
+    /// `withAfterNorm`.
+    std::vector<NodeRef> norm;
+    /// The `with` arguments, empty when the operator takes them behind the ordinary ones.
+    std::vector<NodeRef> with;
+};
+
 /**
  * The graph a reader holds, whatever it is made of. Replaces, together, `GCGraph` and `GraphDraft`
  * as *read* by anything but an adapter.
@@ -309,6 +328,12 @@ class GraphView {
     /// `exitNodeRef`/`exitRefOf`; a frozen graph stores it, a draft names the node it holds, and
     /// which of the two is a field is the adapter's business and not a reader's.
     virtual NodeRef exit() const = 0;
+    /// The graph's name: the label a debugger, a dump and a diagnostic print, empty when it has
+    /// none. Compile and debug metadata, not content -- the same kind of reading as `originOf` --
+    /// and not the `GraphId` a callee is stored as (see `CalleeRef`; that one is a number this
+    /// face does not answer). A draft answers empty: a draft is not named until it is encoded, and
+    /// the name is `encode`'s argument (`runtime/draft.h`), so "empty" is what the draft stores.
+    virtual std::string_view name() const = 0;
 
     // -- nodes -------------------------------------------------------------------------------
     /// How many node places the numbering has: NodeRefs are `0 .. nodeSlotCount() - 1`, gaps
@@ -319,10 +344,16 @@ class GraphView {
     /// `containsNode()`; a tombstone and a placeholder are both false here.
     ///
     /// This is **not** the question "can this ref be asked about at all", and the difference is
-    /// deliberate: a JOIN, a DREF and a dead place hold a node record and answer their ports
-    /// (`inputs`, `users`, `predecessors`) while answering false here and no kind at all. A port
-    /// list is a fact about the graph's edges; a kind is one of the nine, and there is no tenth for
-    /// a place this vocabulary does not carry.
+    /// deliberate: a JOIN holds a node record and answers its ports (`inputs`, `users`,
+    /// `predecessors`) while answering false here, and so does a DREF while its representation
+    /// still holds it. A port list is a fact about the graph's edges. A kind is one of the nine,
+    /// and `kindOf` still answers for these places -- with the nearest kind, not with "no kind":
+    /// a JOIN is `Brch` (each adapter's `viewKind` maps it there: one kind for a branch and its
+    /// merge point) and a DREF or a dead place is `Data`. That answer is not a fact about a node --
+    /// nothing in this face reads it as one -- because there is no tenth kind for a place the
+    /// vocabulary does not carry. A dead place is where the two representations part: a frozen
+    /// graph keeps its record, so its port lists are the graph's (empty once it has none), while a
+    /// draft keeps only the number, so `inputs` answers nothing there.
     ///
     /// Do not "fix" that by letting a JOIN into `nodes()`: `nodes()` answers what nodes the graph
     /// has, and whether a JOIN -- the merge point of a branch, not a value the graph computes -- is
@@ -341,6 +372,18 @@ class GraphView {
     /// word is a value of the representation the graph and the back ends share (`slot_t`), so a
     /// reader decodes it through the node's `typeOf`.
     virtual std::optional<::slot_t> constantOf(NodeRef ref) const = 0;
+    /// The static-area index the node's constant sits at, `std::nullopt` when it has none: not a
+    /// node, not a DATA node, or a DATA node on a runtime slot (a non-negative `dataIndex`, which
+    /// belongs to the execution plan, section 13). The index is the graph's own content -- the
+    /// negative half of the one field -- and the value at it is what `constantOf` answers.
+    /// Replaces the three-step read every caller writes out by hand today (`dataIndex >= 0`,
+    /// `-dataIndex`, `staticSlots()`), five implementations of which exist in the tree.
+    virtual std::optional<std::uint32_t> staticIndexOf(NodeRef ref) const = 0;
+    /// How many slots the graph's static area has, so that an index `staticIndexOf` answers can be
+    /// told from one the graph does not have: the encoder refuses such an index on a frozen graph
+    /// (`graph.cpp`), so a reader that sees one is looking at a draft that broke the invariant.
+    /// The array itself is not a query of this face (file comment).
+    virtual std::uint32_t staticSlotCount() const = 0;
     // Three more readings are not here (interface review), and a reader that wants one
     // asks where it is derived rather than this face:
     //
@@ -349,9 +392,11 @@ class GraphView {
     //                truth).
     //   isConstant   the node's kind and its inputs: a DATA node whose value the graph was given,
     //                which is what `constantOf` answers.
-    //   dataIndexOf  which slot the value sits in is the execution plan's (section 13), not the
-    //                graph's content. The back ends read the slot from the frozen payload, which
-    //                is where it lives.
+    //   dataIndexOf  the field carries two things and the answer above is only the second: a
+    //                negative value is the static area's index, which is the graph's content and
+    //                is what `staticIndexOf` answers, and a non-negative one is the runtime slot,
+    //                which is the execution plan's (section 13) and stays on the representation
+    //                where the back ends read it.
     /// Where the node was written, 0 when unknown. Compile and debug metadata, not content.
     virtual std::uint64_t originOf(NodeRef ref) const = 0;
 
@@ -411,6 +456,36 @@ class GraphView {
     /// `GCOperBody` payload; the URI, the traits and the implementation are read from
     /// `camel/core/operator_table.h`, where they are stored once per operator.
     virtual camel::core::OperId operatorOf(NodeRef ref) const = 0;
+    /// True when the node holds an operator record: an OPER node whose payload names one.
+    /// `NodeKind::Oper` alone is not this answer -- the view folds CAST, COPY, FILL and ACCS into
+    /// that kind and they name no operator (file comment) -- so the two-step reading
+    /// (`kindOf` then `operatorOf`) is what a caller writes out by hand today; this is that
+    /// reading written once. Defined here rather than in an adapter: it is one definition over two
+    /// answers the face already gives, and both representations fold the same four kinds.
+    bool isOperRecord(NodeRef ref) const {
+        return kindOf(ref) == NodeKind::Oper && operatorOf(ref) != camel::core::kNoOper;
+    }
+    /// The node's arguments as its kernel reads them: the two port groups, with the `with` ones
+    /// moved behind the ordinary ones when the operator declares `withAfterNorm` (`OperatorTraits`,
+    /// `camel/core/operator_table.h`) and `with` empty then. A node that is not a stored OPER
+    /// record answers its own two groups unchanged. Replaces `runtime::kernelArgumentsOf`, which
+    /// needs one of the two representations to answer; the concatenation is the one definition it
+    /// and this share (`core::joinKernelArguments`), so the two cannot order a kernel's arguments
+    /// differently. Defined here for the same reason as `isOperRecord`.
+    KernelArguments kernelArgumentsOf(NodeRef ref) const {
+        KernelArguments arguments;
+        const std::span<const NodeRef> norm = inputs(ref, PortGroup::Normal);
+        arguments.norm.assign(norm.begin(), norm.end());
+        const std::span<const NodeRef> with = inputs(ref, PortGroup::Context);
+        arguments.with.assign(with.begin(), with.end());
+        if (isOperRecord(ref)) {
+            camel::core::joinKernelArguments(
+                camel::core::OperatorTable::instance().uri(operatorOf(ref)),
+                arguments.norm,
+                arguments.with);
+        }
+        return arguments;
+    }
     /// The form of a LOOP node; a default `LoopForm` for another kind. Replaces three accessors and
     /// one free function (`loopBodyOf`).
     virtual LoopForm loopFormOf(NodeRef ref) const = 0;
