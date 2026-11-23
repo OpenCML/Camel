@@ -1,8 +1,10 @@
 # graph-view 阶段 3a 第二批：变换、重写、执行、工具
 
-**这一路的账：`1772` → `1586`（−186），新增 0 处。**（变换 `192→159`、重写 `40→32`、执行侧五个目录 `439→436`、工具 `434→292`。）
+**这一路的账：`1772` → `1586`（−186），新增 0 处。**（变换 `192→159`、重写 `40→32`、执行侧五个目录 `439→436`、工具 `58→58`、测试 `434→292`。）
 
-四个类各一笔，共四笔：`aaa2f8a90`（变换）、`8de478cee`（重写）、`f9189ff32`（工具）、`5066fa6fc`（执行）。
+题面点名的四类是四个目录族：变换 `src/stdlib/transforms`、重写 `src/stdlib/rewrite`、执行 `src/stdlib/std/{nvm,fvm,prl,cpp,exec}`、工具 `src/tools`。**工具一处也没动**，理由在 §5；`src/tools` 是写路径，读视图给不了它要的东西。真正还有大量直读的地方是 `src/stdlib/test`（测试里的遍），它不是题面点的类，单独一笔。
+
+四笔：`aaa2f8a90`（变换）、`8de478cee`（重写）、`f9189ff32`（测试）、`5066fa6fc`（执行）。
 
 ## 0 怎么数
 
@@ -16,11 +18,12 @@ git grep -n 'GCGraph\|GraphDraft' -- 'src/stdlib/**'
 
 | 提交 | 类 | 这一笔 | 本类 | 全树 |
 |---|---|---|---|---|
-| 基点 `234dfb0a4` | — | — | 192 / 40 / 439 / 434 | 1772 |
+| 基点 `234dfb0a4` | — | — | 变换 192 / 重写 40 / 执行 439 / 工具 58 / 测试 434 | 1772 |
 | `aaa2f8a90` | 变换 | 三十三处借来的图改 `const auto *` | 192 → 159 | 1739 |
 | `8de478cee` | 重写 | 七处借来的图改 `auto`；`portIndexIn` 改问视图 | 40 → 32 | 1731 |
-| `f9189ff32` | 工具 | 一百四十五处声明丢掉类型名改 `auto`（其中九行仍写着另一个以 `GCGraph` 开头的类型名——`GCGraphBuildAccess`、`GCGraphPayloadArena`——所以按行数只掉 142）；六个纯形状谓词改问视图；控制台谓词改问算子，两处按编号的搜寻改 `nodes()` | 434 → 292 | 1599 |
+| `f9189ff32` | 测试 | 一百四十五处声明丢掉类型名改 `auto`（其中九行仍写着另一个以 `GCGraph` 开头的类型名——`GCGraphBuildAccess`、`GCGraphPayloadArena`——所以按行数只掉 142）；六个纯形状谓词改问视图；控制台谓词改问算子，两处按编号的搜寻改 `nodes()` | 434 → 292 | 1599 |
 | `5066fa6fc` | 执行 | 三处借来的图改 `auto` | 439 → 436 | 1586 |
+| — | 工具 | **一处未动** | 58 → 58 | 1586 |
 
 ## 2 剩下 1586 处按"这个名字在这里做什么"分
 
@@ -72,10 +75,11 @@ git grep -n 'GCGraph\|GraphDraft' -- 'src/stdlib/**'
 - **`rewrite/fact.cpp#compilePattern`、`rewrite/module.cpp#RefEvaluator`**：读的是静态区（`staticSlots`）与算子记录以外的种种载荷（`dataIndex`、`GCOperBody`）。视图按设计不交静态区、不交槽位。
 - **`test/commit_checks.cpp#findChainedPrints`**：见第 4 节，控制输入不是边。
 - **`test/impl_body.cpp#inputList`**：打的是 `normInputsOf + withInputsOf + ctrlInputsOf` 三段，第三段视图没有。
+- **整个 `src/tools`（58 处，一处未动）**：这里没有一处"借来读它的图"。剩下的全是**写路径的形参**：`DebugCore::endCompile(GCGraph *root)`、`pushFrame`/`pushCallee`/`replaceTop(GCGraph *graph, Frame *)` 要把图连同帧存下来并改它；`passStarting(bool, GCGraph *)` 与 `passDumpHandler(…, GCGraph *graph, void *)` 是实现遍钩子的回调签名，签名换不成只读的面；`camel-cli/main.cpp#writePassDump` 读的是 `execPlan()`。视图是只读的一张脸（`docs/design-principles` 里"一个实现、一张脸"），给写者用不了它——这不是"没时间"，是它答不了。真正能把 `src/tools` 从 `GCGraph` 上摘下来的，是 3c 的引用模型（引用按值传、`Graph` 只剩一个实现），那时这些形参改收 `Graph &`，一次性解决。
 
 ## 6 读数
 
-`-Plan smoke,feat/parse,feat/trans,feat/compile -Jobs 8`，`[SUMMARY] total: 2917, pass: 2905, fail: 7, known failures: 5`：
+`-Plan smoke,feat/parse,feat/trans,feat/compile -Jobs 8`，在干净树上跑的那一次 `[provenance] tip 98deec31dcaf500b857ad9bfb9b4562835910e91 | tier fast | jobs 8`，`[SUMMARY] total: 2917, pass: 2905, fail: 7, known failures: 5`：
 
 | 计划 | total | pass | fail |
 |---|---|---|---|
