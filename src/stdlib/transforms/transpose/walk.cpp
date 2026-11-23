@@ -1083,7 +1083,7 @@ bool buildTransposeMember(
                     // main walk fills), and the call site passes what that member takes: the
                     // arguments as the arm has them, then this node's cotangent.
                     const GraphId calleeId = function->calleeIdOf(ref);
-                    camel::runtime::GCGraph *callee =
+                    auto *callee =
                         rt::isValid(calleeId) ? state.program->graph(calleeId) : nullptr;
                     if (callee == nullptr) {
                         os << "TRANSPOSE function=" << function->name()

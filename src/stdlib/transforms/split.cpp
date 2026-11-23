@@ -853,7 +853,7 @@ std::vector<Residual> residualsOf(
                 return false;
             }
             const GraphId calleeId = lifted.calleeIdOf(ref);
-            const rt::GCGraph *calleeGraph =
+            const auto *calleeGraph =
                 rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
             return answersAPair(calleeGraph) || answersAPairByValueAt(lifted, ref);
         });
@@ -1053,7 +1053,7 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
             const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
             // The values the caller passes, read from the callee's signature (`valuePortsOf`), and
             // then the call's `with` arguments, which that reading does not name.
-            const rt::GCGraph *callee =
+            const auto *callee =
                 program != nullptr && rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
             const camel::core::type::FunctionType *calleeType = callValueSignatureOf(graph, ref);
             if (calleeType == nullptr && callee != nullptr) {
@@ -2301,7 +2301,7 @@ SplitGraph buildSplitGraph(
     }
     std::vector<const rt::GCGraph *> pending{function};
     for (size_t at = 0; at < pending.size(); ++at) {
-        for (const rt::GCGraph *callee : pairCalleesOnValueChain(*pending[at], program)) {
+        for (const auto *callee : pairCalleesOnValueChain(*pending[at], program)) {
             if (callee == nullptr || calleeCuts.find(callee) != calleeCuts.end()) {
                 continue;
             }

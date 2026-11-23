@@ -26,7 +26,6 @@ using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using camel::runtime::fact::Anchor;
 using camel::runtime::EffectSummary;
-using camel::runtime::GCGraph;
 using camel::runtime::kInvalidNodeRef;
 
 namespace camel::graphmod {
