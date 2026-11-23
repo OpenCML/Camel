@@ -430,9 +430,13 @@ int main() {
         const auto maximum = ScalarExpr::apply(ScalarOp::Maximum, {a,b});
         const auto minimum = ScalarExpr::apply(ScalarOp::Minimum, {a,b});
         if (maximum.evaluate({{"a",ScalarValue::f32(-0.0f)},{"b",ScalarValue::f32(0)}}).bits != 0 ||
-            minimum.evaluate({{"a",ScalarValue::f32(0)},{"b",ScalarValue::f32(-0.0f)}}).bits != 0x80000000U ||
-            maximum.evaluate({{"a",{DType::F32,0xffc01234U}},{"b",ScalarValue::f32(1)}}).bits != 0x7fc00000U)
+            minimum.evaluate({{"a",ScalarValue::f32(0)},{"b",ScalarValue::f32(-0.0f)}}).bits != 0x80000000U)
             throw std::runtime_error("scalar IR extrema bit contract mismatch");
+        // A NaN is a NaN: its payload and signalling bit are not part of the value (design
+        // principles, floating point; the author's ruling of 2026-11-23), so the extrema's NaN
+        // result is judged as a NaN and not against the canonical bit pattern it carries today.
+        if (!std::isnan(maximum.evaluate({{"a",{DType::F32,0xffc01234U}},{"b",ScalarValue::f32(1)}}).asF32()))
+            throw std::runtime_error("scalar IR extrema lost the NaN result");
         const auto half = ScalarExpr::literal(ScalarValue::f64(1.0 + std::ldexp(1.0,-24)));
         if (ScalarExpr::cast(DType::F32,half).evaluate({}).asF32() != 1.0f ||
             a.substitute("a",ScalarExpr::literal({DType::F32,1})).evaluate({}).bits != 1)

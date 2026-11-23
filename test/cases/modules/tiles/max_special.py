@@ -22,6 +22,19 @@ def read_values(path):
     assert header['descr'] == '<f4' and header['shape'] == (8,), header
     return struct.unpack('<8I', raw[10 + size:])
 
+def is_nan(bits):
+    return bits & 0x7f800000 == 0x7f800000 and bits & 0x007fffff != 0
+
+def same(actual, expected):
+    """The same values: a NaN for a NaN, every other cell bit for bit (the two zeros included).
+
+    `expected_bits` names the canonical NaN the extrema answer with, but a NaN's payload and
+    signalling bit are not part of the value (design principles, floating point; the author's
+    ruling of 2026-11-23), so the NaN cells are satisfied by any NaN and nothing else is loosened.
+    """
+    return len(actual) == len(expected) and all(
+        a == e or (is_nan(a) and is_nan(e)) for a, e in zip(actual, expected))
+
 with tempfile.TemporaryDirectory(prefix='camel-tiles-max-') as folder:
     env['TILES_TEST_OUT'] = folder
     for width in [127, 128, 257, 513]:
@@ -34,6 +47,8 @@ with tempfile.TemporaryDirectory(prefix='camel-tiles-max-') as folder:
         expected = 'parallel_max' if width >= 128 else 'standard'
         assert plan['stages'][0]['implementation'] == expected, plan
         cpu, gpu = [read_values(Path(folder) / f'{name}.npy') for name in ['cpu', 'gpu']]
+        # The 0x7fc00000 cells are NaNs, not that NaN's bits: `same` judges a NaN as a NaN, so the
+        # canonical pattern the extrema answer with is written here only to say which cells are NaNs.
         expected_bits = (0x7fc00000, 0x7fc00000, 0, 0, 0xff800000, 0x7f800000, 0x7fc00000, 0x41100000)
-        assert cpu == gpu == expected_bits, (width, cpu, gpu)
+        assert same(cpu, expected_bits) and same(gpu, expected_bits), (width, cpu, gpu)
         print(f'max width={width}: NaNs, infinities and signed-zero ties match')

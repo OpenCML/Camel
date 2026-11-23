@@ -52,6 +52,23 @@ def read(path):
     return tuple(header['shape']), struct.unpack('<' + str(len(payload) // 4) + 'I', payload)
 
 
+def nan(bits):
+    return bits & 0x7f800000 == 0x7f800000 and bits & 0x007fffff != 0
+
+
+def same(actual, expected):
+    """The same shape and the same values, a NaN standing for any NaN.
+
+    A view map moves an element without touching it, but a NaN's payload and signalling bit are
+    not part of the value (design principles, floating point; the author's ruling of 2026-11-23),
+    so the fixture's NaN cells agree with any NaN. Every other cell is still compared bit for bit,
+    the two zeros included: the sign of a zero is part of the value.
+    """
+    if actual[0] != expected[0] or len(actual[1]) != len(expected[1]):
+        return False
+    return all(a == e or (nan(a) and nan(e)) for a, e in zip(actual[1], expected[1]))
+
+
 def permuted(bits, shape, axes):
     """Independent row-major coordinate oracle, without backend/index-map helpers."""
     output_shape = tuple(shape[axis] for axis in axes)
@@ -98,8 +115,8 @@ def verify(text, folder, bits):
             names = [name + '_cpu', name + '_gpu']
         for filename in names:
             actual = read(folder / (filename + '.npy'))
-            assert actual == value, (filename, actual, value)
-    assert read(folder / 'config_gpu2.npy') == expected['config0'], 'A/B/A context binding retained stale axes'
+            assert same(actual, value), (filename, actual, value)
+    assert same(read(folder / 'config_gpu2.npy'), expected['config0']), 'A/B/A context binding retained stale axes'
 
 
 def run_matrix():
