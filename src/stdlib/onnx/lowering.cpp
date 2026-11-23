@@ -522,15 +522,21 @@ Value lowerSliceSub(const LowerContext &ctx) {
     }
     // The guard's index domain is the axis' own legal range of positions, held as zeros of that
     // length: an index inside the domain gathers a zero, an index outside it reads past the end
-    // of the zeros and ONNX Runtime fails where the run faults. A forward slice's bounds are
-    // positions 0..extent (the end may be one past the last position, which is the axis' own
-    // extent), a backward slice's start is a position the axis has (0..extent - 1) while its end
-    // may be one before the first. ONNX reads a *negative* index from the end of the tensor,
-    // which no Camel bound ever is, so a negative index is pushed further out of range on that
-    // side instead of landing on a legal one.
+    // of the zeros and ONNX Runtime fails where the run faults. What the domain watches is the
+    // position the walk takes (design principles 5.4), not the bound's sign: a forward slice's
+    // bounds are positions 0..extent (the end may be one past the last position, which is the
+    // axis' own extent) and a backward slice's start is a position the axis has (0..extent - 1),
+    // while its end may be the position before the first. ONNX reads a *negative* index from the
+    // end of the tensor, which Camel reads as a bound and never as a position, so a negative index
+    // is pushed further out of range on that side instead of landing on a legal one -- except the
+    // backward end of -1, which is the before-first position by name and is spelled below every
+    // extent.
     const auto boundOf = [&](size_t index, bool isStart) {
         const bool known    = ctx.arg(index).isConstant();
         const int64_t value = known ? ctx.constInt(index) : 0;
+        if (known && !isStart && step < 0 && value == -1) {
+            return std::string(e.int64s(beforeFirst)); // the same position an end left out names
+        }
         const bool legal    = known && extent.has_value() && value >= 0 &&
                            (isStart && step < 0 ? value < *extent : value <= *extent);
         if (legal) {

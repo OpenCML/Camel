@@ -164,3 +164,13 @@ std::string toString(const ControlRegionTree &tree) {
 }
 
 } // namespace camel::facts
+
+namespace camel::facts {
+namespace {
+// Registered when the library loads, not when a reader first asks: a kind that exists only once
+// somebody has called `controlRegionsOf` is a kind `registeredKinds` cannot name and `computeAll`
+// cannot fill, so `camel inspect --facts` would leave it out of the table, and a reader could not
+// tell that from a graph with no control regions.
+[[maybe_unused]] const KindId kControlRegionKind = controlRegionKind();
+} // namespace
+} // namespace camel::facts
