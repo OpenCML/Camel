@@ -1051,8 +1051,15 @@ $goldenCount = -1
 $goldenState = ''
 $lastRunPublish = [datetime]::MinValue
 
-# One line per run for the panel's run registry. `slot` stays null (the host does not report which
-# of the two locks it took); slots = 2 is the host layout this script itself creates below.
+# One line per run for the panel's run registry. The fields that say *how* this run was scheduled
+# are reported by the host itself and not guessed here: `slot` is the build slot the host took
+# ("1", "2", "1&2" for a run that holds both, "0" when it built nothing and held none), `testSlot`
+# is 1 when the plan slot was held, and
+# `overlapping` names the other runs that were on the host when this one started and when it
+# stopped, as `runId:phase` or `none`. `loadAtStart`/`loadAtEnd` are the host's 1-minute load at
+# the same two moments. Without them a duration is a number taken in unknown company: two runs red
+# side by side and two runs red one after the other are different readings, and only these four
+# fields tell them apart. `state` is `read` when the run was measured.
 $run = @{
     runId           = "$PID-$($startedAt.ToString('yyyyMMddHHmmss'))"
     pid             = $PID
@@ -1062,8 +1069,13 @@ $run = @{
     startedAt       = $startedAt.ToString('o')
     updatedAt       = $startedAt.ToString('o')
     phase           = 'starting'
+    state           = $null
     slots           = 2
     slot            = $null
+    testSlot        = $null
+    overlapping     = @{ atStart = $null; atEnd = $null }
+    loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
+    loadAtEnd       = $null
     queuedAt        = $null
     queueSeconds    = $null
     buildStartedAt  = $null
@@ -1869,6 +1881,34 @@ fi
 # The split the plan runner prints: unless a build runs below, this run built nothing.
 export CAMEL_GATE_BUILD_SECONDS=0
 cd "`$R" || exit 2
+# --- who else is on this host, and how loaded it was ------------------------
+# The registry on the workstation holds one line per run, but a run cannot see the other ones from
+# there: what a reading needs is the set that overlapped *this* run, reported by the machine that
+# ran it. So each run leaves a one-line note on the host while it lives, and reads the other notes
+# at its start and at its end. The note is not a lock and decides nothing -- the locks are below --
+# it is the "who else was running" half of a duration that would otherwise be unattributable
+# (load 15-42 is normal here, so a duration without its company is not comparable to another one).
+# A note left behind by a run that was killed goes stale on its own: six hours is not a co-tenant.
+RUN_NOTE_DIR=/tmp/camel-host-runs
+mkdir -p "`$RUN_NOTE_DIR"
+run_note() { printf '%s\t%s\t%s\t%s\n' '$($run.runId)' '$name' "`$1" "`$(date +%s)" > "`$RUN_NOTE_DIR/'$($run.runId)'"; }
+others_now() {
+    awk -v me='$($run.runId)' -v now="`$(date +%s)" 'NF >= 4 { if (`$1 == me) next; if (now - `$4 > 21600) next; printf "%s%s:%s", sep, `$1, `$3; sep = "," }' "`$RUN_NOTE_DIR"/* 2>/dev/null
+}
+finish_probe() {
+    echo "HOST_LOAD_END=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
+    echo "HOST_OVERLAP_END=`$(others_now)"
+    rm -f "`$RUN_NOTE_DIR/'$($run.runId)'"
+}
+# Every exit path, including a failed build and a wait that runs out: the end reading is taken on
+# the way out, so a run that never reached the plan still says how the host looked when it stopped.
+trap finish_probe EXIT
+run_note starting
+echo "HOST_LOAD_START=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
+echo "HOST_OVERLAP_START=`$(others_now)"
+# 0 means "this run held no build slot": a -NoBuild run builds nothing, and the plan slot below is
+# a slot of its own.
+echo 'HOST_BUILD_SLOT=0'
 echo '__CAMEL_REMOTE_SYNCED__'
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
@@ -1911,6 +1951,8 @@ if [ '$NoBuild' != 'True' ]; then
         done
     fi
     # A build that wedges must not hold a slot forever; the cap is generous.
+    echo "HOST_BUILD_SLOT=`$slot"
+    run_note "build-`$slot"
     build_started_ns=`$(date +%s%N)
     timeout 2400 $buildCmd
     code=`$?
@@ -2089,6 +2131,55 @@ exit `$code
                 } else {
                     "[camel-remote] recording the AST snapshot failed on the host (exit $astExit)"
                 }
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            # --- how the host scheduled this run -----------------------------
+            # Four readings, all of them from the host and printed as well as recorded: a duration
+            # is only comparable to another duration when the slot it was taken in, the company it
+            # was taken with and the load at both ends travel with it. They arrive before the sync
+            # marker, so the "first line after SYNCED is the build start" rule below is untouched.
+            if ($cleanLine -match '^HOST_BUILD_SLOT=(\S+)$') {
+                # A string, not a number: "1" and "2" are the two build slots, "0" is a run that
+                # built nothing, and a time-sensitive run holds both at once ("1&2").
+                $run.slot = $Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_TEST_SLOT=(\d+)$') {
+                $run.testSlot = [int]$Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_LOAD_START=(\S+)$') {
+                $run.loadAtStart = $Matches[1]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_OVERLAP_START=(.*)$') {
+                $othersAtStart = if ($Matches[1].Trim()) { $Matches[1].Trim() } else { 'none' }
+                $run.overlapping = @{ atStart = $othersAtStart; atEnd = 'not read' }
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_OVERLAP_END=(.*)$') {
+                $othersAtEnd = if ($Matches[1].Trim()) { $Matches[1].Trim() } else { 'none' }
+                if ($null -eq $run.overlapping) {
+                    $run.overlapping = @{ atStart = 'unknown'; atEnd = $othersAtEnd }
+                } else {
+                    $run.overlapping.atEnd = $othersAtEnd
+                }
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_LOAD_END=(\S+)$') {
+                $run.loadAtEnd = $Matches[1]
                 Publish-Run
                 Write-Host $line
                 return
@@ -2291,6 +2382,15 @@ exit `$code
         }
     $code = $LASTEXITCODE
     $finishedAt = Get-Date
+    # The end load is taken here, not after the summaries below: this is the moment the run stopped
+    # being the thing that loaded the host, and a reading taken a minute later is a reading of other
+    # people's work. The summary further down reuses this reading instead of taking a second one.
+    if ($null -eq $loadEnd) { $loadEnd = Get-HostLoad }
+    if ($null -ne $loadEnd) { $run.loadAtEnd = "$([math]::Round($loadEnd[0], 2))" }
+    if ($null -eq $run.loadAtStart -and $null -ne $loadStart) {
+        $run.loadAtStart = "$([math]::Round($loadStart[0], 2))"
+    }
+    if ($null -eq $run.state) { $run.state = 'read' }
     $run.finishedAt = $finishedAt.ToString('o')
     $run.exit = $code
     $run.phase = if ($code -eq 0) { 'done' } else { 'fail' }
@@ -2683,7 +2783,7 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     $planEnd = if ($planStartedAt) { $finishedAt } else { $planStartedAt }
     $phases = "transfer {0:N1} s, build {1:N1} s" -f ($transferEnd - $startedAt).TotalSeconds, ($buildEnd - $transferEnd).TotalSeconds
     if ($null -ne $planStartedAt) { $phases += ", plan {0:N1} s" -f ($finishedAt - $planStartedAt).TotalSeconds }
-    $loadEnd = Get-HostLoad
+    $loadEnd = if ($null -ne $loadEnd) { $loadEnd } else { Get-HostLoad }
     if ($null -ne $loadEnd) {
         Write-Host ("[load] {0} {1} {2} (1m/5m/15m) after run" -f $loadEnd[0], $loadEnd[1], $loadEnd[2])
     }
@@ -2693,6 +2793,22 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     if ($null -ne $loadLow -and $loadLow -gt 8) {
         Write-Host ("[load] WARNING: 1m load {0} > 8 -- readings taken now are not comparable to quiet-host readings" -f $loadLow)
     }
+    # How this run was scheduled, on one line and next to the readings it qualifies: a duration
+    # without its slot, its company and its load is a number taken in unknown conditions, and the
+    # difference between "two runs red side by side" and "two runs red one after the other" is
+    # exactly this line. `slot=0` is a run that built nothing (it held no build slot), not a run
+    # that held no exclusion: `testSlot=1` is the plan slot.
+    $slotText = if ($null -eq $run.slot) { 'unknown' } else { "$($run.slot)" }
+    $testSlotText = if ($null -eq $run.testSlot) { '0' } else { "$($run.testSlot)" }
+    $overlapText = if ($null -eq $run.overlapping -or $null -eq $run.overlapping.atStart) {
+        'not reported'
+    } else {
+        "start [$($run.overlapping.atStart)] end [$($run.overlapping.atEnd)]"
+    }
+    Write-Host ("[camel-remote] run {0}: state={1} slot={2} testSlot={3} load {4} -> {5} (1m) overlapping {6}" -f `
+        $run.runId, $run.state, $slotText, $testSlotText,
+        $(if ($run.loadAtStart) { $run.loadAtStart } else { 'unknown' }),
+        $(if ($run.loadAtEnd) { $run.loadAtEnd } else { 'unknown' }), $overlapText)
     Write-Host ("[camel-remote] {0} exit {1} ({2}; total {3} s)" -f `
         $name, $code, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
     exit $code
