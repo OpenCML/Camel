@@ -70,11 +70,18 @@ async function backlogOf(repo) {
     const text = await readFile(path.join(repo, 'internal', 'backlog.md'), 'utf8')
     const rows = new Map()
     for (const line of text.split('\n')) {
-        const cells = line.split('|').map((cell) => cell.trim())
-        const id = /^[DC]-\d+-\d+/.exec(cells[1] || '')
+        if (!line.trim().startsWith('|')) continue
+        // The id is in the first cell, possibly in code or bold marks; a table of any width counts.
+        const cells = line.split('|').map((cell) => cell.trim().replace(/[`*]/g, ''))
+        const id = /^([DC]-\d+-\d+)/.exec(cells[1] || '')
         if (!id) continue
-        const status = cells[5] || ''
-        const stamp = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(cells[6] || '')
+        // The documented table has seven columns (status fifth, stamp sixth); a narrower one is read
+        // by content: the status is the cell that names one, the stamp the cell that holds one.
+        const wide = cells.length >= 9
+        const statusCell = wide ? cells[5] : cells.slice(2).find((cell) => /待做|在做|卡住|完成|open|doing|todo|blocked|done|resolved/i.test(cell)) || ''
+        const status = statusCell
+        const stampCell = wide ? cells[6] : cells.slice(2).find((cell) => /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(cell)) || ''
+        const stamp = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(stampCell)
         const updated = stamp ? new Date(+stamp[1], +stamp[2] - 1, +stamp[3], +stamp[4], +stamp[5]).getTime() : null
         rows.set(id[0], {
             status,
@@ -109,7 +116,12 @@ async function buildPanelOf(repo, stateDir) {
         }
     }
     const runs = [...latest.values()]
-    const open = runs.filter((row) => !row.finishedAt)
+    // A run with no finish whose record has not been touched for a while is one whose process ended
+    // without writing it (a crash, a closed window), not one that is still going: counting it would
+    // show a busy host that is idle. The writer refreshes `updatedAt` as it goes.
+    const touched = (row) => Date.parse(row.updatedAt || row.startedAt || '') || 0
+    const open = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) < 20 * 60_000)
+    const abandoned = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) >= 20 * 60_000).length
     // The two queues the build-queue panel draws, read from the same files it reads: who holds the
     // build or test slot on this machine and who is waiting, with how long.
     const queue = async (name) => {
@@ -137,6 +149,7 @@ async function buildPanelOf(repo, stateDir) {
         buildQueue: await queue('build-state.json'),
         testQueue: await queue('test-state.json'),
         unfinished: open.length,
+        abandoned,
         total: runs.length,
         // Each run still going: where it is, which slot it holds, and how long it has waited for one.
         // A queue that is long, or two runs whose phases overlap, is read here rather than assumed.
