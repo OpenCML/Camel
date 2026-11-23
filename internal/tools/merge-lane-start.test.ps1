@@ -145,7 +145,7 @@ Check 'the run says it is not restoring' ($run.Text -match 'Not restoring local 
 Check 'local develop was not touched' ((Get-GitText $work rev-parse develop) -eq $plain) (Get-GitText $work rev-parse develop)
 Check 'no second tag was left behind' (@(Invoke-Git $work for-each-ref 'refs/tags/backup/').Count -eq 1) 'refs grew'
 Check 'and the sentence is still about the true state' `
-    ($run.Text -match "Nothing was committed and nothing was pushed by this run: local develop is $plain and origin/develop is $base") $run.Text
+    ($run.Text -match "Nothing was committed and nothing was pushed by this run: local develop is $plain and origin/develop is $base\. The commit only local develop holds is $plain\.") $run.Text
 
 # --- result ------------------------------------------------------------------
 Write-Host ''

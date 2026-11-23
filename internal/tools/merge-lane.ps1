@@ -118,8 +118,10 @@ function Write-GitState {
         return
     }
 
-    $only = @(& git rev-list 'origin/develop..develop' 2>$null) |
-        ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+    # `@( ... )` around the whole pipeline, not around the git call: one line of output is a string,
+    # and a string indexed at [0] is its first character -- this said "the commit is d" once.
+    $only = @(& git rev-list 'origin/develop..develop' 2>$null |
+        ForEach-Object { "$_".Trim() } | Where-Object { $_ })
     $held = if ($only.Count -eq 0) {
         'Local develop holds no commit that origin/develop does not have, so it is behind rather than ahead.'
     } elseif ($only.Count -eq 1) {
