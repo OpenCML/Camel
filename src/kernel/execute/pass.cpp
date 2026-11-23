@@ -513,7 +513,8 @@ std::optional<camel::execute::detail::ParamProblem>
 valueProblem(const std::string &name, const PassArgs &args);
 
 /// Resolves the function-valued parameters of one call: the word names a function of a library
-/// module (`<module>::<function>`), and the value the pass reads is that function. The function is
+/// module (`<module>::<function>`, the module being the path the name lies on, as
+/// camel/common/ref.h states it), and the value the pass reads is that function. The function is
 /// compiled as the program the store keeps for it (its entry graph has the function's own
 /// signature and computes the library's module-level values first), and the pass receives a
 /// function value over that program, rooted by the PassArgs for as long as the arguments live.
@@ -544,15 +545,6 @@ std::optional<camel::execute::detail::ParamProblem> bindFunctionValues(
             }
             return problem;
         };
-        const size_t separator = written.find("::");
-        if (separator == std::string::npos || separator == 0 ||
-            separator + 2 >= written.size()) {
-            return refuse(std::format(
-                "the parameter '{}' takes a function value, written <module>::<function>; '{}' "
-                "names no function",
-                param.name,
-                written));
-        }
         if (ctx == nullptr) {
             return refuse(std::format(
                 "the parameter '{}' names the function '{}', and there is no context to resolve it "
@@ -560,8 +552,41 @@ std::optional<camel::execute::detail::ParamProblem> bindFunctionValues(
                 param.name,
                 written));
         }
-        const std::string module   = written.substr(0, separator);
-        const std::string function = written.substr(separator + 2);
+        // The word is a qualified name, and what one is the runtime's own rule states
+        // (camel/common/ref.h): the last segment is the name, the segments before it are the path
+        // the name lies on. The path is the library module's name here, and the module loader
+        // spells a module name with '.' (Context::importModule, ModuleResolver::splitLookup): the
+        // module named `std.cost` is the file std/cost.cml, so the word that names its `default`
+        // is `std::cost::default` -- not a function `cost::default` of a module `std`, which is
+        // what splitting at the first `::` would have read, and would have failed to resolve.
+        Reference named;
+        try {
+            named = Reference(written);
+        } catch (const std::exception &) {
+            return refuse(std::format(
+                "the parameter '{}' takes a function value, written <module>::<function>; '{}' "
+                "names no function",
+                param.name,
+                written));
+        }
+        bool wellFormed = !named.plain() && !named.ident().empty();
+        for (const std::string &segment : named.paths()) {
+            wellFormed = wellFormed && !segment.empty();
+        }
+        if (!wellFormed) {
+            return refuse(std::format(
+                "the parameter '{}' takes a function value, written <module>::<function>; '{}' "
+                "names no function",
+                param.name,
+                written));
+        }
+        std::string module;
+        for (const std::string &segment : named.paths()) {
+            module += segment;
+            module += '.';
+        }
+        module.pop_back();
+        const std::string function = named.ident();
         std::string problem;
         std::optional<DiagLabel> where;
         camel::runtime::DefinitionStore::LibraryLookup lookup;

@@ -4114,6 +4114,7 @@ dcbe48847fec16db ok test/cases/opt/pass_function/cmlpass.cml
 80e8ab9054c90913 ok test/cases/opt/pass_function/lib.cml
 494c7b5d0c175f5f ok test/cases/opt/pass_function/plain.cml
 16e7065b26913446 ok test/cases/opt/pass_function/test.cml
+8817a19f997fa1d0 ok test/cases/opt/pass_function/nest/lib.cml
 d47b3947a9e509c8 ok test/cases/opt/pass_params/plain.cml
 7c268b848ff0a040 ok test/cases/opt/pass_params/test.cml
 76633fa857cf59fe ok test/cases/opt/progen/seed8_join_reads_gate.cml

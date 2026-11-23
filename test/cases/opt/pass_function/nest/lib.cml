@@ -1,0 +1,7 @@
+/// A function of a module whose *name* has two segments (`nest.lib`, the file `nest/lib.cml`): the
+/// word that names its `twice` is `nest::lib::twice`, which is the reading that has to hold the
+/// module's name as the whole path and the function as the last segment. Split at the first `::`
+/// this is a function `lib::twice` of a module `nest`, which is not what the module is called.
+export func twice(n: int) => int {
+    return n + n
+}

@@ -245,9 +245,13 @@ a function (`onnx::export_model`, called with the function and an example), and 
 A **function parameter** is the one type a word does not read as a constant: the word names a
 function value, `<module>::<function>`, the same value `f->rewrite<cost>` takes, and the pipeline
 resolves it while it reads the call, so the pass receives the function itself and not its name
-(`cost=<module>::<function>`). A name that is no function is refused at the call, in the word's own
-column. A function parameter has no default — a function is not a constant expression — so every
-call writes it; written `T?`, leaving it out is `null`.
+(`cost=<module>::<function>`). The word is a qualified name, read by the rule the runtime states for
+one (`camel/common/ref.h`): its last segment is the function's name and the segments before it are
+the path the name lies on, which is the library module's name — a module named `std.cost` is the file
+`std/cost.cml`, and the word that names its `default` is `std::cost::default`. A name that is no
+function is refused at the call, in the word's own column. A function parameter has no default — a
+function is not a constant expression — so every call writes it; written `T?`, leaving it out is
+`null`.
 
 The call is checked when the pipeline is resolved, before any pass runs, and the refusal is the
 language's own for a call, located at the call and in the semantic stage (`typecheck`):

@@ -17,6 +17,13 @@ timeout_ms = 20000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
+name = "declared.multi_segment_module"
+desc = "A module whose name has two segments (`nest.lib`) is named by the whole path: the word `nest::lib::twice` reads the module as `nest.lib` and the function as `twice`, and the pass calls it (`cost=10`). Read at the first `::` instead -- a module `nest` and a function `lib::twice` -- the call has no function to resolve and the line could not be printed."
+args = ["-I", ".", "${case}", "test::declared cost=nest::lib::twice flag=true", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["test::declared cost=10 (given) flag=true (given) declared=2", "camel-ran-marker"]
+
+[[tests]]
 name = "declared.function_value"
 desc = "A declaration's function parameter is the function its word names: `cost=lib::twice` and the declaration `(n: int) => int` give `cost=10` when the pass calls it with 5. The line pins the call, so a parameter left as the word's text has nothing to call and cannot print 10; `declared=2` pins that the declaration still holds two parameters."
 args = ["-I", ".", "${case}", "test::declared cost=lib::twice flag=true", "std::nvm"]
@@ -30,6 +37,15 @@ args = ["-I", ".", "${case}", "test::declared flag=true", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
 expect_output_contains = ["The call gives no value for the parameter 'cost' of 'test::declared', and it has no default."]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "declared.names_the_module_path"
+desc = "The word names a module by its whole path, so the library this word looks for is `std.cost`: `std::cost::default` is `default` of the module `std.cost` (the file `std/cost.cml`), and the diagnostic says that library is not there. Read at the first `::` the word would name a function `cost::default` of the module `std`, which is a different module and a different complaint."
+args = ["-I", ".", "${case}", "test::declared cost=std::cost::default flag=true", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidPassParameter"
+expect_output_contains = ["takes the function 'std::cost::default'", "library 'std.cost'"]
 expect_output_not_contains = ["camel-ran-marker"]
 
 [[tests]]
