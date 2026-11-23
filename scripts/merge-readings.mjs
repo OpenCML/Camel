@@ -24,6 +24,13 @@
  *   2  not measured (a reading is absent, unreadable, or from another rule set) -- refuses the merge
  *      and says what is missing, because "I could not measure" is not "your tree is wrong"
  *
+ * A baseline is a reading of *some tree*, and the one thing this program cannot see in its own
+ * numbers is a baseline measured on the tree it is comparing. Every set would be empty -- fixed, new
+ * and changed are all computed by comparing the rows with themselves -- and an empty diff is this
+ * program's green. So the sha of the measured tree travels with every entry (`--tree`) and is
+ * checked against the tree this run read: same sha is exit 2, "there was nothing to compare", never
+ * a green.
+ *
  * The rows come from one of two places, and the difference is the defect that made this program
  * unusable for a night:
  *   --current <rows.jsonl>   the rows as their own file, which is how a baseline is measured
@@ -129,7 +136,12 @@ const arg = (name) => {
 const cacheDir = arg('--cache')
 const develop = arg('--develop')
 const planSet = arg('--plans')
+// The sha of the tree these rows were read on. Not the key: the key is the develop this merge lands
+// on (its first parent), and an entry is filed under the key its rows *describe*. The two shas are
+// printed together on every comparison so the pair is a reading and not an assumption.
+const treeSha = (arg('--tree') || '').trim()
 const storeFile = process.argv.includes('--accept')
+const probeOnly = process.argv.includes('--probe')
 
 function planSetHash(names) {
     // Order-independent and content-sensitive: the same plans listed in another order are the same
@@ -140,42 +152,88 @@ function planSetHash(names) {
     return `${list.length}-${h.toString(16)}`
 }
 
+/** The names `--plans` names: a file of one name per line, or a comma list. */
+function planSetNames(list) {
+    return fs.existsSync(list) ? fs.readFileSync(list, 'utf8').split('\n') : list.split(',')
+}
+
+/** The record beside an entry, or null: what was measured, when, and on which tree. */
+function readWhere(key) {
+    const file = `${key}.where`
+    if (!fs.existsSync(file)) return null
+    try {
+        return JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch {
+        return null
+    }
+}
+
 let cacheKey = null
 if (cacheDir) {
-    if (!fs.existsSync(cacheDir)) {
+    if (!develop || !planSet) die('--cache needs --develop <sha> and --plans <file or comma list>: a baseline keyed by commit alone is reused across plan sets it was not measured on')
+    cacheKey = path.join(cacheDir, `${develop.slice(0, 12)}-${planSetHash(planSetNames(planSet))}-v${READING_NORMAL_VERSION}.jsonl`)
+    // An absent directory is the strongest "nothing was ever measured here", and the compare path
+    // must refuse it rather than read it as an empty baseline; `--probe` is the caller asking the
+    // same question before it measures, and `--accept` is the call that creates it, so a miss is the
+    // answer those two came for.
+    if (!probeOnly && !storeFile && !fs.existsSync(cacheDir)) {
         die(`the baseline cache does not exist at ${cacheDir}: no baseline was ever measured there, and an empty baseline would call every case fixed -- measure the plans once on the develop commit and store them (--accept) before merging`)
     }
-    if (!develop || !planSet) die('--cache needs --develop <sha> and --plans <file or comma list>: a baseline keyed by commit alone is reused across plan sets it was not measured on')
-    const names = fs.existsSync(planSet) ? fs.readFileSync(planSet, 'utf8').split('\n') : planSet.split(',')
-    cacheKey = path.join(cacheDir, `${develop.slice(0, 12)}-${planSetHash(names)}-v${READING_NORMAL_VERSION}.jsonl`)
+}
+
+// `--probe`: is there a baseline for this key? It reads no rows and compares nothing -- it is what a
+// merge asks before it spends a second run on measuring the tree it is about to land on. Hit is 0,
+// miss is 2, and the two words are part of the output because the caller branches on them.
+if (probeOnly) {
+    if (!cacheKey) die('--probe needs --cache --develop <sha> --plans <file or comma list>: it answers about one key')
+    if (!fs.existsSync(cacheKey)) {
+        console.log(
+            `merge-readings: cache-miss: no baseline for ${develop.slice(0, 12)} under this plan set ` +
+                `(${path.basename(cacheKey)})` +
+                (fs.existsSync(cacheDir) ? '' : `; the cache at ${cacheDir} does not exist yet`)
+        )
+        process.exit(2)
+    }
+    const meta = readWhere(cacheKey)
+    const where = meta ? `, ${meta.cases} case(s), tree ${(meta.tree || 'not recorded').slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}` : ''
+    console.log(`merge-readings: cache-hit: ${path.basename(cacheKey)}${where}`)
+    process.exit(0)
 }
 
 const currentFile = arg('--current')
 const transcriptFile = arg('--transcript')
 if (!currentFile && !transcriptFile) {
-    console.log('usage: merge-readings.mjs (--current <rows.jsonl> | --transcript <console output>) (--baseline <rows.jsonl> | --cache <dir> --develop <sha> --plans <list> [--accept])')
+    console.log('usage: merge-readings.mjs (--current <rows.jsonl> | --transcript <console output>) (--baseline <rows.jsonl> | --cache <dir> --develop <sha> --plans <list> --tree <sha> [--accept])')
+    console.log('       merge-readings.mjs --cache <dir> --develop <sha> --plans <list> --probe')
     process.exit(2)
 }
 const tree = transcriptFile ? rowsFromTranscript(transcriptFile) : readRowsFile(currentFile)
 
 // `--accept` stores this run as the baseline for its key and stops: it is what the first merge on a
 // new develop commit runs, and it exits 0 because storing a baseline is not a judgement.
+//
+// `--tree` is required with it. An entry that does not say which tree it read cannot be told apart
+// from one read on the tree it is later compared with, and that comparison is a green of nothing.
 if (storeFile && cacheKey) {
+    if (!treeSha) {
+        die('--accept needs --tree <sha>: the sha of the tree these rows were measured on, because an entry without it cannot be told apart from a tree compared with itself')
+    }
     fs.mkdirSync(path.dirname(cacheKey), { recursive: true })
     // The rows alone, whether they arrived as their own file or out of a transcript: a cache entry
     // that held a console transcript would be a baseline with narration inside it.
     fs.writeFileSync(cacheKey, tree.text)
     fs.writeFileSync(`${cacheKey}.where`, JSON.stringify({
         develop,
-        plans: planSetHash((fs.existsSync(planSet) ? fs.readFileSync(planSet, 'utf8').split('\n') : planSet.split(','))),
-        plans_list: fs.existsSync(planSet) ? fs.readFileSync(planSet, 'utf8').split('\n').filter(Boolean) : planSet.split(','),
+        tree: treeSha,
+        plans: planSetHash(planSetNames(planSet)),
+        plans_list: planSetNames(planSet).filter(Boolean),
         measured_at: new Date().toISOString(),
         host: process.env.CAMEL_BASELINE_HOST || os.hostname(),
         cases: tree.rows.size,
         normal: tree.version,
         seconds: Number(process.env.CAMEL_BASELINE_SECONDS || 0),
     }, null, 2))
-    console.log(`merge-readings: stored this run as the baseline for ${develop.slice(0, 12)} at ${cacheKey}`)
+    console.log(`merge-readings: stored this run as the baseline for ${develop.slice(0, 12)} at ${cacheKey}, measured on tree ${treeSha.slice(0, 9)}`)
     process.exit(0)
 }
 
@@ -187,15 +245,34 @@ if (cacheKey) {
         process.exit(2)
     }
     baseFile = cacheKey
-    const where = `${cacheKey}.where`
-    if (fs.existsSync(where)) {
-        const meta = JSON.parse(fs.readFileSync(where, 'utf8'))
+    const meta = readWhere(cacheKey)
+    if (meta) {
         console.log(`merge-readings: baseline ${meta.develop.slice(0, 12)} measured ${meta.measured_at} on ${meta.host}, ${meta.cases} case(s), normal=${meta.normal}, plans=${(meta.plans_list || []).length}`)
     }
 }
 if (!baseFile) {
     console.log('merge-readings: no baseline given (--baseline or --cache): nothing to compare against')
     process.exit(2)
+}
+
+// The one failure the three sets cannot show: a baseline measured on the tree being compared. Both
+// runs are then the same rows, so `fixed`, `new` and `changed` are empty by construction and this
+// program exits 0 -- a green that measured one tree twice and called it agreement. So the shas are
+// put side by side and a match is a refusal, not a pass. This is why `--tree` is required with a
+// cache: the record is the only thing here that knows which tree the rows came from.
+if (cacheKey) {
+    const meta = readWhere(cacheKey)
+    const measured = meta && typeof meta.tree === 'string' && meta.tree ? meta.tree : null
+    if (!measured) {
+        die(`the baseline ${path.basename(cacheKey)} does not record the tree it was measured on, so nothing proves it is not this tree: measure it again with --tree <sha> --accept`)
+    }
+    if (!treeSha) {
+        die('--cache needs --tree <sha>: the sha of the tree these rows were measured on, which the baseline is checked against')
+    }
+    if (measured === treeSha) {
+        die(`the baseline was measured on this very tree (${measured.slice(0, 9)}): comparing it with itself is 0 fixed, 0 new and 0 changed by construction, so nothing has been said about this change`)
+    }
+    console.log(`merge-readings: baseline tree ${measured.slice(0, 9)} against this tree ${treeSha.slice(0, 9)} -- two different trees`)
 }
 const base = readRowsFile(baseFile)
 if (base.version !== tree.version) {
@@ -247,6 +324,9 @@ if (out) {
 
 console.log(
     `merge-readings: cases=${base.rows.size} fixed=${fixed.length} new=${regressed.length} changed=${changed.length} ` +
-        `normal=${base.version}`,
+        `normal=${base.version}` +
+        // The two shas on the line that carries the verdict: a reader who sees 0/0/0 has to be able to
+        // see, without going back up the transcript, that the baseline and this run are two trees.
+        (cacheKey ? ` baseline_tree=${(readWhere(cacheKey)?.tree || '?').slice(0, 9)} this_tree=${treeSha.slice(0, 9)}` : ''),
 )
 process.exit(regressed.length > 0 || changed.length > 0 ? 1 : 0)
