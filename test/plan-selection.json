@@ -608,11 +608,6 @@
             "plans": ["feat/docs_links.plan.toml"]
         },
         {
-            "comment": "The editor syntax files and their tests.",
-            "paths": ["editors/"],
-            "plans": ["feat/tools/grammar.plan.toml"]
-        },
-        {
             "comment": "The build definitions: every backend may be affected, so the smoke set and the runtime plans.",
             "paths": ["CMakeLists.txt", "cmake/"],
             "plans": ["smoke", "feat/linear", "feat/para", "feat/modules"]
