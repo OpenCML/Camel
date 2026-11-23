@@ -26,6 +26,7 @@
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/manager.h"
@@ -36,6 +37,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/passes/macro/macro.h"
 #include "camel/passes/opt/config.h"
 #include "camel/passes/opt/generic.h"
@@ -62,6 +64,7 @@
 namespace camel::onnx {
 
 using camel::runtime::gc_node_ref_t;
+using camel::runtime::gc_slot_idx_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using tensor::ops::TensorFacts;
@@ -239,11 +242,20 @@ class Evaluator {
         Activation &act, const std::string &uri, std::vector<Value> norm, type::Type *resultType,
         std::vector<Value> with = {});
     Value evalJoin(Activation &act, gc_node_ref_t ref);
-    Value evalFill(Activation &act, gc_node_ref_t ref);
+    /// A construction: the constant aggregate `templ` (the node's first ordinary input) with the
+    /// values it computes filling `slots`. The two forms a graph writes a construction in state
+    /// the same two facts differently -- a FILL node's body carries the slot table, an operator
+    /// call's operands are already in the target type's layout order -- so the caller passes
+    /// them instead of this reader asking which form the node is.
+    Value evalFill(
+        Activation &act, gc_node_ref_t ref, const Value &templ,
+        std::span<const gc_slot_idx_t> slots, std::span<const gc_node_ref_t> values);
     Value symbolicFloatArray(
-        Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values);
+        Activation &act, gc_node_ref_t ref, const Value &source,
+        std::span<const gc_slot_idx_t> slots, std::span<const Value> values);
     Value symbolicIntArray(
-        Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values);
+        Activation &act, gc_node_ref_t ref, const Value &source,
+        std::span<const gc_slot_idx_t> slots, std::span<const Value> values);
     Value
     evalSymbolicBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
     /// Refuses a branch on a model-dependent condition whose arms yield functions (of type
@@ -262,7 +274,17 @@ class Evaluator {
     collectArmLeaves(Activation &act, const Value &a, const Value &b, std::vector<ArmLeaf> &leaves);
     /// Rebuilds the branch's aggregate from the combined leaf values, in collectArmLeaves' order.
     Value rebuildArmAggregate(type::Type *camelType, std::span<const Value> combined, size_t &next);
-    Value evalAccs(Activation &act, gc_node_ref_t ref);
+    /// What a member read asks the value it reads for: the element at a place (a tuple) or the
+    /// field with a name (a struct). An ACCS node keeps that in its body and a `:op/access` /
+    /// `:op/access_key` call carries it as the first ordinary operand, so the reader is given it
+    /// rather than reading the payload of a node that may not have one.
+    struct MemberRead {
+        bool byName  = false;
+        size_t index = 0;
+        std::string key;
+    };
+    Value evalAccs(
+        Activation &act, gc_node_ref_t ref, gc_node_ref_t from, const MemberRead &read);
 
     // ---- calls that simplification leaves: tail recursion as an ONNX Loop (see translateLoop)
     /// One function being translated as a loop: its ports and what they are bound to while
@@ -861,10 +883,22 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         // A gate forwards its first ordinary input; the rest are the waits it keeps alive.
         return eval(act, camel::runtime::forwardedInputOf(*g, ref));
     }
-    case GCNodeKind::Fill:
-        return evalFill(act, ref);
-    case GCNodeKind::Accs:
-        return evalAccs(act, ref);
+    case GCNodeKind::Fill: {
+        // A construction written as a node: its body carries the slot table and its with-inputs
+        // the values that fill it, its first ordinary input the template.
+        const auto *body = g->nodeBodyAs<camel::runtime::GCFillBody>(ref);
+        return evalFill(
+            act, ref, eval(act, g->normInputsOf(ref).front()), body->slots(),
+            g->withInputsOf(ref));
+    }
+    case GCNodeKind::Accs: {
+        const auto *body = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
+        MemberRead read;
+        read.byName = body->accsKind != camel::runtime::GCAccsKind::TupleIndex;
+        read.index  = static_cast<size_t>(body->value);
+        read.key    = body->key();
+        return evalAccs(act, ref, g->normInputsOf(ref).front(), read);
+    }
     case GCNodeKind::Oper:
         return evalOper(act, ref);
     case GCNodeKind::Join:
@@ -1917,23 +1951,28 @@ Evaluator::BodyOutcome
 Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     GCGraph *g    = act.graph;
     const auto *n = g->node(ref);
-    switch (n->kind) {
-    case GCNodeKind::Copy:
+    // A conversion and a copy are not decisions: the branch under them decides whether the
+    // recursion goes on, and the conversion is applied to the value the path returns. (A struct
+    // conversion sits between a returned branch and the function's exit; without this the
+    // branch is hidden from the loop translation and its recursive call is taken for a
+    // call in value position.) Asked by the operation the node names, so that both writings of
+    // the two are read alike (camel/execute/shaped_operators.h).
+    switch (execute::shapeOfOperation(*g, ref)) {
+    case execute::OperShape::Clone:
         return evalLoopBody(act, g->normInputsOf(ref).front(), loop);
-    case GCNodeKind::Gate: {
-        return evalLoopBody(act, camel::runtime::forwardedInputOf(*g, ref), loop);
-    }
-    case GCNodeKind::Cast: {
-        // A cast is not a decision: the branch under it decides whether the recursion goes on,
-        // and the conversion is applied to the value the path returns. (A struct conversion sits
-        // between a returned branch and the function's exit; without this the
-        // branch is hidden from the loop translation and its recursive call is taken for a
-        // call in value position.)
+    case execute::OperShape::Conversion: {
         BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
         if (out.result) {
             out.result = evalCast(act, ref, std::move(*out.result));
         }
         return out;
+    }
+    default:
+        break;
+    }
+    switch (n->kind) {
+    case GCNodeKind::Gate: {
+        return evalLoopBody(act, camel::runtime::forwardedInputOf(*g, ref), loop);
     }
     case GCNodeKind::Func: {
         GCGraph *callee = programOf(g).calleeOf(*g, ref);
@@ -3052,7 +3091,7 @@ std::optional<Value> Evaluator::probeSpecialClosure(Activation &act, gc_node_ref
 /// A closure element of an aggregate is left as a marker when nothing at the point that builds
 /// the aggregate wants functions as values (see evalFill). An access that reads the element back
 /// -- a call of it, or a closure that captures it -- wants the value, so it is evaluated here,
-/// through the FILL the projection reads, with closures wanted.
+/// through the construction the projection reads, with closures wanted.
 ///
 /// The marker exists so that a (value, pullback) pair whose pullback the exported path never
 /// uses emits nothing; it must not outlive that assumption. An element that cannot be evaluated
@@ -3066,9 +3105,30 @@ std::optional<Value> Evaluator::deferredElement(
         if (header == nullptr) {
             return std::nullopt;
         }
-        if (header->kind == GCNodeKind::Fill) {
-            const auto slots = g->nodeBodyAs<camel::runtime::GCFillBody>(source)->slots();
-            const auto refs  = g->withInputsOf(source);
+        // Which of the four operations the node performs, asked of the operator it names and of
+        // its kind alike (camel/execute/shaped_operators.h): a graph may carry either form.
+        const execute::OperShape shape = execute::shapeOfOperation(*g, source);
+        if (shape == execute::OperShape::Construction) {
+            // The values a construction writes and the place each one fills: the body's slot
+            // table for a FILL node, the operand order for a `fill(template, ...fields)` call.
+            std::span<const gc_slot_idx_t> slots;
+            std::vector<gc_slot_idx_t> positions;
+            std::span<const gc_node_ref_t> refs;
+            if (header->kind == GCNodeKind::Fill) {
+                slots = g->nodeBodyAs<camel::runtime::GCFillBody>(source)->slots();
+                refs  = g->withInputsOf(source);
+            } else {
+                const auto norm = g->normInputsOf(source);
+                if (norm.empty()) {
+                    return std::nullopt;
+                }
+                positions.resize(norm.size() - 1);
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    positions[i] = static_cast<gc_slot_idx_t>(i);
+                }
+                slots = positions;
+                refs  = norm.subspan(1);
+            }
             for (size_t k = 0; k < slots.size() && k < refs.size(); ++k) {
                 if (static_cast<size_t>(slots[k]) != index) {
                     continue;
@@ -3085,20 +3145,21 @@ std::optional<Value> Evaluator::deferredElement(
             }
             return std::nullopt;
         }
-        // A cast, a copy and a gate pass their input on unchanged: the aggregate a projection
-        // reads is the one behind them.
-        if (header->kind != GCNodeKind::Cast && header->kind != GCNodeKind::Copy &&
-            header->kind != GCNodeKind::Gate) {
-            return std::nullopt;
-        }
-        const auto norm = g->normInputsOf(source);
         if (header->kind == GCNodeKind::Gate) {
             // The value is the gate's first ordinary input, then its first context input.
             source = camel::runtime::forwardedInputOf(*g, source);
             if (source == camel::runtime::kInvalidNodeRef) {
                 return std::nullopt;
             }
-        } else if (!norm.empty()) {
+            continue;
+        }
+        // A conversion and a copy pass their input on unchanged: the aggregate a projection
+        // reads is the one behind them.
+        if (shape != execute::OperShape::Conversion && shape != execute::OperShape::Clone) {
+            return std::nullopt;
+        }
+        const auto norm = g->normInputsOf(source);
+        if (!norm.empty()) {
             source = norm.front();
         } else {
             return std::nullopt;
@@ -3743,6 +3804,79 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         return evalVariableRead(act, ref);
     }
     const std::string uri(body->uri());
+    // A conversion, a copy, a construction and a member read are operations on the exporter's own
+    // values, not on ONNX tensors: a tuple or a struct is a `Value::Aggregate` with no ONNX value
+    // of its own (value.h), so reading a member out of one, or making one from a template, writes
+    // no ONNX node at all -- what it does is choose or assemble the fields. They are asked of the
+    // graph by the operation the node names, not by a node kind it used to have
+    // (camel/execute/shaped_operators.h), because the front end now builds them as operator calls
+    // of the same four operations; the lowering table below is for operators that do become ONNX
+    // nodes, and a call of one of these four has no row in it and must not be given one: a node
+    // there would stand for a value ONNX does not have.
+    switch (execute::shapeOfUri(uri)) {
+    case execute::OperShape::Conversion:
+        // The node's type is the target type, its one ordinary operand the value converted.
+        return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
+    case execute::OperShape::Clone:
+        // Exported values are never mutated in place, so a copy can share its source.
+        return eval(act, g->normInputsOf(ref).front());
+    case execute::OperShape::Construction: {
+        // `fill::<T, ...F>(template, ...fields)`: the template first, the values after it, in the
+        // target type's layout order, so a value's place is its own position (prelude.cml, the
+        // construction's declaration); that is the same reading std::cpp's lowerFill takes.
+        const auto norm = g->normInputsOf(ref);
+        if (norm.empty()) {
+            unsupported(act, "a construction with no template");
+        }
+        std::vector<gc_slot_idx_t> slots(norm.size() - 1);
+        for (size_t i = 0; i < slots.size(); ++i) {
+            slots[i] = static_cast<gc_slot_idx_t>(i);
+        }
+        return evalFill(act, ref, eval(act, norm.front()), slots, norm.subspan(1));
+    }
+    case execute::OperShape::Access: {
+        // `access::<T, U>(at, x)` by place, `access_key::<T, U>(key, x)` by name: the place or the
+        // name is the call's first ordinary operand, a constant the program wrote.
+        const auto norm = g->normInputsOf(ref);
+        if (norm.size() != 2) {
+            unsupported(
+                act,
+                std::format(
+                    "'{}' reads no value: a member read takes its place or its name and the value "
+                    "it reads",
+                    uri));
+        }
+        const Value position = eval(act, norm[0]);
+        MemberRead read;
+        read.byName = uri == ":op/access_key";
+        if (read.byName) {
+            if (!position.isConstant() || position.ty == nullptr ||
+                position.ty->code() != TypeCode::String) {
+                unsupported(
+                    act,
+                    "a field is read by a name the program computes, and the export reads a name "
+                    "at export time");
+            }
+            read.key = rtdata::fromSlot<::String *>(position.slot)->toString();
+        } else {
+            if (!position.isConstant() || position.ty == nullptr ||
+                position.ty->code() != TypeCode::Int64) {
+                unsupported(
+                    act,
+                    "a tuple element is read by a place the program computes, and the export reads "
+                    "a place at export time");
+            }
+            const int64_t at = rtdata::fromSlot<int64_t>(position.slot);
+            if (at < 0) {
+                unsupported(act, std::format("a negative place {} reads no tuple element", at));
+            }
+            read.index = static_cast<size_t>(at);
+        }
+        return evalAccs(act, ref, norm[1], read);
+    }
+    case execute::OperShape::None:
+        break;
+    }
     // The lowerings read the arguments in kernel order: an operator whose kernel takes its
     // with-arguments after the ordinary ones (`reshape<shape>(x)`) is lowered as `(x, shape)`.
     const camel::runtime::KernelArguments kernelArguments = camel::runtime::kernelArgumentsOf(*g, ref);
@@ -4161,12 +4295,11 @@ Value Evaluator::evalSymbolicAggregateBranch(
     return rebuildArmAggregate(camelType, combined, next);
 }
 
-Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
+Value Evaluator::evalFill(
+    Activation &act, gc_node_ref_t ref, const Value &source, std::span<const gc_slot_idx_t> slots,
+    std::span<const gc_node_ref_t> refs) {
     GCGraph *g             = act.graph;
-    const Value source     = eval(act, g->normInputsOf(ref).front());
     type::Type *targetType = g->node(ref)->dataType();
-    const auto slots       = g->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
-    const auto refs        = g->withInputsOf(ref);
     const auto elemTypeAt  = [&](size_t k) -> type::Type  *{
         if (targetType->code() == TypeCode::Tuple) {
             return static_cast<type::TupleType *>(targetType)->typeAt(slots[k]);
@@ -4212,10 +4345,10 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
     // replacing it is execution-safe, and one inside a branch arm, e.g. `[k, k + 1]` in the
     // first, specialised call of a recursion, reaches the export unfolded.)
     if (source.isConstant() && isIntArrayType(targetType)) {
-        return symbolicIntArray(act, ref, source, values);
+        return symbolicIntArray(act, ref, source, slots, values);
     }
     if (source.isConstant() && isFloatArrayType(targetType)) {
-        return symbolicFloatArray(act, ref, source, values);
+        return symbolicFloatArray(act, ref, source, slots, values);
     }
     if (source.isConstant() && isAggregate) {
         // A tuple or struct of input-dependent values (e.g. gradients) exists only at export
@@ -4272,12 +4405,12 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
 // dtype a constant array of that element type gets, so it is emitted as that 1-D tensor: each
 // element unsqueezed and the elements concatenated.
 Value Evaluator::symbolicFloatArray(
-    Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values) {
+    Activation &act, gc_node_ref_t ref, const Value &source,
+    std::span<const gc_slot_idx_t> fillSlots, std::span<const Value> values) {
     auto *templ = rtdata::fromSlot<::Array *>(source.slot);
     type::Type *elemType =
         static_cast<type::ArrayType *>(act.graph->node(ref)->dataType())->elemType();
     const TypeCode dtype = elemType->code();
-    const auto fillSlots = act.graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
     std::vector<std::optional<Value>> elems(templ->size());
     for (size_t k = 0; k < fillSlots.size(); ++k) {
         elems[static_cast<size_t>(fillSlots[k])] = values[k];
@@ -4304,9 +4437,9 @@ Value Evaluator::symbolicFloatArray(
 }
 
 Value Evaluator::symbolicIntArray(
-    Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values) {
-    auto *templ          = rtdata::fromSlot<::Array *>(source.slot);
-    const auto fillSlots = act.graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
+    Activation &act, gc_node_ref_t ref, const Value &source,
+    std::span<const gc_slot_idx_t> fillSlots, std::span<const Value> values) {
+    auto *templ = rtdata::fromSlot<::Array *>(source.slot);
     std::vector<std::optional<Value>> elems(templ->size());
     for (size_t k = 0; k < fillSlots.size(); ++k) {
         elems[static_cast<size_t>(fillSlots[k])] = values[k];
@@ -4360,10 +4493,22 @@ Value Evaluator::symbolicIntArray(
         std::move(known));
 }
 
-Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g               = act.graph;
-    const gc_node_ref_t from = g->normInputsOf(ref).front();
-    const Value source       = eval(act, from);
+Value Evaluator::evalAccs(
+    Activation &act, gc_node_ref_t ref, gc_node_ref_t from, const MemberRead &read) {
+    GCGraph *g         = act.graph;
+    // A read by name is a struct's: the type the value is declared with says whether it has fields
+    // to look a name up in, and a graph that disagrees is refused rather than read by place. Both
+    // readings walk the same run of fields, so the wrong one has a shape and no error.
+    if (read.byName) {
+        const type::Type *declared = g->node(from)->dataType();
+        if (declared != nullptr && declared->code() != TypeCode::Struct) {
+            unsupported(
+                act,
+                "a member is read by name of a value that is not a struct, and only a struct has "
+                "fields to read by name");
+        }
+    }
+    const Value source = eval(act, from);
     // The read-back a deferred closure waits for (see deferredElement): the element is wanted
     // here, so it is evaluated instead of being passed on as the marker evalFill left.
     const auto element = [&](size_t index) -> Value {
@@ -4375,29 +4520,27 @@ Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
         }
         return source.fields.at(index);
     };
-    const auto *body   = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
     type::Type *result = g->node(ref)->dataType();
     if (source.isAggregate()) {
-        if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
-            return element(static_cast<size_t>(body->value));
+        if (!read.byName) {
+            return element(read.index);
         }
-        const auto field =
-            static_cast<type::StructType *>(source.camelType)->findField(body->key());
+        const auto field = static_cast<type::StructType *>(source.camelType)->findField(read.key);
         if (!field) {
-            unsupported(act, std::format("no field '{}'", body->key()));
+            unsupported(act, std::format("no field '{}'", read.key));
         }
         return element(*field);
     }
     if (!source.isConstant()) {
         unsupported(act, "field access on a value that depends on the model input");
     }
-    if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
+    if (!read.byName) {
         auto *tuple = rtdata::fromSlot<::Tuple *>(source.slot);
-        Value v     = Value::constant(tuple->get<slot_t>(body->value), result);
-        v.label     = std::format("{}_{}", source.label.empty() ? "t" : source.label, body->value);
+        Value v     = Value::constant(tuple->get<slot_t>(read.index), result);
+        v.label     = std::format("{}_{}", source.label.empty() ? "t" : source.label, read.index);
         return v;
     }
-    const std::string key(body->key());
+    const std::string key(read.key);
     auto *object = rtdata::fromSlot<::Struct *>(source.slot);
     Value v      = Value::constant(object->get<slot_t>(key, source.ty), result);
     v.label      = key;
