@@ -14,6 +14,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "src/stdlib/tensor/type.h"
+#include "src/stdlib/transforms/node_operator.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/dtype_map.h"
@@ -524,17 +525,23 @@ SegmentAnalysis analyzeRegions(
     do {
         changed = false;
         for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
-            if (nodes[id].eligible || graph.node(id)->kind != rt::GCNodeKind::Accs ||
+            // A member read is admitted by what it is, not by the kind it wears: an ACCS node and
+            // a `:op/access` call are the same read, and `nodeCaseOf` answers both. The value it
+            // reads is the last ordinary input in both spellings, and the place or the name comes
+            // from `accsPayloadOf`. Measured on this tree: of 190 admissions, 26 are call-form
+            // reads that the kind test silently left out of the region.
+            if (nodes[id].eligible ||
+                transforms::nodeCaseOf(graph, id) != transforms::NodeCase::Accs ||
                 !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
                 !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
                 inChain(chain, id) || !graph.withInputsOf(id).empty())
                 continue;
             const auto inputs = graph.normInputsOf(id);
-            if (inputs.size() != 1 || !nodes[inputs[0]].eligible)
+            if (inputs.empty() || !nodes[inputs.back()].eligible)
                 continue;
-            auto *sourceType   = graph.node(inputs[0])->dataType();
-            const auto *access = graph.nodeBodyAs<rt::GCAccsBody>(id);
-            if (sourceType->code() != ty::TypeCode::Tuple ||
+            auto *sourceType   = graph.node(inputs.back())->dataType();
+            const auto access  = transforms::accsPayloadOf(graph, id);
+            if (sourceType->code() != ty::TypeCode::Tuple || !access.has_value() ||
                 access->accsKind != rt::GCAccsKind::TupleIndex)
                 continue;
             auto *tuple = static_cast<ty::TupleType *>(sourceType);

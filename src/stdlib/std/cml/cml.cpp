@@ -37,6 +37,7 @@
 #include "camel/runtime/effects.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
+#include "src/stdlib/transforms/node_operator.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/number_text.h"
@@ -3720,23 +3721,41 @@ class CmlPrinter {
     }
 
     Expr accessExpression(gc_node_ref_t ref) {
-        const auto *body  = graph_->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
+        // A member read states the value it reads last in both spellings -- the one ordinary input
+        // of an ACCS node, the second operand of a `:op/access` call -- and the place or the name
+        // in `accsPayloadOf`, which answers the body and the call alike. Asking for one ordinary
+        // input and then reading the body said "an access without one value" about a call that has
+        // two: a refusal with the wrong reason, which sends the next reader after the wrong thing.
         const auto inputs = graph_->normInputsOf(ref);
-        if (inputs.size() != 1) {
-            fail(ref, "an access without one value");
+        if (inputs.empty()) {
+            fail(ref, "a member read without a value to read from");
         }
-        Expr base            = expression(inputs.front());
+        const auto read = camel::transforms::accsPayloadOf(*graph_, ref);
+        if (!read.has_value()) {
+            fail(
+                ref,
+                std::format(
+                    "a member read of a value of type '{}' that states neither a place nor a name",
+                    graph_->node(inputs.back())->dataType() != nullptr
+                        ? graph_->node(inputs.back())->dataType()->toString()
+                        : std::string("unknown")));
+        }
+        Expr base            = expression(inputs.back());
         std::string baseText = parenthesize(base, 90);
         // A struct literal starts with `{`: an access on it needs the parentheses the source
         // wrote (`({ x: 0 }).x`), because the postfix would otherwise bind inside the braces.
         if (!baseText.empty() && baseText.front() == '{') {
             baseText = "(" + baseText + ")";
         }
-        const std::string member = body->accsKind == camel::runtime::GCAccsKind::StructKey
-                                       ? std::string(body->key())
-                                       : std::to_string(body->value);
+        const std::string member =
+            read->accsKind == camel::runtime::GCAccsKind::StructKey
+                ? std::string(read->key().data(), read->key().size())
+                : std::to_string(read->value);
         if (member.empty()) {
-            fail(ref, "an access without a member");
+            fail(
+                ref,
+                "a member read whose field name is empty, which is not a name the source can "
+                "write");
         }
         return {std::format("{}.{}", baseText, member), 90};
     }
