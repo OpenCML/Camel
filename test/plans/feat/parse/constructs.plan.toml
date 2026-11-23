@@ -87,7 +87,7 @@ expect_stdout_contains = ["4 6", "20"]
 
 [[tests]]
 name = "constructs.type_arguments"
-desc = "Type arguments at a call: by position (`f::<int>`), by name in either order (`f::<A = int, B = string>`), and alone as a function value (`f::<T = float>`)."
+desc = "Type arguments at a call: by position (`f::<int>`), by name in either order (`f::<A: int, B: string>`), and alone as a function value (`f::<T: float>`)."
 kind = "behavior"
 case = "../../../cases/parse/constructs/type_arguments.cml"
 args = ["${case}"]

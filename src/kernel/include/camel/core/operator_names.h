@@ -69,12 +69,10 @@ inline std::string compilerNamedOperator(std::string_view plain) {
     return std::string(kBuiltinPrefix) + std::string(plain);
 }
 
-/// The name the compiler writes for `a..b` before the two readings of the construct are told
-/// apart (design principles 4.2; the rule on
-/// the rule): between two functions it is the composition `f..g`, the
-/// lambda `(x) => g(f(x))`, and between two integers it is the interval `[a, b)`. The graph
-/// builder writes the construct as one call of this name and the GIR builder resolves it, since
-/// only there are the types of the two operands known. No program writes the name.
+/// The name the compiler writes for `a..b`, the interval (design principles 4.2; the rule on
+/// the rule): the integers from `a` to `b - 1`, and nothing else -- the composition is `f <> g`
+/// and has the name of its own below. The graph builder writes the construct as one call of this
+/// name and the GIR builder resolves it. No program writes the name.
 inline constexpr std::string_view kCompositionCall = "$comp::..";
 
 /// The name the compiler writes for `f <> g` (design principles 4.2): the

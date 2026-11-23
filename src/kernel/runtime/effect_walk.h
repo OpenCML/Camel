@@ -12,7 +12,8 @@
  *
  * `effectSummaryOfOperator` is not here: an operator's clause is a declaration read, which is what
  * the walk starts each node from, not a summary computed over a graph. It stays in effects.h
- * because `graph.is_pure` asks exactly that question.
+ * because `graph.is_pure` asks it directly, and it takes the node the operator runs at when there
+ * is one -- so the walk's operator branch and that reader are one statement, not two.
  */
 
 #pragma once

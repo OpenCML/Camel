@@ -87,3 +87,18 @@
 |---|---|---|---|
 | `D-1123-48` | 返工 `e93a627d9d`：查清 prelude 的 `declaredName` 为何不等于文件名，让模块只有一个名字（10.1），`moduleNamed` 只比这一个，删掉两个名字的分支，全树量出不一致的模块 | `lane/range-ri` | doing |
 | `D-1123-49` | `__iter__` 改成 `func operator for(r: Range): int..`（运算符重载，同 `operator []`）；`prelude` 的 `iter` 函数换掉；7.4.5 加 `for`；补两条用例 | `lane/range-ri`（排 48 之后） | todo |
+
+## 2026-11-23 22:15 装协作机制（`D-1123-50`）
+
+| 编号 | 事 | 车道 | 状态 |
+|---|---|---|---|
+| `D-1123-50` | ①②③ 已装（合 fsh-dev 装 0.2、删定时任务与 watch-fsh-dev、撤 camel-lanes、skill 合成 `internal/collab`），`ae0e9501b` | — | done |
+| `D-1123-50④` | 锁：撤「一律串行」、运行登记补 slot/overlapping/load、时间敏感计划独占主机、pre-push 限合并位 | `lane/host-locks` | doing |
+
+## 2026-11-23 22:25 派工里三处量不到的判据
+
+| 编号 | 事 | 状态 |
+|---|---|---|
+| `C-1123-52` | 内核握着库的执行器：`camel/execute/executor.h`（2 include）、`graph_runtime_support.h`（2 include），`ExecutorManager` 是内核 `Context` 的成员（`context.cpp:431`），拆它要动 `context`/`pass` 归属 | todo |
+| `C-1123-53` | `scripts/check-effect-facts.mjs` 在干净 `develop` 上也 exit 2：它找 `effectSummaryOf` 紧跟 `(`，而名字是 `effectSummaryOfOperator` —— 从此没读到过任何东西 | todo |
+| `C-1123-54` | 派工判据三处量不到：`effectSummaryOfNode` 这个名字在基线不存在；「21 处读者」实测 2 处；`#include.*stdlib` 命中的是 C 标准库。判据要在基线上先量一次再写进派工 | done（教训） |

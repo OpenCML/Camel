@@ -107,12 +107,11 @@ node_handle_t Builder::visitLinkNode(
             return built;
         }
     }
-    // `a..b` (gct.comp): one construct of two readings, told apart by the types of its two
-    // operands, and they are known only here (design principles 4.2). The type this position
-    // expects is what a generic operand is instantiated from (design principles 5.5).
+    // `a..b` (gct.comp): the interval of two integers and no other construct (design principles
+    // 4.2). The type this position expects says nothing about its operands.
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kCompositionCall) {
-        node_handle_t composed = buildComposition(gct, expectedResult);
+        node_handle_t composed = buildComposition(gct, expectedResult, true);
         LEAVE("LINK");
         return composed;
     }
@@ -120,7 +119,7 @@ node_handle_t Builder::visitLinkNode(
     // offered here (design principles 4.2).
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kComposeCall) {
-        node_handle_t composed = buildComposition(gct, expectedResult, true);
+        node_handle_t composed = buildComposition(gct, expectedResult, false);
         LEAVE("LINK");
         return composed;
     }

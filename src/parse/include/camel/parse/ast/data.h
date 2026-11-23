@@ -103,7 +103,7 @@ enum class ReservedDataOp {
     Call,
     Bind,
     Instantiate,
-    Comp,    // `..`: the interval `[a, b)`, and the composition while the corpus spells it that way
+    Comp,    // `..`: the interval `[a, b)`
     Compose, // `<>`: the composition of two functions, and nothing else
     As
 };

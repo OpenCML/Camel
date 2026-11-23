@@ -47,11 +47,16 @@ struct EffectSummary {
 // that asked the walk directly would be a second entry to the same answer, which is why the walk's
 // declarations are not in this header.
 //
-/// The effects of running the operator `oper` itself, without the node that calls it: the clause
-/// its record states and the fault fact, which is the answer a reader of the declaration asks for
-/// -- `graph.is_pure`, a listing -- and the same one a node of it starts from. An operator that
-/// takes its accesses from a function operand is read conservatively here: what the operand is is
-/// the node's to say, and `core.nodeEffects` is where it says it.
-EffectSummary effectSummaryOfOperator(camel::core::OperId oper);
+/// The effects of running the operator `oper` at `ref` of `graph`: the clause its record states,
+/// the fault fact and what it writes. This is the one reading of an operator's effect, and the
+/// walk takes it at every node it visits (`effect_walk.h`) -- `graph` and `ref` are that node,
+/// which is how an operator that takes its accesses from a function operand gets that value's
+/// clause (design principles 3.3).
+EffectSummary effectSummaryOfOperator(core::OperId oper, const GCGraph *graph, gc_node_ref_t ref);
+
+/// The same reading with no node to read it at: `core.operatorEffects` and `graph.is_pure` on a
+/// draft ask the declaration, and an operator whose clause is a function operand's cannot be
+/// narrowed here -- "may reach outside and may not end" is as precise as the declaration is.
+EffectSummary effectSummaryOfOperator(core::OperId oper);
 
 } // namespace camel::runtime

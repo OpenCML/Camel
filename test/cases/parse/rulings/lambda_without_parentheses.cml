@@ -2,8 +2,8 @@
  * A lambda is a function declaration without a name: it starts with `func` and its body is a
  * brace block. `x => e` is not one, because a rule body's `x => x` already spends that arrow; the
  * unparenthesised spelling is reported by name - SyntaxDiag::LambdaParametersNeedParentheses, at
- * the `=>`, saying how a lambda is written. The composition `f..g` is accepted in the line above
- * it, so the two spellings are told apart in one program.
+ * the `=>`, saying how a lambda is written. The composition `ident <> ident` is accepted in the
+ * line above it, so the two spellings are told apart in one program.
  * It used to be `Unexpected '=>'; expected '}'.` at the `=>`.
  */
 
@@ -12,7 +12,7 @@ func ident(x: int) => int {
 }
 
 func main() => int sync {
-    let composed: (x: int) => int = ident..ident
+    let composed: (x: int) => int = ident <> ident
     let written: (x: int) => int = x => ident(ident(x))
     println(composed(3))
     return written(3)

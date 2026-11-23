@@ -1,0 +1,16 @@
+// `..` is the interval and has no composition reading (design principles 4.2): `inc..dbl` is two
+// functions where the interval wants two integers, so the construct is refused and both operands
+// are named. The composition is written `f <> g`.
+
+func inc(x: int) => int {
+    return x + 1
+}
+func dbl(x: int) => int {
+    return x * 2
+}
+
+func main() => int sync {
+    let g = inc..dbl
+    println(g(3))
+    return 0
+}

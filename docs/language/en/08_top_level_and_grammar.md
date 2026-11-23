@@ -193,7 +193,7 @@ sliceIndices       : ('..' dataExpr? | dataExpr ('..' dataExpr?)?) | 'range' '('
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
 typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
-namedTypeArgument  : IDENTIFIER (':' | '=') typeExpr
+namedTypeArgument  : IDENTIFIER ':' typeExpr
 arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)?
                      ']'
 structData         : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
