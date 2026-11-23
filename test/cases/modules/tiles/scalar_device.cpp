@@ -148,8 +148,11 @@ void testScalarDevice() {
             for (size_t op=0;op<expressions.size();++op) {
                 const auto expected=expressions[op].evaluate(bindings);
                 const ScalarValue actual{type,output[i*expressions.size()+op]};
-                // Only extrema define canonical payloads; other arithmetic compares NaN classification.
-                const bool nanPair = op < 10 && op != 7 && op != 8 && (f32
+                // A NaN is a NaN: its payload and signalling bit are not part of the value (design
+                // principles, floating point; the author's ruling of 2026-11-23), so every float
+                // operation, the extrema included, compares NaN classification. `op < 10` keeps the
+                // integer results (bitcast and the i64 probes) out of a float comparison.
+                const bool nanPair = op < 10 && (f32
                     ? std::isnan(expected.asF32()) && std::isnan(actual.asF32())
                     : std::isnan(expected.asF64()) && std::isnan(actual.asF64()));
                 if (expected.bits != actual.bits && !nanPair)

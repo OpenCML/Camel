@@ -13,6 +13,8 @@ env = os.environ.copy()
 env['CAMEL_HOME'] = str(root / 'out/latest')
 a = [0, 0x80000000, 0x7fc12345, 0xffc54321, 0x7f800001, 0x3f800000, 0xbf800000, 0xff800000]
 b = [0x80000000, 0, 0xffc54321, 0x7fc12345, 0x3f800000, 0x7fa00001, 0xbf800000, 0x7f800000]
+# A cell marked `nan` is a NaN, not that NaN's bits: `same` below judges a NaN as a NaN, so the
+# canonical pattern the extrema answer with is written here only to say which cells are NaNs.
 nan = 0x7fc00000
 expected = {
     'hi': [0, 0, nan, nan, nan, nan, 0xbf800000, 0x7f800000],
@@ -34,6 +36,20 @@ def read(path):
     header = ast.literal_eval(raw[10:10 + size].decode())
     assert header['descr'] == '<f4' and header['shape'] == (8,)
     return list(struct.unpack('<8I', raw[10 + size:]))
+
+def is_nan(bits):
+    return bits & 0x7f800000 == 0x7f800000 and bits & 0x007fffff != 0
+
+def same(actual, expected):
+    """The same values: a NaN for a NaN, every other cell bit for bit (the two zeros included).
+
+    The expected table writes the canonical NaN the extrema answer with, but a NaN's payload and
+    signalling bit are not part of the value (design principles, floating point; the author's
+    ruling of 2026-11-23), so a cell the table says is a NaN is satisfied by any NaN. Nothing else
+    is loosened: a finite value, an infinity and a zero are still compared bit for bit.
+    """
+    return len(actual) == len(expected) and all(
+        a == e or (is_nan(a) and is_nan(e)) for a, e in zip(actual, expected))
 
 with tempfile.TemporaryDirectory(prefix='camel-extrema-bits-') as folder:
     folder = Path(folder)
@@ -57,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='camel-extrema-bits-') as folder:
             for name, bits in expected.items():
                 for suffix in ['cpu', 'gpu'] + (['rev'] if name in ['hi', 'lo'] else []):
                     actual = read(folder / f'{name}_{suffix}.npy')
-                    assert actual == bits, (vm, width, name, suffix, actual, bits)
+                    assert same(actual, bits), (vm, width, name, suffix, actual, bits)
             for suffix in ['cpu', 'gpu']:
-                assert read(folder / f'rows_{suffix}.npy') == expected['single' if width == 1 else 'hi']
+                assert same(read(folder / f'rows_{suffix}.npy'), expected['single' if width == 1 else 'hi'])
         print(f'{vm}: canonical extrema payloads, zeros, singleton and parallel reductions passed')

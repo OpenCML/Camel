@@ -1835,8 +1835,9 @@ const ulpDistance = (actual, expected, bits = 53) => {
     return Math.abs(a - e) / ulpStep(e, bits)
 }
 // \`ulp(measured, declared, bound)\`: true when the two are within \`bound\` units in the last place of
-// the declared value. Exact special values (NaN, +-inf, +-0) are compared bit for bit, because 7.1
-// promises those exactly.
+// the declared value. Special values are exact, because 7.1 promises them: a NaN answers a NaN (its
+// payload and signalling bit are not part of the value), and +-inf and the two zeros match as they
+// are, the sign of a zero included.
 const ulp = (actual, expected, bound = 2, bits = 53) => {
     const a = Number(actual)
     const e = Number(expected)
