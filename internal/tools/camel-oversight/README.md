@@ -25,8 +25,10 @@ unrelated one.
 
 ## Setup on the machine that runs DSH
 
-1. Add the plugin to the profile (this directory's `cordis.patch.yml`); set `buildHost` to the ssh target of
-   the build server if its load should be reported (key-based ssh, no prompt).
+1. Add the plugin to the profile once (this directory's `cordis.patch.yml`, or the profile's own insert, not
+   both). Machine-local values go in `%USERPROFILE%\.camel-oversight\config.json`, which overrides the
+   patch: `{"buildHost": "<ssh target of the build server>"}` to report its load (key-based ssh, no prompt),
+   and optionally `logFile`.
 2. Keep the web server on loopback and publish it on the tailnet: `tailscale serve --bg <port>`. The routes
    sit outside the GUI's login; the tailnet is the gate, so its ACL decides who reaches them.
 3. `camel-lanes` also registers `/camel/state` and `/camel/say`; set its `http: false` once this plugin is in,
