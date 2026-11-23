@@ -677,6 +677,20 @@ std::optional<ConversionTypes> OperatorTable::conversionTypesOf(std::string_view
     return entries_[*id].conversion;
 }
 
+void OperatorTable::declareShape(std::string_view uri, camel::ops::OperShape shape) {
+    // The shape is a record item and not a field of the entry: unlike `conversion` it is asked of a
+    // node's operator while graphs are analysed, and the record is where a fact a graph reader and a
+    // back end both need lives. This entry is what joins the id a node holds to the record's own id
+    // (`recordOf`), so the statement goes through that join and nowhere else.
+    const OperId id              = intern(uri);
+    const std::uint32_t recordId = entries_[id].record;
+    if (recordId == 0) {
+        throw std::logic_error(
+            std::format("{}: no operator record was seated for it at intern", uri));
+    }
+    camel::ops::Registry::instance().stateShape(recordId, shape);
+}
+
 void OperatorTable::declareGrant(std::string_view uri, AttrGrant grant) {
     (void)attr::key(grant.key); // validates the name
     auto shared = std::make_shared<const AttrGrant>(std::move(grant));
