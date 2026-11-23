@@ -1,0 +1,23 @@
+id = "tools.facts"
+order = 918
+tier = "fast"
+tags = ["feat", "tools", "facts", "kernel"]
+
+# The fact framework (`src/kernel/facts/include/camel/facts/facts.h`) had every declaration and no
+# definition anywhere in the tree: `registerKind`, `findKind`, `kindInfo`, `registeredKinds`,
+# `ReadLog::take`, all of `Store`, `computeAll` and `dump`. A framework declared and not defined
+# reads like a framework that exists -- the header says what a fact is, how it is stamped and what
+# it is about -- and nothing could register a kind or ask for one. `camel-facts --self-check` walks
+# that path and asserts what a reader sees at each step.
+
+[[tests]]
+name = "facts.self_check"
+desc = "A kind registers and is refused when it breaks a rule (a key that is not '<owner>.<name>', no print, the same key as another kind, a Content kind stating a merge, a Content kind that reads nothing), the same key registered again answers the id it already had, a store computes a fact on the first ask and answers the second from what it kept, a version that moved drops the entry instead of answering it, the validator compares a fresh computation with the stored one, a Content kind is read from the view each time and stored nowhere, a Target kind is stored under the hash of its target, computeAll fills the store at every anchor the kind names, the dump prints one FACT line per stored fact naming the kind and its class, the read log sorts and de-duplicates what a computation reported, a kind that states a merge law merges two parts into the value of their union, and dropping a graph's facts drops every fact anchored on it."
+kind = "behavior"
+tool = "camel-facts"
+case = "../../../../tools/facts/main.cpp"
+args = ["--self-check"]
+expect_exit = 0
+expect_stdout_contains = ["a kind registers and is found again by its key", "a kind registered again as another kind is refused, naming its key", "a Content kind that states a merge is refused: it is read, never stored", "the second ask answers from what the store kept, and computes nothing", "a version that moved drops the entry instead of answering it", "the validator says a stored value that disagrees with a fresh computation is not the fact", "a Content kind is read from the view and stored nowhere", "a kind that states a merge law merges two parts into the value of their union", "computeAll fills the store at every anchor the kind names, and nowhere else", "the dump prints one FACT line per stored fact, naming the kind and its class", "facts self-check: passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
