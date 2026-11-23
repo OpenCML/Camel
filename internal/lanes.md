@@ -32,6 +32,7 @@
 | lane/flip-consumers | 翻转的下游读者跟上新形状 | 30 笔,dd497756,91 红 | 基线 129 → 91，转绿 38、反方向 0 | **红由 onnx-lowering（55 已清）与 oper-identity-write（21 在修）接手**；本层不再单独动手,等它们落完再合 | 2026-11-23 09:05 |
 | lane/packed-view-lifetime | 修「一个闭包被当成 cell 塞进 `var int` 槽」那族（`C-1123-24`）| 31 笔，`e5ae19df7`（已合 `bdd497756`），未推未合 | 旧症状全消失（不再 `70.0`/`1046.0`、不再 `materializeAggregate`、12 次逐字相同）；**但 12/12 改停在 `struct.cpp:1568 norm.size() >= 2`** —— 静默读错变成会说话的拒绝 | 定位「`inputs.size() != 2` 的 `:op/access` 是重连弄坏的还是建图造出来的」；`isView()` 加断言（Release 也红） | 2026-11-23 07:55 |
 | lane/commit-checks-b2 | 作者裁的两处缺口（`D-1123-21`）：①改窄签名也要在提交时查；②遍新建的图全部节点算碰过的区域 | 已合入 `08fde0e53`（`41e817021`…`c2d330570`） | ① 拒绝原话点名「it declared(改前 stdout 子句) and now declares nothing」；② `made_graph_order` 两半 `refused/published`；影响面 9099 例**三类全 0**；边界夹具改到 call site 后 31/31 | — | 2026-11-23 07:55 |
+| lane/facts-b2 | `facts.h` 缺的是**定义**而不是头文件：写注册表、`Store`、`computeAll`、`dump`，附 `camel-facts --self-check`；33 处只数不改 | `camel::facts` 有定义的入口 0 → **25**；`--self-check` **28/28**；`tools.facts` 1/1（本机要 `out/latest/libs` 在 `PATH` 上，与 `op_record` 同一条环境限制，不是这一笔带来的）；33 处仍 33 | 0（未合） | 等作者裁「可自由调度」归谁（`internal/questions/2026-11-23-who-owns-freely-arrangeable.cn.md`），再动 33 处 | 2026-11-23 09:30 |
 
 ## 没开车道的一件
 

@@ -368,6 +368,7 @@ file(GENERATE
 add_subdirectory(src/tools)
 add_subdirectory(test/tools/parsecheck)
 add_subdirectory(test/tools/oprecord)
+add_subdirectory(test/tools/facts)
 camel_layout_append_catchall()
 
 # ---------------------------------------------------------------------------------------------
