@@ -9,7 +9,6 @@
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
 | lane/notation-corpus | `D-1123-31` 第 4 条：4,252 个 `.cml` 的旧返回类型写法与残留 `f..g` 用格式化器一次过，**然后**再删解析器旧分支；冲突时重跑格式化器 | 语料 **4254 → 0**、解析器旧分支已删（`eb20efab7`、`0b93cbf6f`）；`camel-format` 改 4,163 文件；幂等 4253/4254，唯一例外 `comparison_across_lines.cml` 是**故意保留换行**（它钉的就是行尾 `>`）；`f..g` 14 处手改为 `<>`（格式化器只加空格、分不出区间）；`ast_hashes.txt` 用 `-UpdateAstHashes` 重录 4,097 行 | `feat/parse` 126/126/0、`smoke` 10/10/0；`feat/compile` 2669 里 **130 红**，逐条判完 **甲 12 / 乙 1** | **修 `camel-format` 的 `visitStrayPositional`**（见下），再按 CST 逐文件对照证明没丢第二处，然后重录一次 | 2026-11-23 18:36 |
-| lane/facts-effects | `D-1123-31` 第 3 条：`EffectSummary`、`graph.is_pure` 的读者改读 `core.effects`，绕库的直接计算删掉，读数是逐节点相同 | 8 处计算入口 → **1**（只剩 `core.effects` 的 compute）；保留的 `effectSummaryOfOperator` 是「算符声明子句」这一读数、是 walk 的每节点输入，**不是第二份图/区域计算**，`read.cpp` 只剩 draft 分支用它（draft 没有冻结图，写不了锚点）。逐节点对照：**2,467,119 读 / 0 异**（trans+modules+effects）、**341,975 读 / 0 异**（feat/compile）；图 43 / 区域 68 / 操作符 14 全 0 异。新 kind 让 `rewrite_inline`/`rewrite_opt`/`rewrite_macro_simplify` 由绿转红（`feat/trans` 46 → 49 红，多出的正好这 3 个），卡在 `FACTS graph <g> valid=..` 计数 —— **这一行该变**（它数的是事实，而事实多了三个 kind） | 未合 | 合 `develop`、改那 3 条计数、删探针（`git grep -n 'effectprobe'` 须为 0）、复跑四组 | 2026-11-23 18:20 |
 
 ## 已合入（本小时，18:00 之后）
 
@@ -20,7 +19,7 @@
 | lane/3a-b5 | `74d9cf433` | `git grep -c 'GCGraph\|GraphDraft' -- 'src/compile' 'src/stdlib' 'src/tools'` **1576 → 1535**（compile 34→33、stdlib 1483→1443、tools 59→59）；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` 2669/2663/1红/5known | 5 处 `C-1123-17`（视图里 JOIN 与墓碑不占位）全不改并报出；`src/tools` 实测 59 不是 58（`facts-tools` 合并给 `camel-cli/main.cpp:555` 加了一行 `GCGraph *root`），**派工里的那个数在写它的时候是对的** |
 | lane/range-value | `28e3cb377` | `export type Range` **0→1**、三个函数；`smoke` 10/10/0、`stream` 150/150/0、`feat/parse` 126/126/0、`feat/compile` 2672/2666/1红/5known | 两条否决式：`let r: Range = 1..5` 报 `DeclaredTypeMismatch` 0x03000110；`map(1..5, f)` 仍走**算子组**。乙（五条 `:range/…` 算子 + C++ 内核）留作下一笔 |
 | lane/onnx-lowering（含 `device-programs`、`oper-identity-write` 一摞） | `ce7f79bd9` | 61 文件 +2798/−1016；`feat/modules` **2026/48 → 2082/2032/40**；与 `develop` 逐名 13 红 → **5**（3 已知 + 并行族 2 条随负载）；`feat/compile` 2669/2663/1红/5known | `dy` 无 rank 的根在 `tensor:shape` 的 `inferenceTypeOf` 答开口 `int[]`（丢掉「列表有 2 项」，而 `sum_to` 的 rank 取自该长度），同族另补两处桥；「动态参数没有静态范域」那个前提**被读代码推翻**（`lowerSumTo` 早有两条路），修的是本车道自相矛盾，**4 条真绿**、2 条重钉到 ONNX Loop 的固定 dtype/shape 墙；两堵墙现在只剩 `float`/`f32` 一堵，在那页问题里等作者 |
-
+| lane/facts-effects | `a82121b23` | 8 处 → **1**（私头可达，读者自算即编译错）；逐节点 **2,467,119 + 341,975 读 / 0 异**、图 43 / 区 68 / 算符 14 全 0 异；`smoke` 10/10/0、`feat/parse` 126/126/0、`feat/compile` 2669/2663/1红/5known | 四个 kind（图/节点/区域/算符子句）；`valid=` 多出**正好是 OPER 节点数**（main 11、layer 1、total 2、count 2、twice 1）—— 因为边界检查现在会读因而会存一条 `core.nodeEffects`。探针已删（`src/` 下 0 行） |
 
 
 
