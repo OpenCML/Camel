@@ -18,6 +18,6 @@
 
 ## 验收
 
-- `git grep -nE 'costModels\(\)|findCostModel|kWritingsCostModel|WeightedModel|NodeCountModel' -- src` 为 0。
+- `git grep -nE 'costModels\(\)|findCostModel|kWritingsCostModel|WeightedModel|NodeCountModel|std::cxx::extract' -- src test` 为 0；内核没有任何从函数值到代价模型的登记处（槽、表、回调都没有）。
 - 用例：① 饱和后不提取直接 `std::nvm`，报 `PassNeedsExtraction` 且诊断点名要加提取；② 同一个饱和结果用两个不同的代价函数提取，选出不同的写法；③ 代价函数读形状事实，同一程序在不同形状上选出不同写法；④ 一个被三处读的子表达式只计一次代价（构造两种写法，按树计与按图计会选反的那种）。
 - 默认代价判"贵"不按名字：`git grep` 默认代价的实现里没有算子名字或 URI 的字符串比较。
