@@ -2,18 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The computation of `core.controlRegions` (camel/facts/control_regions.h), and the store of the
- * facts of the frozen graphs a process holds.
+ * The computation of `core.controlRegions` (camel/facts/control_regions.h).
  *
  * The tree is built from the view's region records: regions whose kind only annotates (Inline,
  * Block) are looked through, and every other control region is placed in the one around it. It is
  * the same walk for every reader, and it is here rather than in the reader because a tree belongs
  * to a graph, not to whoever asked for it.
  *
+ * The store is not made here: it is the context's (facts.h, "Which store holds a graph"), and a
+ * reader finds it with `storeHolding` because the owner told it about the graph when it made it.
  * A frozen graph's content never changes, so the store's version for one is the constant 0 and a
- * stored fact about one is valid until the graph is freed; `forgetGraph` is that end. The store is
- * never destroyed: it outlives every graph, and a store destroyed before the graphs it answers
- * about would turn a graph's last act into a use of a dead object.
+ * stored fact about one is valid until the graph is freed; `forgetGraph` is that end.
  */
 
 #include "camel/facts/control_regions.h"
@@ -38,18 +37,6 @@ std::uint32_t parentControlOf(
     const camel::graph::GraphView &view, const ControlRegionTree &tree, std::uint32_t control) {
     const std::uint32_t parent = view.region(control).parent;
     return parent == 0 || parent >= tree.enclosing.size() ? 0u : tree.enclosing[parent];
-}
-
-/// The store of the frozen graphs' facts. See the file comment for why its version is constant and
-/// why it is never destroyed.
-Store &frozenGraphFacts() {
-    static Store *store = new Store(
-        GraphAccess{
-            .view = [](const graph::Graph &graph) { return &graph.view(); },
-            .version = [](const graph::Graph &) { return std::uint64_t(0); },
-        },
-        true);
-    return *store;
 }
 
 } // namespace
@@ -165,15 +152,10 @@ KindId controlRegionKind() {
     return id;
 }
 
-std::shared_ptr<const ControlRegionTree> controlRegionsOf(const graph::Graph &graph) {
+std::shared_ptr<const ControlRegionTree>
+controlRegionsOf(Store &store, const graph::Graph &graph) {
     const Anchor anchor{&graph, kWholeGraph};
-    return frozenGraphFacts().obtain<ControlRegionTree>(controlRegionKind(), anchor);
-}
-
-void forgetGraph(const graph::Graph *graph) {
-    if (graph != nullptr) {
-        frozenGraphFacts().invalidateGraph(graph);
-    }
+    return store.obtain<ControlRegionTree>(controlRegionKind(), anchor);
 }
 
 std::string toString(const ControlRegionTree &tree) {

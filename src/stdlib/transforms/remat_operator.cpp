@@ -202,16 +202,18 @@ std::unordered_map<std::string, operator_t> rematOperatorKernels() {
 }
 
 void registerRematOperatorMetadata() {
-    camel::core::OperatorTable::instance().declare("transforms", {{"remat", false}});
     // The kernel reads the graph of the function value it is handed -- the mark is a property of
     // that graph -- so it refuses a loop there (OperatorTraits::readsGraphs).
     camel::core::OperatorTable::instance().set(
         "transforms:remat",
-        {.pure = false, .readsGraphs = true});
+        {.pure = true, .readsGraphs = true, .foldable = false});
     // The mark is a property of the graph it is handed, and the copy carries the graph's captures as
     // well: a copy that declared none would bind nothing for a call through the marked
     // value and answer the zero of every capture's slot (1.0 where `x + c` says 4.0, the same
     // capture-loss class as `vmap`'s).
+    // What it touches: nothing. The marked copy is a value, so the mark writes nothing a scheduler
+    // could order, and `pure` is the statement (design principles 3.3). Not foldable, as for the
+    // module's other transforms: the compiler cannot see the call from its arguments alone.
 }
 
 } // namespace camel::transforms

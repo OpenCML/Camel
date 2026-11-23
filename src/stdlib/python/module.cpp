@@ -7,6 +7,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -121,6 +122,26 @@ bool PythonModule::load() {
          {"to_string", false},
          {"to_py", false},
          {"from_py", false}});
+    // What the nine touch, in the record and not only in the word above: the interpreter, which
+    // no argument names and which the program does not own, so a call is a use of everything in
+    // the order the program writes it -- `stdlib/python.cml` says the same in prose. An external
+    // effect that itemizes no access is that statement: it is not the empty clause a `pure`
+    // operator states, and it keeps every call ordered among the program's effects.
+    {
+        camel::core::sem::ResourceSpec usesEverything;
+        usesEverything.externalEffect = true;
+        camel::core::OperatorTable::instance().declareResources(
+            "python",
+            {{"exec", usesEverything},
+             {"eval", usesEverything},
+             {"run_file", usesEverything},
+             {"import_module", usesEverything},
+             {"attr", usesEverything},
+             {"call", usesEverything},
+             {"to_string", usesEverything},
+             {"to_py", usesEverything},
+             {"from_py", usesEverything}});
+    }
     loaded_ = true;
     return true;
 }

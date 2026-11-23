@@ -508,7 +508,7 @@ e52b16ee68c242ea ok showcase/d4-mcts/selfplay.cml
 64bd172d73275346 ok showcase/i2-diffusion-step/step.cml
 cb61054139066eda ok showcase/i2-diffusion-step/step_gpu.cml
 8e81248d84b0e5a4 ok showcase/s1-stream-fib/fib.cml
-f4f7de82ac10c483 ok src/stdlib/array.cml
+a3cb320677915d37 ok src/stdlib/array.cml
 9485cab77cc60238 ok src/stdlib/autodiff.cml
 b7c501988b03d43e ok src/stdlib/bytes.cml
 4fc670ca235f4d35 ok src/stdlib/ckpt.cml

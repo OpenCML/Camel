@@ -69,6 +69,10 @@ namespace camel::core::context {
 class Context;
 }
 
+namespace camel::facts {
+class Store;
+}
+
 namespace camel::runtime {
 
 class Program;
@@ -1151,7 +1155,10 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
     /// (the frozen block stores each edge once, as an input). Thread-safe.
     const GCUseIndex &uses() const;
     /// How to run this version: the order of its nodes, its branches and calls (exec_plan.h).
-    /// Built the first time it is asked for and kept with the graph. Thread-safe.
+    /// The plan is a fact of the module that reads it (`std.execPlan`), so this asks the fact
+    /// store through `execPlanOf` and keeps nothing of its own: the graph has no field for a
+    /// plan, and a reader that finds no kind is told so rather than given a plan computed here.
+    /// Thread-safe.
     const class ExecPlan &execPlan() const;
     std::span<const gc_node_ref_t> normOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
@@ -1308,8 +1315,6 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
     ::Tuple *staticArea_ = nullptr;
     // Built by uses() on first demand, owned by the graph.
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
-    // Built by execPlan() on first demand, owned by the graph.
-    mutable std::atomic<class ExecPlan *> execPlan_{nullptr};
 };
 
 /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture of
@@ -1459,6 +1464,13 @@ class GCGraphManager {
     /// that was bound before it was built.
     void forget(GCGraph *graph);
 
+    /// The store the facts of this manager's graphs are held in (camel/facts/facts.h): the context
+    /// gives it here when it makes the manager, one store for the whole context, and every graph
+    /// that enters the books is told to it -- a graph bound into a program, or one a rewrite
+    /// encoded and has not bound yet. Null for a manager no context gave a store to, and then a
+    /// graph announces its end (a no-op) to nobody.
+    void setFactsStore(camel::facts::Store *store) { factsStore_ = store; }
+
   private:
     friend class Program;
     void rebuildGcRoots();
@@ -1474,6 +1486,8 @@ class GCGraphManager {
     /// until the pass settles, then they are freed unless a program holds them.
     std::unordered_set<GCGraph *> unbound_;
     const Program *current_ = nullptr;
+    /// The context's fact store (see setFactsStore). Not owned: the context outlives its manager.
+    camel::facts::Store *factsStore_ = nullptr;
     std::vector<const Program *> detached_;
     /// One name per live pin (GCGraphManager::pin): a program held by two ProgramHold handles is
     /// named twice, and unpin() drops one name.

@@ -450,10 +450,15 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         // result reaches the tail JOIN only through forwarding GATEs and nested JOINs, with
         // nothing of its arm running after it (the rule NodeVM and FastVM use).
         std::vector<camel::runtime::gc_node_ref_t> tailCalls;
-        // Per node ref: where an operator reads its arguments. The function of the operator is
-        // kept in the execution plan of the graph (ExecPlan::resolvedOpers) once it has run.
+        // Per node ref: where an operator reads its arguments. The function the operator resolves to
+        // is kept beside it, in this scheduler's own table for the graph version (`resolvedOpers`),
+        // once the node has run.
         std::vector<PreparedOper> opers;
         std::vector<camel::runtime::gc_data_idx_t> operArgs;
+        /// The function of each operator node, by node reference, resolved the first time the node
+        /// runs: null until then. A plan is a value and keeps no table a back end writes in place,
+        /// so the table a run fills in is the run's, kept with the graph version it belongs to.
+        std::unique_ptr<std::atomic<operator_t>[]> resolvedOpers;
         // As an element function of a higher-order operator: 1 when everything the graph can
         // reach is built-in operators and direct calls without recursion (the work of an
         // element is then bounded by the size of the graphs), 0 when not, -1 until asked

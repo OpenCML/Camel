@@ -16,6 +16,10 @@
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
 
+#include <atomic>
+#include <memory>
+#include <unordered_map>
+
 namespace ctx            = camel::core::context;
 using runtime_data_idx_t = camel::runtime::gc_data_idx_t;
 
@@ -30,6 +34,15 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     camel::execute::RunPrograms programs_;
     std::vector<runtime_data_idx_t> operIndices_;
     std::vector<slot_t> callArgScratch_;
+
+    // The function each operator node of a graph version was resolved to, once it has run: this
+    // pass's own table, keyed by the plan (a plan is an immutable fact of the graph and keeps no
+    // table a back end writes in place). Kept for the run, so a node that runs again does not look
+    // its operator up by URI again.
+    std::unordered_map<const camel::runtime::ExecPlan *, std::unique_ptr<std::atomic<operator_t>[]>>
+        resolvedOpers_;
+    /// The operator table of `plan`, made on the first ask.
+    std::atomic<operator_t> *resolvedOpersOf(const camel::runtime::ExecPlan &plan);
 
     // `program` is the program the graph belongs to, when the caller knows it (the callee of a
     // direct call is in the caller's program); looked up otherwise.

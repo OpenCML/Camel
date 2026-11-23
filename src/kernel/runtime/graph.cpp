@@ -12,6 +12,7 @@
  */
 
 #include "camel/runtime/graph.h"
+#include "camel/facts/facts.h"
 #include "camel/facts/arrangeable.h"
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/draft.h"
@@ -3516,31 +3517,16 @@ const GCUseIndex &GCGraph::uses() const {
 }
 
 const ExecPlan &GCGraph::execPlan() const {
-    if (ExecPlan *known = execPlan_.load(std::memory_order_acquire)) {
-        return *known;
-    }
-    if (!executable()) [[unlikely]] {
-        throw std::logic_error(
-            "Graph '" + name() +
-            "' has values with several writings: it has no execution plan "
-            "until they are extracted.");
-    }
-    ExecPlan *built    = buildExecPlan(*this).release();
-    ExecPlan *expected = nullptr;
-    if (!execPlan_.compare_exchange_strong(
-            expected,
-            built,
-            std::memory_order_acq_rel,
-            std::memory_order_acquire)) {
-        delete built; // another thread was first
-        return *expected;
-    }
-    return *built;
+    // The plan is the fact `std.execPlan` of the module that reads it: the store answers, and a
+    // kind that is not registered is an error about the kind rather than a plan computed here
+    // (camel/runtime/exec_plan.h, `execPlanOf`).
+    return *execPlanOf(*this);
 }
 
 GCGraph::~GCGraph() {
     // The facts anchored on this graph end here: an address is a graph only while the graph is
-    // there, so the store must not answer about this one afterwards (camel/facts/control_regions.h).
+    // there, and the store that was told about this one must not answer about it afterwards
+    // (camel/facts/facts.h). The store itself outlives nothing here: it goes with its context.
     camel::facts::forgetGraph(this);
     // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
     // graph, so it goes before the graph does. `GraphView` is complete in this file
@@ -3548,7 +3534,6 @@ GCGraph::~GCGraph() {
     delete static_cast<const camel::graph::GraphView *>(viewCache_);
     viewCache_ = nullptr;
     delete uses_.load(std::memory_order_acquire);
-    delete execPlan_.load(std::memory_order_acquire);
 }
 
 void GCGraph::releaseNodeChunks() {

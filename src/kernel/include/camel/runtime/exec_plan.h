@@ -7,18 +7,23 @@
  * What every back end needs to run a graph and would otherwise compute for itself: the order its live
  * nodes run in, where each arm of a branch starts, the callee and the argument slots of each
  * direct call, which calls are in tail position. It is computed once, the first time a back end
- * asks (GCGraph::execPlan), from the frozen graph alone, and kept with the graph version: a
- * rewrite makes a new version, which gets a new plan. Only the nodes the exit depends on are in
- * it. The order is deterministic: the same graph gives the same plan in every run.
+ * asks, from the frozen graph alone, and kept with the graph version: a rewrite makes a new
+ * version, which gets a new plan. Only the nodes the exit depends on are in it. The order is
+ * deterministic: the same graph gives the same plan in every run.
  *
- * The plan does not change after it is built, except for the record FastVM keeps in it about the
- * code it made for the version (`fastVm`).
+ * The plan belongs to the module that reads it: `std::exec` registers the fact kind
+ * `std.execPlan` and computes it (`buildExecPlan`), and a reader asks the store (`execPlanOf`) --
+ * never a field of the graph, and never a computation of its own. What the kind hands out is a
+ * whole immutable value: nothing a back end records while it runs lives in it. The state a
+ * bytecode engine keeps about the code it made for a version is the engine's own, keyed by the
+ * plan (fvm/version_state.h), and so is the operator a back end resolved for a node.
  */
 
 #pragma once
 
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/foreign.h"
+#include "camel/facts/facts.h"
 #include "camel/runtime/graph.h"
 
 #include <algorithm>
@@ -157,14 +162,10 @@ class ExecPlan {
     /// The live nodes in the order they run (every node after its inputs; an arm of a branch is
     /// one range between the BRCH and its JOIN).
     std::vector<gc_node_ref_t> topo;
-    /// The nodes of `topo`, in the same order. Built the first time they are asked for (only a
-    /// back end that walks the nodes while it runs needs them), then kept.
-    const std::vector<ExecNode> &nodes() const {
-        if (nodesReady_.load(std::memory_order_acquire)) [[likely]] {
-            return nodes_;
-        }
-        return buildNodes();
-    }
+    /// The nodes of `topo`, in the same order: what a back end that walks the nodes while it runs
+    /// reads. Built when it is asked for and handed over by value, because a plan is a value and
+    /// keeps no table a reader fills in -- the reader holds the table it walks.
+    std::vector<ExecNode> nodesOfTopo() const;
     /// The position in `topo` of each node, by node reference; kNotInPlan for a node that does
     /// not run (dead).
     static constexpr uint32_t kNotInPlan = UINT32_MAX;
@@ -232,10 +233,9 @@ class ExecPlan {
             loopEventOffsets[topoIndex + 1] - loopEventOffsets[topoIndex]};
     }
 
-    /// The function of each OPER node, by node reference, once a back end has resolved it; null
-    /// until then (resolving an operator can import a module, and an unknown one is a fault of
-    /// the run, not of the plan). Written by the back ends that run the graph node by node.
-    mutable std::unique_ptr<std::atomic<operator_t>[]> resolvedOpers;
+    /// The function of each OPER node is not kept here. Resolving one can import a module, and the
+    /// answer is the run's: an address a back end resolved in place is that back end's state and
+    /// not data about the graph, so it lives in a table the back end owns and keys by the plan.
 
     /// ---- In-place updates: where the decision lives
     /// (docs/design/arrays-memory/README.cn.md 4.3.1) -------------------
@@ -469,42 +469,6 @@ class ExecPlan {
     /// A `std::string` and not a view: the answer for a marked node comes from the operator table's
     /// own `std::string` (`inPlaceForm`) and there is no buffer the caller could be given.
     std::string operatorUriFor(gc_node_ref_t ref) const;
-    /// What FastVM records about the code it made for this version: where its bytecode starts and
-    /// how long it is (each stored plus one; 0 is "not compiled"), the JIT entry, flags, and how
-    /// often an indirect call from it was made. Only FastVM reads and writes it.
-    struct FastVmState {
-        uintptr_t entryPc           = 0;
-        uintptr_t graphLength       = 0;
-        uintptr_t jitEntry          = 0;
-        uintptr_t flags             = 0;
-        uintptr_t indirectCallCount = 0;
-        /// Keeps the bytecode range of the version in the interpreter's code space; gives it
-        /// back when the version is freed (the plan is freed with it).
-        std::shared_ptr<void> codeLease;
-    };
-    mutable FastVmState fastVm;
-
-    /// The anchor's side table, kept with the plan for the reason `fastVm` is: the compiler knows
-    /// what the run needs later, and the run reads it while it runs. The anchor's pc form -- a back
-    /// end that runs bytecode holds a pc where the node form holds a node -- asks which node an
-    /// instruction belongs to at the moment a counted box is made, which is after the compile that
-    /// knew the answer is over. So the table lives here, with the plan it describes, and lasts
-    /// exactly as long as the graph version that owns it.
-    ///
-    /// Empty unless `--gc-check` asked for the counted blocks: a compile that is not asked fills
-    /// nothing, allocates nothing for it, and every reader of it finds an empty table.
-    ///
-    /// `nodeAtPc` is keyed by the graph's own pc numbering as the compiler emitted it, and the
-    /// optimizer moves those keys with the instructions, in the same call that moves the origin
-    /// table (`BytecodeOptimizer::optimize`), so a pc an interpreter holds in hand finds the row of
-    /// the instruction it is pointing at and never the row of one that was there before the move.
-    /// `entryPc` is where that numbering starts in the image the run executes, so an image pc can
-    /// be brought back to a key of `nodeAtPc`.
-    struct CountedSites {
-        std::unordered_map<size_t, gc_node_ref_t> nodeAtPc;
-        size_t entryPc = 0;
-    };
-    mutable CountedSites countedSites;
 
     /// The graph version the plan was built from.
     const GCGraph *graph = nullptr;
@@ -532,26 +496,40 @@ class ExecPlan {
             branchArmTails.data() + branchArmEntryOffsets[topoIndex],
             branchArmEntryOffsets[topoIndex + 1] - branchArmEntryOffsets[topoIndex]};
     }
-
-  private:
-    const std::vector<ExecNode> &buildNodes() const;
-
-    mutable std::mutex nodesMutex_;
-    mutable std::atomic<bool> nodesReady_{false};
-    mutable std::vector<ExecNode> nodes_;
 };
 
-/// Computes the plan of `graph` (a frozen graph with nodes). Use GCGraph::execPlan, which keeps
-/// the result.
+/// Whether two plans plan the same graph version in the same order. Every other table of a plan is
+/// a function of the graph and of that order, and the order is deterministic, so two plans that
+/// agree on these two are the same plan. It is the kind's `equal` (facts.h): the validator of a
+/// fact recomputes it and compares the result with the value the store keeps.
+inline bool samePlanAs(const ExecPlan &left, const ExecPlan &right) {
+    return left.graph == right.graph && left.topo == right.topo;
+}
+
+/// The id of the kind `std.execPlan`, or `facts::kNoKind` when the kind is not registered. The kind
+/// belongs to the module that reads the plan, so it is registered by `std::exec` and not by the
+/// core (facts.h; the kernel states how a kind is registered and nothing else).
+facts::KindId execPlanKind();
+
+/// The plan of `graph`, asked from the fact store: computed the first time it is asked for, kept
+/// while the graph lives, and dropped with the graph. Throws `std::logic_error` when the kind is
+/// not registered (the reader names the missing kind and computes nothing in its place, facts.h)
+/// and one naming the graph when the graph has no plan to give (its values still have several
+/// writings: they have to be extracted first).
+std::shared_ptr<const ExecPlan> execPlanOf(const GCGraph &graph);
+
+/// Computes the plan of `graph` (a frozen graph with nodes). The kind `std.execPlan`'s computation;
+/// a reader asks `execPlanOf`, which keeps the result.
 std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph);
 
 /// ---- The anchor, asked from an executor -------------------------------------------------------
 //
 // One question, two ways of naming the node it is about: a back end that runs nodes holds the node
 // (`noteCountedCreationForNode`), and one that runs bytecode holds a pc of the image it executes
-// (`noteCountedCreationAt`, which finds the node through the plan's counted-site table). Both reach
-// the same decision -- `refProducedAt` at the node's position in the plan -- so the four back ends
-// answer with the same instrument and not with four copies of it.
+// (`noteCountedCreationAt`, which finds the node through the pc table the bytecode engine keeps
+// beside the plan -- fvm/version_state.h, where that form is defined). Both reach the same decision
+// -- `refProducedAt` at the node's position in the plan -- so the four back ends answer with the
+// same instrument and not with four copies of it.
 //
 // `boxes` is how many boxes the node's execution made, read by the caller from the allocator
 // (`core::rtdata::countedBlocksMade`) around the operator call: the caller is the only place that

@@ -76,11 +76,12 @@ StoreTally tally(const Store &store);
 bool kindRegistered(const Store &store, KindId kind);
 
 /// Question 4: nothing in a kind says whether its value is written after it is computed, and
-/// `Store::obtain<T>` hands out a `shared_ptr<const T>`. A value a back end writes in place
-/// (`ExecPlan`'s `mutable FastVmState fastVm` and `mutable CountedSites countedSites`) has no shape
-/// here. The two kinds the split would need are named so the question has one place to be answered:
-/// one for what is a function of the graph and read-only, one for what the back end records about
-/// the code it made for a version. They are not registered and nothing defines them.
+/// `Store::obtain<T>` hands out a `shared_ptr<const T>`. The answer taken is that no fact value is
+/// written at all: the execution plan is a whole immutable value (`std.execPlan`), and the state a
+/// bytecode engine records about the code it made for a version stopped being part of it -- it is
+/// the engine's own, keyed by the plan (`<fvm>/version_state.h`). So neither of the two names below
+/// is the shape any more, and the kind they would have declared for a back end's state is not the
+/// shape a fact has.
 KindId frozenExecPlanKind();
 KindId fastVmStateKind();
 
