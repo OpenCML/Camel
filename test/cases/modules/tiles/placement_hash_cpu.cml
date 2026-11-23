@@ -1,12 +1,13 @@
 /// placement_hash_gpu.cml with the other placement label: same nodes, names and edges, a
 /// different block-region fact. See placement_hash_gpu.cml.
 
-func other(): int {
+func other() => int {
     return 5
 }
 
-func main(): int {
-    #cpu {
+func main() => int {
+    #cpu
+    {
         7
     }
     return other()

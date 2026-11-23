@@ -6,11 +6,11 @@ type OnlyArrays<T> = match type T {
     case array => ElementOf<T>
 }
 
-func element_is_integer::<T>(): bool {
+func element_is_integer::<T>() => bool {
     return is_integer::<OnlyArrays<T>>()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(element_is_integer::<int>())
     return 0
 }

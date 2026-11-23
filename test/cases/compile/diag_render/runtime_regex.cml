@@ -1,6 +1,6 @@
 import { has_match } from re
 
-func main(): int sync {
+func main() => int sync {
     println('abc'->has_match<'(unclosed'>)
     return 0
 }

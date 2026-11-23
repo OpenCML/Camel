@@ -9,7 +9,7 @@
  * the result or drop it on purpose"), which names nothing the reader can act on.
  */
 
-func main(): int sync {
+func main() => int sync {
     var xs = [1, 2, 3]
     let f = func () sync {
         len(xs)

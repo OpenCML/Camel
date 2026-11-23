@@ -6,8 +6,8 @@
  * the operator.
  */
 
-import { exists, mkdirs, write_text, remove, remove_dir } from fs
 import { get_env } from env
+import { exists, mkdirs, write_text, remove, remove_dir } from fs
 import { index_of } from str
 
 /// The kind and location of a `void!`, or ok.
@@ -22,23 +22,21 @@ func report(r: void!) {
 /// platform and locale, so it is not part of this report).
 func reason(r: void!) {
     return match r {
-        case error e =>
-            if (e.message->index_of<'not empty'> ?? -1) >= 0 then 'not empty'
-            else if (e.message->index_of<'is a directory'> ?? -1) >= 0 then 'is a directory'
-            else if (e.message->index_of<'not a directory'> ?? -1) >= 0 then 'not a directory'
-            else if (e.message->index_of<'no such file'> ?? -1) >= 0 then 'missing'
-            else if (e.message->index_of<'denied'> ?? -1) >= 0 then 'denied'
-            else 'io'
+        case error e => if (e.message->index_of<'not empty'> ?? -1) >= 0 then 'not empty'
+        else if (e.message->index_of<'is a directory'> ?? -1) >= 0 then 'is a directory'
+        else if (e.message->index_of<'not a directory'> ?? -1) >= 0 then 'not a directory'
+        else if (e.message->index_of<'no such file'> ?? -1) >= 0 then 'missing'
+        else if (e.message->index_of<'denied'> ?? -1) >= 0 then 'denied' else 'io'
         case _ => '-'
     }
 }
 
-func line(r: void!): int sync {
+func line(r: void!) => int sync {
     println(report(r), '|', reason(r))
     return 0
 }
 
-func main(mode: int, path: string): int sync {
+func main(mode: int, path: string) => int sync {
     return if mode == 1 then sync {
         // The permission case is set up by the node verifier (remove_permissions.mjs).
         let _ = line(remove(path))

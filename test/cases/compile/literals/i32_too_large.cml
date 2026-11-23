@@ -1,4 +1,5 @@
-func main(): int sync {
-    let b: i32 = 3000000000; println(b)
+func main() => int sync {
+    let b: i32 = 3000000000
+    println(b)
     return 0
 }

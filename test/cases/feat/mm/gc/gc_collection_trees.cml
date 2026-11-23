@@ -6,11 +6,17 @@
 // `remove` copies one path of the tree and leaves the previous path as garbage, while the
 // rest is shared by all the versions that are kept here on purpose.
 
-func key_of(i: int): string {
+func key_of(i: int) => string {
     return 'key-' + string(i)
 }
 
-func fill(i: int, n: int, a: int, b: int, acc: Map<string, int[]>): Map<string, int[]> {
+func fill(
+    i: int,
+    n: int,
+    a: int,
+    b: int,
+    acc: Map<string, int[]>
+) => Map<string, int[]> {
     if i >= n then {
         return acc
     } else {
@@ -18,7 +24,13 @@ func fill(i: int, n: int, a: int, b: int, acc: Map<string, int[]>): Map<string, 
     }
 }
 
-func drain(i: int, n: int, a: int, b: int, acc: Map<string, int[]>): Map<string, int[]> {
+func drain(
+    i: int,
+    n: int,
+    a: int,
+    b: int,
+    acc: Map<string, int[]>
+) => Map<string, int[]> {
     if i >= n then {
         return acc
     } else {
@@ -26,11 +38,13 @@ func drain(i: int, n: int, a: int, b: int, acc: Map<string, int[]>): Map<string,
     }
 }
 
-func total(m: Map<string, int[]>): int {
-    return values(m)->reduce<func (acc: int, xs: int[]) => int { acc + xs[0] + xs[1] }, 0>
+func total(m: Map<string, int[]>) => int {
+    return values(m)->reduce<func (acc: int, xs: int[]) => int {
+        acc + xs[0] + xs[1]
+    }, 0>
 }
 
-func names(i: int, n: int, acc: Set<string>): Set<string> {
+func names(i: int, n: int, acc: Set<string>) => Set<string> {
     if i >= n then {
         return acc
     } else {
@@ -38,11 +52,13 @@ func names(i: int, n: int, acc: Set<string>): Set<string> {
     }
 }
 
-func grid(n: int): Map<(int, string), string?> {
-    return (0..n)->map<func (i: int) => ((int, string), string?) { ((i % 9, key_of(i)), (key_of(i * 2)) as string?) }> as Map<(int, string), string?>
+func grid(n: int) => Map<(int, string), string?> {
+    return (0 .. n)->map<func (i: int) => ((int, string), string?) {
+        ((i % 9, key_of(i)), (key_of(i * 2)) as string?)
+    }> as Map<(int, string), string?>
 }
 
-func main(): int sync {
+func main() => int sync {
     let e = [] as Map<string, int[]>
     let m = fill(0, 150, 7, 211, e)
     let grown = fill(150, 190, 1, 1000, m)

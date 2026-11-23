@@ -8,11 +8,15 @@
 
 type P = { a: int, b: float }
 
-func three(): int { return 3 }
+func three() => int {
+    return 3
+}
 
-func mk(): P { return { a: three(), b: 1.5 } }
+func mk() => P {
+    return { a: three(), b: 1.5 }
+}
 
-func main(): int sync {
+func main() => int sync {
     let p = mk()
     println(p.a)
     println(p.b)

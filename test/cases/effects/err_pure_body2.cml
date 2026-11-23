@@ -4,17 +4,17 @@
 // which only reads what the declaration said (design effects plan, step 5).
 
 /// The parameter promises an empty set: whatever is passed must touch nothing.
-func apply(f: (x: int) => int pure, x: int): int {
+func apply(f: (x: int) => int pure, x: int) => int {
     return f(x)
 }
 
 /// The clause promises the empty set; the body writes `stdout`.
-func say(x: int): int pure {
+func say(x: int) => int pure {
     println('x')
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(apply(say, 4))
     return 0
 }

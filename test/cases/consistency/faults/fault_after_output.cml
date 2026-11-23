@@ -3,7 +3,7 @@
  * four lines before the fault are on standard output, in order, then the diagnostic.
  */
 
-func work(z: int): int sync {
+func work(z: int) => int sync {
     println('work 1')
     println('work 2')
     let r = 5 / z
@@ -11,7 +11,7 @@ func work(z: int): int sync {
     return r
 }
 
-func main(): int sync {
+func main() => int sync {
     println('main 1')
     println('main 2')
     println(work(0))

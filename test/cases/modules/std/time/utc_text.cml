@@ -6,7 +6,7 @@
 
 import { strftime, strptime } from time
 
-func main(): int sync {
+func main() => int sync {
     println('1970-01-02'->strptime<'%Y-%m-%d'> !! -1.0)
     println('2001-09-09 01:46:40'->strptime<'%Y-%m-%d %H:%M:%S'> !! -1.0)
     println(86400.0->strftime<'%Y-%m-%d %H:%M'>)

@@ -11,24 +11,24 @@
  * would fail it.
  */
 
-import { abs, max, sum } from tensor
 import { next_key, normal, seed } from random
+import { abs, max, sum } from tensor
 import { is_numeric } from types
 
 #strict
-func exact::<T>(a: T[...], b: T[...]): T[...] when is_numeric::<T>() {
+func exact::<T>(a: T[...], b: T[...]) => T[...] when is_numeric::<T>() {
     return a @ b
 }
 
-func fast::<T>(a: T[...], b: T[...]): T[...] when is_numeric::<T>() {
+func fast::<T>(a: T[...], b: T[...]) => T[...] when is_numeric::<T>() {
     return a @ b
 }
 
-func max_abs(t: f32[...]): float {
+func max_abs(t: f32[...]) => float {
     return float(sum(max<0>(max<0>(abs(t)))))
 }
 
-func main(): int sync {
+func main() => int sync {
     seed(20261023)
     let a = next_key()->normal::<f32><shape: [1024, 1024]>
     let b = next_key()->normal::<f32><shape: [1024, 1024]>
@@ -36,7 +36,6 @@ func main(): int sync {
     let canonical = exact(a, b)
     let difference = max_abs(library - canonical)
     let bound = 1024.0 * 1024.0 * 5.9604645e-8 * max_abs(a) * max_abs(b)
-    'gemm_library sums={} {} diff={} bound={}'->format<
-        sum(library), sum(canonical), difference, bound>->println
+    'gemm_library sums={} {} diff={} bound={}'->format<sum(library), sum(canonical), difference, bound>->println
     return 0
 }

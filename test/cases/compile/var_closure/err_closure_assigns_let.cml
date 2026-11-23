@@ -11,7 +11,7 @@
  * Kept as a pin because the program has to keep being refused, whichever rule is the one answering.
  */
 
-func main(): int sync {
+func main() => int sync {
     let k = 1
     let bump = func () => int sync {
         k = k + 1

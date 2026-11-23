@@ -3,14 +3,14 @@
  */
 
 with <k: int>
-func add_n(f: (x: int) => int): (x: int) => int {
+func add_n(f: (x: int) => int) => (x: int) => int {
     return func (x: int) => int {
         return f(x) + k
     }
 }
 
 with <m: int>
-func mul_n(f: (x: int) => int): (x: int) => int {
+func mul_n(f: (x: int) => int) => (x: int) => int {
     return func (x: int) => int {
         return f(x) * m
     }
@@ -18,12 +18,11 @@ func mul_n(f: (x: int) => int): (x: int) => int {
 
 @add_n<1>
 @mul_n<2>
-func core(x: int): int {
+func core(x: int) => int {
     return x + 3
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = core(1)
     return if v == 9 then 0 else 1
 }
-

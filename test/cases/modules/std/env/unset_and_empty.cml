@@ -5,14 +5,14 @@
 
 import { get_env } from env
 
-func describe(value: string?): string {
+func describe(value: string?) => string {
     return match value {
         case null => 'unset'
         case v => 'set to ' + v
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describe(get_env('CAMEL_TEST_ENV_UNSET_ABC')))
     println(describe(get_env('CAMEL_TEST_ENV_SET')))
     println(get_env('CAMEL_TEST_ENV_UNSET_ABC') ?? 'default')

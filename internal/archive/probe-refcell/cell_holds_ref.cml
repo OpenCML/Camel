@@ -7,7 +7,7 @@
 import state
 
 // The author's minimal example, without the generator: a `let` bound to a box, written, read.
-func plain_let(): int sync {
+func plain_let() => int sync {
     let box = state::ref(0)
     state::set(box, 5)
     return state::get(box)
@@ -15,7 +15,7 @@ func plain_let(): int sync {
 
 // The same program with `var`: the name is a cell when its reads and writes are not all in the
 // region that declares it. Here they are, so this one is built as a value (stage S1).
-func var_same_region(): int sync {
+func var_same_region() => int sync {
     var box = state::ref(0)
     state::set(box, 5)
     return state::get(box)
@@ -23,35 +23,41 @@ func var_same_region(): int sync {
 
 // A cell that holds a box: the read is in another graph, so the `var` is a cell (`:var/new`) and
 // the closure takes the cell.
-func cell_read_by_closure(): int sync {
+func cell_read_by_closure() => int sync {
     var box = state::ref(0)
     state::set(box, 5)
-    let read = func () { state::get(box) }
+    let read = func () {
+        state::get(box)
+    }
     return read()
 }
 
 // A cell that holds a box and is written through the cell after the read was made: the cell is
 // written by the closure's own graph as well.
-func cell_written_and_read(): int sync {
+func cell_written_and_read() => int sync {
     var box = state::ref(0)
-    let bump = func () { state::set(box, 9) }
+    let bump = func () {
+        state::set(box, 9)
+    }
     state::set(box, 5)
     bump()
     return state::get(box)
 }
 
 // The generator of the question's example: `yield` in the body, the box made before it.
-func gen(): int.. sync {
+func gen() => int.. sync {
     let box = state::ref(0)
     state::set(box, 5)
     yield state::get(box)
 }
 
-func drain(): int sync {
-    loop acc = 0 for v in gen() do sync { acc + v }
+func drain() => int sync {
+    loop acc = 0 for v in gen() do sync {
+        acc + v
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(plain_let())
     println(var_same_region())
     println(cell_read_by_closure())

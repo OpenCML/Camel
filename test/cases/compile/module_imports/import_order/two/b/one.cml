@@ -1,7 +1,6 @@
 /// trap 1: imports the `lib` beside it, which is `b/lib.cml` (value 2).
-
 import lib
 
-export func n(): int {
+export func n() => int {
     return lib::n()
 }

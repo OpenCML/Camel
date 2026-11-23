@@ -10,42 +10,42 @@
  *   L1 | 5             a lambda whose body is a sync block ending in a value
  */
 
-func pick(c: bool): int sync {
+func pick(c: bool) => int sync {
     let y = if c then sync {
-        println("A1")
+        println('A1')
         let a = 2
-        println("A2")
+        println('A2')
         a
     } else sync {
         let b = 3
-        println("B1")
+        println('B1')
         b
     }
     return y
 }
 
-func nested(a: int, b: int): int sync {
+func nested(a: int, b: int) => int sync {
     sync {
-        println("n1")
-        println("n2")
+        println('n1')
+        println('n2')
     }
     return a + b
 }
 
-func pair(): (int, int) sync {
-    println("1 pair")
+func pair() => (int, int) sync {
+    println('1 pair')
     return (7, 8)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true))
     println(pick(false))
     println(nested(11, 22))
     let (p, q) = pair()
-    println("2 after")
+    println('2 after')
     println(p + q)
     let f = func (x: int) => int sync {
-        println("L1")
+        println('L1')
         x + 1
     }
     println(f(4))

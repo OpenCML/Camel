@@ -37,30 +37,30 @@
  * element in the second.
  */
 
-import { to_bytes } from tensor
 import { to_array } from bytes
 import { abs, is_inf, pow } from math
+import { to_bytes } from tensor
 
 /// The little-endian bytes of one element of a one-element array of the type: the stored element
 /// itself, two bytes for either reduced-precision type.
-func bitsOfBf16(value: bf16): int[] {
+func bitsOfBf16(value: bf16) => int[] {
     let one: bf16[] = [value]
     return to_array(to_bytes(one))
 }
 
-func bitsOfF16(value: f16): int[] {
+func bitsOfF16(value: f16) => int[] {
     let one: f16[] = [value]
     return to_array(to_bytes(one))
 }
 
 /// The same power computed in f32 and rounded once into bf16: the operator has to answer the
 /// value this expression gives, element for element, because both are the one arithmetic path.
-func bf16AgreesWithF32(x: bf16, y: bf16): bool {
+func bf16AgreesWithF32(x: bf16, y: bf16) => bool {
     let r: bf16 = x ^ y
     return r == bf16(pow(float(x), float(y)))
 }
 
-func f16AgreesWithF32(x: f16, y: f16): bool {
+func f16AgreesWithF32(x: f16, y: f16) => bool {
     let r: f16 = x ^ y
     return r == f16(pow(float(x), float(y)))
 }
@@ -68,13 +68,13 @@ func f16AgreesWithF32(x: f16, y: f16): bool {
 /// Whether the stored element is within one rounding's relative bound of the exact power, computed in
 /// f64 from the two widening values. The tolerance is the spacing of the type at 1 -- 2^-8 for
 /// bf16 and 2^-11 for f16 -- and not the f32 one (2^-23), which no 16-bit result could meet.
-func bf16WithinEps(x: bf16, y: bf16): bool {
+func bf16WithinEps(x: bf16, y: bf16) => bool {
     let r: bf16 = x ^ y
     let exact: f64 = pow(f64(x), f64(y))
     return abs(f64(r) - exact) / abs(exact) <= 0.00390625
 }
 
-func f16WithinEps(x: f16, y: f16): bool {
+func f16WithinEps(x: f16, y: f16) => bool {
     let r: f16 = x ^ y
     let exact: f64 = pow(f64(x), f64(y))
     return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
@@ -84,13 +84,13 @@ func f16WithinEps(x: f16, y: f16): bool {
 /// probe: 1.734375 is 1.34e-3 from the exact power, which passes bf16's 3.9e-3 and fails f16's
 /// 4.9e-4. A tolerance that passed everything would answer true here, so this line is what says
 /// the check above can fail at all.
-func bf16WithinF16Eps(x: bf16, y: bf16): bool {
+func bf16WithinF16Eps(x: bf16, y: bf16) => bool {
     let r: bf16 = x ^ y
     let exact: f64 = pow(f64(x), f64(y))
     return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
 }
 
-func main(): int sync {
+func main() => int sync {
     // ---- the exact powers, by the bytes of the stored element ----
     let bfTen: bf16 = bf16(2.0) ^ bf16(10.0)
     let bfCubic: bf16 = bf16(1.5) ^ bf16(3.0)
@@ -102,14 +102,15 @@ func main(): int sync {
         bitsOfBf16(bfCubic),
         bitsOfBf16(bfInverse),
         bitsOfBf16(bfThousand),
-        bitsOfBf16(bfNegative))
+        bitsOfBf16(bfNegative)
+    )
     println(f32(bfTen), f32(bfCubic), f32(bfInverse), f32(bfThousand), f32(bfNegative))
-
+    
     // ---- the inexact power, and one beyond the range of the type ----
     let bfRoot: bf16 = bf16(3.0) ^ bf16(0.5)
     let bfOver: bf16 = bf16(3.0e38) ^ bf16(2.0)
     println(bitsOfBf16(bfRoot), f32(bfRoot), is_inf(bfOver), bitsOfBf16(bfOver))
-
+    
     // ---- the same seven probes at f16 ----
     let f16Ten: f16 = f16(2.0) ^ f16(10.0)
     let f16Cubic: f16 = f16(1.5) ^ f16(3.0)
@@ -121,24 +122,25 @@ func main(): int sync {
         bitsOfF16(f16Cubic),
         bitsOfF16(f16Inverse),
         bitsOfF16(f16Thousand),
-        bitsOfF16(f16Negative))
+        bitsOfF16(f16Negative)
+    )
     println(f32(f16Ten), f32(f16Cubic), f32(f16Inverse), f32(f16Thousand), f32(f16Negative))
-
+    
     let f16Root: f16 = f16(3.0) ^ f16(0.5)
     let f16Over: f16 = f16(3.0e4) ^ f16(2.0)
     println(bitsOfF16(f16Root), f32(f16Root), is_inf(f16Over), bitsOfF16(f16Over))
-
+    
     // ---- the result's element type is the operands', not f32 ----
     // Two bytes an element: three bf16 results are six bytes, three f16 results six, and an
     // operator answering in f32 would make both twelve.
     let bfResults: bf16[] = [bfTen, bfCubic, bfRoot]
     let f16Results: f16[] = [f16Ten, f16Cubic, f16Root]
     println(len(to_bytes(bfResults)), len(to_bytes(f16Results)))
-
+    
     // ---- the same expression in f32, rounded once into the element type ----
     println(bf16AgreesWithF32(bf16(3.0), bf16(0.5)), f16AgreesWithF32(f16(3.0), f16(0.5)))
     println(bf16AgreesWithF32(bf16(10.0), bf16(3.0)), f16AgreesWithF32(f16(10.0), f16(3.0)))
-
+    
     // ---- the exact power in f64, within one rounding's relative bound ----
     println(bf16WithinEps(bf16(3.0), bf16(0.5)), f16WithinEps(f16(3.0), f16(0.5)))
     println(bf16WithinEps(bf16(1.5), bf16(3.0)), f16WithinEps(f16(1.5), f16(3.0)))

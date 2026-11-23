@@ -3,7 +3,7 @@
  * `9`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a = 0o9
     return a
 }

@@ -3,23 +3,23 @@
  * depends on a differentiated parameter. Taking the read as a constant would drop the
  * gradient through `acc` (the true gradient of p0 is 2 * x) without any sign of it.
  */
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
+import { reshape, sum } from tensor
 
 type P = { p0: f64[] }
 
 with <m: P>
-func loss(x: f64[], var acc: f64[]): float sync {
+func loss(x: f64[], var acc: f64[]) => float sync {
     acc = m.p0 * x
     let b = acc * 1.0
     return float(sum(m.p0 * x)) + float(sum(b))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0])
     let m = { p0: reshape<[2]>([0.5, 0.25]) }
     var acc = reshape<[2]>([0.0, 0.0])
     let vg = with_grad(loss)<m>(x, acc)
-    println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
+    println('value {} grad {}'->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

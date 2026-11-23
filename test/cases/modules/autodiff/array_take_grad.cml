@@ -13,21 +13,21 @@
 import { grad } from autodiff
 
 with <xs: float[]>
-func repeated(): float {
+func repeated() => float {
     let raw = [0, 2, 0]
     let r = xs[raw as int[3]]
     return r[0] * 2.0 + r[1] * 3.0 + r[2] * 5.0
 }
 
 with <xs: float[]>
-func pair(): float {
+func pair() => float {
     let raw = [4, 1]
     let r = xs[raw as int[2]]
     return r[0] * 2.0 + r[1] * 3.0
 }
 
 with <xs: float[]>
-func ofTake(): float {
+func ofTake() => float {
     let raw = [2, 0]
     let r = xs[raw as int[2]]
     let here = [0, 1]
@@ -35,17 +35,24 @@ func ofTake(): float {
     return s[0] * 4.0 + s[1] * 7.0
 }
 
-func square(v: float): float {
+func square(v: float) => float {
     return v * v
 }
 
 // The squared distance between a gradient of five elements and an expected adjoint, written out
 // element by element: the language has no array arithmetic that could hide a mistake in it.
-func distance(g: float[], e0: float, e1: float, e2: float, e3: float, e4: float): float {
+func distance(
+    g: float[],
+    e0: float,
+    e1: float,
+    e2: float,
+    e3: float,
+    e4: float
+) => float {
     return square(g[0] - e0) + square(g[1] - e1) + square(g[2] - e2) + square(g[3] - e3) + square(g[4] - e4)
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1.0, 2.0, 3.0, 4.0, 5.0]
     let g1 = grad(repeated)<xs>()
     let g2 = grad(pair)<xs>()
@@ -57,6 +64,7 @@ func main(): int sync {
         distance(g1, 7.0, 0.0, 3.0, 0.0, 0.0),
         distance(g2, 0.0, 3.0, 0.0, 0.0, 2.0),
         distance(g3, 7.0, 0.0, 4.0, 0.0, 0.0),
-        nonzero>->println
+        nonzero
+    >->println
     return 0
 }

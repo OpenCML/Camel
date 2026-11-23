@@ -15,11 +15,11 @@
 
 import { rendezvous } from test_support
 
-func leaf(): int sync {
+func leaf() => int sync {
     return rendezvous(2, 5.0) - 1
 }
 
-func tree(depth: int): int {
+func tree(depth: int) => int {
     return if depth == 0 then leaf() else {
         let l = tree(depth - 1)
         let r = tree(depth - 1)
@@ -27,7 +27,7 @@ func tree(depth: int): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println('leaves that met a peer: {} of 8'->format<tree(3)>)
     return 0
 }

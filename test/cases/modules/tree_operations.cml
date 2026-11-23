@@ -1,27 +1,50 @@
-import { tree_map, tree_unzip, tree_reduce } from tree
 import { tree_leaves } from ckpt
+import { tree_map, tree_unzip, tree_reduce } from tree
 import { tree_paths } from tree
-func twice::<T>(x: T): T { return x + x }
-func bump(x: int): int { return x + 1 }
-func bump(x: float): float { return x + 0.5 }
-func main(): int sync {
+
+func twice::<T>(x: T) => T {
+    return x + x
+}
+func bump(x: int) => int {
+    return x + 1
+}
+func bump(x: float) => float {
+    return x + 0.5
+}
+func main() => int sync {
     let p = { w: 3.0, block: (4.0, 5.0) }
-    println(tree_map<func (a: float, b: float) => float { a + b }>(p, p))
+    println(tree_map<func (a: float, b: float) => float {
+        a + b
+    }>(p, p))
     println(tree_map<twice>({ count: 2, weight: 1.5 }))
     println(tree_map<bump>({ count: 2, weight: 1.5 }))
-    let r = tree_map<func (a: float, b: float) { (a + b, a - b, a * b) }>(p, p)
+    let r = tree_map<func (a: float, b: float) {
+        (a + b, a - b, a * b)
+    }>(p, p)
     println(tree_unzip(r, p))
     // A secondary tree's aggregate at a reference leaf is a whole argument.
-    println(tree_map<func (a: float, b: (float, float)) => float { a + b.0 + b.1 }>(p, tree_map<func (a: float) { (a, a) }>(p)))
-    println(tree_reduce<func (acc: float, x: float) => float { acc - x }>(p, 20.0))
+    println(tree_map<func (a: float, b: (float, float)) => float {
+        a + b.0 + b.1
+    }>(p, tree_map<func (a: float) {
+        (a, a)
+    }>(p)))
+    println(tree_reduce<func (acc: float, x: float) => float {
+        acc - x
+    }>(p, 20.0))
     println(tree_leaves(p))
     println(tree_paths(p))
-    println(tree_map<func (a: int[]) => int { len(a) }>({ samples: [1, 2, 3] }))
-    println(tree_reduce<func (a: float, b: float) => float { a + b }>((10000000000000000.0, -10000000000000000.0, 1.0), 0.0))
+    println(tree_map<func (a: int[]) => int {
+        len(a)
+    }>({ samples: [1, 2, 3] }))
+    println(tree_reduce<func (a: float, b: float) => float {
+        a + b
+    }>((10000000000000000.0, -10000000000000000.0, 1.0), 0.0))
     // A tree may itself be a tuple: the same-shape comprehension covers the tuple kind, and
     // `tree_unzip` reads the leaf-tuple arity from `typeof`, not from a sample value.
     println(tree_paths((1, (2.0, 3.0))))
     println(tree_map<bump>((1, (2, 3))))
-    println(tree_unzip(tree_map<func (a: int) { (a, a + 1) }>({ x: 1, y: (2, 3) }), { x: 0, y: (0, 0) }))
+    println(tree_unzip(tree_map<func (a: int) {
+        (a, a + 1)
+    }>({ x: 1, y: (2, 3) }), { x: 0, y: (0, 0) }))
     return 0
 }

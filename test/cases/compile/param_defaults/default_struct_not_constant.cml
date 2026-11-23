@@ -6,10 +6,10 @@
 
 type Point = { x: int, y: int }
 
-func shift(q: Point, p: Point = { x: 3, y: 4 }): int {
+func shift(q: Point, p: Point = { x: 3, y: 4 }) => int {
     return q.x + p.x + q.y + p.y
 }
 
-func main(): int sync {
+func main() => int sync {
     return shift({ x: 1, y: 1 })
 }

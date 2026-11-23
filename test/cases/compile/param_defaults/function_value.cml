@@ -4,11 +4,11 @@
  * value with one argument is a call that leaves a parameter without a value.
  */
 
-func f(a: int, b: int = 2): int {
+func f(a: int, b: int = 2) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = f
     return g(1)
 }

@@ -15,15 +15,15 @@
 // (`transpose_loop_escape.two_values_of_two_kinds`), through the same `CALL` a two-parameter
 // member would take: `jvp(sq)(2.0, 1.0)` builds one `CALL` with the value on a `WITH` edge and two
 // arguments on `NORM` edges (`function_values.a_two_argument_call_of_an_operator_answer`).
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func read_outer(x: float): float {
+func read_outer(x: float) => float {
     let k = x * x
-    return loop s = x for i in 0..3 do 2.0 * s + k + x
+    return loop s = x for i in 0 .. 3 do 2.0 * s + k + x
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(read_outer)
     println(back(1.0, 1.0))
     println(transpose(read_outer)(1.0, 1.0))

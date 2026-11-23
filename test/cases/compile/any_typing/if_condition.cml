@@ -2,11 +2,11 @@ import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
 // bool. It is a `Json` now, and a condition is a bool.
-func check(a: Json): int sync {
+func check(a: Json) => int sync {
     println(if a then 1 else 2)
     return 0
 }
 
-func main(): int sync {
-    return decode('true') -> check !! 1
+func main() => int sync {
+    return decode('true')->check !! 1
 }

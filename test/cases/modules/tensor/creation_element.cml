@@ -4,7 +4,7 @@
  */
 import { zeros, ones, eye } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let a: f32[2, 2] = ones([2, 2])
     let b = zeros::<f64>([3])
     let c = eye::<i32>(2)

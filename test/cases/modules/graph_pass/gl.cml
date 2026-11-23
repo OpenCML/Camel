@@ -5,13 +5,13 @@
 
 let two = 2
 
-func ten(): int {
+func ten() => int {
     return 10
 }
 
 let twelve = two + ten()
 
-export func apply::<F>(p: F): F! sync {
+export func apply::<F>(p: F) => F! sync {
     println(two, twelve)
     return p
 }

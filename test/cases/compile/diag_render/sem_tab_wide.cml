@@ -1,4 +1,4 @@
-func main(): int sync {
-	let s = '中文字符' + nope	// 注释
-	return 0
+func main() => int sync {
+    let s = '中文字符' + nope // 注释
+    return 0
 }

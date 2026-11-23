@@ -1,10 +1,10 @@
-func seven(): int {
+func seven() => int {
     return 7
 }
 
 let k = seven()
 
-func main(): int sync {
+func main() => int sync {
     println(k)
     return 0
 }

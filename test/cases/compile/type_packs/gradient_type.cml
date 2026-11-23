@@ -25,32 +25,32 @@
  * The last line is the number, and it is the same number as before this type had a name: the point
  * of the case is that naming the derivative changed nothing about taking it.
  */
-import { FirstOf, Gradient, is_same, WithOf } from types
 import { grad } from autodiff
 import { reshape } from tensor
+import { FirstOf, Gradient, is_same, WithOf } from types
 
 // A weight that is a tensor: the derivative returns a value of the weight's shape, which is what
 // makes `Gradient<Loss>` different from `Loss`. With a `float` weight the two would coincide, and
 // the "not the function" judgment below would be about a case that cannot separate them.
-type Loss = <w: f64[2]> (x: float) => float
+type Loss = <w: f64[2]>(x: float) => float
 
 // `Gradient<Loss>` written out in full, as a type of its own so the comparison names two spellings:
 // the `with` list, the parameters, and the cotangent of the weight.
-type LossDerivative = <w: f64[2]> (x: float) => f64[2]
+type LossDerivative = <w: f64[2]>(x: float) => f64[2]
 
 with <w: f64[2]>
-func loss(x: float): float {
+func loss(x: float) => float {
     return w[0] * x + w[1] * x
 }
 
-func main(): int sync {
+func main() => int sync {
     // A value whose type is `Gradient<F>`. The engine's `grad` answers the gradient function, and
     // the annotation says that function's type is the computed one; the two have to be one type.
     let g: Gradient<Loss> = grad(loss)
-
+    
     let w = reshape<[2]>([3.0, 4.0])
     let x = 2.0
-
+    
     println(is_same::<FirstOf<WithOf<Loss>>, f64[2]>())
     println(is_same::<Gradient<Loss>, LossDerivative>())
     println(is_same::<Gradient<Loss>, Gradient<Loss>>())

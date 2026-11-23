@@ -6,7 +6,7 @@
  * compiles.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('0', len('\0'))
     println('x41', len('\x41'), '\x41')
     println('u', len('\u{1F600}'))

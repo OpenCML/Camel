@@ -24,26 +24,26 @@ type PairTangent = Tangent<(float, float)>
 
 type Holder = { t: Tangent<(float, float)>, n: int }
 
-func take(t: Tangent<(float, int)>): string {
+func take(t: Tangent<(float, int)>) => string {
     return 'ok'
 }
 
 /// The subject after `match type` is a type expression, and so is the `case` pattern.
-func kind_of::<T>(): string {
+func kind_of::<T>() => string {
     return match type Tangent<T> {
-        case (float, ()) => 'float and unit'
-        case (float, float) => 'two floats'
+        case (float,()) => 'float and unit'
+        case (float,float) => 'two floats'
         case _ => 'other'
     }
 }
 
 /// A tuple read back from the type after `fields`: `Tangent<(float, float)>` is `(float, float)`,
 /// whose members the rounds walk.
-func zeros(): Tangent<(float, float)> {
+func zeros() => Tangent<(float, float)> {
     return Tangent<(float, float)> { static for n, _ in fields Tangent<(float, float)> do 0.0 }
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: Tangent<(float, int)> = (1.0, ())
     println(take(v))
     println(v)

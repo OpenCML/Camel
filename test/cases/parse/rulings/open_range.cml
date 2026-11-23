@@ -9,10 +9,10 @@
  * which is the token the parser used to take for the missing operand.
  */
 
-func inc(x: int): int { return x + 1 }
-func dbl(x: int): int { return x * 2 }
+func inc(x: int) => int { return x + 1 }
+func dbl(x: int) => int { return x * 2 }
 
-func main(): int {
+func main() => int {
     let bounded = 1..4
     let composed = inc..dbl
     let open = 1..

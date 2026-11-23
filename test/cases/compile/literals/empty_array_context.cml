@@ -8,40 +8,40 @@
 
 type Box = { xs: int[] }
 
-func takes(xs: float[]): int {
+func takes(xs: float[]) => int {
     return len(xs)
 }
 
-func squares(n: int): int[] sync {
+func squares(n: int) => int[] sync {
     // The function's declared return type is the loop's position: `acc` is an `int[]`.
-    loop acc = [] for i in 0..n do acc->append<i * i>
+    loop acc = [] for i in 0 .. n do acc->append<i * i>
 }
 
-func halves(): float[] sync {
+func halves() => float[] sync {
     let out: float[] = loop acc = [] for x in [1.0, 2.0, 3.0] do acc->append<x / 2.0>
     return out
 }
 
-func inferred(n: int): int[] sync {
+func inferred(n: int) => int[] sync {
     // No expected type here: the value the body appends gives the state its element type.
-    let squares = loop acc = [] for i in 0..n do acc->append<i * i>
+    let squares = loop acc = [] for i in 0 .. n do acc->append<i * i>
     return squares
 }
 
-func main(): int sync {
+func main() => int sync {
     // A cast: the same literal with the element type of the cast.
     let none = [] as int[]
     println(len(none))
     println(squares(4))
     println(halves())
     println(inferred(4))
-
+    
     // A declaration types it, and an array of it is an array of arrays.
     let empty: string[] = []
     let nested: int[][] = [[]]
     println(len(empty))
     println(nested)
-
+    
     // A struct field and a parameter type it by position as well.
     let box = { xs: [] }
     println(len(box.xs))

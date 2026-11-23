@@ -5,9 +5,11 @@
  */
 
 with <k: f32>
-func scale(x: f32): f32 { return x * k }
+func scale(x: f32) => f32 {
+    return x * k
+}
 
-func main(): int sync {
+func main() => int sync {
     let n = 2
     let s = scale<n>
     println(s(3.0))

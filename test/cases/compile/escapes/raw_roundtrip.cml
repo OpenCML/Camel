@@ -4,11 +4,11 @@
  * lengths. test/tools/roundtrip-compare.mjs compares the two runs.
  */
 
-func main(): int sync {
-    let path = "C:\\dir\\file"
+func main() => int sync {
+    let path = 'C:\\dir\\file'
     println(path)
     println(len(path))
-    let mixed = "a\\b\"c\n"
+    let mixed = 'a\\b\"c\n'
     println(len(mixed))
     return 0
 }

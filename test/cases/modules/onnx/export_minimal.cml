@@ -5,18 +5,20 @@
  * must not compare it with the program that is running.
  */
 
-import { reshape } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape } from tensor
 
-func f(x: float[...]): float[...] {
+func f(x: float[...]) => float[...] {
     return x * 2.0
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let x = reshape<[2]>([1.0, 2.0])
     return match export_model<out: get_env('ONNX_OUT') ?? ''>(f, x) {
-        case error e => { return e }
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

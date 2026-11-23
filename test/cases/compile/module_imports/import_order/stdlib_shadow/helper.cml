@@ -4,6 +4,6 @@
 
 import graph
 
-export func answer(): int {
+export func answer() => int {
     return graph::answer()
 }

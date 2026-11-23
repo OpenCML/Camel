@@ -2,10 +2,10 @@
  * The caller imports the type and the generic function, but not the module's operators: the
  * instance still finds `+`, `==` and `!=` in the module that declares `Box`.
  */
-import { mk } from models
 import { twice, same, differs } from gen
+import { mk } from models
 
-func main(): int sync {
+func main() => int sync {
     let b = twice(mk(2))
     println(b.v)
     println(same(mk(1), mk(1)))

@@ -4,22 +4,22 @@
 
 type Tree<T> = enum {
     Leaf(T),
-    Node { left: Tree<T>, right: Tree<T> },
+    Node { left: Tree<T>, right: Tree<T> }
 }
 
 type Maybe = enum {
     None,
-    Some(Maybe?),
+    Some(Maybe?)
 }
 
 type Nest = enum {
     Leaf(int),
-    More(Nest[]),
+    More(Nest[])
 }
 
-func main(): int sync {
-    let t1: Tree<int> = Tree::Node { left: Tree::Leaf(1), right: Tree::Leaf(2) }
-    let t2: Tree<int> = Tree::Node { left: Tree::Leaf(1), right: Tree::Leaf(3) }
+func main() => int sync {
+    let t1: Tree<int> = Tree::Node{ left: Tree::Leaf(1), right: Tree::Leaf(2) }
+    let t2: Tree<int> = Tree::Node{ left: Tree::Leaf(1), right: Tree::Leaf(3) }
     println(t1)
     println(t1 == t2)
     let m = Maybe::Some(Maybe::Some(Maybe::None))

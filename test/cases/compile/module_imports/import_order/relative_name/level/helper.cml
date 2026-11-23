@@ -5,6 +5,6 @@
 
 import ..lib
 
-export func name(): string {
-    return "helper+" + lib::name()
+export func name() => string {
+    return 'helper+' + lib::name()
 }

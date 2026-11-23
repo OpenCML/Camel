@@ -14,22 +14,22 @@
 // `deep`) times the cotangent handed in, read at two different cotangents -- a reading that only
 // asked for one number could not tell a slope from a constant. `deep` is `chain` with one more
 // multiply on top, so the node a rewrite adds is not the last one on the chain.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func linear(x: float): float {
+func linear(x: float) => float {
     return 2.0 * x + 3.0 * x
 }
 
-func chain(x: float): float {
+func chain(x: float) => float {
     return (x * 2.0 + x * 3.0) * 4.0
 }
 
-func deep(x: float): float {
+func deep(x: float) => float {
     return ((x * 2.0 + x * 3.0) * 4.0) * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let back_linear = transpose(linear)
     let back_chain = transpose(chain)
     let back_deep = transpose(deep)

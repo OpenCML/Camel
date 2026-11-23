@@ -4,11 +4,11 @@
  * follows, rather than looping until the build runs out of stack.
  */
 
-func spin(n: int): int {
+func spin(n: int) => int {
     return spin(n + 1)
 }
 
-func main(): int {
+func main() => int {
     let xs = (1, 2)
     return xs.[spin(0)]
 }

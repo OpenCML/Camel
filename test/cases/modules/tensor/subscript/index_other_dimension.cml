@@ -12,14 +12,14 @@
  */
 import { reshape, shape, sum } from tensor
 
-func column(a: f32[2]): float {
+func column(a: f32[2]) => float {
     return float(sum(a))
 }
 
-func main(): int sync {
+func main() => int sync {
     println('reached')
     let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     println(shape(m[.., 0]))
-    println("value={}"->format<column(m[.., 0])>)
+    println('value={}'->format<column(m[.., 0])>)
     return 0
 }

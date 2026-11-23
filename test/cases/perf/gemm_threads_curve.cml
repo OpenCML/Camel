@@ -45,16 +45,22 @@ type Shapes = {
 
 /// The canonical algorithm: `#strict` withholds every permission, the library GEMM included.
 #strict
-func exact(a: f32[...], b: f32[...]): f32[...] {
+func exact(a: f32[...], b: f32[...]) => f32[...] {
     return a @ b
 }
 
 /// The default policy: `tensor::fuse` records this product as the library GEMM's.
-func fast(a: f32[...], b: f32[...]): f32[...] {
+func fast(a: f32[...], b: f32[...]) => f32[...] {
     return a @ b
 }
 
-func time_fast(round: int, label: string, a: f32[...], b: f32[...], reps: int): void sync {
+func time_fast(
+    round: int,
+    label: string,
+    a: f32[...],
+    b: f32[...],
+    reps: int
+) => void sync {
     let warm = fast(a, b)
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
@@ -62,11 +68,16 @@ func time_fast(round: int, label: string, a: f32[...], b: f32[...], reps: int): 
         return (i + 1, s + float(sum(product)))
     }
     let elapsed = now() - started
-    'gemm_threads_curve round={} t={} shape={} path=library ms={} checksum={}'->format<
-        round, num_threads(), label, elapsed * 1000.0 / float(reps), measured.1>->println
+    'gemm_threads_curve round={} t={} shape={} path=library ms={} checksum={}'->format<round, num_threads(), label, elapsed * 1000.0 / float(reps), measured.1>->println
 }
 
-func time_exact(round: int, label: string, a: f32[...], b: f32[...], reps: int): void sync {
+func time_exact(
+    round: int,
+    label: string,
+    a: f32[...],
+    b: f32[...],
+    reps: int
+) => void sync {
     let warm = exact(a, b)
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
@@ -74,42 +85,41 @@ func time_exact(round: int, label: string, a: f32[...], b: f32[...], reps: int):
         return (i + 1, s + float(sum(product)))
     }
     let elapsed = now() - started
-    'gemm_threads_curve round={} t={} shape={} path=canonical ms={} checksum={}'->format<
-        round, num_threads(), label, elapsed * 1000.0 / float(reps), measured.1>->println
+    'gemm_threads_curve round={} t={} shape={} path=canonical ms={} checksum={}'->format<round, num_threads(), label, elapsed * 1000.0 / float(reps), measured.1>->println
 }
 
 /// Every shape at one thread count. Explicit calls rather than a loop over the shapes: each shape
 /// is a different extent, and a reader sees which extents a point of the curve belongs to.
-func curve_at(round: int, shapes: Shapes, t: int, reps: int): void sync {
+func curve_at(round: int, shapes: Shapes, t: int, reps: int) => void sync {
     set_num_threads(t)
-
+    
     time_fast(round, '1024x1024x1024', shapes.cube_a, shapes.cube_b, reps)
     time_exact(round, '1024x1024x1024', shapes.cube_a, shapes.cube_b, reps)
-
+    
     time_fast(round, '2048x1024x1024', shapes.forward_a, shapes.forward_b, reps)
     time_exact(round, '2048x1024x1024', shapes.forward_a, shapes.forward_b, reps)
-
+    
     time_fast(round, '2048x1024x2048', shapes.forward_a, shapes.up_b, reps)
     time_exact(round, '2048x1024x2048', shapes.forward_a, shapes.up_b, reps)
-
+    
     time_fast(round, '1024x2048x1024', shapes.gradient_a, shapes.gradient_b, reps)
     time_exact(round, '1024x2048x1024', shapes.gradient_a, shapes.gradient_b, reps)
-
+    
     // A batch of four large products: the batch loop splits over the pool, so this is the shape
     // where the library must not take the budget a second time.
     time_fast(round, '4x1024x1024x1024', shapes.batch_a, shapes.batch_b, reps)
     time_exact(round, '4x1024x1024x1024', shapes.batch_a, shapes.batch_b, reps)
-
+    
     // The batched attention product of the d=1024 sweep: below 2^30 per call, canonical either way.
     time_fast(round, '32x64x64x16x64', shapes.attention_q, shapes.attention_k, reps)
     time_exact(round, '32x64x64x16x64', shapes.attention_q, shapes.attention_k, reps)
-
+    
     // The d=256 sweep's largest projection.
     time_fast(round, '512x256x512', shapes.small_a, shapes.small_b, reps)
     time_exact(round, '512x256x512', shapes.small_a, shapes.small_b, reps)
 }
 
-func main(rounds: int, reps: int): int sync {
+func main(rounds: int, reps: int) => int sync {
     let shapes = {
         cube_a: zeros::<f32>([1024, 1024]) + 0.001,
         cube_b: zeros::<f32>([1024, 1024]) + 0.001,

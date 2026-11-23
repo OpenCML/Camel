@@ -4,7 +4,7 @@
  * says so and points at `int(s)` / `parse_int(s)`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x: int = '42'
     println(x)
     return 0

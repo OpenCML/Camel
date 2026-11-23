@@ -11,23 +11,23 @@
  */
 import { argmax, argmin, max, min } from tensor
 
-func wholeMax(t: f32[]): f32 {
+func wholeMax(t: f32[]) => f32 {
     return max(t)
 }
 
-func wholeMin(t: f32[]): f32 {
+func wholeMin(t: f32[]) => f32 {
     return min(t)
 }
 
-func wholeArgMax(t: f32[]): int {
+func wholeArgMax(t: f32[]) => int {
     return argmax(t)
 }
 
-func wholeArgMin(t: f32[]): int {
+func wholeArgMin(t: f32[]) => int {
     return argmin(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     let none: f32[0] = []
     println(attempt(wholeMax)(none))
     println(attempt(wholeMin)(none))

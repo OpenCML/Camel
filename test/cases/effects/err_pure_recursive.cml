@@ -5,11 +5,11 @@
  * (design principles 3.3).
  */
 
-func countdown(n: int): int pure {
+func countdown(n: int) => int pure {
     println(n)
     return if n <= 0 then 0 else countdown(n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     return countdown(2)
 }

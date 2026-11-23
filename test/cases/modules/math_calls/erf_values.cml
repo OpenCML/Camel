@@ -5,7 +5,7 @@
  */
 import { erf, erfc, round } from math
 
-func main(): int sync {
+func main() => int sync {
     let a = 0.5
     let b = -1.0
     let c = 2.0

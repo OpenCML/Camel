@@ -20,15 +20,15 @@
  */
 import { vjp } from vjp
 
-func sqf(x: f32): f32 {
+func sqf(x: f32) => f32 {
     return x * x
 }
 
-func sqd(x: float): float {
+func sqd(x: float) => float {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     'pullback f32  f(3) ct=1   -> {}'->format<vjp(sqf)(3.0).1(1.0).0>->println
     'pullback float f(3) ct=1  -> {}'->format<vjp(sqd)(3.0).1(1.0).0>->println
     'pullback f32  f(3) ct=2   -> {}'->format<vjp(sqf)(3.0).1(2.0).0>->println

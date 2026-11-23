@@ -2,26 +2,26 @@
  * Refused: the variable is read in a function the differentiated function calls. What the
  * variable holds when the callee runs is not known there.
  */
-import { reshape, sum } from tensor
 import { with_grad } from autodiff
+import { reshape, sum } from tensor
 
 type P = { p0: f64[...] }
 
-func peek(var acc: f64[]): f64[...] {
+func peek(var acc: f64[]) => f64[...] {
     return acc * 1.0
 }
 
 with <m: P>
-func loss(x: f64[...], var acc: f64[]): float sync {
+func loss(x: f64[...], var acc: f64[]) => float sync {
     let b = peek(acc)
     return float(sum(m.p0 * x)) + float(sum(b))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0])
     let m = { p0: reshape<[2]>([0.5, 0.25]) }
     var acc = reshape<[2]>([0.0, 0.0])
     let vg = with_grad(loss)<m>(x, acc)
-    println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
+    println('value {} grad {}'->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

@@ -40,22 +40,22 @@ import { vjp } from vjp
 
 /// The engine's route for `d/dx`: the differentiated value is the `with` parameter.
 with <x: float[3]>
-func total_x(): float {
+func total_x() => float {
     return sum(x * ([2.0] as float[1]))
 }
 
 /// The engine's route for `d/dw`: the same function with the other operand differentiated.
 with <w: float[1]>
-func total_w(): float {
+func total_w() => float {
     return sum(([1.0, 2.0, 3.0] as float[3]) * w)
 }
 
 /// The library's route: both operands are parameters, so one `vjp` answers both cotangents.
-func total(x: float[3], w: float[1]): float {
+func total(x: float[3], w: float[1]) => float {
     return sum(x * w)
 }
 
-func main(): int sync {
+func main() => int sync {
     let gx = grad(total_x)
     let ex = gx<[1.0, 2.0, 3.0] as float[3]>()
     `engine d/dx numel={} d/dx={}`->format<numel(ex), ex>->println

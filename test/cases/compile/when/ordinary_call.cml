@@ -5,15 +5,15 @@
  * at compile time).
  */
 
-func is_positive(x: int): bool {
+func is_positive(x: int) => bool {
     return x > 0
 }
 
-func bump(x: int): int when is_positive(1) {
+func bump(x: int) => int when is_positive(1) {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bump(41))
     return 0
 }

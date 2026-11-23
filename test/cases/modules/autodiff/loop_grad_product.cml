@@ -7,11 +7,11 @@
 import { grad, with_grad } from autodiff
 
 with <w: float>
-func f(): float {
+func f() => float {
     return loop acc = 1.0 for k in [1, 2, 3] do acc * w
 }
 
-func main(): int sync {
+func main() => int sync {
     let vg = with_grad(f)<2.0>()
     'loop_grad_product vg={}'->format<vg>->println
     return 0

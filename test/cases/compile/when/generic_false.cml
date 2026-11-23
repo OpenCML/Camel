@@ -4,18 +4,18 @@
  * site names the condition it could not meet.
  */
 
-func is_numeric::<T>(): bool {
+func is_numeric::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 | c64 | c128 => true
         case _ => false
     }
 }
 
-func add::<T>(x: T, y: T): T when is_numeric::<T>() {
+func add::<T>(x: T, y: T) => T when is_numeric::<T>() {
     return x + y
 }
 
-func main(): int sync {
-    println(add("a", "b"))
+func main() => int sync {
+    println(add('a', 'b'))
     return 0
 }

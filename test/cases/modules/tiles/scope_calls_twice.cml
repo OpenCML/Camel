@@ -8,7 +8,7 @@
 import { reshape, sum } from tensor
 
 #gpu
-func scale(x: f32[3]): f32[3] {
+func scale(x: f32[3]) => f32[3] {
     return x * x
 }
 

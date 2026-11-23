@@ -12,7 +12,7 @@ import { is_function } from types
 
 // What a node runs and what type it carries, or `-` where it has none. `op(n)` is the module's own
 // answer to "is this an operator node", so no rendered text is compared to decide it.
-func looks(n: Node): string {
+func looks(n: Node) => string {
     let operator = match op(n) {
         case null => '-'
         case o => op_name(o)
@@ -25,7 +25,7 @@ func looks(n: Node): string {
 }
 
 // Whether the node is a constant carrying the type named.
-func constant_of(n: Node, wanted: string): bool {
+func constant_of(n: Node, wanted: string) => bool {
     let carried = match type_of(n) {
         case null => '-'
         case t => type_name(t)
@@ -34,7 +34,7 @@ func constant_of(n: Node, wanted: string): bool {
 }
 
 // Whether the node runs the printing operator.
-func is_print(n: Node): bool {
+func is_print(n: Node) => bool {
     return match op(n) {
         case null => false
         case o => op_name(o) == ':io/println'
@@ -44,7 +44,7 @@ func is_print(n: Node): bool {
 // Every node of every graph the entry function value reaches. A program is a root graph whose one
 // call goes to the entry function, so its graphs are reached by following calls, never by comparing
 // a graph name.
-func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
+func all_nodes::<F>(p: F) => Node[] when is_function::<F>() {
     return flatten(graphs_of(p)->map<nodes>)
 }
 
@@ -55,59 +55,69 @@ func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
 /// the program's own output and the reading the row existed to make is simply gone -- `break_rate`
 /// answered that way once and the record showed three lines of the program in a row that was supposed
 /// to be a refusal. Every `case null` below returns `error(...)` for that reason.
-func only::<F, K>(p: F, keep: K): Node? when is_function::<K>() {
+func only::<F, K>(p: F, keep: K) => Node? when is_function::<K>() {
     let found = all_nodes(p)->filter<keep>
     return if len(found) == 1 then found[0] else null
 }
 
 // Erases the nodes given and commits: the changed function is the answer.
-func erased::<F>(p: F, hits: Node[]): F! sync {
+func erased::<F>(p: F, hits: Node[]) => F! sync {
     let t = open(p)
-    hits->foreach<func (n: Node) => void { erase(t, n) }>
+    hits->foreach<func (n: Node) => void {
+        erase(t, n)
+    }>
     return commit(t)
 }
 
 // Puts `new` in the place of `old` and commits.
-func swapped::<F>(p: F, old: Node, new: Node): F! sync {
+func swapped::<F>(p: F, old: Node, new: Node) => F! sync {
     let t = open(p)
     replace(t, old, new)
     return commit(t)
 }
 
 /// Lists every node the program is made of: the operator each one runs, and the type it carries.
-export func list::<F>(p: F): F! sync {
-    all_nodes(p)->foreach<func (n: Node) { println(looks(n)) }>
+export func list::<F>(p: F) => F! sync {
+    all_nodes(p)->foreach<func (n: Node) {
+        println(looks(n))
+    }>
     return p
 }
 
 /// Drops every printing call of the program: a rewrite that loses an effect.
-export func drop_print::<F>(p: F): F! sync {
-    let prints = all_nodes(p)->filter<func (n: Node) => bool { is_print(n) }>
+export func drop_print::<F>(p: F) => F! sync {
+    let prints = all_nodes(p)->filter<func (n: Node) => bool {
+        is_print(n)
+    }>
     return if len(prints) == 0 then p else erased(p, prints)
 }
 
 // The `float` constants of one graph.
-func floats_in(g: Graph): Node[] {
-    return nodes(g)->filter<func (n: Node) => bool { constant_of(n, 'float') }>
+func floats_in(g: Graph) => Node[] {
+    return nodes(g)->filter<func (n: Node) => bool {
+        constant_of(n, 'float')
+    }>
 }
 
 // The constants of type `f32[4, 1]` in one graph: the targets the rewrite passes in the rate's place.
-func targets_in(g: Graph): Node[] {
-    return nodes(g)->filter<func (n: Node) => bool { constant_of(n, 'f32[4, 1]') }>
+func targets_in(g: Graph) => Node[] {
+    return nodes(g)->filter<func (n: Node) => bool {
+        constant_of(n, 'f32[4, 1]')
+    }>
 }
 
 // Whether one graph holds both of the constants the rewrite pairs, each exactly once.
-func holds_the_pair(g: Graph): bool {
+func holds_the_pair(g: Graph) => bool {
     return len(floats_in(g)) == 1 && len(targets_in(g)) == 1
 }
 
 // The one graph of the list, or nothing when the count is not one.
-func one_graph(found: Graph[]): Graph? {
+func one_graph(found: Graph[]) => Graph? {
     return if len(found) == 1 then found[0] else null
 }
 
 // The one node of the list, or nothing when the count is not one.
-func one_node(found: Node[]): Node? {
+func one_node(found: Node[]) => Node? {
     return if len(found) == 1 then found[0] else null
 }
 
@@ -126,7 +136,7 @@ func one_node(found: Node[]): Node? {
 /// for one round, and the record printed the program's own output where a refusal belonged. Silence
 /// costs more than a refusal: a refusal names the count it wanted, and a rewrite that quietly declines
 /// to pick names nothing at all.
-export func break_rate::<F>(p: F): F! sync {
+export func break_rate::<F>(p: F) => F! sync {
     let where = graphs_of(p)->filter<holds_the_pair>
     return match one_graph(where) {
         case null => error('InvalidArgument', 'break_rate: no single graph holds the rate and the targets')
@@ -155,12 +165,12 @@ export func break_rate::<F>(p: F): F! sync {
 // region and leaves the body's ordering to `order`, which is exactly where the two cases part.
 
 /// The body every rewrite splices in: it prints, and it hands the printed string on.
-func announce(): string sync {
+func announce() => string sync {
     return println('announced')
 }
 
 /// The type text a node carries, or `-` where it has none.
-func type_text(n: Node): string {
+func type_text(n: Node) => string {
     return match type_of(n) {
         case null => '-'
         case t => type_name(t)
@@ -169,7 +179,7 @@ func type_text(n: Node): string {
 
 /// Whether the node runs the model update of the training step: `step` has one, and no other graph of
 /// the program has any, so this names the graph without reading how it is written.
-func is_update(n: Node): bool {
+func is_update(n: Node) => bool {
     return match op(n) {
         case null => false
         case o => op_name(o) == 'nn:sgd'
@@ -197,7 +207,7 @@ func is_update(n: Node): bool {
 
 /// The training inputs of the entry function: the program's only constant of type `f32[4, 2]`, and it
 /// stands in no chain.
-func is_inputs(n: Node): bool {
+func is_inputs(n: Node) => bool {
     return constant_of(n, 'f32[4, 2]')
 }
 
@@ -213,24 +223,22 @@ func is_inputs(n: Node): bool {
 /// printed the program's own three lines, and `print_appended_reversed` printed them where it should
 /// have been refused. Selecting by a type's *text* is what let a migration change a reading; selecting
 /// by the fact that the value is an array of known element type does not.
-func is_weight_print(n: Node): bool {
+func is_weight_print(n: Node) => bool {
     let ins = inputs(n)
     return if !is_print(n) then false
-        else if len(ins) != 1 then false
-        else shape_text(ins[0]) != null
+    else if len(ins) != 1 then false else shape_text(ins[0]) != null
 }
 
 /// The printing call whose operand is a string the program already holds. `train.cml` has none of that
 /// shape; `train-step-sync.cml` has the one the training step writes.
-func is_literal_print(n: Node): bool {
+func is_literal_print(n: Node) => bool {
     let ins = inputs(n)
     return if !is_print(n) then false
-        else if len(ins) != 1 then false
-        else is_constant(ins[0]) && type_text(ins[0]) == 'string'
+    else if len(ins) != 1 then false else is_constant(ins[0]) && type_text(ins[0]) == 'string'
 }
 
 /// Splices `announce` in at `at` and commits. Whether the print is ordered is `at`'s to say.
-func spliced_at::<F>(p: F, at: Node): F! sync {
+func spliced_at::<F>(p: F, at: Node) => F! sync {
     let t = open(p)
     inline(t, at, announce)
     return commit(t)
@@ -239,8 +247,10 @@ func spliced_at::<F>(p: F, at: Node): F! sync {
 /// 甲: a print added to `main` at a pure node, so the print is unordered against the three prints the
 /// entry function already has. `commit` is expected to refuse it (the conflict check,
 /// `RuntimeDiag::PassEffectOrder`).
-export func print_unordered::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_inputs(n) })
+export func print_unordered::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_inputs(n)
+    })
     return match at {
         case null => error('InvalidArgument', 'print_unordered: no single training-input constant to splice at')
         case a => spliced_at(p, a)
@@ -251,8 +261,10 @@ export func print_unordered::<F>(p: F): F! sync {
 /// pure node -- the statement hands its place over, so the print is ordered there and `commit` is
 /// expected to accept it. The statement it takes over is the entry function's print of the weights,
 /// which is why the edited program prints the announcement where that line was.
-export func print_ordered::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_weight_print(n) })
+export func print_ordered::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_weight_print(n)
+    })
     return match at {
         case null => error('InvalidArgument', 'print_ordered: no single print of the model weights')
         case a => spliced_at(p, a)
@@ -265,9 +277,13 @@ export func print_ordered::<F>(p: F): F! sync {
 /// body therefore lands beside the print instead of taking its place, and `main` prints four lines:
 /// its own three, then this one. `print_unordered` is this edit with the one edge left out, which is
 /// what makes the pair a reading of the check rather than of the print.
-export func print_appended::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_inputs(n) })
-    let last = only(p, func (n: Node) => bool { is_weight_print(n) })
+export func print_appended::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_inputs(n)
+    })
+    let last = only(p, func (n: Node) => bool {
+        is_weight_print(n)
+    })
     return match at {
         case null => error('InvalidArgument', 'print_appended: no single training-input constant to splice at')
         case a => match last {
@@ -285,9 +301,13 @@ export func print_appended::<F>(p: F): F! sync {
 /// The same edit with the one edge the other way round: the announcement is said to run *before*
 /// the print it is ordered against. `commit` is expected to accept it, and the new line is in front
 /// of the line it was ordered against.
-export func print_appended_reversed::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_inputs(n) })
-    let last = only(p, func (n: Node) => bool { is_weight_print(n) })
+export func print_appended_reversed::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_inputs(n)
+    })
+    let last = only(p, func (n: Node) => bool {
+        is_weight_print(n)
+    })
     return match at {
         case null => error('InvalidArgument', 'print_appended_reversed: no single training-input constant to splice at')
         case a => match last {
@@ -306,24 +326,30 @@ export func print_appended_reversed::<F>(p: F): F! sync {
 /// before. A reverse edge against the *last* print puts the new line between two prints and leaves
 /// it unordered against the earlier ones, so the row that can be accepted is the one ordered against
 /// this node.
-func head_print(g: Graph): Node? {
+func head_print(g: Graph) => Node? {
     let prints = nodes(g)->filter<is_print>
-    let heads = prints->filter<func (n: Node) => bool { len(order_inputs(n)->filter<is_print>) == 0 }>
+    let heads = prints->filter<func (n: Node) => bool {
+        len(order_inputs(n)->filter<is_print>) == 0
+    }>
     return if len(heads) == 1 then heads[0] else null
 }
 
 /// The one graph of the program that prints at all: `main`, named by what it does and not by its
 /// spelling. `train.cml`'s other three graphs (`loss`, `step`, `run`) print nothing.
-func printing_graph::<F>(p: F): Graph? when is_function::<F>() {
-    let gs = graphs_of(p)->filter<func (g: Graph) => bool { len(nodes(g)->filter<is_print>) > 0 }>
+func printing_graph::<F>(p: F) => Graph? when is_function::<F>() {
+    let gs = graphs_of(p)->filter<func (g: Graph) => bool {
+        len(nodes(g)->filter<is_print>) > 0
+    }>
     return if len(gs) == 1 then gs[0] else null
 }
 
 /// 甲 prepend: the same splice, ordered *before* the first printing call of `main`. The reverse
 /// direction of `print_appended`, anchored where a reverse edge can be complete: the new line comes
 /// before all three of the program's own lines.
-export func print_prepended::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_inputs(n) })
+export func print_prepended::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_inputs(n)
+    })
     let head = match printing_graph(p) {
         case null => null
         case g => head_print(g)
@@ -357,8 +383,10 @@ export func print_prepended::<F>(p: F): F! sync {
 /// the print. Same edit, same place, two diagnoses -- the one thing about item (1) the move did change,
 /// and it changed it by changing what a call statement is made of. What the move does not leave is a
 /// place for splicing *at* the gradient instead; see the note above `is_inputs`.
-export func step_print::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_update(n) })
+export func step_print::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_update(n)
+    })
     return match at {
         case null => error('InvalidArgument', 'step_print: no single model-update node in the program')
         case a => spliced_at(p, a)
@@ -367,7 +395,7 @@ export func step_print::<F>(p: F): F! sync {
 
 /// Whether the node runs the sum the loss takes of the squared error: `loss` has one, and no other
 /// graph of the program has any.
-func is_sum(n: Node): bool {
+func is_sum(n: Node) => bool {
     return match op(n) {
         case null => false
         case o => op_name(o) == 'tensor:sum'
@@ -377,8 +405,10 @@ func is_sum(n: Node): bool {
 /// The same print in `loss`, whose type declares nothing either but whose body is made of operations
 /// alone: no call whose footprint the analysis cannot name. This is the reading that separates "the
 /// effect check declined this graph" from "the effect check does not run on this build".
-export func loss_print::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_sum(n) })
+export func loss_print::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_sum(n)
+    })
     return match at {
         case null => error('InvalidArgument', 'loss_print: no single sum node in the program')
         case a => spliced_at(p, a)
@@ -388,8 +418,10 @@ export func loss_print::<F>(p: F): F! sync {
 /// 乙对照: the same print added to `step`, in the program whose `step` prints and therefore declares
 /// the write to stdout, and spliced at a statement of `step`'s own chain so it takes that place and is
 /// ordered there. Expected to be accepted. Run it on `train-step-sync.cml`.
-export func step_print_ordered::<F>(p: F): F! sync {
-    let at = only(p, func (n: Node) => bool { is_literal_print(n) })
+export func step_print_ordered::<F>(p: F) => F! sync {
+    let at = only(p, func (n: Node) => bool {
+        is_literal_print(n)
+    })
     return match at {
         case null => error('InvalidArgument', 'step_print_ordered: no single print of a string literal')
         case a => spliced_at(p, a)

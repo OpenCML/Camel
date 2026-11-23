@@ -18,20 +18,20 @@
  * which is the defect this case is about.
  */
 
-import { reshape, sum } from tensor
 import { grad } from autodiff
+import { reshape, sum } from tensor
 
 type Model = { w: float }
 
 with <m: Model>
-func loss(): float {
+func loss() => float {
     let a = [m.w * 2.0, m.w * 3.0]
     let t = reshape<[2]>(a)
     return float(sum(t))
 }
 
 with <w: float[]>
-func weighted_reshape(): float {
+func weighted_reshape() => float {
     let s = reshape<[2, 2]>(w)
     let c = reshape<[2, 2]>([2.0, 3.0, 5.0, 7.0] as f64[])
     return float(sum(s * c))
@@ -39,7 +39,7 @@ func weighted_reshape(): float {
 
 // The squared distance from a four-element gradient to the adjoint written out by hand: the
 // language has no array arithmetic that could hide a mistake in it.
-func distance(g: float[], e0: float, e1: float, e2: float, e3: float): float {
+func distance(g: float[], e0: float, e1: float, e2: float, e3: float) => float {
     let d0 = g[0] - e0
     let d1 = g[1] - e1
     let d2 = g[2] - e2
@@ -47,15 +47,16 @@ func distance(g: float[], e0: float, e1: float, e2: float, e3: float): float {
     return d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3
 }
 
-func main(): int sync {
+func main() => int sync {
     let model = { w: 2.0 }
-    let g     = grad(loss)<model>()
-    let w     = [1.0, 2.0, 3.0, 4.0]
-    let gw    = grad(weighted_reshape)<w>()
+    let g = grad(loss)<model>()
+    let w = [1.0, 2.0, 3.0, 4.0]
+    let gw = grad(weighted_reshape)<w>()
     'adjoint_reshape_array grad={:.1f} trap={:.1f} gw={} gw_d={:.1f}'->format<
         g.w,
         12.0 * g.w,
         gw,
-        distance(gw, 2.0, 3.0, 5.0, 7.0)>->println
+        distance(gw, 2.0, 3.0, 5.0, 7.0)
+    >->println
     return 0
 }

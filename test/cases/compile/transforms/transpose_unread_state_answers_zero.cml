@@ -9,19 +9,19 @@
 // The zero must also be *linear*: a pullback of `2.0` answers `0.0` and not `1.0`, which is what tells
 // a zero answer from the constant `1.0` the same shape answered before this change. `m`, whose state
 // starts at the parameter, is the control: `m(x) = x + 6`, so `m'(x) = 1` and its pullback is `1.0`.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func k(x: float): float {
+func k(x: float) => float {
     let _ = x
     return loop s = 0.0 for i in [1, 2, 3] do s + 2.0
 }
 
-func m(x: float): float {
+func m(x: float) => float {
     return loop s = x for i in [1, 2, 3] do s + 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println('k value=', k(3.0))
     let back = transpose(k)
     println('k pullback(1.0)=', back(1.0))

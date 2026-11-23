@@ -4,7 +4,7 @@
  */
 import { zeros } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let x = zeros([2])
     println(x)
     return 0

@@ -65,14 +65,14 @@
  * text rather than a tolerance.
  */
 import rulesets.jvp
-import { jvp } from transforms
 import { layer_norm } from tensor
+import { jvp } from transforms
 
-func normed(x: float[...], gamma: float[...], beta: float[...]): float[...] {
+func normed(x: float[...], gamma: float[...], beta: float[...]) => float[...] {
     return layer_norm(x, gamma, beta)
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [[-3.0, 0.0, 3.0], [2.0, 5.0, 8.0]] as float[2, 3]
     let gamma = [1.0, 2.0, -1.0] as float[3]
     let beta = [0.5, -0.5, 1.0] as float[3]

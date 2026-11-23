@@ -12,7 +12,7 @@
 // beside the cotangent: the value the call stands on is then the answer a transform hands back,
 // and no function value is built for it here (`two_arguments_to_a_one_port_member.cml`, the shape
 // the question page names).
-func main(): int sync {
+func main() => int sync {
     let t = (1.0, 2.0)
     println(t(1.0))
     return 0

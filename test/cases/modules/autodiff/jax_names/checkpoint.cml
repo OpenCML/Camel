@@ -10,11 +10,11 @@
  * has nothing to call yet.
  */
 
-func square(x: float): float {
+func square(x: float) => float {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = checkpoint(square)
     println('jax_checkpoint g={}'->format<g(2.0)>)
     return 0

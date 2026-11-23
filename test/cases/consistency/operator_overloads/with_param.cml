@@ -6,6 +6,10 @@
 type M = { v: int }
 
 with <k: int>
-func operator +(a: M, b: M): M { return a }
+func operator +(a: M, b: M) => M {
+    return a
+}
 
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}

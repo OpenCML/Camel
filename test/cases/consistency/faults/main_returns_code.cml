@@ -2,7 +2,7 @@
  * The value main returns is the exit code.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('done')
     return 7
 }

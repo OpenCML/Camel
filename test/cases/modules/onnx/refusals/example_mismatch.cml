@@ -5,10 +5,12 @@
  * type whatever the parameter declares, so this was exported for [2, 3] without a word.
  */
 
-import { reshape } from tensor
 import { export_model } from onnx
+import { reshape } from tensor
 
-func main(): void! sync {
+func main() => void! sync {
     let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[])
-    export_model<out: 'tmp/test/onnx/refusal_example_mismatch.onnx'>(func (x: f32[4, 3]) => f32[...] { x * 2.0 }, ex)
+    export_model<out: 'tmp/test/onnx/refusal_example_mismatch.onnx'>(func (x: f32[4, 3]) => f32[...] {
+        x * 2.0
+    }, ex)
 }

@@ -1,9 +1,12 @@
-import { zeros, sum, abs } from tensor
 import { grad } from autodiff
+import { zeros, sum, abs } from tensor
+
 type Pair = { a: f32[...], b: f32[...] }
 with <p: Pair>
-func loss(): float { return float(sum(p.a + p.b)) }
-func main(): int sync {
+func loss() => float {
+    return float(sum(p.a + p.b))
+}
+func main() => int sync {
     let p = { a: zeros::<f32>([2, 1, 3]), b: zeros::<f32>([1, 4, 1]) }
     let g = grad(loss)<p>()
     println(sum(abs(g.a - 4.0)))

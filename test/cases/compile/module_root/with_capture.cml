@@ -4,11 +4,11 @@
 let k = 10
 
 with <s: int>
-func f(x: int): int {
+func f(x: int) => int {
     return x * s + k
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f<2>(3))
     return 0
 }

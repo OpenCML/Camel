@@ -27,21 +27,21 @@
 //
 //     camel test/cases/compile/transforms/sqrt_gradient_both_legs.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, sqrt, sum } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 with <x: float[...]>
-func total(): float {
+func total() => float {
     return sum(sqrt(x))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[]): float {
+func total_plain(x: float[]) => float {
     return sum(sqrt(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let engine = grad(total)<[4.0, 2.25, 0.25] as float[]>()
     `sqrt engine={}`->format<engine>->println
     let (_, pullback) = vjp(total_plain)([4.0, 2.25, 0.25] as float[])

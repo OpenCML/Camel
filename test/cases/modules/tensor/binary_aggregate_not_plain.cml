@@ -8,7 +8,7 @@ import { to_bytes } from tensor
 
 type Named = { name: string, n: int }
 
-func main(): int sync {
+func main() => int sync {
     let ns: Named[] = [{ name: 'a', n: 1 }]
     println(to_bytes(ns))
     return 0

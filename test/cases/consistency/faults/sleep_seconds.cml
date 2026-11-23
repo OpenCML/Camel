@@ -4,7 +4,7 @@
 
 import { sleep } from process
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     sleep(0.001)
     println('after')

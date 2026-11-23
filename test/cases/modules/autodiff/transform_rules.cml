@@ -14,44 +14,46 @@
  * `jvp`.
  */
 
-import { declaration_tags, graph_of, rule_of, tag_graphs, tag_name } from graph
 import { add_tangent, div_tangent, mul_cotangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
-import { jvp, transpose, vjp } from prelude
+import { declaration_tags, graph_of, rule_of, tag_graphs, tag_name } from graph
 import { Graph, Tag } from graph
+import { jvp, transpose, vjp } from prelude
 
 // A function with all three rules: a linear one, so its transpose and its pullback are the transpose
 // of its own derivative.
-func scale_jvp(x: float, k: float, dx: float, dk: float): float {
+func scale_jvp(x: float, k: float, dx: float, dk: float) => float {
     return dx * k + x * dk
 }
 
-func scale_t(x: float, k: float, ct: float): float {
+func scale_t(x: float, k: float, ct: float) => float {
     return ct * k
 }
 
-#jvp(scale_jvp) #transpose(scale_t) #vjp(scale_t)
-func scale(x: float, k: float): float {
+#jvp(scale_jvp)
+#transpose(scale_t)
+#vjp(scale_t)
+func scale(x: float, k: float) => float {
     return x * k
 }
 
 // A function with one of the three: what a declaration that writes a single rule reads back as.
-func cube_jvp(x: float, dx: float): float {
+func cube_jvp(x: float, dx: float) => float {
     return 3.0 * x * x * dx
 }
 
 #jvp(cube_jvp)
-func cube(x: float): float {
+func cube(x: float) => float {
     return x * x * x
 }
 
-func isRule(of: Graph?, rule: Graph): bool {
+func isRule(of: Graph?, rule: Graph) => bool {
     return match of {
         case null => false
         case g => g == rule
     }
 }
 
-func written(of: Graph?): bool {
+func written(of: Graph?) => bool {
     return match of {
         case null => false
         case g => true
@@ -59,23 +61,24 @@ func written(of: Graph?): bool {
 }
 
 // Whether the tangent agrees with the central difference of the primitive at `x` along `dx`.
-func agrees(tangent: float, difference: float): bool {
+func agrees(tangent: float, difference: float) => bool {
     let gap = tangent - difference
     let size = if gap < 0.0 then -gap else gap
     return size < 0.001
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = graph_of(scale)
     let tags = declaration_tags(g)
-    let read = isRule(rule_of(g, 'jvp'), graph_of(scale_jvp)) &&
-        isRule(rule_of(g, 'transpose'), graph_of(scale_t)) && isRule(rule_of(g, 'vjp'), graph_of(scale_t))
+    let read = isRule(rule_of(g, 'jvp'), graph_of(scale_jvp)) && isRule(rule_of(g, 'transpose'), graph_of(scale_t)) && isRule(rule_of(g, 'vjp'), graph_of(scale_t))
     println('transform_rules read={} tags={} one={}'->format<read, len(tags), isRule(rule_of(graph_of(cube), 'jvp'), graph_of(cube_jvp)) && !written(rule_of(graph_of(cube), 'vjp'))>)
-    println(tags->map<func (t: Tag) => string { tag_name(t) }>)
+    println(tags->map<func (t: Tag) => string {
+        tag_name(t)
+    }>)
     // The first tag's argument is the function written for it, and the name a program writes
     // (`jvp`) and the qualified spelling both find the same rule.
     println('transform_rules graph={} qualified={}'->format<tag_graphs(tags[0])[0] == graph_of(scale_jvp), isRule(rule_of(g, 'prelude::jvp'), graph_of(scale_jvp))>)
-
+    
     // The tangent of each scalar primitive is its derivative.
     let e = 1.0
     let add = add_tangent(3.0, 5.0, 1.0, 0.0) == ((3.0 + e) + 5.0 - ((3.0 - e) + 5.0)) / (2.0 * e)
@@ -86,7 +89,7 @@ func main(): int sync {
     let div_w = agrees(div_tangent(6.0, 4.0, 0.0, 1.0), (6.0 / 4.125 - 6.0 / 3.875) / 0.25)
     let neg = neg_tangent(3.0, 1.0) == (-(3.0 + e) + (3.0 - e)) / (2.0 * e)
     println('transform_rules derivative add={} sub={} mul={} mul_w={} div={} div_w={} neg={}'->format<add, sub, mul_x, mul_w, div_x, div_w, neg>)
-
+    
     // The transpose is the adjoint of the tangent: `<J v, ct> = <v, T ct>`.
     let x = 3.0
     let w = 5.0

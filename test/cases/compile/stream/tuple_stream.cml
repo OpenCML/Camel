@@ -4,19 +4,21 @@
  * `tee` and a loop that carries a stream beside its state both need.
  */
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func pair(s: int..): (int.., int) {
+func pair(s: int..) => (int.., int) {
     return (s, 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let both = pair(count(2))
     println(both.1)
     return 0

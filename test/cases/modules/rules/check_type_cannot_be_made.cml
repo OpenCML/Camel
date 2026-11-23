@@ -17,14 +17,14 @@
  */
 
 import { check, check_text } from rewrite
-import { is_string } from types
 import { add_self } from rules
+import { is_string } from types
 
 rule join::<T>(x: T) when is_string::<T>() { x + 'a' => x }
 
-func main(): int sync {
+func main() => int sync {
     let report = [join, add_self]->check<200, 7>
     print(check_text(report))
-    println("rows", len(report.rows))
+    println('rows', len(report.rows))
     return 0
 }

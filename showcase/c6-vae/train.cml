@@ -11,29 +11,34 @@
 //         --arg lr=0.005 --arg log_every=20 --arg threads=1 std::macro std::nvm
 
 // == imports ==
-import { exp, load_npy, mean, numel, relu, set_num_threads, shape, sum } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state } from nn
+import { exp, load_npy, mean, numel, relu, set_num_threads, shape, sum } from tensor
 import { now } from time
 
 // == model ==
 // Ten tensors: the encoder trunk, two heads (mu and log-variance) and the decoder.
 type Vae = {
-    ew1: f32[...], eb1: f32[...],
-    ewm: f32[...], ebm: f32[...],
-    ewv: f32[...], ebv: f32[...],
-    dw1: f32[...], db1: f32[...],
-    dw2: f32[...], db2: f32[...]
+    ew1: f32[...],
+    eb1: f32[...],
+    ewm: f32[...],
+    ebm: f32[...],
+    ewv: f32[...],
+    ebv: f32[...],
+    dw1: f32[...],
+    db1: f32[...],
+    dw2: f32[...],
+    db2: f32[...]
 }
 
 with <m: Vae>
-func encode(x: f32[...]): (f32[...], f32[...]) {
+func encode(x: f32[...]) => (f32[...], f32[...]) {
     let hidden = relu(x @ m.ew1 + m.eb1)
     return (hidden @ m.ewm + m.ebm, hidden @ m.ewv + m.ebv)
 }
 
 with <m: Vae>
-func decode(z: f32[...]): f32[...] {
+func decode(z: f32[...]) => f32[...] {
     let hidden = relu(z @ m.dw1 + m.db1)
     return hidden @ m.dw2 + m.db2
 }
@@ -42,7 +47,7 @@ func decode(z: f32[...]): f32[...] {
 // Reconstruction is mean squared error per input dimension; KL is the standard Gaussian prior
 // term.  `eps` is one standard-normal sample per row.
 with <m: Vae>
-func loss(x: f32[...], eps: f32[...]): float {
+func loss(x: f32[...], eps: f32[...]) => float {
     let (mu, logvar) = encode<m>(x)
     let z = mu + exp(0.5 * logvar) * eps
     let errors = decode<m>(z) - x
@@ -52,21 +57,26 @@ func loss(x: f32[...], eps: f32[...]): float {
 }
 
 // == data ==
-func load_model(data: string): Vae {
+func load_model(data: string) => Vae {
     let init = data + '/init'
     return {
-        ew1: load_npy::<f32>(init + '/ew1.npy'), eb1: load_npy::<f32>(init + '/eb1.npy'),
-        ewm: load_npy::<f32>(init + '/ewm.npy'), ebm: load_npy::<f32>(init + '/ebm.npy'),
-        ewv: load_npy::<f32>(init + '/ewv.npy'), ebv: load_npy::<f32>(init + '/ebv.npy'),
-        dw1: load_npy::<f32>(init + '/dw1.npy'), db1: load_npy::<f32>(init + '/db1.npy'),
-        dw2: load_npy::<f32>(init + '/dw2.npy'), db2: load_npy::<f32>(init + '/db2.npy')
+        ew1: load_npy::<f32>(init + '/ew1.npy'),
+        eb1: load_npy::<f32>(init + '/eb1.npy'),
+        ewm: load_npy::<f32>(init + '/ewm.npy'),
+        ebm: load_npy::<f32>(init + '/ebm.npy'),
+        ewv: load_npy::<f32>(init + '/ewv.npy'),
+        ebv: load_npy::<f32>(init + '/ebv.npy'),
+        dw1: load_npy::<f32>(init + '/dw1.npy'),
+        db1: load_npy::<f32>(init + '/db1.npy'),
+        dw2: load_npy::<f32>(init + '/dw2.npy'),
+        db2: load_npy::<f32>(init + '/db2.npy')
     }
 }
 
 // == evaluate ==
 // Validation uses the posterior mean (no sampling), so the number does not depend on a fresh
 // epsilon draw.  Returns (reconstruction, KL, total).
-func evaluate(m: Vae, x: f32[...]): (float, float, float) {
+func evaluate(m: Vae, x: f32[...]) => (float, float, float) {
     let (mu, logvar) = encode<m>(x)
     let errors = decode<m>(mu) - x
     let reconstruction = float(mean(sum<1>(errors * errors)))
@@ -74,16 +84,21 @@ func evaluate(m: Vae, x: f32[...]): (float, float, float) {
     return (reconstruction, kl, reconstruction + kl)
 }
 
-func count_params(m: Vae): int {
-    return numel(m.ew1) + numel(m.eb1) + numel(m.ewm) + numel(m.ebm) +
-        numel(m.ewv) + numel(m.ebv) + numel(m.dw1) + numel(m.db1) +
-        numel(m.dw2) + numel(m.db2)
+func count_params(m: Vae) => int {
+    return numel(m.ew1) + numel(m.eb1) + numel(m.ewm) + numel(m.ebm) + numel(m.ewv) + numel(m.ebv) + numel(m.dw1) + numel(m.db1) + numel(m.dw2) + numel(m.db2)
 }
 
 // == entry ==
-func main(data: string, steps: int, batch: int, lr: float, log_every: int, threads: int): int sync {
+func main(
+    data: string,
+    steps: int,
+    batch: int,
+    lr: float,
+    log_every: int,
+    threads: int
+) => int sync {
     set_num_threads(threads)
-
+    
     // == data ==
     let train_x = load_npy::<f32>(data + '/train_x.npy')
     let val_x = load_npy::<f32>(data + '/val_x.npy')
@@ -93,7 +108,7 @@ func main(data: string, steps: int, batch: int, lr: float, log_every: int, threa
     let before = evaluate(initial, val_x)
     `c6 config steps=${steps} batch=${batch} lr=${lr} threads=${threads} params=${count_params(initial)} batches=${batches}`->println
     `c6 init val_loss=${before.2:.9f} recon=${before.0:.9f} kl=${before.1:.9f}`->println
-
+    
     // == train ==
     // The optimizer state is part of the loop state, as in C2.  The noise row for a step is a
     // contiguous slice, so no sampling happens inside the loop.
@@ -102,21 +117,19 @@ func main(data: string, steps: int, batch: int, lr: float, log_every: int, threa
     // The loop carries three states and this declaration wants two of them: `_` is the third, a
     // value dropped on purpose (design principles 3.9), which is also what a name too few has to
     // be written as now.
-    let (trained, optimizer, _) = loop m = initial, opt = adam_state(initial), step = 0
-        while step < steps
-        do sync {
-            let start = (step % batches) * batch
-            let x = slice(train_x, 0, start, start + batch)
-            let eps = slice(noise, 0, step * batch, step * batch + batch)
-            let (value, gradient) = loss_with_grad<m>(x, eps)
-            if step % log_every == 0 then {
-                `c6 step=${step} loss=${value:.9f}`->println
-            }
-            let next = adam(m, gradient, opt, lr)
-            return (next.0, next.1, step + 1)
+    let (trained, optimizer, _) = loop m = initial, opt = adam_state(initial), step = 0 while step < steps do sync {
+        let start = (step % batches) * batch
+        let x = slice(train_x, 0, start, start + batch)
+        let eps = slice(noise, 0, step * batch, step * batch + batch)
+        let (value, gradient) = loss_with_grad<m>(x, eps)
+        if step % log_every == 0 then {
+            `c6 step=${step} loss=${value:.9f}`->println
         }
+        let next = adam(m, gradient, opt, lr)
+        return (next.0, next.1, step + 1)
+    }
     let elapsed = now() - started
-
+    
     // == evaluate ==
     let after = evaluate(trained, val_x)
     `c6 trained steps=${steps} seconds=${elapsed:.6f} val_loss=${after.2:.9f} recon=${after.0:.9f} kl=${after.1:.9f}`->println

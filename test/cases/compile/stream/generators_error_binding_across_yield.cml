@@ -8,23 +8,26 @@
  * returns 0.
  */
 
-func fail(): int! {
-    return error("a8", "broke")
+func fail() => int! {
+    return error('a8', 'broke')
 }
 
-func g(x: int!): string.. sync {
+func g(x: int!) => string.. sync {
     match x {
         case v => {
-            yield "ok"
+            yield 'ok'
         }
         case error e => {
-            yield "!"
+            yield '!'
             yield e.message
         }
     }
 }
 
-func main(): int sync {
-    loop acc = 0 for s in g(fail()) do sync { println(s); acc + 1 }
+func main() => int sync {
+    loop acc = 0 for s in g(fail()) do sync {
+        println(s)
+        acc + 1
+    }
     return 0
 }

@@ -1,9 +1,8 @@
 // A pack stands for the trailing dimensions, so nothing may follow it.
-
-func bad(x: f32[...rest, 3]): int {
+func bad(x: f32[...rest, 3]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

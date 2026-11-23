@@ -6,7 +6,7 @@
 
 import { sleep, user_name, cpu_count } from process
 
-func main(): int sync {
+func main() => int sync {
     sleep(0.0)
     println(user_name() !! '', cpu_count())
     return 0

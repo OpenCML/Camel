@@ -1,13 +1,13 @@
-func r11(a12: int, a13: int): int {
+func r11(a12: int, a13: int) => int {
     return if a12 <= 0 then 0 else r11(0, if (loop s14 = false, c15 = (if false then 0.25 else -1.5) for q16 in [0] while (if s14 then true else false) do (false, 1.0)).0 then a13 - 31 else {
-        return 0-a12;
-    });
+        return 0 - a12
+    })
 }
 
-func main(): int sync {
-    println('');
+func main() => int sync {
+    println('')
     let n67 = loop s60 = float(0), c61 = r11(3, -7) for q62 in [1.0] while false do sync {
-        return (1.0, 0);
-    };
-    return 0;
+        return (1.0, 0)
+    }
+    return 0
 }

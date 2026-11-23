@@ -25,16 +25,16 @@ import { vjp } from vjp
 
 /// The engine's route: the differentiated value is the `with` parameter (design principles 9.9).
 with <x: float[2]>
-func total_of_the_parameter(): float {
+func total_of_the_parameter() => float {
     return sum(tanh(x))
 }
 
 /// The library's route: an ordinary parameter, which is what `vjp` takes.
-func total(x: float[2]): float {
+func total(x: float[2]) => float {
     return sum(tanh(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     let slope = grad(total_of_the_parameter)
     let de = slope<[1.5, -2.0] as float[2]>()
     `tanh stated engine d={}`->format<de>->println

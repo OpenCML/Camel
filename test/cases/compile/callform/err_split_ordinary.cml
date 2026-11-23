@@ -1,6 +1,6 @@
 import { split } from str
 
-func main(): int sync {
+func main() => int sync {
     println(split('a,b', ','))
     return 0
 }

@@ -5,12 +5,12 @@
  */
 
 with <var acc: int>
-func add(n: int): int sync {
+func add(n: int) => int sync {
     acc += n
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     let total = 0
     let r = add<total>(5)
     println(total)

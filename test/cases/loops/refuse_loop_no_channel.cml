@@ -4,12 +4,12 @@
 import { grad } from autodiff
 
 with <w: float>
-func f(): float {
+func f() => float {
     let n = loop i = 0 for k in [1, 2] do i + (if w > 0.0 then 1 else 0)
     return w * float(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(f)<2.0>())
     return 0
 }

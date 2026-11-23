@@ -7,7 +7,7 @@
 // rank-2 value, and a zero, a one or the last extent would each be a silently wrong shape.
 import { dim, zeros } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let t = zeros::<f32>([2, 3])
     println(dim<0>(t))
     println(dim<2>(t))

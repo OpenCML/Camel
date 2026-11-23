@@ -25,11 +25,11 @@
  */
 
 /// The self-written higher-order function: it takes the closure as a value and calls it once.
-func apply(f: (x: int) => int, x: int): int sync {
+func apply(f: (x: int) => int, x: int) => int sync {
     return f(x)
 }
 
-func run(n: int, base: int): int sync {
+func run(n: int, base: int) => int sync {
     let label = 'step'
     let twice = base * 2
     let thrice = base * 3
@@ -47,7 +47,7 @@ func run(n: int, base: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = run(3, 10)
     return 0
 }

@@ -10,12 +10,14 @@
  * loop whose value nobody takes never runs at all, and its body's write with it.
  */
 
-func untaken(): int {
-    if false then { println("never") }
+func untaken() => int {
+    if false then {
+        println('never')
+    }
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     untaken()
     return 0
 }

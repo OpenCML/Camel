@@ -4,6 +4,6 @@
 
 import { rev } from export_lib
 
-export func rev_ints(xs: int[]): int[] {
+export func rev_ints(xs: int[]) => int[] {
     return rev(xs)
 }

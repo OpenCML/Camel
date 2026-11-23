@@ -22,11 +22,11 @@ import rulesets.jvp
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
 
-func f(x: f32, y: f32): f32 {
+func f(x: f32, y: f32) => f32 {
     return x * x * y
 }
 
-func main(): int sync {
+func main() => int sync {
     let fwd = split(jvp(f))
     let (value, lin) = fwd(3.0, 2.0)
     let back = transpose(lin)

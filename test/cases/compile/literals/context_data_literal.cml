@@ -8,14 +8,14 @@
 
 type Point = { x: float, y: float }
 
-func pick(x: f32): int {
+func pick(x: f32) => int {
     return match x {
         case 3 => 1
         case _ => 0
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     // The declared type reaches the elements and the fields.
     let xs: float[] = [1, 2.0]
     let zs: i32[] = [1, 2]

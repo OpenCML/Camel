@@ -27,7 +27,6 @@
 // `save_params` is fixed: it takes a value and a directory, writes the tensor leaves of the value,
 // and returns nothing. A declaration can say that with a type variable over the value.
 
-
 /// The state an optimiser carries between steps; the module provides the type.
 export type OptimizerState
 
@@ -39,4 +38,4 @@ export type OptimizerState
 /// @effect writes files under `dir`
 /// @fails fault `RuntimeError` when the directory cannot be created or a leaf cannot be written
 /// @example save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')
-export func save_params::<P>(params: P, dir: string): void
+export func save_params::<P>(params: P, dir: string) => void

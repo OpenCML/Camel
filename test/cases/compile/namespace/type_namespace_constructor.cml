@@ -3,17 +3,15 @@
  * type-qualified reference.
  */
 
-type Foo = {
-    x: int
-}
+type Foo = { x: int }
 
 namespace Foo {
-    func new(x: int): Foo {
+    func new(x: int) => Foo {
         return { x: x }
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let f = Foo::new(7)
     'type_namespace_constructor x={}'->format<f.x>->println
     return 0

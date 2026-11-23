@@ -2,7 +2,7 @@
  * A literal case cannot be compared with a value that is not opened: TaggedMatchCases.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     let a = 1 as int?
     let s = match a {

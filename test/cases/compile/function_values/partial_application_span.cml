@@ -2,9 +2,11 @@
 // the `let` statement it is written in (1.6, item 4).
 
 with <step: int>
-func inc(x: int): int { return x + step }
+func inc(x: int) => int {
+    return x + step
+}
 
-func main(): int sync {
+func main() => int sync {
     let g = inc<1>
     return g(2)
 }

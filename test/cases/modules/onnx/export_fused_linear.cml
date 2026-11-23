@@ -3,21 +3,25 @@
  * Relu in the ONNX graph, whether tensor::fuse ran or not (design principles 9.6). The exporter
  * has no fused form to translate, so the ONNX graph is the same before and after the pass.
  */
-import { reshape, relu, sum } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, relu, sum } from tensor
 
-func net(x: f32[...]): f32[...] {
+func net(x: f32[...]) => f32[...] {
     let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[])
     let b = reshape<[2]>([0.1, -0.2] as f32[])
     return relu(x @ w + b)
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     println(sum(net(x)))
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] { net(x) }, x) {
-        case error e => { return e }
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
+        net(x)
+    }, x) {
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

@@ -38,12 +38,12 @@
 //         --arg mode=forward --arg steps=0
 //   camel showcase/c3-char-transformer/train.cml --arg corpus=<the same> --arg mode=train --arg steps=20
 
-import { ones, layer_norm, permute, reshape, relu, softmax, take, transpose, zeros } from tensor
+import { read_text } from fs
+import { sqrt } from math
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { fold, key, normal } from random
-import { sqrt } from math
-import { read_text } from fs
 import { codepoints } from str
+import { ones, layer_norm, permute, reshape, relu, softmax, take, transpose, zeros } from tensor
 import { vjp } from vjp
 
 // == shapes ==
@@ -51,44 +51,48 @@ import { vjp } from vjp
 // `permute` take a value here, and a literal is the one shape spelling this program needs to be
 // readable.  `context`, `width` and the rest answer the same numbers for the config line, so a
 // reader can check the two against each other.
-func context(): int {
+func context() => int {
     return 8
 }
 
-func width(): int {
+func width() => int {
     return 16
 }
 
-func heads(): int {
+func heads() => int {
     return 2
 }
 
-func head_width(): int {
+func head_width() => int {
     return 8
 }
 
-func classes(): int {
+func classes() => int {
     return 28
 }
 
 // The alphabet the corpus is written in: space, the lowercase letters, and the period.  A
 // character's class index is its position here, so the encoding is one function and nothing else
 // in the program knows how a character becomes a number.
-func alphabet(): string {
+func alphabet() => string {
     return ' abcdefghijklmnopqrstuvwxyz.'
 }
 
 // The class index of one character code: its position in the alphabet, or 0 (the space) for a
 // character the corpus does not use.
-func class_of(code: int): int {
+func class_of(code: int) => int {
     let letters = codepoints(alphabet())
-    let found = range(0, len(letters), 1)->filter<func (i: int) => bool { letters[i] == code }>
+    let found = range(0, len(letters), 1)->filter<func (i: int) => bool {
+        letters[i] == code
+    }>
     return if len(found) == 0 then 0 else found[0]
 }
 
 // The corpus as class indices, one integer per character.
-func tokens(corpus: string): int[] {
-    return codepoints(corpus)->map<func (code: int) => int { class_of(code) }>
+func tokens(corpus: string) => int[] {
+    return codepoints(corpus)->map<func (code: int) => int {
+        class_of(code)
+    }>
 }
 
 // == model ==
@@ -142,9 +146,11 @@ type Transformer = {
 // The rows of a causal mask: `0` where position `i` may read position `j` (j <= i) and `-1000`
 // where it may not -- a constant of the program, because the mask is a fact about attention and
 // not a parameter.  Row-major over the T x T grid: element `k` is row `k / T`, column `k % T`.
-func causal_mask(): float[...] {
+func causal_mask() => float[...] {
     let n = 8
-    let flat = range(0, n * n, 1)->map<func (k: int) => float { if k % n <= k / n then 0.0 else -1000.0 }>
+    let flat = range(0, n * n, 1)->map<func (k: int) => float {
+        if k % n <= k / n then 0.0 else -1000.0
+    }>
     return reshape<[8, 8]>(flat)
 }
 
@@ -157,9 +163,16 @@ func causal_mask(): float[...] {
 //   mixed  = softmax(scores, last) @ v                         [H, T, Dh]
 //   [H, T, Dh] -> [T, H, Dh] -> [T, D]                         the join
 func attention(
-    x: float[...], wq: float[...], bq: float[...], wk: float[...], bk: float[...],
-    wv: float[...], bv: float[...], wo: float[...], bo: float[...]
-): float[...] {
+    x: float[...],
+    wq: float[...],
+    bq: float[...],
+    wk: float[...],
+    bk: float[...],
+    wv: float[...],
+    bv: float[...],
+    wo: float[...],
+    bo: float[...]
+) => float[...] {
     let q = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wq + bq))
     let k = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wk + bk))
     let v = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wv + bv))
@@ -171,10 +184,24 @@ func attention(
 
 // One post-layer-norm block: attention then a two-layer MLP, each a residual around its sublayer.
 func block(
-    x: float[...], ga: float[...], ba: float[...], wq: float[...], bq: float[...], wk: float[...],
-    bk: float[...], wv: float[...], bv: float[...], wo: float[...], bo: float[...],
-    gb: float[...], bb: float[...], f1: float[...], fb1: float[...], f2: float[...], fb2: float[...]
-): float[...] {
+    x: float[...],
+    ga: float[...],
+    ba: float[...],
+    wq: float[...],
+    bq: float[...],
+    wk: float[...],
+    bk: float[...],
+    wv: float[...],
+    bv: float[...],
+    wo: float[...],
+    bo: float[...],
+    gb: float[...],
+    bb: float[...],
+    f1: float[...],
+    fb1: float[...],
+    f2: float[...],
+    fb2: float[...]
+) => float[...] {
     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
     let hidden = relu(layer_norm(attended, gb, bb) @ f1 + fb1)
     return attended + (hidden @ f2 + fb2)
@@ -182,14 +209,46 @@ func block(
 
 // The forward pass: a window of token indices in, the logits at every position out.
 with <m: Transformer>
-func logits(window: int[...]): float[...] {
+func logits(window: int[...]) => float[...] {
     let embedded = take(m.emb, window) + m.pos
     let first = block(
-        embedded, m.g1a, m.b1a, m.wq1, m.bq1, m.wk1, m.bk1, m.wv1, m.bv1, m.wo1, m.bo1,
-        m.g1b, m.b1b, m.f11, m.fb1, m.f12, m.fb2)
+        embedded,
+        m.g1a,
+        m.b1a,
+        m.wq1,
+        m.bq1,
+        m.wk1,
+        m.bk1,
+        m.wv1,
+        m.bv1,
+        m.wo1,
+        m.bo1,
+        m.g1b,
+        m.b1b,
+        m.f11,
+        m.fb1,
+        m.f12,
+        m.fb2
+    )
     let second = block(
-        first, m.g2a, m.b2a, m.wq2, m.bq2, m.wk2, m.bk2, m.wv2, m.bv2, m.wo2, m.bo2,
-        m.g2b, m.b2b, m.f21, m.fb21, m.f22, m.fb22)
+        first,
+        m.g2a,
+        m.b2a,
+        m.wq2,
+        m.bq2,
+        m.wk2,
+        m.bk2,
+        m.wv2,
+        m.bv2,
+        m.wo2,
+        m.bo2,
+        m.g2b,
+        m.b2b,
+        m.f21,
+        m.fb21,
+        m.f22,
+        m.fb22
+    )
     return layer_norm(second, m.gf, m.bf) @ m.wout + m.bout
 }
 
@@ -197,7 +256,7 @@ func logits(window: int[...]): float[...] {
 // The training loss of one window: the cross-entropy of the logits at each position against the
 // character that follows it, averaged over the positions.  The model is the *first parameter*
 // because that is the parameter `vjp` differentiates.
-func window_loss(m: Transformer, window: int[...], targets: int[...]): float {
+func window_loss(m: Transformer, window: int[...], targets: int[...]) => float {
     return float(softmax_cross_entropy(logits<m>(window), targets))
 }
 
@@ -205,7 +264,7 @@ func window_loss(m: Transformer, window: int[...], targets: int[...]): float {
 // Initial weights from the counter-based generator, so two runs with the same seed are the same
 // numbers: every matrix is a normal draw scaled by 0.2/sqrt(fan_in), every bias starts at zero and
 // every layer-norm gain at one.
-func initial(seed: int = 7): Transformer {
+func initial(seed: int = 7) => Transformer {
     let k = key(seed)
     let d = 16
     let v = 28
@@ -256,7 +315,13 @@ func initial(seed: int = 7): Transformer {
 // `mode=forward` prints the initial loss only: the forward pass is the half that does not need the
 // transform, and it is what a reader can check against the PyTorch counterpart.  `mode=train` runs
 // the training loop, which calls the library's `vjp` on the parameter tree.
-func main(corpus: string, steps: int, mode: string, lr: float = 0.002, seed: int = 7): int sync {
+func main(
+    corpus: string,
+    steps: int,
+    mode: string,
+    lr: float = 0.002,
+    seed: int = 7
+) => int sync {
     let text = corpus->read_text !! ''
     let data = tokens(text)
     let model = initial(seed)
@@ -268,25 +333,23 @@ func main(corpus: string, steps: int, mode: string, lr: float = 0.002, seed: int
     if mode == 'forward' then {
         return 0
     }
-
+    
     // The transformation, bound once outside the loop: `vjp(window_loss)` answers `(value,
     // pullback)` at the parameters, the window and the targets, and the pullback answers one
     // cotangent per parameter -- the model's own type, which `adam` consumes without this program
     // naming a leaf.
     let differentiate = vjp(window_loss)
-    let (trained, state, final_step, losses) = loop m = model, opt = adam_state(model), step = 0, losses = [] as float[]
-        while step < steps
-        do {
-            // The window walks one character per step, so consecutive steps are different training
-            // examples and the loop covers the corpus in `chars - context` steps.
-            let offset = step % (len(data) - 9)
-            let window_tokens = slice(data, 0, offset, offset + 8)
-            let window_targets = slice(data, 0, offset + 1, offset + 9)
-            let (value, pullback) = differentiate(m, window_tokens, window_targets)
-            let gradient = pullback(1.0).0
-            let next = adam(m, gradient, opt, lr)
-            return (next.0, next.1, step + 1, losses->append<value>)
-        }
+    let (trained, state, final_step, losses) = loop m = model, opt = adam_state(model), step = 0, losses = [] as float[] while step < steps do {
+        // The window walks one character per step, so consecutive steps are different training
+        // examples and the loop covers the corpus in `chars - context` steps.
+        let offset = step % (len(data) - 9)
+        let window_tokens = slice(data, 0, offset, offset + 8)
+        let window_targets = slice(data, 0, offset + 1, offset + 9)
+        let (value, pullback) = differentiate(m, window_tokens, window_targets)
+        let gradient = pullback(1.0).0
+        let next = adam(m, gradient, opt, lr)
+        return (next.0, next.1, step + 1, losses->append<value>)
+    }
     let _ = state
     let after = window_loss(trained, first, first_targets)
     `c3 trained steps=${final_step} loss=${after:.6f} logged=${len(losses)}`->println

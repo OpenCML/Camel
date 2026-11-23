@@ -11,31 +11,33 @@
  *   [5, 6] 2 [5, 6, 7]
  */
 
-func size_of(xs: int[]): int { return len(xs) }
+func size_of(xs: int[]) => int {
+    return len(xs)
+}
 
-func main(): int sync {
+func main() => int sync {
     var acc: int[] = []
     acc = acc->append<1>
-    let n0 = len(acc)                 // cannot keep the array
+    let n0 = len(acc) // cannot keep the array
     acc = acc->append<2>
     let n1 = len(acc)
-    let s = acc                       // bound: keeps it
+    let s = acc // bound: keeps it
     acc = acc->append<3>
     println(n0, n1, s, acc, len(s))
-    let e = acc[0]                    // an int: cannot keep it
+    let e = acc[0] // an int: cannot keep it
     acc = acc->append<4>
     let same = acc == [1, 2, 3, 4]
     println(e, acc, '{}'->format<len(acc)>, same)
-
+    
     var grid: int[][] = [[1]]
     grid = grid->append<[2]>
-    let row = grid[0]                 // an array: kept
+    let row = grid[0] // an array: kept
     grid = grid->append<[3]>
     println(row, grid)
-
+    
     var xs: int[] = [5]
     xs = xs->append<6>
-    let k = size_of(xs)               // a call: kept
+    let k = size_of(xs) // a call: kept
     let before = xs
     xs = xs->append<7>
     println(before, k, xs)

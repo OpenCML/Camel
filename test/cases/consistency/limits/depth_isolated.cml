@@ -7,18 +7,18 @@
 
 import { get_env } from env
 
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)
 }
 
-func kind(r: int!): string {
+func kind(r: int!) => string {
     return match r {
         case error e => e.kind
         case v => format<v>('{}')
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = int(get_env('N') ?? '')
     println('start')
     println(depth(200))

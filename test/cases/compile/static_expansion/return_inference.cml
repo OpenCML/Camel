@@ -12,16 +12,18 @@ func classified::<T>(t: T) {
 }
 
 /** A `return` in the selected case gives the value of the match, not of the function. */
-func inside::<T>(t: T): int {
+func inside::<T>(t: T) => int {
     let x = match type T {
         case struct => 8
-        case #leaf => { return 7 }
+        case #leaf => {
+            return 7
+        }
     }
     return x + 1
 }
 
-func main(): int sync {
-    println(classified({a: 1}))
+func main() => int sync {
+    println(classified({ a: 1 }))
     println(classified((1, 2)))
     println(classified(3))
     println(inside(1))

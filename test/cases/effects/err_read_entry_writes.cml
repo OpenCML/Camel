@@ -3,12 +3,12 @@
 // past its promise when it prints. The report quotes the signature as it stands, entry without
 // `var`.
 
-func grow(): int uses env sync {
+func grow() => int uses env sync {
     println('x')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grow())
     return 0
 }

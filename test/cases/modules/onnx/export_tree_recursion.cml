@@ -3,15 +3,17 @@
  * depends on the model input. Unrolling doubles the graph with every level; the export says so
  * at the second recursive call instead of failing with an allocation error.
  */
-import { reshape, sum } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, sum } from tensor
 
-func tree(h: float[...]): float[...] {
+func tree(h: float[...]) => float[...] {
     return if float(sum(h)) < 1.0 then h else tree(h * 0.5) + tree(h * 0.25)
 }
 
-func main(): void! sync {
+func main() => void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
-    export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] { tree(x) }, x)
+    export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] {
+        tree(x)
+    }, x)
 }

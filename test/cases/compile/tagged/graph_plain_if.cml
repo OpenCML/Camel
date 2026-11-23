@@ -2,10 +2,10 @@
  * A program without `T?` / `T!`: nothing of them appears in its graph.
  */
 
-func pick(c: bool, a: int, b: int): int {
+func pick(c: bool, a: int, b: int) => int {
     return if c then a else b
 }
 
-func main(): int {
+func main() => int {
     return pick(true, 3, 4)
 }

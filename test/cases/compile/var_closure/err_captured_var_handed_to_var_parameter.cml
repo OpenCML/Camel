@@ -9,13 +9,15 @@
  * closure outlives the call that writes the name.
  */
 
-func bump(var p: int): void {
+func bump(var p: int) => void {
     p = p + 10
 }
 
-func main(): int sync {
+func main() => int sync {
     var x = 1
-    let g = func () { x }
+    let g = func () {
+        x
+    }
     bump(x)
     println(g())
     return 0

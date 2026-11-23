@@ -4,6 +4,6 @@
  * position to turn into an exception.
  */
 
-export func doubled(x: int): int {
+export func doubled(x: int) => int {
     return missing_name(x) * 2
 }

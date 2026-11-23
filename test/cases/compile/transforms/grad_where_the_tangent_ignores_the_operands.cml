@@ -12,15 +12,21 @@ import rulesets.transpose
 import { grad } from vjp
 
 with <x: float>
-func plus_one(): float { return x + 1.0 }
+func plus_one() => float {
+    return x + 1.0
+}
 
 with <x: float>
-func cube_plus_one(): float { return x * x * x + 1.0 }
+func cube_plus_one() => float {
+    return x * x * x + 1.0
+}
 
 with <x: float>
-func square_plus_one(): float { return x * x + 1.0 }
+func square_plus_one() => float {
+    return x * x + 1.0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(grad(plus_one)<3.0>())
     println(grad(cube_plus_one)<3.0>())
     println(grad(square_plus_one)<3.0>())

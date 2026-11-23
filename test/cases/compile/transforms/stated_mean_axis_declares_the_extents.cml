@@ -14,11 +14,11 @@
 //     camel test/cases/compile/transforms/stated_mean_axis_declares_the_extents.cml std::gir
 import { mean_axis_stated } from tensor
 
-func lane_mean(x: float[]): float {
+func lane_mean(x: float[]) => float {
     return mean_axis_stated(x, 0, false, [4])
 }
 
-func main(): int sync {
+func main() => int sync {
     let value = lane_mean([1.0, 2.0, 3.0, 4.0] as float[])
     `stated lane mean={}`->format<value>->println
     return 0

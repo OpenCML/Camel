@@ -20,10 +20,10 @@
  * `--verify-ops` compares against the declaration files item by item.
  */
 
-import { trim } from str
 import { Json, decode, get, as_int } from json
+import { trim } from str
 
-func report(j: Json): int sync {
+func report(j: Json) => int sync {
     // `json.get`'s with-parameter is `key` in every one of its eight declarations, and `as_int`'s
     // ordinary parameter is `j`, so both spellings of a with-list bind here.
     println(j->get<key: 'a'>->as_int ?? -1, j->get<'a'>->as_int ?? -1)
@@ -31,17 +31,17 @@ func report(j: Json): int sync {
     return 0
 }
 
-func main(): int sync {
-    let m = [("a", 1), ("b", 2)] as Map<string, int>
+func main() => int sync {
+    let m = [('a', 1), ('b', 2)] as Map<string, int>
     let s = [3, 1, 2] as Set<int>
     // The name reaches the position in each rule, and the type of the argument picks the rule.
-    println(len(x: "abc"), len(x: [1, 2, 3]))
+    println(len(x: 'abc'), len(x: [1, 2, 3]))
     println(len(x: m), len(x: s))
     println(items(m: m), items(m: s))
     // The same five calls, positionally.
-    println(len("abc"), len([1, 2, 3]), len(m), len(s))
+    println(len('abc'), len([1, 2, 3]), len(m), len(s))
     println(items(m), items(s))
     // A single rule of a declaration module: its one parameter is `s`.
-    println("[" + trim(s: "  x  ") + "]", "[" + trim("  x  ") + "]")
-    return decode('{"a": 7, "b": 8}') -> report !! 1
+    println('[' + trim(s: '  x  ') + ']', '[' + trim('  x  ') + ']')
+    return decode('{"a": 7, "b": 8}')->report !! 1
 }

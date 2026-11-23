@@ -6,7 +6,7 @@
  * argument -- rather than bound to a position that means two things.
  */
 
-func main(): int sync {
+func main() => int sync {
     println([1, 2, 3]->contains<value: 2>)
     return 0
 }

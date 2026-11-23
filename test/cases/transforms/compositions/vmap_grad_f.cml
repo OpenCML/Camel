@@ -15,13 +15,15 @@ import { grad } from autodiff
 import { vmap } from transforms
 
 with <w: f32>
-func sq(): f32 {
+func sq() => f32 {
     return w * w
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: f32[] = [1.0, 2.0, 3.0]
-    let gs = vmap(func (x: f32) { grad(sq)<x>() })(xs)
+    let gs = vmap(func (x: f32) {
+        grad(sq)<x>()
+    })(xs)
     println(gs[0])
     println(gs[1])
     println(gs[2])

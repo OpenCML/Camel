@@ -5,11 +5,11 @@
  */
 
 /// The expression this file's `typeof#0` stands for: an array literal, so a `float[]`.
-func own(): float[] {
+func own() => float[] {
     return [1.5, 2.5]
 }
 
 /// `typeof#0` of this tree, in the result type of an exported generic.
-export func second_value::<P>(p: P): typeof(own()) {
+export func second_value::<P>(p: P) => typeof (own()) {
     return own()
 }

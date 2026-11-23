@@ -6,11 +6,11 @@
 
 import { Graph, graph_of, name } from graph
 
-func entry_name(g: Graph): string {
+func entry_name(g: Graph) => string {
     return name(g)
 }
 
-func main(): int {
+func main() => int {
     let text = entry_name(graph_of(main))
     return len(text)
 }

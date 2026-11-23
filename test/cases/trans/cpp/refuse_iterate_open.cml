@@ -8,11 +8,11 @@
  * (test/cases/trans/cpp/iterate_rows.cml).
  */
 
-func countRows(t: f32[...]): int {
+func countRows(t: f32[...]) => int {
     return loop c = 0 for row in t do c + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(countRows([[1.0, 2.0], [3.0, 4.0]] as float[2, 2]))
     return 0
 }

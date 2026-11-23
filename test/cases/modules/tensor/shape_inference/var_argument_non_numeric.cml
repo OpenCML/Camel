@@ -6,12 +6,12 @@
  */
 import { sum } from tensor
 
-func step(var t: f64[], d: float): float sync {
+func step(var t: f64[], d: float) => float sync {
     t = t + d
     return float(sum(t))
 }
 
-func main(): int sync {
+func main() => int sync {
     var xs = ['a', 'b']
     println(step(xs, 0.5))
     return 0

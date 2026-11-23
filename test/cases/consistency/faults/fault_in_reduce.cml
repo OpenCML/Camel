@@ -3,11 +3,13 @@
  * back end.
  */
 
-func step(acc: int, x: int): int { return acc + 60 / (x - 3) }
+func step(acc: int, x: int) => int {
+    return acc + 60 / (x - 3)
+}
 
-func main(): int sync {
+func main() => int sync {
     println('before')
-    let total = (0..8)->reduce<step, 0>
+    let total = (0 .. 8)->reduce<step, 0>
     println(total)
     println('not reached')
     return 0

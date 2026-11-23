@@ -1,8 +1,8 @@
-func pick::<T>(c: bool, a: T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T) => T {
     return if c then a else b
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(true, 1, 2.5))
     return 0
 }

@@ -1,11 +1,11 @@
 // The control for the two refusals beside it: the same signature with a second argument of the
 // extent the first one bound runs.
 
-func pair(a: f32[n], b: f32[n + 1]): int {
+func pair(a: f32[n], b: f32[n + 1]) => int {
     return len(a) + len(b)
 }
 
-func main(): int sync {
+func main() => int sync {
     let v: f32[] = [1.0, 2.0]
     let w: f32[] = [3.0, 4.0, 5.0]
     let a = v as f32[2]

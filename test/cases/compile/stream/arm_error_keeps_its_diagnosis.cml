@@ -5,15 +5,17 @@
  * legal reads into a second consumer, which would name the wrong line and hide the real error.
  */
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let s = count(2)
     if true then {
         println(loop acc = 0 for x in s do acc + x)

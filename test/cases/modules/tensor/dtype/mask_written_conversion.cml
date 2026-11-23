@@ -8,15 +8,15 @@
 
 import { reshape, where, sum, to_bytes } from tensor
 
-func selected(x: f32[4], mask: bool[4]): float {
+func selected(x: f32[4], mask: bool[4]) => float {
     return float(sum(where(mask, x, 0.0)))
 }
 
-func converted(x: f32[4], mask: bool[4]): float {
+func converted(x: f32[4], mask: bool[4]) => float {
     return float(sum(x * f32(mask)))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[4]>([1.0, -2.0, 3.0, -4.0] as f32[])
     let mask = x > 0.0
     println(selected(x, mask))

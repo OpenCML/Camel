@@ -6,17 +6,17 @@ import { reshape, sum } from tensor
 import { regions } from tiles
 
 #gpu
-func repeat(x: f32[3]): f32[3] sync {
+func repeat(x: f32[3]) => f32[3] sync {
     let y = loop a = x for k in [1, 2] do a * 2.0
     return y
 }
 
-func repeat_host(x: f32[3]): f32[3] sync {
+func repeat_host(x: f32[3]) => f32[3] sync {
     let y = loop a = x for k in [1, 2] do a * 2.0
     return y
 }
 
-func main(): int sync {
+func main() => int sync {
     println(regions<repeat>())
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(sum(repeat(x)))

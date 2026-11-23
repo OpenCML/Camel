@@ -7,7 +7,7 @@ import state
 
 // Three `yield`s and a `var` the body writes between them: the cell lives in the function's own
 // body, so the second pull reads what the first one wrote.
-func count(): int.. sync {
+func count() => int.. sync {
     var i = 0
     yield i
     i = 5
@@ -16,13 +16,13 @@ func count(): int.. sync {
 }
 
 // The element can be a tuple of any type.
-func quad(): (int, int).. sync {
+func quad() => (int, int).. sync {
     yield (1, 2)
     yield (3, 4)
 }
 
 // A branch with a `yield` in each arm: the arm is where the next pull goes on.
-func sign(x: int): int.. sync {
+func sign(x: int) => int.. sync {
     if x > 0 then {
         yield 1
     } else {
@@ -36,14 +36,16 @@ func sign(x: int): int.. sync {
 // its last use (design principles 3.5). The box is the way out that rule names: the handle is
 // captured by value, and the value a later pull writes into the box is what `read()` gives -- 5
 // here, not 0.
-func reading(box: state::Ref<int>): int.. sync {
-    let read = func () { state::get(box) }
+func reading(box: state::Ref<int>) => int.. sync {
+    let read = func () {
+        state::get(box)
+    }
     yield 0
     state::set(box, 5)
     yield read()
 }
 
-func main(): int sync {
+func main() => int sync {
     println(loop acc = 0 for v in count() do acc * 10 + v)
     println(loop acc = 0 for q in quad() do acc * 100 + q.0 * 10 + q.1)
     println(loop acc = 0 for v in sign(3) do acc * 10 + v)

@@ -6,11 +6,11 @@
 // answered `(float[],)` where `Vjp<F>` declares `(float[], ())`.
 import { vjp } from vjp
 
-func mixed(xs: float[], n: int): float {
+func mixed(xs: float[], n: int) => float {
     return xs[n] * xs[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(mixed)([3.0, 2.0], 1)
     let cotangents = pullback(1.0)
     println(value)

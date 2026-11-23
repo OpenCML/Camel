@@ -1,8 +1,8 @@
-func main(): int sync {
-    var v67 = true;
-    let n79 = loop s72 = ['k9'], c73 = (4.75- 1.5) for q74 in [0] do sync {
-        v67 = false;
-        return (([''], false).0, 0.25);
-    };
-    return 0;
+func main() => int sync {
+    var v67 = true
+    let n79 = loop s72 = ['k9'], c73 = (4.75 - 1.5) for q74 in [0] do sync {
+        v67 = false
+        return (([''], false).0, 0.25)
+    }
+    return 0
 }

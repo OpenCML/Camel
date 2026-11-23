@@ -2,11 +2,11 @@
 /// entry file is `counts.cml`, so the entry module is `counts` and `counts::twice` names its own
 /// function, with no `module` declaration and no placeholder name.
 
-func main(): int sync {
+func main() => int sync {
     println(counts::twice(21))
     return 0
 }
 
-export func twice(n: int): int {
+export func twice(n: int) => int {
     return n * 2
 }

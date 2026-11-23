@@ -23,27 +23,27 @@ import { vjp } from vjp
 
 type Point = { a: float, b: float }
 
-func sum_of(t: (float, float)): float {
+func sum_of(t: (float, float)) => float {
     return t.0 + t.1
 }
 
-func sum_p(p: Point): float {
+func sum_p(p: Point) => float {
     return p.a + p.b
 }
 
-func f(q: (float, float)): float {
+func f(q: (float, float)) => float {
     return q.0 * 2.0 + sum_of(q)
 }
 
-func h(p: Point): float {
+func h(p: Point) => float {
     return p.a * 2.0 + sum_p(p)
 }
 
-func main(): int sync {
-    println("hand  y= 9.0  dq= ((3.0, 1.0))  dp= ({ a: 3.0, b: 1.0 })")
+func main() => int sync {
+    println('hand  y= 9.0  dq= ((3.0, 1.0))  dp= ({ a: 3.0, b: 1.0 })')
     let (y, pullback) = vjp(f)((2.0, 3.0))
-    println("vjp   y=", y, " dq=", pullback(1.0))
+    println('vjp   y=', y, ' dq=', pullback(1.0))
     let (py, ppullback) = vjp(h)({ a: 2.0, b: 3.0 })
-    println("vpjp  y=", py, " dp=", ppullback(1.0))
+    println('vpjp  y=', py, ' dp=', ppullback(1.0))
     return 0
 }

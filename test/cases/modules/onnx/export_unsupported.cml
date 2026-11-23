@@ -3,13 +3,15 @@
  * to the model input reports the operator.
  */
 
-import { reshape } from tensor
+import { get_env } from env
 import { softmax_cross_entropy } from nn
 import { export_model } from onnx
-import { get_env } from env
+import { reshape } from tensor
 
-func main(): void! sync {
+func main() => void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
     let target = reshape<[2, 2]>([0.0, 1.0, 1.0, 0.0])
-    export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: float[...]) => float[...] { t * softmax_cross_entropy(t, target) }, x)
+    export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: float[...]) => float[...] {
+        t * softmax_cross_entropy(t, target)
+    }, x)
 }

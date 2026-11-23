@@ -4,11 +4,13 @@
  * and not the other arm's write (1). This is the "value set before the branch" shape: the phi's
  * pre-branch input is the last value written before the branch, not the declaration.
  */
-func main(): int {
-    var x = 9;
-    x = 9;
-    let c = 0;
-    if c > 0 then { x = 1 } else { }
-    let shown = println(x);
+func main() => int {
+    var x = 9
+    x = 9
+    let c = 0
+    if c > 0 then {
+        x = 1
+    } else {}
+    let shown = println(x)
     return 0
 }

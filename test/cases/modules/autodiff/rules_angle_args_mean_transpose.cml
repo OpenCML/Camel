@@ -33,14 +33,14 @@
  * against 1.0.
  */
 import rulesets.transpose
-import { transpose } from transforms
 import { mean, sum } from tensor
+import { transpose } from transforms
 
-func loss_mean(x: float[2, 3]): float {
+func loss_mean(x: float[2, 3]) => float {
     return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(loss_mean)(1.0)
     'rules_angle_args mean transpose={}'->format<back.0>->println
     return 0

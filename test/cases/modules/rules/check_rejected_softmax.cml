@@ -17,11 +17,9 @@ import { check, check_text } from rewrite
 import { exp, softmax, sum } from tensor
 
 #requires(refine_accuracy)
-rule tensor_softmax_naive(x: f32[3], const axis: int) {
-    exp(x) / sum<axis, true>(exp(x)) => softmax<axis>(x)
-}
+rule tensor_softmax_naive(x: f32[3], const axis: int) { exp(x) / sum<axis, true>(exp(x)) => softmax<axis>(x) }
 
-func main(): int sync {
+func main() => int sync {
     println(check_text([tensor_softmax_naive]->check<100, 7>))
     return 0
 }

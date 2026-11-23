@@ -4,43 +4,61 @@
  * parameters whose types bind or use type variables.
  */
 
-func id::<T>(x: T): T {
+func id::<T>(x: T) => T {
     return x
 }
 
-func twice::<T>(f: (x: T) => T, x: T): T {
+func twice::<T>(f: (x: T) => T, x: T) => T {
     return f(f(x))
 }
 
 with <f: (x: T) => U>
-func my_map::<T, U>(xs: T[]): U[] {
+func my_map::<T, U>(xs: T[]) => U[] {
     return xs->map<f>
 }
 
 with <keep: (x: T) => bool>
-func my_filter::<T>(xs: T[]): T[] {
+func my_filter::<T>(xs: T[]) => T[] {
     return xs->filter<keep>
 }
 
 with <f: (acc: U, x: T) => U, init: U>
-func my_fold::<U, T>(xs: T[]): U {
+func my_fold::<U, T>(xs: T[]) => U {
     return xs->reduce<f, init>
 }
 
-func adder::<T>(n: T): (x: T) => T {
-    return func (x: T) { x + n }
+func adder::<T>(n: T) => (x: T) => T {
+    return func (x: T) {
+        x + n
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     // a lambda whose parameter types are written out instantiates the generic function
-    println([1, 2, 3]->map<func (x: int) { id(x) * 2 }>)
-    println(['a', 'b']->map<func (s: string) { id(s) + '!' }>)
-    println(twice(func (x: int) { x + 3 }, 1))
-    println(twice(func (s: string) { s + s }, 'ab'))
-    println([1, 2, 3]->my_map<func (x: int) { x * x }>)
-    println(my_map<func (x: int) { 'n{}'->format<x> }>([4, 5]))
-    println([1, 2, 3, 4]->my_filter<func (x: int) { x % 2 == 0 }>)
-    println(['a', 'bb']->my_fold<func (acc: int, s: string) { acc + len(s) }, 0>)
+    println([1, 2, 3]->map<func (x: int) {
+        id(x) * 2
+    }>)
+    println(['a', 'b']->map<func (s: string) {
+        id(s) + '!'
+    }>)
+    println(twice(func (x: int) {
+        x + 3
+    }, 1))
+    println(twice(func (s: string) {
+        s + s
+    }, 'ab'))
+    println([1, 2, 3]->my_map<func (x: int) {
+        x * x
+    }>)
+    println(my_map<func (x: int) {
+        'n{}'->format<x>
+    }>([4, 5]))
+    println([1, 2, 3, 4]->my_filter<func (x: int) {
+        x % 2 == 0
+    }>)
+    println(['a', 'bb']->my_fold<func (acc: int, s: string) {
+        acc + len(s)
+    }, 0>)
     // a generic function returning a closure over a value of the variable's type
     let add5 = adder(5)
     let greet = adder('!')

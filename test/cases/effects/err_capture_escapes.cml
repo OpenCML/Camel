@@ -10,7 +10,7 @@
  * that reads "a closure is made here and leaves here", and what refuses it is now the write.
  */
 
-func make(x: int): ((k: int) => int, int) pure {
+func make(x: int) => ((k: int) => int, int) pure {
     var acc = 0
     let add = func (k: int) => int sync {
         acc = acc + k
@@ -19,7 +19,7 @@ func make(x: int): ((k: int) => int, int) pure {
     (add, x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (g, n) = make(0)
     println(g(n))
     return 0

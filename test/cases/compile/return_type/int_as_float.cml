@@ -1,7 +1,7 @@
-func f(x: int): float {
+func f(x: int) => float {
     return x
 }
-func main(): int sync {
+func main() => int sync {
     println('ran')
     println(f(2))
     return 0

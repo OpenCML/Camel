@@ -6,11 +6,11 @@
 
 type T = int
 
-func id::<T>(a: T): T {
+func id::<T>(a: T) => T {
     return a
 }
 
-func main(): int sync {
+func main() => int sync {
     println(id(1))
     return 0
 }

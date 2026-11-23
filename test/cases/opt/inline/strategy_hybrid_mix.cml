@@ -2,18 +2,17 @@
  * Verifies mixed inline strategies can coexist in one graph without leaving stale work items after rescanning.
  */
 
-func inc(v: int): int {
+func inc(v: int) => int {
     return v + 1
 }
 
-func pick(flag: int, v: int): int {
+func pick(flag: int, v: int) => int {
     return if flag != 0 then v + 2 else v + 3
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = inc(40)
     let b = pick(1, 5)
     'inline_strategy_hybrid_mix a={} b={}'->format<a, b>->println
     return 0
 }
-

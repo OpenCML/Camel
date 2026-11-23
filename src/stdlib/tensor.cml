@@ -22,7 +22,6 @@
 // fold from a type that fixes every extent). A declaration names `tensor:<function>` by
 // convention, so no `#op` tag is needed.
 
-
 import { is_float, is_numeric, is_plain, is_same, ShapeOf } from types
 
 // Every signature here writes the element type of its operand as an explicit type variable of
@@ -64,21 +63,21 @@ import { is_float, is_numeric, is_plain, is_same, ShapeOf } from types
 /// rank zero and answers the empty list.
 /// @pure
 /// @example shape([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [2, 2]
-export func shape::<T>(t: T): ShapeOf<T>
+export func shape::<T>(t: T) => ShapeOf<T>
 
 /// The number of elements in a tensor: the product of its extents.
 /// @pure
 /// @example numel(zeros::<f32>([2, 3]))    // 6
-export func numel::<T>(t: T[...]): int when is_numeric::<T>()
+export func numel::<T>(t: T[...]) => int when is_numeric::<T>()
 
 /// The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example dim<1>(zeros::<f32>([2, 2]))    // 2
 with <axis: int>
-export func dim::<T>(t: T[...]): int when is_numeric::<T>()
+export func dim::<T>(t: T[...]) => int when is_numeric::<T>()
 with <axis: i32>
-export func dim::<T>(t: T[...]): int when is_numeric::<T>()
+export func dim::<T>(t: T[...]) => int when is_numeric::<T>()
 
 /// The element at `position` of a rank-1 tensor whose length is `length`: `t[position]`, with the
 /// length stated by whoever holds the value.
@@ -103,7 +102,8 @@ export func dim::<T>(t: T[...]): int when is_numeric::<T>()
 /// @pure
 /// @fails fault `RuntimeError` when `length` disagrees with the tensor, or `position` is outside it
 /// @example pick_at([1.0, 2.0, 3.0] as float[], 2, 3)    // 3.0
-export func pick_at::<T>(t: T[...], position: int, length: int): T when is_numeric::<T>()
+export func pick_at::<T>(t: T[...], position: int, length: int) => T
+    when is_numeric::<T>()
 
 // ---- the same operations, with the extents the reverse law needs ----
 //
@@ -134,7 +134,7 @@ export func pick_at::<T>(t: T[...], position: int, length: int): T when is_numer
 /// @pure
 /// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape
 /// @example sum_stated([1.0, 2.0, 3.0] as float[], [3])    // 6.0
-export func sum_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>()
+export func sum_stated::<T>(t: T[...], extents: int[]) => T when is_numeric::<T>()
 
 /// The rows `take` reads, with the indices it reads **and** the operand's extents stated:
 /// `take_stated(t, [i0, ..., i(n-1)], [d0, ..., d(rank-1)])` is `take(t, [i0, ..., i(n-1)])`.
@@ -147,7 +147,8 @@ export func sum_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>()
 /// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or an index is
 /// outside the first dimension
 /// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1], [2, 2])    // [[3.0, 4.0]]
-export func take_stated::<T>(t: T[...], indices: int[], extents: int[]): T[...] when is_numeric::<T>()
+export func take_stated::<T>(t: T[...], indices: int[], extents: int[]) => T[...]
+    when is_numeric::<T>()
 
 /// The product of two tensors, with **both** operands' extents stated: `x * w`, where `ax` is
 /// `shape(x)` and `aw` is `shape(w)`.
@@ -164,7 +165,8 @@ export func take_stated::<T>(t: T[...], indices: int[], extents: int[]): T[...] 
 /// @pure
 /// @fails fault `RuntimeError` when either list disagrees with its operand's shape
 /// @example mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])    // [3.0, 8.0]
-export func mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] when is_numeric::<T>()
+export func mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+    when is_numeric::<T>()
 
 /// The sum of two tensors, with **both** operands' extents stated: `x + w`, where `ax` is
 /// `shape(x)` and `aw` is `shape(w)`.
@@ -182,7 +184,8 @@ export func mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] 
 /// @pure
 /// @fails fault `RuntimeError` when either list disagrees with its operand's shape
 /// @example add_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])    // [[11.0, 22.0], [13.0, 24.0]]
-export func add_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] when is_numeric::<T>()
+export func add_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+    when is_numeric::<T>()
 
 /// The difference of two tensors, with **both** operands' extents stated: `x - w`, where `ax` is
 /// `shape(x)` and `aw` is `shape(w)`.
@@ -194,7 +197,8 @@ export func add_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] 
 /// @pure
 /// @fails fault `RuntimeError` when either list disagrees with its operand's shape
 /// @example subtract_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])    // [[-9.0, -18.0], [-7.0, -16.0]]
-export func subtract_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] when is_numeric::<T>()
+export func subtract_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+    when is_numeric::<T>()
 
 /// The quotient of two tensors, with **both** operands' extents stated: `x / w`, where `ax` is
 /// `shape(x)` and `aw` is `shape(w)`.
@@ -211,7 +215,8 @@ export func subtract_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[
 /// @pure
 /// @fails fault `RuntimeError` when either list disagrees with its operand's shape
 /// @example div_stated([[1.0, 2.0], [2.0, 4.0]] as float[2, 2], [2.0, 4.0] as float[2], [2, 2], [2])    // [[0.5, 0.5], [1.0, 1.0]]
-export func div_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] when is_numeric::<T>()
+export func div_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+    when is_numeric::<T>()
 
 /// The matrix product, with **both** operands' extents stated: `a @ b`, where `sa` is `shape(a)` and
 /// `sb` is `shape(b)`.
@@ -224,7 +229,7 @@ export func div_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] 
 /// @pure
 /// @fails fault `RuntimeError` when either list disagrees with its operand's shape
 /// @example matmul_stated([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1], [1, 2], [2, 1])    // [[11.0]]
-export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[...]
+export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
     when is_numeric::<T>()
 
 // The lane mean with its extents stated -- `mean_axis_stated(t, axis, keepdims, extents)` -- is not
@@ -254,7 +259,13 @@ export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[..
 /// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is
 /// outside the rank
 /// @example sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false, [2, 2])    // [4.0, 6.0]
-export func sum_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: int[]): T[...] when is_numeric::<T>()
+export func sum_axis_stated::<T>(
+    t: T[...],
+    axis: int,
+    keepdims: bool,
+    extents: int[]
+) => T[...]
+    when is_numeric::<T>()
 
 /// The mean of every element, with the operand's extents stated: `mean(t)`, and `extents` is
 /// `shape(t)`.
@@ -267,7 +278,7 @@ export func sum_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: 
 /// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the tensor has no
 /// element
 /// @example mean_stated([1.0, 2.0, 3.0, 4.0] as float[], [4])    // 2.5
-export func mean_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>()
+export func mean_stated::<T>(t: T[...], extents: int[]) => T when is_numeric::<T>()
 
 /// The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
 /// the operand's extents stated: `max_axis_stated(t, mask, axis, keepdims, extents)` is
@@ -284,7 +295,14 @@ export func mean_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>(
 /// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is
 /// outside the rank
 /// @example max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], 1, false, [2, 2])    // [2.0, 4.0]
-export func max_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]): T[...] when is_numeric::<T>()
+export func max_axis_stated::<T>(
+    t: T[...],
+    mask: bool[...],
+    axis: int,
+    keepdims: bool,
+    extents: int[]
+) => T[...]
+    when is_numeric::<T>()
 
 /// The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
 /// the operand's extents stated: `min<axis, keepdims>(t)`, laid out exactly as
@@ -293,7 +311,14 @@ export func max_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims
 /// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is
 /// outside the rank
 /// @example min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], 1, false, [2, 2])    // [1.0, 3.0]
-export func min_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]): T[...] when is_numeric::<T>()
+export func min_axis_stated::<T>(
+    t: T[...],
+    mask: bool[...],
+    axis: int,
+    keepdims: bool,
+    extents: int[]
+) => T[...]
+    when is_numeric::<T>()
 
 // ---- binary form ----
 
@@ -303,13 +328,13 @@ export func min_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims
 /// one.
 /// @pure
 /// @example to_bytes([1.0, 2.0] as float[])    // [0, 0, 128, 63, 0, 0, 0, 64]
-export func to_bytes::<T>(t: T[...]): Bytes when is_plain::<T>()
+export func to_bytes::<T>(t: T[...]) => Bytes when is_plain::<T>()
 
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
 /// @effect writes a file
 /// @fails fault `RuntimeError` when the file cannot be written
 /// @example save_npy(zeros::<f32>([2, 2]), 'x.npy')
-export func save_npy::<T>(t: T[...], path: string): void when is_numeric::<T>()
+export func save_npy::<T>(t: T[...], path: string) => void when is_numeric::<T>()
 
 // ---- conversion and display ----
 
@@ -323,25 +348,25 @@ export func save_npy::<T>(t: T[...], path: string): void when is_numeric::<T>()
 /// element of a rank-zero array.
 /// @effect writes the console
 /// @example show([[1.0, 2.0]] as float[1, 2])
-export func show::<A>(t: A[...]): void when is_numeric::<A>() || is_same::<A, bool>()
+export func show::<A>(t: A[...]) => void when is_numeric::<A>() || is_same::<A, bool>()
 
 // ---- module state ----
 
 /// The size of the module's worker pool.
 /// @effect reads the size of the worker pool
 /// @example num_threads()
-export func num_threads(): int
+export func num_threads() => int
 
 /// Sets the size of the module's worker pool; a value below 1 is read as 1.
 /// @effect changes the size of the worker pool
 /// @example set_num_threads(4)
-export func set_num_threads(n: int): void
-export func set_num_threads(n: i32): void
+export func set_num_threads(n: int) => void
+export func set_num_threads(n: i32) => void
 
 /// The name of the matrix-multiplication kernel the module dispatches to.
 /// @pure
 /// @example gemm_backend()
-export func gemm_backend(): string
+export func gemm_backend() => string
 
 /// The thread count the matrix multiplication had for its most recent call: the tensor-pool
 /// chunks that split a whole-work library product, the worker pool's width for a canonical call,
@@ -349,20 +374,20 @@ export func gemm_backend(): string
 /// product got: `num_threads()` is what the run was given, and this is what one product spent.
 /// @effect reads the size of the worker pool
 /// @example gemm_threads()
-export func gemm_threads(): int
+export func gemm_threads() => int
 
 /// The library's own thread count for the most recent call: 1 when a library call ran (each chunk
 /// of a split product is one such call), 0 when the canonical kernel did. `gemm_threads()` is the
 /// pool that split the product; this is what each of its library calls got.
 /// @effect reads the thread count of the last library call
 /// @example gemm_library_threads()
-export func gemm_library_threads(): int
+export func gemm_library_threads() => int
 
 /// The name of the matrix-multiplication kernel the library path calls: `cblas` in a build with a
 /// CBLAS, otherwise the canonical kernel's name, which is what the path forwards to.
 /// @pure
 /// @example gemm_library()
-export func gemm_library(): string
+export func gemm_library() => string
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program
@@ -372,7 +397,7 @@ export func gemm_library(): string
 /// operator (design principles 9.3). `safe_fp` keeps a matmul on the canonical algorithm (design
 /// principles 7.4); the default lets a matmul the 7.3 rule permits use the library GEMM.
 with <safe_fp: bool = false>
-export func fuse::<F>(f: F): F! when is_function::<F>()
+export func fuse::<F>(f: F) => F! when is_function::<F>()
 
 // ---- the reductions along an axis, computed rather than declared ----
 //
@@ -424,7 +449,7 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 /// @example sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [2])    // [3.0, 7.0]
 /// @example sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [])    // 10.0
 /// @example sum_to([1.0, 2.0, 3.0] as float[], [3])    // [1.0, 2.0, 3.0]
-export func sum_to::<T>(t: T[...], at: int[]): T[...] when is_float::<T>()
+export func sum_to::<T>(t: T[...], at: int[]) => T[...] when is_float::<T>()
 
 /// `t` spread out to the shape `like` states: the **other** direction of the same adjoint, and the
 /// operator that owns it.
@@ -447,7 +472,7 @@ export func sum_to::<T>(t: T[...], at: int[]): T[...] when is_float::<T>()
 /// @pure
 /// @example broadcast_like(2.0, [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])    // [[2.0, 2.0], [2.0, 2.0]]
 /// @example broadcast_like([1.0, 2.0] as float[2], [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])    // [[1.0, 2.0], [1.0, 2.0]]
-export func broadcast_like::<T, S>(t: T, like: S): S
+export func broadcast_like::<T, S>(t: T, like: S) => S
 
 // The axis forms of `mean`, `min`, `max`, `argmax` and `argmin` stand beside the axis form of `sum`
 // above and for the same reason: the extents of their result follow from the operand's type and

@@ -3,19 +3,23 @@
  * arms whose value is a function literal (with and without captures).
  */
 
-func square(x: float): float {
+func square(x: float) => float {
     return x * x
 }
 
-func apply(f: (x: float) => float, x: float): float {
+func apply(f: (x: float) => float, x: float) => float {
     return f(x)
 }
 
-func scaler(x: float): (dy: float) => float {
-    return if x > 0.0 then func (dy: float) => float { return dy * 2.0 * x } else func (dy: float) => float { return dy * 0.5 }
+func scaler(x: float) => (dy: float) => float {
+    return if x > 0.0 then func (dy: float) => float {
+        return dy * 2.0 * x
+    } else func (dy: float) => float {
+        return dy * 0.5
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let named = apply(square, 3.0)
     let positive = scaler(3.0)
     let negative = scaler(-3.0)

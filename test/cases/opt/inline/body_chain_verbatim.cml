@@ -9,13 +9,13 @@
 // The corpus is built so that the two directions are told apart: the statement before the call
 // prints a constant of its own (1), which makes the node an order edge starts from findable.
 
-func inner(x: int): int sync {
+func inner(x: int) => int sync {
     println(101)
     println(102)
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(1)
     println(inner(3))
     println(2)

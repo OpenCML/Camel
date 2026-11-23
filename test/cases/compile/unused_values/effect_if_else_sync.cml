@@ -4,7 +4,7 @@
  * prints nothing.
  */
 
-func report(take_then: bool): int sync {
+func report(take_then: bool) => int sync {
     if take_then then sync {
         println('then=1')
         println('then=2')
@@ -14,7 +14,7 @@ func report(take_then: bool): int sync {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     report(false)
     return 0
 }

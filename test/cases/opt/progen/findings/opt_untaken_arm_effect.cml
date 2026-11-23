@@ -9,27 +9,27 @@
 
 type P = { x: int, y: int }
 
-func f1(a2: string[]): int {
+func f1(a2: string[]) => int {
     return if true then 0 else {
-        return -3;
-    };
+        return -3
+    }
 }
 
-func e8(): P sync {
+func e8() => P sync {
     if false then sync {
         let h11 = func (p9: int) => int sync {
-            println('L2 {} {} {} {}'->format<0, 0, 0, f1(if false then [''] else [''])>);
-            return 0;
-        };
-        let n12 = h11(100);
-        null;
+            println('L2 {} {} {} {}'->format<0, 0, 0, f1(if false then [''] else [''])>)
+            return 0
+        }
+        let n12 = h11(100)
+        null
     } else sync {
-        null;
-    };
-    return { x: 0, y: 0 };
+        null
+    }
+    return { x: 0, y: 0 }
 }
 
-func main(): int sync {
-    let n24 = e8();
-    return 0;
+func main() => int sync {
+    let n24 = e8()
+    return 0
 }

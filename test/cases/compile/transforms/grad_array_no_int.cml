@@ -8,11 +8,11 @@
 // When wall B falls, replace the assertion below with the number: the gradient of `xs` is [2.0, 3.0].
 import { vjp } from vjp
 
-func both(xs: float[]): float {
+func both(xs: float[]) => float {
     return xs[1] * xs[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(both)([3.0, 2.0])
     let cotangents = pullback(1.0)
     println(value)

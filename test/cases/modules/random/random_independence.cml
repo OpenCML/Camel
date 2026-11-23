@@ -5,7 +5,7 @@
 
 import { seed, rand, key, split, permutation } from random
 
-func main(): int sync {
+func main() => int sync {
     seed(7)
     let first = rand()
     let k = key(42)

@@ -10,11 +10,12 @@ import { rewrite } from rewrite
 with <cap: int = 5>
 fact capped(v: int): int match v {
     case const c => c
-    case _       => 0
-} join max
+    case _ => 0
+}
+join max
 
 rule bad_arg(x: int, y: int) when capped<y>(x) == 0 { x * y => x }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

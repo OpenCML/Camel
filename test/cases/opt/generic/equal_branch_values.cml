@@ -5,17 +5,17 @@
 
 import { get_env } from env
 
-func left(): float sync {
+func left() => float sync {
     println('left')
     return 2.0
 }
 
-func right(): float sync {
+func right() => float sync {
     println('right')
     return 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let flag = (get_env('CAMEL_EQUAL_BRANCH') ?? '') == ''
     let x = if flag then left() else right()
     println(x * x)

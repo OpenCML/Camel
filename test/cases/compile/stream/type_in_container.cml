@@ -6,7 +6,7 @@
  * (SemanticDiag::StreamInContainer) - never built, never silently read as `int..` of `[3]`.
  */
 
-func main(): int sync {
+func main() => int sync {
     let s: int..[3] = [1, 2, 3]
     println(0)
     return 0

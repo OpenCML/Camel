@@ -14,24 +14,24 @@
  * answers -- is unchanged.
  */
 
-func r6(a7: int, a8: float, a9: string): float {
-    return if (0 <= 0) then 1.0 + 1.0 else r6(0, 1.5, '');
+func r6(a7: int, a8: float, a9: string) => float {
+    return if (0 <= 0) then 1.0 + 1.0 else r6(0, 1.5, '')
 }
 
-func main(): int sync {
-    let n37 = '';
+func main() => int sync {
+    let n37 = ''
     let n66 = match n37 {
         case 'ab' => sync {
-            return 1.0;
+            return 1.0
         }
         case 'a' => 1.0
         case _ => sync {
             let s = loop st = (-0.5, 2) while st.1 < 4 do sync {
                 (st.0 + r6(0, -1.5, 'ab'), st.1 + 1)
-            };
-            return s.0;
+            }
+            return s.0
         }
-    };
-    println('L8 {}'->format<n66>);
-    return 0;
+    }
+    println('L8 {}'->format<n66>)
+    return 0
 }

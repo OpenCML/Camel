@@ -1,11 +1,11 @@
 // Item A's fourth rewrite: one dead pure statement added inside `run`. It produces no node at
 // all, so the canonical document must not move -- and the five lines must not move either.
 
-func apply(f: (x: int) => int, x: int): int sync {
+func apply(f: (x: int) => int, x: int) => int sync {
     return f(x)
 }
 
-func run(n: int, base: int): int sync {
+func run(n: int, base: int) => int sync {
     let label = 'step'
     let twice = base * 2
     let thrice = base * 3
@@ -24,7 +24,7 @@ func run(n: int, base: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = run(3, 10)
     return 0
 }

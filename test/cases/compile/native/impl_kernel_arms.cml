@@ -17,7 +17,7 @@
 /// The element type the kernels below implement: `i32` alone. A body-less declaration's
 /// condition says which instances of the function that rule is the executor of (design
 /// principles 4.4); an instance it does not cover has no executor and runs the body (10.4).
-func is_armed::<T>(): bool {
+func is_armed::<T>() => bool {
     return match type T {
         case i32 => true
         case _ => false
@@ -25,22 +25,22 @@ func is_armed::<T>(): bool {
 }
 
 #op(':op/add_i')
-func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()
+func add_kernel::<T>(a: T, b: T) => T when is_armed::<T>()
 
 #impl(add_kernel)
-func add::<T>(a: T, b: T): T {
+func add::<T>(a: T, b: T) => T {
     return a - (0 - b)
 }
 
 #op(':op/sub_i')
-func sub_kernel::<T>(a: T, b: T): T when is_armed::<T>()
+func sub_kernel::<T>(a: T, b: T) => T when is_armed::<T>()
 
 #impl(sub_kernel)
-func flipped::<T>(a: T, b: T): T {
+func flipped::<T>(a: T, b: T) => T {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: i32 = 19
     let y: i32 = 23
     // `i32` is the element type both conditions name: both calls are the kernels.

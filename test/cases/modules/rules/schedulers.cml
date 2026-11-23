@@ -10,46 +10,44 @@
  */
 
 import { Rule, Run, rule_name, rewrite } from rewrite
-import {
-    int_add_zero, int_mul_zero, seq, first, repeat, until, alternate,
-} from rules
+import { int_add_zero, int_mul_zero, seq, first, repeat, until, alternate } from rules
 
 rule bump_one(x: int) { x + 0 => x + 1 }
 rule bump_ten(x: int) { x + 1 => x + 11 }
 rule step(x: int, const c: int) { x + c => x + (c + 1) }
 rule step_ten(x: int, const c: int) { x + c => x + (c + 10) }
 
-func helper(x: int): int {
+func helper(x: int) => int {
     return x
 }
 rule bad(x: int) { helper(x) => x }
 
-func always::<F>(q: F): bool {
+func always::<F>(q: F) => bool {
     return true
 }
 
-func never::<F>(q: F): bool {
+func never::<F>(q: F) => bool {
     return false
 }
 
 /// A rule chosen at run time: this is the value form, so `pick` returns a `Rule`, not a function.
-func pick(which: int): Rule {
+func pick(which: int) => Rule {
     return if which == 0 then int_add_zero else bump_one
 }
 
 /// A rule set built at run time from the chosen rule.
-func choose(which: int): Rule[] {
+func choose(which: int) => Rule[] {
     let chosen: Rule = pick(which)
     return if which == 0 then [chosen] else [chosen, int_add_zero]
 }
 
 /// Prints what the schedule cost, and answers the program it produced.
-func reported::<F>(label: string, r: Run<F>): F sync {
+func reported::<F>(label: string, r: Run<F>) => F sync {
     println(label, r.rewrites, r.rounds, r.visited)
     return r.result
 }
 
-export func values::<F>(p: F): F! sync {
+export func values::<F>(p: F) => F! sync {
     let firstSet: Rule[] = choose(0)
     let secondSet: Rule[] = choose(1)
     let all: Rule[] = [secondSet[0], secondSet[1], firstSet[0]]
@@ -57,56 +55,66 @@ export func values::<F>(p: F): F! sync {
     return p->rewrite<all>
 }
 
-export func seq_order::<F>(p: F): F! sync {
-    return p->seq<[[bump_one], [bump_ten]], strict: false>
-        -> func (r: Run<F>) sync { reported('seq_order', r) }
+export func seq_order::<F>(p: F) => F! sync {
+    return p->seq<[[bump_one], [bump_ten]], strict: false>->func (r: Run<F>) sync {
+        reported('seq_order', r)
+    }
 }
 
-export func seq_reverse::<F>(p: F): F! sync {
-    return p->seq<[[bump_ten], [bump_one]], strict: false>
-        -> func (r: Run<F>) sync { reported('seq_reverse', r) }
+export func seq_reverse::<F>(p: F) => F! sync {
+    return p->seq<[[bump_ten], [bump_one]], strict: false>->func (r: Run<F>) sync {
+        reported('seq_reverse', r)
+    }
 }
 
-export func first_zero::<F>(p: F): F! sync {
-    return p->first<[[int_add_zero], [bump_one]], strict: false>
-        -> func (r: Run<F>) sync { reported('first_zero', r) }
+export func first_zero::<F>(p: F) => F! sync {
+    return p->first<[[int_add_zero], [bump_one]], strict: false>->func (r: Run<F>) sync {
+        reported('first_zero', r)
+    }
 }
 
-export func first_bump::<F>(p: F): F! sync {
-    return p->first<[[bump_one], [int_add_zero]], strict: false>
-        -> func (r: Run<F>) sync { reported('first_bump', r) }
+export func first_bump::<F>(p: F) => F! sync {
+    return p->first<[[bump_one], [int_add_zero]], strict: false>->func (r: Run<F>) sync {
+        reported('first_bump', r)
+    }
 }
 
-export func repeat_five::<F>(p: F): F! sync {
-    return p->repeat<[step], 5, false>
-        -> func (r: Run<F>) sync { reported('repeat_five', r) }
+export func repeat_five::<F>(p: F) => F! sync {
+    return p->repeat<[step], 5, false>->func (r: Run<F>) sync {
+        reported('repeat_five', r)
+    }
 }
 
-export func repeat_two::<F>(p: F): F! sync {
-    return p->repeat<[step], 2, false>
-        -> func (r: Run<F>) sync { reported('repeat_two', r) }
+export func repeat_two::<F>(p: F) => F! sync {
+    return p->repeat<[step], 2, false>->func (r: Run<F>) sync {
+        reported('repeat_two', r)
+    }
 }
 
-export func alternate_three::<F>(p: F): F! sync {
-    return p->alternate<[step], [step_ten], 3, false>
-        -> func (r: Run<F>) sync { reported('alternate_three', r) }
+export func alternate_three::<F>(p: F) => F! sync {
+    return p->alternate<[step], [step_ten], 3, false>->func (r: Run<F>) sync {
+        reported('alternate_three', r)
+    }
 }
 
-export func until_now::<F>(p: F): F! sync {
-    return p->until<[step], always, 10, false>
-        -> func (r: Run<F>) sync { reported('until_now', r) }
+export func until_now::<F>(p: F) => F! sync {
+    return p->until<[step], always, 10, false>->func (r: Run<F>) sync {
+        reported('until_now', r)
+    }
 }
 
-export func until_budget::<F>(p: F): F! sync {
-    return p->until<[step], never, 2, false>
-        -> func (r: Run<F>) sync { reported('until_budget', r) }
+export func until_budget::<F>(p: F) => F! sync {
+    return p->until<[step], never, 2, false>->func (r: Run<F>) sync {
+        reported('until_budget', r)
+    }
 }
 
-export func nothing::<F>(p: F): F! sync {
-    return p->seq<[[int_mul_zero]], strict: false>
-        -> func (r: Run<F>) sync { reported('nothing', r) }
+export func nothing::<F>(p: F) => F! sync {
+    return p->seq<[[int_mul_zero]], strict: false>->func (r: Run<F>) sync {
+        reported('nothing', r)
+    }
 }
 
-export func refuse::<F>(p: F): F! {
+export func refuse::<F>(p: F) => F! {
     return p->rewrite<[bad]>
 }

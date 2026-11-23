@@ -3,7 +3,7 @@
  * empty array is (design principles 5.4): an array with no last element has no value to give.
  */
 
-func main(): int sync {
+func main() => int sync {
     let xs: int[] = []
     println(last(xs))
     println('not reached')

@@ -15,13 +15,15 @@ import { rewrite } from rewrite
 
 rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[drop_by_node]>
 }
 
-func scaled(x: int): int { return x * 2 }
+func scaled(x: int) => int {
+    return x * 2
+}
 
-func main(): int sync {
+func main() => int sync {
     println(scaled(21))
     return 0
 }

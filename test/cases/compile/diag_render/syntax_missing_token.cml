@@ -1,5 +1,5 @@
-func f(a int): int { return a }
+func f(a int) => int { return a }
 
-func main(): int sync {
+func main() => int sync {
     return f(1)
 }

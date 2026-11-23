@@ -5,11 +5,11 @@
  */
 
 with <rounds: int = 8, label: string = 'x'>
-func show(x: int): string {
+func show(x: int) => string {
     return label + ':' + string(x * rounds)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(show(2))
     println(show<label: 'a'>(2))
     println(show<rounds: 3>(2))

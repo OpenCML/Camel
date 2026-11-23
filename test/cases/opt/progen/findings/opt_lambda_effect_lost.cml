@@ -8,21 +8,21 @@
  * Reduced by test/tools/progen from seed 1197 (generator version 1, all features).
  */
 
-func e10(): (float, bool, int) sync {
-    println(false);
-    return (1.0, false, 0);
+func e10() => (float, bool, int) sync {
+    println(false)
+    return (1.0, false, 0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let h35 = func (p33: int) => int sync {
-        let n34 = e10();
-        return 7;
-    };
+        let n34 = e10()
+        return 7
+    }
     if (0 < 31) then sync {
-        let n36 = h35(0 - 0);
-        null;
+        let n36 = h35(0 - 0)
+        null
     } else sync {
-        null;
-    };
-    return 0;
+        null
+    }
+    return 0
 }

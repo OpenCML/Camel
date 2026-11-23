@@ -5,7 +5,7 @@
  * `loop` belongs to its own function, so the write is a plain rebinding of `total`.
  */
 
-func main(): int sync {
+func main() => int sync {
     var total = 0
     let _ = loop x = 0 while x < 8 do sync {
         total = total + 12 / (3 - x)

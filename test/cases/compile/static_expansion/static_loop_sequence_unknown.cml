@@ -5,6 +5,6 @@
  * it could not work out rather than reporting the message of a missing tuple.
  */
 
-func sumTo(n: int): int {
-    return static loop acc = 0 for i in 0..n do acc + i
+func sumTo(n: int) => int {
+    return static loop acc = 0 for i in 0 .. n do acc + i
 }

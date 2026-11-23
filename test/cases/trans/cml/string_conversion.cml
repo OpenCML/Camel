@@ -7,11 +7,11 @@
 // call is an argument rather than the whole expression.
 let scale = 2.5
 
-func shout(text: string): string {
+func shout(text: string) => string {
     return text + '!'
 }
 
-func describe(count: int): string sync {
+func describe(count: int) => string sync {
     let label = 'i' + string(count)
     let called = shout(string(count * 2))
     println(label)
@@ -19,7 +19,7 @@ func describe(count: int): string sync {
     return label
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = 7
     println(string(n))
     println(string(scale))

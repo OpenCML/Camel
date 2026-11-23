@@ -22,7 +22,7 @@ type DimsProbe<T> = match type T {
     case _ => bool
 }
 
-func main(): int sync {
+func main() => int sync {
     // ① a stated rank: the number of dimensions, not the first extent and not a default.
     println(is_same::<ShapeOf<float[2, 3]>, int[2]>(), is_same::<ShapeOf<float[3, 4]>, int[2]>())
     println(is_same::<ShapeOf<float[3]>, int[1]>(), is_same::<ShapeOf<float[2, 3, 4]>, int[3]>())
@@ -32,8 +32,7 @@ func main(): int sync {
     //    that is not a number is refused instead of answered. See `lib/types/types.cml#ShapeOf`.
     println(is_same::<ShapeOf<int>, int[0]>())
     // ③ an open rank states the open list.
-    println(is_same::<ShapeOf<float[...]>, int[]>()
-    )
+    println(is_same::<ShapeOf<float[...]>, int[]>())
     // ④ the dimensions are a pack that can be put back, and the case that binds them selects no
     //    scalar and no open rank.
     println(is_same::<RowsProbe<float[2, 3]>, float[?, 2, 3]>())

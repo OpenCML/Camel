@@ -10,7 +10,7 @@
 
 import { now } from time
 
-func main(): int sync {
+func main() => int sync {
     let n = int(now() * 0.0) + 3
     let a = if n > 5 then 1 / 0 + n else 7
     println(a)

@@ -16,7 +16,7 @@
 
 import { ones } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(ones::<f64>([2, 2]))
     println(ones::<i64>([2, 2]))
     return 0

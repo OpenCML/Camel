@@ -1,5 +1,5 @@
-func main(): int sync {
-    let name = "Camel"
+func main() => int sync {
+    let name = 'Camel'
     let n = 42
     let pi = 3.5
     println(`hello, ${name}!`)

@@ -3,7 +3,7 @@
 // the refusal is at the
 // call, under the step the program wrote, and says both ways to write what it meant.
 
-func main(): int sync {
+func main() => int sync {
     let xs = range(0, 10, 0)
     println(xs)
     return 0

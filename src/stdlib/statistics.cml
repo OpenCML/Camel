@@ -20,14 +20,14 @@ import { is_float } from types
 /// The sample variance (divisor n - 1).
 /// @fails fault `InvalidArgument` when the array has fewer than two elements
 /// @example [1.0, 2.0, 3.0, 4.0]->variance    // 1.66667
-export func variance::<T>(xs: T[]): T when is_float::<T>() {
+export func variance::<T>(xs: T[]) => T when is_float::<T>() {
     return T(variance_of(float(xs)))
 }
 
 /// The sample standard deviation (divisor n - 1).
 /// @fails fault `InvalidArgument` when the array has fewer than two elements
 /// @example [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]->stdev    // 2.13809
-export func stdev::<T>(xs: T[]): T when is_float::<T>() {
+export func stdev::<T>(xs: T[]) => T when is_float::<T>() {
     return T(sqrt(variance_of(float(xs))))
 }
 
@@ -35,7 +35,7 @@ export func stdev::<T>(xs: T[]): T when is_float::<T>() {
 /// NaN when an element is NaN.
 /// @fails fault `InvalidArgument` when the array has no element
 /// @example [3.0, 1.0, 2.0]->median    // 2
-export func median::<T>(xs: T[]): T when is_float::<T>() {
+export func median::<T>(xs: T[]) => T when is_float::<T>() {
     return xs->quantile<0.5>
 }
 
@@ -44,28 +44,27 @@ export func median::<T>(xs: T[]): T when is_float::<T>() {
 /// @fails fault `InvalidArgument` when q is not between 0 and 1, or the array has no element
 /// @example [1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25>    // 2
 with <q: float>
-export func quantile::<T>(xs: T[]): T when is_float::<T>() {
+export func quantile::<T>(xs: T[]) => T when is_float::<T>() {
     return if !(q >= 0.0 && q <= 1.0) then fail<'InvalidArgument'>('a quantile is between 0 and 1')
-        else if len(xs) == 0 then fail<'InvalidArgument'>('the quantile of no elements')
-        else T(quantile_of(sort(float(xs)), q))
+    else if len(xs) == 0 then fail<'InvalidArgument'>('the quantile of no elements') else T(quantile_of(sort(float(xs)), q))
 }
 
 // The sample variance: the squares of the distances to the mean, added in f64 and divided by n - 1.
-func variance_of(w: float[]): float {
-    return if len(w) < 2 then fail<'InvalidArgument'>('a variance needs at least two elements')
-        else {
-            let m = sum(w) / float(len(w))
-            sum(w->map<func (x) { (x - m) * (x - m) }>) / float(len(w) - 1)
-        }
+func variance_of(w: float[]) => float {
+    return if len(w) < 2 then fail<'InvalidArgument'>('a variance needs at least two elements') else {
+        let m = sum(w) / float(len(w))
+        sum(w->map<func (x) {
+            (x - m) * (x - m)
+        }>) / float(len(w) - 1)
+    }
 }
 
 // The q-quantile of values in ascending order, a NaN being last, so one anywhere is NaN.
-func quantile_of(sorted: float[], q: float): float {
+func quantile_of(sorted: float[], q: float) => float {
     let at = q * float(len(sorted) - 1)
     let lo = int(floor(at))
     let hi = int(ceil(at))
     let frac = at - float(lo)
     return if is_nan(last(sorted)) then nan
-        else if lo == hi then sorted[lo]
-        else sorted[lo] * (1.0 - frac) + sorted[hi] * frac
+    else if lo == hi then sorted[lo] else sorted[lo] * (1.0 - frac) + sorted[hi] * frac
 }

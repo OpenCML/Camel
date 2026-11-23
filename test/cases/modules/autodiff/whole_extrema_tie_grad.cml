@@ -23,25 +23,25 @@ import { grad } from autodiff
 import { max, min, sum } from tensor
 
 with <w: float>
-func tie_max(): float {
+func tie_max() => float {
     let xs: float[2, 2] = [[3.0 + 5.0 * w, 3.0 + 1.0 * w], [1.0, 1.5]]
     return max(xs)
 }
 
 with <w: float>
-func tie_min(): float {
+func tie_min() => float {
     let xs: float[2, 2] = [[1.0 + 5.0 * w, 1.0 + 1.0 * w], [2.0, 3.0]]
     return min(xs)
 }
 
 // The axis form on the same tie: the rule the whole-tensor form has to agree with.
 with <w: float>
-func axis_tie(): float {
+func axis_tie() => float {
     let xs: float[2, 2] = [[1.0 + 5.0 * w, 1.0 + 1.0 * w], [2.0, 3.0]]
     return sum(max<1, false>(xs))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(tie_max)<0.0>())
     println(grad(tie_min)<0.0>())
     println(grad(axis_tie)<0.0>())

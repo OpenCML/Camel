@@ -5,7 +5,7 @@
  * arguments while choosing between the two forms.
  */
 
-func main(): int sync {
+func main() => int sync {
     let a = 1
     let u = (a < 2, 'x{}'->format<a>)
     println(u)

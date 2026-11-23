@@ -3,9 +3,11 @@
  * a text element is the mismatch of that element, not a call that matches no overload.
  */
 
-func pairSum(t: (float, float)): float { return t.0 + t.1 }
+func pairSum(t: (float, float)) => float {
+    return t.0 + t.1
+}
 
-func main(): int sync {
+func main() => int sync {
     println(pairSum(('1.5', 2.0)))
     return 0
 }

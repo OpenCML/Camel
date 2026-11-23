@@ -23,17 +23,17 @@ import rulesets.jvp
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
 
-func f(x: float, y: float): float {
+func f(x: float, y: float) => float {
     return x * x * y
 }
 
-func main(): int sync {
+func main() => int sync {
     let lifted = jvp(f)
     let fwd = split(lifted)
     let (value, lin) = fwd(3.0, 2.0)
     let back = transpose(lin)
     let (bx, by) = back(1.0)
-    println("value= ", value)
-    println("back dx= ", bx, " back dy= ", by)
+    println('value= ', value)
+    println('back dx= ', bx, ' back dy= ', by)
     return 0
 }

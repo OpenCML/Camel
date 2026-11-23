@@ -8,13 +8,13 @@
 // a region the program chooses to run or not, so it is no longer a question: 3.1 answers it.
 
 // A statement whose result is unused, in a function whose body is not a `sync` block.
-func plain(x: int): int {
+func plain(x: int) => int {
     println('plain')
     return x + 1
 }
 
 // A nested `sync` block: it orders its own statements, and its writes run with the body.
-func nested(x: int): int {
+func nested(x: int) => int {
     sync {
         println('nested 1')
         println('nested 2')
@@ -23,18 +23,18 @@ func nested(x: int): int {
 }
 
 // Suffix spelling: the body is a `sync` block.
-func suffix(x: int): int sync {
+func suffix(x: int) => int sync {
     println('suffix')
     return x + 1
 }
 
 // An effect whose result is the function's result is on the data path.
-func returned(x: int): void {
+func returned(x: int) => void {
     println('returned first')
     return println('returned')
 }
 
-func main(): int sync {
+func main() => int sync {
     println('main start')
     let a = plain(1) + nested(1) + suffix(1)
     returned(1)

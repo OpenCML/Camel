@@ -9,11 +9,11 @@ import state
 // not allowed, could not be written at all: the value was then called `kept`. The plan read
 // balanced and the box stayed counted for the life of the program. The LEAVING of the loop is the
 // position that runs once at that moment, and the reference now comes back there.
-func escaped_box(i: int): state::Ref<int> {
+func escaped_box(i: int) => state::Ref<int> {
     return state::ref(i)
 }
 
-func read_from_a_call(): int sync {
+func read_from_a_call() => int sync {
     let box = escaped_box(0)
     loop i = 0 while i < 3 do sync {
         println(`box ${state::get(box)}`)
@@ -22,6 +22,6 @@ func read_from_a_call(): int sync {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return read_from_a_call()
 }

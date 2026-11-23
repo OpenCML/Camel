@@ -1,10 +1,10 @@
 import { ones, sum } from tensor
 
-func total(constas n: int, x: f32[n]): float {
+func total(constas n: int, x: f32[n]) => float {
     return float(sum(x))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total())
     return 0
 }

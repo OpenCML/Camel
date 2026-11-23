@@ -2,7 +2,7 @@
  * Smallest executable sanity case for module loading, main dispatch, and plain stdout emission.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('Hello, Camel!')
     return 0
 }

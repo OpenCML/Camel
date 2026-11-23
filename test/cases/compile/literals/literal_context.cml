@@ -6,26 +6,30 @@
  * nearest to 0.3. A variable is not converted by any of this: only literals move.
  */
 
-func scale(x: f32): f32 {
+func scale(x: f32) => f32 {
     return x * 2 + 1
 }
 
-func widen(x: float): float {
+func widen(x: float) => float {
     return x + 0.5
 }
 
-func half(): f32 {
+func half() => f32 {
     return 1 / 2
 }
 
-func armExit(c: bool): float {
+func armExit(c: bool) => float {
     // A `return` in an arm takes the type of the arm's position — here the declared type of
     // `v`, float — not the return type of the function.
-    let v: float = if c then { return 2; } else { 2.0 };
+    let v: float = if c then {
+        return 2
+    } else {
+        2.0
+    }
     return v
 }
 
-func main(): int sync {
+func main() => int sync {
     // The declared type: 2 is an f32, 1 a float, 1 + 2 an i32.
     let a: f32 = 2
     let b: float = 1

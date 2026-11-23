@@ -8,11 +8,11 @@
 // an internal error: the rewrite of graph '__root__' did not settle` -- instead of being refused
 // where it is impure. Nothing about the recursion makes this program exportable, so the refusal is
 // owed before any simplification is tried.
-func sum(n: int, acc: int): int {
+func sum(n: int, acc: int) => int {
     return if n == 0 then acc else sum(n - 1, acc + n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(sum(100000, 0))
     return 0
 }

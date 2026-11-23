@@ -6,11 +6,11 @@
  */
 
 with <rounds: int = 4242>
-func bump(x: int): int {
+func bump(x: int) => int {
     return x + rounds
 }
 
-func main(): int sync {
+func main() => int sync {
     println(bump(1))
     println(bump(2))
     return 0

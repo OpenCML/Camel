@@ -20,7 +20,7 @@ rule wrong_reassociate(x: float) { x * 2.0 => x * 2.000000001 }
 #requires(change_precision)
 rule wrong_precision(x: float) { x * 2.0 => x * 2.000000001 }
 
-func main(): int sync {
+func main() => int sync {
     println(check_text([wrong_reassociate, wrong_precision]->check<40, 5>))
     return 0
 }

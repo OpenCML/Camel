@@ -6,29 +6,49 @@
  * unresolved reference, and as the value of a branch or match arm the branch had type void.
  */
 
-func inc(x: int): int { return x + 1 }
-func dec(x: int): int { return x - 1 }
+func inc(x: int) => int {
+    return x + 1
+}
+func dec(x: int) => int {
+    return x - 1
+}
 
-func apply(f: (x: int) => int, x: int): int { return f(x) }
+func apply(f: (x: int) => int, x: int) => int {
+    return f(x)
+}
 
 with <f: (x: int) => int>
-func withf(x: int): int { return f(x) }
+func withf(x: int) => int {
+    return f(x)
+}
 
-func pick(): (x: int) => int { return inc }
-func choose(c: bool): (x: int) => int { return if c then inc else dec }
+func pick() => (x: int) => int {
+    return inc
+}
+func choose(c: bool) => (x: int) => int {
+    return if c then inc else dec
+}
 
-func main(): int sync {
+func main() => int sync {
     let b = 10
     let c = b > 5
     let s = 'a'
-    func g(a: int): int { return a + b }
-    func h(a: int): int { return a - b }
-    let lam = func (x: int) { x * 2 }
-
+    func g(a: int) => int {
+        return a + b
+    }
+    func h(a: int) => int {
+        return a - b
+    }
+    let lam = func (x: int) {
+        x * 2
+    }
+    
     // argument
     println('arg', apply(inc, 1), apply(g, 1), apply(lam, 1))
     // returned
-    func pick_g(): (x: int) => int { return g }
+    func pick_g() => (x: int) => int {
+        return g
+    }
     println('return', pick()(1), choose(c)(1), choose(!c)(1), pick_g()(1))
     // bound with let
     let k1 = inc
@@ -38,7 +58,9 @@ func main(): int sync {
     let fs = [inc, dec]
     let gs = [g, h]
     println('array', fs[0](1), fs[1](1), gs[0](1), gs[1](1), [inc, lam][1](4))
-    println('array map', [inc, dec]->map<func (f: (x: int) => int) { f(10) }>)
+    println('array map', [inc, dec]->map<func (f: (x: int) => int) {
+        f(10)
+    }>)
     // element of a tuple literal
     let t = (inc, g, 3)
     println('tuple', t.0(1), t.1(1))
@@ -53,17 +75,32 @@ func main(): int sync {
     let a1 = if c then inc else dec
     let a2 = if c then g else h
     let a3 = if c then inc else lam
-    let a4 = if c then sync { println('arm block'); inc } else dec
+    let a4 = if c then sync {
+        println('arm block')
+        inc
+    } else dec
     println('if arm', a1(1), a2(1), a3(7), a4(1), (if c then inc else dec)(5))
     println('if arm as argument', apply(if c then inc else dec, 1), [1, 2]->map<if c then g else h>)
     // value of a match arm
-    let m1 = match s { case 'a' => inc  case _ => dec }
-    let m2 = match s { case 'b' => g  case _ => h }
+    let m1 = match s {
+        case 'a' => inc
+        case _ => dec
+    }
+    let m2 = match s {
+        case 'b' => g
+        case _ => h
+    }
     println('match arm', m1(1), m2(1))
     // captured by a lambda
-    let l1 = func (x: int) { inc(x) + g(x) }
-    let l2 = func (x: int) { k1(x) }
-    let l3 = func (x: int) { apply(inc, x) + apply(g, x) }
+    let l1 = func (x: int) {
+        inc(x) + g(x)
+    }
+    let l2 = func (x: int) {
+        k1(x)
+    }
+    let l3 = func (x: int) {
+        apply(inc, x) + apply(g, x)
+    }
     println('capture', l1(1), l2(1), l3(1))
     // with argument
     let w1 = withf<inc>(1)

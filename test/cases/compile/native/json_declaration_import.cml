@@ -7,7 +7,7 @@
 
 import { Json, decode, kind, get, as_int, as_string, as_array } from json
 
-func report(j: Json): int sync {
+func report(j: Json) => int sync {
     println(kind(j))
     println(j->get<'a'>->get<1>->as_int ?? -1)
     println(j->get<'s'>->as_string ?? '?')
@@ -15,6 +15,6 @@ func report(j: Json): int sync {
     return 0
 }
 
-func main(): int sync {
-    return decode('{"a": [1, 2], "s": "hi"}') -> report !! 1
+func main() => int sync {
+    return decode('{"a": [1, 2], "s": "hi"}')->report !! 1
 }

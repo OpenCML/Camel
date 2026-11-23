@@ -34,10 +34,10 @@
 // everywhere would give, matches none of them.
 //
 //     camel test/cases/compile/transforms/sum_axis_in_a_training_step.cml
-import { relu, sum } from tensor
-import rulesets.jvp
-import { jvp } from transforms
 import { with_grad } from autodiff
+import rulesets.jvp
+import { relu, sum } from tensor
+import { jvp } from transforms
 
 type Cache = {
     w: float[3, 2],
@@ -45,30 +45,30 @@ type Cache = {
 }
 
 with <p: Cache>
-func loss(x: float[2, 3]): float {
+func loss(x: float[2, 3]) => float {
     let h = relu(x @ p.w + p.b)
     let dy = h - [[1.0, 2.0], [1.0, 2.0]] as float[2, 2]
     return sum(sum<1, false>(dy * dy))
 }
 
-func loss_plain(w: float[3, 2], b: float[2]): float {
+func loss_plain(w: float[3, 2], b: float[2]) => float {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let h = relu(x @ w + b)
     let dy = h - [[1.0, 2.0], [1.0, 2.0]] as float[2, 2]
     return sum(sum<1, false>(dy * dy))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let w = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]] as float[3, 2]
     let b = [0.0, 0.0] as float[2]
     let p = { w: w, b: b }
     let zero_w = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[3, 2]
     let zero_b = [0.0, 0.0] as float[2]
-
+    
     let (value, g) = with_grad(loss)<p>(x)
     `step engine  loss={} dL/db={} dL/dw={}`->format<value, g.b, g.w>->println
-
+    
     let (_l0, t00) = jvp(loss_plain)(w, b, [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[3, 2], zero_b)
     `step library dL/dw[0][0]={}`->format<t00>->println
     let (_l1, t10) = jvp(loss_plain)(w, b, [[0.0, 0.0], [1.0, 0.0], [0.0, 0.0]] as float[3, 2], zero_b)

@@ -7,13 +7,15 @@
  * the warning names the argument; the fault the argument raises happens as it did.
  */
 
-func double(x: int): int { return x + x }
+func double(x: int) => int {
+    return x + x
+}
 
-func stop(m: string): never {
+func stop(m: string) => never {
     return fail<'Stopped'>(m)
 }
 
-func main(): int sync {
+func main() => int sync {
     let as_int: int! = double(stop('no value to double'))
     let as_string: string! = double(stop('no value to double'))
     return 0

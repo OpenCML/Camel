@@ -5,10 +5,14 @@
 
 import { max, min, is_nan } from math
 
-func neg(x: float): float { return -x }
-func sub(a: float, b: float): float { return a - b }
+func neg(x: float) => float {
+    return -x
+}
+func sub(a: float, b: float) => float {
+    return a - b
+}
 
-func main(): int sync {
+func main() => int sync {
     let pz = 0.0
     let nz = neg(0.0)
     // Infinity is reached at run time: `1.0e308 * 10.0` written with literals only is the

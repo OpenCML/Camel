@@ -8,13 +8,15 @@ type S = { a: int, b: float }
 type Row = { name: string, size: int }
 
 with <k: int>
-func pair(x: int): (int, int) {
+func pair(x: int) => (int, int) {
     return (x + k, x * k)
 }
 
-func make(): S { return { a: 5, b: 1.5 } }
+func make() => S {
+    return { a: 5, b: 1.5 }
+}
 
-func main(): int sync {
+func main() => int sync {
     let s: S = { a: 1, b: 2.0 }
     let rows = [{ name: 'x', size: 1 }, { name: 'y', size: 2 }]
     'annotated {} {}'->format<s.a, s.b>->println

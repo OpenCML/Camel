@@ -5,11 +5,11 @@
 
 import predicates as preds
 
-func describe::<T>(x: T): string when preds::is_compound::<T>() {
+func describe::<T>(x: T) => string when preds::is_compound::<T>() {
     return 'compound'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(describe((1, 2)))
     return 0
 }

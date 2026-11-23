@@ -7,12 +7,15 @@
 
 import { Json, decode, kind } from json
 
-func report(j: Json): int sync {
+func report(j: Json) => int sync {
     let bad = decode('{"a": ')
-    println(match bad { case error e => 'error' case v => kind(v) }, kind(j))
+    println(match bad {
+        case error e => 'error'
+        case v => kind(v)
+    }, kind(j))
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return decode('{"a":1}')->report !! 1
 }

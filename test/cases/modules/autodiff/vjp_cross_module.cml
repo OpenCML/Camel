@@ -11,7 +11,7 @@ import { grad } from autodiff
 import { use_a } from vjp_user_a
 import { use_b } from vjp_user_b
 
-func main(): int sync {
+func main() => int sync {
     let da = grad(use_a)<2.0>()
     let db = grad(use_b)<2.0>()
     'vjp_cross_module da={} db={}'->format<da, db>->println

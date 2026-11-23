@@ -42,18 +42,18 @@
 import { grad } from autodiff
 import { vjp } from vjp
 
-func cube(x: float): float {
+func cube(x: float) => float {
     return x * x * x
 }
 
 with <x: float>
-func vjp_value(): float {
+func vjp_value() => float {
     let (value, pullback) = vjp(cube)(x)
     let _ = pullback
     return value
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(vjp_value)<2.0>())
     return 0
 }

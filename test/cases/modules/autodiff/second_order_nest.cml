@@ -15,13 +15,15 @@
 import { grad } from autodiff
 
 with <x: float>
-func cube(): float {
+func cube() => float {
     return x * x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let nested = grad(grad(cube))<2.0>()
-    let lambda = grad(func <x: float>() { grad(cube)<x>() })<2.0>()
+    let lambda = grad(func <x: float>() {
+        grad(cube)<x>()
+    })<2.0>()
     'second_order_nest nested={} lambda={}'->format<nested, lambda>->println
     return 0
 }

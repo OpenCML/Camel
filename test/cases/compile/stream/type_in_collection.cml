@@ -5,15 +5,15 @@
  * takes a stream: the restriction is linearity, not the type.
  */
 
-func drain(m: Map<string, int..>): int {
+func drain(m: Map<string, int..>) => int {
     return 0
 }
 
-func collect(s: Set<int..>): int {
+func collect(s: Set<int..>) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(0)
     return 0
 }

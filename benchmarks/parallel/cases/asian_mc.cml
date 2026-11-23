@@ -3,13 +3,16 @@
 
 import { asian_call_price } from sim
 
-func main(): int sync {
+func main() => int sync {
     let workers = 16
     let paths_per_worker = 5000
     let steps = 256
-    let prices = (0..workers)
-        ->map<func (i: int) => float { asian_call_price(paths_per_worker, steps, 20260309 + i * 7919) }>
-    let total = prices->reduce<func (acc: float, cur: float) => float { acc + cur }, 0.0>
+    let prices = (0 .. workers)->map<func (i: int) => float {
+        asian_call_price(paths_per_worker, steps, 20260309 + i * 7919)
+    }>
+    let total = prices->reduce<func (acc: float, cur: float) => float {
+        acc + cur
+    }, 0.0>
     println(format<total>('Sum of worker prices = {:.6f}'))
     return 0
 }

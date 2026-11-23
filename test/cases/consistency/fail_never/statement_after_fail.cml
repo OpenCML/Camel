@@ -5,7 +5,7 @@
  * warning belongs to `fail`. What was printed before it stays, and nothing after it is printed.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     fail<'NoPremise'>('the premise of this program does not hold')
     println('after')

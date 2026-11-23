@@ -3,7 +3,7 @@
  * mismatch; `c128('1+2i')` is the explicit conversion.
  */
 
-func main(): int sync {
+func main() => int sync {
     let z: c128 = '1+2i'
     println(z)
     return 0

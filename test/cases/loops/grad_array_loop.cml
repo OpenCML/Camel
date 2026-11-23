@@ -11,25 +11,25 @@ import { grad } from autodiff
 type P = { x: float, y: float }
 
 with <xs: float[]>
-func capture(): float {
+func capture() => float {
     return loop acc = 0.0 for k in [0, 1, 2] do acc + xs[k]
 }
 
 with <w: float>
-func state(): float {
+func state() => float {
     let empty: float[] = []
     let losses = loop acc = empty for x in [1.0, 2.0, 3.0] do acc->append<x * w>
     return losses[0] + losses[1] + losses[2]
 }
 
 with <w: float>
-func state_struct(): float {
+func state_struct() => float {
     let empty: P[] = []
     let ps = loop acc = empty for i in [1, 2] do acc->append<{ x: float(i) * w, y: 0.0 }>
     return ps[0].x + ps[1].x
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs = [1.0, 2.0, 3.0]
     println(capture<xs>())
     println(grad(capture)<xs>())

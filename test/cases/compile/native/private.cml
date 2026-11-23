@@ -4,7 +4,7 @@
  */
 import { second } from private_module
 
-func main(): int sync {
+func main() => int sync {
     println(second([4, 5, 6]))
     return 0
 }

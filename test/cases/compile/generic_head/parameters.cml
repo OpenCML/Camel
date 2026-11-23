@@ -6,26 +6,30 @@
  */
 
 // `A` appears in both parameters and in the result.
-func pair::<A>(x: A, y: A): (A, A) {
+func pair::<A>(x: A, y: A) => (A, A) {
     return (x, y)
 }
 
 // The type of the `with` parameter uses `T` and `U`; the result type uses `U`.
 with <f: (x: T) => U>
-func turn::<T, U>(x: T): U {
+func turn::<T, U>(x: T) => U {
     return f(x)
 }
 
 // A function type written in an ordinary parameter type uses the head names too.
-func feed::<T, U>(f: (x: T) => U, x: T): U {
+func feed::<T, U>(f: (x: T) => U, x: T) => U {
     return f(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let p = pair(1, 2)
     println(p.0)
     println(p.1)
-    println(turn::<int, int><func (x: int) { x + 1 }>(41))
-    println(feed(func (x: int) { x * 3 }, 7))
+    println(turn::<int, int><func (x: int) {
+        x + 1
+    }>(41))
+    println(feed(func (x: int) {
+        x * 3
+    }, 7))
     return 0
 }

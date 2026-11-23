@@ -7,128 +7,129 @@
  * either side changes the output.
  */
 
-
 type Point = { x: int }
 
-func is_numeric::<T>(): bool {
+func is_numeric::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 | c64 | c128 => true
         case _ => false
     }
 }
 
-func is_integer::<T>(): bool {
+func is_integer::<T>() => bool {
     return match type T {
         case int | i32 => true
         case _ => false
     }
 }
 
-func is_float::<T>(): bool {
+func is_float::<T>() => bool {
     return match type T {
         case float | f32 => true
         case _ => false
     }
 }
 
-func is_ordered::<T>(): bool {
+func is_ordered::<T>() => bool {
     return match type T {
         case int | i32 | float | f32 | string | bool => true
         case _ => false
     }
 }
 
-func is_function::<T>(): bool {
+func is_function::<T>() => bool {
     return match type T {
         case func => true
         case _ => false
     }
 }
 
-func is_string::<T>(): bool {
+func is_string::<T>() => bool {
     return match type T {
         case string => true
         case _ => false
     }
 }
 
-func is_bool::<T>(): bool {
+func is_bool::<T>() => bool {
     return match type T {
         case bool => true
         case _ => false
     }
 }
 
-func numeric::<T>(x: T): string when is_numeric::<T>() {
-    return "numeric"
+func numeric::<T>(x: T) => string when is_numeric::<T>() {
+    return 'numeric'
 }
 
-func not_numeric::<T>(x: T): string when !is_numeric::<T>() {
-    return "not numeric"
+func not_numeric::<T>(x: T) => string when !is_numeric::<T>() {
+    return 'not numeric'
 }
 
-func integer::<T>(x: T): string when is_integer::<T>() {
-    return "integer"
+func integer::<T>(x: T) => string when is_integer::<T>() {
+    return 'integer'
 }
 
-func not_integer::<T>(x: T): string when !is_integer::<T>() {
-    return "not integer"
+func not_integer::<T>(x: T) => string when !is_integer::<T>() {
+    return 'not integer'
 }
 
-func real::<T>(x: T): string when is_float::<T>() {
-    return "float"
+func real::<T>(x: T) => string when is_float::<T>() {
+    return 'float'
 }
 
-func not_real::<T>(x: T): string when !is_float::<T>() {
-    return "not float"
+func not_real::<T>(x: T) => string when !is_float::<T>() {
+    return 'not float'
 }
 
-func ordered::<T>(x: T): string when is_ordered::<T>() {
-    return "ordered"
+func ordered::<T>(x: T) => string when is_ordered::<T>() {
+    return 'ordered'
 }
 
-func not_ordered::<T>(x: T): string when !is_ordered::<T>() {
-    return "not ordered"
+func not_ordered::<T>(x: T) => string when !is_ordered::<T>() {
+    return 'not ordered'
 }
 
-func function::<T>(f: T): string when is_function::<T>() {
-    return "function"
+func function::<T>(f: T) => string when is_function::<T>() {
+    return 'function'
 }
 
-func not_function::<T>(x: T): string when !is_function::<T>() {
-    return "not function"
+func not_function::<T>(x: T) => string when !is_function::<T>() {
+    return 'not function'
 }
 
-func text::<T>(x: T): string when is_string::<T>() {
-    return "string"
+func text::<T>(x: T) => string when is_string::<T>() {
+    return 'string'
 }
 
-func not_text::<T>(x: T): string when !is_string::<T>() {
-    return "not string"
+func not_text::<T>(x: T) => string when !is_string::<T>() {
+    return 'not string'
 }
 
-func boolean::<T>(x: T): string when is_bool::<T>() {
-    return "bool"
+func boolean::<T>(x: T) => string when is_bool::<T>() {
+    return 'bool'
 }
 
-func not_boolean::<T>(x: T): string when !is_bool::<T>() {
-    return "not bool"
+func not_boolean::<T>(x: T) => string when !is_bool::<T>() {
+    return 'not bool'
 }
 
-func main(): int sync {
+func main() => int sync {
     let p: Point = { x: 1 }
-    let f: (x: int) => int = func (x) { x }
+    let f: (x: int) => int = func (x) {
+        x
+    }
     println(numeric(1))
-    println(not_numeric("s"))
+    println(not_numeric('s'))
     println(integer(1))
     println(not_integer(1.0))
     println(real(1.0))
     println(not_real(1))
-    println(ordered("s"))
+    println(ordered('s'))
     println(not_ordered(p))
     println(function(f))
     println(not_function(1))
-    println(text("s"))
+    println(text('s'))
     println(not_text(1))
     println(boolean(true))
     println(not_boolean(1))

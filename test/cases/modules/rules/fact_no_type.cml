@@ -10,6 +10,6 @@ fact depth(n) match n {
     case _            => 0
 } join max
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

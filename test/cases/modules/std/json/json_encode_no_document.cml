@@ -10,14 +10,20 @@
 
 import { Json, decode, encode } from json
 
-func report(): int sync {
+func report() => int sync {
     let bad = decode('{"a": ')
     let other = decode('[1, ')
-    println(match bad { case error e => 'error' case v => encode(v) })
-    println(match other { case error e => 'error' case v => encode<indent: 2>(v) })
+    println(match bad {
+        case error e => 'error'
+        case v => encode(v)
+    })
+    println(match other {
+        case error e => 'error'
+        case v => encode<indent: 2>(v)
+    })
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return report()
 }

@@ -4,16 +4,16 @@
  * overload's parameter (design principles 5.1).
  */
 with <tag: int>
-func pick::<T>(x: T): int {
+func pick::<T>(x: T) => int {
     return tag
 }
 
 with <tag: int, axes: int[] = [], names: string[] = []>
-func pick::<T>(x: T, y: T): int {
+func pick::<T>(x: T, y: T) => int {
     return tag + len(axes) * 10 + len(names) * 100
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick<1>(0))
     println(pick<1, [], []>(0, 0))
     println(pick<1, [4, 5], ['a']>(0, 0))

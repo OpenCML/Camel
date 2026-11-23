@@ -7,17 +7,35 @@
  * item of a tuple takes a stream; nothing else is a special case.
  */
 
-func stream(s: int..): int { return 0 }
-func nullableStream(s: int?..): int { return 0 }
-func fallibleStream(s: int!..): int { return 0 }
-func streamNullable(s: int..?): int { return 0 }
-func streamOfRows(s: int[3]..): int { return 0 }
-func streamOfOpenRows(s: int[...]..): int { return 0 }
-func openRank(rows: int[...]): int { return 0 }
-func inTuple(pair: (int, int)..): int { return 0 }
-func tupleOfStreams(pair: (int.., int..)): int { return 0 }
+func stream(s: int..) => int {
+    return 0
+}
+func nullableStream(s: int?..) => int {
+    return 0
+}
+func fallibleStream(s: int!..) => int {
+    return 0
+}
+func streamNullable(s: int..?) => int {
+    return 0
+}
+func streamOfRows(s: int[3]..) => int {
+    return 0
+}
+func streamOfOpenRows(s: int[...]..) => int {
+    return 0
+}
+func openRank(rows: int[...]) => int {
+    return 0
+}
+func inTuple(pair: (int, int)..) => int {
+    return 0
+}
+func tupleOfStreams(pair: (int.., int..)) => int {
+    return 0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(4)
     return 0
 }

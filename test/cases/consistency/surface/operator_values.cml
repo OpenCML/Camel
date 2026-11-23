@@ -3,21 +3,31 @@
  * function value like a user function of that name: `xs->map<trim>`. A name with several
  * signatures is a value where the type expected there selects one of them.
  */
-import { trim, to_upper, starts_with } from str
 import { abs } from math
+import { trim, to_upper, starts_with } from str
 
-func apply(f: (s: string) => string, s: string): string { return f(s) }
-func on_int(f: (x: int) => int, v: int): int { return f(v) }
-func on_float(f: (x: float) => float, v: float): float { return f(v) }
+func apply(f: (s: string) => string, s: string) => string {
+    return f(s)
+}
+func on_int(f: (x: int) => int, v: int) => int {
+    return f(v)
+}
+func on_float(f: (x: float) => float, v: float) => float {
+    return f(v)
+}
 
-func twice(x: int): int { return x * 2 }
-func twice(x: float): float { return x * 2.0 }
+func twice(x: int) => int {
+    return x * 2
+}
+func twice(x: float) => float {
+    return x * 2.0
+}
 
-func pick(upper: bool): (s: string) => string {
+func pick(upper: bool) => (s: string) => string {
     return if upper then to_upper else trim
 }
 
-func main(): int sync {
+func main() => int sync {
     println([' a ', ' b']->map<trim>)
     println(['a', 'b']->map<to_upper>)
     println(apply(trim, '  padded  ') + '|')

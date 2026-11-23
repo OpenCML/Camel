@@ -5,18 +5,18 @@
  * it was given and the trees it was given.
  */
 
-func column(constas n: string, ...ts): (int, int) {
-    return ( static for j in indices ts do ts.[j].[n] )
+func column(constas n: string, ...ts) => (int, int) {
+    return (static for j in indices ts do ts.[j].[n])
 }
 
-func columnOf(constas n: string, ...ts): (int, int) {
+func columnOf(constas n: string, ...ts) => (int, int) {
     return column(n, ...ts)
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = { w: 1, h: 2 }
     let b = { w: 3, h: 4 }
-    println(columnOf("w", a, b))
-    println(columnOf("h", a, b))
+    println(columnOf('w', a, b))
+    println(columnOf('h', a, b))
     return 0
 }

@@ -11,12 +11,12 @@
  *
  * Run: camel test/cases/compile/chain/effect_call_first.cml
  */
-func announce(x: int): int {
+func announce(x: int) => int {
     println(x)
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = announce(1)
     println(2)
     return a

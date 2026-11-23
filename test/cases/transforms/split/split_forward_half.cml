@@ -16,15 +16,15 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func g(x: float): float {
+func g(x: float) => float {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let fwd = split(jvp(g))
     let (y, lin) = fwd(3.0)
     let dy = lin(1.0)
-    println("forward y=", y)
-    println("tangent dx1=", dy)
+    println('forward y=', y)
+    println('tangent dx1=', dy)
     return 0
 }

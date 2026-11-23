@@ -2,7 +2,7 @@
 // success, `!!` supplies a fallback and `match ... case error e` inspects the failure.
 // Run: camel examples/data/validate_input.cml
 
-func check_range(age: int): int! {
+func check_range(age: int) => int! {
     return if age < 0 || age > 150 then {
         return error('OutOfRange', 'age must be between 0 and 150, got ' + string(age))
     } else {
@@ -10,28 +10,33 @@ func check_range(age: int): int! {
     }
 }
 
-func to_months(age: int): int {
+func to_months(age: int) => int {
     return age * 12
 }
 
-func report(text: string, r: int!): string {
+func report(text: string, r: int!) => string {
     return match r {
         case error e => `${text:<6} -> error ${e.kind}`
         case v => `${text:<6} -> ${v} months`
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let inputs = ['42', '7', 'forty', '-3', '999']
     inputs->foreach<func (text: string) sync {
         // The first failing step decides the result; the steps after it are skipped.
-        println(report(text, parse_int(text) -> check_range -> to_months))
+        println(report(text, parse_int(text)->check_range->to_months))
     }>
-
-    let ages = inputs->map<func (text: string) => int { parse_int(text) -> check_range !! 0 }>
+    
+    let ages = inputs->map<func (text: string) => int {
+        parse_int(text)->check_range !! 0
+    }>
     println('ages, 0 for bad input:', ages)
-
+    
     let failure = check_range(200)
-    println(match failure { case error e => e.message  case v => 'ok' })
+    println(match failure {
+        case error e => e.message
+        case v => 'ok'
+    })
     return 0
 }

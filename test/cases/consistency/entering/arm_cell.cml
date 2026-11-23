@@ -7,32 +7,36 @@
  * ordered and no ignored-side-effect warning is part of what this case measures.
  */
 
-func from_name(var x: int, c: bool): int? {
+func from_name(var x: int, c: bool) => int? {
     return if c then x else null
 }
 
-func from_write(var x: int, c: bool): int? sync {
-    return if c then sync { x = x + 1 } else null
+func from_write(var x: int, c: bool) => int? sync {
+    return if c then sync {
+        x = x + 1
+    } else null
 }
 
-func from_either(var x: int, c: bool): int? sync {
-    return if c then x else sync { x = x - 1 }
+func from_either(var x: int, c: bool) => int? sync {
+    return if c then x else sync {
+        x = x - 1
+    }
 }
 
 // A position whose type is the cell's own content type: `int` takes the `int` the variable
 // holds, never the cell, so the arm joins as `int` and the branch as a whole is an `int`.
-func same_type(c: bool, a: int): int {
+func same_type(c: bool, a: int) => int {
     var x: int = a
     return if c then x else 0
 }
 
 // Only an `int?` enters this position: a cell with a null slot does not, so these calls
 // compile only if the cell was read out of the join.
-func only_nullable(v: int?): int {
+func only_nullable(v: int?) => int {
     return v ?? -1
 }
 
-func main(): int sync {
+func main() => int sync {
     var x: int = 0
     println(only_nullable(from_name(x, true)))
     println(only_nullable(from_name(x, false)))
@@ -49,7 +53,9 @@ func main(): int sync {
     println(only_nullable(z))
     // The same, with an arm that is a write: no position types the branch, so the arm merge
     // itself is what reads the cell out; a `(var int)?` would not enter `only_nullable`.
-    let w = if x >= 0 then sync { x = x + 1 } else null
+    let w = if x >= 0 then sync {
+        x = x + 1
+    } else null
     println(only_nullable(w))
     println(x)
     println(same_type(true, 7))

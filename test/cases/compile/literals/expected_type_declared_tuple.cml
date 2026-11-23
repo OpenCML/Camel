@@ -9,11 +9,17 @@
 
 type P = { a: f32, b: f32 }
 
-func viaReturn(): (f32, f32) { return (1.0000000596046447753906251, 2.0) }
-func viaField(): P { return { a: 1.0000000596046447753906251, b: 2.0 } }
-func viaArray(): f32[] { return [1.0000000596046447753906251] }
+func viaReturn() => (f32, f32) {
+    return (1.0000000596046447753906251, 2.0)
+}
+func viaField() => P {
+    return { a: 1.0000000596046447753906251, b: 2.0 }
+}
+func viaArray() => f32[] {
+    return [1.0000000596046447753906251]
+}
 
-func main(): int sync {
+func main() => int sync {
     // a declaration, a tuple literal, a struct literal and an array literal
     let t: (f32, f32) = (1.0000000596046447753906251, 2.0)
     println('{:.9g}'->format<t.0>)

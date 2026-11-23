@@ -5,7 +5,7 @@
  * guessed position: ParamArgumentCallee, at the argument.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(fn: 'printf')
     return 0
 }

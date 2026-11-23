@@ -16,7 +16,7 @@ type UnguardedShapeOf<T> = match type T {
     case _ => int[0]
 }
 
-func main(): int sync {
+func main() => int sync {
     // ① a string has no dimension to state, and the bare default answers what it answers for a
     //    scalar: `int[0]`, silently.
     println(is_same::<UnguardedShapeOf<string>, int[0]>())

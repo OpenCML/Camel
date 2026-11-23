@@ -6,11 +6,11 @@
 //     camel test/cases/modules/tensor/shape_types/reduction_states_extents.cml
 import { mean } from tensor
 
-func four(v: f32[4]): float {
+func four(v: f32[4]) => float {
     return float(v[0])
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3]
     println(four(mean<0, false>(x)))
     return 0

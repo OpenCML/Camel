@@ -6,11 +6,11 @@
 //     camel test/cases/modules/tensor/shape_types/reduction_extents_reach_the_product.cml
 import { mean } from tensor
 
-func five(v: f32[5]): float {
+func five(v: f32[5]) => float {
     return float(v[0])
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3]
     let w = [1.0, 2.0, 3.0] as f32[3]
     println(five(mean<0, false>(x) * w))

@@ -37,30 +37,30 @@
  * (a result kept at f32 would answer the f32 value and not the element).
  */
 
-import { to_bytes } from tensor
 import { to_array } from bytes
 import { abs } from math
+import { to_bytes } from tensor
 
 /// The little-endian bytes of one element of a one-element array of the type.
-func bitsOfBf16(value: bf16): int[] {
+func bitsOfBf16(value: bf16) => int[] {
     let one: bf16[] = [value]
     return to_array(to_bytes(one))
 }
 
-func bitsOfF16(value: f16): int[] {
+func bitsOfF16(value: f16) => int[] {
     let one: f16[] = [value]
     return to_array(to_bytes(one))
 }
 
 /// The stored element is the nearest member of the type to the exact difference: off by no more
 /// than one rounding's relative bound (2^-8 for bf16, 2^-11 for f16; half each type's machine epsilon).
-func bf16Nearest(a: bf16, b: bf16): bool {
+func bf16Nearest(a: bf16, b: bf16) => bool {
     let r: bf16 = a - b
     let exact: f64 = f64(a) - f64(b)
     return abs(f64(r) - exact) / abs(exact) <= 0.00390625
 }
 
-func f16Nearest(a: f16, b: f16): bool {
+func f16Nearest(a: f16, b: f16) => bool {
     let r: f16 = a - b
     let exact: f64 = f64(a) - f64(b)
     return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
@@ -68,15 +68,15 @@ func f16Nearest(a: f16, b: f16): bool {
 
 /// The exact difference sat between these two elements: each is the same distance away, so which
 /// one was stored is the whole of the tie rule.
-func bf16WasATie(below: bf16, above: bf16, exact: f64): bool {
+func bf16WasATie(below: bf16, above: bf16, exact: f64) => bool {
     return abs(f64(below) - exact) == abs(f64(above) - exact)
 }
 
-func f16WasATie(below: f16, above: f16, exact: f64): bool {
+func f16WasATie(below: f16, above: f16, exact: f64) => bool {
     return abs(f64(below) - exact) == abs(f64(above) - exact)
 }
 
-func main(): int sync {
+func main() => int sync {
     // ---- bf16 ----
     let bfExact: bf16 = bf16(3.75) - bf16(0.5)
     let bfNegative: bf16 = bf16(0.5) - bf16(1.0)
@@ -84,24 +84,24 @@ func main(): int sync {
     println(bitsOfBf16(bfExact), f32(bfExact))
     println(bitsOfBf16(bfNegative), f32(bfNegative))
     println(bitsOfBf16(bfBoth), f32(bfBoth))
-
+    
     // the two ties: the upper element is even in the first, the lower in the second
     let bfUp: bf16 = bf16(1.0) - bf16(0.001953125)
     let bfDown: bf16 = bf16(1.0) - bf16(0.005859375)
     println(bitsOfBf16(bfUp), bf16WasATie(bf16(0.99609375), bf16(1.0), 0.998046875))
     println(bitsOfBf16(bfDown), bf16WasATie(bf16(0.9921875), bf16(0.99609375), 0.994140625))
-
+    
     // neither neighbour, a real rounding
     let bfRounded: bf16 = bf16(1.0) - bf16(0.1)
     println(bitsOfBf16(bfRounded), bf16Nearest(bf16(1.0), bf16(0.1)))
-
+    
     // zero, and one past the range
     let bfZero: bf16 = bf16(1.5) - bf16(1.5)
     let bfMax: bf16 = 3.3895314e38
     let bfOver: bf16 = -bfMax - bfMax
     println(bitsOfBf16(bfZero), f32(bfZero))
     println(bitsOfBf16(bfOver), f32(bfOver))
-
+    
     // ---- f16: the same eight ----
     let f16Exact: f16 = f16(3.75) - f16(0.5)
     let f16Negative: f16 = f16(0.5) - f16(1.0)
@@ -109,21 +109,21 @@ func main(): int sync {
     println(bitsOfF16(f16Exact), f32(f16Exact))
     println(bitsOfF16(f16Negative), f32(f16Negative))
     println(bitsOfF16(f16Both), f32(f16Both))
-
+    
     let f16Up: f16 = f16(1.0) - f16(0.00048828125)
     let f16Down: f16 = f16(1.0) - f16(0.000732421875)
     println(bitsOfF16(f16Up), f16WasATie(f16(0.9990234375), f16(1.0), 0.99951171875))
     println(bitsOfF16(f16Down), f16WasATie(f16(0.9990234375), f16(0.99951171875), 0.999267578125))
-
+    
     let f16Rounded: f16 = f16(1.0) - f16(0.1)
     println(bitsOfF16(f16Rounded), f16Nearest(f16(1.0), f16(0.1)))
-
+    
     let f16Zero: f16 = f16(1.5) - f16(1.5)
     let f16Max: f16 = 65504.0
     let f16Over: f16 = -f16Max - f16Max
     println(bitsOfF16(f16Zero), f32(f16Zero))
     println(bitsOfF16(f16Over), f32(f16Over))
-
+    
     // ---- the result keeps the operands' element type ----
     let bfOne: bf16[] = [bfExact]
     let f16One: f16[] = [f16Exact]

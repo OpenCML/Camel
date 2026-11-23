@@ -6,32 +6,32 @@
 
 type Pair<T> = (T, T)
 
-func first::<T>(xs: T[]): T {
+func first::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func swap::<T>(p: Pair<T>): Pair<T> {
+func swap::<T>(p: Pair<T>) => Pair<T> {
     return (p.1, p.0)
 }
 
-func zip2::<A, B>(a: A, b: B): (A, B) {
+func zip2::<A, B>(a: A, b: B) => (A, B) {
     return (a, b)
 }
 
-func count::<T>(xs: T[], i: int): int {
+func count::<T>(xs: T[], i: int) => int {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 
-func sum_to::<T>(xs: T[], i: int, acc: T): T {
+func sum_to::<T>(xs: T[], i: int, acc: T) => T {
     return if i >= len(xs) then acc else sum_to(xs, i + 1, acc + xs[i])
 }
 
 with <f: (x: T) => U>
-func my_map::<T, U>(xs: T[]): U[] {
+func my_map::<T, U>(xs: T[]) => U[] {
     return xs->map<f>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(first([[1.5], [2.5]]))
@@ -43,7 +43,11 @@ func main(): int sync {
     println(sum_to([1, 2, 3, 4], 0, 0))
     println(sum_to([0.5, 0.25], 0, 0.0))
     println(sum_to(['a', 'b', 'c'], 0, ''))
-    println([1, 2, 3]->my_map<func (x: int) { x * 10 }>)
-    println(['a']->my_map<func (s: string) { len(s) }>)
+    println([1, 2, 3]->my_map<func (x: int) {
+        x * 10
+    }>)
+    println(['a']->my_map<func (s: string) {
+        len(s)
+    }>)
     return 0
 }

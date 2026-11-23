@@ -6,16 +6,16 @@
  */
 
 with <rounds: int = 8>
-func show(x: int): string {
+func show(x: int) => string {
     return string(x * rounds)
 }
 
 with <iters: int = 8>
-func show(x: string): string {
+func show(x: string) => string {
     return x + string(iters)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(show<rounds: 2>(3))
     return 0
 }

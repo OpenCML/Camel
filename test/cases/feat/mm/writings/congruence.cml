@@ -3,14 +3,14 @@
  * `a + 1` are one value, and what follows from merging two parameters.
  */
 
-func f(a: int, b: int): int {
+func f(a: int, b: int) => int {
     let p = a + 1
     let q = b + 1
     let r = a + 1
     return p * q + r
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(2, 3))
     return 0
 }

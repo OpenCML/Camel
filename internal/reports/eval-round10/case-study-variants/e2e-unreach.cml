@@ -2,15 +2,15 @@
 // program runs; the question this row asks is whether the canonical document gains a graph
 // for it. Same five lines as e2e/program.cml.
 
-func unused(x: int): int {
+func unused(x: int) => int {
     return x + 1
 }
 
-func apply(f: (x: int) => int, x: int): int sync {
+func apply(f: (x: int) => int, x: int) => int sync {
     return f(x)
 }
 
-func run(n: int, base: int): int sync {
+func run(n: int, base: int) => int sync {
     let label = 'step'
     let twice = base * 2
     let thrice = base * 3
@@ -28,7 +28,7 @@ func run(n: int, base: int): int sync {
     return total
 }
 
-func main(): int sync {
+func main() => int sync {
     let _ = run(3, 10)
     return 0
 }

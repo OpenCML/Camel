@@ -3,11 +3,11 @@
 /// therefore runs here, next to a program file that would break it if it were taken for the
 /// library's `graph`.
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(21))
     return 0
 }

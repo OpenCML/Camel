@@ -4,22 +4,22 @@
  * Also a nested function that captures a parameter, returned by its name.
  */
 
-func positive(a: int): bool {
+func positive(a: int) => bool {
     return a > 0
 }
 
-func pick(): (a0: int) => bool {
+func pick() => (a0: int) => bool {
     return positive
 }
 
-func adder(k: int): (x: int) => int {
-    func add(x: int): int {
+func adder(k: int) => (x: int) => int {
+    func add(x: int) => int {
         return x + k
     }
     return add
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = pick()
     println(g(1), g(-1))
     let add5 = adder(5)

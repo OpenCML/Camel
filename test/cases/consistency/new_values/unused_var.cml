@@ -3,7 +3,7 @@
  * compile-time error whose message gives the rebinding to write instead.
  */
 
-func main(): int sync {
+func main() => int sync {
     var xs = [1, 2]
     xs->append<5>
     println(xs)

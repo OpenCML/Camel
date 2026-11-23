@@ -5,7 +5,7 @@
  * Expected output: 1
  */
 
-func main(): int sync {
+func main() => int sync {
     let n = if true then sync {
         var v = [int(2.5)]
         return int(1.0)

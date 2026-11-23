@@ -3,12 +3,12 @@
  * its type from the parameter, `[]` takes its element type from it, and a `T` enters `T?`.
  */
 with <axes: int[]?, extra: int[] = [], scale: f32 = 1.0>
-func probe(): float {
+func probe() => float {
     let n = len(axes ?? [])
     return float(n * 100 + len(extra)) + float(scale)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(probe<[0]>())
     println(probe<[0, 1], []>())
     println(probe<null, [4, 5]>())

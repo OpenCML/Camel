@@ -5,16 +5,16 @@
  * as an effect that is not executed as well (design principles 3.9).
  */
 
-func check_same(a: int, b: int): bool! {
+func check_same(a: int, b: int) => bool! {
     return if a == b then true else error('Mismatch', 'not the same')
 }
 
-func probe(a: int, b: int): int {
+func probe(a: int, b: int) => int {
     check_same(a, b)
     return 3
 }
 
-func main(): int sync {
+func main() => int sync {
     println(probe(1, 2))
     return 0
 }

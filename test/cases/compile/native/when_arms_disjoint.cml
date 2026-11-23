@@ -19,7 +19,7 @@
  */
 
 /// The element types of the first arm: `i32` alone.
-func is_arm_i32::<T>(): bool {
+func is_arm_i32::<T>() => bool {
     return match type T {
         case i32 => true
         case _ => false
@@ -30,7 +30,7 @@ func is_arm_i32::<T>(): bool {
 /// declarations of `arms_kernel` cover one family of element types each and may stand side by
 /// side where a second declaration of the same signature used to be
 /// `SemanticDiag::NativeDeclarationOverlap`.
-func is_arm_int::<T>(): bool {
+func is_arm_int::<T>() => bool {
     return match type T {
         case int => true
         case _ => false
@@ -38,17 +38,17 @@ func is_arm_int::<T>(): bool {
 }
 
 #op(':op/sub_i')
-func arms_kernel::<T>(a: T, b: T): T when is_arm_i32::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_arm_i32::<T>()
 
 #op(':op/add_l')
-func arms_kernel::<T>(a: T, b: T): T when is_arm_int::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_arm_int::<T>()
 
 #impl(arms_kernel)
-func combine::<T>(a: T, b: T): T {
+func combine::<T>(a: T, b: T) => T {
     return a * b
 }
 
-func main(): int sync {
+func main() => int sync {
     let x: i32 = 19
     let y: i32 = 23
     // `i32`: the first arm's executor.

@@ -4,7 +4,7 @@
  * `match` with `case error e` reads the error.
  */
 
-func safe_div(a: int, b: int): int! {
+func safe_div(a: int, b: int) => int! {
     if b == 0 then {
         return error('DivByZero', 'the divisor is zero')
     } else {
@@ -12,25 +12,35 @@ func safe_div(a: int, b: int): int! {
     }
 }
 
-func double(x: int): int { return x * 2 }
-func half(x: int): int! { return safe_div(x, 2) }
-func tenth_of(x: int): int! { return safe_div(10, x) }
+func double(x: int) => int {
+    return x * 2
+}
+func half(x: int) => int! {
+    return safe_div(x, 2)
+}
+func tenth_of(x: int) => int! {
+    return safe_div(10, x)
+}
 
-func show(r: int!): string {
+func show(r: int!) => string {
     return match r {
         case error e => format<e.kind, e.message, e.location>('{}: {} at {}')
         case v => format<v>('ok {}')
     }
 }
 
-func rethrow(r: int!): int! {
+func rethrow(r: int!) => int! {
     return match r {
-        case error e => { return e }
-        case v => { return v + 1 }
+        case error e => {
+            return e
+        }
+        case v => {
+            return v + 1
+        }
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = safe_div(10, 2)
     let b = safe_div(1, 0)
     println(a)
@@ -39,10 +49,10 @@ func main(): int sync {
     println(b !! -1)
     println(show(a))
     println(show(b))
-    println(show(a -> double))
-    println(show(b -> double))
-    println(show(a -> half -> double))
-    println(show(safe_div(0, 1) -> tenth_of -> double))
+    println(show(a->double))
+    println(show(b->double))
+    println(show(a->half->double))
+    println(show(safe_div(0, 1)->tenth_of->double))
     println(show(rethrow(a)))
     println(show(rethrow(b)))
     return 0

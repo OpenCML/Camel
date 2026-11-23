@@ -6,20 +6,20 @@
  * The heavy side is concurrent_alloc (a merge sort whose halves call module operators).
  */
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
 // Mutual recursion between two light graphs stays light.
-func ways(n: int): int {
+func ways(n: int) => int {
     return if n <= 1 then 1 else steps(n - 1) + steps(n - 2)
 }
 
-func steps(n: int): int {
+func steps(n: int) => int {
     return if n <= 0 then 1 else ways(n) + 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(fib(20))
     println(ways(15))
     return 0

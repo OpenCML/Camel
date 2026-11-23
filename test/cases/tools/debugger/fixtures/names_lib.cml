@@ -1,10 +1,10 @@
 namespace Config {
     export let limit = 10
-    export func clamp(x: int): int {
-        return if x > limit then limit else x      // mark:clamp
+    export func clamp(x: int) => int {
+        return if x > limit then limit else x // mark:clamp
     }
 }
 
-export func twice(x: int): int {
-    return x * 2                                   // mark:twice
+export func twice(x: int) => int {
+    return x * 2 // mark:twice
 }

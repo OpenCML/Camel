@@ -1,5 +1,5 @@
 import { h } from ring_c
 
-export func g(n: int): int {
+export func g(n: int) => int {
     return h(n) + 1
 }

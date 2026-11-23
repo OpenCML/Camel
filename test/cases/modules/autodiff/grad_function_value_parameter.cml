@@ -10,13 +10,15 @@ import { grad } from vjp
 // The program is `p -> sum(f(f(p)) * p)` with `f = tanh`, whose gradient is
 // `f(f(p)) + f'(f(p)) * f'(p) * p` elementwise -- the three numbers the plan reads out.
 with <p: f64[...]>
-func loss(f: (t: f64[...]) => f64[...]): float {
+func loss(f: (t: f64[...]) => f64[...]) => float {
     let a = f(p)
     return float(sum(f(a) * p))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([0.5, 0.25, -0.35])
-    println(grad(loss)<x>(func (t: f64[...]) => f64[...] { tanh(t) }))
+    println(grad(loss)<x>(func (t: f64[...]) => f64[...] {
+        tanh(t)
+    }))
     return 0
 }

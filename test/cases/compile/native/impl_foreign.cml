@@ -7,10 +7,10 @@
 import { at } from generic_module
 
 #impl(at)
-func first(xs: int[], i: int): int {
+func first(xs: int[], i: int) => int {
     return xs[i]
 }
 
-func main(): int sync {
+func main() => int sync {
     return first([1, 2, 3], 0)
 }

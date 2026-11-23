@@ -6,7 +6,7 @@
 
 import array
 
-func main(): int sync {
+func main() => int sync {
     println(array::sort([3, 1, 2]))
     println(array::argsort([30, 10, 20]))
     println(array::flatten([[1, 2], [3]]))

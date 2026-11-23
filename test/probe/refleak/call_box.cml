@@ -1,11 +1,11 @@
 import state
 
-func escaped_box(i: int): state::Ref<int> {
+func escaped_box(i: int) => state::Ref<int> {
     return state::ref(i)
 }
 
-func main(): int sync {
-    let values = [state::get(escaped_box(i)) for i in 0..10]
+func main() => int sync {
+    let values = [state::get(escaped_box(i)) for i in 0 .. 10]
     println(len(values))
     return 0
 }

@@ -10,9 +10,9 @@
  * below that size on purpose (a value that large does not repay the memory folding spends on it).
  */
 
-func main(): int sync {
+func main() => int sync {
     let n = 2000000
-    let a: int[] = 0..n
+    let a: int[] = 0 .. n
     println(len(a))
     return 0
 }

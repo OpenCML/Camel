@@ -4,11 +4,11 @@ import { sin } from math
 // math:sin has no derivative rule, so std::macro cannot expand `grad(f)`: a run-time fault at
 // the grad call that names the operator. The program does not run.
 with <x: float>
-func f(): float {
+func f() => float {
     return sin(x) * x
 }
 
-func main(): int sync {
+func main() => int sync {
     println('main start')
     let d = grad(f)<4.0>()
     println(d)

@@ -4,7 +4,7 @@
  * own defect and is reported as one instead of being handed on as a zero slot.
  */
 
-func main(): int {
+func main() => int {
     let slot: int? = null
     return __unwrap__(slot)
 }

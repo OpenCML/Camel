@@ -15,22 +15,28 @@
  * finds the stream over -- both pulled by the same consumer loop, so the two are read in one order.
  */
 
-func counted(): int.. sync {
+func counted() => int.. sync {
     yield 1
-    println("a")
+    println('a')
     yield 2
-    println("b")
+    println('b')
     yield 3
 }
 
-func opening(): int.. sync {
-    println("start")
+func opening() => int.. sync {
+    println('start')
     yield 1
-    println("end")
+    println('end')
 }
 
-func main(): int sync {
-    println(loop acc = 0 for v in counted() do sync { println(v); acc + v })
-    println(loop acc = 0 for v in opening() do sync { println(v); acc + v })
+func main() => int sync {
+    println(loop acc = 0 for v in counted() do sync {
+        println(v)
+        acc + v
+    })
+    println(loop acc = 0 for v in opening() do sync {
+        println(v)
+        acc + v
+    })
     return 0
 }

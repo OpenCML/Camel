@@ -4,16 +4,16 @@
  * call reaches the C++ operator.
  */
 
-import { sha256 } from hash
 import { encode } from bytes
+import { sha256 } from hash
 
 // SHA-256 applied `rounds` times, each to the hexadecimal text of the one before.
-func sha256_rounds(s: string, rounds: int): string {
+func sha256_rounds(s: string, rounds: int) => string {
     let (digest, done) = loop digest = s, done = 0 while done < rounds do (sha256(digest), done + 1)
     return digest
 }
 
-func main(): int sync {
+func main() => int sync {
     let expected = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
     let text: string = sha256('abc')
     let binary: string = sha256(encode('abc'))

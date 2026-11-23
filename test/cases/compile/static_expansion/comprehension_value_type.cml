@@ -8,16 +8,18 @@
 
 func widen::<T>(t: T) {
     return match type T {
-        case struct => { static for n, F in fields T do widen(t.[n]) }
-        case tuple => ( static for n, F in fields T do widen(t.[n]) )
+        case struct => {static for n, F in fields T do widen(t.[n])}
+        case tuple => (static for n, F in fields T do widen(t.[n]))
         case _ => float(t)
     }
 }
 
-func half(x: float): float { return x * 0.5 }
+func half(x: float) => float {
+    return x * 0.5
+}
 
-func main(): int sync {
-    let t = {p: {x: 1, y: 2}, q: (3, 4)}
+func main() => int sync {
+    let t = { p: { x: 1, y: 2 }, q: (3, 4) }
     let w = widen(t)
     // Each argument binds to the `float` parameter: the fields hold the values' types.
     println(half(w.p.x), half(w.p.y), half(w.q.0), half(w.q.1))

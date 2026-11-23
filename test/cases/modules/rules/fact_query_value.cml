@@ -10,10 +10,11 @@ import { max } from math
 
 fact depth::<T>(v: T): int match v {
     case const c => 1
-    case x + y   => max(depth::<T>(x), depth::<T>(y)) + 1
-    case _       => 0
-} join max
+    case x + y => max(depth::<T>(x), depth::<T>(y)) + 1
+    case _ => 0
+}
+join max
 
-func wrong(a: int): int {
+func wrong(a: int) => int {
     return depth(a)
 }

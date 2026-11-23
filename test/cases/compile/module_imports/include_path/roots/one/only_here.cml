@@ -1,6 +1,6 @@
 /// reachable only through `-I.../roots/one`; the entry directory has no such module
 /// and no module of this name is installed with Camel.
 
-export func value(): int {
+export func value() => int {
     return 101
 }

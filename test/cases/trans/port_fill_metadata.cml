@@ -1,11 +1,17 @@
 // Named with/normal parameters, captured values in zero-argument functions, and aggregate FILLs.
 with <offset: int>
-func assemble(items: int[]): int[] {
+func assemble(items: int[]) => int[] {
     let count = len(items)
-    let make = func () => int[] { [offset, count] }
+    let make = func () => int[] {
+        [offset, count]
+    }
     let pair = (offset, count)
     let record = { value: offset, size: count }
-    let other = func () => int[] { [pair.0, record.size] }
+    let other = func () => int[] {
+        [pair.0, record.size]
+    }
     return if count > 0 then make() else other()
 }
-func main(): int[] { return assemble<3>([1, 2]) }
+func main() => int[] {
+    return assemble<3>([1, 2])
+}

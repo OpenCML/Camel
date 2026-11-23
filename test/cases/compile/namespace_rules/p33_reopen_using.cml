@@ -4,14 +4,18 @@ import lib
 
 namespace N {
     using namespace lib::Tools
-    export func a(): int { return inc(1) }
+    export func a() => int {
+        return inc(1)
+    }
 }
 
 namespace N {
-    export func b(): int { return inc(2) }
+    export func b() => int {
+        return inc(2)
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(N::a() + N::b())
     return 0
 }

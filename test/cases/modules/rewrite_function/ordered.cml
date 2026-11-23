@@ -16,35 +16,37 @@ rule nested(a: int, b: int) { (a + 0) * b => a * b }
 rule repeated(a: int, b: int) { (a + b) - a => b }
 rule combine(a: int) { (a + 0) + 1 => a + 1 }
 rule commute(a: int, b: int) { a + b <=> b + a }
-func guard_search(p: int, q: int, r: int, s: int): int {
+func guard_search(p: int, q: int, r: int, s: int) => int {
     return (p + (q + r)) + s
 }
-func nested_target(x: int, y: int): int {
+func nested_target(x: int, y: int) => int {
     return (0 + x) * y
 }
-func repeated_swapped(x: int, y: int): int {
+func repeated_swapped(x: int, y: int) => int {
     return (x + y) - y
 }
-func repeated_shared(x: int): int {
+func repeated_shared(x: int) => int {
     return (x + x) - x
 }
-func repeated_distinct(x: int, y: int, z: int): int {
+func repeated_distinct(x: int, y: int, z: int) => int {
     return (x + y) - z
 }
-func chain(x: int, y: int): int {
+func chain(x: int, y: int) => int {
     return (x + 1) + 0
 }
-func sum(x: int, y: int): int {
+func sum(x: int, y: int) => int {
     return x + y
 }
-func graph_height::<F>(f: F): int {
-    return nodes(graph_of(f))->map<func (n: Node) => int { height(n) }>->reduce<max, 0>
+func graph_height::<F>(f: F) => int {
+    return nodes(graph_of(f))->map<func (n: Node) => int {
+        height(n)
+    }>->reduce<max, 0>
 }
-func height_cost(o: Op, inputs: float[]): float {
+func height_cost(o: Op, inputs: float[]) => float {
     return 1.0 + inputs->reduce<max, 0.0>
 }
 with <ordered: bool>
-func report::<F>(f: F, rules: Rule[], label: string): int sync {
+func report::<F>(f: F, rules: Rule[], label: string) => int sync {
     return match f->run<rules, rounds: 1, explain: true, ordered: ordered> {
         case error e => sync {
             println(e.message)
@@ -56,7 +58,7 @@ func report::<F>(f: F, rules: Rule[], label: string): int sync {
         }
     }
 }
-func main(): int! sync {
+func main() => int! sync {
     report<true>(guard_search, [rotate], 'guard ordered')
     report<false>(guard_search, [rotate], 'guard default')
     println(match guard_search->run<[rotate], rounds: 1> {

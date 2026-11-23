@@ -5,11 +5,11 @@
  * is an ordinary syntax error rather than a dedicated diagnostic.
  */
 
-func try(x: int): int {
+func try(x: int) => int {
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let catch = 2
     let finally = 3
     let is = 4

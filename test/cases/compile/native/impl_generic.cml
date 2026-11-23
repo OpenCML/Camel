@@ -15,22 +15,22 @@
  */
 
 #op(':op/idx_arr')
-func idx_kernel::<T>(xs: T[], i: int): T
+func idx_kernel::<T>(xs: T[], i: int) => T
 
 #impl(idx_kernel)
-func at::<T>(xs: T[], i: int): T {
+func at::<T>(xs: T[], i: int) => T {
     return xs[i]
 }
 
 #op(':op/add_l')
-func add_kernel(a: int, b: int): int
+func add_kernel(a: int, b: int) => int
 
 #impl(add_kernel)
-func add::<T>(a: T, b: T): T {
+func add::<T>(a: T, b: T) => T {
     return a - (0 - b)
 }
 
-func main(): int sync {
+func main() => int sync {
     let first = at([7, 8, 9], 0)
     let throughKernel = add(19, 23)
     let x: i32 = 19

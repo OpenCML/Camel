@@ -5,31 +5,31 @@
  *   tensor: g(x) = sum(x^3), h(x) = sum(grad(g)(x)) = sum(3x^2), grad(h)(x) = 6x
  */
 
-import { reshape, sum } from tensor
 import { grad } from autodiff
 import { get_env } from env
+import { reshape, sum } from tensor
 
 with <x: float>
-func cube(): float {
+func cube() => float {
     return x * x * x
 }
 
 with <x: float>
-func dcube(): float {
+func dcube() => float {
     return grad(cube)<x>()
 }
 
 with <x: f32[...]>
-func g(): float {
+func g() => float {
     return float(sum(x * x * x))
 }
 
 with <x: f32[...]>
-func h(): float {
+func h() => float {
     return float(sum(grad(g)<x>()))
 }
 
-func main(): int sync {
+func main() => int sync {
     // Read at run time, so the gradient graphs stay general rather than folding to constants.
     let x = if (get_env('SECOND_ORDER_X') ?? '') == '' then 2.0 else 2.0
     'scalar d2={}'->format<grad(dcube)<x>()>->println

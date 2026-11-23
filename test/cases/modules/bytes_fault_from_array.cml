@@ -1,6 +1,6 @@
 import { from_array } from bytes
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(from_array([104, 256]))
     println('not reached')

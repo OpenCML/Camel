@@ -16,11 +16,11 @@
  */
 import { vjp } from vjp
 
-func f(x: f32): f32 {
+func f(x: f32) => f32 {
     return if x > 0.0 then x * x else 3.0 * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (y, pullback) = vjp(f)(2.0)
     'branch f32 value={} dfdx={}'->format<y, pullback(1.0).0>->println
     let (z, pullbackNeg) = vjp(f)(-2.0)

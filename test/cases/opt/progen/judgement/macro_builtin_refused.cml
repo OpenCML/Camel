@@ -6,11 +6,14 @@
  * See README.md, "For the owner to decide", J1.
  */
 
-#macro func total(n: int): int {
-    return (0..n)->reduce<func (acc: int, x: int) => int { acc + x }, 0>
+#macro
+func total(n: int) => int {
+    return (0 .. n)->reduce<func (acc: int, x: int) => int {
+        acc + x
+    }, 0>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(4))
     return 0
 }

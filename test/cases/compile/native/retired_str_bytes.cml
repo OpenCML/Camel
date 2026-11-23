@@ -6,7 +6,7 @@
  */
 import { bytes } from str
 
-func main(): int sync {
+func main() => int sync {
     println(bytes('hé'))
     return 0
 }

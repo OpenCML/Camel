@@ -5,29 +5,29 @@
 // The first command runs the program; the second translates it without running it and
 // writes the same model.
 
-import { tanh, reshape } from tensor
-import { export_model } from onnx
-import { mkdirs, file_size } from fs
 import { get_env } from env
+import { mkdirs, file_size } from fs
+import { export_model } from onnx
+import { tanh, reshape } from tensor
 
 type Weights = { hidden: f32[...], out: f32[...] }
 
-func forward(x: f32[...], w: Weights): f32[...] {
+func forward(x: f32[...], w: Weights) => f32[...] {
     return tanh(x @ w.hidden) @ w.out
 }
 
-func weights(): Weights {
+func weights() => Weights {
     return {
         hidden: reshape<[2, 3]>([0.5, -0.25, 0.1, 0.3, 0.2, -0.4] as f32[]),
         out: reshape<[3, 1]>([1.0, -1.0, 0.5] as f32[])
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let w = weights()
-    let x = reshape<[2, 2]>([1.0, 2.0, 0.5, -1.0] as f32[])       // two samples with two features
+    let x = reshape<[2, 2]>([1.0, 2.0, 0.5, -1.0] as f32[]) // two samples with two features
     println(forward(x, w))
-
+    
     // The runner's per-test scratch directory (the translate test names the file with the pass's
     // `out` parameter instead); a direct run keeps the header's fixed path.
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
@@ -36,7 +36,9 @@ func main(): int sync {
     let _ = dir->mkdirs
     // The closure captures the weights, so they are stored in the model; `[0]` leaves the
     // first axis (the batch size) open.
-    match export_model<out: path, dynamic_axes: [0]>(func (t: f32[...]) => f32[...] { forward(t, w) }, x) {
+    match export_model<out: path, dynamic_axes: [0]>(func (t: f32[...]) => f32[...] {
+        forward(t, w)
+    }, x) {
         case error e => println('export refused:', e)
         case _ => println('model file written:', (path->file_size !! 0) > 0)
     }

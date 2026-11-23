@@ -4,7 +4,7 @@
 
 type Nest = enum { Leaf(int), More(Nest[]) }
 
-func main(): int sync {
+func main() => int sync {
     let n = 100000
     let (i, a) = loop i = 0, a = Nest::Leaf(7) while i < n do (i + 1, Nest::More([a]))
     let (j, b) = loop j = 0, b = Nest::Leaf(7) while j < n do (j + 1, Nest::More([b]))

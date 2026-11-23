@@ -4,9 +4,8 @@
 
 import { now } from time
 
-func main(): int sync {
+func main() => int sync {
     let start = now()
     'elapsed = {:.4f}'->format<now() - start>->println
     return 0
 }
-

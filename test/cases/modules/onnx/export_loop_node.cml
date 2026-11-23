@@ -11,31 +11,31 @@
  * working directory, every model's native results are saved there, and the model named by MODEL
  * is exported when ONNX_OUT is set.
  */
-import { load_npy, reshape, save_npy, sum } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { load_npy, reshape, save_npy, sum } from tensor
 
 // for: a tensor state, one round per element of the tensor.
-func total(x: f32[?]): f32[?] {
+func total(x: f32[?]) => f32[?] {
     return loop acc = x * 0.0 for v in x do acc + v
 }
 
 // for over an interval: the rounds and the element are the interval's, nothing is enumerated.
-func sweep(x: f32[?]): (int, f32[?]) {
-    return loop n = 0, acc = x * 0.0 for i in 0..int(sum(x)) do (n + i, acc + f32(i))
+func sweep(x: f32[?]) => (int, f32[?]) {
+    return loop n = 0, acc = x * 0.0 for i in 0 .. int(sum(x)) do (n + i, acc + f32(i))
 }
 
 // while: the state is the value and the round's data decides where the loop ends.
-func halve(x: f32[?]): f32[?] {
+func halve(x: f32[?]) => f32[?] {
     return loop h = x while float(sum(h * h)) > 1.0 do h * 0.5
 }
 
 // for ... while: a sequence and a condition, and two state values.
-func bounded(x: f32[?]): (f32[?], int) {
+func bounded(x: f32[?]) => (f32[?], int) {
     return loop t = x * 0.0, n = 0 for v in x while n < 5 do (t + v, n + 1)
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let x = (load_npy::<f32>('x.npy')) as f32[?]
     save_npy(total(x), 'total_0.npy')
     let (k, a) = sweep(x)
@@ -45,26 +45,43 @@ func main(): string! sync {
     let (t, n) = bounded(x)
     save_npy(t, 'bounded_0.npy')
     save_npy(reshape<[1]>([n]), 'bounded_1.npy')
-    let out   = get_env('ONNX_OUT') ?? ''
+    let out = get_env('ONNX_OUT') ?? ''
     let which = get_env('MODEL') ?? ''
-    return if out == '' then '0' else if which == 'total' then sync {
-        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] { total(x) }, (x)) {
-            case error e => { return e }
+    return if out == '' then '0'
+    else if which == 'total' then sync {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] {
+            total(x)
+        }, (x)) {
+            case error e => {
+                return e
+            }
             case v => '1'
         }
     } else if which == 'sweep' then sync {
-        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (int, f32[?]) { sweep(x) }, (x)) {
-            case error e => { return e }
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (int, f32[?]) {
+            sweep(x)
+        }, (x)) {
+            case error e => {
+                return e
+            }
             case v => '1'
         }
     } else if which == 'halve' then sync {
-        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] { halve(x) }, (x)) {
-            case error e => { return e }
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] {
+            halve(x)
+        }, (x)) {
+            case error e => {
+                return e
+            }
             case v => '1'
         }
     } else sync {
-        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (f32[?], int) { bounded(x) }, (x)) {
-            case error e => { return e }
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (f32[?], int) {
+            bounded(x)
+        }, (x)) {
+            case error e => {
+                return e
+            }
             case v => '1'
         }
     }

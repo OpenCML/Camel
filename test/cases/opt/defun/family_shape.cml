@@ -11,25 +11,25 @@
  * The program prints the same lines with and without the pass.
  */
 
-func notice(): void {
+func notice() => void {
     'FAMILY notice'->println
 }
 
-func inc(x: int): int {
+func inc(x: int) => int {
     return x + 1
 }
 
-func apply(f: (x: int) => int, x: int): int {
+func apply(f: (x: int) => int, x: int) => int {
     return f(x)
 }
 
 /// Takes the value and does nothing with it: the family of `() => void` is a type the program
 /// writes a value of, and this is what keeps that value read.
-func ignore(f: () => void): int {
+func ignore(f: () => void) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     let n: () => void = notice
     let f: (x: int) => int = inc
     'FAMILY a={}'->format<apply(f, 41) + ignore(n)>->println

@@ -8,7 +8,7 @@ type Point = { x: float, y: int }
 
 type Pair = (float, int)
 
-func main(): int sync {
+func main() => int sync {
     println(is_same::<Tangent<float>, float>())
     println(is_same::<Tangent<f32[2, 3]>, f32[2, 3]>())
     println(is_same::<Tangent<int>, int>())

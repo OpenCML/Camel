@@ -2,7 +2,7 @@
 /// a module, however its name is spelled.
 import { value } from thing
 
-func main(): int sync {
+func main() => int sync {
     println(value)
     return 0
 }

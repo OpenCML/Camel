@@ -7,28 +7,38 @@
 
 import { Json, decode, get, as_string, as_array } from json
 
-func churn(n: int): int {
-    return len((0..n)->map<func (i: int) => string { 'item-' + string(i) }>)
+func churn(n: int) => int {
+    return len((0 .. n)->map<func (i: int) => string {
+        'item-' + string(i)
+    }>)
 }
 
-func keep(j: Json, n: int): Json {
+func keep(j: Json, n: int) => Json {
     let c = churn(n)
     return if c >= 0 then j else j
 }
 
 // `d` is the decoded document (decode gives a `Json!`, design principles 11.2).
-func run(d: Json, n: int): int sync {
+func run(d: Json, n: int) => int sync {
     let c = churn(n)
     let kept = keep(d, n)
-    let names = (kept->get<'names'>->as_array ?? [])->map<func (x: Json) => string { x->as_string ?? '?' }>
+    let names = (kept->get<'names'>->as_array ?? [])->map<func (x: Json) => string {
+        x->as_string ?? '?'
+    }>
     println(c, names, kept->get<'nested'>->get<'deep'>->get<0>->as_string ?? '?')
-    let docs = (0..3)->map<func (i: int) => Json { decode('{"k": "v-' + string(i) + '"}') !! d }>
+    let docs = (0 .. 3)->map<func (i: int) => Json {
+        decode('{"k": "v-' + string(i) + '"}') !! d
+    }>
     let d2 = churn(n)
-    println(d2, docs->map<func (x: Json) => string { x->get<'k'>->as_string ?? '?' }>)
+    println(d2, docs->map<func (x: Json) => string {
+        x->get<'k'>->as_string ?? '?'
+    }>)
     return 0
 }
 
-func main(n: int): int sync {
+func main(n: int) => int sync {
     let d = decode('{"names": ["alpha", "beta", "gamma"], "nested": {"deep": ["x-' + string(n) + '"]}}')
-    return d -> (func (j: Json) => int { run(j, n) }) !! 1
+    return d->(func (j: Json) => int {
+        run(j, n)
+    }) !! 1
 }

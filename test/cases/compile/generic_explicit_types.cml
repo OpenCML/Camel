@@ -1,12 +1,27 @@
-func id::<T>(x: T): T { return x }
+func id::<T>(x: T) => T {
+    return x
+}
 with <n: int>
-func repeat::<T>(x: T): T[] { return (0..n)->map<func (i: int) => T { x }> }
-func empty::<T>(): T[] { let xs: T[] = []; return xs }
-func returned(): int[] { return empty() }
-func length(xs: int[]): int { return len(xs) }
+func repeat::<T>(x: T) => T[] {
+    return (0 .. n)->map<func (i: int) => T {
+        x
+    }>
+}
+func empty::<T>() => T[] {
+    let xs: T[] = []
+    return xs
+}
+func returned() => int[] {
+    return empty()
+}
+func length(xs: int[]) => int {
+    return len(xs)
+}
 with <xs: int[]>
-func context_length(): int { return len(xs) }
-func main(): int sync {
+func context_length() => int {
+    return len(xs)
+}
+func main() => int sync {
     println(id::<int>(7))
     println(id::<string>('typed'))
     println(repeat::<int><3>(5))

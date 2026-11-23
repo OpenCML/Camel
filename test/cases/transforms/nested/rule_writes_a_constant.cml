@@ -20,16 +20,16 @@
 //
 // `rule_constant_agrees.cml` is the same program at `[2, 2]`. The two differ only in the node's
 // configuration and read the same sentence, which is what a general law should do.
-import { grad } from vjp
 import { reshape, sum } from tensor
+import { grad } from vjp
 
 with <x: f32[]>
-func loss(): f32 {
+func loss() => f32 {
     let t = reshape<[2, 1, 2]>(x)
     return sum(t)
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
     println(grad(loss)<xs>())
     return 0

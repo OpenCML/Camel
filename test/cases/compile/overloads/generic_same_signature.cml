@@ -3,15 +3,15 @@
  * the second is a redeclaration, reported where it is declared, as for two ordinary functions.
  */
 
-func g::<T>(x: T): string {
+func g::<T>(x: T) => string {
     return 'first'
 }
 
-func g::<U>(y: U): string {
+func g::<U>(y: U) => string {
     return 'second'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(g(1))
     println('never printed')
     return 0

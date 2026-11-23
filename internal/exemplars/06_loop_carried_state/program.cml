@@ -6,20 +6,20 @@
  * and the same program runs unchanged after std::opt.
  */
 
-import { reshape, relu, mean } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
+import { reshape, relu, mean } from tensor
 
 type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
 
 with <m: Mlp>
-func loss(x: f32[...]): float {
+func loss(x: f32[...]) => float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return float(mean(y * y))
 }
 
-func train(m: Mlp, x: f32[...], step: int, steps: int): Mlp {
+func train(m: Mlp, x: f32[...], step: int, steps: int) => Mlp {
     return if step >= steps then m else sync {
         let vg = with_grad(loss)<m>(x)
         `step ${step} loss ${vg.0}`->println
@@ -27,7 +27,7 @@ func train(m: Mlp, x: f32[...], step: int, steps: int): Mlp {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[]),
         b1: reshape<[3]>([0.1, 0.0, -0.1] as f32[]),

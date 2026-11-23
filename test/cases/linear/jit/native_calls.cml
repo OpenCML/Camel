@@ -6,25 +6,24 @@
  * that were themselves reached by a native self call.
  */
 
-func wide(a: int, b: int, c: int, d: int, e: int, n: int): int {
-    return if n <= 0 then a + 2 * b + 3 * c + 4 * d + 5 * e
-           else 1 + wide(b, c, d, e, a, n - 1) + wide(e, 7, c, b, a, n - 2)
+func wide(a: int, b: int, c: int, d: int, e: int, n: int) => int {
+    return if n <= 0 then a + 2 * b + 3 * c + 4 * d + 5 * e else 1 + wide(b, c, d, e, a, n - 1) + wide(e, 7, c, b, a, n - 2)
 }
 
-func swap(a: int, b: int, n: int): int {
+func swap(a: int, b: int, n: int) => int {
     return if n <= 0 then a * 10 + b else swap(b, a, n - 1)
 }
 
-func rot(a: int, b: int, c: int, d: int, e: int, f: int, n: int): int {
-    return if n <= 0 then a + 10 * b + 100 * c + 1000 * d + 10000 * e + 100000 * f
-           else rot(f, a, b, c, d, e, n - 1)
+func rot(a: int, b: int, c: int, d: int, e: int, f: int, n: int) => int {
+    return if n <= 0 then a + 10 * b + 100 * c + 1000 * d + 10000 * e + 100000 * f else rot(f, a, b, c, d, e, n - 1)
 }
 
-func nested(n: int, k: int): int {
-    return if n <= 0 then k else if k > 3 then nested(n - 1, 0) else 2 + nested(n - 1, k + 1)
+func nested(n: int, k: int) => int {
+    return if n <= 0 then k
+    else if k > 3 then nested(n - 1, 0) else 2 + nested(n - 1, k + 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println('wide {} {} {}'->format<wide(1, 2, 3, 4, 5, 0), wide(1, 2, 3, 4, 5, 3), wide(1, 2, 3, 4, 5, 9)>)
     println('swap {} {} {}'->format<swap(1, 2, 0), swap(1, 2, 5), swap(1, 2, 8)>)
     println('rot {} {} {}'->format<rot(1, 2, 3, 4, 5, 6, 0), rot(1, 2, 3, 4, 5, 6, 4), rot(1, 2, 3, 4, 5, 6, 9)>)

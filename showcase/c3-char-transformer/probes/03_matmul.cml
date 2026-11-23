@@ -6,15 +6,15 @@
 // (`reinterp<jvp>(f)` as a call, `stdlib/transforms.cml`), and it needs only the forward rules of
 // `stdlib/rulesets/jvp.cml`. If it stops here, the wall is a *missing rule*, not the type law that
 // `vjp`'s composition is stuck on today.
-import { ones, sum } from tensor
 import rulesets.jvp
+import { ones, sum } from tensor
 import { jvp } from transforms
 
-func quadratic(w: float[...]): float {
+func quadratic(w: float[...]) => float {
     return sum(w @ w)
 }
 
-func main(): int sync {
+func main() => int sync {
     let w = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
     let (value, tangent) = jvp(quadratic)(w, ones::<float>([2, 2]))
     println(`value = ${value:.6f}`)

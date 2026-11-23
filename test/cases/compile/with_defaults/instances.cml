@@ -6,11 +6,11 @@
  */
 
 with <n: int = 3>
-func tag::<T>(x: T): string {
+func tag::<T>(x: T) => string {
     return string(n) + ':' + string(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(tag::<int>(7))
     println(tag::<string>('a'))
     println(tag::<float>(2.5))

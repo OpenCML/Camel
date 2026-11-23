@@ -12,9 +12,9 @@
   11 [   7:10] - Colon           : :
   12 [   7:12] s Identifier      : int
   13 [   7:15] - RParen          : )
-  14 [   7:16] - Colon           : :
-  15 [   7:18] s Identifier      : int
-  16 [   7:22] s LBrace          : {
+  14 [   7:17] s FatArrow        : =>
+  15 [   7:20] s Identifier      : int
+  16 [   7:24] s LBrace          : {
   17 [    8:4] n KwReturn        : return
   18 [   8:11] s KwIf            : if
   19 [   8:14] s Identifier      : n
@@ -41,10 +41,10 @@
   40 [   11:5] s Identifier      : main
   41 [   11:9] - LParen          : (
   42 [  11:10] - RParen          : )
-  43 [  11:11] - Colon           : :
-  44 [  11:13] s Identifier      : int
-  45 [  11:17] s KwSync          : sync
-  46 [  11:22] s LBrace          : {
+  43 [  11:12] s FatArrow        : =>
+  44 [  11:15] s Identifier      : int
+  45 [  11:19] s KwSync          : sync
+  46 [  11:24] s LBrace          : {
   47 [   12:4] n KwLet           : let
   48 [   12:8] s Identifier      : idx
   49 [  12:12] s Assign          : =

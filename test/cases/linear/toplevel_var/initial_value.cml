@@ -5,17 +5,16 @@
  *   106
  */
 
-
 var cnt: int = base + 5
 
 let base = 100
 
-func bump(): int sync {
+func bump() => int sync {
     cnt += 1
     return cnt
 }
 
-func main(): int sync {
+func main() => int sync {
     println(cnt)
     println(bump())
     return 0

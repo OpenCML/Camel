@@ -8,26 +8,26 @@
  * Reduced by test/tools/progen from seed 34 (generator version 1, all features).
  */
 
-func main(): int sync {
-    let n46 = '';
-    let n47 = '';
-    let n50 = [12, 4];
+func main() => int sync {
+    let n46 = ''
+    let n47 = ''
+    let n50 = [12, 4]
     let n66 = if (match n47 {
         case 'k9' => true
         case _ => !false
     }) then sync {
-        var v64 = n50[1];
+        var v64 = n50[1]
         return match n46 {
             case 'x' => 'k9'
             case 'yz' => ''
             case '' => 'yz'
             case _ => 'pq'
-        };
+        }
     } else sync {
-        return '';
-    };
+        return ''
+    }
     let n71 = ['']->reduce<func (p69: int, p70: string) => int sync {
-        return len(n66);
-    }, -2>;
-    return 0;
+        return len(n66)
+    }, -2>
+    return 0
 }

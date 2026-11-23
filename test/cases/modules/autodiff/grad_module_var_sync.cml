@@ -16,13 +16,13 @@ import { grad, with_grad } from autodiff
 var calls: int = 0
 
 with <w: float>
-func f(x: float): float sync {
+func f(x: float) => float sync {
     println('f body runs')
     calls = calls + 1
     return w * w * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let vg = with_grad(f)<3.0>(1.0)
     println(vg.0)
     println(vg.1)

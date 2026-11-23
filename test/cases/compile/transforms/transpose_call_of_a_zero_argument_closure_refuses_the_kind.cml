@@ -14,13 +14,15 @@
 import rulesets.transpose
 import { transpose } from transforms
 
-func f(x: f32): f32 {
-    let g = func () { x }
+func f(x: f32) => f32 {
+    let g = func () {
+        x
+    }
     return g()
 }
 
-func main(): int sync {
+func main() => int sync {
     let back = transpose(f)
-    println("f_pullback=", back(1.5))
+    println('f_pullback=', back(1.5))
     return 0
 }

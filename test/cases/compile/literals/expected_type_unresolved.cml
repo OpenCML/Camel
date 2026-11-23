@@ -5,9 +5,12 @@
  * a source of types, it does not make an open one closed.
  */
 
-func make::<T>(): T[] { let xs: T[] = []; return xs }
+func make::<T>() => T[] {
+    let xs: T[] = []
+    return xs
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = make()
     println(len(xs))
     return 0

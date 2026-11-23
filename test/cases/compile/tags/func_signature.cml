@@ -3,14 +3,16 @@
 
 tag rule(f: (x: int) => int) on field
 
-func twice(x: int): int { return x + x }
+func twice(x: int) => int {
+    return x + x
+}
 
 type Box = {
     #rule(twice) scaled: int,
-    plain: int,
+    plain: int
 }
 
-func main(): int sync {
-    println({scaled: 3, plain: 5}.plain)
+func main() => int sync {
+    println({ scaled: 3, plain: 5 }.plain)
     return 0
 }

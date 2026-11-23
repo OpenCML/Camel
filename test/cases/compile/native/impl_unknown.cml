@@ -4,10 +4,10 @@
  */
 
 #impl(nope)
-func add(a: int, b: int): int {
+func add(a: int, b: int) => int {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return add(1, 2)
 }

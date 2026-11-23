@@ -10,42 +10,44 @@ type Mapper<A, B> = (x: A) => B
 type Grid<T> = T[][]
 type PairList<T> = Pair<T>[]
 
-func swap::<T>(p: Pair<T>): Pair<T> {
+func swap::<T>(p: Pair<T>) => Pair<T> {
     return (p.1, p.0)
 }
 
-func sum_pair(p: Pair<int>): int {
+func sum_pair(p: Pair<int>) => int {
     return p.0 + p.1
 }
 
-func key_of::<K, V>(e: Entry<K, V>): K {
+func key_of::<K, V>(e: Entry<K, V>) => K {
     return e.key
 }
 
-func value_of::<K, V>(e: Entry<K, V>): V {
+func value_of::<K, V>(e: Entry<K, V>) => V {
     return e.value
 }
 
-func apply::<A, B>(f: Mapper<A, B>, x: A): B {
+func apply::<A, B>(f: Mapper<A, B>, x: A) => B {
     return f(x)
 }
 
-func corner::<T>(g: Grid<T>): T {
+func corner::<T>(g: Grid<T>) => T {
     return g[0][0]
 }
 
-func firsts::<T>(ps: PairList<T>): T {
+func firsts::<T>(ps: PairList<T>) => T {
     return ps[0].0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(swap((1, 2)))
     println(swap(('a', 'b')))
     println(sum_pair((20, 22)))
     let e = { key: 'k', value: 3.5 }
     println(key_of(e))
     println(value_of(e))
-    println(apply(func (x: int) { x * 2 }, 21))
+    println(apply(func (x: int) {
+        x * 2
+    }, 21))
     println(corner([[7, 8], [9]]))
     println(firsts([('p', 'q')]))
     return 0

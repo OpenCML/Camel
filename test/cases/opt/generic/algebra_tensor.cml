@@ -11,30 +11,30 @@ import { reshape } from tensor
 
 type Vec = f32[3]
 
-func merged(x: Vec): Vec {
+func merged(x: Vec) => Vec {
     return x * 3.0 + x * 5.0
 }
 
 #[reassociate]
-func merged_explicit(x: Vec): Vec {
+func merged_explicit(x: Vec) => Vec {
     return x * 3.0 + x * 5.0
 }
 
-func chain(x: Vec): Vec {
+func chain(x: Vec) => Vec {
     return (x * 3.0) * 2.0
 }
 
-func rounded_coefficients(x: Vec): Vec {
+func rounded_coefficients(x: Vec) => Vec {
     return x * 0.1 + x * 0.2
 }
 
-func shared_product(x: Vec): Vec sync {
+func shared_product(x: Vec) => Vec sync {
     let t = x * 3.0
     println(t)
     return t + t
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(merged(x))
     println(merged_explicit(x))

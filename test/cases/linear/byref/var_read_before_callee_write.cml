@@ -8,12 +8,12 @@
  */
 import { reshape, sum } from tensor
 
-func ignores(x: f64[...], var c: int): int sync {
+func ignores(x: f64[...], var c: int) => int sync {
     c += 5
     return 1
 }
 
-func steps(i: int, n: int, x: f64[...], var c: int): f64[...] sync {
+func steps(i: int, n: int, x: f64[...], var c: int) => f64[...] sync {
     return if i >= n then x else sync {
         c += 1
         let fresh = reshape<[2]>([0.5, 0.5])
@@ -22,7 +22,7 @@ func steps(i: int, n: int, x: f64[...], var c: int): f64[...] sync {
     }
 }
 
-func f(var c: int): int sync {
+func f(var c: int) => int sync {
     c += 1
     let snapshot = c + 0
     let t = reshape<[2]>([1.0, 2.0])
@@ -30,7 +30,7 @@ func f(var c: int): int sync {
     return snapshot * 100 + r
 }
 
-func g(var c: int): float sync {
+func g(var c: int) => float sync {
     c += 1
     let snapshot = c + 0
     let t = reshape<[2]>([1.0, 2.0])
@@ -38,7 +38,7 @@ func g(var c: int): float sync {
     return float(sum(y)) + float(snapshot % 4) * 100.0
 }
 
-func main(): int sync {
+func main() => int sync {
     var a = 0
     let x = f(a)
     println('f: {} counter {}'->format<x, a>)

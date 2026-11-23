@@ -12,9 +12,11 @@
  * wording is reported apart and is not this case's business.
  */
 
-func main(): int sync {
+func main() => int sync {
     var o: int? = 1
-    let f = func () { if o != null then o + 1 else 0 }
+    let f = func () {
+        if o != null then o + 1 else 0
+    }
     println(f())
     return 0
 }

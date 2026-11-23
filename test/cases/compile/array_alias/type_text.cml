@@ -2,13 +2,12 @@
 // candidate list of a refused call is where the text is visible.
 import tensor
 
-
-func takes(a: f32[...], b: f32[2, 3]): int {
+func takes(a: f32[...], b: f32[2, 3]) => int {
     return 0
 }
 
-func main(): int sync {
-    let s: string[] = ["a"]
+func main() => int sync {
+    let s: string[] = ['a']
     println(takes(s, s))
     return 0
 }

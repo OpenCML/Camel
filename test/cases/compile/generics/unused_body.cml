@@ -9,11 +9,11 @@
  * `err_decl_name.cml` is the case that pins that half.
  */
 
-func never_called::<T>(x: T): T {
+func never_called::<T>(x: T) => T {
     return x + x
 }
 
-func main(): int sync {
+func main() => int sync {
     println('ok')
     return 0
 }

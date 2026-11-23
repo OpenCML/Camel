@@ -4,10 +4,10 @@
  */
 
 #reads(nowhere)
-func f(): int {
+func f() => int {
     return 0
 }
 
-func main(): int {
+func main() => int {
     return f()
 }

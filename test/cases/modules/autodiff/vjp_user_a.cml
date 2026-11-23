@@ -6,6 +6,6 @@
 import { scale } from vjp_lib
 
 with <x: float>
-export func use_a(): float {
+export func use_a() => float {
     return scale(x) * 2.0
 }

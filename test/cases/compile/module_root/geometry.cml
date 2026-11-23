@@ -7,11 +7,11 @@ export let pi = 3.14159
 export let tau = pi * 2.0
 export let unit = make_unit()
 
-func make_unit(): (float, float) sync {
+func make_unit() => (float, float) sync {
     println('geometry: making the unit vector')
     return (1.0, 0.0)
 }
 
-export func circumference(r: float): float {
+export func circumference(r: float) => float {
     return tau * r
 }

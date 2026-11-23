@@ -3,7 +3,7 @@ let a = b + 1
 let b = c * 2
 let c = a - 3
 
-func main(): int sync {
+func main() => int sync {
     println(a)
     return 0
 }

@@ -6,9 +6,10 @@
 import { reshape, tanh, sum } from tensor
 
 #gpu
-func step(x: f32[...]): f32[...] {
+func step(x: f32[...]) => f32[...] {
     let y = x * 2.0
-    #cpu {
+    #cpu
+    {
         return tanh(y)
     }
 }

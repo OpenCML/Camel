@@ -7,41 +7,35 @@
  * through the zero tangent and the sum of two array tangents.
  */
 
-import { abs, reshape, sum } from tensor
 import { grad } from autodiff
+import { abs, reshape, sum } from tensor
 
 type Block = { w: f32[4, 4], b: f32[4] }
 
 with <blocks: Block[]>
-func loss_array(x: f32[4, 4]): float {
+func loss_array(x: f32[4, 4]) => float {
     let h = loop h = x for block in blocks do h @ block.w + block.b
     return float(sum(h))
 }
 
 with <blocks: (Block, Block)>
-func loss_tuple(x: f32[4, 4]): float {
-    let h = static loop h = x
-        for i, B in fields (Block, Block) do h @ blocks.[i].w + blocks.[i].b
+func loss_tuple(x: f32[4, 4]) => float {
+    let h = static loop h = x for i, B in fields (Block, Block) do h @ blocks.[i].w + blocks.[i].b
     return float(sum(h))
 }
 
-func main(): int sync {
-    let w0 = reshape<[4, 4]>(
-        [0.5, 0.1, 0.0, 0.2, 0.0, 0.3, -0.1, 0.0, 0.2, 0.0, 0.4, 0.1, 0.0, 0.1, 0.0, 0.25] as f32[])
-    let w1 = reshape<[4, 4]>(
-        [0.1, 0.0, 0.2, 0.0, 0.3, 0.1, 0.0, -0.1, 0.0, 0.2, 0.1, 0.0, 0.1, 0.0, 0.0, 0.3] as f32[])
+func main() => int sync {
+    let w0 = reshape<[4, 4]>([0.5, 0.1, 0.0, 0.2, 0.0, 0.3, -0.1, 0.0, 0.2, 0.0, 0.4, 0.1, 0.0, 0.1, 0.0, 0.25] as f32[])
+    let w1 = reshape<[4, 4]>([0.1, 0.0, 0.2, 0.0, 0.3, 0.1, 0.0, -0.1, 0.0, 0.2, 0.1, 0.0, 0.1, 0.0, 0.0, 0.3] as f32[])
     let b0: f32[4] = reshape<[4]>([0.01, -0.02, 0.03, 0.0] as f32[])
     let b1: f32[4] = reshape<[4]>([0.0, 0.04, -0.01, 0.02] as f32[])
-    let x: f32[4, 4] = reshape<[4, 4]>(
-        [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] as f32[])
+    let x: f32[4, 4] = reshape<[4, 4]>([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] as f32[])
     let blocks = [{ w: w0, b: b0 }, { w: w1, b: b1 }]
     let pair = ({ w: w0, b: b0 }, { w: w1, b: b1 })
     let ga = grad(loss_array)<blocks>(x)
     let gt = grad(loss_tuple)<pair>(x)
     let loss_gap = loss_array<blocks>(x) - loss_tuple<pair>(x)
-    let grad_gap = sum(abs(ga[0].w - gt.0.w)) + sum(abs(ga[1].w - gt.1.w)) +
-        sum(abs(ga[0].b - gt.0.b)) + sum(abs(ga[1].b - gt.1.b))
-    'loop_grad_iterable_tensors loss_gap={:.9f} grad_gap={:.9f} d0w={:.9f} d0b={:.9f}'
-        ->format<loss_gap, grad_gap, sum(ga[0].w), sum(ga[0].b)>->println
+    let grad_gap = sum(abs(ga[0].w - gt.0.w)) + sum(abs(ga[1].w - gt.1.w)) + sum(abs(ga[0].b - gt.0.b)) + sum(abs(ga[1].b - gt.1.b))
+    'loop_grad_iterable_tensors loss_gap={:.9f} grad_gap={:.9f} d0w={:.9f} d0b={:.9f}'->format<loss_gap, grad_gap, sum(ga[0].w), sum(ga[0].b)>->println
     return 0
 }

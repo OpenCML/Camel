@@ -4,14 +4,14 @@
  * (design principles 4.4).
  */
 
-func f(a: int, b: int): int {
+func f(a: int, b: int) => int {
     return a * 10 + b
 }
 
-func f(b: float, a: float): int {
+func f(b: float, a: float) => int {
     return a * 10 + b
 }
 
-func main(): int sync {
+func main() => int sync {
     return f(a: 1, b: 2)
 }

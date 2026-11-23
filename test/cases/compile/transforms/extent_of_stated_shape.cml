@@ -13,10 +13,8 @@
 // the same either way, so this case pins them and the fold has a case of its own.
 import { dim, numel, shape, zeros } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let t = zeros::<f32>([2, 3])
-    println(
-        `shape={} dim0={} dim1={} dim-1={} numel={}`->format<
-            shape(t), dim<0>(t), dim<1>(t), dim<-1>(t), numel(t)>)
+    println(`shape={} dim0={} dim1={} dim-1={} numel={}`->format<shape(t), dim<0>(t), dim<1>(t), dim<-1>(t), numel(t)>)
     return 0
 }

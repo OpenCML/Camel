@@ -5,12 +5,12 @@
  * is visible outside the program are not two things the writer has to say.
  */
 
-func shout(): int uses var stdout sync {
+func shout() => int uses var stdout sync {
     println('x')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(shout())
     return 0
 }

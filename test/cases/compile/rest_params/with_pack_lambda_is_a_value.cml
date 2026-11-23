@@ -19,19 +19,23 @@
 // The two types are also compared by `is_same`, so the shape is pinned and not only the call.
 import { WithOf, ParamsOf, GradientOf, is_same } from types
 
-type GradOf<F> = <...WithOf<F>> (...ParamsOf<F>) => float
+type GradOf<F> = <...WithOf<F>>(...ParamsOf<F>) => float
 
-func main(): int sync {
+func main() => int sync {
     // One member: the pack is the single `with` parameter, and the call gives one value.
-    let one: GradOf<<x: float> () => float> = func <w> () { w * w }
+    let one: GradOf<<x: float>() => float> = func <w>() {
+        w * w
+    }
     // No member: the pack is nothing, so the type has no `with` parameter and the call gives none.
-    let none: GradOf<() => float> = func () { 5.0 }
+    let none: GradOf<() => float> = func () {
+        5.0
+    }
     let a = one<3.0>()
     let b = none()
     println('with_pack_lambda one={} none={}'->format<a, b>)
     // The shape itself: the alias over a one-member pack is the alias over a written `<x: float>`,
     // and the alias over an empty pack has no `with` list at all.
-    let sameOne = is_same::<GradOf<<x: float> () => float>, <w: float> () => float>()
+    let sameOne = is_same::<GradOf<<x: float>() => float>, <w: float>() => float>()
     let sameNone = is_same::<GradOf<() => float>, () => float>()
     println('with_pack_lambda same_one={} same_none={}'->format<sameOne, sameNone>)
     return 0

@@ -3,19 +3,19 @@
 // direct calls, `let` and `var`, assignment, `return`, and a straight-line `sync` body.
 let scale = 3
 
-func shift(value: int, delta: int): int {
+func shift(value: int, delta: int) => int {
     let base = value * scale
     return base + delta
 }
 
-func describe(score: int): string sync {
+func describe(score: int) => string sync {
     var bonus: int = 1
     bonus = bonus + score
     println('bonus =', bonus)
     return string(bonus) + ' points'
 }
 
-func main(): int sync {
+func main() => int sync {
     let base = 7
     let shifted = shift(base, 2)
     let labels = ['zero', 'one', 'two']

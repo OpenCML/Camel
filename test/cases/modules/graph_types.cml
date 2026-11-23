@@ -1,6 +1,7 @@
 import { creation_id, id, Node, nodes, graph_of } from graph
 import { NodeKind, Value } from graph
-func main(): int spelling sync {
+
+func main() => int spelling sync {
     let p = main
     println(graph_of(p) == graph_of(main))
     println(graph_of(p) != graph_of(main))

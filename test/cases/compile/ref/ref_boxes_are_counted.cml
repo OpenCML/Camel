@@ -17,18 +17,18 @@
 
 import state
 
-func drop_many(i: int, n: int): int {
+func drop_many(i: int, n: int) => int {
     let r = state::ref(i)
     let v = state::get(r)
     return if i + 1 >= n then v else v + drop_many(i + 1, n)
 }
 
-func main(): int sync {
+func main() => int sync {
     let kept = state::ref(41)
     println(drop_many(0, 1000))
     // A tail that allocates: a box is freed when the collector finds its last handle gone, so the
     // collections the allocations below cause are the ones that would notice a dead one.
-    let tail = 0..20000
+    let tail = 0 .. 20000
     println(len(tail))
     println(state::get(kept))
     return 0

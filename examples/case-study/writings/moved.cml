@@ -3,28 +3,34 @@
 //
 // The tensors state their rank and leave the extents open (`f32[?, ?]`): the transpose that builds the
 // gradient has to know how many axes the parameter it differentiates has.
-import { grad } from vjp
-import { reshape, shape, sum } from tensor
 import { sgd } from nn
+import { reshape, shape, sum } from tensor
+import { grad } from vjp
 
 type Linear = { weight: f32[?, ?] }
 
 with <layer: Linear, y: f32[?, ?]>
-func loss(X: f32[?, ?]): float {
+func loss(X: f32[?, ?]) => float {
     let err = X @ layer.weight - y
     return float(sum(err * err)) / float(shape(X)[0])
 }
 
-func step(layer: Linear, X: f32[?, ?], y: f32[?, ?], rate: float): Linear {
+func step(layer: Linear, X: f32[?, ?], y: f32[?, ?], rate: float) => Linear {
     let g = grad(loss)<layer, y>(X)
     return sgd(layer, g, rate)
 }
 
-func train(layer: Linear, X: f32[?, ?], y: f32[?, ?], rate: float, n: int): Linear {
+func train(
+    layer: Linear,
+    X: f32[?, ?],
+    y: f32[?, ?],
+    rate: float,
+    n: int
+) => Linear {
     return if n == 0 then layer else train(step(layer, X, y, rate), X, y, rate, n - 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     let X = reshape<[4, 2]>([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[])
     let y = reshape<[4, 1]>([2.0, -1.0, 1.0, 3.0] as f32[])
     let w0: Linear = { weight: reshape<[2, 1]>([0.0, 0.0] as f32[]) }

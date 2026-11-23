@@ -14,12 +14,20 @@ type MC = { n: int, v: f32[] }
 type MD = { n: int, t: (f32[2], f32) }
 
 // The sibling `n` is computed, so each returned literal is a FILL over the field `n`.
-func tupleField(n: int): MA { return { n: n, t: (1.0000000596046447753906251, 2.0) } }
-func arrayFixed(n: int): MB { return { n: n, v: [1.0000000596046447753906251, 2.0] } }
-func arrayOpen(n: int): MC { return { n: n, v: [1.0000000596046447753906251, 2.0] } }
-func arrayInTuple(n: int): MD { return { n: n, t: ([1.0000000596046447753906251, 2.0], 3.0) } }
+func tupleField(n: int) => MA {
+    return { n: n, t: (1.0000000596046447753906251, 2.0) }
+}
+func arrayFixed(n: int) => MB {
+    return { n: n, v: [1.0000000596046447753906251, 2.0] }
+}
+func arrayOpen(n: int) => MC {
+    return { n: n, v: [1.0000000596046447753906251, 2.0] }
+}
+func arrayInTuple(n: int) => MD {
+    return { n: n, t: ([1.0000000596046447753906251, 2.0], 3.0) }
+}
 
-func main(): int sync {
+func main() => int sync {
     let a = tupleField(1)
     println(a.n, '{:.9g}'->format<a.t.0>, '{:.9g}'->format<a.t.1>)
     let b = arrayFixed(2)

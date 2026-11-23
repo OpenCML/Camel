@@ -5,7 +5,7 @@
 
 import { one_hot } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let labels = int([0, 3])
     let bad = one_hot(labels, 3)
     return 0

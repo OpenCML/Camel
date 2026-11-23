@@ -5,15 +5,15 @@
  * repair the diagnostic names is to write `pure` on the parameter.
  */
 
-func applyPure(f: (x: int) => int): int pure {
+func applyPure(f: (x: int) => int) => int pure {
     return f(1)
 }
 
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     println(applyPure(twice))
     return 0
 }

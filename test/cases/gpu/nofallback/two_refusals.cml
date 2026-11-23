@@ -7,15 +7,15 @@
 import { reshape, sum, tanh } from tensor
 
 #gpu
-func step(a: f32[2, 2], b: f32[2]): f32[2] {
+func step(a: f32[2, 2], b: f32[2]) => f32[2] {
     helper(a, b)
 }
 
-func helper(a: f32[2, 2], b: f32[2]): f32[2] {
+func helper(a: f32[2, 2], b: f32[2]) => f32[2] {
     tanh(a @ b)
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let b = reshape<[2]>([1.0, 2.0] as f32[])
     println(sum(step(a, b)))

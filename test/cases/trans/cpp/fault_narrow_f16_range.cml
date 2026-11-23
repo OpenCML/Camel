@@ -7,7 +7,7 @@
  * The text is the interpreter's, byte for byte (agree_with_fvm compares the whole standard output
  * and the exit code).
  */
-func main(): int sync {
+func main() => int sync {
     println(f16('1.5'))
     println(f16('1e5'))
     println('not reached')

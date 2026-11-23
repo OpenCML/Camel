@@ -21,25 +21,31 @@
  */
 import { is_same, ParamsOf, WithOf } from types
 
-type Loss = <w: f32[2], k: int> (x: float) => float
+type Loss = <w: f32[2], k: int>(x: float) => float
 
 // The head of a pack: the member the case names first, and no case for a pack with none.
-type Head<P> = match type P { case (W, ...Rest) => W }
+type Head<P> = match type P {
+    case (W,...Rest) => W
+}
 
 // The member after the head: the names written out before the rest are matched by position, and
 // what is left of the pack reaches `...Rest`.
-type Second<P> = match type P { case (A, B, ...Rest) => B }
+type Second<P> = match type P {
+    case (A,B,...Rest) => B
+}
 
 // The rest of a pack is a pack of its own, so `...Rest` written back expands it: the members after
 // the ones the case wrote out, and the empty tuple when the case wrote every member out.
-type RestOf<P> = match type P { case (W, ...Rest) => Rest }
+type RestOf<P> = match type P {
+    case (W,...Rest) => Rest
+}
 
 // A function type computed from `F` here, in the program: the packs `F` has, and the type of its
 // first `with` parameter as the result.
-type FirstWithOf<F> = <...WithOf<F>> (...ParamsOf<F>) => Head<WithOf<F>>
-type LossShape = <w: f32[2], k: int> (x: float) => f32[2]
+type FirstWithOf<F> = <...WithOf<F>>(...ParamsOf<F>) => Head<WithOf<F>>
+type LossShape = <w: f32[2], k: int>(x: float) => f32[2]
 
-func main(): int sync {
+func main() => int sync {
     println(is_same::<Head<WithOf<Loss>>, f32[2]>())
     println(is_same::<Head<ParamsOf<Loss>>, float>())
     println(is_same::<Second<WithOf<Loss>>, int>())

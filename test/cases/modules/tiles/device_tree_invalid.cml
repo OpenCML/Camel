@@ -1,3 +1,6 @@
 import { Device } from tiles
+
 type Invalid = Device<{ block: (float, { label: string }) }>
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}

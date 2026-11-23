@@ -1,7 +1,6 @@
 /// trap 3: the first root's `pkg/` library; `import lib` takes the `pkg/lib.cml` beside it.
-
 import lib
 
-export func n(): int {
+export func n() => int {
     return lib::n()
 }

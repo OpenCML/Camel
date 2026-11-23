@@ -3,19 +3,23 @@
  * i64 initializer (the same mapping nn embedding uses).
  */
 
-import { reshape, take } from tensor
-import { export_model } from onnx
 import { get_env } from env
+import { export_model } from onnx
+import { reshape, take } from tensor
 
-func forward(x: float[...], indices: int[]): float[...] {
+func forward(x: float[...], indices: int[]) => float[...] {
     return take(x, indices)
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let x = reshape<[4, 2]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
     let indices = [2, 0, 2]
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] { forward(x, indices) }, x) {
-        case error e => { return e }
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] {
+        forward(x, indices)
+    }, x) {
+        case error e => {
+            return e
+        }
         case v => 'exported'
     }
 }

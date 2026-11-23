@@ -2,7 +2,7 @@
  * An error value nobody handled is what main returns.
  */
 
-func safe_div(a: int, b: int): int! {
+func safe_div(a: int, b: int) => int! {
     if b == 0 then {
         return error('DivByZero', 'the divisor is zero')
     } else {
@@ -10,7 +10,7 @@ func safe_div(a: int, b: int): int! {
     }
 }
 
-func main(): int! sync {
+func main() => int! sync {
     println('before')
     return safe_div(1, 0)
 }

@@ -4,7 +4,7 @@
  * converted by this rule, and a literal is not cut to fit.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x: int = 1.9
     println(x)
     return 0

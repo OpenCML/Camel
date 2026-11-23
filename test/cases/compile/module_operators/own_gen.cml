@@ -6,10 +6,10 @@
 
 import { Box } from two_models
 
-func operator +(a: Box, b: Box): Box {
+func operator +(a: Box, b: Box) => Box {
     return { v: 300 }
 }
 
-export func twice::<T>(x: T): T {
+export func twice::<T>(x: T) => T {
     return x + x
 }

@@ -22,23 +22,23 @@ type Twice<T> = ElemOrSelf<ElemOrSelf<T>>
 
 type Pair<T> = (T, T)
 
-func element_is_integer::<T>(): bool {
+func element_is_integer::<T>() => bool {
     return is_integer::<ElemOrSelf<T>>()
 }
 
-func shown_is_string::<T>(): bool {
+func shown_is_string::<T>() => bool {
     return is_string::<Shown<T>>()
 }
 
-func twice_is_float::<T>(): bool {
+func twice_is_float::<T>() => bool {
     return is_float::<Twice<T>>()
 }
 
-func pair_of::<T>(x: ElemOrSelf<T>): Pair<ElemOrSelf<T>> {
+func pair_of::<T>(x: ElemOrSelf<T>) => Pair<ElemOrSelf<T>> {
     return (x, x)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(element_is_integer::<int[]>(), element_is_integer::<int>(), element_is_integer::<f32[]>())
     println(shown_is_string::<int>(), shown_is_string::<f32>(), shown_is_string::<string>(), shown_is_string::<bool>())
     println(twice_is_float::<float[][]>(), twice_is_float::<float[]>(), twice_is_float::<int[][]>())

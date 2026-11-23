@@ -5,12 +5,12 @@
 // takes the call's last read leaves in its place.
 import { println } from std
 
-func side(): int sync {
-    println("side")
+func side() => int sync {
+    println('side')
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = side() + 1
     println(v)
     return 0

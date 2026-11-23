@@ -1,12 +1,12 @@
-func main(): int sync {
-    var v53 = 0;
+func main() => int sync {
+    var v53 = 0
     if false then sync {
         if false then sync {
-            v53 = 0;
-            null;
-        };
-        null;
-    };
-    println('L6 {}'->format<v53>);
-    return 0;
+            v53 = 0
+            null
+        }
+        null
+    }
+    println('L6 {}'->format<v53>)
+    return 0
 }

@@ -7,22 +7,29 @@
 
 import { Json, decode, get, as_string, as_array } from json
 
-#macro func table(): Json! {
+#macro
+func table() => Json! {
     return decode('{"rows": ["r0", "r1", "r2"], "name": "t"}')
 }
 
-func churn(n: int): int {
-    return len((0..n)->map<func (i: int) => string { 'item-' + string(i) }>)
+func churn(n: int) => int {
+    return len((0 .. n)->map<func (i: int) => string {
+        'item-' + string(i)
+    }>)
 }
 
-func show(t: Json, n: int): int sync {
+func show(t: Json, n: int) => int sync {
     let c = churn(n)
-    let rows = (t->get<'rows'>->as_array ?? [])->map<func (x: Json) => string { x->as_string ?? '?' }>
+    let rows = (t->get<'rows'>->as_array ?? [])->map<func (x: Json) => string {
+        x->as_string ?? '?'
+    }>
     println(c, rows, t->get<'name'>->as_string ?? '?')
     return 0
 }
 
-func main(n: int): int sync {
+func main(n: int) => int sync {
     let t = table()
-    return t -> (func (j: Json) => int { show(j, n) }) !! 1
+    return t->(func (j: Json) => int {
+        show(j, n)
+    }) !! 1
 }

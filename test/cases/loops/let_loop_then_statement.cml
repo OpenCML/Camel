@@ -16,44 +16,58 @@
  * `sync` function. There is no `break` to test -- the language has none, and a loop ends early
  * through the condition on its head (design principles 3.10).
  */
-func after_statement(): int {
-    let n = loop k = 0 while k < 2 do { k + 1 }
+func after_statement() => int {
+    let n = loop k = 0 while k < 2 do {
+        k + 1
+    }
     println(n)
     return 0
 }
 
-func after_var(): int {
-    let n = loop k = 0 while k < 2 do { k + 1 }
+func after_var() => int {
+    let n = loop k = 0 while k < 2 do {
+        k + 1
+    }
     var t = n
     println(t + 1)
     return 0
 }
 
-func second_loop(): int {
-    let n = loop k = 0 while k < 2 do { k + 1 }
-    let m = loop k = 0 while k < 3 do { k + 1 }
+func second_loop() => int {
+    let n = loop k = 0 while k < 2 do {
+        k + 1
+    }
+    let m = loop k = 0 while k < 3 do {
+        k + 1
+    }
     println(n, m)
     return 0
 }
 
-func as_statement(): int {
-    loop k = 0 while k < 2 do { k + 1 }
+func as_statement() => int {
+    loop k = 0 while k < 2 do {
+        k + 1
+    }
     println('after')
     return 0
 }
 
-func returned(): int {
-    let n = loop k = 0 while k < 2 do { k + 1 }
+func returned() => int {
+    let n = loop k = 0 while k < 2 do {
+        k + 1
+    }
     return n
 }
 
-func in_sync(): int sync {
-    let n = loop k = 0 while k < 2 do { k + 1 }
+func in_sync() => int sync {
+    let n = loop k = 0 while k < 2 do {
+        k + 1
+    }
     println(n)
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     after_statement()
     after_var()
     second_loop()

@@ -16,11 +16,11 @@
 
 import { vmap } from array
 
-func add(a: float, b: float): float {
+func add(a: float, b: float) => float {
     return a + b
 }
 
-func main(): int sync {
+func main() => int sync {
     let batched = vmap(add)
     println(batched([1.0, 2.0]))
     return 0

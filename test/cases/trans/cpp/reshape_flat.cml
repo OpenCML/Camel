@@ -5,7 +5,7 @@
 
 import { reshape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     let xs: float[] = [1.0, 2.0, 3.0]
     println(reshape<[3]>(xs))
     println(reshape<[3]>([4.0, 5.0, 6.0]))

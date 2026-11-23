@@ -7,26 +7,26 @@ import { reshape, sum } from tensor
 import { regions } from tiles
 
 #gpu
-func scale(x: f32[3]): f32[3] {
+func scale(x: f32[3]) => f32[3] {
     return x * 2.0
 }
 
 #gpu
-func shift(x: f32[3]): f32[3] {
+func shift(x: f32[3]) => f32[3] {
     return 1.0 - x
 }
 
 #gpu
-func divide(x: f32[3]): f32[3] {
+func divide(x: f32[3]) => f32[3] {
     return x / 0.0
 }
 
 #gpu
-func bf16_scale(x: bf16[3]): bf16[3] {
+func bf16_scale(x: bf16[3]) => bf16[3] {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(regions<scale>())
     println(regions<shift>())
     println(regions<divide>())

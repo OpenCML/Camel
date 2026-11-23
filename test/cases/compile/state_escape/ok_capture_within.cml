@@ -10,14 +10,14 @@
  * The rule's own tests are plan compile.state_escape.
  */
 
-func total(x: int): int sync {
+func total(x: int) => int sync {
     let (_, acc) = loop s = (0, 0) while s.0 < x do sync {
         (s.0 + 1, s.1 + s.0)
     }
     return acc
 }
 
-func main(): int sync {
+func main() => int sync {
     println(total(4))
     return 0
 }

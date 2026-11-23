@@ -1,24 +1,24 @@
 import { nodes, name, graphs_of } from graph
 
-export func keep::<F>(p: F): F! {
+export func keep::<F>(p: F) => F! {
     return p
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F) => F! sync {
     let all = graphs_of(p)
     println(len(all))
     println(all->map<name>)
     return p
 }
 
-export func refuse::<F>(p: F): F! {
+export func refuse::<F>(p: F) => F! {
     return error('NotSupported', 'this program has too few graphs')
 }
 
-export func helper(x: int): int {
+export func helper(x: int) => int {
     return x
 }
 
-export func broken::<F>(p: F): int {
+export func broken::<F>(p: F) => int {
     return 1
 }

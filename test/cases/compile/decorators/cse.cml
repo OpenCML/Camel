@@ -6,7 +6,7 @@
  */
 import { mark, flags } from test_attrs
 
-func twice(a: float, b: float): float {
+func twice(a: float, b: float) => float {
     let p = a * b
     let q = a * b
     @mark
@@ -18,7 +18,7 @@ func twice(a: float, b: float): float {
 }
 
 @flags<1>
-func relaxed(a: float, b: float): float {
+func relaxed(a: float, b: float) => float {
     let p = a * b
     @flags<2>
     {
@@ -27,7 +27,7 @@ func relaxed(a: float, b: float): float {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(twice(1.5, 3.0))
     println(relaxed(1.5, 3.0))
     return 0

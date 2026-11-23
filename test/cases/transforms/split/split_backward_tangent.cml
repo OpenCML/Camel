@@ -9,13 +9,13 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func g(x: float): float {
+func g(x: float) => float {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let fwd = split(jvp(g))
     let (_y, lin) = fwd(3.0)
-    println("tangent dx1=", lin(1.0))
+    println('tangent dx1=', lin(1.0))
     return 0
 }

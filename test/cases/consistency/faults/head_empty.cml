@@ -2,7 +2,7 @@
  * The first element of an empty array: there is no first element, so `xs[0]` is a fault (a
  * program once got a zero value instead).
  */
-func main(): int sync {
+func main() => int sync {
     println([7, 8][0])
     let e: int[] = []
     println(e[0])

@@ -5,12 +5,14 @@
 // and its cotangent is the second member of the pullback's answer.
 import { vjp } from vjp
 
-func square(z: float): float {
+func square(z: float) => float {
     return z * z
 }
 
-func main(): int sync {
-    let (value, pullback) = vjp(func (h: (z: float) => float, w: float) => float { h(w) })(square, 3.0)
+func main() => int sync {
+    let (value, pullback) = vjp(func (h: (z: float) => float, w: float) => float {
+        h(w)
+    })(square, 3.0)
     let cotangents = pullback(1.0)
     println('value={} cotangents={}'->format<value, cotangents>)
     return 0

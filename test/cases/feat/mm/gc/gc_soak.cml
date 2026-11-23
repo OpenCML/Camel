@@ -13,27 +13,33 @@ type Rec = {
     words: string[]
 }
 
-func word(i: int, j: int): string { return 'w' + string(i) + '-' + string(j) }
-
-func window(i: int): Rec {
-    return { id: i, tag: 'step' + string(i), words: (0..48)->map<func (j: int) => string { word(i, j) }> }
+func word(i: int, j: int) => string {
+    return 'w' + string(i) + '-' + string(j)
 }
 
-func weight(r: Rec): int {
-    return r.words->reduce<func (acc: int, s: string) => int { acc + len(s) }, len(r.tag)> + r.id % 7
+func window(i: int) => Rec {
+    return { id: i, tag: 'step' + string(i), words: (0 .. 48)->map<func (j: int) => string {
+        word(i, j)
+    }> }
 }
 
-func table(n: int): int[][] {
-    return (0..n)->map<func (i: int) => int[] { [i, i + 1, i + 2, i + 3] }>
+func weight(r: Rec) => int {
+    return r.words->reduce<func (acc: int, s: string) => int {
+        acc + len(s)
+    }, len(r.tag)> + r.id % 7
 }
 
-func run(keep: int[][], prev: Rec, left: int, total: int): int {
-    return if left == 0
-        then total + weight(prev) + keep[len(keep) - 1][3]
-        else run(keep, window(left), left - 1, (total + weight(prev)) % 1000000007)
+func table(n: int) => int[][] {
+    return (0 .. n)->map<func (i: int) => int[] {
+        [i, i + 1, i + 2, i + 3]
+    }>
 }
 
-func main(rows: int, reps: int): int sync {
+func run(keep: int[][], prev: Rec, left: int, total: int) => int {
+    return if left == 0 then total + weight(prev) + keep[len(keep) - 1][3] else run(keep, window(left), left - 1, (total + weight(prev)) % 1000000007)
+}
+
+func main(rows: int, reps: int) => int sync {
     let keep = table(rows)
     println('gc_soak total={}'->format<run(keep, window(0), reps, 0)>)
     return 0

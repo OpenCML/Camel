@@ -6,7 +6,7 @@
 
 import { kind } from json
 
-func main(): int sync {
+func main() => int sync {
     println(kind(42))
     return 0
 }

@@ -1,21 +1,23 @@
-// A chain `f..g..h` is the lambda `(x) => h(g(f(x)))`, and the expected type reaches every link:
+// A chain `f <> g <> h` is the lambda `(x) => h(g(f(x)))`, and the expected type reaches every link:
 // the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and
 // the result the position expects is what `h` gives. Each operand here takes a different
 // instance, so a distribution that handed all three the same type could not build this
 // program (design principles 5.5: each operand takes the instance its own
 // position fixes).
 
-func wrap::<T>(x: T): T[] {
+func wrap::<T>(x: T) => T[] {
     return [x]
 }
 
-func head::<T>(xs: T[]): T {
+func head::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func main(): int sync {
-    let chain: (x: int) => int[] = wrap..head..wrap
-    let written: (x: int) => int[] = func (x) { wrap(wrap(x)[0]) }
+func main() => int sync {
+    let chain: (x: int) => int[] = wrap <> head <> wrap
+    let written: (x: int) => int[] = func (x) {
+        wrap(wrap(x)[0])
+    }
     println(chain(4))
     println(written(4))
     return 0

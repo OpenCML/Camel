@@ -7,12 +7,15 @@
  * older / 1 1 / after`. The scale is what makes it useful -- two statements, one branch.
  */
 
-func older(c: bool): int sync {
-    if c then sync { println('older'); null }
+func older(c: bool) => int sync {
+    if c then sync {
+        println('older')
+        null
+    }
     return 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(older(true), older(false))
     println('after')

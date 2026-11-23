@@ -3,14 +3,14 @@
  * adds no arm of its own, so a value no case lists would have nowhere to go.
  */
 
-func f(s: string): int {
+func f(s: string) => int {
     return match s {
         case 'a' => 1
         case 'b' => 2
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f('a'), f('b'))
     return 0
 }

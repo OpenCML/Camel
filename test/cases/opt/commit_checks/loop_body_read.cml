@@ -14,7 +14,7 @@
 // reading a value of the loop's body), then the two that must not be: the same copy reading a value
 // of its own region, and a copy inside the loop's body reading the value the function body computed.
 
-func main(): int sync {
+func main() => int sync {
     var total = 0
     let step = total + 10
     let _ = loop i = 0 while i < 3 do sync {

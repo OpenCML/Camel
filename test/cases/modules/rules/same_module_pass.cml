@@ -1,4 +1,3 @@
-
 import { rewrite } from rewrite
 
 // Deliberately not an equation: `x + 0` becomes `x + 1`, so the rewritten program prints 8
@@ -6,13 +5,15 @@ import { rewrite } from rewrite
 // program it produced (not an empty one, and not the original) was installed and run.
 rule add_zero_bumps(x: int) { x + 0 => x + 1 }
 
-func f(x: int): int { return x + 0 }
+func f(x: int) => int {
+    return x + 0
+}
 
-func main(): int sync {
+func main() => int sync {
     println(f(7))
     return 0
 }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[add_zero_bumps]>
 }

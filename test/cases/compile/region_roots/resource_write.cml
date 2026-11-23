@@ -10,16 +10,16 @@
 
 import { next_key, seed } from random
 
-func firstKeyLo(): int sync {
+func firstKeyLo() => int sync {
     seed(7)
     return next_key().lo
 }
 
-func main(): int {
+func main() => int {
     seed(7)
     let outside = next_key()
     let inside = firstKeyLo()
     let same = outside.lo == inside
-    println("keys agree")
+    println('keys agree')
     if same then 0 else 1
 }

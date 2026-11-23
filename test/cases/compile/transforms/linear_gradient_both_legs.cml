@@ -21,33 +21,31 @@
 //
 //     camel test/cases/compile/transforms/linear_gradient_both_legs.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, linear, sum } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling of `d/dx`: the differentiated value is the `with` parameter.
 with <x: float[2, 2]>
-func total_x(w: float[2, 2]): float {
+func total_x(w: float[2, 2]) => float {
     return sum(linear(x, w))
 }
 
 /// The same for `d/dw`: the weight is the `with` parameter.
 with <w: float[2, 2]>
-func total_w(x: float[2, 2]): float {
+func total_w(x: float[2, 2]) => float {
     return sum(linear(x, w))
 }
 
 /// The library's spelling: both operands are ordinary parameters.
-func total_plain(x: float[2, 2], w: float[2, 2]): float {
+func total_plain(x: float[2, 2], w: float[2, 2]) => float {
     return sum(linear(x, w))
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
-    let engine_dx = grad(total_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>(
-        [[0.5, 0.25], [0.125, 1.0]] as float[2, 2])
-    let engine_dw = grad(total_w)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>(
-        [[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
+    let engine_dx = grad(total_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>([[0.5, 0.25], [0.125, 1.0]] as float[2, 2])
+    let engine_dw = grad(total_w)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
     `linear engine dx={} dw={}`->format<engine_dx, engine_dw>->println
     let (value, pullback) = vjp(total_plain)(x, w)
     let (library_dx, library_dw) = pullback(1.0)

@@ -1,4 +1,4 @@
-func main(): int sync {
+func main() => int sync {
     let func = 1
     return func
 }

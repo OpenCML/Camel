@@ -4,15 +4,15 @@
  * its parameters are called.
  */
 
-func f(x: int): string {
+func f(x: int) => string {
     return 'first'
 }
 
-func f(y: int): int {
+func f(y: int) => int {
     return y
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(1))
     println('never printed')
     return 0

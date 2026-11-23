@@ -2,11 +2,10 @@
 // say so, and what the module does provide, instead of "pass not found" over the whole pipeline
 // 
 
-
-export func ok::<F>(p: F): F! {
+export func ok::<F>(p: F) => F! {
     return p
 }
 
-export func twice(n: int): int {
+export func twice(n: int) => int {
     return n * 2
 }

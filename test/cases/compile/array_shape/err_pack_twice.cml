@@ -1,9 +1,8 @@
 // One array type has one pack: a second one says the same thing twice.
-
-func bad(x: f32[...a, ...b]): int {
+func bad(x: f32[...a, ...b]) => int {
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

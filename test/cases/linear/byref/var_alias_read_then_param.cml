@@ -5,25 +5,61 @@
  * (docs/design-principles.cn.md 3.5, 6.11).
  */
 
-func make_array(): int[] {
+func make_array() => int[] {
     return [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
     ]
 }
 
-func touch(var xs: int[]): int sync {
+func touch(var xs: int[]) => int sync {
     xs[0] = 9
     return 0
 }
 
-func main(): int sync {
-    let big  = make_array()
-    var v    = big
+func main() => int sync {
+    let big = make_array()
+    var v = big
     let kept = v
     touch(v)
-    println("kept[0] =", kept[0], " v[0] =", v[0])
+    println('kept[0] =', kept[0], ' v[0] =', v[0])
     return 0
 }

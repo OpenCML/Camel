@@ -7,26 +7,30 @@
 
 let source: int.. = count(3)
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func firstOf(p: (int, int..)?): int {
+func firstOf(p: (int, int..)?) => int {
     return match p {
         case null => 0
         case v => v.0
     }
 }
 
-func read(): () => int {
-    return func () { firstOf(source()) }
+func read() => () => int {
+    return func () {
+        firstOf(source())
+    }
 }
 
-func main(): int sync {
+func main() => int sync {
     let take = read()
     println(take())
     return 0

@@ -2,11 +2,13 @@
  * One element function of a filter faults (element 5 of 8).
  */
 
-func keep(x: int): bool { return 60 % (x - 5) == 0 }
+func keep(x: int) => bool {
+    return 60 % (x - 5) == 0
+}
 
-func main(): int sync {
+func main() => int sync {
     println('before')
-    let ys = (0..8)->filter<keep>
+    let ys = (0 .. 8)->filter<keep>
     println(ys)
     println('not reached')
     return 0

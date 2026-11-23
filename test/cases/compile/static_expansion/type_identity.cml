@@ -4,7 +4,7 @@
  * every scalar that no identity case named (design principles 5.5).
  */
 
-func kind::<T>(x: T): string {
+func kind::<T>(x: T) => string {
     return match type T {
         case int => 'int'
         case i32 => 'i32'
@@ -14,7 +14,7 @@ func kind::<T>(x: T): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let small: f32 = 1.5
     let narrow: i32 = 1
     println(kind(1))

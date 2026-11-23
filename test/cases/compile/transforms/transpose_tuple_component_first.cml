@@ -10,15 +10,15 @@
 // Before this channel, a component read dropped its cotangent ("a component of the residuals is a
 // known value"), so nothing downstream of a tuple was differentiated at all and this function
 // refused with `skip=output`.
-import { transpose } from transforms
 import rulesets.transpose
+import { transpose } from transforms
 
-func first(x: float): float {
+func first(x: float) => float {
     let t = (x, 2.0 * x)
     return t.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first(1.0))
     let back = transpose(first)
     println(back(1.0))

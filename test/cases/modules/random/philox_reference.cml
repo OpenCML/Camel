@@ -10,11 +10,9 @@
  *   permutation  the permutation of 8, of 0 and of -3
  *   array     key(42)'s whole-array draw of shape [2, 3], then the scalar draws of the keys it folds
  */
-import {
-    key, fold, uniform, normal, randint, permutation, seed, next_key, rand
-} from random
+import { key, fold, uniform, normal, randint, permutation, seed, next_key, rand } from random
 
-func main(): int sync {
+func main() => int sync {
     let k = key(42)
     println('fold', fold(k, 3))
     println('uniform', uniform::<float>(k), uniform::<f32>(k), uniform::<f16>(k), uniform::<bf16>(k))

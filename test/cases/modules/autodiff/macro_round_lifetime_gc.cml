@@ -1,34 +1,56 @@
 // Several custom VJP expansions retain function-valued macro results across rewrite rounds.
 // Every rule is used; the regression requires safepoint stress, without importing Tiles.
 // The differentiated tensor is the first `with` parameter of every loss.
-import { reshape, shape, sum, zeros } from tensor
 import { grad } from autodiff
 import { vjp } from prelude
+import { reshape, shape, sum, zeros } from tensor
 
 let weights = reshape<[2, 3]>([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[])
-func rule(x: f32[...], dy: f32[...]): f32[...] { return reshape<[3, 2]>(dy) }
+func rule(x: f32[...], dy: f32[...]) => f32[...] {
+    return reshape<[3, 2]>(dy)
+}
 #vjp(rule)
-func mark(x: f32[...]): f32[...] { return x }
+func mark(x: f32[...]) => f32[...] {
+    return x
+}
 with <x: f32[...]>
-func loss(): float { return float(sum(mark(sum<1>(x)) * weights)) }
+func loss() => float {
+    return float(sum(mark(sum<1>(x)) * weights))
+}
 with <x: f32[...]>
-func negative_loss(): float { return float(sum(mark(sum<-2>(x)) * weights)) }
+func negative_loss() => float {
+    return float(sum(mark(sum<-2>(x)) * weights))
+}
 with <x: f32[...]>
-func keep_loss(): float { return float(sum(sum<-2, true>(x))) }
+func keep_loss() => float {
+    return float(sum(sum<-2, true>(x)))
+}
 
-func narrow_rule(x: f32[...], dy: f32[...]): f32[...] { return reshape<[4]>(dy) }
+func narrow_rule(x: f32[...], dy: f32[...]) => f32[...] {
+    return reshape<[4]>(dy)
+}
 #vjp(narrow_rule)
-func narrow_mark(x: f32[...]): f32[...] { return x }
+func narrow_mark(x: f32[...]) => f32[...] {
+    return x
+}
 with <x: f32[...]>
-func narrow_loss(): float { return float(sum(narrow_mark(sum<1>(x)))) }
+func narrow_loss() => float {
+    return float(sum(narrow_mark(sum<1>(x))))
+}
 
-func wide_rule(x: f32[...], dy: f32[...]): f32[...] { return reshape<[4, 5, 2]>(dy) }
+func wide_rule(x: f32[...], dy: f32[...]) => f32[...] {
+    return reshape<[4, 5, 2]>(dy)
+}
 #vjp(wide_rule)
-func wide_mark(x: f32[...]): f32[...] { return x }
+func wide_mark(x: f32[...]) => f32[...] {
+    return x
+}
 with <x: f32[...]>
-func wide_loss(): float { return float(sum(wide_mark(sum<1>(x)))) }
+func wide_loss() => float {
+    return float(sum(wide_mark(sum<1>(x))))
+}
 
-func main(): int sync {
+func main() => int sync {
     let df = grad(loss)
     let dn = grad(negative_loss)
     let dk = grad(keep_loss)

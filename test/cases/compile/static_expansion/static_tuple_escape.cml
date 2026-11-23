@@ -3,10 +3,10 @@
  * that the rest parameter does not have, and is refused instead of materialized.
  */
 
-func first(...ts): int {
+func first(...ts) => int {
     return ts
 }
 
-func main(): int sync {
+func main() => int sync {
     return first(1, 2)
 }

@@ -2,7 +2,7 @@
  * Verifies array literals can mix constants and computed values without losing element order or materialization.
  */
 
-func main(): int sync {
+func main() => int sync {
     let x = 2
     let arr = [1, x, 3]
     println(arr[0])
@@ -10,4 +10,3 @@ func main(): int sync {
     println(arr[2])
     return 0
 }
-

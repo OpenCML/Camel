@@ -3,7 +3,8 @@
  * as an ordinary function without it): the array it returns becomes a constant of the graph.
  */
 
-#macro func squares(n: int): int[] sync {
+#macro
+func squares(n: int) => int[] sync {
     var out: int[] = []
     out = out->append<0>
     out = out->append<1>
@@ -13,7 +14,7 @@
     return out
 }
 
-func main(): int sync {
+func main() => int sync {
     println(squares(5), len(squares(3)))
     return 0
 }

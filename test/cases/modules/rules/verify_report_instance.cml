@@ -15,10 +15,10 @@
 import { check } from rewrite
 import { int_add_zero } from rules
 
-func main(): int sync {
+func main() => int sync {
     let r = [int_add_zero]->check<50, 11>
-    println("rows", len(r.rows))
-    println("row 0 |", r.rows[0].rule, "|", r.rows[0].instance, "|", r.rows[0].verdict)
-    println("row 1 |", r.rows[1].rule, "|", r.rows[1].instance, "|", r.rows[1].verdict)
+    println('rows', len(r.rows))
+    println('row 0 |', r.rows[0].rule, '|', r.rows[0].instance, '|', r.rows[0].verdict)
+    println('row 1 |', r.rows[1].rule, '|', r.rows[1].instance, '|', r.rows[1].verdict)
     return 0
 }

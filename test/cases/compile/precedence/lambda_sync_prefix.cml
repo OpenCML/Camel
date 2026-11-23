@@ -1,6 +1,6 @@
 // A lambda has no modifier: `sync` is written before a block, so a lambda that needs a synchronous
 // body writes `func (x) sync { ... }` (design principles 3.4).
-func main(): int sync {
+func main() => int sync {
     let inc = sync (x: int) => x + 1
     println(inc(1))
     return 0

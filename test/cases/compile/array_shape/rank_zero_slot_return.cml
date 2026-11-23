@@ -5,19 +5,19 @@
 // What this case pins: the value a function hands back is the value its return type promises, for a
 // literal and for a computed value alike.
 
-func writtenLow(): f32[...] {
+func writtenLow() => f32[...] {
     return 1.0
 }
 
-func writtenHigh(): f32[...] {
+func writtenHigh() => f32[...] {
     return 2.5
 }
 
-func computed(v: f32): f32[...] {
+func computed(v: f32) => f32[...] {
     return v
 }
 
-func main(): int sync {
+func main() => int sync {
     let one: f32 = 1.0
     let two: f32 = 2.5
     println(writtenLow())

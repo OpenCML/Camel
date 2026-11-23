@@ -3,11 +3,11 @@
  * passes print is about one site (rewrite design 8.7).
  */
 
-func f(x: int): int {
+func f(x: int) => int {
     return x + 0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(5))
     return 0
 }

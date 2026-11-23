@@ -6,7 +6,7 @@
 
 import { stop_gradient } from autodiff
 
-func main(): int sync {
+func main() => int sync {
     println(stop_gradient(1.0, 2.0))
     return 0
 }

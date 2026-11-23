@@ -4,20 +4,22 @@
  * called", progen finding F33).
  */
 
-func inc(a: int): int {
+func inc(a: int) => int {
     return a + 1
 }
 
 let top = inc
 
-func use_top(a: int): int {
+func use_top(a: int) => int {
     return top(a) * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = inc
     println(g(1))
-    println([1]->map<func (x: int) => int { g(x) }>)
+    println([1]->map<func (x: int) => int {
+        g(x)
+    }>)
     println([1, 2]->map<g>)
     println(use_top(4))
     let h = g

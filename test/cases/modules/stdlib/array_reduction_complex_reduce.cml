@@ -21,12 +21,14 @@
  * the record of what happens when it is reached.
  */
 
-func main(): int sync {
+func main() => int sync {
     let z0: c64 = 1 + 2i
     let z1: c64 = 3 + 4i
     let zs: c64[] = [z0, z1]
-    println("before")
-    let acc: c64 = zs->reduce<func (a, b) { a + b }, c64(0)>
-    println("reduce {}", acc)
+    println('before')
+    let acc: c64 = zs->reduce<func (a, b) {
+        a + b
+    }, c64(0)>
+    println('reduce {}', acc)
     return 0
 }

@@ -2,9 +2,11 @@
  * Floating-point division by zero, after a line of output.
  */
 
-func div(a: float, b: float): float { return a / b }
+func div(a: float, b: float) => float {
+    return a / b
+}
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     println(div(1.0, 4.0))
     println(div(1.0, 0.0))

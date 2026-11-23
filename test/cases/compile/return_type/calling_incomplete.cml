@@ -6,6 +6,6 @@ func f(n: int) {
     return f(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

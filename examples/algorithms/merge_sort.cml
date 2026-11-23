@@ -7,14 +7,13 @@ import { sort, sort_by, zip_with, all } from array
 
 // Merges two sorted arrays. The recursive call is the last thing done, so the depth of the
 // recursion is not limited.
-func merge(a: int[], b: int[], i: int, j: int, out: int[]): int[] {
+func merge(a: int[], b: int[], i: int, j: int, out: int[]) => int[] {
     return if i >= len(a) then concat(out, b[j..len(b)])
-        else if j >= len(b) then concat(out, a[i..len(a)])
-        else if a[i] <= b[j] then merge(a, b, i + 1, j, concat(out, [a[i]]))
-        else merge(a, b, i, j + 1, concat(out, [b[j]]))
+    else if j >= len(b) then concat(out, a[i..len(a)])
+    else if a[i] <= b[j] then merge(a, b, i + 1, j, concat(out, [a[i]])) else merge(a, b, i, j + 1, concat(out, [b[j]]))
 }
 
-func sort(xs: int[]): int[] {
+func sort(xs: int[]) => int[] {
     let n = len(xs)
     let no_ints: int[] = []
     return if n <= 1 then xs else {
@@ -24,21 +23,29 @@ func sort(xs: int[]): int[] {
     }
 }
 
-func same(a: int[], b: int[]): bool {
-    let equal = zip_with<func (x: int, y: int) { x == y }>(a, b)
-    return equal->all<func (e: bool) { e }>
+func same(a: int[], b: int[]) => bool {
+    let equal = zip_with<func (x: int, y: int) {
+        x == y
+    }>(a, b)
+    return equal->all<func (e: bool) {
+        e
+    }>
 }
 
-func main(): int sync {
+func main() => int sync {
     let data = [38, 27, 43, 3, 9, 82, 10, 27, -5, 0]
     let result = sort(data)
     println('input: ', data)
     println('sorted:', result)
     println('same as array.sort:', same(result, sort(data)))
-    println('same as array.sort_by:', same(result, data->sort_by<func (x: int) { x }>))
-
+    println('same as array.sort_by:', same(result, data->sort_by<func (x: int) {
+        x
+    }>))
+    
     // 2000 values in descending order.
-    let big = (0..2000)->map<func (i: int) => int { 2000 - i }>
+    let big = (0 .. 2000)->map<func (i: int) => int {
+        2000 - i
+    }>
     let big_sorted = sort(big)
     println('first:', big_sorted[0], 'last:', big_sorted[1999], 'same as array.sort:', same(big_sorted, sort(big)))
     return 0

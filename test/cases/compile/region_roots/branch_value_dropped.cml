@@ -15,16 +15,20 @@
  * Nothing is printed.
  */
 
-func quiet(x: int): int {
+func quiet(x: int) => int {
     return x + 1
 }
 
-func value_dropped(): int {
-    let unused = if quiet(0) > 0 then { println("a") } else { println("b") }
+func value_dropped() => int {
+    let unused = if quiet(0) > 0 then {
+        println('a')
+    } else {
+        println('b')
+    }
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     value_dropped()
     return 0
 }

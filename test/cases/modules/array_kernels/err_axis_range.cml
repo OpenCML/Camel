@@ -1,7 +1,7 @@
 import { sum } from array
 import { reshape } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])->sum<2>)
     return 0
 }

@@ -3,9 +3,11 @@
 // refusal of a constant step cannot see it (design principles 4.2). A step that is not 0 is the
 // sequence it names.
 
-func counted(k: int): int[] { return range(0, 10, k) }
+func counted(k: int) => int[] {
+    return range(0, 10, k)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(counted(3))
     println(counted(-3))
     println(counted(0))

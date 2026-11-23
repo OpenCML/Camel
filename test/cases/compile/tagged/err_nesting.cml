@@ -2,11 +2,15 @@
  * The same mark twice is rejected: TaggedTypeNesting. `T?!` and `T!?` are allowed.
  */
 
-func ok(x: int?!): int { return 1 }
+func ok(x: int?!) => int {
+    return 1
+}
 
-func f(x: (int?)?): int { return 1 }
+func f(x: (int?)?) => int {
+    return 1
+}
 
-func main(): int sync {
+func main() => int sync {
     println('never printed')
     return 0
 }

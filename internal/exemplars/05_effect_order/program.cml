@@ -5,14 +5,14 @@
  * NodeVM, FastVM and after std::opt has inlined the callback.
  */
 
-func visit(items: int[], i: int, cb: (x: int) => int): int {
+func visit(items: int[], i: int, cb: (x: int) => int) => int {
     return if i >= len(items) then 0 else sync {
         let r = cb(items[i])
         return visit(items, i + 1, cb) + r
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println('start')
     let total = visit([3, 1, 2], 0, func (x: int) => int sync {
         println('visit {}'->format<x>)

@@ -4,23 +4,23 @@
  * subgraph in which the variables are replaced by those types.
  */
 
-func first::<T>(xs: T[]): T {
+func first::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func pick::<T>(c: bool, a: T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T) => T {
     return if c then a else b
 }
 
-func pair_of::<T, U>(a: T, b: U): (T, U) {
+func pair_of::<T, U>(a: T, b: U) => (T, U) {
     return (a, b)
 }
 
-func swap::<A, B>(p: (A, B)): (B, A) {
+func swap::<A, B>(p: (A, B)) => (B, A) {
     return (p.1, p.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(first([1.5, 2.5]))

@@ -11,43 +11,43 @@
 
 type Point = { x: int, y: int }
 
-func via_cast(x: int): float {
+func via_cast(x: int) => float {
     return cast::<int, float>(x)
 }
 
-func via_copy(t: (int, int)): (int, int) {
+func via_copy(t: (int, int)) => (int, int) {
     return copy(t)
 }
 
-func via_fill(a: int, b: int): (int, int) {
+func via_fill(a: int, b: int) => (int, int) {
     return fill((0, 0), a, b)
 }
 
-func via_access(t: (int, int)): int {
+func via_access(t: (int, int)) => int {
     return access::<(int, int), int>(0, t)
 }
 
-func via_access_key(p: Point): int {
+func via_access_key(p: Point) => int {
     return access_key::<Point, int>('y', p)
 }
 
-func by_conversion(x: int): float {
+func by_conversion(x: int) => float {
     return float(x)
 }
 
-func by_rank_zero(x: int): int[...] {
+func by_rank_zero(x: int) => int[...] {
     return x
 }
 
-func by_aggregate(a: int, b: int): (int, int) {
+func by_aggregate(a: int, b: int) => (int, int) {
     return (a, b)
 }
 
-func by_member(t: (int, int)): int {
+func by_member(t: (int, int)) => int {
     return t.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let point: Point = { x: 1, y: 2 }
     let pair = (5, 6)
     println(
@@ -57,6 +57,7 @@ func main(): int sync {
         via_access_key(point),
         int(by_conversion(1)),
         by_aggregate(7, 8).0,
-        by_member(pair))
+        by_member(pair)
+    )
     return 0
 }

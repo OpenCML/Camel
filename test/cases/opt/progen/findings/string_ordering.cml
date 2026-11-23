@@ -5,7 +5,7 @@
  * Expected output (byte order, design principles log 2.9): four lines `true`.
  */
 
-func main(): int sync {
+func main() => int sync {
     println('a' < 'b')
     println('b' > 'a')
     println('a' <= 'a')

@@ -18,19 +18,25 @@
  * Expected output: (nothing)
  */
 
-func sum(a3: string): int {
-    return concat(['']->map<func (p12: string) => string { '' }>, ['', a3])->reduce<func (p10: int, p11: string) => int { -1 }, 0>;
+func sum(a3: string) => int {
+    return concat(['']->map<func (p12: string) => string {
+        ''
+    }>, ['', a3])->reduce<func (p10: int, p11: string) => int {
+        -1
+    }, 0>
 }
 
-func pick(a2: (a0: int) => int, a24: int, a25: int): int {
-    return if (0 <= 0) then sum(string(0)) else a24 - a25;
+func pick(a2: (a0: int) => int, a24: int, a25: int) => int {
+    return if (0 <= 0) then sum(string(0)) else a24 - a25
 }
 
-func main(): int sync {
+func main() => int sync {
     let unread = if false then sync {
-        return 0;
+        return 0
     } else sync {
-        return pick(func (p26: int) => int { 0 }, 7, -1);
-    };
-    return 0;
+        return pick(func (p26: int) => int {
+            0
+        }, 7, -1)
+    }
+    return 0
 }

@@ -13,17 +13,17 @@
 /// @effect changes the terminal
 /// @fails error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses
 /// @example set_terminal_raw_mode(true)
-export func set_terminal_raw_mode(enabled: bool): void!
+export func set_terminal_raw_mode(enabled: bool) => void!
 
 /// Writes prompt to standard output and reads one line from standard input, without its line end.
 /// @effect writes standard output, reads standard input
 /// @example input('name: ')
-export func input(prompt: string): string
+export func input(prompt: string) => string
 
 /// Whether a key press is waiting to be read.
 /// @effect reads the terminal
 /// @example has_input()    // true or false
-export func has_input(): bool
+export func has_input() => bool
 
 /// Up to max characters of the input that is waiting, as text; the empty text when none is. A
 /// character is read whole, so max counts code points, not bytes.
@@ -31,11 +31,11 @@ export func has_input(): bool
 /// @fails fault `InvalidArgument` when max is negative
 /// @example get_chars(3)    // at most three characters
 #op('io:get_chars')
-export func get_chars(max: int): string panic
+export func get_chars(max: int) => string panic
 
 /// The next character of the input that is waiting; null when none is.
 /// @example get_char() ?? ''    // 'w'
-export func get_char(): string? {
+export func get_char() => string? {
     let typed = get_chars(1)
     return if typed == '' then null else typed
 }
@@ -43,4 +43,4 @@ export func get_char(): string? {
 /// Discards the input that is waiting.
 /// @effect reads the terminal
 /// @example clear_input_buffer()
-export func clear_input_buffer(): void
+export func clear_input_buffer() => void

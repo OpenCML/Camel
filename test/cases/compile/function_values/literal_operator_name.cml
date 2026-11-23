@@ -3,11 +3,17 @@
  * one function value, so neither can be an element of a literal or the value of an arm.
  */
 
-func inc(x: int): int { return x + 1 }
-func over(x: int): int { return x }
-func over(x: float): float { return x }
+func inc(x: int) => int {
+    return x + 1
+}
+func over(x: int) => int {
+    return x
+}
+func over(x: float) => float {
+    return x
+}
 
-func main(): int sync {
+func main() => int sync {
     let c = true
     let fs = [println, inc]
     let t = (over, 1)

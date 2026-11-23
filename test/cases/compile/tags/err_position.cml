@@ -1,6 +1,7 @@
 /// A tag written where its declaration does not list it (design principles 6.2).
-
 export tag shape on type
 
 #shape
-func main(): int { return 0 }
+func main() => int {
+    return 0
+}

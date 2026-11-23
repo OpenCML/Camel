@@ -6,12 +6,12 @@
  * after it keeps its own meaning and the program prints what it prints.
  */
 
-func f(x: int): int {
+func f(x: int) => int {
     fail<'NoPremise'>('f was called with an x it cannot take')
     return x + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     println(f(1))
     return 0
 }

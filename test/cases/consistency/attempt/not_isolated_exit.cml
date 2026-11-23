@@ -5,13 +5,15 @@
 
 import { exit } from process
 
-func leave(x: int): int sync {
+func leave(x: int) => int sync {
     println('leaving')
-    if x == 3 then sync { exit(7) }
+    if x == 3 then sync {
+        exit(7)
+    }
     return x
 }
 
-func main(): int sync {
+func main() => int sync {
     println('before')
     let a = attempt(leave)(1) !! -1
     println(a)

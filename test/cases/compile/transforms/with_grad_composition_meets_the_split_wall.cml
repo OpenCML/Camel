@@ -38,18 +38,18 @@ import { first_with_as_param } from transforms
 import { vjp } from vjp
 
 with <w: float, b: float>
-func loss_with(x: float, t: float): float {
+func loss_with(x: float, t: float) => float {
     let err = x * w + b - t
     return 0.5 * err * err
 }
 
 with <w: float, b: float>
-func step(x: float, t: float): (float, float) {
+func step(x: float, t: float) => (float, float) {
     let (value, pullback) = vjp(first_with_as_param(loss_with))<b>(w, x, t)
     return (value, pullback(1.0).0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, weight_gradient) = step<0.5, 0.75>(1.5, 2.0)
     println(`value={:.17f} w={:.17f}`->format<value, weight_gradient>)
     return 0

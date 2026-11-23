@@ -5,7 +5,7 @@
 
 import { sleep } from process
 
-func main(): int sync {
+func main() => int sync {
     sleep()
     return 0
 }

@@ -73,9 +73,9 @@ rule zero_sign_licensed(x: f32) { x * -0.0 => x * 0.0 }
 #requires(no_signed_zeros)
 rule zero_sign_exact(x: f32) { x * -0.0 => x * 0.0 }
 
-func main(): int sync {
+func main() => int sync {
     let x: f32 = 1e30
-    println("at x = 1e+30", x * 48.0 + x * (-47.0), x * 1.0)
+    println('at x = 1e+30', x * 48.0 + x * (-47.0), x * 1.0)
     print(check_text([real_cancel, overflow_to_nan, overflow_licensed, nan_licensed, real_difference, zero_sign, zero_sign_licensed, zero_sign_exact]->check<200, 7>))
     return 0
 }

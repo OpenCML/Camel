@@ -5,22 +5,22 @@
  * inside a block, a whole function body that is a block, and a lambda whose body is one are all
  * here.
  */
-func inner(a: int): int sync {
-    println("inner 1", a)
+func inner(a: int) => int sync {
+    println('inner 1', a)
     let s = a * 2
-    println("inner 2", s)
+    println('inner 2', s)
     return s
 }
 
-func main(): int sync {
-    println("main 1")
+func main() => int sync {
+    println('main 1')
     let block = func (a: int) => int sync {
-        println("block 1", a)
+        println('block 1', a)
         let y = inner(a)
-        println("block 2", y)
+        println('block 2', y)
         y + 1
     }
     let x = block(5)
-    println("main 2", x)
+    println('main 2', x)
     return 0
 }

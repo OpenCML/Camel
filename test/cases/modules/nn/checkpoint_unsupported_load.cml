@@ -1,6 +1,6 @@
 import { load_tree } from ckpt
 
-func main(): int sync {
+func main() => int sync {
     let s = 'out/never'->load_tree::<{ block: { f: (x: int) => int } }>
     println(s)
     return 0

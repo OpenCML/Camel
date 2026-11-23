@@ -7,18 +7,18 @@
  * Reduced by test/tools/progen from seed 75 (generator version 1, all features).
  */
 
-func e9(): (string, int) sync {
-    println('a');
-    var v10 = int(10.0);
-    return ('', 0);
+func e9() => (string, int) sync {
+    println('a')
+    var v10 = int(10.0)
+    return ('', 0)
 }
 
-func main(): int sync {
+func main() => int sync {
     if false then sync {
-        let n23 = e9();
-        null;
+        let n23 = e9()
+        null
     } else sync {
-        null;
-    };
-    return 0;
+        null
+    }
+    return 0
 }

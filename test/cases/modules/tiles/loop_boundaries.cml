@@ -1,5 +1,6 @@
 import { reshape, sum } from tensor
-func effect(x: f32[3]): f32[3] {
+
+func effect(x: f32[3]) => f32[3] {
     let pre = x + x
     let y = loop s = pre for k in [1, 2] do sync {
         println('cpu round', k)
@@ -7,17 +8,17 @@ func effect(x: f32[3]): f32[3] {
     }
     return y * y
 }
-func crosslane(x: f32[3]): f32[3] {
+func crosslane(x: f32[3]) => f32[3] {
     let pre = x + x
     let y = loop s = pre for k in [1, 2] do s + f32(sum(s))
     return y * y
 }
-func conditional(x: f32[3]): f32[3] {
+func conditional(x: f32[3]) => f32[3] {
     let pre = x + x
     let n = loop s = 0.0 while s < 3.0 do s + 1.0
     return pre * f32(n)
 }
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[]) as f32[3]
     println(sum(effect(x)))
     println(sum(crosslane(x)))

@@ -4,30 +4,31 @@
 // (`churn`: 20000 iterations of `mix`). The driver and `inner_sum` have a `map` below them; `fib`,
 // `mix` and `churn` have nothing to run concurrently.
 
-func fib(n: int): int {
+func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func mix(a: int, b: int): int {
+func mix(a: int, b: int) => int {
     return (a * 31 + b) % 1000003
 }
 
-func churn(i: int, n: int, acc: int): int {
+func churn(i: int, n: int, acc: int) => int {
     return if i == n then acc else churn(i + 1, n, mix(acc, i))
 }
 
-func inner_sum(seed: int): int {
-    return (0..16)
-        ->map<func (i: int) => int { fib(18 + (seed + i) % 3) }>
-        ->reduce<func (acc: int, cur: int) => int { acc + cur }, 0>
+func inner_sum(seed: int) => int {
+    return (0 .. 16)->map<func (i: int) => int {
+        fib(18 + (seed + i) % 3)
+    }>->reduce<func (acc: int, cur: int) => int {
+        acc + cur
+    }, 0>
 }
 
-func drive(step: int, steps: int, acc: int): int {
-    return if step == steps then acc
-        else drive(step + 1, steps, mix(acc, inner_sum(step) + churn(0, 20000, step)))
+func drive(step: int, steps: int, acc: int) => int {
+    return if step == steps then acc else drive(step + 1, steps, mix(acc, inner_sum(step) + churn(0, 20000, step)))
 }
 
-func main(): int sync {
+func main() => int sync {
     println(drive(0, 40, 0))
     return 0
 }

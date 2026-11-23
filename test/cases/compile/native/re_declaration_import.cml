@@ -6,7 +6,7 @@
 
 import { has_match } from re
 
-func main(): int sync {
+func main() => int sync {
     println('room 42'->has_match<'[0-9]+'>)
     println('hello world'->has_match<'^hello'>)
     println('hello'->has_match<'xyz'>)

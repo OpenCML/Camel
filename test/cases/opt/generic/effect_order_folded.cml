@@ -17,23 +17,23 @@ import { reshape, concat, zeros, show } from tensor
 // retired; `test/cases/effects/callback_write_through_parameter.cml#counter` holds one the same way.
 var seen: int[] = []
 
-func count_down(i: int, acc: int): int sync {
+func count_down(i: int, acc: int) => int sync {
     return if i <= 0 then acc else step(i, acc)
 }
 
 // Inlined into count_down's arm, its branch nests inside count_down's: both recursive calls
 // are still tail calls.
-func step(i: int, acc: int): int sync {
+func step(i: int, acc: int) => int sync {
     return if i % 2 == 0 then count_down(i - 1, acc + 2) else count_down(i - 1, acc + 1)
 }
 
-func main(): int sync {
+func main() => int sync {
     println('start')
     let labels = [3, 1, 4]
     let n = 3
-    func one_hot(i: int, acc: f32[...]): f32[...] {
+    func one_hot(i: int, acc: f32[...]) => f32[...] {
         return if i >= n then acc else sync {
-            let row = reshape<[1, 10]>((0..10 === labels[i]) * 1.0)
+            let row = reshape<[1, 10]>((0 .. 10 === labels[i]) * 1.0)
             let next = if i == 0 then row else concat<0>(acc, row)
             return one_hot(i + 1, next)
         }
@@ -41,7 +41,7 @@ func main(): int sync {
     let y = one_hot(0, zeros::<f32>([1, 10]))
     show(y)
     let items: int[] = [7, 8, 9]
-    func visit(i: int): void {
+    func visit(i: int) => void {
         return if i >= len(items) then null else sync {
             seen = seen->append<items[i]>
             return visit(i + 1)

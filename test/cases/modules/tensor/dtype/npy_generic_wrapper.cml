@@ -8,9 +8,11 @@
 
 import { load_npy, numel } from tensor
 
-func read_as::<T>(p: string): T[...] { return load_npy::<T>(p) }
+func read_as::<T>(p: string) => T[...] {
+    return load_npy::<T>(p)
+}
 
-func main(): int sync {
+func main() => int sync {
     let xs = read_as::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
     println(numel(xs))
     let labels = read_as::<i64>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')

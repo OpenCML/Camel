@@ -17,20 +17,22 @@
 
 import { get_env } from env
 
-func depth(n: int): int {
+func depth(n: int) => int {
     return if n == 0 then 0 else 1 + depth(n - 1)
 }
 
-func bottom(b: int): int {
-    let ys = [b]->map<func (x: int) => int { 0 + depth(x) }>
+func bottom(b: int) => int {
+    let ys = [b]->map<func (x: int) => int {
+        0 + depth(x)
+    }>
     return ys[0]
 }
 
-func descend(a: int, b: int): int {
+func descend(a: int, b: int) => int {
     return if a == 0 then bottom(b) else 1 + descend(a - 1, b)
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = int(get_env('A') ?? '')
     let b = int(get_env('B') ?? '')
     println('start')

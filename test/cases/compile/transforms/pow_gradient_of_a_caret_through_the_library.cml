@@ -22,23 +22,23 @@
 //   - `caret vjp(-3.0)` and `named vjp(-3.0)`: -6.0 twice, at the base the guard was written for.
 //
 //     camel test/cases/compile/transforms/pow_gradient_of_a_caret_through_the_library.cml
-import rulesets.jvp
-import { vjp } from vjp
-import { jvp } from transforms
 import { pow } from math
+import rulesets.jvp
+import { jvp } from transforms
+import { vjp } from vjp
 
 /// The spelling the library could not differentiate: the differentiated value is an ordinary
 /// parameter (design principles 9.9), so `vjp` transforms it and the pullback answers its cotangent.
-func caret(x: float): float {
+func caret(x: float) => float {
     return x ^ 2.0
 }
 
 /// The same power, spelled as the call the ruleset files under `math:pow_d`.
-func named(x: float): float {
+func named(x: float) => float {
     return pow(x, 2.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (negativeValue, negativeTangent) = jvp(caret)(0.0 - 3.0, 1.0)
     `caret jvp(-3.0) value={} tangent={}`->format<negativeValue, negativeTangent>->println
     let (caretValue, caretPullback) = vjp(caret)(3.0)

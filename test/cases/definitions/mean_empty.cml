@@ -4,7 +4,7 @@
 // definition, faults included).
 import { zeros, mean } from tensor
 
-func main(): int sync {
+func main() => int sync {
     println(mean(zeros::<f32>([2, 2])))
     println(mean(zeros::<f32>([0, 4])))
     return 0

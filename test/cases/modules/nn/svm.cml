@@ -4,14 +4,20 @@
 
 import { matmul, ones, zeros, sum, eye, transpose, show, shape, concat, reshape, where } from tensor
 
-func svm_train(X: f32[...], y: f32[...], learning_rate: float, epochs: int, lambda: float): f32[...] sync {
+func svm_train(
+    X: f32[...],
+    y: f32[...],
+    learning_rate: float,
+    epochs: int,
+    lambda: float
+) => f32[...] sync {
     let m = shape(X)[0]
     let n = shape(X)[1]
     let X_bias = concat<1>(X, ones::<f32>([m, 1]))
     let y_col = reshape<[m, 1]>(((y * 2.0) - 1.0))
     let w0 = zeros::<f32>([n + 1, 1])
-
-    func svm_epoch(epoch: int, weights: f32[...]): f32[...] sync {
+    
+    func svm_epoch(epoch: int, weights: f32[...]) => f32[...] sync {
         if (epoch >= epochs) then {
             return weights
         } else sync {
@@ -28,45 +34,45 @@ func svm_train(X: f32[...], y: f32[...], learning_rate: float, epochs: int, lamb
             return svm_epoch(epoch + 1, new_weights)
         }
     }
-
+    
     return svm_epoch(0, w0)
 }
 
-func svm_predict(X: f32[...], model: f32[...]): f32[...] sync {
+func svm_predict(X: f32[...], model: f32[...]) => f32[...] sync {
     let n = shape(X)[0]
     let X_bias = concat<1>(X, ones::<f32>([n, 1]))
     let predictions = matmul(X_bias, model)
     return (((predictions > 0) * 2.0) - 1.0)
 }
 
-func main(): int sync {
-    println("=== Support Vector Machine ===")
-
+func main() => int sync {
+    println('=== Support Vector Machine ===')
+    
     let X1: f32[][] = [[1.0, 2.0], [2.0, 3.0], [3.0, 1.0]]
     let y1: f32[] = [0.0, 0.0, 0.0]
-
+    
     let X2: f32[][] = [[6.0, 5.0], [7.0, 8.0], [8.0, 6.0]]
     let y2: f32[] = [1.0, 1.0, 1.0]
-
+    
     let X = concat<0>(X1, X2)
     let y = concat<0>(y1, y2)
-
-    println("Training data:")
+    
+    println('Training data:')
     show(X)
-    println("Labels:")
+    println('Labels:')
     show(y)
-
+    
     let learning_rate = 0.01
     let epochs = 1000
     let lambda = 0.01
-
+    
     let model = svm_train(X, y, learning_rate, epochs, lambda)
-    println("Trained SVM model:")
+    println('Trained SVM model:')
     show(model)
-
+    
     let predictions = svm_predict(X, model)
-    println("Predictions:")
+    println('Predictions:')
     show(predictions)
-
+    
     return 0
 }

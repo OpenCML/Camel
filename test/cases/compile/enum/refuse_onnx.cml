@@ -1,17 +1,16 @@
 // A model input is a tensor, a number, or a struct or tuple of those: an enum is refused.
-
 type Shape = enum {
     Circle(float),
-    Empty,
+    Empty
 }
 
-func area(s: Shape): float {
+func area(s: Shape) => float {
     return match s {
         case Shape::Circle(r) => r * r
         case Shape::Empty => 0.0
     }
 }
 
-func main(s: Shape): float {
+func main(s: Shape) => float {
     return area(s)
 }

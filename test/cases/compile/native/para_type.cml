@@ -6,7 +6,7 @@
 
 import { rendezvous } from test_support
 
-func main(): int sync {
+func main() => int sync {
     println(rendezvous('a', 0.0))
     return 0
 }

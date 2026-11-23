@@ -8,7 +8,7 @@
 let base = 100
 
 // declared after its first use below
-func main(): int sync {
+func main() => int sync {
     println(add_base(1))
     println(wrap(3))
     println(wrap('s'))
@@ -30,46 +30,48 @@ func main(): int sync {
     return 0
 }
 
-func id::<T>(x: T): T {
+func id::<T>(x: T) => T {
     return x
 }
 
 // a generic function calling generic functions
-func wrap::<T>(x: T): (T, T[]) {
+func wrap::<T>(x: T) => (T, T[]) {
     return (id(x), [id(x)])
 }
 
 // captures a module-level value
-func add_base::<T>(x: T): T {
+func add_base::<T>(x: T) => T {
     return x + base
 }
 
 // with parameters are ordinary context parameters; their types may use and bind variables
 with <k: T>
-func scaled::<T>(x: T): T {
+func scaled::<T>(x: T) => T {
     return x * k
 }
 
 with <w: W>
-func keep::<T, W>(x: T): (W, T) {
+func keep::<T, W>(x: T) => (W, T) {
     return (w, x)
 }
 
 // a lambda in the body typed with the variable
-func lam::<T>(x: T): T[] {
-    let dup = func (y: T) { [y, y] }
+func lam::<T>(x: T) => T[] {
+    let dup = func (y: T) {
+        [y, y]
+    }
     return dup(x)
 }
 
 // conversions to a type written with the variable
-func conv::<T>(x: T): T {
+func conv::<T>(x: T) => T {
     let zero: T = 0
     return (x + zero) as T
 }
 
 // a generic function declared inside a function
-func local_generic(n: int): (int, string) {
-    func twice::<T>(x: T): (T, T) {
+func local_generic(n: int) => (int, string) {
+    func twice::<T>(x: T) => (T, T) {
         return (x, x)
     }
     let a = twice(n)
@@ -77,17 +79,19 @@ func local_generic(n: int): (int, string) {
     return (a.0 + a.1, b.0 + b.1)
 }
 
-func bump::<T>(var x: T, d: T): void sync {
+func bump::<T>(var x: T, d: T) => void sync {
     x = x + d
 }
 
 // a lambda capturing a parameter whose type is the variable
-func capture_param::<T>(x: T): T {
-    let f = func () { x }
+func capture_param::<T>(x: T) => T {
+    let f = func () {
+        x
+    }
     return f()
 }
 
-func ann::<T>(x: T): T {
+func ann::<T>(x: T) => T {
     let y: T = 2
     return x * y
 }

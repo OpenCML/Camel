@@ -3,9 +3,11 @@
  * followed by an operator symbol declares an overload.
  */
 
-func operator(x: int): int { return x + 1 }
+func operator(x: int) => int {
+    return x + 1
+}
 
-func main(): int sync {
+func main() => int sync {
     let operator2 = operator(1)
     println(operator2)
     return 0

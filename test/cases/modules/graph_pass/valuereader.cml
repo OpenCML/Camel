@@ -5,7 +5,7 @@ import { five, nine } from valuelib
 
 let sum = five + nine()
 
-export func show::<F>(p: F): F! sync {
+export func show::<F>(p: F) => F! sync {
     println(five, sum)
     return p
 }

@@ -3,10 +3,10 @@
  * `t.[n]` read the state instead of the field. The names of the head may not repeat.
  */
 
-func bad(t: {a: int}): int {
-    return static loop n = 0 for n, F in fields {a: int} do n + 1
+func bad(t: { a: int }) => int {
+    return static loop n = 0 for n, F in fields { a: int } do n + 1
 }
 
-func main(): int {
-    return bad({a: 1})
+func main() => int {
+    return bad({ a: 1 })
 }

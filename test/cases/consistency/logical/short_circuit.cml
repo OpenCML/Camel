@@ -4,12 +4,12 @@
  * side does not decide. `&` and `|` are the operators that evaluate both sides.
  */
 
-func noisy(tag: string, v: bool): bool sync {
+func noisy(tag: string, v: bool) => bool sync {
     println(tag)
     return v
 }
 
-func main(): int sync {
+func main() => int sync {
     // the right side runs only when the left does not decide
     println(noisy('a1', false) && noisy('a2', true))
     println(noisy('b1', true) && noisy('b2', false))
@@ -36,7 +36,9 @@ func main(): int sync {
     println(acc)
     // as a condition, and with a lambda's captured value on the right
     let limit = 3
-    println([1, 2, 3, 4, 5]->filter<func (x: int) { x > 1 && x < limit + 2 }>)
+    println([1, 2, 3, 4, 5]->filter<func (x: int) {
+        x > 1 && x < limit + 2
+    }>)
     if noisy('m1', true) && noisy('m2', true) then println('both')
     return 0
 }

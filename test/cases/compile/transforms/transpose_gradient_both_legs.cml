@@ -13,8 +13,8 @@
 //
 //     camel test/cases/compile/transforms/transpose_gradient_both_legs.cml
 import { grad } from autodiff
-import { vjp } from vjp
 import { abs, sum, transpose } from tensor
+import { vjp } from vjp
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 /// The weight is written into the body rather than called, because a call the lift cannot transform
@@ -22,16 +22,16 @@ import { abs, sum, transpose } from tensor
 /// function, the engine leg printed its answer and the library leg stopped at `jvp has no forward
 /// transform for this function`.
 with <x: float[2, 2]>
-func total(): float {
+func total() => float {
     return sum(transpose(x) * ([[1.0, 10.0], [100.0, 1000.0]] as float[2, 2]))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[2, 2]): float {
+func total_plain(x: float[2, 2]) => float {
     return sum(transpose(x) * ([[1.0, 10.0], [100.0, 1000.0]] as float[2, 2]))
 }
 
-func main(): int sync {
+func main() => int sync {
     let engine = grad(total)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>()
     `transpose engine={}`->format<engine>->println
     let (_, pullback) = vjp(total_plain)([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])

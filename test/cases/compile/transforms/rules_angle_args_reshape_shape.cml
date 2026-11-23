@@ -19,17 +19,16 @@
  * One program, one reading, for the reason `rules_angle_args_reshape.cml` gives.
  */
 import rulesets.jvp
-import { jvp } from transforms
 import { reshape, sum } from tensor
+import { jvp } from transforms
 
-func loss_reshape_shape(x: float[...]): float {
+func loss_reshape_shape(x: float[...]) => float {
     return sum(reshape<[8, 2, 8]>(x))
 }
 
-func main(): int sync {
-    let xs = [float(i + 1) for i in 0..128]
-    let (value, tangent) =
-        jvp(loss_reshape_shape)(xs as float[], [0.5 for i in 0..128] as float[])
+func main() => int sync {
+    let xs = [float(i + 1) for i in 0 .. 128]
+    let (value, tangent) = jvp(loss_reshape_shape)(xs as float[], [0.5 for i in 0 .. 128] as float[])
     'rules_angle_args reshape-shape value={} tangent={}'->format<value, tangent>->println
     return 0
 }

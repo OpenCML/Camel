@@ -6,7 +6,7 @@
 // side for literal elements, the FILL side for computed ones -- so an array of an open rank's
 // elements holds values a program can read, and both writings read the same.
 
-func main(): int sync {
+func main() => int sync {
     let one: f32 = 1.0
     let two: f32 = 2.5
     let written: f32[...][2] = [1.0, 2.5]

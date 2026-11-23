@@ -14,19 +14,19 @@
 
 import { now } from time
 
-func tap(a: int): int sync {
+func tap(a: int) => int sync {
     println('base')
     return a * 3
 }
 
-func spin(i: int, n: int, acc: int): int {
+func spin(i: int, n: int, acc: int) => int {
     return if i >= n then tap(acc) else {
         let a2 = acc + 1
         spin(i + 1, n, a2)
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let n = int(now() * 0.0) + 3
     let x = n + 37
     let r = if n > 2 then {

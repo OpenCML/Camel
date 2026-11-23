@@ -6,7 +6,7 @@
 
 import { abs } from math
 
-func main(): int sync {
+func main() => int sync {
     println(abs('x'))
     return 0
 }

@@ -11,53 +11,53 @@ import { grad } from autodiff
 import { vjp } from prelude
 
 // A deliberately different rule, so the test can tell which derivative was used: 10 * dy.
-func cube_rule(x: float, dy: float): float {
+func cube_rule(x: float, dy: float) => float {
     return 10.0 * dy
 }
 
 #vjp(cube_rule)
-func cube(x: float): float {
+func cube(x: float) => float {
     return x * x * x
 }
 
 // Straight-through clipping: the value is clipped, the gradient passes unchanged.
-func clip_rule(x: float, dy: float): float {
+func clip_rule(x: float, dy: float) => float {
     return dy
 }
 
 #vjp(clip_rule)
-func clip(x: float): float {
+func clip(x: float) => float {
     return if x > 1.0 then 1.0 else x
 }
 
 // Two differentiable parameters: the rule returns a tuple of gradients.
-func mix_rule(a: float, b: float, n: int, dy: float): (float, float) {
+func mix_rule(a: float, b: float, n: int, dy: float) => (float, float) {
     return (dy * 2.0, dy * 3.0)
 }
 
 #vjp(mix_rule)
-func mix(a: float, b: float, n: int): float {
+func mix(a: float, b: float, n: int) => float {
     return a * b
 }
 
 with <x: float>
-func use_cube(): float {
+func use_cube() => float {
     return cube(x) * 2.0
 }
 
 with <x: float>
-func use_clip(): float {
+func use_clip() => float {
     return clip(x) * x
 }
 
 // `a` is the first `with` parameter, so only its entry of the rule's tuple is used; `b` is a
 // second `with` parameter and stays constant.
 with <a: float, b: float>
-func use_mix(): float {
+func use_mix() => float {
     return mix(a, b, 3) + a
 }
 
-func main(): int sync {
+func main() => int sync {
     let v = cube(2.0)
     let dc = grad(use_cube)<2.0>()
     let dk = grad(use_clip)<3.0>()

@@ -5,12 +5,14 @@
  * (FoldCallNotEvaluable) with the construct it stopped at, rather than guessing a value.
  */
 
-func first_of_list(): int {
-    let step = func (n: int) => int { n + 1 }
+func first_of_list() => int {
+    let step = func (n: int) => int {
+        n + 1
+    }
     return step(1)
 }
 
-func main(): int {
+func main() => int {
     let t = (10, 20, 30)
     return t.[first_of_list()]
 }

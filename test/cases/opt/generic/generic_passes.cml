@@ -8,7 +8,7 @@
 
 import { get_env } from env
 
-func main(): int sync {
+func main() => int sync {
     let a = 3 + 4 * 5
     let n = len(get_env('CAMEL_TEST_SURELY_UNSET_VARIABLE') ?? '')
     let p = n * 7 + 1

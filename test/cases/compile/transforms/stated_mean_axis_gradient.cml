@@ -24,14 +24,14 @@
 // says the conversion did not change the derivative.
 //
 //     camel test/cases/compile/transforms/stated_mean_axis_gradient.cml
-import { vjp } from vjp
 import { mean } from tensor
+import { vjp } from vjp
 
-func total(x: float[]): float {
+func total(x: float[]) => float {
     return mean<0, false>(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, pullback) = vjp(total)([1.0, 2.0, 3.0, 4.0] as float[])
     let d = pullback(1.0).0
     `stated mean value={} dL/dx={}`->format<value, d>->println

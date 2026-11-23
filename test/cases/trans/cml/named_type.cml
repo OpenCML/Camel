@@ -7,19 +7,19 @@
 type P = { x: int, y: int }
 
 with <m: P>
-func take(): int {
+func take() => int {
     return m.x
 }
 
-func get(p: P): int {
+func get(p: P) => int {
     return p.x + p.y
 }
 
-func keep(p: P): P {
+func keep(p: P) => P {
     return p
 }
 
-func main(): int sync {
+func main() => int sync {
     println(take<{ x: 3, y: 4 }>())
     println(get({ x: 1, y: 2 }))
     let q = keep({ x: 5, y: 6 })

@@ -5,11 +5,11 @@
 // `readonly_resource_read.cml` is the same program with the bare entry, and it compiles.
 export resource graph readonly
 
-func twice(f: int): int uses var graph {
+func twice(f: int) => int uses var graph {
     return f * 2
 }
 
-func main(): int {
+func main() => int {
     println(twice(21))
     return 0
 }

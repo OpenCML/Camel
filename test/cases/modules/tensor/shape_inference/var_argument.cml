@@ -1,10 +1,11 @@
 import { sum, ones } from tensor
+
 // A variable has the widened type of its first value; no conversion applies to a variable.
-func step(var s: f32[3], x: f32[3]): float sync {
+func step(var s: f32[3], x: f32[3]) => float sync {
     s = s + x
     return float(sum(s))
 }
-func main(): int sync {
+func main() => int sync {
     var s = ones::<f32>([3])
     println(step(s, ones::<f32>([3])))
     return 0

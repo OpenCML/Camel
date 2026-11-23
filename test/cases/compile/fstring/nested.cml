@@ -1,5 +1,5 @@
 type Point = { x: int, y: int }
-func main(): int sync {
+func main() => int sync {
     let a = 1
     let b = 2
     let p: Point = { x: 3, y: 4 }

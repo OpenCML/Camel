@@ -11,24 +11,34 @@
  * Reduced by test/tools/progen from seed 108 at size 4 (generator version 2, all features).
  */
 
-func f1(a2: (a0: int) => string, a3: (a0: bool) => string, a4: (a0: int, a1: float) => int): int {
-    return 2;
+func f1(
+    a2: (a0: int) => string,
+    a3: (a0: bool) => string,
+    a4: (a0: int, a1: float) => int
+) => int {
+    return 2
 }
 
-func r18(a19: int, a20: int, a21: bool): int {
-    return if false then f1(func (p22: int) => string { 'yz' }, func (p23: bool) => string { '' }, func (p24: int, p25: float) => int { a19 }) else {
-        return 0;
-    };
+func r18(a19: int, a20: int, a21: bool) => int {
+    return if false then f1(func (p22: int) => string {
+        'yz'
+    }, func (p23: bool) => string {
+        ''
+    }, func (p24: int, p25: float) => int {
+        a19
+    }) else {
+        return 0
+    }
 }
 
-func w210(a211: int, var c212: int, a213: int): int sync {
+func w210(a211: int, var c212: int, a213: int) => int sync {
     return if false then sync {
-        return r18(r18(0, 0, false), -1, true);
+        return r18(r18(0, 0, false), -1, true)
     } else sync {
-        return 0;
-    };
+        return 0
+    }
 }
 
-func main(): int sync {
-    return 0;
+func main() => int sync {
+    return 0
 }

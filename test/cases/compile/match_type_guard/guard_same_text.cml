@@ -21,7 +21,7 @@ type ArrayFirst<T> = match type T {
     case _ => int[7]
 }
 
-func main(): int sync {
+func main() => int sync {
     // ① and ②: one question asked by two type functions, each case answered for itself.
     println(is_same::<FirstCopy<int>, int[1]>(), is_same::<SecondCopy<int>, int[3]>())
     // ③ the same two questions with a subject the guard refuses: each falls through to its own

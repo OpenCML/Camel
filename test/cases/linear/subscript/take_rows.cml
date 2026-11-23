@@ -13,23 +13,23 @@
  * return type" -- so a take that returned its argument's type would not compile here.
  */
 
-func take(xs: f32[5], idx: int[3]): f32[3] {
+func take(xs: f32[5], idx: int[3]) => f32[3] {
     return xs[idx]
 }
 
-func rowsOfRank2(t: f32[2, 3], idx: int[3]): f32[3, 3] {
+func rowsOfRank2(t: f32[2, 3], idx: int[3]) => f32[3, 3] {
     return t[idx]
 }
 
-func rowsOfRank3(t: f32[4, 2, 2], idx: int[2]): f32[2, 2, 2] {
+func rowsOfRank3(t: f32[4, 2, 2], idx: int[2]) => f32[2, 2, 2] {
     return t[idx]
 }
 
-func anyRank(t: f32[...], idx: int[]): f32[...] {
+func anyRank(t: f32[...], idx: int[]) => f32[...] {
     return t[idx]
 }
 
-func main(): int sync {
+func main() => int sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0, 5.0]
     let raw = [4, 0, 4]
     let idx = raw as int[3]

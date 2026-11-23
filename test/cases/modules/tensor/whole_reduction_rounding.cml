@@ -28,62 +28,67 @@ import { sum, mean, numel } from tensor
 
 /// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
 /// rounds — this is what "round after every step" means.
-func foldF32(xs: f32[]): f32 {
-    return xs->reduce<func (acc: f32, item: f32) => f32 { acc + item }, f32(0.0)>
+func foldF32(xs: f32[]) => f32 {
+    return xs->reduce<func (acc: f32, item: f32) => f32 {
+        acc + item
+    }, f32(0.0)>
 }
 
-func main(): int sync {
-    let a = (0..1026)->map<func (i: int) { if i == 0 then f32(16777216.0) else f32(1.0) }>
-    let c = (0..3)->map<func (i: int) { if i == 0 then f32(33554432.0) else f32(7.0) }>
-
+func main() => int sync {
+    let a = (0 .. 1026)->map<func (i: int) {
+        if i == 0 then f32(16777216.0) else f32(1.0)
+    }>
+    let c = (0 .. 3)->map<func (i: int) {
+        if i == 0 then f32(33554432.0) else f32(7.0)
+    }>
+    
     let ta = a
     let tc = c
-
+    
     // The element type, from the call: both are f32, and neither is a float.
-    let sumA  = sum(ta)
+    let sumA = sum(ta)
     let meanC = mean(tc)
     // The per-step f32 fold, and the same elements through the array reduction.
-    let foldA   = foldF32(a)
-    let arrayA  = array_sum(a)
+    let foldA = foldF32(a)
+    let arrayA = array_sum(a)
     // The same call with the array spelling of the operand: `sum::<T>(x: T[...]): T` at f32.
     let arrayArgA = sum(a)
     // The f64 accumulation of the same elements: the sum this call answered while its result type
     // was float, and the mean's sum before it was divided.
-    let f64A     = float(sum(float(ta)))
+    let f64A = float(sum(float(ta)))
     let f64MeanC = float(mean(float(tc)))
     // The mean with the sum rounded to the element type first, divided in f64 again: the two
     // roundings the rule rules out.
     let twiceC = float(sum(tc)) / float(numel(tc))
-
-    let onceA          = sumA == f32(f64A)
-    let differsA       = sumA != foldA
-    let arrayAgrees    = sumA == arrayA && arrayArgA == arrayA
-    let onceC          = meanC == f32(f64MeanC)
-    let twiceDiffersC  = meanC != f32(twiceC)
-    let controlAgrees  = f32(f64A) == sumA && f32(f64MeanC) == meanC
-
-    println("A tensor sum (one rounding)")
+    
+    let onceA = sumA == f32(f64A)
+    let differsA = sumA != foldA
+    let arrayAgrees = sumA == arrayA && arrayArgA == arrayA
+    let onceC = meanC == f32(f64MeanC)
+    let twiceDiffersC = meanC != f32(twiceC)
+    let controlAgrees = f32(f64A) == sumA && f32(f64MeanC) == meanC
+    
+    println('A tensor sum (one rounding)')
     println(sumA)
-    println("A f64 accumulation (float)")
+    println('A f64 accumulation (float)')
     println(f64A)
-    println("A per-step f32 fold")
+    println('A per-step f32 fold')
     println(foldA)
-    println("A array sum")
+    println('A array sum')
     println(arrayA)
-    println("A array argument, tensor sum")
+    println('A array argument, tensor sum')
     println(arrayArgA)
-    println("C tensor mean (one rounding)")
+    println('C tensor mean (one rounding)')
     println(meanC)
-    println("C mean with the sum rounded first")
+    println('C mean with the sum rounded first')
     println(twiceC)
-    println("C f64 mean (float)")
+    println('C f64 mean (float)')
     println(f64MeanC)
     'once: {} {}'->format<onceA, onceC>->println
     'differs from the per-step fold: {}'->format<differsA>->println
     'differs from rounding the sum first: {}'->format<twiceDiffersC>->println
     'array agrees: {}'->format<arrayAgrees>->println
     'f64 control agrees: {}'->format<controlAgrees>->println
-
-    return if onceA && differsA && arrayAgrees && onceC && twiceDiffersC && controlAgrees then 0
-           else 1
+    
+    return if onceA && differsA && arrayAgrees && onceC && twiceDiffersC && controlAgrees then 0 else 1
 }

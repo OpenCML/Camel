@@ -17,7 +17,7 @@
  * counterexample (2026-11-02, `rules.library_verdicts_are_exactly_these`).
  */
 
-func main(): int sync {
+func main() => int sync {
     println(bf16([0.1, -0.1, 1.0, -1.0, 100.0, -100.0]))
     println(f16([0.1, -0.1, 1.0, -1.0, 100.0, -100.0]))
     return 0

@@ -7,12 +7,15 @@
 
 import { Json, decode, decode_as, encode } from json
 
-func report(): int sync {
+func report() => int sync {
     let bad = decode('{"a": ')
-    println(match bad { case error e => 'error' case v => encode(decode_as::<int>(v) !! 0) })
+    println(match bad {
+        case error e => 'error'
+        case v => encode(decode_as::<int>(v) !! 0)
+    })
     return 0
 }
 
-func main(): int sync {
+func main() => int sync {
     return report()
 }

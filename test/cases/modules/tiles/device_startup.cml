@@ -2,7 +2,7 @@ import { available } from tiles
 
 // The startup check of --devices does not depend on a device operation: this program imports
 // tiles (so the module that owns devices is loaded) and never asks for one.
-func main(): int sync {
-    println("ran")
+func main() => int sync {
+    println('ran')
     return 0
 }

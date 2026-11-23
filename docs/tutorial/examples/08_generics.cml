@@ -3,22 +3,24 @@
 
 type Pair<T> = (T, T)
 
-func first::<T>(xs: T[]): T {
+func first::<T>(xs: T[]) => T {
     return xs[0]
 }
 
-func swap::<T>(p: Pair<T>): Pair<T> {
+func swap::<T>(p: Pair<T>) => Pair<T> {
     return (p.1, p.0)
 }
 
-func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main(): int sync {
+func main() => int sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(swap((1, 2)), swap(('x', 'y')))
-    println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
+    println(my_map([1, 2, 3], func (x: int) => string {
+        string(x) + '!'
+    }))
     return 0
 }

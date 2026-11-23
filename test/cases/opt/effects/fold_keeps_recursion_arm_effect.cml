@@ -4,14 +4,14 @@
  * or not the optimizer unrolls the recursion and dissolves the constant branches it unrolls into.
  */
 
-func visit(items: int[], i: int, cb: (x: int) => int): int {
+func visit(items: int[], i: int, cb: (x: int) => int) => int {
     return if i >= len(items) then 0 else sync {
         let r = cb(items[i])
         return visit(items, i + 1, cb) + r
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let total = visit([1, 2], 0, func (x: int) => int sync {
         println('visit {}'->format<x>)
         println('twice {}'->format<x>)

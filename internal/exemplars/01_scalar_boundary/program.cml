@@ -10,11 +10,11 @@
 
 import { reshape, relu } from tensor
 
-func gate(t: f32[4]): f32[4] {
+func gate(t: f32[4]) => f32[4] {
     return if t[0] > 0.5 then relu(t) else t * (t[1] * 2.0)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(gate(reshape<[4]>([1.0, -2.0, 3.0, 0.5] as f32[])))
     println(gate(reshape<[4]>([0.25, -2.0, 3.0, 0.5] as f32[])))
     return 0

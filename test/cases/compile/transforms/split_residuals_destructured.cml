@@ -18,16 +18,16 @@
 import rulesets.jvp
 import { jvp, split } from transforms
 
-func f(x: float, y: float): float {
+func f(x: float, y: float) => float {
     return x * x * y * y
 }
 
-func main(): int sync {
+func main() => int sync {
     let forward = split(jvp(f))
     let (value, linear) = forward(3.0, 2.0)
     let (dx, dy) = linear
-    println("value=", value)
-    println("dx=", dx)
-    println("dy=", dy)
+    println('value=', value)
+    println('dx=', dx)
+    println('dy=', dy)
     return 0
 }

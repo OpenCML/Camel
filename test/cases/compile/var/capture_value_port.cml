@@ -11,11 +11,11 @@
 // made directly, and the same function reached through the value.
 var c = 5
 
-func read_c(a: int): int {
+func read_c(a: int) => int {
     return a + c
 }
 
-func main(): int sync {
+func main() => int sync {
     println(read_c(1))
     let k = read_c
     println(k(1))

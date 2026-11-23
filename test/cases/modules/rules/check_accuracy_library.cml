@@ -23,11 +23,9 @@
  */
 
 import { check, check_text } from rewrite
-import {
-        float_expm1, float_log1p, array_log_softmax_of_softmax
-} from rules
+import { float_expm1, float_log1p, array_log_softmax_of_softmax } from rules
 
-func main(): int sync {
+func main() => int sync {
     println(check_text([float_log1p, float_expm1]->check<100, 11>))
     println(check_text([array_log_softmax_of_softmax]->check<100, 1>))
     return 0

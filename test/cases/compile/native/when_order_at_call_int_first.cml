@@ -8,7 +8,7 @@
  */
 
 /// The element type of the `int` arm: `int` alone.
-func is_arm_int::<T>(): bool {
+func is_arm_int::<T>() => bool {
     return match type T {
         case int => true
         case _ => false
@@ -16,7 +16,7 @@ func is_arm_int::<T>(): bool {
 }
 
 /// The element type of the `i32` arm: `i32` alone.
-func is_arm_i32::<T>(): bool {
+func is_arm_i32::<T>() => bool {
     return match type T {
         case i32 => true
         case _ => false
@@ -24,12 +24,12 @@ func is_arm_i32::<T>(): bool {
 }
 
 #op(':op/add_l')
-func arms_kernel::<T>(a: T, b: T): T when is_arm_int::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_arm_int::<T>()
 
 #op(':op/sub_i')
-func arms_kernel::<T>(a: T, b: T): T when is_arm_i32::<T>()
+func arms_kernel::<T>(a: T, b: T) => T when is_arm_i32::<T>()
 
-func main(): int sync {
+func main() => int sync {
     let x: i32 = 19
     let y: i32 = 23
     // `i32`: only the subtraction's condition holds, whichever declaration is written first.

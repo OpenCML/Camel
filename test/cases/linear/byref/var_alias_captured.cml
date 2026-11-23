@@ -10,21 +10,59 @@
  * closure is to hold is bound first -- the way out `CapturedVarWrittenAfterTheClosure` names.
  */
 
-func make_array(): int[] {
+func make_array() => int[] {
     return [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
     ]
 }
 
-func main(): int sync {
+func main() => int sync {
     let big = make_array()
-    var v   = big
-    let v0  = v
-    let f   = func () { v0[0] }
+    var v = big
+    let v0 = v
+    let f = func () {
+        v0[0]
+    }
     v[0] = 9
-    println("big[0] =", big[0], " v[0] =", v[0], " f() =", f())
+    println('big[0] =', big[0], ' v[0] =', v[0], ' f() =', f())
     return 0
 }

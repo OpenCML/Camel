@@ -5,10 +5,10 @@
  * not one. The refusal names the expression that was written.
  */
 
-func sum(xs: int[]): int {
+func sum(xs: int[]) => int {
     return static loop acc = 0 for x in xs do acc + x
 }
 
-func main(): int {
+func main() => int {
     return sum([1, 2, 3])
 }

@@ -9,11 +9,11 @@
  * see. Refused by `ClosureAssignsCapturedName` (0x03000213).
  */
 
-func keep(f: (x: int) => int): ((x: int) => int, int) {
+func keep(f: (x: int) => int) => ((x: int) => int, int) {
     return (f, 0)
 }
 
-func make(): int sync {
+func make() => int sync {
     var acc = 0
     let add = func (x: int) => int sync {
         acc = acc + x
@@ -23,7 +23,7 @@ func make(): int sync {
     return kept(n)
 }
 
-func main(): int sync {
+func main() => int sync {
     println(make())
     return 0
 }

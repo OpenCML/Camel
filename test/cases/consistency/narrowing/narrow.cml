@@ -5,63 +5,65 @@
  * that excludes null: the same branch as `match x { case null => B  case v => A }`.
  */
 
-func len_or_zero(s: string?): int {
+func len_or_zero(s: string?) => int {
     return if s != null then len(s) else 0
 }
 
-func len_or_minus(s: string?): int {
+func len_or_minus(s: string?) => int {
     return if s == null then -1 else len(s)
 }
 
 // several comparisons joined by `&&`: all of them hold in the then arm
-func sum_or_minus(a: int?, b: int?): int {
+func sum_or_minus(a: int?, b: int?) => int {
     return if a != null && b != null then a + b else -1
 }
 
 // `null != x` narrows as `x != null` does, and so does a test among the operands of `&&`
-func ready_plus(x: int?, ready: bool): int {
+func ready_plus(x: int?, ready: bool) => int {
     return if null != x && ready then x + 1 else 0
 }
 
 // `p && q` is `if p then q else false`: `x` is an int on the right side
-func positive(x: int?): bool {
+func positive(x: int?) => bool {
     return x != null && x > 0
 }
 
 // `p || q` is `if p then true else q`
-func missing_or_zero(x: int?): bool {
+func missing_or_zero(x: int?) => bool {
     return x == null || x == 0
 }
 
-func describe(x: int?): string sync {
+func describe(x: int?) => string sync {
     // an `if` without `else`: the arm is narrowed all the same
     if x != null then println(x + 1)
     return if x == null then 'none' else format<x>('some {}')
 }
 
-func nested(a: int?, b: int?): int {
+func nested(a: int?, b: int?) => int {
     return if a != null then (if b != null then a * b else a) else 0
 }
 
 // the narrowed name is an ordinary value of the arm: a lambda captures it as an int
-func add_to_all(x: int?, xs: int[]): int[] {
-    return if x != null then xs->map<func (y: int) { y + x }> else xs
+func add_to_all(x: int?, xs: int[]) => int[] {
+    return if x != null then xs->map<func (y: int) {
+        y + x
+    }> else xs
 }
 
 // the elements of an array literal see the narrowed value too (they are names kept in the
 // constant, not DREF nodes)
-func pair(x: int?): int[] {
+func pair(x: int?) => int[] {
     return if x != null then [x, x + 1] else [0]
 }
 
 // the arm that does not exclude null still sees the `T?`
-func keep(x: int?): int? {
+func keep(x: int?) => int? {
     return if x == null then x else x + 100
 }
 
-func main(): int sync {
+func main() => int sync {
     let present: string? = 'abc'
-    let absent: string?  = null
+    let absent: string? = null
     println(len_or_zero(present), len_or_zero(absent))
     println(len_or_minus(present), len_or_minus(absent))
     println(sum_or_minus(1, 2), sum_or_minus(1, null), sum_or_minus(null, 2))
@@ -76,7 +78,9 @@ func main(): int sync {
     // the comparison is an ordinary expression, in either order
     let has = present != null
     println(has, absent != null, absent == null, null == absent, null != present)
-    println([present, absent]->map<func (s: string?) { s == null }>)
+    println([present, absent]->map<func (s: string?) {
+        s == null
+    }>)
     // a nullable function value can be compared with null too (two functions cannot)
     let callback: ((x: int) => int)? = null
     println(callback == null, callback != null)

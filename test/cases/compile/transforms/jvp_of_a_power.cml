@@ -21,19 +21,19 @@
 import rulesets.jvp
 import { jvp } from transforms
 
-func p(x: float): float {
+func p(x: float) => float {
     return x ^ 2.0
 }
 
-func q(x: float): float {
+func q(x: float) => float {
     return x ^ 2
 }
 
-func s(x: float): float {
+func s(x: float) => float {
     return x ^ x
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, tangent) = jvp(p)(3.0, 1.0)
     println(value)
     println(tangent)

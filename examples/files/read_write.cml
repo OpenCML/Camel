@@ -3,11 +3,11 @@
 // `match`.
 // Run: camel examples/files/read_write.cml
 
-import { split, trim_end } from str
-import { exists, is_file, mkdirs, write_text, read_text, file_size } from fs
 import { get_env } from env
+import { exists, is_file, mkdirs, write_text, read_text, file_size } from fs
+import { split, trim_end } from str
 
-func load(path: string): string {
+func load(path: string) => string {
     let r = path->read_text
     return match r {
         case error e => '<unreadable: ' + e.kind + '>'
@@ -15,21 +15,21 @@ func load(path: string): string {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     // The runner's per-test scratch directory; a direct run keeps the header's fixed path.
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
     let path = dir + '/notes.txt'
-    let _ = dir->mkdirs                                     // creates missing parent directories
-
+    let _ = dir->mkdirs // creates missing parent directories
+    
     let _ = 'first line\nsecond line\n'->write_text<path>
     println('exists:', exists(path), 'is a file:', is_file(path), 'bytes:', (path->file_size !! 0))
     print(load(path))
-
+    
     // Without the line feed at the end, `split` gives one piece per line.
     let lines = load(path)->trim_end->split<'\n'>
     println('lines:', len(lines), 'last:', lines[len(lines) - 1])
-
+    
     let missing = dir + '/no_such_file.txt'
     println('exists:', exists(missing))
     println(load(missing))

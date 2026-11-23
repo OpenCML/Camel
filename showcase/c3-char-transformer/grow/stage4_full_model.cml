@@ -14,9 +14,9 @@
 //
 //     camel showcase/c3-char-transformer/grow/stage4_full_model.cml
 //     python showcase/c3-char-transformer/baseline/grow.py --stage 4
-import { layer_norm, relu, softmax, sum, take, transpose } from tensor
-import { adam, adam_state } from nn
 import { with_grad } from autodiff
+import { adam, adam_state } from nn
+import { layer_norm, relu, softmax, sum, take, transpose } from tensor
 
 type Model = {
     emb: float[...],
@@ -46,11 +46,16 @@ type Model = {
     bout: float[...]
 }
 
-func mask(): float[...] {
+func mask() => float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
-func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): float[...] {
+func attention(
+    x: float[...],
+    wq: float[...],
+    wk: float[...],
+    wv: float[...]
+) => float[...] {
     let q = x @ wq
     let k = transpose(x @ wk)
     let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
@@ -58,7 +63,7 @@ func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): f
 }
 
 with <m: Model>
-func loss_of(tokens: int[...]): float {
+func loss_of(tokens: int[...]) => float {
     let x = take(m.emb, tokens)
     let attended1 = x + attention(layer_norm(x, m.g1a, m.b1a), m.wq1, m.wk1, m.wv1)
     let hidden1 = relu(layer_norm(attended1, m.g1b, m.b1b) @ m.f1_1 + m.fb1_1)
@@ -69,42 +74,45 @@ func loss_of(tokens: int[...]): float {
     return sum(layer_norm(second, m.gout, m.bout))
 }
 
-func initial(): Model {
+func initial() => Model {
     return {
         emb: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
-        g1a: [1.0, 1.0] as float[], b1a: [0.0, 0.0] as float[],
+        g1a: [1.0, 1.0] as float[],
+        b1a: [0.0, 0.0] as float[],
         wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
         wk1: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
         wv1: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2],
-        g1b: [1.0, 1.0] as float[], b1b: [0.0, 0.0] as float[],
+        g1b: [1.0, 1.0] as float[],
+        b1b: [0.0, 0.0] as float[],
         f1_1: [[0.75, -0.5, 0.5, 0.25], [1.0, 0.5, -0.25, 0.75]] as float[2, 4],
         fb1_1: [0.1, -0.1, 0.05, 0.0] as float[],
         f2_1: [[1.0, 0.5], [-0.5, 1.0], [0.25, -0.25], [0.5, 1.0]] as float[4, 2],
         fb2_1: [0.0, 0.1] as float[],
-        g2a: [1.0, 1.0] as float[], b2a: [0.0, 0.0] as float[],
+        g2a: [1.0, 1.0] as float[],
+        b2a: [0.0, 0.0] as float[],
         wq2: [[0.75, 0.0], [0.0, 0.75]] as float[2, 2],
         wk2: [[0.0, 0.5], [0.5, 0.0]] as float[2, 2],
         wv2: [[1.0, 1.0], [1.0, 1.0]] as float[2, 2],
-        g2b: [1.0, 1.0] as float[], b2b: [0.0, 0.0] as float[],
+        g2b: [1.0, 1.0] as float[],
+        b2b: [0.0, 0.0] as float[],
         f1_2: [[0.5, 0.25, 0.75, -0.5], [0.25, 0.75, 0.5, 0.5]] as float[2, 4],
         fb1_2: [0.0, 0.05, -0.05, 0.1] as float[],
         f2_2: [[0.5, 1.0], [1.0, 0.25], [-0.25, 0.5], [0.75, -0.5]] as float[4, 2],
         fb2_2: [0.1, 0.0] as float[],
-        gout: [1.0, 1.0] as float[], bout: [0.0, 0.0] as float[]
+        gout: [1.0, 1.0] as float[],
+        bout: [0.0, 0.0] as float[]
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     let tokens = [0, 1] as int[]
     let model0 = initial()
-    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
-        while step < 50
-        do {
-            let (value, g) = with_grad(loss_of)<m>(tokens)
-            let next = adam(m, g, opt, 0.002)
-            let nlog = log + `stage4 step=${step + 1} loss=${value:.12f}` + "\n"
-            return (next.0, next.1, step + 1, nlog)
-        }
+    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string while step < 50 do {
+        let (value, g) = with_grad(loss_of)<m>(tokens)
+        let next = adam(m, g, opt, 0.002)
+        let nlog = log + `stage4 step=${step + 1} loss=${value:.12f}` + '\n'
+        return (next.0, next.1, step + 1, nlog)
+    }
     log->print
     let last = with_grad(loss_of)<final>(tokens).0
     `stage4 done steps=${steps} last=${last:.12f}`->println

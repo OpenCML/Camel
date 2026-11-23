@@ -17,16 +17,16 @@ import { grad } from autodiff
 import { remat } from transforms
 
 with <y: float>
-func f(x: float): float {
+func f(x: float) => float {
     return x * x * y
 }
 
 with <x: float>
-func f_by_x(y: float): float {
+func f_by_x(y: float) => float {
     return x * x * y
 }
 
-func main(): int sync {
+func main() => int sync {
     let g = remat(f)
     let gx = remat(f_by_x)
     // The plain path first, then the same three numbers through `remat`.

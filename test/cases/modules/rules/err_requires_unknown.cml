@@ -4,6 +4,6 @@ import { rewrite } from rewrite
 #requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
-export func apply::<F>(p: F): F! {
+export func apply::<F>(p: F) => F! {
     return p->rewrite<[r]>
 }

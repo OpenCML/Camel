@@ -1,6 +1,8 @@
-func inc(x: int): int { return x + 1 }
+func inc(x: int) => int {
+    return x + 1
+}
 
-func main(): int sync {
+func main() => int sync {
     println((1, inc) != (1, inc))
     return 0
 }

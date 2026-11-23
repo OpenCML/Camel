@@ -7,35 +7,40 @@
  * Reduced by test/tools/progen from seed 79 (generator version 1, all features).
  */
 
-func f6(a7: (a0: string) => int): string {
-    let n9 = [1.0];
+func f6(a7: (a0: string) => int) => string {
+    let n9 = [1.0]
     return [0]->reduce<func (p11: string, p12: int) => string {
-        let n15 = n9->reduce<func (p13: string, p14: float) => string { '' }, ''>;
-        return '';
-    }, string(10)>;
+        let n15 = n9->reduce<func (p13: string, p14: float) => string {
+            ''
+        }, ''>
+        return ''
+    }, string(10)>
 }
 
-#macro func r16(a17: int, a18: string): string {
+#macro
+func r16(a17: int, a18: string) => string {
     return if (a17 <= 0) then '' else r16(a17 - 1, match a18 {
         case 'cd' => ''
         case 'ab' => {
-            let n21 = '';
-            return '';
+            let n21 = ''
+            return ''
         }
         case 'k9' => ''
-        case _ => f6(func (p22: string) => int { a17 })
-    });
+        case _ => f6(func (p22: string) => int {
+            a17
+        })
+    })
 }
 
-func main(): int sync {
-    let n33 = '';
-    let n34 = 0;
-    let n35 = 0;
-    let n39 = '';
-    let n44 = 2.5;
-    var v46 = 1.0;
-    let n56 = [(0, 0)];
-    let n62 = { x: 0, y: 0 };
-    println(r16(3, ''));
-    return 0;
+func main() => int sync {
+    let n33 = ''
+    let n34 = 0
+    let n35 = 0
+    let n39 = ''
+    let n44 = 2.5
+    var v46 = 1.0
+    let n56 = [(0, 0)]
+    let n62 = { x: 0, y: 0 }
+    println(r16(3, ''))
+    return 0
 }

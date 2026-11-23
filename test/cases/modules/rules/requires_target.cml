@@ -4,16 +4,16 @@
  * `scaled` does not, so the engine applies the rule to one body and not the other.
  */
 
-func scaled(x: float): float {
+func scaled(x: float) => float {
     return x * 1.0
 }
 
 #[approx_math]
-func kept(x: float): float {
+func kept(x: float) => float {
     return x * 1.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(scaled(3.0), kept(4.0))
     return 0
 }

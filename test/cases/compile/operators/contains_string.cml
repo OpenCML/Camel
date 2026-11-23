@@ -3,7 +3,7 @@
  * brackets, `'abc'->contains<'b'>`; the diagnostic says so.
  */
 
-func main(): int sync {
+func main() => int sync {
     println(contains('abc', 'b'))
     println('never printed')
     return 0

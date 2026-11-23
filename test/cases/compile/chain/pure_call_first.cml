@@ -13,11 +13,11 @@
  *
  * Run: camel test/cases/compile/chain/pure_call_first.cml
  */
-func twice(x: int): int {
+func twice(x: int) => int {
     return x * 2
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = twice(3)
     println(1)
     return a

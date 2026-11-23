@@ -20,7 +20,7 @@ type FamilyOf<T> = match type T {
 
 /// The same division written where a value is asked for (`match type` over values), so that the
 /// guard is read in the graph builder as well as in the type layer.
-func family::<T>(): int {
+func family::<T>() => int {
     return match type T {
         case array => 1
         case struct => 2
@@ -32,7 +32,7 @@ func family::<T>(): int {
 
 type Point = { x: float, y: float }
 
-func main(): int sync {
+func main() => int sync {
     // ① the shape words decide without asking anything: an array is not a struct and neither is
     //    asked whether it is a number.
     println(is_same::<FamilyOf<int[]>, int[1]>(), is_same::<FamilyOf<Point>, int[2]>())

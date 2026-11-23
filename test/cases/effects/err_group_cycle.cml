@@ -3,6 +3,6 @@
 resource a = [b]
 resource b = [a]
 
-func main(): int {
+func main() => int {
     return 0
 }

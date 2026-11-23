@@ -1,8 +1,7 @@
 /// A variant whose fields do not say the type argument of the enum.
-
 type Option<T> = enum { Some(T), None }
 
-func main(): int sync {
+func main() => int sync {
     let x = Option::None
     return 0
 }

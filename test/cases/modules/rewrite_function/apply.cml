@@ -1,18 +1,19 @@
-
-import { Rule, rewrite, run, saturate, extract, check, check_text } from rewrite
 import { Node, Op } from graph
+import { Rule, rewrite, run, saturate, extract, check, check_text } from rewrite
 
 rule bump_one(x: int) { x + 0 => x + 1 }
 
-func target(x: int): int {
+func target(x: int) => int {
     return (x + 0) * 2
 }
 
-func unit_cost(o: Op, inputs: float[]): float {
-    return 1.0 + inputs->reduce<func (acc: float, c: float) { acc + c }, 0.0>
+func unit_cost(o: Op, inputs: float[]) => float {
+    return 1.0 + inputs->reduce<func (acc: float, c: float) {
+        acc + c
+    }, 0.0>
 }
 
-func main(): int sync {
+func main() => int sync {
     let rules = [bump_one]
     let g = target->rewrite<rules> !! target
     println(target(5), g(5))

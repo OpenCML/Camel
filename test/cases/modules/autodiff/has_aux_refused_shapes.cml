@@ -23,21 +23,21 @@
 import { grad } from autodiff
 
 with <w: float>
-func counted(): (int, float) {
+func counted() => (int, float) {
     return (7, w * w)
 }
 
 with <w: float>
-func triple(): (float, float, float) {
+func triple() => (float, float, float) {
     return (w, w * w, w * w * w)
 }
 
 with <w: float>
-func plain(): float {
+func plain() => float {
     return w * w
 }
 
-func main(): int sync {
+func main() => int sync {
     let a = grad(counted, has_aux: true)<3.0>()
     let b = grad(triple, has_aux: true)<3.0>()
     let c = grad(plain, has_aux: true)<3.0>()

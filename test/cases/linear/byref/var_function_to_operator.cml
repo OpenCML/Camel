@@ -8,7 +8,7 @@ func bump(var x: int) {
     x += 1
 }
 
-func main(): int sync {
+func main() => int sync {
     [1, 2, 3]->foreach<bump>
     return 0
 }

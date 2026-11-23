@@ -4,9 +4,11 @@
  * says, rather than not a number.
  */
 
-func conv(s: string): float { return float(s) }
+func conv(s: string) => float {
+    return float(s)
+}
 
-func main(): int sync {
+func main() => int sync {
     println(conv('1.5'))
     println(conv('1e-9999'))
     println('not reached')

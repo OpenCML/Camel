@@ -4,7 +4,7 @@
  */
 import { at, second } from generic_module
 
-func main(): int sync {
+func main() => int sync {
     let ints = [3, 5, 7]
     println(at(ints, 1))
     println(second(ints))

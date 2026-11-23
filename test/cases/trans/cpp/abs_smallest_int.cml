@@ -8,7 +8,7 @@
 
 import { abs, gcd } from math
 
-func main(): int sync {
+func main() => int sync {
     let smallest = -9223372036854775807 - 1
     println(abs(smallest))
     println('before')

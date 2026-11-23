@@ -10,27 +10,27 @@
 // A `var` of the form written twice in its own function: `gone = null` writes the null slot. The
 // writes are of this call and read in it, which is what the ruling of 2026-11-15 calls a name for
 // values -- no cell leaves the call, and no closure captures one (design principles 3.5).
-func clear(): int? sync {
+func clear() => int? sync {
     var gone: int? = 7
     gone = null
     gone
 }
 
 // A literal takes the place's type, as a literal takes the type of any other position.
-func five(): int? sync {
+func five() => int? sync {
     var n: int? = 0
     n = 5
     n
 }
 
 // The fallible form.
-func lifted(x: int): int! sync {
+func lifted(x: int) => int! sync {
     var slot: int! = 0
     slot = x
     slot
 }
 
-func show(r: int!): string {
+func show(r: int!) => string {
     return match r {
         case error e => 'error ' + e.kind
         case v => 'ok ' + string(v)
@@ -41,12 +41,12 @@ func show(r: int!): string {
 // `best = ...` is an entering assignment and the next call reads the value the line before wrote.
 // The shape this case used to carry -- a closure capturing `best` and writing it -- is refused by
 // the ruling of 2026-11-15 (design principles 3.5, "a closure may not assign an outer name").
-func improve(best: float?, x: float): float {
+func improve(best: float?, x: float) => float {
     let m = best ?? x
     return if x > m then x else m
 }
 
-func main(): int sync {
+func main() => int sync {
     var best: float? = null
     let r1 = improve(best, 2.0)
     best = r1

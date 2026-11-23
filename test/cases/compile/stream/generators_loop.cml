@@ -16,18 +16,27 @@
  *     of its own.
  */
 
-func count(n: int): int.. sync {
+func count(n: int) => int.. sync {
     loop i = 0 while i < n do {
         yield i
         i + 1
     }
 }
 
-func main(): int sync {
-    loop acc = 0 for v in count(3) do sync { println(v); acc + 1 }
-    println("-")
-    loop acc = 0 for v in count(0) do sync { println(v); acc + 1 }
-    loop acc = 0 for v in count(5) while acc < 2 do sync { println(v); acc + 1 }
-    println("end")
+func main() => int sync {
+    loop acc = 0 for v in count(3) do sync {
+        println(v)
+        acc + 1
+    }
+    println('-')
+    loop acc = 0 for v in count(0) do sync {
+        println(v)
+        acc + 1
+    }
+    loop acc = 0 for v in count(5) while acc < 2 do sync {
+        println(v)
+        acc + 1
+    }
+    println('end')
     return 0
 }

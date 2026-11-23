@@ -6,12 +6,14 @@
  * program never reaches a value.
  */
 
-func pick::<T>(x: T): T { return x }
+func pick::<T>(x: T) => T {
+    return x
+}
 
-func stop(m: string): never {
+func stop(m: string) => never {
     return fail<'Stopped'>(m)
 }
 
-func main(): int sync {
+func main() => int sync {
     return pick(stop('no value'))
 }

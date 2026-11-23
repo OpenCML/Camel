@@ -5,12 +5,12 @@
 import { grad } from autodiff
 
 with <w: float>
-func f(): float {
+func f() => float {
     let pair = loop a = w, ns = [int(w)] while len(ns) < 2 do (a * 2.0, ns->append<int(w * 10.0)>)
     return pair.0
 }
 
-func main(): int sync {
+func main() => int sync {
     println(grad(f)<2.0>())
     return 0
 }

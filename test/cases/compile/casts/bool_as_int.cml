@@ -1,6 +1,6 @@
 // A bool is not a number by `as`, and a number is not a bool: `if` takes a bool, a comparison
 // makes one.
-func main(): int sync {
+func main() => int sync {
     let b = true
     let i = b as int
     println(i)

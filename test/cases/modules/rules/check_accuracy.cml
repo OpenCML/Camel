@@ -7,36 +7,26 @@
  * 2 and -1.
  */
 
-import { check, check_text } from rewrite
 import { log as scalar_log, log1p } from math
+import { check, check_text } from rewrite
 import { log, log_softmax, softmax } from tensor
 
 #requires(refine_accuracy)
-rule accurate_log1p(x: float) {
-    scalar_log(1.0 + x) => log1p(x)
-}
+rule accurate_log1p(x: float) { scalar_log(1.0 + x) => log1p(x) }
 
 #requires(refine_accuracy)
-rule worse_log1p(x: float) {
-    log1p(x) => scalar_log(1.0 + x)
-}
+rule worse_log1p(x: float) { log1p(x) => scalar_log(1.0 + x) }
 
 #requires(refine_accuracy)
-rule softmax_vector(x: f32[3], const axis: int) {
-    log(softmax<axis>(x)) => log_softmax<axis>(x)
-}
+rule softmax_vector(x: f32[3], const axis: int) { log(softmax<axis>(x)) => log_softmax<axis>(x) }
 
 #requires(refine_accuracy)
-rule softmax_matrix(x: f32[2, 3], const axis: int) {
-    log(softmax<axis>(x)) => log_softmax<axis>(x)
-}
+rule softmax_matrix(x: f32[2, 3], const axis: int) { log(softmax<axis>(x)) => log_softmax<axis>(x) }
 
 #requires(refine_accuracy)
-rule softmax_axis2(x: f32[2, 2, 2], const axis: int) {
-    log(softmax<axis>(x)) => log_softmax<axis>(x)
-}
+rule softmax_axis2(x: f32[2, 2, 2], const axis: int) { log(softmax<axis>(x)) => log_softmax<axis>(x) }
 
-func main(): int sync {
+func main() => int sync {
     println(check_text([
         accurate_log1p,
         worse_log1p,

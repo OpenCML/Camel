@@ -11,13 +11,13 @@
  * all run.
  */
 
-func twice(x: float): float {
+func twice(x: float) => float {
     return x * 2.0
 }
 
-func main(): int sync {
+func main() => int sync {
     let a: float = 1.5
     let c = twice(a)
-    println("retype kept the graph; printed value=", 1 + 1)
+    println('retype kept the graph; printed value=', 1 + 1)
     return 0
 }

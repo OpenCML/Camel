@@ -35,21 +35,21 @@
  *   -(max + max)             0xFF80 [128,255] 0xFC00 [0,252]
  */
 
-import { to_bytes } from tensor
 import { to_array } from bytes
+import { to_bytes } from tensor
 
 /// The little-endian bytes of one element of a one-element array of the type.
-func bitsOfBf16(value: bf16): int[] {
+func bitsOfBf16(value: bf16) => int[] {
     let one: bf16[] = [value]
     return to_array(to_bytes(one))
 }
 
-func bitsOfF16(value: f16): int[] {
+func bitsOfF16(value: f16) => int[] {
     let one: f16[] = [value]
     return to_array(to_bytes(one))
 }
 
-func main(): int sync {
+func main() => int sync {
     // ---- bf16 ----
     let x: bf16 = bf16(1.0) / bf16(3.0)
     let nx: bf16 = -x
@@ -58,23 +58,23 @@ func main(): int sync {
     println(bitsOfBf16(nx)[0] == bitsOfBf16(x)[0], bitsOfBf16(nx)[1] == bitsOfBf16(x)[1] + 128)
     let back: bf16 = -nx
     println(bitsOfBf16(back))
-
+    
     // a negation after a statement that rounded, and after a subtraction that cancelled
     let afterSum: bf16 = -(bf16(1.0) + bf16(0.00390625))
     let afterDifference: bf16 = -(bf16(1.5) - bf16(1.5))
     println(bitsOfBf16(afterSum))
     println(bitsOfBf16(afterDifference))
     println(bitsOfBf16(-afterDifference))
-
+    
     // past the range
     let bfMax: bf16 = 3.3895314e38
     let over: bf16 = -(bfMax + bfMax)
     println(bitsOfBf16(over))
-
+    
     // sign and rounding commute
     let negative: bf16 = -x
     println(bitsOfBf16(-(x * x)) == bitsOfBf16(negative * x))
-
+    
     // ---- f16: the same ----
     let h: f16 = f16(1.0) / f16(3.0)
     let nh: f16 = -h
@@ -82,20 +82,20 @@ func main(): int sync {
     println(bitsOfF16(nh)[0] == bitsOfF16(h)[0], bitsOfF16(nh)[1] == bitsOfF16(h)[1] + 128)
     let backHalf: f16 = -nh
     println(bitsOfF16(backHalf))
-
+    
     let afterSumHalf: f16 = -(f16(1.0) + f16(0.00048828125))
     let afterDifferenceHalf: f16 = -(f16(1.5) - f16(1.5))
     println(bitsOfF16(afterSumHalf))
     println(bitsOfF16(afterDifferenceHalf))
     println(bitsOfF16(-afterDifferenceHalf))
-
+    
     let f16Max: f16 = 65504.0
     let overHalf: f16 = -(f16Max + f16Max)
     println(bitsOfF16(overHalf))
-
+    
     let negativeHalf: f16 = -h
     println(bitsOfF16(-(h * h)) == bitsOfF16(negativeHalf * h))
-
+    
     // ---- the result keeps the operands' element type ----
     let bfOne: bf16[] = [nx]
     let f16One: f16[] = [nh]

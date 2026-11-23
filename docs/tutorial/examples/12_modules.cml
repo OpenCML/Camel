@@ -5,7 +5,7 @@ import { sqrt } from math
 import { hypot, Vec } from shapes
 import shapes
 
-func main(): int sync {
+func main() => int sync {
     println(sqrt(2.0))
     let v: Vec = { x: 3.0, y: 4.0 }
     println(hypot(v))

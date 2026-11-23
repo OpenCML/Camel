@@ -11,42 +11,46 @@
  * names index 105.
  */
 
-func down(n: int, d: int): int {
+func down(n: int, d: int) => int {
     return if n == 0 then 1000 / d else 1 + down(n - 1, d)
 }
 
 // Elements 3, 7, 11, ... fault at depth i + 2.
-func risky(i: int): int {
+func risky(i: int) => int {
     return down(i + 2, (i + 1) % 4)
 }
 
-func row(round: int): int[] {
-    return (0..16)->map<func (i: int) => int { risky(i) + round }>
+func row(round: int) => int[] {
+    return (0 .. 16)->map<func (i: int) => int {
+        risky(i) + round
+    }>
 }
 
 // Reads [1, 2, 3][k] after n levels: out of range for k >= 3, and the message names k.
-func pick(n: int, k: int): int {
+func pick(n: int, k: int) => int {
     return if n == 0 then [1, 2, 3][k] else 1 + pick(n - 1, k)
 }
 
 // Elements 5, 9 and 13 fault at depth 3 * i, reading index 100 + i.
-func late(i: int): int {
+func late(i: int) => int {
     return pick(i * 3, if i % 4 == 1 && i > 4 then 100 + i else 2)
 }
 
-func main(): int sync {
-    (0..30)->foreach<func (round: int) sync {
+func main() => int sync {
+    (0 .. 30)->foreach<func (round: int) sync {
         let r = attempt(row)(round)
         let line = match r {
             case error e => e.message
             case v => 'no fault'
         }
         // a recursion to the same depth right after the fault, on whichever thread
-        let again = (0..16)->map<func (i: int) => int { down(i + 40, 4) }>
+        let again = (0 .. 16)->map<func (i: int) => int {
+            down(i + 40, 4)
+        }>
         if round % 10 == 0 then println(format<line, again[15]>('{} / {}'))
     }>
     println('before')
-    println((0..16)->map<late>)
+    println((0 .. 16)->map<late>)
     println('not reached')
     return 0
 }

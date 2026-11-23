@@ -8,9 +8,11 @@
  * use in the block that binds it. The report names the closure and the assignment.
  */
 
-func main(): int sync {
+func main() => int sync {
     var x = 1
-    let g = func () { x }
+    let g = func () {
+        x
+    }
     x = 2
     println(g())
     return 0

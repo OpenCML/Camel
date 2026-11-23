@@ -13,25 +13,25 @@
  * with as many outputs as the function returns, and return the values the function computes.
  */
 
-import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
+import { reshape, sum, tanh } from tensor
 
 type Run = { state: f32[...], steps: int }
 
-func twice(h: f32[...]): (f32[...], f32[...]) {
+func twice(h: f32[...]) => (f32[...], f32[...]) {
     return (tanh(h), tanh(h))
 }
 
-func repeated(h: f32[...], k: int): (Run, Run) {
+func repeated(h: f32[...], k: int) => (Run, Run) {
     let r: Run = { state: tanh(h), steps: k }
     return (r, r)
 }
 
-func constants(h: f32[...]): (float, float) {
+func constants(h: f32[...]) => (float, float) {
     return (1.5, 1.5)
 }
 
-func computed(h: f32[...]): (float, float) {
+func computed(h: f32[...]) => (float, float) {
     let s = float(sum(h))
     return (s, s)
 }
@@ -39,15 +39,23 @@ func computed(h: f32[...]): (float, float) {
 // The refusal of the first request that was refused, or 'exported' when all four were written.
 // The requests stay the program's own statements (see main): the `onnx::export` pass reads them
 // from the top level of the entry graph, while the error they answer is handled here.
-func report(r1: void!, r2: void!, r3: void!, r4: void!): string! {
+func report(r1: void!, r2: void!, r3: void!, r4: void!) => string! {
     return match r1 {
-        case error e1 => { return e1 }
+        case error e1 => {
+            return e1
+        }
         case v1 => match r2 {
-            case error e2 => { return e2 }
+            case error e2 => {
+                return e2
+            }
             case v2 => match r3 {
-                case error e3 => { return e3 }
+                case error e3 => {
+                    return e3
+                }
                 case v3 => match r4 {
-                    case error e4 => { return e4 }
+                    case error e4 => {
+                        return e4
+                    }
                     case v4 => 'exported'
                 }
             }
@@ -55,11 +63,19 @@ func report(r1: void!, r2: void!, r3: void!, r4: void!): string! {
     }
 }
 
-func main(): string! sync {
+func main() => string! sync {
     let ex = reshape<[2, 2]>([1.0, -2.0, 0.5, 1.5] as f32[])
-    let r1 = export_model<out: 'twice.onnx'>(func (x: f32[...]) => (f32[...], f32[...]) { twice(x) }, ex)
-    let r2 = export_model<out: 'repeated.onnx'>(func (x: f32[...]) => (Run, Run) { repeated(x, 2) }, ex)
-    let r3 = export_model<out: 'constants.onnx'>(func (x: f32[...]) => (float, float) { constants(x) }, ex)
-    let r4 = export_model<out: 'computed.onnx'>(func (x: f32[...]) => (float, float) { computed(x) }, ex)
+    let r1 = export_model<out: 'twice.onnx'>(func (x: f32[...]) => (f32[...], f32[...]) {
+        twice(x)
+    }, ex)
+    let r2 = export_model<out: 'repeated.onnx'>(func (x: f32[...]) => (Run, Run) {
+        repeated(x, 2)
+    }, ex)
+    let r3 = export_model<out: 'constants.onnx'>(func (x: f32[...]) => (float, float) {
+        constants(x)
+    }, ex)
+    let r4 = export_model<out: 'computed.onnx'>(func (x: f32[...]) => (float, float) {
+        computed(x)
+    }, ex)
     return report(r1, r2, r3, r4)
 }

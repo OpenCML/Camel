@@ -8,7 +8,7 @@ import { argsort } from array
 import math
 import tensor
 
-func main(): int sync {
+func main() => int sync {
     println(argsort(bf16([3.0, 1.0, 2.0])), argsort(f16([2.0, math::nan, 1.0])))
     println(argsort([0.0, -0.0, -1.0]), argsort(f32([-0.0, 0.0, -0.0])))
     return 0

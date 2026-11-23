@@ -2,12 +2,11 @@
  * Ensures semantic analysis rejects branch expressions whose arms produce incompatible return types.
  */
 
-func pick(n: int): int {
+func pick(n: int) => int {
     return if n > 0 then 1 else 'oops'
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pick(1))
     return 0
 }
-

@@ -5,27 +5,29 @@
  * be refused if they stood on one path.
  */
 
-func count(n: int): int.. {
+func count(n: int) => int.. {
     return step(n)
 }
 
-func step(n: int): () => (int, int..)? {
-    return func () { if n > 0 then (n, step(n - 1)) else null }
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
 }
 
-func firstOf(p: (int, int..)?): int {
+func firstOf(p: (int, int..)?) => int {
     return match p {
         case null => -1
         case v => v.0
     }
 }
 
-func pullOrPull(flag: bool, s: int..): int {
+func pullOrPull(flag: bool, s: int..) => int {
     let p = if flag then s() else s()
     return firstOf(p)
 }
 
-func pullOrLoop(flag: bool, s: int..): int {
+func pullOrLoop(flag: bool, s: int..) => int {
     if flag then {
         return firstOf(s())
     } else {
@@ -33,7 +35,7 @@ func pullOrLoop(flag: bool, s: int..): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(pullOrPull(true, count(3)))
     println(pullOrPull(false, count(3)))
     println(pullOrLoop(true, count(3)))

@@ -5,7 +5,7 @@
 
 import { zen } from this
 
-func main(): int sync {
+func main() => int sync {
     println(zen(1, 2))
     return 0
 }

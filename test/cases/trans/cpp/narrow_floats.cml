@@ -25,7 +25,7 @@
  * back end: the C++ file built from it must print these lines byte for byte as std::fvm does
  * (test/tools/cppexec/expect.txt).
  */
-func main(): int sync {
+func main() => int sync {
     // A literal is the nearest value of its written type.
     let a: bf16 = 0.1
     let b: bf16 = 1.5
@@ -33,7 +33,7 @@ func main(): int sync {
     let g: f16 = 65504.0
     println(a, b, bf16(0.0), bf16(-0.0))
     println(h, g, f16(0.0), f16(-0.0))
-
+    
     // The text of a value is the type's own, wherever it is written: printing, `string(x)`, and a
     // format without a specification.
     println(string(a), string(h))
@@ -43,12 +43,12 @@ func main(): int sync {
     // empty one is the type's own text: the two are one line apart in the runtime as well.
     println<'{:10}'>(a)
     println<'{:.2f}'>(a)
-
+    
     // An array of them prints each element by its element type.
     let xs: bf16[] = [a, b]
     let halves: f16[] = [h, g]
     println(xs, halves)
-
+    
     // Arithmetic is computed in f32 and rounded once into the element type: `1.0 / 3.0` as a bf16
     // is 0.334 where the f32 it widens to is 0.33333334, and `0.1 * 1.5` rounds the exact product
     // back into the type.
@@ -56,18 +56,18 @@ func main(): int sync {
     println(bf16(1.0) / bf16(3.0), bf16(1.0) + bf16(1.0))
     println(h + g, g * g, h * h, -h)
     println(f16(1.0) / f16(3.0))
-
+    
     // Comparison is the comparison of the widened values: the two zeros are equal, and a value is
     // equal to the element it rounds to, not to the f32 the literal was written as.
     println(a < b, a <= b, a == b, a != b, b > a, b >= b)
     println(bf16(0.0) == bf16(-0.0), a == bf16(0.1))
     println(h < g, h == f16(0.1), h != g)
-
+    
     // A written conversion rounds once into the element type, and reading one as a wider number is
     // exact: the f32 of a bf16 keeps every bit it had.
     let wide: f32 = f32(a)
     println(wide, bf16(wide / 2.0), int(b), string(a))
-
+    
     // A text is read as f32 and rounded once into the element type; an array of f32 converts each
     // element the same way.
     println(bf16('0.25'), f16('0.25'))

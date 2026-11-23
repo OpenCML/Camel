@@ -4,7 +4,7 @@
  * reported.
  */
 
-func shape::<T>(t: T): int {
+func shape::<T>(t: T) => int {
     return match type T {
         case struct => 1
         case tuple => nope
@@ -12,7 +12,7 @@ func shape::<T>(t: T): int {
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(shape(1))
     return 0
 }

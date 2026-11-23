@@ -1,8 +1,7 @@
 // A Bytes has a length, concatenates with +, compares with == and slices by byte like a string.
-
 import { encode, decode, to_array } from bytes
 
-func main(): int sync {
+func main() => int sync {
     let b = encode('hello')
     let c = b + encode(' world')
     println(len(b), len(c), b == encode('hello'), b != c)

@@ -8,7 +8,7 @@
 type V = { x: float, y: float }
 
 // Two points are the same when they are closer than a tolerance (not by content).
-func operator ==(a: V, b: V): bool {
+func operator ==(a: V, b: V) => bool {
     let dx = a.x - b.x
     let dy = a.y - b.y
     return dx * dx + dy * dy < 0.01
@@ -16,7 +16,7 @@ func operator ==(a: V, b: V): bool {
 
 type W = { x: float }
 
-func main(): int sync {
+func main() => int sync {
     let p: V = { x: 1.0, y: 2.0 }
     let q: V = { x: 1.05, y: 2.0 }
     let r: V = { x: 3.0, y: 2.0 }

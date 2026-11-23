@@ -5,16 +5,16 @@
  * `string` member is refused, and the diagnostic names that member, by position, so the
  * message says which member stands in the way.
  */
-import { reshape, sum } from tensor
 import { grad } from autodiff
+import { reshape, sum } from tensor
 
 with <m: (f32[...], string)>
-func plain(): float {
+func plain() => float {
     let p = m.0
     return sum(p)
 }
 
-func main(): int sync {
+func main() => int sync {
     let x = reshape<[1]>([1.0] as f32[])
     println(grad(plain)<(x, 'a')>())
     return 0

@@ -5,28 +5,59 @@
  * grant. `wrap` checks the i32 sum wraps like the program does.
  */
 
-func i32_combine_one(x: i32): i32 { return x * 3 + x }
-func i32_one_combine(x: i32): i32 { return x + x * 3 }
-func i32_combine_one_wrap(x: i32): i32 { return x * 2147483647 + x }
-func i64_combine_one(x: int): int { return x * 3 + x }
-func i64_one_combine(x: int): int { return x + x * 3 }
-func f32_combine_one(x: f32): f32 { return x * 3.0 + x }
-func f32_one_combine(x: f32): f32 { return x + x * 3.0 }
-func f32_combine_one_zero(x: f32): f32 { return x * -1.0 + x }
-func f32_combine_one_mixed(x: f32): f32 { return x * -3.0 + x }
+func i32_combine_one(x: i32) => i32 {
+    return x * 3 + x
+}
+func i32_one_combine(x: i32) => i32 {
+    return x + x * 3
+}
+func i32_combine_one_wrap(x: i32) => i32 {
+    return x * 2147483647 + x
+}
+func i64_combine_one(x: int) => int {
+    return x * 3 + x
+}
+func i64_one_combine(x: int) => int {
+    return x + x * 3
+}
+func f32_combine_one(x: f32) => f32 {
+    return x * 3.0 + x
+}
+func f32_one_combine(x: f32) => f32 {
+    return x + x * 3.0
+}
+func f32_combine_one_zero(x: f32) => f32 {
+    return x * -1.0 + x
+}
+func f32_combine_one_mixed(x: f32) => f32 {
+    return x * -3.0 + x
+}
 
 #[finite_math]
-func f32_combine_one_mixed_ok(x: f32): f32 { return x * -3.0 + x }
+func f32_combine_one_mixed_ok(x: f32) => f32 {
+    return x * -3.0 + x
+}
 
-func f64_combine_one(x: float): float { return x * 3.0 + x }
-func f64_one_combine(x: float): float { return x + x * 3.0 }
-func f64_combine_one_zero(x: float): float { return x * -1.0 + x }
+func f64_combine_one(x: float) => float {
+    return x * 3.0 + x
+}
+func f64_one_combine(x: float) => float {
+    return x + x * 3.0
+}
+func f64_combine_one_zero(x: float) => float {
+    return x * -1.0 + x
+}
 
-func main(): int sync {
+func main() => int sync {
     println(i32_combine_one(2), i32_one_combine(2), i32_combine_one_wrap(1))
     println(i64_combine_one(3), i64_one_combine(3))
-    println(f32_combine_one(2.0), f32_one_combine(2.0), f32_combine_one_zero(-0.0),
-        f32_combine_one_mixed(2.0), f32_combine_one_mixed_ok(2.0))
+    println(
+        f32_combine_one(2.0),
+        f32_one_combine(2.0),
+        f32_combine_one_zero(-0.0),
+        f32_combine_one_mixed(2.0),
+        f32_combine_one_mixed_ok(2.0)
+    )
     println(f64_combine_one(2.0), f64_one_combine(2.0), f64_combine_one_zero(-0.0))
     return 0
 }

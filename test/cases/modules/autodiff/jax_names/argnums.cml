@@ -15,11 +15,11 @@
 import { grad } from autodiff
 
 with <x: float>
-func square(): float {
+func square() => float {
     return x * x
 }
 
-func main(): int sync {
+func main() => int sync {
     let d = grad(square, argnums: 0)<2.0>()
     println(d)
     return 0

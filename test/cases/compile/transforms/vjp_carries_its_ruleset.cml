@@ -18,18 +18,18 @@
 // whole for that reason, and the plan also refuses the old point's `27.0` outright.
 import { grad, vjp } from vjp
 
-func f(x: float): float {
+func f(x: float) => float {
     return x * x * x
 }
 
 // `grad` differentiates the first `with` parameter (design principles 9.9), so its leg is read
 // through one; the rulesets it needs are the ones above, and this file still imports only `vjp`.
 with <x: float>
-func f_at(): float {
+func f_at() => float {
     return f(x)
 }
 
-func main(): int sync {
+func main() => int sync {
     let (value, backward) = vjp(f)(2.0)
     let cotangents = backward(1.0)
     println('vjp_ruleset value={}'->format<value>)

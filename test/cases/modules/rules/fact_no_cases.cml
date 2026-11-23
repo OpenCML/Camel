@@ -7,6 +7,6 @@ import { max } from math
 fact sign(v: int): int match v {
 } join max
 
-func main(): int sync {
+func main() => int sync {
     return 0
 }

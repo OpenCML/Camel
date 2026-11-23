@@ -16,7 +16,7 @@ import { shape } from tensor
 
 type Box = { v: f32[...] }
 
-func main(): int sync {
+func main() => int sync {
     let first: Box = { v: 1.5 }
     println(first.v)
     let one = [2.5] as f32[]
@@ -25,7 +25,7 @@ func main(): int sync {
     println(many, shape(many))
     let grown = [3]->append<4>
     println(grown)
-    println("[{:>6}]"->format<first.v>)
-    println("[{:>6}]"->format<one>)
+    println('[{:>6}]'->format<first.v>)
+    println('[{:>6}]'->format<one>)
     return 0
 }

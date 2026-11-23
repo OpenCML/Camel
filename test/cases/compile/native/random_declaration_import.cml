@@ -7,11 +7,23 @@
  */
 
 import {
-    Key, seed, next_key, rand, randn, key, split, fold, randint, choice, sample, shuffle,
-    permutation, uniform
+    Key,
+    seed,
+    next_key,
+    rand,
+    randn,
+    key,
+    split,
+    fold,
+    randint,
+    choice,
+    sample,
+    shuffle,
+    permutation,
+    uniform
 } from random
 
-func main(): int sync {
+func main() => int sync {
     seed(42)
     let r = rand()
     let n = randn()

@@ -8,7 +8,7 @@ import { graph_of, nodes } from graph
 import { is_function } from types
 
 /// Reads the canonical order of the program once.
-export func run::<F>(p: F): F! when is_function::<F>() sync {
+export func run::<F>(p: F) => F! when is_function::<F>() sync {
     println(len(nodes(graph_of(p))))
     return p
 }

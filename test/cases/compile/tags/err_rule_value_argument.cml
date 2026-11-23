@@ -7,6 +7,10 @@ tag vjp::<F>(rule: F) on func when is_function::<F>()
 let three = 3
 
 #vjp(three)
-func label(x: int): int { return x }
+func label(x: int) => int {
+    return x
+}
 
-func main(): int sync { return 0 }
+func main() => int sync {
+    return 0
+}

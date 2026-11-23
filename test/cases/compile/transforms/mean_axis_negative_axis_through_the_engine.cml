@@ -28,17 +28,17 @@ import { mean, sum } from tensor
 
 /// The last axis, written as `-1`.
 with <w: float[...]>
-func last_axis(): float {
+func last_axis() => float {
     return sum(mean<-1, true>(w))
 }
 
 /// The same lane of a rank-2 value, written as `1`.
 with <w: float[...]>
-func named_axis(): float {
+func named_axis() => float {
     return sum(mean<1, true>(w))
 }
 
-func main(): int sync {
+func main() => int sync {
     let input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let negative = grad(last_axis)<input>()
     let positive = grad(named_axis)<input>()

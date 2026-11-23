@@ -6,7 +6,7 @@
 
 import { sha256 } from hash
 
-func main(): int {
+func main() => int {
     println(sha256(42))
     return 0
 }

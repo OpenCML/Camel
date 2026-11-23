@@ -3,11 +3,11 @@
  * error value is handed out by a `return` in a function declared `T!`.
  */
 
-func raise(amount: int): int {
+func raise(amount: int) => int {
     return amount + 1
 }
 
-func main(): int sync {
+func main() => int sync {
     let raised = raise(41)
     println(raised)
     return 0

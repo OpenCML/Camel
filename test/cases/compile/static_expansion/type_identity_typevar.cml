@@ -4,14 +4,14 @@
  * `same::<int, float>()` is false.
  */
 
-func same::<T, U>(): bool {
+func same::<T, U>() => bool {
     return match type T {
         case U => true
         case _ => false
     }
 }
 
-func main(): int sync {
+func main() => int sync {
     println(same::<int, int>())
     println(same::<int, float>())
     println(same::<float, float>())

@@ -4,6 +4,6 @@
  * declaration lookup has nothing to add (design principles 5.7).
  */
 
-export func twice::<T>(x: T): T {
+export func twice::<T>(x: T) => T {
     return x + x
 }
