@@ -1232,6 +1232,110 @@ std::vector<generic_template_ptr_t> Builder::genericOverloadsOf(node_handle_t no
     return group != nullptr ? *group : std::vector<generic_template_ptr_t>{};
 }
 
+std::string Builder::describeGenericCandidate(const generic_template_ptr_t &tmpl) {
+    std::string text = tmpl->name + ": " + tmpl->funcType->toString();
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        text += " — when " + when->text;
+    }
+    return text;
+}
+
+bool Builder::genericCandidateBinds(
+    const generic_template_ptr_t &tmpl, const std::vector<Argument> &withInputs,
+    const std::vector<Argument> &normInputs, const type_vec_t &withTypes,
+    const type_vec_t &normTypes, std::vector<std::string> *unmetConditions) {
+    FunctionType *signature = tmpl->funcType;
+    if (signature->hasRest() || withTypes.size() > signature->withTypesCount()) {
+        return false;
+    }
+    // A `with` parameter the call leaves out needs a default of this declaration.
+    const auto registered = defaults_.find(tmpl.get());
+    for (size_t i = 0; i < signature->withTypesCount(); ++i) {
+        const bool written = i < withInputs.size() && !withInputs[i].left;
+        if (written) {
+            continue;
+        }
+        if (registered == defaults_.end() || i >= registered->second.with.size() ||
+            !registered->second.with[i].has_value()) {
+            return false;
+        }
+    }
+    const size_t params = signature->normTypesCount() - signature->normConstasCount();
+    if (params != normTypes.size()) {
+        return false;
+    }
+    // The arguments are matched to the parameters the way the call wrote them: a `constas`
+    // parameter is written at its own position and is not a runtime argument. A variable
+    // that occurs at an unnamed-struct position and at a named one takes the named type
+    // (isUnnamedStructArgument).
+    type_bindings_t bindings;
+    // A `with` parameter's type binds the variables it writes, as it does in a call
+    // (instantiateForCall binds the `with` positions first): `with <f: (acc: U, item: int) => U>`
+    // and `reduce::<U>(r: Range, initial: U)` take `U` from the `f` the call wrote, which is what
+    // makes `initial: U` a concrete parameter here.
+    for (size_t i = 0; i < signature->withTypesCount() && i < withTypes.size(); ++i) {
+        if (!bindTypeVars(signature->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+            return false;
+        }
+    }
+    for (int pass = 0; pass < 2; ++pass) {
+        size_t written = 0;
+        for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+            if (signature->normIsConstasAt(i)) {
+                continue;
+            }
+            Type *actual = valueTypeOf(normTypes[written]);
+            ++written;
+            if (isUnnamedStructArgument(actual) != (pass == 1)) {
+                continue;
+            }
+            if (!bindTypeVars(signature->normTypeAt(i), actual, bindings)) {
+                return false;
+            }
+        }
+    }
+    size_t written = 0;
+    for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+        if (signature->normIsConstasAt(i)) {
+            continue;
+        }
+        const size_t at = written++;
+        Type *pattern   = signature->normTypeAt(i);
+        unifyTypeVars(pattern, valueTypeOf(normTypes[at]), bindings);
+        Type *wanted = substituteTypeVars(pattern, bindings);
+        Type *actual = valueTypeOf(normTypes[at]);
+        if (entersImplicitly(wanted, actual)) {
+            continue;
+        }
+        if (at < normInputs.size() &&
+            compositeLiteralEntersIn(normInputs[at].node, wanted, normInputs[at].expr)) {
+            continue;
+        }
+        return false;
+    }
+    // The declaration's `when`, now that the arguments have bound its type variables: a
+    // false condition makes this declaration inapplicable, not erroneous, so it is not a
+    // fit and the call goes on to the other candidates (design principles 4.4).
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        std::unordered_map<std::string, data_ptr_t> withValues;
+        for (size_t i = 0; i < signature->withTypesCount() && i < withInputs.size(); ++i) {
+            data_ptr_t value = constantOfNode(withInputs[i].node);
+            if (value != nullptr) {
+                withValues.emplace(std::string(signature->argNameAt(i)), value);
+            }
+        }
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+        if (verdict.fails()) {
+            unmetConditions->push_back(describeGenericCandidate(tmpl));
+            return false;
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
+    }
+    return true;
+}
 generic_template_ptr_t Builder::chooseGenericOverload(
     const std::vector<generic_template_ptr_t> &candidates, const std::vector<Argument> &withInputs,
     const std::vector<Argument> &normInputs, const type_vec_t &withTypes,
@@ -1239,13 +1343,6 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     // A candidate named by its signature -- which the siblings of one name share -- and by the
     // condition it wrote, which is what tells two arms of that name apart (design principles 4.4:
     // the call site lists the candidates with the conditions each of them holds under).
-    const auto describeCandidate = [](const generic_template_ptr_t &tmpl) {
-        std::string text = tmpl->name + ": " + tmpl->funcType->toString();
-        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
-            text += " — when " + when->text;
-        }
-        return text;
-    };
     // The candidates whose parameters take the arguments and whose own `when` is false for the
     // types those arguments bind: kept for the report a call that reaches no candidate at all
     // gets, because a condition that does not hold is not a mismatch of types (design
@@ -1256,90 +1353,9 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     // entering the parameter types. Two that fit are an ambiguity, not a matter of the order
     // they are declared in.
     const auto binds = [&](const generic_template_ptr_t &tmpl) {
-        FunctionType *signature = tmpl->funcType;
-        if (signature->hasRest() || withTypes.size() > signature->withTypesCount()) {
-            return false;
-        }
-        // A `with` parameter the call leaves out needs a default of this declaration.
-        const auto registered = defaults_.find(tmpl.get());
-        for (size_t i = 0; i < signature->withTypesCount(); ++i) {
-            const bool written = i < withInputs.size() && !withInputs[i].left;
-            if (written) {
-                continue;
-            }
-            if (registered == defaults_.end() || i >= registered->second.with.size() ||
-                !registered->second.with[i].has_value()) {
-                return false;
-            }
-        }
-        const size_t params = signature->normTypesCount() - signature->normConstasCount();
-        if (params != normTypes.size()) {
-            return false;
-        }
-        // The arguments are matched to the parameters the way the call wrote them: a `constas`
-        // parameter is written at its own position and is not a runtime argument. A variable
-        // that occurs at an unnamed-struct position and at a named one takes the named type
-        // (isUnnamedStructArgument).
-        type_bindings_t bindings;
-        for (int pass = 0; pass < 2; ++pass) {
-            size_t written = 0;
-            for (size_t i = 0; i < signature->normTypesCount(); ++i) {
-                if (signature->normIsConstasAt(i)) {
-                    continue;
-                }
-                Type *actual = valueTypeOf(normTypes[written]);
-                ++written;
-                if (isUnnamedStructArgument(actual) != (pass == 1)) {
-                    continue;
-                }
-                if (!bindTypeVars(signature->normTypeAt(i), actual, bindings)) {
-                    return false;
-                }
-            }
-        }
-        size_t written = 0;
-        for (size_t i = 0; i < signature->normTypesCount(); ++i) {
-            if (signature->normIsConstasAt(i)) {
-                continue;
-            }
-            const size_t at = written++;
-            Type *pattern   = signature->normTypeAt(i);
-            unifyTypeVars(pattern, valueTypeOf(normTypes[at]), bindings);
-            Type *wanted = substituteTypeVars(pattern, bindings);
-            Type *actual = valueTypeOf(normTypes[at]);
-            if (entersImplicitly(wanted, actual)) {
-                continue;
-            }
-            if (at < normInputs.size() &&
-                compositeLiteralEntersIn(normInputs[at].node, wanted, normInputs[at].expr)) {
-                continue;
-            }
-            return false;
-        }
-        // The declaration's `when`, now that the arguments have bound its type variables: a
-        // false condition makes this declaration inapplicable, not erroneous, so it is not a fit
-        // and the call goes on to the other candidates (design principles 4.4).
-        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
-            std::unordered_map<std::string, data_ptr_t> withValues;
-            for (size_t i = 0; i < signature->withTypesCount() && i < withInputs.size(); ++i) {
-                data_ptr_t value = constantOfNode(withInputs[i].node);
-                if (value != nullptr) {
-                    withValues.emplace(std::string(signature->argNameAt(i)), value);
-                }
-            }
-            const WhenResult verdict =
-                evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
-            if (verdict.fails()) {
-                unmetConditions.push_back(describeCandidate(tmpl));
-                return false;
-            }
-            if (!verdict.holds()) {
-                reportWhenProblem(verdict, tmpl->name, when->condition);
-            }
-        }
-        return true;
-    };
-    // A name with one generic function keeps it, and its own report when the arguments do not
+        return genericCandidateBinds(
+            tmpl, withInputs, normInputs, withTypes, normTypes, &unmetConditions);
+    };    // A name with one generic function keeps it, and its own report when the arguments do not
     // fit; only a name with several needs the choice made here.
     if (candidates.size() == 1) {
         return candidates.front();
@@ -1370,7 +1386,7 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         std::vector<std::string> also;
         also.reserve(fits.size());
         for (const auto &candidate : fits) {
-            also.push_back(describeCandidate(candidate));
+            also.push_back(describeGenericCandidate(candidate));
         }
         std::sort(also.begin(), also.end());
         also.erase(std::unique(also.begin(), also.end()), also.end());

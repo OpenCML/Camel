@@ -454,44 +454,6 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
     return drefNode;
 }
 
-bool Builder::genericOperatorAccepts(
-    const generic_template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
-    const type_vec_t &normTypes) {
-    FunctionType *signature = tmpl->funcType;
-    if (signature->withTypesCount() != 0 || signature->normTypesCount() != normTypes.size()) {
-        return false;
-    }
-    // As resolveGenericCall: the binding occurrences, then the others, then each argument
-    // against its parameter with the variables replaced.
-    type_bindings_t bindings;
-    for (size_t i = 0; i < normTypes.size(); ++i) {
-        if (!bindTypeVars(signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
-            return false;
-        }
-    }
-    for (size_t i = 0; i < normTypes.size(); ++i) {
-        unifyTypeVars(signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings);
-    }
-    for (size_t i = 0; i < normTypes.size(); ++i) {
-        Type *wanted = substituteTypeVars(signature->normTypeAt(i), bindings);
-        if (containsTypeVar(wanted)) {
-            return false;
-        }
-        if (entersImplicitly(wanted, valueTypeOf(normTypes[i]))) {
-            continue;
-        }
-        // An argument that is an array or struct literal enters the parameter's type (design
-        // principles 5.1); resolveGenericCall makes the conversion once this template is the
-        // one the call means.
-        if (i < normInputs.size() &&
-            compositeLiteralEntersIn(normInputs[i].node, wanted, normInputs[i].expr)) {
-            continue;
-        }
-        return false;
-    }
-    return true;
-}
-
 compile_graph_ptr_t Builder::chooseOperatorOverload(
     const OperatorOverloads &set, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
@@ -535,6 +497,11 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         return it == set.moduleOf.end() ? std::string(" (this module)")
                                         : std::format(" (module '{}')", it->second);
     };
+    // The candidates whose own `when` is false for these arguments: dropped from the choice, since
+    // a condition that does not hold makes its declaration inapplicable and the call goes on to
+    // the others (design principles 4.4). Kept so that a call left with no candidate at all says
+    // what it filtered instead of saying the name had nothing.
+    std::vector<std::string> unmetConditions;
     // Exactly as given first, then with the arguments entering `T?` / `T!` parameters (as for
     // a call of a function, visitLinkNode). The built-in overloads take only the first.
     for (const bool entering : {false, true}) {
@@ -546,8 +513,12 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
             }
         }
         if (!entering) {
+            // The same test a call of a generic function uses, so that a template taking `with`
+            // parameters is a candidate here too (its `with` arguments are the call's) and one
+            // whose `when` fails is not counted as a fit.
             for (const auto &tmpl : set.templates) {
-                if (genericOperatorAccepts(tmpl, normInputs, normTypes)) {
+                if (genericCandidateBinds(
+                        tmpl, withInputs, normInputs, withTypes, normTypes, &unmetConditions)) {
                     templates.push_back(tmpl);
                 }
             }
@@ -632,6 +603,22 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
             throw BuildAbortException();
         }
         return chosen;
+    }
+    if (!unmetConditions.empty()) {
+        // Nothing is left because every candidate the arguments fit was dropped by its own
+        // `when`: the call reports the conditions it could not meet, not an overload set it did
+        // not match (design principles 4.4).
+        std::sort(unmetConditions.begin(), unmetConditions.end());
+        unmetConditions.erase(
+            std::unique(unmetConditions.begin(), unmetConditions.end()),
+            unmetConditions.end());
+        diags_->of(SemanticDiag::WhenConditionUnmet)
+            .atOrigin(call->origin())
+            .commit(
+                display,
+                strutil::join(normTypes, ", ", [](Type *t) { return t->toString(); }),
+                strutil::join(unmetConditions, "; ", [](const std::string &s) { return s; }));
+        throw BuildAbortException();
     }
     return nullptr;
 }
