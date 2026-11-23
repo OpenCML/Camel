@@ -676,12 +676,51 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Oper: {
-                const auto oper = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                const auto *operBody        = g->nodeBodyAs<rt::GCOperBody>(id);
+                const std::string_view uri = operBody->uri();
+                const auto oper             = operBody->oper;
                 std::vector<Value> args;
                 const auto kernelArguments = rt::kernelArgumentsOf(*g, id);
-                if (!kernelArguments.with.empty())
+                if (!kernelArguments.with.empty()) {
+                    // A member read's place or name is the operator's compile-time parameter
+                    // (`:op/access` / `:op/access_key`, prelude.cml), so it arrives as the call's
+                    // `with` argument and a constant the specialization reads here. The read is
+                    // the aggregate's member, which is what the ACCS case above takes as well.
+                    if ((uri == ":op/access" || uri == ":op/access_key") &&
+                        kernelArguments.with.size() == 1 && kernelArguments.norm.size() == 1) {
+                        Value aggregate    = eval(f, kernelArguments.norm.front());
+                        const Value member = eval(f, kernelArguments.with.front());
+                        if (!member.constant)
+                            throw std::runtime_error(
+                                "a member read's member has to be known when specializing");
+                        size_t index = 0;
+                        if (uri == ":op/access_key") {
+                            const auto *key = std::get_if<std::string>(&*member.constant);
+                            if (key == nullptr)
+                                throw std::runtime_error(
+                                    "a member read by name must read a name");
+                            if (aggregate.type == nullptr ||
+                                aggregate.type->code() != ty::TypeCode::Struct)
+                                throw std::runtime_error("expected struct aggregate");
+                            const auto field =
+                                static_cast<ty::StructType *>(aggregate.type)->findField(*key);
+                            if (!field)
+                                throw std::runtime_error("missing struct field");
+                            index = *field;
+                        } else {
+                            const auto *at = std::get_if<int64_t>(&*member.constant);
+                            if (at == nullptr || *at < 0)
+                                throw std::runtime_error(
+                                    "a member read by place must be given a place that is not "
+                                    "negative");
+                            index = static_cast<size_t>(*at);
+                        }
+                        out = aggregate.fields.at(index);
+                        break;
+                    }
                     throw UnsupportedComputation(
                         "operator context arguments are not supported yet");
+                }
                 for (auto in : kernelArguments.norm)
                     args.push_back(eval(f, in));
                 const auto first      = program.nodes.size();

@@ -300,10 +300,10 @@ const edge = (from, to, type) =>
 // takes that version. Nothing stands in for it with a control edge any more.
 const writeA = one('write_a', 'FUNC')
 const readA = one('read_a', 'FUNC')
-const versionMatch = text.match(new RegExp(writeA + ' -> (N[0-9A-F]+) \\[label="1\\|1", type="NORM"'))
+const versionMatch = text.match(new RegExp(writeA + ' -> (N[0-9A-F]+) \\[label="1\\|0", type="NORM"'))
 assert(versionMatch, 'missing the access node of the second part of the value of write_a')
-// That node is the member-read operator: its second operand is the value, so the second part of
-// the call arrives at its input 1.
+// That node is the member-read operator: its one ordinary operand is the value, so the second part
+// of the call arrives at its input 0. The member it reads is its `with` argument, not an operand.
 const version = versionMatch[1]
 assert(new RegExp(version + ' \\[label=":op/(?:access|access_key)", type="OPER"').test(text),
     'the second part of the value of write_a is not read by a member-read operator')
@@ -789,10 +789,10 @@ const memberReadType = (node) => {
     const m = text.match(new RegExp(node + ' \\[label=":op/(?:access|access_key)", type="OPER", [^\\]]*value_type="([^"]+)"'))
     return m ? m[1] : null
 }
-// The part such an operator selects is the key it takes as its first operand, so the number is read
-// off the data node feeding the operator rather than off the call's output port.
+// The part such an operator selects is the key it takes as its `with` argument, so the number is
+// read off the data node feeding the operator's `with` list rather than off the call's output port.
 const keyOf = (node) => {
-    const edge = text.match(new RegExp('(N[0-9A-F]+) -> ' + node + ' \\[label="[^"]*\\|0", type="NORM"'))
+    const edge = text.match(new RegExp('(N[0-9A-F]+) -> ' + node + ' \\[label="[^"]*\\|0", type="WITH"'))
     if (!edge) return null
     const key = text.match(new RegExp(edge[1] + ' \\[label="(\\d+)", type="DATA"'))
     return key ? Number(key[1]) : null
