@@ -18,8 +18,9 @@ namespace camel::runtime {
 /// loops it runs (docs/design/op-semantics 11.2, I20). Computed from the nodes each time it is
 /// asked for, so it cannot disagree with them.
 struct EffectSummary {
-    /// An operator with an effect outside the program's variables (OperatorTable::
-    /// hasExternalEffect), or a call through a function value (what it runs is not known here).
+    /// An operator with an effect outside the program's variables (the accesses its record
+    /// states, united with the ones its function operand brings), or a call through a function
+    /// value (what it runs is not known here).
     bool external = false;
     /// An operator that declares a write to a variable cell or to an object changed in place
     /// (its resource declaration: OperatorTable::writesProgramState).

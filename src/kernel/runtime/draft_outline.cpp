@@ -147,7 +147,11 @@ DraftOutlineBoundary draftOutlineBoundary(const GraphDraft &draft, std::span<con
         // "移出区域的必须是纯且不会出故障的计算" is 9.7's rule for hoisting, and the wider one holds
         // here too: a group that carries an access would owe the commit the effect and order
         // questions of the region it lands in (8.1's ⑥), which this landing does not answer.
-        if (!camel::core::OperatorTable::instance().isPure(body.uri())) {
+        // The record's answer for the operator (`sem::Effect`): the empty stated clause is the
+        // computation a group may hold, and one that states an access is not (design principles
+        // 3.3).
+        if (camel::core::OperatorTable::instance().effectOf(body.uri()) !=
+            camel::core::sem::Effect::Pure) {
             refuse(std::format(
                 "{} carries an access: '{}' is not a pure operator, so the group is not outlined "
                 "yet",

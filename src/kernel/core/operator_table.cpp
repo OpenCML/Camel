@@ -229,17 +229,6 @@ std::optional<OperatorTraits> OperatorTable::find(std::string_view uri) const {
     return id ? find(*id) : std::nullopt;
 }
 
-bool OperatorTable::isPure(OperId id) const {
-    const sem::OperatorSemantics *facts = record(id);
-    return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&
-           facts->effect() == sem::Effect::Pure;
-}
-
-bool OperatorTable::isPure(std::string_view uri) const {
-    const auto id = lookup(uri);
-    return id && isPure(*id);
-}
-
 sem::Effect OperatorTable::effectOf(OperId id) const {
     // One statement, one reading: the access list (sem::OperatorSemantics::effect). An operator
     // nobody recorded at all is `Undeclared`; a record that states no effect is read as effectful,
@@ -287,23 +276,10 @@ bool OperatorTable::mayBeRecomputed(std::string_view uri) const {
     return id && mayBeRecomputed(*id);
 }
 
-bool OperatorTable::hasExternalEffect(OperId id) const {
-    const sem::OperatorSemantics *facts = record(id);
-    // The access list decides it, or the declaration that says an effect exists without an
-    // itemized one; an operator nobody declared keeps the conservative answer (design
-    // principles 3.3).
-    return facts == nullptr || facts->external();
-}
-
-bool OperatorTable::hasExternalEffect(std::string_view uri) const {
-    const auto id = lookup(uri);
-    return !id || hasExternalEffect(*id);
-}
-
 bool OperatorTable::writesForTheRegion(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
     // An operator nobody declared writes the global resource (design principles 3.3), which is
-    // the same reading `hasExternalEffect` gives it and the same one `accessList` publishes.
+    // the same reading `accessList` publishes.
     return facts == nullptr || facts->writesForTheRegion();
 }
 

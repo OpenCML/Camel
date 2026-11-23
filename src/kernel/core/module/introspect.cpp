@@ -239,7 +239,10 @@ bool reachOf(
     if (const camel::ops::Record *record = traits.recordOf(*id); record != nullptr) {
         return record->external();
     }
-    return traits.hasExternalEffect(*id);
+    // The record reads `Undeclared` for an operator nobody stated anything about, which is the
+    // conservative "reaches outside" (design principles 3.3).
+    const sem::Effect effect = traits.effectOf(*id);
+    return effect == sem::Effect::Effectful || effect == sem::Effect::Undeclared;
 }
 
 void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {

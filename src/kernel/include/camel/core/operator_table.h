@@ -379,26 +379,25 @@ class OperatorTable {
      */
     const camel::ops::Record *recordOf(OperId id) const;
 
-    /// True when the operator is declared pure.
-    /// Whether the operator's kernel takes the with-arguments after the ordinary ones
+    /// True when the operator's kernel takes the with-arguments after the ordinary ones
     /// (OperatorTraits::withAfterNorm).
     bool withAfterNorm(std::string_view uri) const;
-    bool isPure(OperId id) const;
-    bool isPure(std::string_view uri) const;
 
     /// The effect of the operator, as the one statement of it reads it
     /// (`sem::OperatorSemantics::effect`): the access list a declaration writes, and nothing
     /// beside it. `Undeclared` when nobody stated one at all -- which is what a listing reports,
-    /// while a reader that asks what running the operator may do takes the conservative reading
-    /// (`isPure` false, `hasExternalEffect` true).
+    /// while a reader that asks what running the operator may do reads `Effectful` for it (the
+    /// conservative reading, design principles 3.3). A reader that has a node asks the fact
+    /// (`core.nodeEffects`, `core.operatorEffects`) instead: the node's effect is this clause
+    /// united with what its function operand brings.
     sem::Effect effectOf(OperId id) const;
     sem::Effect effectOf(std::string_view uri) const;
 
     /// True when a call of the operator may be computed by the compiler or a pass itself and its
-    /// result treated as a value: it has no effect, and it is foldable (isPure and the foldable
-    /// fact). False for every operator that has an effect, and for a pure one that must run where
-    /// the program writes it (declareUnfoldable). A pass that folds a call or merges it with an
-    /// identical one asks this, not isPure. Whether a pass may also drop, move or reorder the call
+    /// result treated as a value: it has no effect, and it is foldable (a pure `effectOf` and the
+    /// foldable fact). False for every operator that has an effect, and for a pure one that must
+    /// run where the program writes it (declareUnfoldable). A pass that folds a call or merges it
+    /// with an identical one asks this. Whether a pass may also drop, move or reorder the call
     /// depends on whether it can fault as well: that is `nodeIsFreelySchedulable`
     /// (camel/runtime/graph.h), the one question every pass asks.
     bool mayBeRecomputed(OperId id) const;
@@ -426,11 +425,6 @@ class OperatorTable {
         const std::optional<OperatorTraits> traits = find(uri);
         return traits.has_value() && traits->macro;
     }
-
-    /// True when running the operator is an effect visible outside the program's variables:
-    /// it is neither pure nor state-only. True for an undeclared operator.
-    bool hasExternalEffect(OperId id) const;
-    bool hasExternalEffect(std::string_view uri) const;
 
     /// True when running the operator **writes** a resource a running region owes (design
     /// principles 3.1, 3.3): the region that runs it owes its running, so the write is a root of

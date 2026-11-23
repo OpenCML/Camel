@@ -700,10 +700,9 @@ bool Builder::reachOfOper(
     }
     // An operator's resources are in the operator table, not on its type
     // (runtime/resources.cpp oper reads them the same way): what the table declares, and otherwise
-    // the conservative reading of its traits.
+    // the conservative reading of the effect its record states.
     const auto &table = camel::core::OperatorTable::instance();
     const std::string uri(op->uri());
-    const auto traits = table.find(uri);
     sem::ResourceSpec spec;
     sem::ElementCalls elementCalls;
     bool declared = false;
@@ -715,11 +714,15 @@ bool Builder::reachOfOper(
         }
     }
     if (!declared) {
+        // The word is read back as the record states it: `pure` is the empty access list, and
+        // `Effectful` (or a clause nobody stated) is the one that reaches outside the program
+        // (design principles 3.3). A draft node is not something a fact can be anchored on.
+        const sem::Effect effect = table.effectOf(uri);
         spec = sem::conservativeResources(
             draft.normInputsOf(id).size(),
             draft.withInputsOf(id).size(),
-            traits.has_value() && traits->pure,
-            table.hasExternalEffect(uri));
+            effect == sem::Effect::Pure,
+            effect == sem::Effect::Effectful || effect == sem::Effect::Undeclared);
     }
     if (spec.functionOperand) {
         // The accesses are the function operand's (design principles 3.3), so

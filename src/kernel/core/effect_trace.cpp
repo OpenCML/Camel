@@ -298,7 +298,14 @@ void setTraceFile(std::string path) {
 bool enabled() { return tracePath() != nullptr; }
 
 operator_t wrap(std::string_view uri, operator_t op) {
-    if (!enabled() || op == nullptr || !OperatorTable::instance().hasExternalEffect(uri)) {
+    if (!enabled() || op == nullptr) {
+        return op;
+    }
+    // The record's answer for the operator: `Effectful` is the one that reaches outside the
+    // program, which is what a trace of effects wraps, and an operator nobody declared a clause
+    // for is read the same way (design principles 3.3).
+    const sem::Effect effect = OperatorTable::instance().effectOf(uri);
+    if (effect != sem::Effect::Effectful && effect != sem::Effect::Undeclared) {
         return op;
     }
     Registry &r = registry();
