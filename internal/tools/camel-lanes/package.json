@@ -1,0 +1,22 @@
+{
+  "name": "@local/camel-lanes",
+  "version": "1.7.0",
+  "private": true,
+  "type": "module",
+  "description": "Reads the Camel repository's lane state on a timer and puts it in front of the agent.",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./client": "./client.js",
+    "./icon": "./icon.svg"
+  },
+  "files": ["index.js", "client.js", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
+  }
+}
