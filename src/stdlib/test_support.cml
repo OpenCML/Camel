@@ -25,8 +25,8 @@ export resource rendezvous_point unordered
 /// @fails fault `InvalidArgument` when parties is below 1 or timeout is negative
 /// @example rendezvous(2, 1.0)    // 2 when another call arrived in time
 #op('test_support:rendezvous')
-export func rendezvous(parties: int, timeout: float) => int
-    panic uses var rendezvous_point
+export func rendezvous(parties: int, timeout: float) => int panic
+    uses var rendezvous_point
 
 /// The number of threads this process has, the caller included: the count the operating system
 /// reports for the process, not the number of processors. A test reads it to pin how many worker

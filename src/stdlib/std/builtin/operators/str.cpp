@@ -8,6 +8,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/complex.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/assert.h"
 #include "camel/utils/type.h"
 
 #include "complex_format.h"
@@ -74,8 +75,8 @@ std::vector<std::string> placeholderSpecs(std::string_view pattern) {
                 ++i;
                 continue;
             }
-            size_t j      = i + 1;
-            size_t colon  = std::string_view::npos;
+            size_t j     = i + 1;
+            size_t colon = std::string_view::npos;
             while (j < pattern.size() && pattern[j] != '}') {
                 if (pattern[j] == ':' && colon == std::string_view::npos) {
                     colon = j;
@@ -111,12 +112,14 @@ std::string formatElementText(Type *elemType, slot_t slot, std::string_view spec
             return fmt::format(format, fromSlot<Int64>(slot));
         case TypeCode::Float32:
             return fmt::format(
-                format, camel::builtin::LanguageFloat<Float32>{fromSlot<Float32>(slot)});
+                format,
+                camel::builtin::LanguageFloat<Float32>{fromSlot<Float32>(slot)});
         case TypeCode::Float64:
             return fmt::format(
                 format,
                 camel::builtin::LanguageFloat<Float64>{
-                    fromSlot<Float64>(slot), camel::builtin::FloatTextFormat::Float64});
+                    fromSlot<Float64>(slot),
+                    camel::builtin::FloatTextFormat::Float64});
         case TypeCode::BFloat16:
             return fmt::format(
                 format,
@@ -175,8 +178,8 @@ void formatArrayWithSpec(
 /// and a string takes no numeric specification, so `{:.4f}` becomes `{}` while every other field
 /// stays as written. `argumentIsArray` says which argument of the call was written element by
 /// element.
-std::string dropSpecsOfArrayFields(
-    std::string_view pattern, const std::vector<bool> &argumentIsArray) {
+std::string
+dropSpecsOfArrayFields(std::string_view pattern, const std::vector<bool> &argumentIsArray) {
     std::string out;
     size_t automaticIndex = 0;
     for (size_t i = 0; i < pattern.size();) {
@@ -247,18 +250,24 @@ std::optional<std::string> checkFormatPattern(
             store.push_back(camel::builtin::LanguageFloat<Float32>{0});
             break;
         case TypeCode::Float64:
-            store.push_back(camel::builtin::LanguageFloat<Float64>{
-                0, camel::builtin::FloatTextFormat::Float64});
+            store.push_back(
+                camel::builtin::LanguageFloat<Float64>{
+                    0,
+                    camel::builtin::FloatTextFormat::Float64});
             break;
         case TypeCode::BFloat16:
             // The two reduced-precision types take a plain `{}` and a specification alike, as
             // f32 does: the pattern check must accept what the run-time `__format__` accepts.
-            store.push_back(camel::builtin::LanguageFloat<Float32>{
-                0, camel::builtin::FloatTextFormat::BFloat16});
+            store.push_back(
+                camel::builtin::LanguageFloat<Float32>{
+                    0,
+                    camel::builtin::FloatTextFormat::BFloat16});
             break;
         case TypeCode::Float16:
-            store.push_back(camel::builtin::LanguageFloat<Float32>{
-                0, camel::builtin::FloatTextFormat::Float16});
+            store.push_back(
+                camel::builtin::LanguageFloat<Float32>{
+                    0,
+                    camel::builtin::FloatTextFormat::Float16});
             break;
         case TypeCode::Complex64:
             store.push_back(camel::builtin::LanguageComplex<Float32>{0, 0});
@@ -286,16 +295,22 @@ std::optional<std::string> checkFormatPattern(
                 store.push_back(camel::builtin::LanguageFloat<Float32>{0});
                 break;
             case TypeCode::Float64:
-                store.push_back(camel::builtin::LanguageFloat<Float64>{
-                    0, camel::builtin::FloatTextFormat::Float64});
+                store.push_back(
+                    camel::builtin::LanguageFloat<Float64>{
+                        0,
+                        camel::builtin::FloatTextFormat::Float64});
                 break;
             case TypeCode::BFloat16:
-                store.push_back(camel::builtin::LanguageFloat<Float32>{
-                    0, camel::builtin::FloatTextFormat::BFloat16});
+                store.push_back(
+                    camel::builtin::LanguageFloat<Float32>{
+                        0,
+                        camel::builtin::FloatTextFormat::BFloat16});
                 break;
             case TypeCode::Float16:
-                store.push_back(camel::builtin::LanguageFloat<Float32>{
-                    0, camel::builtin::FloatTextFormat::Float16});
+                store.push_back(
+                    camel::builtin::LanguageFloat<Float32>{
+                        0,
+                        camel::builtin::FloatTextFormat::Float16});
                 break;
             default:
                 store.push_back(camel::builtin::CodePointText{""});
@@ -362,33 +377,39 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
             store.push_back(camel::builtin::LanguageFloat<Float32>{with.get<Float32>(i)});
             break;
         case TypeCode::Float64:
-            store.push_back(camel::builtin::LanguageFloat<Float64>{
-                with.get<Float64>(i), camel::builtin::FloatTextFormat::Float64});
+            store.push_back(
+                camel::builtin::LanguageFloat<Float64>{
+                    with.get<Float64>(i),
+                    camel::builtin::FloatTextFormat::Float64});
             break;
         case TypeCode::BFloat16:
             // A bf16 or an f16 has one text of its own (7.7), and this is the
             // path `format` and string interpolation take: a plain `{}` writes that text.
-            store.push_back(camel::builtin::LanguageFloat<Float32>{
-                rtdata::halfValueFloat(with.slot(i), type),
-                camel::builtin::FloatTextFormat::BFloat16});
+            store.push_back(
+                camel::builtin::LanguageFloat<Float32>{
+                    rtdata::halfValueFloat(with.slot(i), type),
+                    camel::builtin::FloatTextFormat::BFloat16});
             break;
         case TypeCode::Float16:
-            store.push_back(camel::builtin::LanguageFloat<Float32>{
-                rtdata::halfValueFloat(with.slot(i), type),
-                camel::builtin::FloatTextFormat::Float16});
+            store.push_back(
+                camel::builtin::LanguageFloat<Float32>{
+                    rtdata::halfValueFloat(with.slot(i), type),
+                    camel::builtin::FloatTextFormat::Float16});
             break;
         case TypeCode::Complex64: {
             const Complex *value = with.get<Complex *>(i);
-            store.push_back(camel::builtin::LanguageComplex<Float32>{
-                value != nullptr ? value->realF() : Float32{0},
-                value != nullptr ? value->imaginaryF() : Float32{0}});
+            store.push_back(
+                camel::builtin::LanguageComplex<Float32>{
+                    value != nullptr ? value->realF() : Float32{0},
+                    value != nullptr ? value->imaginaryF() : Float32{0}});
             break;
         }
         case TypeCode::Complex128: {
             const Complex *value = with.get<Complex *>(i);
-            store.push_back(camel::builtin::LanguageComplex<Float64>{
-                value != nullptr ? value->real() : Float64{0},
-                value != nullptr ? value->imaginary() : Float64{0}});
+            store.push_back(
+                camel::builtin::LanguageComplex<Float64>{
+                    value != nullptr ? value->real() : Float64{0},
+                    value != nullptr ? value->imaginary() : Float64{0}});
             break;
         }
         default:
@@ -411,10 +432,14 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The separator is the declaration's `with <sep: string>` argument, so the compiler writes a
+    // string and no program can hand this kernel a null one: a null here is a value the type rule
+    // excludes, which is a defect of the compiler and not a fault of the program (design
+    // principles 3.9; the family `NullSlotUnwrapped` belongs to). It is an invariant rather than a
+    // fault so that `attempt` cannot report a compiler defect as an error value the program made,
+    // and the declaration states no `panic` because no call can fail.
     String *sepObj = with.get<String *>(0);
-    if (!sepObj) {
-        throwRuntimeFault(RuntimeDiag::InvalidArgument, "join", "the separator is null");
-    }
+    GUARD(sepObj != nullptr, "join's separator is the string the declaration states.");
     std::string separator = sepObj->toString();
 
     Array *arrObj = norm.get<Array *>(0);
