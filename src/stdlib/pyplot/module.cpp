@@ -6,6 +6,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -55,6 +56,14 @@ bool PyplotModule::load() {
     // Without this entry the declaration loader refuses a body-less declaration of `pyplot:plot`
     // (`Builder::declareNativeOperator`, src/compile/gir/builder_modules.cpp#declareNativeOperator).
     camel::core::OperatorTable::instance().declare("pyplot", {{"plot", false}});
+    // What it touches: the image file, which is the file system under the name the fs module
+    // declares, read-modify-written because the file it names may already be there. The window it
+    // opens instead when matplotlib shows one is the same statement for the record: both are
+    // outside the program, and two calls keep the order they are written in.
+    camel::core::OperatorTable::instance().declareResources(
+        "pyplot",
+        {{"plot",
+          camel::core::sem::externalAmbient("fs", camel::core::sem::AccessMode::ReadModifyWrite)}});
     loaded_ = true;
     return true;
 }

@@ -322,13 +322,11 @@ void registerOperatorMetadata() {
     camel::core::OperatorTable::instance().set(
         "transforms:jvp",
         {.pure = true, .readsGraphs = true, .foldable = false});
-    // `transpose` builds a graph of its own from the one it is handed and touches no resource
-    // either, but it is not this edit's to re-declare: it is declared not pure here, as it was, and
-    // the same reading as `jvp`'s above would have to be measured for it first.
-    camel::core::OperatorTable::instance().declare("transforms", {{"transpose", false}});
+    // `transpose` builds a graph of its own from the one it is handed and touches no resource either,
+    // so it states the same reading as `jvp` above: pure, reading the graph, not foldable.
     camel::core::OperatorTable::instance().set(
         "transforms:transpose",
-        {.pure = false, .readsGraphs = true});
+        {.pure = true, .readsGraphs = true, .foldable = false});
     // How a call of each is written: `jvp(f)` and `transpose(f)`, one function and no `with`
     // parameters. Neither has a Camel declaration that could say so -- the result of `jvp` is the
     // forward transform of `f`, the result of `transpose` its reverse transform, and no signature

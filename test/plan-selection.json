@@ -278,6 +278,16 @@
             "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile", "feat/modules/rules_proofs.plan.toml"]
         },
         {
+            "comment": "The rule verifier's translation layer (`src/stdlib/verify/translate.cpp`, `translate.h`): it is not a module -- it registers no operator, and `src/stdlib/verify/CMakeLists.txt` compiles it into modules/rewrite -- so it selects what a change to the module selects, plus `rules_differential` (the differential check reads the translation of a rule into witnesses). The rule is here and not left to the directory rule because no plan mirrors the directory: `src/stdlib/verify/` has no plan file, so the mirror looked for `test/plans/feat/modules/verify`, which held only the three verifier scripts below, and `--changed` refused the run with exit 2 -- a refusal that reads as an unreadable tree rather than as a selection. Measured on 2026-11-23: `--list` exited 2 with `test/plans/feat/modules/verify holds no *.plan.toml`, and exits 0 selecting these seven plans now that the directory holds no plan-less sibling.",
+            "paths": ["src/stdlib/verify/"],
+            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile", "feat/modules/rules_proofs.plan.toml", "feat/modules/rules_differential.plan.toml"]
+        },
+        {
+            "comment": "The three scripts that judge a rule library (`test/cases/modules/rules/verify/*.mjs`): `feat/modules/rules.plan.toml` runs `check_covers_every_rule.mjs` as its verify script and `check_covers_every_rule_rejects_refuted.mjs` as a case, and `feat/modules/rules_differential.plan.toml` runs `differential_equivalence.mjs`. The mirror alone is not enough: a file under `test/cases/modules/rules/verify/` resolves to `rules.plan.toml` (the plan file its grandparent directory names), which runs neither of the other two. `rules_proofs` is named by the rule above and not here, because it runs no case of this class and a named plan file runs in full (the self-test refuses a costly plan named for a case it does not run).",
+            "paths": ["test/cases/modules/rules/verify/"],
+            "plans": ["feat/modules/rules.plan.toml", "feat/modules/rules_differential.plan.toml"]
+        },
+        {
             "comment": "The profiler pass: its own plan runs without a CUDA device (the host fallback), so it is safe from an ordinary change.",
             "paths": ["src/stdlib/std/profile/"],
             "plans": ["smoke", "gpu/profile.plan.toml"]

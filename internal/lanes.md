@@ -8,6 +8,7 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
+| lane/cleanup | `D-1123-29` 第 4 条的三样：① `C-1123-33` 余下的旧切片写法（文本迁移已在 `8ee76003e`，全树只剩「反向切片的末端」一族，是语言问题、交裁）；② 25 个真沉默算子逐个补 `uses`/`pure`；③ `:op/` 以外的小欠账（`C-1123-11`） | `node scripts/check-operator-uses.mjs`：**18 个算子（25 个声明行）无声 → 0**（`814/814` 声明、`0` 分歧）；`--changed --list` 对 `src/stdlib/verify/` **exit 2 → exit 0，选 7 个计划**；本机读数 `smoke` 10/10/0、`feat/parse` 125/126（那一红是 `ast_hashes.txt` 里 `src/stdlib/array.cml` 那行过期，`develop` 上同样红、与本笔无关）、`feat/transforms` 44/0(known 27)、`feat/compile/native_declarations` 119/119、`feat/modules/rules` 174/174、`rules_differential` 1/1 | 未合 | 交作者裁「带步长的切片末端怎么表达『走到第一个元素』」（`internal/questions/2026-11-23-how-a-backward-slice-names-the-position-before-the-first.cn.md`）；六处用例在裁之前不动 | 2026-11-23 15:57 |
 
 
 

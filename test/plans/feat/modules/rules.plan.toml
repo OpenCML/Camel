@@ -1417,7 +1417,7 @@ desc = "The check's input is the library's own list of exported rules, and a ver
 kind = "behavior"
 case = "../../../cases/modules/rules/check_every_rule.cml"
 args = ["${case}", "std::nvm"]
-verify_script_path = "./verify/check_covers_every_rule.mjs"
+verify_script_path = "../../../cases/modules/rules/verify/check_covers_every_rule.mjs"
 expect_exit = 0
 expect_stdout_contains = ["sampled array_sigmoid_chain: proposition equality, evidence samples 200, fired 8 of 8","sampled int_add_zero<int>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio","sampled array_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio "]
 expect_output_not_contains = ["ok ", "FAIL ", "refuted", "a generic rule, whose instances are not checked here"]
@@ -1426,10 +1426,10 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rules.the_coverage_check_refuses_every_refuted_law"
-desc = "The negative space of the coverage guard: `verify/check_covers_every_rule_rejects_refuted.mjs` feeds `verify/check_covers_every_rule.mjs` reports built out of `stdlib/rules.cml`'s own export list and asserts both directions of its last rule -- a report in which no exported rule is `refuted` is accepted, and a report in which any one of them is refuted is refused, once per rule. The first direction is what a checker carrying a list of excused names fails, and the second is what a checker that let a `refuted` line through fails, so the pair says the guard is judging rather than printing a conclusion it was handed. The test above reads that script on the run's own report; this one is the reason that reading means something."
+desc = "The negative space of the coverage guard: `cases/modules/rules/verify/check_covers_every_rule_rejects_refuted.mjs` feeds `cases/modules/rules/verify/check_covers_every_rule.mjs` reports built out of `stdlib/rules.cml`'s own export list and asserts both directions of its last rule -- a report in which no exported rule is `refuted` is accepted, and a report in which any one of them is refuted is refused, once per rule. The first direction is what a checker carrying a list of excused names fails, and the second is what a checker that let a `refuted` line through fails, so the pair says the guard is judging rather than printing a conclusion it was handed. The test above reads that script on the run's own report; this one is the reason that reading means something."
 kind = "behavior"
 tool = "node"
-case = "./verify/check_covers_every_rule_rejects_refuted.mjs"
+case = "../../../cases/modules/rules/verify/check_covers_every_rule_rejects_refuted.mjs"
 args = ["${case}", "${test_tmp}"]
 expect_exit = 0
 expect_stdout_contains = ["37 exported rule(s) probed: a report with no rule refuted is accepted, and a report in which any one of them is refuted is refused (37 of 37)"]
