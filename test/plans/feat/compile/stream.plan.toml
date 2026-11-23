@@ -108,7 +108,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandNotUnary"
 expect_diagnostic_code = "0x030001E2"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 13
-expect_output_contains = ["'..' and '<>' compose a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
+expect_output_contains = ["'<>' composes a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -350,7 +350,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 20
-expect_output_contains = ["'..' takes two functions or two integers, and '<>' takes two functions; the left operand is '(x: int) => int pure' and the right one 'int'."]
+expect_output_contains = ["'..' takes two integers and '<>' takes two functions; the left operand is '(x: int) => int pure' and the right one 'int'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

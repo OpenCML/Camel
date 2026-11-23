@@ -13,7 +13,7 @@ b77ebbe862ed5db4 ok test/cases/parse/constructs/operator_name.cml
 476e7fb80374d2be ok test/cases/parse/constructs/rest_signature.cml
 595a5d0e35991d15 ok test/cases/parse/constructs/static_loop.cml
 b3cc69e8f576dbb9 ok test/cases/parse/constructs/tags.cml
-48ee9f9b8e6361ea ok test/cases/parse/constructs/type_arguments.cml
+fb7dc0882479ca2e ok test/cases/parse/constructs/type_arguments.cml
 e18870591c281bd8 no test/cases/parse/numbers/bad_octal_digit.cml
 e18870591c281bd8 no test/cases/parse/numbers/leading_zero.cml
 b4688d572db8c7f4 no test/cases/parse/numbers/leading_zero_real.cml
@@ -84,7 +84,8 @@ d84cb37382942ae5 no test/cases/parse/syntax/no_spread_in_array_literal.cml
 8a3a54657b4b5ee5 ok test/cases/parse/syntax/subscript_forms.cml
 e5389c159ce131ec no test/cases/parse/syntax/tag_group_open.cml
 09026f648fae0451 ok test/cases/parse/syntax/tuple_and_parenthesis.cml
-187ec9364e442082 no test/cases/parse/syntax/type_arguments_missing_name.cml
+5e1568190a4c6ff1 no test/cases/parse/syntax/type_arguments_missing_name.cml
+74892aed291affc3 no test/cases/parse/syntax/type_arguments_old_equals.cml
 096937bb2224e849 no test/cases/parse/syntax/type_params_open.cml
 5273429391bbd727 no test/cases/parse/syntax/unmatched_closing_delimiter.cml
 8ba77e1661eef523 no test/cases/parse/syntax/unterminated_comment.cml
@@ -568,7 +569,7 @@ ddd54969ecee6b31 ok test/cases/compile/format_string_bad_spec.cml
 01afadf342525253 ok test/cases/compile/format_string_checked.cml
 6ecda509a81a807a ok test/cases/compile/generic_closed_rank_rejects_rank_zero.cml
 ae2d0b70c4bdc3a1 ok test/cases/compile/generic_explicit_arity_error.cml
-ecb41c319c87a1b7 no test/cases/compile/generic_explicit_mixed.cml
+90f2e2fdf1f42ea7 no test/cases/compile/generic_explicit_mixed.cml
 5a9546eb401ad902 ok test/cases/compile/generic_explicit_named.cml
 19e79f082daaf6f4 ok test/cases/compile/generic_explicit_named_missing.cml
 99beb7cdff78c928 ok test/cases/compile/generic_explicit_named_unknown.cml
@@ -1704,12 +1705,13 @@ e0f30c6ba3490368 ok test/cases/compile/static_expansion/typeof_void.cml
 bec16c59e1d67bf8 ok test/cases/compile/stream/arms_consume_once.cml
 99ae648ff5fba66e ok test/cases/compile/stream/capture_stream.cml
 dd39c562acc6c788 ok test/cases/compile/stream/comp_chain.cml
-e22887d631734cb9 ok test/cases/compile/stream/comp_expected_type.cml
+774c102837e94bd3 ok test/cases/compile/stream/comp_dotdot_spelling.cml
+789b0e28c6abfc4a ok test/cases/compile/stream/comp_expected_type.cml
 90e6ae3660560aed ok test/cases/compile/stream/comp_lambda_equivalence.cml
-f9d7cb9ede40d403 ok test/cases/compile/stream/comp_operand_function_integer.cml
+335e111ff8974f54 ok test/cases/compile/stream/comp_operand_function_integer.cml
 33c6552df523fa5b ok test/cases/compile/stream/comp_operand_generic.cml
 591f3c7d13b246ba ok test/cases/compile/stream/comp_operand_generic_mixed.cml
-f1ef0ca4ed14aaea ok test/cases/compile/stream/comp_operand_mismatch.cml
+4566e9b7b255bf36 ok test/cases/compile/stream/comp_operand_mismatch.cml
 05143987c46e4175 ok test/cases/compile/stream/comp_operand_not_unary.cml
 bcab112b1be3fd31 ok test/cases/compile/stream/composition.cml
 6f865ad6d7c480c6 ok test/cases/compile/stream/composition_uses.cml

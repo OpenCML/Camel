@@ -329,7 +329,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 15
 expect_diagnostic_column = 13
-expect_output_contains = ["'..' takes two functions or two integers", "the left operand is 'int'"]
+expect_output_contains = ["'..' takes two integers and '<>' takes two functions", "the left operand is 'int'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
