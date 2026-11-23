@@ -5,6 +5,7 @@
 
 #include "camel/core/operator_semantics.h"
 #include "camel/core/operator_table.h"
+#include "camel/ops/operator_record.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/rtdata/func.h"
@@ -171,7 +172,7 @@ std::string eligibility(
     const auto found = operations().find(oper);
     if (found == operations().end())
         return "unsupported_operator";
-    if (!table.isPure(oper) || table.hasExternalEffect(oper))
+    if (!touchesNothing(oper))
         return "effect";
     const auto *decl = table.semantics(oper);
     if (!decl || decl->key.major != 1)
@@ -317,10 +318,19 @@ void ids(std::ostream &out, const std::vector<size_t> &values) {
     out << ']';
 }
 } // namespace
+bool touchesNothing(core::OperId oper) {
+    const camel::ops::Record *record = core::OperatorTable::instance().recordOf(oper);
+    // The operator record's clause, and nothing beside it: `pure` is the empty `uses` clause and
+    // `external` is the reach that clause states, so a record nobody wrote a clause for answers
+    // "it touches something outside" (design principles 3.3) instead of being answered a second
+    // way from the table's derived bits.
+    if (record == nullptr) {
+        return false;
+    }
+    return record->pure() && !record->external();
+}
 bool deviceCapable(core::OperId oper) {
-    const auto &table = core::OperatorTable::instance();
-    return operations().find(oper) != operations().end() && table.isPure(oper) &&
-           !table.hasExternalEffect(oper);
+    return operations().find(oper) != operations().end() && touchesNothing(oper);
 }
 const char *
 gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_node_ref_t id) {
@@ -330,10 +340,9 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
     if (reason.empty() || !graph.node(id) || graph.node(id)->kind != rt::GCNodeKind::Oper)
         return "";
     const auto oper   = graph.nodeBodyAs<rt::GCOperBody>(id)->oper;
-    const auto &table = core::OperatorTable::instance();
     // A host effect is the boundary of a device scope, not an operator the device must run
     // The pass leaves it to the host and this refusal ignores it.
-    if (!table.isPure(oper) || table.hasExternalEffect(oper))
+    if (!touchesNothing(oper))
         return "";
     if (reason == "unsupported_operator") {
         // Not in the device capability list: no module offers a device program for it.

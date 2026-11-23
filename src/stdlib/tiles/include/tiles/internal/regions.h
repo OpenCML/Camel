@@ -87,6 +87,14 @@ std::string loopEligibility(
 /// Whether the device back end has an implementation of `oper`: the declared capability list,
 /// the same one the region compiler lowers. A `#gpu` scope refuses an operator outside it.
 bool deviceCapable(core::OperId oper);
+/// Whether running the operator touches nothing the device has to leave on the host: it writes no
+/// state and reaches nothing outside the program. The statement of it is the operator record
+/// (`camel/ops/operator_record.h`: `pure` is the empty `uses` clause, `external` the reach it
+/// states), and a record that does not state `uses` is answered from the semantics the operator was
+/// declared with. This is a placement question, not the scheduling one (`core.arrangeable`,
+/// `camel/facts/arrangeable.h`): whether the device can run the operator, not whether a pass may
+/// move it.
+bool touchesNothing(core::OperId oper);
 /// The reason a `#gpu` scope must refuse `id`, as the diagnostic prints it, or an empty string
 /// when it must not. `id`'s eligibility answer (`analysis.exclusions[id]`) decides: a shape or
 /// element type the back end refuses is `"no device program for this shape"`; an operator with

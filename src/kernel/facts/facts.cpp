@@ -33,6 +33,11 @@
 
 #include "camel/facts/facts.h"
 
+#include "camel/facts/arrangeable.h"
+
+#include "camel/core/loop_kind.h"
+#include "camel/core/operator_table.h"
+
 #include "graph/graph_view.h"
 
 #include <algorithm>
@@ -702,6 +707,223 @@ void dump(Store &store, const graph::Graph &root, const graph::GraphView &rootVi
             }
         }
     }
+}
+
+// ---- core.arrangeable -------------------------------------------------------------------------
+
+namespace {
+
+Arrangeable andTerms(const Arrangeable &left, const Arrangeable &right) {
+    return Arrangeable{
+        left.pure && right.pure,
+        left.noExternalEffect && right.noExternalEffect,
+        left.cannotFault && right.cannotFault,
+        left.terminates && right.terminates};
+}
+
+/// The four terms of an OPER node, read from the operator and from nothing else. The first three
+/// are what the operator record states (`camel/ops/operator_record.h`: `pure` is the empty `uses`
+/// clause, `external` is what an access outside the program or an unstated clause amounts to, and
+/// `panic` is the fault fact); the fourth is the node's form -- an operator node computes a value
+/// and hands it on, so whatever it runs is bounded by the call that asked for that value, and a
+/// loop is a LOOP node rather than an operator (design principles 3.10).
+Arrangeable termsOfOperator(camel::ops::OperId oper) {
+    Arrangeable terms;
+    if (oper == camel::ops::kNoOper) {
+        // An operator nobody named: none of the four terms is known.
+        return terms;
+    }
+    const camel::core::OperatorTable &table = camel::core::OperatorTable::instance();
+    if (const camel::ops::Record *record = table.recordOf(oper); record != nullptr) {
+        // The record is the one statement of the three, and this is the only place it is read for
+        // this kind: `pure` is the empty `uses` clause, `external` the reach that clause states (a
+        // clause nobody stated reads as writing the global resource, design principles 3.3), and
+        // `panic` the fault fact. The built-in module writes its clause into every record it
+        // registers, and a Camel declaration writes its own, so a reader of this kind and a reader
+        // of the table read one statement instead of two derivations of it.
+        terms.pure             = record->pure();
+        terms.noExternalEffect = !record->external();
+        terms.cannotFault      = !record->mayFault();
+    } else {
+        // No record at all: nobody stated anything about the operator, so none of the three terms
+        // holds. The table's derived bits are not a second answer to read here -- falling back to
+        // them is the pair this kind exists to remove.
+        terms = Arrangeable{};
+    }
+    terms.terminates = true;
+    return terms;
+}
+
+/// Walks the nodes one node stands for. A branch, a loop and a call carry what runs inside them,
+/// so their terms are the conjunction over the nodes of their arms, of their regions, or of the
+/// callee's body: a branch with an effect in one arm is not freely arrangeable, and neither is a
+/// call whose callee may not end. A callee that is already being judged above the node is a
+/// recursion, and a recursion is not known to terminate (design principles 3.4, 3.10) -- the node
+/// that makes the call, not the nodes of the body it is in.
+class ArrangeWalk {
+  public:
+    ArrangeWalk(const GraphAccess &graphs, ReadLog &log) : graphs_(graphs), log_(log) {}
+
+    /// The graph the node is anchored on: a call to it, met while walking below the node, is the
+    /// recursion this walk has to see.
+    void seed(const graph::Graph *graph) {
+        if (graph != nullptr) {
+            active_.push_back(graph);
+        }
+    }
+
+    Arrangeable at(const graph::GraphView &view, NodeId node) {
+        const graph::NodeRef ref = static_cast<graph::NodeRef>(node);
+        if (!view.contains(ref)) {
+            return Arrangeable{};
+        }
+        log_.node(node);
+        switch (view.kindOf(ref)) {
+        case graph::NodeKind::Oper: {
+            const camel::ops::OperId oper = view.operatorOf(ref);
+            log_.record(oper);
+            return termsOfOperator(oper);
+        }
+        case graph::NodeKind::Data:
+        case graph::NodeKind::Port:
+        case graph::NodeKind::Gate:
+            // A value, a port of the body, and the hand-on of a `sync` block: computed from what
+            // they read, with nothing to write, nothing to fail and nothing to wait for.
+            return Arrangeable{true, true, true, true};
+        case graph::NodeKind::Brch: {
+            Arrangeable terms{true, true, true, true};
+            for (const RegionId region : view.regionsOwnedBy(ref)) {
+                terms = andRegions(view, region, terms);
+            }
+            return terms;
+        }
+        case graph::NodeKind::Loop: {
+            // The loop's own termination term is its form's (design principles 3.10): a `for` and
+            // a `for ... while` take a finite sequence, and a `while` has no bound to read, so it
+            // is not known to end.
+            Arrangeable terms{
+                true, true, true, view.loopFormOf(ref).kind != camel::core::LoopKind::While};
+            for (const RegionId region : view.regionsOwnedBy(ref)) {
+                terms = andRegions(view, region, terms);
+            }
+            return terms;
+        }
+        case graph::NodeKind::Call:
+        case graph::NodeKind::Func: {
+            const graph::CalleeRef callee = view.calleeOf(ref);
+            if (callee.kind != graph::CalleeRef::Kind::Value || callee.graph == nullptr) {
+                // A callee named by an environment entry, or not named yet: what it runs is not
+                // in this graph, so none of the four terms is known here.
+                return Arrangeable{};
+            }
+            if (std::find(active_.begin(), active_.end(), callee.graph) != active_.end()) {
+                // A call that reaches a graph this walk is already in: a recursion. It may not
+                // end, so the call is not freely arrangeable wherever it stands.
+                return Arrangeable{};
+            }
+            const graph::GraphView *calleeView = graphs_.view ? graphs_.view(*callee.graph) : nullptr;
+            if (calleeView == nullptr) {
+                return Arrangeable{};
+            }
+            return atGraph(*calleeView, callee.graph);
+        }
+        default:
+            // A BIND node (reserved: nothing creates one): not known to be anything.
+            return Arrangeable{};
+        }
+    }
+
+  private:
+    Arrangeable atGraph(const graph::GraphView &view, const graph::Graph *graph) {
+        active_.push_back(graph);
+        Arrangeable terms{true, true, true, true};
+        for (const graph::NodeRef ref : view.nodes()) {
+            terms = andTerms(terms, at(view, ref));
+        }
+        active_.pop_back();
+        return terms;
+    }
+
+    Arrangeable andRegions(const graph::GraphView &view, RegionId region, Arrangeable terms) {
+        log_.region(region);
+        for (const graph::NodeRef ref : view.regionNodes(region)) {
+            terms = andTerms(terms, at(view, ref));
+        }
+        return terms;
+    }
+
+    const GraphAccess &graphs_;
+    ReadLog &log_;
+    std::vector<const graph::Graph *> active_;
+};
+
+} // namespace
+
+Arrangeable operatorArrangeable(camel::ops::OperId oper) { return termsOfOperator(oper); }
+
+Arrangeable
+nodeArrangeable(const graph::Graph &graph, const graph::GraphView &view, NodeId node, const GraphAccess &graphs, ReadLog &log) {
+    ArrangeWalk walk{graphs, log};
+    walk.seed(&graph);
+    return walk.at(view, node);
+}
+
+std::string toString(const Arrangeable &arrangeable) {
+    if (arrangeable.all()) {
+        return "freely arrangeable";
+    }
+    std::string out;
+    const auto add = [&out](bool holds, std::string_view why) {
+        if (holds) {
+            return;
+        }
+        if (!out.empty()) {
+            out += ", ";
+        }
+        out += std::string(why);
+    };
+    add(arrangeable.pure, "not pure");
+    add(arrangeable.noExternalEffect, "external effect");
+    add(arrangeable.cannotFault, "may fault");
+    add(arrangeable.terminates, "may not terminate");
+    return out;
+}
+
+KindId arrangeableKind() {
+    static const KindId id = registerKind<Arrangeable>(Kind<Arrangeable>{
+        .key        = "core.arrangeable",
+        .owner      = "core",
+        .version    = 1,
+        .cls        = Class::Derived,
+        .scope      = Scope::Node,
+        .dependence = Dependence::Reported,
+        .monotone   = false,
+        .compute =
+            [](std::span<const Anchor> anchors, const GraphAccess &graphs, ReadLog &log)
+            -> std::optional<Arrangeable> {
+            if (anchors.size() != 1 || anchors[0].graph == nullptr ||
+                anchors[0].node == kWholeGraph || !graphs.view) {
+                return std::nullopt;
+            }
+            const graph::GraphView *view = graphs.view(*anchors[0].graph);
+            if (view == nullptr) {
+                return std::nullopt;
+            }
+            ArrangeWalk walk{graphs, log};
+            walk.seed(anchors[0].graph);
+            return walk.at(*view, anchors[0].node);
+        },
+        // The answer for a union of places is the conjunction of the answers for the parts: a
+        // place is freely arrangeable when every place it is made of is. Adding nodes can turn
+        // the answer false (an effect written into an arm), so the kind is not monotone.
+        .merge =
+            [](const Arrangeable &left, const Arrangeable &right) -> std::optional<Arrangeable> {
+            return andTerms(left, right);
+        },
+        .print = [](const Arrangeable &arrangeable) { return toString(arrangeable); },
+        .anchorsIn = {},
+    });
+    return id;
 }
 
 } // namespace camel::facts

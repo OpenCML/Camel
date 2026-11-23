@@ -185,6 +185,71 @@ EffectSummary effectSummaryOfRegion(const Program &program, const GCGraph *graph
     return walk.ofNodes(graph, region);
 }
 
+EffectSummary effectSummaryOfOperator(camel::core::OperId oper) {
+    const auto &table = camel::core::OperatorTable::instance();
+    EffectSummary summary;
+    const auto traits = table.find(oper);
+    summary.mayFault |= !traits || traits->mayFault;
+    if (traits && traits->callsGraphs) {
+        // What it runs is the function value's and its accesses are that value's; without the
+        // value the answer cannot be narrower than "may reach outside and may not end".
+        summary.external        = true;
+        summary.mayNotTerminate = true;
+        summary.writesVariables |= table.writesProgramState(oper);
+        return summary;
+    }
+    summary.external |= table.hasExternalEffect(oper);
+    summary.writesVariables |= table.writesProgramState(oper);
+    return summary;
+}
+
+EffectSummary effectSummaryOfNode(const Program &program, const GCGraph *graph, gc_node_ref_t ref) {
+    EffectSummary summary;
+    if (graph == nullptr || graph->node(ref) == nullptr) {
+        return summary;
+    }
+    const auto &table = camel::core::OperatorTable::instance();
+    switch (graph->node(ref)->kind) {
+    case GCNodeKind::Oper: {
+        // The graph's own summary reads one operator node the same way (`EffectWalk::ofNodes`);
+        // this is that reading, at one node, so a per-node reader and the graph's summary cannot
+        // disagree about what the operator does.
+        const auto oper   = graph->nodeBodyAs<GCOperBody>(ref)->oper;
+        const auto traits = table.find(oper);
+        summary.mayFault |= !traits || traits->mayFault;
+        if (traits && traits->callsGraphs) {
+            const OperandClause clause = functionOperandClause(*graph, ref);
+            summary.external |= clause.external;
+            summary.writesVariables |= clause.writesVariables;
+            summary.writesVariables |= table.writesProgramState(oper);
+            summary.mayNotTerminate = true;
+            break;
+        }
+        summary.external |= table.hasExternalEffect(oper);
+        summary.writesVariables |= table.writesProgramState(oper);
+        break;
+    }
+    case GCNodeKind::Call:
+        // A call through a function value: its reach is the value's clause (design principles 3.3),
+        // and nothing says what it runs may end or cannot fault.
+        summary.external |= callClause(*graph, ref).external;
+        summary.mayFault        = true;
+        summary.mayNotTerminate = true;
+        break;
+    case GCNodeKind::Func:
+        return effectSummaryOf(program, program.calleeOf(*graph, ref));
+    case GCNodeKind::Loop:
+        summary.mayFault        = true;
+        summary.mayNotTerminate = true;
+        break;
+    default:
+        // A value, a port, a gate, a branch: it computes (or hands on) a value, and what runs
+        // inside a branch is a region of this graph rather than this node's own running.
+        break;
+    }
+    return summary;
+}
+
 EffectStanding effectStandingOf(const EffectLivenessFacts &facts) {
     // 3.1's two: a value of it is read, or it is a statement of a `sync` block. A read written
     // after it takes what it wrote only where the writer table says so.
