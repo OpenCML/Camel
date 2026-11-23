@@ -385,12 +385,18 @@ void computeFacts(FactStore &store, const Program &program);
 /**
  * `camel inspect --facts`: one line `FACT {json}` per fact about the graphs reachable from
  * `root`: the stored facts whose stamp matches those graphs, then the GraphContent facts read
- * from them. Fields: "kind", "version", "class" ("content", "derived", "target"), "anchors"
- * (a list of {"graph", "node"}, the node omitted for a graph as a whole), "value" (the kind's
- * print), "stamp" ({"revisions": [{"graph", "revision"}], "nodes": [{"graph", "node", "hash"}]
- * for Dependency::Node, "epoch", "target", "cone"}; null for GraphContent). Stale facts are not
- * printed (and are dropped). Ordered by kind, then graph and node.
+ * from them. Fields: "library" (which store answered: `runtime.facts` for this one, `facts` for
+ * the framework of camel/facts/facts.h), "kind", "version", "class" ("content", "derived",
+ * "target"), "anchors" (a list of {"graph", "node"}, the node omitted for a graph as a whole),
+ * "value" (the kind's print), "stamp" ({"revisions": [{"graph", "revision"}], "nodes": [{"graph",
+ * "node", "hash"}] for Dependency::Node, "epoch", "target", "cone"}; null for GraphContent). Stale
+ * facts are not printed (and are dropped). Ordered by kind, then graph and node.
+ *
+ * `only` prints just those kinds -- `camel inspect --fact <key>` when the key is a kind of this
+ * store. Empty prints every kind.
  */
-void dumpFacts(FactStore &store, const Program &program, std::ostream &os);
+void dumpFacts(
+    FactStore &store, const Program &program, std::ostream &os,
+    std::span<const KindId> only = {});
 
 } // namespace camel::runtime::fact

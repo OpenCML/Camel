@@ -22,6 +22,7 @@
 #include "graph/graph_view.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -413,15 +414,29 @@ int runSelfCheck() {
     // ---- The bulk computation and the dump ---------------------------------------------------
     facts::Store bulk(access);
     facts::computeAll(bulk, graph, view);
-    size_t anchored = 0;
-    for (facts::KindId kind : facts::registeredKinds()) {
-        const facts::KindInfo &info = facts::kindInfo(kind);
-        if (info.compute && info.cls != facts::Class::Content && info.scope == facts::Scope::Node) {
-            anchored += 3;
+    // The store holds a fact at every anchor a kind names and at no other place. The total is not
+    // pinned: it moves when a kind is registered (a graph-scoped kind adds the graph's one anchor,
+    // and a kind whose computation answers nothing about a graph that is not a frozen one adds
+    // none), so a total that has to be edited for each new kind stops being a reading of this
+    // rule. What is pinned is the rule itself: each of the three nodes has a fact, and nothing is
+    // anchored on a node this graph does not have.
+    std::array<bool, 3> nodeFilled{false, false, false};
+    bool strays = false;
+    bulk.forEach([&](const facts::StoredFact &fact) {
+        for (const facts::Anchor &anchor : fact.anchors) {
+            if (anchor.graph != &graph) {
+                strays = true;
+            } else if (anchor.node == facts::kWholeGraph) {
+                continue;
+            } else if (anchor.node < nodeFilled.size()) {
+                nodeFilled[anchor.node] = true;
+            } else {
+                strays = true;
+            }
         }
-    }
+    });
     check(
-        bulk.size() == anchored,
+        !strays && nodeFilled[0] && nodeFilled[1] && nodeFilled[2],
         "computeAll fills the store at every anchor the kind names, and nowhere else");
 
     std::ostringstream printed;
