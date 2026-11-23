@@ -289,6 +289,14 @@ void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller
     }
 }
 
+std::atomic<operator_t> *NodeVMSchedPass::resolvedOpersOf(const camel::runtime::ExecPlan &plan) {
+    std::unique_ptr<std::atomic<operator_t>[]> &table = resolvedOpers_[&plan];
+    if (!table) {
+        table = std::make_unique<std::atomic<operator_t>[]>(plan.graph->nodeCount());
+    }
+    return table.get();
+}
+
 slot_t NodeVMSchedPass::call(
     camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame,
     const camel::runtime::Program *rootProgram) {
@@ -316,9 +324,13 @@ slot_t NodeVMSchedPass::call(
     // The node being executed, so a fault points at its source expression.
     gc_node_ref_t faultNodeRef = kInvalidNodeRef;
     try {
-        const camel::runtime::ExecPlan *currPlan    = &currRuntimeGraph->execPlan();
-        std::span<const gc_node_ref_t> currNodes    = currPlan->topo;
-        const camel::runtime::ExecNode *currRecords = currPlan->nodes().data();
+        const camel::runtime::ExecPlan *currPlan = &currRuntimeGraph->execPlan();
+        std::span<const gc_node_ref_t> currNodes = currPlan->topo;
+        // The nodes of the version being walked. The plan hands them over by value -- it keeps no
+        // table a reader fills in -- so the run holds the one it walks.
+        std::vector<camel::runtime::ExecNode> currRecordsOf = currPlan->nodesOfTopo();
+        const camel::runtime::ExecNode *currRecords         = currRecordsOf.data();
+        std::atomic<operator_t> *currOpers                  = resolvedOpersOf(*currPlan);
         // The program the running graph belongs to: its direct callees are in it. A root graph
         // runs in the program the back end was given; a graph reached through a function value
         // runs in the program that value names (every call below passes `->program()` of the
@@ -625,7 +637,9 @@ slot_t NodeVMSchedPass::call(
                         // Switch to the callee graph and its topo sequence.
                         currRuntimeGraph = runtimeTarget;
                         currPlan         = &currRuntimeGraph->execPlan();
-                        currRecords      = currPlan->nodes().data();
+                        currRecordsOf    = currPlan->nodesOfTopo();
+                        currRecords      = currRecordsOf.data();
+                        currOpers        = resolvedOpersOf(*currPlan);
                         currNodes        = currPlan->topo;
                     }
                     const auto *layout = &runtimeTarget->execPlan();
@@ -675,8 +689,7 @@ slot_t NodeVMSchedPass::call(
 
             case GCNodeKind::Oper: {
                 const auto *body = en.bodyAs<GCOperBody>();
-                operator_t opFunc =
-                    currPlan->resolvedOpers[nodeRef].load(std::memory_order_relaxed);
+                operator_t opFunc = currOpers[nodeRef].load(std::memory_order_relaxed);
                 if (!opFunc) {
                     // The plan names the operator: an update node whose storage must not be
                     // reused runs the plain form of the operator it names, and the copying form of
@@ -686,7 +699,7 @@ slot_t NodeVMSchedPass::call(
                     auto found = context_->execMgr().find(uri);
                     if (found) {
                         opFunc = camel::profile::profiledOperator(uri, *found);
-                        currPlan->resolvedOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
+                        currOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
                             // The marked evaluator writes this node's output itself, so the value
