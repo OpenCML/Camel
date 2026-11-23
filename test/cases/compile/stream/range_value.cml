@@ -1,9 +1,7 @@
 // A range is a value of the library's named type `Range`, not an array (design principles 5.4):
 // `to_range(a, b, s)` writes its three numbers down, `to_array` is the conversion from it to the
-// integers it names, and `is_empty` asks whether it names any. The interval `a..b` still builds the
-// array `range(a, b, 1)`, so a range is written with `to_range` here and nowhere becomes the
-// operand of `..`. The prelude brings these names only to a program that imports them, the type
-// included: `Range` is not in the ambient layer, so a program that annotates one imports it.
+// integers it names, and `is_empty` asks whether it names any. A program writes the type by name
+// only after importing it: `Range` is not in the ambient layer.
 
 import { Range, to_range, to_array, is_empty } from prelude
 
@@ -11,5 +9,12 @@ func main() => int sync {
     let r: Range = to_range(1, 5, 1)
     println(r->to_array())
     println(r->is_empty())
+
+    // `for` walks a range through its own `__iter__` (design principles 5.4), whatever its step:
+    // down for a negative step, and the end takes no round.
+    println(loop n = 0 for i in to_range(10, 0, -3) do { println(i); n + 1 })
+
+    // A range that names no integer runs no round.
+    println(loop n = 0 for i in to_range(3, 3, 1) do n + 1)
     return 0
 }

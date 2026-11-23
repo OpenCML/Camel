@@ -8,6 +8,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/bytes.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -305,6 +306,42 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < count; ++i, value += step)
         result->set(i, value);
 
+    return rtdata::toSlot(result);
+}
+
+slot_t __to_range__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // `to_range(a, b, s)` (:range/to_range, declared in stdlib/prelude.cml) is the range as the
+    // value of its own type -- the three numbers the interval `a..b` is -- and not the array of
+    // the integers they name: that one is `range(a, b, s)` (design principles 4.2, 5.4). The
+    // record is the declaration's own type, which the resolver hands the kernel as the result
+    // type (`:op/mem_blocks` reads its four fields the same way), so the fields are written
+    // through it and nothing here copies the shape of `Range`.
+    (void)with;
+    (void)ctx;
+    Int64 start = norm.get<Int64>(0);
+    Int64 stop  = norm.get<Int64>(1);
+    Int64 step  = (norm.size() == 3) ? norm.get<Int64>(2) : 1;
+    if (step == 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "to_range",
+            std::format(
+                "the step is 0 (from {} to {}); a range needs a step that moves",
+                start,
+                stop));
+    }
+    const auto *structType = dynamic_cast<const StructType *>(norm.resultType());
+    ASSERT(
+        structType != nullptr && structType->size() == 3,
+        "to_range must have the record of `Range` -- three fields -- as its result type");
+    // The two ends are `int?`: a value in a nullable field is the box the tag lives in
+    // (rtdata/tagged.h), so both are boxed here. The step is a plain `int`.
+    const auto *startType = tt::as_ptr<TupleType>(structType->typeAt(0));
+    const auto *stopType  = tt::as_ptr<TupleType>(structType->typeAt(1));
+    Struct *result        = Struct::create(3, mm::autoSpace());
+    result->set<slot_t>(0, makeSome(rtdata::toSlot(start), startType), structType);
+    result->set<slot_t>(1, makeSome(rtdata::toSlot(stop), stopType), structType);
+    result->set<Int64>(2, step, structType);
     return rtdata::toSlot(result);
 }
 

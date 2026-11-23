@@ -56,10 +56,11 @@ namespace {
 constexpr std::string_view kCompParameter = "$comp_arg";
 constexpr std::string_view kCompLhs       = "$comp_f";
 constexpr std::string_view kCompRhs       = "$comp_g";
-// The built-in `range(start, end)`, which is what the interval reading of `..` is: referred to
-// by the name the compiler writes for a built-in operator (design principles 4.2). The name is
-// made by `core::compilerNamedOperator`, the one place such a name is built.
-const std::string kRangeCall = camel::core::compilerNamedOperator("range");
+// The built-in `to_range(start, stop, step)`, which is what the interval reading of `..` is: the
+// range as a value of the library's own type, not the array of the integers it names (design
+// principles 4.2, 5.4). Referred to by the name the compiler writes for a built-in operator, made
+// by `core::compilerNamedOperator`, the one place such a name is built.
+const std::string kRangeCall = camel::core::compilerNamedOperator("to_range");
 } // namespace
 
 node_handle_t
@@ -131,15 +132,6 @@ Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected, bool compo
 bool Builder::isIntervalExpr(const GCT::node_ptr_t &expr) {
     return expr != nullptr && expr->size() == 3 && expr->at(0)->type() == GCT::NodeKind::DREF &&
            expr->at(0)->name() == camel::core::kCompositionCall;
-}
-
-bool Builder::intervalBounds(node_handle_t from, node_handle_t to) const {
-    // An interval is two integers and nothing else (design principles 4.2): `int` is the
-    // language's integer type, as it is in `intervalValue`.
-    Type *fromType = nodeTypeOf(from);
-    Type *toType   = nodeTypeOf(to);
-    return fromType != nullptr && toType != nullptr && fromType->code() == TypeCode::Int64 &&
-           toType->code() == TypeCode::Int64;
 }
 
 node_handle_t Builder::buildCompositionWith(
@@ -275,11 +267,12 @@ node_handle_t Builder::composeFunctionValue(
 
 node_handle_t
 Builder::intervalValue(node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct) {
-    // `a..b` of two integers is the array of them from `a` to `b - 1`, left closed and right
-    // open, as the slice `t[a:b]` is (design principles 4.2). It is the step-1 case of `range`,
-    // written out as that call with the step, `range(a, b, 1)`: the group has one rule and it
-    // takes three arguments, so the two-argument spelling is an ordinary no-match while the
-    // interval keeps its own lowering -- the operation is retired nowhere.
+    // `a..b` of two integers is the range from `a` up to, not including, `b` -- left closed and
+    // right open, as the slice `t[a..b]` is (design principles 4.2). The value is the library's
+    // named type `Range`, not an array (design principles 5.4), and it is the step-1 case of
+    // `to_range`, written out as that call with the step: `to_range(a, b, 1)`. `range(a, b, 1)`
+    // is the array of the same integers and is built only where one is asked for (`to_array`),
+    // so the two spellings are no longer one node.
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(gct->origin());
         return node;

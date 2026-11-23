@@ -2177,6 +2177,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         OperatorGroup::create("last", {}),
         // The rules of `range` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("range", {}),
+        // The rules of `to_range` are the declarations of stdlib/prelude.cml: the same interval as
+        // the `Range` record it is, which is the operator `..` lowers to (design principles 5.4).
+        // A declaration of the prelude joins the group of its own name, so the group is here,
+        // empty, and the declaration fills it.
+        OperatorGroup::create("to_range", {}),
         OperatorGroup::create(
             "slice",
             {

@@ -4111,12 +4111,11 @@ class CmlPrinter {
             }
             return {std::format("{}[{}{}]", parenthesize(base, 90), axes, index.text), 90};
         }
-        if (uri == ":struct/range") {
-            // The interval `a..b` (design principles 4.2) is the one spelling of the integers from
-            // `a` to `b - 1`, and it lowers to this operator's call with its step written out,
-            // `range(a, b, 1)`: the rule takes exactly three arguments and the two-argument
-            // spelling is gone. A step of one is that interval and is written back as it, which is
-            // what keeps the round trip a round trip; any other step stays the call it is.
+        if (uri == ":range/to_range") {
+            // The interval `a..b` is this call with its step of 1 written out (design principles
+            // 4.2, 5.4), so a step of one is written back as the interval it is: that keeps the
+            // round trip a round trip. Any other step stays the call it is, under the name its
+            // declaration gives it.
             if (inputs.size() == 3) {
                 const Expr step = expression(inputs[2]);
                 if (step.text == "1") {
@@ -4127,15 +4126,28 @@ class CmlPrinter {
                             intervalOperand(expression(inputs[1]), kIntervalPrecedence + 1)),
                         kIntervalPrecedence};
                 }
-                // The stepped range `range(a, b, step)`: written back as the call it is, so the
-                // program the printer writes reads the way the program it prints did (design
-                // principles 4.2).
+                return {
+                    std::format(
+                        "to_range({}, {}, {})",
+                        expression(inputs[0]).text,
+                        expression(inputs[1]).text,
+                        step.text),
+                    100};
+            }
+            fail(ref, "a range without its bounds");
+        }
+        if (uri == ":struct/range") {
+            // The array of the integers of a step: `a..b` is the range value now and not this
+            // array (design principles 4.2, 5.4), so the array is written as the call it is --
+            // printing it `a..b` would print a program of another type. A step of one is no
+            // exception: `range(a, b, 1)` is the array.
+            if (inputs.size() == 3) {
                 return {
                     std::format(
                         "range({}, {}, {})",
                         expression(inputs[0]).text,
                         expression(inputs[1]).text,
-                        step.text),
+                        expression(inputs[2]).text),
                     100};
             }
             fail(ref, "a range without its bounds");

@@ -392,6 +392,9 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
 
         {"struct/range", __range__},
 
+        // The range as its own value, the record `Range` the interval `a..b` is.
+        {"range/to_range", __to_range__},
+
         {"struct/concat_arr", __concat_arr__},
 
         {"struct/append_arr", __append_arr__},
@@ -697,6 +700,7 @@ void registerBuiltinOperatorTraits() {
         "op/tag_null_value",
         "op/tag_throw",
         "op/tag_unwrap",
+        "range/to_range",
         "str/format",
         "str/join",
         "struct/append_arr",

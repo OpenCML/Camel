@@ -31,53 +31,54 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval"
-desc = "`a..b` is the interval [a, b) of integers, an `int[]`, on literals and on names alike. It used to be ConstructNotSupported at the operator, with the composition's text."
+desc = "`a..b` is the interval [a, b) of integers as the library's value `Range`, on literals and on names alike (design principles 4.2, 5.4): the declaration of that type takes it, and `to_array` is the call that makes the integers it names. The interval builds no array of its own."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_starts_with = "[1, 2, 3, 4]\n[0, 1, 2]\n"
+expect_stdout_starts_with = "[1, 2, 3, 4]\nfalse\n[0, 1, 2]\n"
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_value"
-desc = "A range is a value of the library's own type `Range` (design principles 5.4): `to_range(1, 5, 1)` writes the three numbers down, `to_array` is the one conversion from it to the integers it names, and `is_empty` says whether it names any. The type is not ambient, so the case imports it and annotates the binding with it."
+desc = "A range is a value of the library's own type `Range` (design principles 5.4): `to_range(1, 5, 1)` writes the three numbers down, `to_array` is the one conversion from it to the integers it names, and `is_empty` says whether it names any. The type is not ambient, so the case imports it and annotates the binding with it. A `for` over a range walks its own `__iter__` whatever the step: the negative one counts down, and a range that names no integer runs no round."
 kind = "behavior"
 case = "../../../cases/compile/stream/range_value.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_starts_with = "[1, 2, 3, 4]\nfalse\n"
+expect_stdout_starts_with = "[1, 2, 3, 4]\nfalse\n10\n7\n4\n1\n4\n0\n"
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
-name = "stream.range_value_is_not_the_interval"
-desc = "The interval is still an `int[]` and `Range` is not one: `let r: Range = 1..5` is a DeclaredTypeMismatch that names both sides, because `..` was not retyped and there is no implicit conversion from an array to a range."
+name = "stream.range_value_from_array"
+desc = "A range is a value of its own type and an array is another value (design principles 5.4): nothing turns an array into a range, so `let r: Range = [1, 2, 3]` is refused where the literal meets the declared type, and the diagnosis names both sides. `to_array` is the one direction between them, and it is a call."
 kind = "negative"
-case = "../../../cases/compile/stream/range_value_is_not_the_interval.cml"
+case = "../../../cases/compile/stream/range_value_from_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_code = "0x03000110"
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 5
-expect_output_contains = ["This value has type 'int[]', which is not the declared type 'Range'."]
+expect_output_contains = ["cannot be represented as type 'Range'"]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
-name = "stream.range_value_map_still_the_interval"
-desc = "The new type changes no call that was already written: `1..5` is still the array `range(1, 5, 1)` builds, so `map<dbl>(1..5)` and `(1..5)->map<dbl>` still resolve through the operator group of `map` at `int[]`. A `map` written for `Range` would be an operator of its own, and there is none."
-kind = "behavior"
-case = "../../../cases/compile/stream/range_value_map_still_the_interval.cml"
+name = "stream.range_value_map_no_instance"
+desc = "A range is not an array, and the functions an array shares with it are not declared at the type yet (design principles 5.4): `map` resolves through the operator group, no member of it takes a `Range`, so `map<dbl>(1..5)` is an ordinary no-match under the name the program wrote. This is the reading of the overload set today, pinned so the gap is a reading rather than a belief."
+kind = "negative"
+case = "../../../cases/compile/stream/range_value_map_no_instance.cml"
 args = ["${case}"]
-expect_exit = 0
-expect_stdout_starts_with = "[2, 4, 6, 8]\n[2, 4, 6, 8]\n"
-expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
+expect_output_contains = ["No matching function found for argument types"]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -357,7 +358,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_loop"
-desc = "`for i in 0..n` is fused by the compiler: the loop walks the two bounds, so the rounds are `a .. b - 1`, an interval that ends where it starts and one whose end is below its start run no round, the bounds are read once, and the end takes no round."
+desc = "`for i in 0..n` walks the range through its own `__iter__` (design principles 5.4): the rounds are `a .. b - 1`, an interval that ends where it starts and one whose end is below its start run no round, and the end takes no round."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_loop.cml"
 args = ["${case}", "std::nvm"]
@@ -369,19 +370,19 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_loop_fused"
-desc = "The graph of `for i in 0..n` holds no array and no `:struct/range`: the loop's sequence is the pair of bounds (`\"iterable\": \"interval\"`), where the same interval bound to a name lowers to the `:struct/range` call that builds the `int[]`."
+desc = "The graph of `for i in 0..n` holds no array: the sequence is the range value the interval lowers to (`range/to_range`) and the loop is the one a stream is walked with, so nothing the size of the interval is ever made -- `struct/range`, the array form, appears nowhere. The case binds no interval to a name, so `struct/range` would only be there if the loop materialised one."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_loop.cml"
 args = ["${case}", "std::jgir", "canonical=true"]
 expect_exit = 0
-expect_output_contains = ["\"iterable\": \"interval\""]
+expect_output_contains = ["range/to_range"]
 expect_output_not_contains = ["struct/range", "UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_loop_not_materialised"
-desc = "Two million rounds under an 8 MB heap cap: the fused loop runs, where an `int[]` of the same interval (16 MB) is refused with RuntimeDiag::MemoryExhausted. This is the observable half of `for i in 0..n` builds no array."
+desc = "Two million rounds under an 8 MB heap cap: the loop walks the range's stream, where an `int[]` of the same interval (16 MB) is refused with RuntimeDiag::MemoryExhausted. This is the observable half of `for i in 0..n` builds no array."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_loop_not_materialised.cml"
 args = ["--gc-heap-limit-mb", "8", "${case}", "std::nvm"]
@@ -444,12 +445,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_step"
-desc = "`range(a, b, step)` is the integers `a`, `a + step`, ... below `b`, and above `b` when the step is negative: the array form of the interval with a step, empty when the step carries the start to the side it does not go, and `range(a, b, 1)` the same integers as `a..b`. The step may be an expression."
+desc = "`range(a, b, step)` is the integers `a`, `a + step`, ... below `b`, and above `b` when the step is negative: the array of a step, empty when the step carries the start to the side it does not go. With a step of 1 it is the array of the interval's integers, and `a..b` itself is the range value those integers name (design principles 5.4). The step may be an expression."
 kind = "behavior"
 case = "../../../cases/compile/stream/range_step.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "[0, 3, 6, 9]\n[0, 3, 6]\n[1]\n[10, 7, 4, 1]\n[10, 7, 4]\n[]\n[]\n[]\n[]\n[0, 4, 8, 12, 16]\n[20, 16, 12, 8, 4]\n[0, 1, 2, 3, 4]\n[0, 1, 2, 3, 4]\n[2, 4, 6, 8]\n"
+expect_stdout_exact = "[0, 3, 6, 9]\n[0, 3, 6]\n[1]\n[10, 7, 4, 1]\n[10, 7, 4]\n[]\n[]\n[]\n[]\n[0, 4, 8, 12, 16]\n[20, 16, 12, 8, 4]\n[0, 1, 2, 3, 4]\n[2, 4, 6, 8]\n"
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

@@ -3151,22 +3151,16 @@ class Builder {
         std::string_view opText = "..");
     /// Whether `expr` is written `a..b`: the GCT link of `kCompositionCall`.
     static bool isIntervalExpr(const GCT::node_ptr_t &expr);
-    /// Whether the two operands of `..` are the interval's: two integers, and nothing else
-    /// (design principles 4.2).
-    bool intervalBounds(node_handle_t from, node_handle_t to) const;
-    /// The two bounds of an interval a loop iterates, as the one value its sequence is: a tuple
-    /// of the two integers (camel::core::LoopIterableForm::Interval). The interval is the
-    /// `int[]` of `intervalValue` in every other position.
-    node_handle_t
-    intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr);
     /// The composition `f..g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
     /// calls `f` and then `g`, both of them captures of it.
     node_handle_t composeFunctionValue(
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
         const GCT::node_ptr_t &gct);
-    /// The interval `a..b` of two integers as the array `int[]`. The form it is written in is
-    /// `a..b` and nothing else: there is no two-parameter `range(a, b)` as the same operation
-    /// (design principles 4.2).
+    /// The interval `a..b` of two integers as the range it is: the value of the library's type
+    /// `Range`, which is `to_range(a, b, 1)`; the array of the same integers is `range(a, b, 1)`
+    /// and is built only where one is asked for (design principles 4.2, 5.4). The form it is
+    /// written in is `a..b` and nothing else: there is no two-parameter `range(a, b)` as the same
+    /// operation.
     node_handle_t intervalValue(node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);

@@ -1,0 +1,10 @@
+// A range is a value of its own type and an array is another value (design principles 5.4):
+// nothing turns an array into a range, and there is no conversion between the two. `to_array` is
+// the one direction, and it is a call the program writes.
+
+import { Range } from prelude
+
+func main() => int sync {
+    let r: Range = [1, 2, 3]
+    return 0
+}

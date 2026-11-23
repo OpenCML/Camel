@@ -2331,24 +2331,6 @@ void Builder::mergeArmVariables(
     }
 }
 
-node_handle_t
-Builder::intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
-    // The interval in the sequence position of a loop is the pair of its two bounds, not the
-    // array of its elements (design principles 4.2): the pair stands where any other sequence
-    // stands — Norm input 0 of the LOOP node, one value — and a back end takes the element of the
-    // round from the bounds and the round number, so nothing of the interval's size is ever made.
-    // The interval is the `int[]` of `intervalValue` in every other position.
-    std::vector<Type *> bounds{Type::Int64(), Type::Int64()};
-    TupleType *boundsType = TupleType::create(bounds);
-    auto &draft          = currGraph_->transaction().edit();
-    const slot_t empty =
-        camel::core::rtdata::toSlot(::Tuple::create(2, camel::core::mm::autoSpace()));
-    node_handle_t source = draft.ref(draft.materializeStaticValue(empty, boundsType));
-    node_handle_t result = fillNodeOf(source, boundsType, {from, to});
-    registerNodeOrigin(context_, result, expr, "gir.loop.interval");
-    return result;
-}
-
 void Builder::attachRegionStatement(
     node_handle_t node, const std::vector<arm_ptr_t> &parts, const GCT::node_ptr_t &gct,
     node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject,
@@ -2803,7 +2785,6 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     node_handle_t sequence = nullptr;
     Type *elementType      = nullptr;
-    bool intervalIterates  = false;
     // The element type of a sequence a loop iterates: an array gives its own elements along its
     // first dimension, and a string and a map give theirs through the `__iter__` operator their
     // type declares (design principles 3.10, 11.1, 11.3): the code points of a string as
@@ -2822,8 +2803,18 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.
+    //
+    // One `__iter__` answers in one of two shapes, and the shape the operator answers with is what
+    // the loop does (design principles 5.4: `for` also takes a value that turns into a stream): an
+    // array, which the loop iterates as it iterates any array, or a stream (`int..`), which it
+    // walks one pull per round. A stream is a function value, so that form is written in Camel and
+    // not as a kernel: the string's and the map's `__iter__` are kernel operators, and a range's is
+    // the prelude function beside the type it belongs to (design principles 5.7). `streamed` is
+    // that value when the operator answered with a stream, and the caller builds that loop -- a
+    // `while` -- instead of the array one.
     const auto iterableElementType = [&](node_handle_t &iterable,
-                                         const GCT::node_ptr_t &expr) -> Type * {
+                                         const GCT::node_ptr_t &expr,
+                                         node_handle_t &streamed) -> Type * {
         Type *type = valueTypeOf(nodeTypeOf(iterable));
         if (type == nullptr) {
             diags_->of(SemanticDiag::LoopSequenceNotIterable)
@@ -2832,65 +2823,100 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         if (type->code() != TypeCode::Array) {
+            // A `__iter__` written in Camel, as the one call the loop makes: the overload that
+            // takes this type, chosen by the type itself. Any other shape of declaration (a
+            // generic one, or one whose parameter is another type) is not this type's answer.
+            const auto camelIterableOf = [&](const entity &written) -> node_handle_t {
+                using camel::core::module::detail::EntityAccess;
+                if (!EntityAccess::isGraphSet(written)) {
+                    return nullptr;
+                }
+                for (const compile_graph_ptr_t &graph :
+                     *asCompileGraphSet(EntityAccess::graphSet(written))) {
+                    FunctionType *signature = graph != nullptr ? graph->funcType() : nullptr;
+                    if (signature == nullptr || signature->withTypesCount() != 0 ||
+                        signature->normTypesCount() != 1 || signature->normTypeAt(0) == nullptr ||
+                        !signature->normTypeAt(0)->assignableFrom(type)) {
+                        continue;
+                    }
+                    node_handle_t call = createFuncDataNode(graph, false, true);
+                    registerNodeOrigin(context_, call, expr, "gir.loop.iter");
+                    linkNodes(LinkType::Norm, iterable, call);
+                    return call;
+                }
+                return nullptr;
+            };
+            node_handle_t elements        = nullptr;
+            std::optional<oper_idx_ptr_t> resolved;
             const std::vector<StaticArg> statics(1);
-            std::optional<oper_idx_ptr_t> elements;
             // `__iter__` is a group of several overloads (`:struct/iter_str`,
             // `:coll/map_items`), one per iterable type: no one OperId names it, so it is still
             // looked up by the group's name.
-            if (const auto group = importedEntity("__iter__");
-                group.has_value() && group->isOperGroup()) {
-                elements = group->operGroup()->resolve({}, {type}, statics);
+            if (const auto iter = importedEntity("__iter__"); iter.has_value()) {
+                if (iter->isOperGroup()) {
+                    resolved = iter->operGroup()->resolve({}, {type}, statics);
+                } else {
+                    elements = camelIterableOf(*iter);
+                }
             }
-            if (!elements.has_value()) {
+            if (resolved.has_value()) {
+                node_handle_t array = currGraph_->addOperNode(*resolved, 0);
+                stampPermissions(array);
+                registerNodeOrigin(context_, array, expr, "gir.loop.iter");
+                linkNodes(LinkType::Norm, iterable, array);
+                elements = array;
+            }
+            if (elements == nullptr) {
+                // A named type's own module says how to walk it (design principles 5.7), which is
+                // where a range's stream stands: the prelude declares `Range` and the function
+                // together, and a program that walks a range imports neither. The name is `iter`
+                // and not the group's `__iter__`, which a library cannot declare -- a name written
+                // `__x__` belongs to the compiler, so the group's members are kernels only and a
+                // stream, being a function value, cannot be one. This fallback is therefore the
+                // one road a Camel-written iterator has, and it is chosen by the type alone.
+                for (const auto &[moduleName, typeName] : declaringModulesOf({}, {type})) {
+                    const module_ptr_t module = moduleNamed(moduleName);
+                    if (!module) {
+                        continue;
+                    }
+                    for (const auto &overload : exports_->exportedOperatorOverloads(*module, "iter")) {
+                        if ((elements = camelIterableOf(overload.overloads)) != nullptr) {
+                            break;
+                        }
+                    }
+                    if (elements != nullptr) {
+                        break;
+                    }
+                }
+            }
+            if (elements == nullptr) {
                 diags_->of(SemanticDiag::LoopSequenceNotIterable)
                     .atOrigin(expr->origin())
                     .commit(sourceTextOf(expr), type->toString());
                 throw BuildAbortException();
             }
-            node_handle_t array = currGraph_->addOperNode(*elements, 0);
-            stampPermissions(array);
-            registerNodeOrigin(context_, array, expr, "gir.loop.iter");
-            linkNodes(LinkType::Norm, iterable, array);
-            iterable = array;
-            type     = valueTypeOf(nodeTypeOf(iterable));
+            Type *elementsType = valueTypeOf(nodeTypeOf(elements));
+            if (elementsType != nullptr && elementsType->code() == TypeCode::Stream) {
+                streamed = elements;
+                return tt::as_ptr<StreamType>(elementsType)->elemType();
+            }
             GUARD(
-                type != nullptr && type->code() == TypeCode::Array,
-                "The elements of an iterable must be an array.");
+                elementsType != nullptr && elementsType->code() == TypeCode::Array,
+                "The elements of an iterable must be an array or a stream.");
+            iterable = elements;
+            type     = elementsType;
         }
         return tt::as_ptr<ArrayType>(type)->firstDimensionElement();
     };
-    // `for i in a..b` (design principles 4.2: "`for i in 0..n` is fused by the compiler, without
-    // materialising an array"). The interval in the sequence position of a loop is the loop's own
-    // form: its two bounds are the loop's iterable, and a round takes `from + round`
-    // (camel::core::LoopIterableForm::Interval). In every other position `a..b` is still the
-    // `int[]` the rule gives it, and the loop iterates that value like any other sequence.
-    if (hasIterable && isIntervalExpr(gct->loopSequence())) {
-        const auto &interval = gct->loopSequence();
-        // The sequence is not the loop's value, so the position the loop stands in does not reach
-        // it (design principles 5.1): its literals have the types they are written with.
-        node_handle_t from{};
-        node_handle_t to{};
-        {
-            ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
-            from = argumentNodeOf(visit(interval->at(1)), interval->at(1));
-            to   = argumentNodeOf(visit(interval->at(2)), interval->at(2));
-        }
-        if (intervalBounds(from, to)) {
-            sequence         = intervalSequenceValue(from, to, interval);
-            elementType      = Type::Int64();
-            intervalIterates = true;
-        } else {
-            // Two functions, or two operands `..` has no reading for: the composition (or the
-            // refusal it gives everywhere else), built from the operands already in hand so that
-            // neither of them is built twice.
-            sequence = valueOf(
-                functionValueOf(valueNodeOf(buildCompositionWith(interval, from, to)), interval));
-            elementType = iterableElementType(sequence, interval);
-        }
-    } else if (hasIterable) {
+    // `for i in a..b` reads the value the interval is (design principles 4.2, 5.4): the library's
+    // `Range`, which turns into a stream through its own `__iter__` -- the same road a stream
+    // written by the program takes. There is no loop form of an interval: `for i in 0..n` makes no
+    // array because the range's operator hands the integers out one round at a time.
+    if (hasIterable) {
         const auto &expr = gct->loopSequence();
         {
-            // The sequence is not the loop's value (see above).
+            // The sequence is not the loop's value, so the position the loop stands in does not
+            // reach it (design principles 5.1): its literals have the types they are written with.
             ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
             sequence = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
         }
@@ -2902,7 +2928,13 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             LEAVE("LOOP");
             return buildStreamLoop(gct, sequence, initial, stateTypes);
         }
-        elementType = iterableElementType(sequence, expr);
+        node_handle_t streamed = nullptr;
+        elementType            = iterableElementType(sequence, expr, streamed);
+        if (streamed != nullptr) {
+            // A sequence that answers with a stream is walked the same way a stream is.
+            LEAVE("LOOP");
+            return buildStreamLoop(gct, streamed, initial, stateTypes);
+        }
     }
     // The states the loop carries: the ones its head declares, and the `var`s its body writes.
     const size_t stateCount = stateTypes.size();
@@ -3517,12 +3549,6 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
 
     node_handle_t loopNode = currGraph_->addRegionLoopNode(kind, loopValueType);
-    if (intervalIterates) {
-        // The sequence the loop iterates is the pair of the interval's bounds, not an array
-        // (camel::core::LoopIterableForm::Interval): a back end takes the element of a round from
-        // the bounds and the round number, so nothing the size of the interval is ever made.
-        currGraph_->edit().setLoopIterableInterval(nodeIdOf(loopNode));
-    }
     if (!collected.empty()) {
         currGraph_->edit().setLoopCollectionCount(
             nodeIdOf(loopNode),

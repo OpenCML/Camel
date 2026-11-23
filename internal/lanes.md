@@ -8,6 +8,7 @@
 
 | 分支 | 在做哪一项 | 分支读数 | `develop` 读数 | 下一笔预计 | 更新 |
 |---|---|---|---|---|---|
+| lane/range-ri | `a..b` 的值从 `int[]` 换成 `Range`（新内核算子 `:range/to_range`，`range(a,b,s)` 仍是数组）；`for` 走该类型的迭代器（`prelude.cml` 的 `iter`，生成器，`yield`）；转置的反向循环、C++ 后端、`cml` 打印跟随 | 基线 `6b844be42b`；`feat/compile/stream` **150/150 → 待填**；`feat/parse`、`smoke`、`feat/trans` 待填 | 未推未合 | 待填 | 2026-11-23 21:20 |
 ## 已合入（本小时，18:00 之后）
 
 | 分支 | 合入 | 读数 | 备注 |

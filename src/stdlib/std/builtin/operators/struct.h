@@ -24,6 +24,9 @@ std::shared_ptr<camel::core::type::FuncTypeResolver> extentOfResolver();
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The range as its own value: `to_range(a, b, s)`, the record `Range` the interval `a..b` is
+// (`:range/to_range`). The array of the same step is `__range__` above.
+slot_t __to_range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 // The subscript forms of design principles 5.4: `t[a:b:s]`, `t[i]` (on the axis it names, which
 // is the first one when it names none), `t[idx]` and `last(t)`.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

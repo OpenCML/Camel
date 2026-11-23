@@ -1,11 +1,19 @@
-// `a..b` is the interval [a, b) (design principles 4.2): integers
-// only, left-closed and right-open like the slice `t[a..b]`, and the `int[]` of the integers
-// from `a` to `b - 1`. It is the one spelling: the two-parameter `range(a, b)` is gone.
+// `a..b` is the range [a, b) as a value of the library's type `Range` (design principles 4.2,
+// 5.4): the three numbers that name the integers from `a` to `b - 1`, and not the array of them.
+// `to_array` is the conversion, asked for by name, and the interval itself never builds an array.
+
+import { Range, to_array, is_empty } from prelude
 
 func main() => int sync {
-    let xs = 1 .. 5
-    println(xs)
+    // The value is a `Range`: a declaration of that type takes it, and the integers it names are
+    // the ones `to_array` answers.
+    let r: Range = 1 .. 5
+    println(r->to_array())
+    println(r->is_empty())
+
+    // A bound may be an expression, and the interval is one value either way.
     let n = 3
-    println(0 .. n)
+    let tail: Range = 0 .. n
+    println(tail->to_array())
     return 0
 }
