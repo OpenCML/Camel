@@ -195,18 +195,18 @@ export const RULES = [
         },
     },
     {
-        // An idle coordinator with work open is the most expensive state there is: every lane it would
-        // have opened stands still. It is woken after a few minutes, and again every ten while it stays
-        // idle, with the items it could start on named, so the wake-up is a work list and not a nudge.
+        // A coordinator idle while its lanes run is waiting on their reports, which is its job. Idle with
+        // no lane running and work open -- after a restart, or when the last lane has just finished --
+        // nothing moves at all, and nothing else will start it. Only that is woken: after a few
+        // minutes, and again every ten while it lasts, with the items it can start on named. Too few
+        // lanes while some run is the lanes-below rule's business, not this one's.
         id: 'coordinator-idle',
         level: 'wake',
         hold: 3,
         cooldown: 10,
-        check: ({ m, target, backlogOpen, now, lanes, limits }) => {
+        check: ({ m, target, backlogOpen, now, lanes }) => {
             if (!target || target.status !== 'idle' || backlogOpen === 0) return null
-            // Idle while its lanes are full is the coordinator waiting on their reports, which is its
-            // job; only idle with lanes to spare (or unknown) is time lost.
-            if (readable(lanes) && lanes.running >= limits.minLanes) return null
+            if (readable(lanes) && lanes.running > 0) return null
             const minutes = target.since ? Math.round((now - target.since) / 60_000) : null
             const rows = m.backlog instanceof Map ? [...m.backlog.entries()] : []
             const open = rows.filter(([, row]) => !row.done && !row.doing && !row.blocked).map(([id]) => id).slice(0, 8)
