@@ -29,6 +29,14 @@ or a missing root. The default developer run therefore poisons a safepoint in ev
 full sweep of every test is `--tier milestone` (or `npm run test:all`: the unsampled copies are the
 milestone layer, and `--tier all` adds the sampled fast ones).
 
+The sample is taken in the source plan's declaration order. A plan that gains a test above a
+sampled one therefore hands the slot to the new test, and the copy that was green in the fast layer
+becomes a milestone copy -- a count of fast copies per plan that does not move, so nothing prints
+it. The risk tags are the defence, and they are only as good as their spelling: a plan whose
+subject is `higher_order` has to carry that tag as `risk_tags` spells it, because a near miss
+(`hof`) is silent and leaves the plan on the one-copy budget, where the next test added above the
+sampled one takes the whole of it.
+
 The plans of the rewrite module and of the standard rule libraries keep three samples as well
 (`rules`): a rule's condition decides which nodes a rewrite matches, and a defect in one of those
 conditions is invisible in the copies a single sample leaves unrun.
