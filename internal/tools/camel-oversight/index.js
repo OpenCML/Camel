@@ -262,30 +262,34 @@ export function apply(ctx, rawConfig) {
         }),
     )
 
-    // The lanes are the target session's live subagents, read from the subagent catalog every time
-    // they are asked for, so the count cannot go stale the way a hand-kept table does. A lane run by
-    // another process is not in this catalog and is not counted.
+    // The lanes are the live agents of the target session's subagent tree, read from the process every
+    // time they are asked for, so the count cannot go stale the way a hand-kept table does. It is the
+    // live set, not the durable catalog: the catalog read (`listDescendants`) walks every child's
+    // history and does not return within seconds, and a lane that is not live is not a lane at work.
+    // A lane run by another process is not in this process and is not counted.
     const lanesOf = async (id) => {
         const subagents = ctx.get('subagents')
-        if (!id || !subagents || typeof subagents.listDescendants !== 'function') return { unreadable: 'no subagent service' }
-        try {
-            const rows = await subagents.listDescendants(id, AbortSignal.timeout(5_000))
-            const children = rows.filter((row) => row.kind === 'child')
-            return {
-                running: children.filter((row) => row.activity === 'running').length,
-                total: children.length,
-                lanes: children.map((row) => ({
-                    id: String(row.id),
-                    path: row.path ?? null,
-                    name: row.name ?? row.label ?? null,
-                    mode: row.mode,
-                    activity: row.activity,
-                    depth: row.depth,
-                })),
+        const root = id ? ctx.agents.get(id) : null
+        if (!root || !subagents || typeof subagents.rootOf !== 'function') return { unreadable: 'no target or no subagent service' }
+        const members = []
+        for (const agent of ctx.agents.list()) {
+            if (agent === root) continue
+            let inTree = false
+            try {
+                inTree = subagents.rootOf(agent) === root
+            } catch {
+                inTree = false
             }
-        } catch (error) {
-            return { unreadable: clip(error && error.message ? error.message : error, 200) }
+            if (!inTree) continue
+            let name = String(agent.id)
+            try {
+                name = subagents.namesOf(agent).self
+            } catch {
+                // an agent whose tree is being torn down keeps its id as its name
+            }
+            members.push({ id: String(agent.id), name, activity: agent.status === 'running' ? 'running' : 'idle', since: since.get(String(agent.id)) ?? null })
         }
+        return { running: members.filter((m) => m.activity === 'running').length, total: members.length, lanes: members }
     }
 
     // ---- the watch ----------------------------------------------------------------------------------
