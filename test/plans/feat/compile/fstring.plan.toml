@@ -192,21 +192,21 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fstring_lambda_spec"
-desc = "A typed lambda at the top level of an interpolation: the ':' of its return type is read as the start of the format specification, and the parse error says to put the lambda in parentheses."
+desc = "The old spelling of a typed lambda at the top level of an interpolation: `(x: int)` is a tuple there, so the parse error lands on its ':', and the note says how a lambda is written."
 kind = "negative"
 case = "../../../cases/compile/fstring/lambda_spec.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SyntaxDiag::MissingToken"
+expect_diagnostic_name = "SyntaxDiag::MissingComma"
 expect_diagnostic_line = 2
-expect_diagnostic_column = 24
+expect_diagnostic_column = 18
 expect_output_contains = ["needs its own parentheses at the top level of an interpolation"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "fstring_lambda_spec_format"
-desc = "The same shape where the expression is complete and the specification is what fails: an invalid specification containing '=>' hints that a lambda needs parentheses."
+desc = "The same shape where the expression is complete and the specification is what fails: an invalid specification containing '=>' hints how a lambda is written."
 kind = "negative"
 case = "../../../cases/compile/fstring/lambda_spec_format.cml"
 args = ["${case}"]

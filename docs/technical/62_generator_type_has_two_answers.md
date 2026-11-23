@@ -75,7 +75,7 @@ operator '=' is not defined for these operand types.        (SemanticDiag::NoMat
 ```cml
 func reading(): int.. sync {   // 生成器体里造闭包，机器会在同一次拉取之外写这个格子
     var x    = 0
-    let read = () => x
+    let read = func () { x }
     yield 0
     x = 5
     yield read()               // 按引用读 5，按值读 0：两个意思

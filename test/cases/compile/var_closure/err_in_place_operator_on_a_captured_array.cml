@@ -13,7 +13,7 @@ import { sort } from array
 
 func main(): int sync {
     var xs = [3, 1, 2]
-    let f = () => sync {
+    let f = func () sync {
         xs = xs->sort
         xs
     }

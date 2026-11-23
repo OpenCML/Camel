@@ -21,6 +21,7 @@
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/log.h"
 
@@ -51,18 +52,10 @@ using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
 
 /// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
-/// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
-/// built, and NodeVM does not execute it.
-bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
-    for (uint32_t r = 0; r < graph.regionCount(); ++r) {
-        const camel::runtime::GCRegion *region = graph.region(r);
-        if (region != nullptr && region->owner == loop &&
-            (region->kind == camel::runtime::GCRegionKind::LoopCond ||
-             region->kind == camel::runtime::GCRegionKind::LoopBody)) {
-            return true;
-        }
-    }
-    return false;
+/// region. The graph form of a loop (two graphs in the LOOP body) owns none, and NodeVM does not
+/// execute it. The pairing is the view's answer, not a scan of the region table here.
+bool hasLoopRegions(const camel::graph::GraphView &graph, gc_node_ref_t loop) {
+    return !graph.regionsOwnedBy(loop).empty();
 }
 
 void bindMarkedFunctionFrame(
@@ -758,7 +751,7 @@ slot_t NodeVMSchedPass::call(
                 // condition graph and a body graph, run a call per round) is not executed; the
                 // plans above prove no such loop reaches this point.
                 GUARD(
-                    hasLoopRegions(*currRuntimeGraph, nodeRef),
+                    hasLoopRegions(currRuntimeGraph->view(), nodeRef),
                     "NodeVM: a LOOP node is not a region of its graph (the graph form of a loop "
                     "must not remain): the step that lowers loop regions did not run");
                 break;
@@ -873,7 +866,7 @@ slot_t NodeVMSchedPass::call(
 
 const camel::runtime::Program *
 NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
     (void)os;
     GUARD(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     if (camel::profile::enabled()) {

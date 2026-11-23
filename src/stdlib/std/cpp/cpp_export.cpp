@@ -11,7 +11,6 @@
 namespace {
 
 using camel::passes::cpp::CppEmitMode;
-using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 
 const char *passName(CppEmitMode mode) {
@@ -29,7 +28,7 @@ const char *passName(CppEmitMode mode) {
 
 const camel::runtime::Program *
 CppDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
     ASSERT(graph != nullptr, "C++ dump requires a non-null runtime root graph.");
     camel::passes::cpp::ProgramEmitter emitter(context_, mode_);
     try {

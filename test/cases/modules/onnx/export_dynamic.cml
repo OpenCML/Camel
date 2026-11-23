@@ -19,7 +19,7 @@ func main(): string! sync {
     let w = reshape<[2, 3]>([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[])
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let ops = supported_operators()
-    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>((t: f32[...]): f32[...] => forward(t, w), x) {
+    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(func (t: f32[...]) => f32[...] { forward(t, w) }, x) {
         case error e => { return e }
         case v => 'exported supported={}'->format<len(ops)>
     }

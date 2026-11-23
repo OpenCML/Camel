@@ -16,7 +16,7 @@ func bump(var p: int): void {
 
 func main(): int sync {
     var x = 1
-    let g = () => sync {
+    let g = func () sync {
         bump(x)
         x
     }

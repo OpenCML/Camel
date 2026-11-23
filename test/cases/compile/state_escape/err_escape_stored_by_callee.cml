@@ -15,7 +15,7 @@ func keep(f: (x: int) => int): ((x: int) => int, int) {
 
 func make(): int sync {
     var acc = 0
-    let add = (x: int): int => sync {
+    let add = func (x: int) => int sync {
         acc = acc + x
         acc
     }

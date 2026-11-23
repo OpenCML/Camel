@@ -45,7 +45,7 @@ func nested(a: int?, b: int?): int {
 
 // the narrowed name is an ordinary value of the arm: a lambda captures it as an int
 func add_to_all(x: int?, xs: int[]): int[] {
-    return if x != null then xs->map<(y: int) => y + x> else xs
+    return if x != null then xs->map<func (y: int) { y + x }> else xs
 }
 
 // the elements of an array literal see the narrowed value too (they are names kept in the
@@ -76,7 +76,7 @@ func main(): int sync {
     // the comparison is an ordinary expression, in either order
     let has = present != null
     println(has, absent != null, absent == null, null == absent, null != present)
-    println([present, absent]->map<(s: string?) => s == null>)
+    println([present, absent]->map<func (s: string?) { s == null }>)
     // a nullable function value can be compared with null too (two functions cannot)
     let callback: ((x: int) => int)? = null
     println(callback == null, callback != null)

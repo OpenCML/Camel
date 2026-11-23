@@ -1386,7 +1386,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "SameShapeComprehensionMismatch",
                 "The shape {0} is filled from the fields of {1}.",
-                "Write `T {{ static for n, F in fields T => ... }}`: the generator must walk the shape the comprehension constructs.",
+                "Write `T {{ static for n, F in fields T do ... }}`: the generator must walk the shape the comprehension constructs.",
             },
         },
         {
@@ -1538,7 +1538,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "CompOperandMismatch",
                 "'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.",
-                "'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.",
+                "'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a..b]' is. Nothing else is composed.",
             },
         },
         {
@@ -1569,8 +1569,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::SliceStepZero,
             {
                 "SliceStepZero",
-                "The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.",
-                "A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+                "The slice 't[range(a, b, s)]' has a step of 0, so it takes no element at all, whatever its bounds are.",
+                "A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a..b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
             },
         },
         {
@@ -1737,7 +1737,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::StructComprehensionWithoutFields,
             {
                 "StructComprehensionWithoutFields",
-                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.",
+                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... do ... )', or walk 'fields T'.",
                 "A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.",
             },
         },

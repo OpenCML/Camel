@@ -117,7 +117,7 @@ func not_boolean::<T>(x: T): string when !is_bool::<T>() {
 
 func main(): int sync {
     let p: Point = { x: 1 }
-    let f: (x: int) => int = (x) => x
+    let f: (x: int) => int = func (x) { x }
     println(numeric(1))
     println(not_numeric("s"))
     println(integer(1))

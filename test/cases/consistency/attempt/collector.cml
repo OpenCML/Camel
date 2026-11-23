@@ -9,9 +9,9 @@
 import { get_env } from env
 
 func build(i: int, d: int): string[] {
-    let xs = (0..20)->map<(x: int): string => format<x + i>('item {}')>
+    let xs = (0..20)->map<func (x: int) => string { format<x + i>('item {}') }>
     let n = 100 / d
-    return xs->map<(s: string): string => s + format<n>(' / {}')>
+    return xs->map<func (s: string) => string { s + format<n>(' / {}') }>
 }
 
 func round(i: int): int {

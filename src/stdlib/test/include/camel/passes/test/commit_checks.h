@@ -168,6 +168,11 @@ class CommitTierTestPass : public RuntimeGraphRewritePass {
  *   * in `carries` the second write reads the first one's value, so a data edge orders them with the
  *     chain gone: the same edit, asked the same question, publishes. Without that half "it was
  *     refused" would only mean "an in-place edit is always refused", which is a reading of nothing.
+ *   * the third draft reads the same pair with the order turned round: the chain is taken away in
+ *     every kind it is carried in, and an order edge says the second write runs before the first,
+ *     and the commit must publish. The pair is ordered either way, so a check that refused it would
+ *     be fixing the direction the program was written in, which is a meaning a pass may change and
+ *     not a promise the check makes.
  *
  * The pass returns the program it was given: the commits are the reading, and what runs next must be
  * the fixture.
@@ -293,6 +298,20 @@ class CommitPortTypeTestPass : public RuntimeGraphRewritePass {
  */
 inline constexpr const char *kCommitMadeGraphPortsTestPass = "test::commit_made_graph_ports";
 class CommitMadeGraphPortsTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
+ * The same reading for the order question: a graph this transaction makes, with two writes to the
+ * console in its body and nothing ordering them, then the same two with an edge between them. No
+ * program holds either graph, so no list of "nodes the draft changed" can name them -- every node in
+ * them is one this transaction put there, and the whole graph is what the commit answers for.
+ */
+inline constexpr const char *kCommitMadeGraphOrderTestPass = "test::commit_made_order";
+class CommitMadeGraphOrderTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

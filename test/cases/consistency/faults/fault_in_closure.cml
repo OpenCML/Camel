@@ -3,7 +3,7 @@
  */
 
 func divider(d: int): (x: int) => int {
-    return (x: int): int => x / d
+    return func (x: int) => int { x / d }
 }
 
 func main(): int sync {

@@ -25,7 +25,7 @@ func main(): int sync {
         }
         case _ => sync {
             let n46 = n27;
-            return f11((p47: int, p48: string): bool => false);
+            return f11(func (p47: int, p48: string) => bool { false });
         }
     };
     println('L6 {}'->format<n49>);

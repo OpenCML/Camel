@@ -45,7 +45,7 @@ func main(): int sync {
     let e = { key: 'k', value: 3.5 }
     println(key_of(e))
     println(value_of(e))
-    println(apply((x: int) => x * 2, 21))
+    println(apply(func (x: int) { x * 2 }, 21))
     println(corner([[7, 8], [9]]))
     println(firsts([('p', 'q')]))
     return 0

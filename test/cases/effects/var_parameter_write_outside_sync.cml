@@ -21,12 +21,12 @@ func main(): int sync {
     var x = 0
     // `y` is this body's own name: `y = 1` is written back to `x` when the call returns, and the
     // `x` the body reads is the value `x` had where the closure was made, which is 0.
-    let store = (var y: int): int => { y = 1; return x }
+    let store = func (var y: int) => int { y = 1; return x }
     println(store(x))
     println(x)
     // The same write with a `sync` body: this body always ran it, and it is the reading the body
     // without `sync` has to agree with.
-    let storeSync = (var z: int): int => sync { z = 2; return z }
+    let storeSync = func (var z: int) => int sync { z = 2; return z }
     println(storeSync(x))
     println(x)
     bump(x)

@@ -23,7 +23,7 @@ func add_year(year: int): Row! {
 // The first step that fails decides the result: a wrong number of fields, or a field that
 // is not an integer (the ParseError of parse_int).
 func parse_row(line: string): Row! {
-    let f = line->split<','>->map<(s: string): string => trim(s)>
+    let f = line->split<','>->map<func (s: string) => string { trim(s) }>
     return if len(f) != 3 then {
         return error('FieldCount', 'expected 3 fields, got ' + string(len(f)))
     } else parse_int(f[1]) -> add_year<f[0], f[2]>
@@ -58,15 +58,15 @@ Tartu, 2022, 97435
     // The first line holds the column names; line numbers start at 1.
     let lines = text->trim->split<'\n'>
     let numbered = enumerate(lines)->drop<1>
-    let rows = numbered->map<(p: (int, string)): Row! => parse_row(p.1)>
+    let rows = numbered->map<func (p: (int, string)) => Row! { parse_row(p.1) }>
     println('data lines:', len(rows))
-    numbered->foreach<(p: (int, string)) => sync {
+    numbered->foreach<func (p: (int, string)) sync {
         let outcome = describe(parse_row(p.1))
         println(format<p.0 + 1, outcome>('line {}: {}'))
     }>
 
     // A rejected line counts as 0 people.
-    let people = rows->map<(r: Row!): int => r -> people_of !! 0>
+    let people = rows->map<func (r: Row!) => int { r -> people_of !! 0 }>
     println('rows read:', rows->count<is_ok>)
     println('people in all:', sum(people))
     return 0

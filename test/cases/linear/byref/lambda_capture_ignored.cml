@@ -15,7 +15,7 @@ import state
 
 func ignored(): int {
     let c = state::ref(0)
-    let f = (): void => sync {
+    let f = func () => void sync {
         state::set(c, state::get(c) + 1)
         println(state::get(c))
     }

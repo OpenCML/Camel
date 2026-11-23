@@ -23,10 +23,10 @@ func main(): int sync {
         case null => []
         case x => x.groups
     })
-    println('a1b22'->find_all<'[0-9]+'>->map<(x: Match): string => x.text>)
-    println('abc'->find_all<''>->map<(x: Match): int => x.start>)
+    println('a1b22'->find_all<'[0-9]+'>->map<func (x: Match) => string { x.text }>)
+    println('abc'->find_all<''>->map<func (x: Match) => int { x.start }>)
     println('a-b-c'->replace<'-', '+'>, 'a.b'->replace<'\\.', '!'>, '日-本'->replace<'-', '・'>)
-    println('a1b22'->replace_with<'[0-9]+', (x: Match): string => '<' + x.text + '>'>)
+    println('a1b22'->replace_with<'[0-9]+', func (x: Match) => string { '<' + x.text + '>' }>)
     println('a, b,c'->split<', *'>, len(''->split<','>))
     println(validate('[0-9]+') !! 'bad', validate('(') !! 'bad')
     println('x'->has_match<'a|x'>, ''->has_match<'^$'>)

@@ -5,11 +5,11 @@
 
 func round(n: int, k: int): int {
     return (0..n)
-        ->map<(i: int): (int, int) => (i, i * k)>
-        ->map<(p: (int, int)): int[] => [p.0, p.1, p.0 + p.1]>
-        ->filter<(xs: int[]): bool => xs[2] % 3 != 0>
-        ->map<(xs: int[]): string => string(xs[2])>
-        ->reduce<(acc: int, s: string): int => acc + len(s), 0>
+        ->map<func (i: int) => (int, int) { (i, i * k) }>
+        ->map<func (p: (int, int)) => int[] { [p.0, p.1, p.0 + p.1] }>
+        ->filter<func (xs: int[]) => bool { xs[2] % 3 != 0 }>
+        ->map<func (xs: int[]) => string { string(xs[2]) }>
+        ->reduce<func (acc: int, s: string) => int { acc + len(s) }, 0>
 }
 
 func run(n: int, left: int, total: int): int {

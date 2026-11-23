@@ -12,7 +12,7 @@ func apply(f: (x: float) => float, x: float): float {
 }
 
 func scaler(x: float): (dy: float) => float {
-    return if x > 0.0 then (dy: float): float => { return dy * 2.0 * x } else (dy: float): float => { return dy * 0.5 }
+    return if x > 0.0 then func (dy: float) => float { return dy * 2.0 * x } else func (dy: float) => float { return dy * 0.5 }
 }
 
 func main(): int sync {

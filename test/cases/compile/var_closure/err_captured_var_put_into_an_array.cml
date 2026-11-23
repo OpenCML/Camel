@@ -17,8 +17,8 @@
 
 func probe(): int {
     var c = 0
-    let h = (): int => c
-    let many = [h, (): int => 1]
+    let h = func () => int { c }
+    let many = [h, func () => int { 1 }]
     c = 41
     return many[1]()
 }

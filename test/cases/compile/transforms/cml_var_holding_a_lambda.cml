@@ -3,12 +3,12 @@
 // copy of the cells table -- putting it back destroys every entry, so the reference pointed at freed
 // storage and std::format read it (three runs, three signals). The name is copied before the value is
 // read now, and the printed source comes out.
-func adder(n: int): (x: int) => int { return (x) => x + n }
+func adder(n: int): (x: int) => int { return func (x) { x + n } }
 
 func main(): int sync {
-    let g: (x: int) => int = (x) => x * 3
-    var h: (x: int) => int = (x) => x - 1
-    h = (x) => x + 100
+    let g: (x: int) => int = func (x) { x * 3 }
+    var h: (x: int) => int = func (x) { x - 1 }
+    h = func (x) { x + 100 }
     println('let', g(14), h(1))
     let add5 = adder(5)
     return 0

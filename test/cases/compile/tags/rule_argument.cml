@@ -6,7 +6,7 @@
 tag jvp::<F>(rule: F) on func when is_function::<F>()
 
 rule mul_rule(x: float, w: float) {
-    x * w => (dx: float, dw: float) => dx * w + x * dw
+    x * w => func (dx: float, dw: float) { dx * w + x * dw }
 }
 
 #jvp(mul_rule)

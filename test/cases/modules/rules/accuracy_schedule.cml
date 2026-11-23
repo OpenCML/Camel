@@ -15,7 +15,7 @@ func reported::<F>(label: string, r: Run<F>): F sync {
 }
 
 func one::<F>(label: string, p: F, rules: Rule[]): F! sync {
-    return p->run<rules, rounds: 16, strict: false> -> (r: Run<F>) => sync { reported(label, r) }
+    return p->run<rules, rounds: 16, strict: false> -> func (r: Run<F>) sync { reported(label, r) }
 }
 
 export func only_log_of_softmax::<F>(p: F): F! sync {

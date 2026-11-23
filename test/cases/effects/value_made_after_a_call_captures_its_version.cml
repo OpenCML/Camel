@@ -11,11 +11,11 @@ var counter = 1
 
 func run(f: () => void): int {
     f()
-    let read = () => counter
+    let read = func () { counter }
     return read()
 }
 
 func main(): int sync {
-    println(run(() => { counter = 5 }))
+    println(run(func () { counter = 5 }))
     return 0
 }

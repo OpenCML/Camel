@@ -27,7 +27,7 @@ func bump(var c: int): int sync {
 
 func firstArm(): int sync {
     v = 1;
-    let lam = (p: int): int => sync {
+    let lam = func (p: int) => int sync {
         let n = bump(v);
         return if n > 0 then v else v;
     };
@@ -36,7 +36,7 @@ func firstArm(): int sync {
 
 func secondArm(): int sync {
     v = 1;
-    let lam = (p: int): int => sync {
+    let lam = func (p: int) => int sync {
         let n = bump(v);
         return if n < 0 then v else v;
     };
@@ -45,7 +45,7 @@ func secondArm(): int sync {
 
 func callInArm(flag: bool): int sync {
     v = 1;
-    let lam = (p: int): int => sync {
+    let lam = func (p: int) => int sync {
         let n = bump(v);
         return if flag then v + n else v * 10 + n;
     };

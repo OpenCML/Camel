@@ -21,10 +21,10 @@ func g(x: f32): f32 {
 func main(): int sync {
     let xs: f32[4] = [1.0, 2.0, 3.0, 0.5]
     println(vmap(f)(xs))
-    println(xs->map<(x: f32) => f(x)>)
+    println(xs->map<func (x: f32) { f(x) }>)
     let ys: f32[3] = [0.25, -2.0, 4.0]
     println(vmap(g)(ys))
-    println(ys->map<(x: f32) => g(x)>)
+    println(ys->map<func (x: f32) { g(x) }>)
     println(lift(f32(3.0)))
     return 0
 }

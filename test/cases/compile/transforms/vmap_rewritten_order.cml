@@ -17,6 +17,6 @@ func h(x: float): float {
 func main(): int sync {
     let xs: float[4] = [1.0, 2.0, 3.0, 0.5]
     println(vmap(h)(xs))
-    println(xs->map<(x: float) => h(x)>)
+    println(xs->map<func (x: float) { h(x) }>)
     return 0
 }

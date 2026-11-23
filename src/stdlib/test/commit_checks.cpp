@@ -134,26 +134,65 @@ SameShapePair findSameShapePair(const Program &program) {
     return {};
 }
 
-/// The fold, in one commit: the noisy graph publishes the type of the quiet one and keeps its body,
-/// which is the program the containment check is about. Returns the program the commit made.
+/// The fold, in one commit, on the **call site** rather than on the graph's own signature: the value
+/// a call runs through is given the quiet function's type, and the printing body behind it stays
+/// where it is. The commit is not the reader that can refuse this: the graph it changed is `main`,
+/// whose own clause still covers the print it reaches through that call, so nothing the commit
+/// compares is out of bounds and it publishes. The call site is left declaring `pure` over a body
+/// that writes the console -- which is the shape the pass boundary reads, at the one place the
+/// commit's comparison does not look: the clause written at the call node against the footprint of
+/// the callee behind it (`effectContainmentViolation`). Returns the program the commit made.
 ///
-/// The session is opened over the whole program and only the noisy graph is edited: naming a graph
-/// as the session's root would make that graph the program's entry when the commit replaces it, and
-/// the fixture would be a program whose entry takes a parameter.
-///
-/// This commit adds no node, so it adds no access, so the commit is not asked the effect or the order
-/// questions ( `commitAddsAccess`): a type replacement is what a draft does
-/// without adding an access, and the program it publishes is the one the boundary check below reads.
+/// The session is opened over the whole program and only the caller is edited: naming a graph as the
+/// session's root would make that graph the program's entry when the commit replaces it, and the
+/// fixture would be a program whose entry takes a parameter.
 const Program *foldTypeOf(
     const camel::core::context::context_ptr_t &context, const Program *program,
     const SameShapePair &pair, std::ostream &out) {
-    RuntimeGraphDraftSession session(context, program);
-    auto &transaction = session.edit(const_cast<GCGraph *>(pair.noisy));
-    transaction.edit().setFuncType(pair.quiet->funcType());
-    out << "fold_function_type: graph '" << pair.noisy->name() << "' now publishes '"
-        << pair.quiet->funcType()->toString() << "', the type of graph '" << pair.quiet->name()
-        << "'; its body is unchanged\n";
-    return session.commit();
+    gc_node_ref_t chosenGraph = kInvalidNodeRef;
+    gc_node_ref_t chosenValue = kInvalidNodeRef;
+    const GCGraph *chosenAt   = nullptr;
+    for (const GCGraph *graph : program->graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (gc_cnt_t i = 0; i < graph->nodeCount(); ++i) {
+            const gc_node_ref_t ref = static_cast<gc_node_ref_t>(i);
+            const GCNode *node      = graph->node(ref);
+            if (node == nullptr || node->kind != GCNodeKind::Call) {
+                continue;
+            }
+            const auto with = graph->withInputsOf(ref);
+            if (with.empty() || graph->node(with[0]) == nullptr) {
+                continue;
+            }
+            // The call that runs the printing function: its value carries that graph's type. The
+            // first call found is the fallback, for a fixture whose value type is a copy.
+            if (chosenAt == nullptr) {
+                chosenAt    = graph;
+                chosenGraph = ref;
+                chosenValue = with[0];
+            }
+            if (graph->node(with[0])->dataType() == pair.noisy->funcType()) {
+                chosenAt    = graph;
+                chosenGraph = ref;
+                chosenValue = with[0];
+                break;
+            }
+        }
+    }
+    if (chosenAt != nullptr) {
+        RuntimeGraphDraftSession session(context, program);
+        auto &transaction = session.edit(const_cast<GCGraph *>(chosenAt));
+        transaction.edit().setNodeDataType(chosenValue, pair.quiet->funcType());
+        out << "fold_function_type: the call site at node " << chosenGraph << " of graph '"
+            << chosenAt->name() << "' now declares '" << pair.quiet->funcType()->toString()
+            << "', the type of graph '" << pair.quiet->name()
+            << "', while the body it runs is '" << pair.noisy->name() << "'\n";
+        return session.commit();
+    }
+    out << "fold_function_type: no call through a value to fold\n";
+    return program;
 }
 
 /// The console a case prints to. `println` in the prelude is `#op(':io/println')`
@@ -1116,12 +1155,12 @@ CommitTierTestPass::apply(const camel::runtime::Program *program, std::ostream &
     }
     const bool wasAsked = camel::runtime::commitChecksEnabled();
     // The cell is the one answer a build can give. It is set to each of its two values here, and the
-    // two drafts -- one that adds an access and one that adds none -- are read under both: what the
-    // commit asks follows the draft and does not move when the cell does.Were it to follow the cell,
-    // the first draft would have been published with the cell off; that is the reading
+    // two drafts -- one that adds an access and one that moves the signature -- are read under both:
+    // what the commit asks follows the draft and does not move when the cell does. Were it to follow
+    // the cell, the first draft would have been published with the cell off; that is the reading
     // this pass exists to make impossible.
-    int refusedWithCellOff    = 0;
-    int publishedWithCellOn   = 0;
+    int refusedWithCellOff = 0;
+    int narrowedWasRefused = 0;
     camel::runtime::setCommitChecksEnabled(false);
     {
         RuntimeGraphDraftSession session(context_, program);
@@ -1144,9 +1183,10 @@ CommitTierTestPass::apply(const camel::runtime::Program *program, std::ostream &
     camel::runtime::setCommitChecksEnabled(true);
     {
         // The other draft makes no node at all: it republishes one graph under the other's type,
-        // which is a body that reaches past the type it is published under. The commit is not asked
-        // about it, because the draft added no access -- so the commit publishes it, and that is the
-        // reading, not a defect of this pass.
+        // which is a body that reaches past the type it is published under. Nothing was added and
+        // no node was changed, so neither list the commit keeps can see it -- but the signature is
+        // the other side of the comparison the containment check makes, and it moved. The commit is
+        // asked, and refuses the body the new clause no longer covers.
         RuntimeGraphDraftSession session(context_, program);
         session.edit(const_cast<GCGraph *>(pair.noisy)).edit().setFuncType(pair.quiet->funcType());
         out << "commit_tier: cell=1, draft adds no access (no node made; graph '"
@@ -1154,21 +1194,22 @@ CommitTierTestPass::apply(const camel::runtime::Program *program, std::ostream &
             << std::flush;
         try {
             session.commit();
-            publishedWithCellOn = 1;
-            out << "commit_tier: cell=1, published, and nothing was asked -- the tier is the "
-                   "draft's, not the build's\n"
+            out << "commit_tier: cell=1, the commit published it, so a signature that narrowed was "
+                   "not read\n"
                 << std::flush;
         } catch (const GraphCommitRefused &refused) {
+            narrowedWasRefused = 1;
             out << "commit_tier: cell=1, refused, check="
                 << commitCheckName(refused.violation().check)
-                << " -- the tier followed the build, not the draft\n"
+                << " -- the signature moved and the body was read against the new one\n"
+                << "commit_tier: cell=1, the refusal says: " << refused.violation().text << "\n"
                 << std::flush;
         }
     }
     camel::runtime::setCommitChecksEnabled(wasAsked);
     out << "commit_tier: cell=0 add-an-access -> refused=" << refusedWithCellOff
-        << ", cell=1 adds-nothing -> published=" << publishedWithCellOn
-        << "; the same two drafts answer the same under both builds\n"
+        << ", cell=1 narrows-the-signature -> refused=" << narrowedWasRefused
+        << "; the tier is the draft's, and the signature is the other side of the same comparison\n"
         << std::flush;
     // The program is handed back unchanged: the two commits above are the reading, and what the
     // boundary check reads next must be the fixture, not the graph they published.
@@ -1295,6 +1336,40 @@ CommitInPlaceTestPass::apply(const camel::runtime::Program *program, std::ostrea
     out << "commit_inplace: unordered-published=" << publishedUnordered
         << " ordered-published=" << publishedOrdered << '\n'
         << std::flush;
+    // The same two writes with the order turned round: the chain is taken away in all three kinds, and
+    // an order edge now says the second runs before the first. A commit that required the order the
+    // program was written in would refuse this; the check asks only that an order exist, because
+    // which of the two runs first is a meaning a pass may change (design principles 1) and not a
+    // promise this check fixes. All three kinds have to go: the block's chain reaches its statement
+    // as an order edge as well as a wait, and an edge left behind is the old direction -- writing
+    // the opposite one over it is a cycle, which the seal reports before the commit is asked.
+    const auto reverseTheOrder = [&](const ChainedPrints &pair) -> bool {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(const_cast<GCGraph *>(pair.graph)).edit();
+        const gc_node_ref_t waits = pair.second;
+        draft.setCtrlInputs(pair.second, none);
+        draft.setSyncInputs(pair.second, none);
+        draft.setOrderInputs(pair.second, none);
+        draft.setOrderInputs(pair.first, std::span<const gc_node_ref_t>(&waits, 1));
+        out << "commit_inplace: graph '" << pair.graph->name() << "': node " << pair.first
+            << " now runs after node " << pair.second << ", the order turned round\n"
+            << std::flush;
+        try {
+            session.commit();
+            out << "commit_inplace: the same edit with the order turned round -- published, which "
+                   "is the answer: the check asks for an order, not for the one the program wrote\n"
+                << std::flush;
+            return true;
+        } catch (const GraphCommitRefused &refused) {
+            out << "commit_inplace: the same edit with the order turned round -- refused, check="
+                << commitCheckName(refused.violation().check)
+                << ", which would mean the check fixes the direction\n"
+                << std::flush;
+            return false;
+        }
+    };
+    const bool reversedPublished = reverseTheOrder(byChain);
+    out << "commit_inplace: reversed-published=" << reversedPublished << '\n' << std::flush;
     // The program is handed back unchanged: the two commits above are the reading.
     return program;
 }
@@ -1392,6 +1467,100 @@ CommitMadeGraphPortsTestPass::apply(const camel::runtime::Program *program, std:
     }
     out << "commit_made_graph_ports: made graph, port of another type -> refused=" << refused
         << ", port of the declared type -> published=" << published << '\n'
+        << std::flush;
+    return current;
+}
+
+/// A graph the transaction **makes**, with two writes to the console in its body and, in one half,
+/// nothing ordering them: no edge, no gate, no region. Nothing in the program holds it, so no list of
+/// nodes a draft edited can name it -- the whole graph is what the commit answers for.
+GCGraph *makeGraphWithTwoPrints(
+    const camel::core::context::context_ptr_t &context, bool ordered, const char *mangledName,
+    const char *name) {
+    using camel::core::type::FunctionType;
+    using camel::core::type::param_vec_t;
+    const param_vec_t withTypes;
+    param_vec_t normTypes;
+    normTypes.emplace_back(camel::core::type::Type::Float32(), false);
+    FunctionType *signature =
+        FunctionType::create(withTypes, normTypes, /*returnType*/ camel::core::type::Type::Float32());
+    auto transaction         = GraphTransaction::open(context->graphIds().allocate(), signature);
+    auto &draft              = transaction->edit();
+    const gc_node_ref_t port = draft.addPortNode(camel::core::type::Type::Float32(), 0);
+    draft.appendNormPort(port);
+    const gc_node_ref_t first =
+        draft.addOperNode(camel::core::type::Type::Float32(), nullptr, kPrintUri);
+    const gc_node_ref_t second =
+        draft.addOperNode(camel::core::type::Type::Float32(), nullptr, kPrintUri);
+    const gc_node_ref_t input[1] = {port};
+    draft.setNormInputs(first, input);
+    draft.setNormInputs(second, input);
+    if (ordered) {
+        const gc_node_ref_t waits[1] = {first};
+        draft.setSyncInputs(second, waits);
+    }
+    draft.setExitNode(port);
+    return draft.encode(mangledName, name);
+}
+
+const camel::runtime::Program *
+CommitMadeGraphOrderTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr || program->root() == nullptr) {
+        out << "commit_made_order: the program has no root, so there is no session to make a graph "
+               "in\n";
+        return program;
+    }
+    out << "commit_made_order: a made graph has no version the program held, so every node in it "
+           "is one this commit put there\n"
+        << std::flush;
+    int refused          = 0;
+    int published        = 0;
+    const Program *current = program;
+    // Two writes to stdout in one body, ordered against nothing: the commit must be asked the order
+    // check (the graph is new, so the whole graph is the scope) and must refuse the pair.
+    {
+        RuntimeGraphDraftSession session(context_, current);
+        GCGraph *made = makeGraphWithTwoPrints(
+            context_, /*ordered=*/false, "test$made_order_unordered", "made$unordered");
+        session.noteMadeGraph(made);
+        out << "commit_made_order: made graph '" << made->name()
+            << "' writes stdout twice and nothing orders the two\n"
+            << std::flush;
+        try {
+            current = session.commit();
+            out << "commit_made_order: the commit published it, which is the defect\n" << std::flush;
+        } catch (const GraphCommitRefused &refusedAtCommit) {
+            ++refused;
+            out << "commit_made_order: refused, check="
+                << commitCheckName(refusedAtCommit.violation().check) << ": "
+                << refusedAtCommit.violation().text << '\n'
+                << std::flush;
+        }
+    }
+    // The positive half: the same graph with an edge between the two writes. Without it, "it was
+    // refused" would mean only "a made graph is always refused", which is a reading of neither rule.
+    {
+        RuntimeGraphDraftSession session(context_, current);
+        GCGraph *made =
+            makeGraphWithTwoPrints(context_, /*ordered=*/true, "test$made_order_ordered", "made$ordered");
+        session.noteMadeGraph(made);
+        out << "commit_made_order: made graph '" << made->name()
+            << "' writes stdout twice with the second waiting for the first\n"
+            << std::flush;
+        try {
+            current = session.commit();
+            ++published;
+            out << "commit_made_order: the same graph with the two ordered -- published\n"
+                << std::flush;
+        } catch (const GraphCommitRefused &refusedAtCommit) {
+            out << "commit_made_order: refused, check="
+                << commitCheckName(refusedAtCommit.violation().check) << ": "
+                << refusedAtCommit.violation().text << '\n'
+                << std::flush;
+        }
+    }
+    out << "commit_made_order: made graph, two writes unordered -> refused=" << refused
+        << ", the same two ordered -> published=" << published << '\n'
         << std::flush;
     return current;
 }
@@ -1544,5 +1713,6 @@ const PassKernel commitSiblingArmKernel(kCommitSiblingArmTestPass, makePass<Comm
 const PassKernel commitLoopBodyReadKernel(kCommitLoopBodyReadTestPass, makePass<CommitLoopBodyReadTestPass>());
 const PassKernel commitPortTypeKernel(kCommitPortTypeTestPass, makePass<CommitPortTypeTestPass>());
 const PassKernel commitMadeGraphPortsKernel(kCommitMadeGraphPortsTestPass, makePass<CommitMadeGraphPortsTestPass>());
+const PassKernel commitMadeGraphOrderKernel(kCommitMadeGraphOrderTestPass, makePass<CommitMadeGraphOrderTestPass>());
 
 } // namespace

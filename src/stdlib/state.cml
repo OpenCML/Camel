@@ -38,17 +38,20 @@ export func ref::<T>(v: T): Ref<T>
 
 /// The content of the box `r` points at: a read of the reference, and nothing else.
 /// @example get(ref(3))    // 3
-export func get::<T>(r: Ref<T>): T uses r
+#op('state:get')
+export func get::<T>(r: Ref<T>): T panic uses r
 
 /// Writes `v` into the box `r` points at, and answers `v`. A write of the box: the handle itself is
 /// not replaced.
 /// @example-fragment the box is one the surrounding program holds, so the example names it
 /// @example set(r, 7)    // 7
-export func set::<T>(r: Ref<T>, v: T): T uses var r
+#op('state:set')
+export func set::<T>(r: Ref<T>, v: T): T panic uses var r
 
 /// Writes `f` of the content into the box `r` points at, and answers the new content. `f` is
 /// `pure`, so an update touches the one reference and no other resource: what it writes is a
 /// function of what it read.
 /// @example-fragment the box is one the surrounding program holds, so the example names it
 /// @example update(r, (x: int) => x + 1)
-export func update::<T>(r: Ref<T>, f: (x: T) => T pure): T uses var r
+#op('state:update')
+export func update::<T>(r: Ref<T>, f: (x: T) => T pure): T panic uses var r

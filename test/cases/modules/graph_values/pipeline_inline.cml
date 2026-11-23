@@ -17,7 +17,7 @@ func b(x: int): int {
 }
 
 func main(): int sync {
-    let held = (x: int): int => twice(x) - 1
+    let held = func (x: int) => int { twice(x) - 1 }
     println(`${twice(5)} ${a(5)} ${b(5)} ${held(5)}`)
     return 0
 }

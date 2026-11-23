@@ -14,6 +14,7 @@
 #include "transpose/signature.h"
 #include "transpose/walk.h"
 #include "camel/runtime/graph.h"
+#include "graph/gc_graph_view.h"
 
 #include "camel/core/derivative.h"
 #include "camel/core/forward.h"
@@ -461,7 +462,7 @@ bool buildTransposeMember(
         // result has one is the only function a member is built for (`transposeSignature`'s gate
         // admits exactly those). A null here is a caller that asked for a member of a function the
         // gate refuses: refused by name, never typed `float`.
-        Type *const cotangentType = resultCotangentType(function);
+        Type *const cotangentType = resultCotangentType(function->funcType());
         if (cotangentType == nullptr) {
             refuse(TransposeRefusalCause::Exit);
             os << " exit="
@@ -1633,9 +1634,11 @@ bool buildTransposeMember(
                             // declaration does not write down, so the refusal is the shape's and
                             // not a lost value's: the same cause, the same sentence and the same
                             // repair as the law-choice path, which is the whole point of one class
-                            // having one word.
+                            // having one word. The reader takes the function's face, not the
+                            // function: the walk-back asks a node's type, kind, ports and inputs.
+                            const camel::graph::FrozenGraphAdapter face(*function);
                             unstated = unstatedParameterBehind(
-                                function,
+                                &face,
                                 inputs[*unboundSlot],
                                 portParameter,
                                 paramCount,
@@ -1671,10 +1674,13 @@ bool buildTransposeMember(
                             return {};
                         }
                         refuse(TransposeRefusalCause::RuleRanks);
-                        state.refusal.node      = ref;
-                        state.refusal.uri       = std::string(body->uri());
-                        state.refusal.rule      = chosenRule;
-                        state.refusal.ranks     = operandRanksText(function, inputs);
+                        state.refusal.node = ref;
+                        state.refusal.uri  = std::string(body->uri());
+                        state.refusal.rule = chosenRule;
+                        {
+                            const camel::graph::FrozenGraphAdapter face(*function);
+                            state.refusal.ranks = operandRanksText(&face, inputs);
+                        }
                         state.refusal.expansion = why;
                         os << " uri=" << body->uri() << " rule=" << chosenRule << " position=" << i
                            << " ranks=" << state.refusal.ranks << " operands=" << inputs.size()
@@ -2526,8 +2532,9 @@ bool buildTransposeMember(
                             // Same question as the arm walk, same answer: the operand the law read
                             // is a shape the declaration does not write down, so the refusal is the
                             // declaration's and says so with the one word that class has.
+                            const camel::graph::FrozenGraphAdapter face(*function);
                             unstated = unstatedParameterBehind(
-                                function,
+                                &face,
                                 inputs[*unboundSlot],
                                 portParameter,
                                 paramCount,
@@ -2563,10 +2570,13 @@ bool buildTransposeMember(
                             return false;
                         }
                         refuse(TransposeRefusalCause::RuleRanks);
-                        state.refusal.node      = ref;
-                        state.refusal.uri       = uri;
-                        state.refusal.rule      = chosenRule;
-                        state.refusal.ranks     = operandRanksText(function, inputs);
+                        state.refusal.node = ref;
+                        state.refusal.uri  = uri;
+                        state.refusal.rule = chosenRule;
+                        {
+                            const camel::graph::FrozenGraphAdapter face(*function);
+                            state.refusal.ranks = operandRanksText(&face, inputs);
+                        }
                         state.refusal.expansion = why;
                         os << " uri=" << uri << " rule=" << chosenRule << " node=" << ref
                            << " position=" << i << " ranks=" << state.refusal.ranks

@@ -186,7 +186,7 @@ func do_export_ce_adam(m: LoraMlp): int sync {
     let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = adam_lr()
     let r = export_model<out: get_env('CAMEL_BENCH_EXPORT') ?? ''>(
-        (mm: LoraMlp, st: OptimizerState, xx: f32[...], tt: f32[...]): (float, LoraMlp, OptimizerState) => step_ce_adam(mm, st, xx, tt, lr),
+        func (mm: LoraMlp, st: OptimizerState, xx: f32[...], tt: f32[...]) => (float, LoraMlp, OptimizerState) { step_ce_adam(mm, st, xx, tt, lr) },
         (m, adam_state(m), x, t)
     )
     return match r {

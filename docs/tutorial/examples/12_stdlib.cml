@@ -8,9 +8,9 @@ import { mean } from array
 
 func main(): int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
-    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<func (w: string) => string { trim(w) }>
     println(words)
-    println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
+    println(words->unique->sort_by<func (w: string) => int { len(w) }>->take<2>)
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
@@ -20,7 +20,7 @@ func main(): int sync {
 
     // Arrays and numbers.
     let xs = [3, -1, 4, -1, 5]
-    println(sum(xs), reverse(xs), xs->map<(x: int): int => abs(x)>)
+    println(sum(xs), reverse(xs), xs->map<func (x: int) => int { abs(x) }>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println(`${pi:.4f}`)
     return 0

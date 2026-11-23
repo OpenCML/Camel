@@ -240,7 +240,7 @@ bool writesOperandAt(const GCOperBody &body, size_t index) {
 /// what they pass in.
 ///
 /// A control region's ports belong to this list because the table is positional and the table is
-/// how the region is entered: `LoopDraftView::bodyStateParam(j)` and `condStateParam(j)` are the
+/// how the region is entered: `LoopView::bodyStateParam(j)` and `condStateParam(j)` are the
 /// j-th entry, and the j-th state is that value. A port node an erasure took leaves the entry
 /// pointing at nothing, and a table that dropped the entry instead renames every state after it --
 /// two wrong answers to one question. `validateRuntimeRegions` refuses the first (a control region

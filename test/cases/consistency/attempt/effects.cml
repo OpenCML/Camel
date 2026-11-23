@@ -14,7 +14,7 @@ import state
 
 func main(): int sync {
     let total = state::ref(1)
-    let work = (d: int): int => sync {
+    let work = func (d: int) => int sync {
         println('work begins')
         total->state::set(total->state::get + 10)
         println(format<total->state::get>('total is {}'))
@@ -31,8 +31,8 @@ func main(): int sync {
     println(b)
     println(total->state::get)
     let seen = state::ref(0)
-    let c = attempt(() => sync {
-        (0..6)->foreach<(x: int) => sync {
+    let c = attempt(func () sync {
+        (0..6)->foreach<func (x: int) sync {
             seen->state::set(seen->state::get + 12 / (3 - x))
             println(seen->state::get)
         }>

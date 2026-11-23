@@ -38,7 +38,7 @@ export func apply_drops::<F>(p: F): F! {
 }
 
 func countOf::<F>(p: F, function: string): int spelling {
-    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
+    let found = graphs_of(p)->filter<func (g: Graph) => bool { name(g) == function }>
     return len(nodes(found[0]))
 }
 

@@ -28,7 +28,7 @@
 func k14(a15: int): int sync {
     var v16 = r1(3, 0);
     v16 /= -2;
-    let f17 = (p17: int): int => sync {
+    let f17 = func (p17: int) => int sync {
         return v16 + p17;
     };
     return f17(a15);

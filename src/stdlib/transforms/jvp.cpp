@@ -47,9 +47,6 @@ using camel::runtime::valueBehindGates;
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
-using camel::compile::gir::FrozenGraphRead;
-using camel::compile::gir::GraphRead;
-using camel::compile::gir::NodeFace;
 using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
 using camel::core::type::TupleType;
@@ -58,6 +55,30 @@ using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
 
 namespace {
+
+/// A run of node ids as a list the walk can keep: the frozen graph hands out spans, and the lists
+/// this walk builds are appended to (the lifted copies of a node's inputs, a fill's members).
+inline std::vector<gc_node_ref_t> idListOf(std::span<const gc_node_ref_t> ids) {
+    return std::vector<gc_node_ref_t>(ids.begin(), ids.end());
+}
+
+/// The record of node `ref`, nullptr when the graph has no node there or the place is a tombstone.
+/// A walk that reads a graph skips a dead place exactly as it skips a place the graph never had.
+inline const rt::GCNode *nodeOf(const camel::runtime::GCGraph &graph, gc_node_ref_t ref) {
+    const rt::GCNode *node = graph.node(ref);
+    return node != nullptr && node->kind != rt::GCNodeKind::Dead ? node : nullptr;
+}
+
+/// The payload of node `ref` read as `Body`, nullptr when it has none.
+///
+/// `nodeBodyAs` asserts that the node carries a payload, and this walk asks a node of any kind; the
+/// guard is here because the kinds it meets are the graph's (a DATA node has bytes only when it is
+/// a constant, and a PORT has none at all).
+template <typename Body>
+const Body *nodeBodyOrNull(const camel::runtime::GCGraph &graph, gc_node_ref_t ref) {
+    const rt::GCNode *node = graph.node(ref);
+    return node != nullptr && node->hasPayload() ? graph.nodeBodyAs<Body>(ref) : nullptr;
+}
 
 /// The type of the lifted *pair* of a value: `(v, dv)`, written at the value's own type, because
 /// the tangent of a value is a value of its own type wherever `tangentSpaceOf` answers `Self`. Null
@@ -460,7 +481,7 @@ bool fail(JvpGraph &refusal, JvpGraph &&why) {
 }
 
 bool liftGraph(
-    LiftState &state, const GraphRead &function, std::string_view name,
+    LiftState &state, const camel::runtime::GCGraph &function, std::string_view name,
     camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
     JvpGraph &refusal);
 
@@ -472,7 +493,7 @@ bool liftGraph(
 /// the lifted graphs are written.
 JvpGraph buildJvpGraphInGroup(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GraphDraftGroup &group, const GraphRead &function, std::string_view name,
+    camel::runtime::GraphDraftGroup &group, const camel::runtime::GCGraph &function, std::string_view name,
     camel::runtime::GraphId self, std::ostream &os) {
     const GraphId member =
         group.reserve("jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
@@ -491,26 +512,15 @@ JvpGraph buildJvpGraphInGroup(
         const_cast<camel::runtime::GCGraph *>(made)};
 }
 
-/// The same build for a caller that holds a frozen graph: the face is made here and lives for the
-/// call. The name and the identity are the caller's because they are the two facts a draft does
-/// not have (it is named and numbered when it is encoded).
+/// The build. The name and the identity are the graph's own: a frozen graph has both.
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     camel::runtime::GCGraph *function, std::ostream &os) {
-    if (function == nullptr) {
+    if (function == nullptr || program == nullptr) {
         return JvpGraph{};
     }
-    const FrozenGraphRead face(*function);
-    return buildJvpGraph(context, program, face, function->name(), function->id(), os);
-}
-JvpGraph buildJvpGraph(
-    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    const GraphRead &function, std::string_view name, camel::runtime::GraphId self,
-    std::ostream &os) {
-    if (program == nullptr) {
-        return JvpGraph{};
-    }
-    FunctionType *signature = jvpSignature(function.funcType());
+    const std::string_view name = function->name();
+    FunctionType *signature = jvpSignature(function->funcType());
     if (signature == nullptr) {
         os << "REINTERP jvp function=" << name
            << " skip=" << refusalCauseName(RefusalCause::Signature) << '\n';
@@ -523,12 +533,12 @@ JvpGraph buildJvpGraph(
     // wants `df/dx` and `df/dy` separately runs it twice with (1, 0) and (0, 1).
 
     camel::runtime::GraphDraftGroup group(context, program);
-    return buildJvpGraphInGroup(context, program, group, function, name, self, os);
+    return buildJvpGraphInGroup(context, program, group, *function, name, function->id(), os);
 }
 namespace {
 
 bool liftGraph(
-    LiftState &state, const GraphRead &function, std::string_view name,
+    LiftState &state, const camel::runtime::GCGraph &function, std::string_view name,
     camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
     JvpGraph &refusal) {
     const camel::core::context::context_ptr_t &context = state.context;
@@ -570,7 +580,7 @@ bool liftGraph(
         if (ref >= function.nodeCount()) {
             return nullptr;
         }
-        const NodeFace *node = function.node(ref);
+        const rt::GCNode *node = nodeOf(function, ref);
         return node != nullptr ? node->dataType() : nullptr;
     };
     // The type of a lifted LOOP node's value, and of the body result that value comes from.
@@ -791,7 +801,7 @@ bool liftGraph(
         const size_t parameterCount = function.funcType()->normTypesCount();
         const size_t withCount =
             function.funcType() != nullptr ? function.funcType()->withTypesCount() : 0;
-        const std::vector<gc_node_ref_t> originalWith = function.withPorts();
+        const std::vector<gc_node_ref_t> originalWith = idListOf(function.withPorts());
         // The value half of the lifted list: the ordinary parameters in their order, which is every
         // value a direction is handed in for (`liftSignature`).
         std::vector<camel::core::type::Type *> valueTypes;
@@ -836,7 +846,7 @@ bool liftGraph(
         }
         // Which value of the lifted list a port of the original body is, by its place in that list.
         std::unordered_map<gc_node_ref_t, size_t> parameterOf;
-        const std::vector<gc_node_ref_t> originalPorts = function.normPorts();
+        const std::vector<gc_node_ref_t> originalPorts = idListOf(function.normPorts());
         for (size_t i = 0; i < originalPorts.size(); ++i) {
             parameterOf[originalPorts[i]] = i;
         }
@@ -852,7 +862,7 @@ bool liftGraph(
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
         // The declared ones and the captured ones, one list: the first `withTypesCount()` are the
         // caller's `with` arguments and the rest are the values the body captured, in the closure
-        // tuple's order (`GraphRead::withPortsOf`, cited below).
+        // tuple's order (`GCGraph::withPorts`, cited below).
         {
             for (size_t i = 0; i < withCount && i < originalWith.size(); ++i) {
                 camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
@@ -872,7 +882,7 @@ bool liftGraph(
         }
         // The values the body *captures* from where it was written, which are not `with` parameters
         // and were the one kind of port this lift left out. A capture is a port of the graph
-        // (`GraphRead::closureNodesOf`, which is `GCGraph::closureNodes`) but not one of its `with`
+        // (`GCGraph::closureNodes`) but not one of its `with`
         // ports, so a cell the walk never made is a hole: the lifted copy reads nothing where the
         // value stood, and the refusal that produces names the whole body (`skip=body`) rather than
         // the capture. `(t: float[]) => k * t[0]` shows it: a captured `float` refuses exactly as a
@@ -887,19 +897,13 @@ bool liftGraph(
         // same way and records the same defect: a capture the copy does not declare answers the
         // zero of its slot.
         //
-        // `closureNodesOf` and `closureTypeOf` are two *readings* added to `GraphRead`, not new
-        // storage: a runtime graph has answered both since captures existed
-        // (`GCGraph::closureNodes` and `GCGraph::closureType`), and the compile-time draft answers
-        // both as well
-        // (`GraphDraft::closureNodes`, `GraphDraft::closureType`). The face that turns a graph into
-        // what a transform reads simply did not pass them on, so a transform holding a `GraphRead`
-        // could see a graph's parameters and its `with` ports and not what it captures. Nothing is
-        // recorded twice and nothing new is encoded.
+        // Both facts are the graph's own and are read where it stores them: `GCGraph::closureNodes`
+        // and `GCGraph::closureType`. Nothing is recorded twice and nothing new is encoded.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
         {
-            const std::vector<gc_node_ref_t> captures = function.closureNodesOf();
+            const std::vector<gc_node_ref_t> captures = idListOf(function.closureNodes());
             for (gc_node_ref_t original : captures) {
-                const NodeFace *captureNode = function.node(original);
+                const rt::GCNode *captureNode = nodeOf(function, original);
                 camel::core::type::Type *captureType =
                     captureNode != nullptr ? captureNode->dataType() : nullptr;
                 if (captureType == nullptr) {
@@ -911,7 +915,7 @@ bool liftGraph(
                 capturePortOf[original] = port;
             }
             if (!capturePortOf.empty()) {
-                if (const camel::core::type::TupleType *closureType = function.closureTypeOf()) {
+                if (const camel::core::type::TupleType *closureType = function.closureType()) {
                     draft.setClosureType(const_cast<camel::core::type::TupleType *>(closureType));
                 }
             }
@@ -1156,16 +1160,15 @@ bool liftGraph(
             liftedJoin; // the original Join -> its copy
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> joinOfBrch; // a Brch -> the Join it names
         for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
-            const NodeFace *node = function.node(ref);
+            const rt::GCNode *node = nodeOf(function, ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Brch) {
                 continue;
             }
-            rt::GCBrchBody brchBody{};
-            const auto *body = function.bodyOf(ref, brchBody) ? &brchBody : nullptr;
+            const auto *body = nodeBodyOrNull<rt::GCBrchBody>(function, ref);
             if (body == nullptr || body->join == rt::kInvalidNodeRef) {
                 continue;
             }
-            const NodeFace *join = function.node(body->join);
+            const rt::GCNode *join = nodeOf(function, body->join);
             if (join == nullptr) {
                 continue;
             }
@@ -1205,7 +1208,7 @@ bool liftGraph(
         // node the edge invariants refuse: a call node whose declared answer is not the answer its
         // callee hands on, with its arguments never wired.
         auto isFunctionValueNode = [&](gc_node_ref_t ref, const camel::runtime::GCGraph &graph) {
-            const NodeFace *candidate = function.node(ref);
+            const rt::GCNode *candidate = nodeOf(function, ref);
             if (candidate == nullptr || candidate->dataType() == nullptr ||
                 candidate->dataType()->code() != camel::core::type::TypeCode::Function) {
                 return false;
@@ -1223,9 +1226,8 @@ bool liftGraph(
             if (callee == nullptr) {
                 return false;
             }
-            // The callee is read through the same kind of face as the caller: a frozen graph here,
-            // because this build starts from one.
-            const FrozenGraphRead calleeFace(*callee);
+            // The callee is read the way the caller is: as the graph it is, found through the
+            // program that holds both.
             const std::string_view calleeName = callee->name();
             // A **call to a function of no ordinary parameters** is a constant of this lift, and it
             // is refused nowhere: the direction a caller seeds reaches a parameter, and this callee
@@ -1263,7 +1265,7 @@ bool liftGraph(
                 // tangents, and the callee's own `with` list (`liftSignature`).
                 JvpGraph sub;
                 const bool lifted =
-                    liftGraph(state, calleeFace, calleeName, calleeId, liftedCallee, os, sub);
+                    liftGraph(state, *callee, calleeName, calleeId, liftedCallee, os, sub);
                 if (!lifted) {
                     refusal = std::move(sub);
                     return false;
@@ -1285,7 +1287,7 @@ bool liftGraph(
             return true;
         };
         for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
-            const NodeFace *node = function.node(ref);
+            const rt::GCNode *node = nodeOf(function, ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Func) {
                 continue;
             }
@@ -1301,7 +1303,7 @@ bool liftGraph(
              ++kind) {
             bool seen = false;
             for (camel::runtime::gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
-                const NodeFace *node = function.node(ref);
+                const rt::GCNode *node = nodeOf(function, ref);
                 if (node != nullptr && static_cast<std::uint8_t>(node->kind) == kind) {
                     seen = true;
                     break;
@@ -1322,12 +1324,12 @@ bool liftGraph(
         // from an array of 'float'`).
         std::unordered_set<gc_node_ref_t> loopElementPorts;
         for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
-            const NodeFace *node = function.node(ref);
+            const rt::GCNode *node = nodeOf(function, ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
                 continue;
             }
-            rt::GCLoopBody loopBody{};
-            if (!function.bodyOf(ref, loopBody) || loopBody.kind == camel::core::LoopKind::While) {
+            const auto *loopBody = nodeBodyOrNull<rt::GCLoopBody>(function, ref);
+            if (loopBody == nullptr || loopBody->kind == camel::core::LoopKind::While) {
                 continue;
             }
             for (uint32_t region = 0; region < function.regionCount(); ++region) {
@@ -1336,7 +1338,7 @@ bool liftGraph(
                     part->kind != rt::GCRegionKind::LoopBody) {
                     continue;
                 }
-                const std::vector<gc_node_ref_t> ports = function.regionPorts(region);
+                const std::vector<gc_node_ref_t> ports = idListOf(function.regionPorts(region));
                 if (!ports.empty()) {
                     loopElementPorts.insert(ports.front());
                 }
@@ -1363,7 +1365,7 @@ bool liftGraph(
                 if (port >= function.nodeCount() || copied[port]) {
                     continue;
                 }
-                const NodeFace *portNode = function.node(port);
+                const rt::GCNode *portNode = nodeOf(function, port);
                 if (portNode == nullptr || portNode->kind != rt::GCNodeKind::Port) {
                     continue;
                 }
@@ -1406,7 +1408,7 @@ bool liftGraph(
         // for it: the slot is a port there, so the call has to fill it, and a `()` value is the
         // only thing that fits. One node, shared: it is a constant.
         gc_node_ref_t emptyTangent = rt::kInvalidNodeRef;
-        const auto tangentSlotOf   = [&](gc_node_ref_t input, const NodeFace *in) {
+        const auto tangentSlotOf   = [&](gc_node_ref_t input, const rt::GCNode *in) {
             if (in != nullptr && pairOf(in->dataType()) != nullptr) {
                 if (tangentOf[input] == rt::kInvalidNodeRef) {
                     return rt::kInvalidNodeRef;
@@ -1422,7 +1424,7 @@ bool liftGraph(
             return emptyTangent;
         };
         for (camel::runtime::gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
-            const NodeFace *node = function.node(ref);
+            const rt::GCNode *node = nodeOf(function, ref);
             if (node == nullptr) {
                 continue;
             }
@@ -1594,16 +1596,12 @@ bool liftGraph(
                 // which this transform writes a pair for the tuple at all. Every slot is listed in
                 // it: a constant the value takes from the template has derivative *zero*, not the
                 // constant, so the tangent cannot borrow the value's template.
-                const std::span<const std::byte> payload = function.payloadOf(ref);
-                // The payload *is* the fill body, slot list and all; a copy of the header alone
-                // would leave slots() reading past its end (measured: it read node references).
-                // The bytes are read here and not through `fillBodyOf` (`node_operator.h`): this
-                // walk reads a `GraphRead`, which copies a body out of a draft's payload instead
-                // of handing out a pointer into it, so the face's own bytes are what is copied.
-                const auto *fill = payload.size() >= sizeof(rt::GCFillBody)
-                                       ? reinterpret_cast<const rt::GCFillBody *>(payload.data())
-                                       : nullptr;
-                const std::vector<gc_node_ref_t> members = function.withInputsOf(ref);
+                const auto *fill = fillBodyOf(function, ref);
+                // The body is written into the lifted fill as it was read: a construction's copy
+                // carries the same fill kind and the same slot list, and the slot list is the
+                // payload past the header.
+                const std::span<const std::byte> payload = function.nodePayloadBytes(ref);
+                const std::vector<gc_node_ref_t> members = idListOf(function.withInputsOf(ref));
                 const auto norm                          = function.normInputsOf(ref);
                 // What this tuple becomes is `Lift<its type>` (`liftedShapeOf`), and the members a
                 // tuple that lifts by component is built from are the members' *lifted* values --
@@ -1630,7 +1628,7 @@ bool liftGraph(
                         break;
                     }
                     if (liftsByComponent) {
-                        const NodeFace *memberFace = function.node(member);
+                        const rt::GCNode *memberFace = nodeOf(function, member);
                         const gc_node_ref_t lifted = liftedValueOf(
                             member,
                             memberFace != nullptr ? const_cast<Type *>(memberFace->dataType())
@@ -1756,8 +1754,7 @@ bool liftGraph(
                 // forms
                 // (`addAccsNode(type, tupleIndex)` and `addAccsNode(type, structKey)`), and reading
                 // a keyed access by the number the payload carries would project another member.
-                rt::GCAccsBody accsBody{};
-                const auto *body  = function.bodyOf(ref, accsBody) ? &accsBody : nullptr;
+                const auto *body = nodeBodyOrNull<rt::GCAccsBody>(function, ref);
                 const auto inputs = function.normInputsOf(ref);
                 const bool tupleIndexed =
                     body != nullptr && body->accsKind == rt::GCAccsKind::TupleIndex;
@@ -1780,7 +1777,7 @@ bool liftGraph(
                 // projecting its j-th member is projecting each half at j. An aggregate that lifts
                 // by component *is* its lifted value, and its j-th member is `Lift<Tj>` already, so
                 // the projection is that member and the node has no tangent half of its own.
-                const NodeFace *tupleFace   = function.node(tuple);
+                const rt::GCNode *tupleFace   = nodeOf(function, tuple);
                 const LiftedShape aggregate = liftedShapeOf(
                     tupleFace != nullptr ? const_cast<Type *>(tupleFace->dataType()) : nullptr);
                 if (aggregate.type == nullptr) {
@@ -1865,8 +1862,7 @@ bool liftGraph(
                 // reached yet. What the branch does not change is the condition itself: it is
                 // copied as written and read by the Brch, never differentiated -- the choice of arm
                 // is not a value the derivative flows through.
-                rt::GCBrchBody brchBody{};
-                const auto *body = function.bodyOf(ref, brchBody) ? &brchBody : nullptr;
+                const auto *body = nodeBodyOrNull<rt::GCBrchBody>(function, ref);
                 const auto at    = joinOfBrch.find(ref);
                 if (body == nullptr || at == joinOfBrch.end()) {
                     complete = false;
@@ -1911,7 +1907,8 @@ bool liftGraph(
                     // because it sits on the `sync` chain, and a print among them is why the chain
                     // exists (`modules/transforms/jvp.cpp`, the operator case).
                     std::vector<gc_node_ref_t> waits;
-                    for (gc_node_ref_t edge : function.syncInputsOf(ref)) {
+                    for (const rt::GCGraphSyncEdge &sync : function.syncPredsOf(ref)) {
+                        const gc_node_ref_t edge = sync.pred;
                         if (edge < function.nodeCount() && copied[edge]) {
                             waits.push_back(copyOf[edge]);
                         }
@@ -1991,7 +1988,7 @@ bool liftGraph(
                         if (input >= function.nodeCount() || !copied[input]) {
                             return fail(refusal);
                         }
-                        const NodeFace *in = function.node(input);
+                        const rt::GCNode *in = nodeOf(function, input);
                         const gc_node_ref_t half =
                             valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input];
                         // The lifted callee takes the value and its tangent as two ordinary
@@ -2005,7 +2002,7 @@ bool liftGraph(
                         }
                         tangents.push_back(tangent);
                     }
-                    const std::vector<gc_node_ref_t> withArgs = function.withInputsOf(ref);
+                    const std::vector<gc_node_ref_t> withArgs = idListOf(function.withInputsOf(ref));
                     for (size_t i = 0; i < withArgs.size(); ++i) {
                         const gc_node_ref_t input = withArgs[i];
                         if (input >= function.nodeCount() || !copied[input]) {
@@ -2129,7 +2126,7 @@ bool liftGraph(
                 // `liftSignature`). The answer is the pair (result, tangent), and the readers of
                 // the call project it exactly as they project a lifted call's pair, so nothing
                 // downstream has to know which of the two ways the callee arrived by.
-                const std::vector<gc_node_ref_t> withInputs = function.withInputsOf(ref);
+                const std::vector<gc_node_ref_t> withInputs = idListOf(function.withInputsOf(ref));
                 if (withInputs.empty()) {
                     return fail(refusal);
                 }
@@ -2137,7 +2134,7 @@ bool liftGraph(
                 if (calleeValue >= function.nodeCount() || !copied[calleeValue]) {
                     return fail(refusal);
                 }
-                const NodeFace *calleeFace = function.node(calleeValue);
+                const rt::GCNode *calleeFace = nodeOf(function, calleeValue);
                 auto *calleeType =
                     calleeFace != nullptr
                         ? tt::as_ptr<FunctionType>(const_cast<Type *>(calleeFace->dataType()))
@@ -2179,7 +2176,7 @@ bool liftGraph(
                     if (input >= function.nodeCount() || !copied[input]) {
                         return fail(refusal);
                     }
-                    const NodeFace *in = function.node(input);
+                    const rt::GCNode *in = nodeOf(function, input);
                     values.push_back(
                         valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input]);
                     const gc_node_ref_t tangent = tangentSlotOf(input, in);
@@ -2264,8 +2261,11 @@ bool liftGraph(
                 // it is `Tuple(state…, array…)` (`LoopView`), and only the state part is lifted.
                 // `liftedLoopValueType` answers both cases, and the body's result is written by the
                 // same rule, so the node's type and what its region yields say the same thing.
+                const rt::GCLoopBody *read = nodeBodyOrNull<rt::GCLoopBody>(function, ref);
                 rt::GCLoopBody body{};
-                function.bodyOf(ref, body);
+                if (read != nullptr) {
+                    body = *read;
+                }
                 rt::GCLoopBody liftedBody = body;
                 const size_t stateCount   = loopStateCountOf(ref, body);
                 Type *liftedValueType =
@@ -2345,8 +2345,7 @@ bool liftGraph(
                 break;
             }
             case NodeCase::Oper: {
-                camel::runtime::GCOperBody operBody{};
-                const auto *body = function.bodyOf(ref, operBody) ? &operBody : nullptr;
+                const auto *body = nodeBodyOrNull<camel::runtime::GCOperBody>(function, ref);
                 const gc_node_ref_t made =
                     draft.addOperNode(node->dataType(), nullptr, body->uri());
                 std::vector<gc_node_ref_t> originals;
@@ -2411,7 +2410,8 @@ bool liftGraph(
                 // time without it.
                 {
                     std::vector<gc_node_ref_t> waits;
-                    for (gc_node_ref_t edge : function.syncInputsOf(ref)) {
+                    for (const rt::GCGraphSyncEdge &sync : function.syncPredsOf(ref)) {
+                        const gc_node_ref_t edge = sync.pred;
                         if (edge < function.nodeCount() && copied[edge]) {
                             waits.push_back(copyOf[edge]);
                         }
@@ -2450,7 +2450,7 @@ bool liftGraph(
                     // have one, in their own order (design principles 9.9, and the same "no slot"
                     // the `Tangent<bool> = ()` reading uses -- a slot that does not exist, not a
                     // zero that does).
-                    const NodeFace *input = function.node(original);
+                    const rt::GCNode *input = nodeOf(function, original);
                     if (input != nullptr &&
                         !camel::core::tangentSpaceOf(input->dataType()).hasSpace()) {
                         continue;
@@ -2489,7 +2489,7 @@ bool liftGraph(
                 // `float[]`.
                 std::vector<camel::core::type::Type *> operandTypes;
                 for (gc_node_ref_t original : originals) {
-                    const NodeFace *input = function.node(original);
+                    const rt::GCNode *input = nodeOf(function, original);
                     operandTypes.push_back(input != nullptr ? input->dataType() : nullptr);
                 }
                 // The rule is generic in the element of the operand it was matched on: `+` over
@@ -2509,7 +2509,9 @@ bool liftGraph(
                     const std::span<const slot_t> staticSlots = function.staticSlots();
                     portValues.reserve(operandTypes.size());
                     for (const gc_node_ref_t original : originals) {
-                        const camel::runtime::gc_slot_idx_t index = function.dataIndexOf(original);
+                        const rt::GCNode *originalNode = nodeOf(function, original);
+                        const camel::runtime::gc_slot_idx_t index =
+                            originalNode != nullptr ? originalNode->dataIndex : 0;
                         if (index < 0) {
                             const auto slot = static_cast<size_t>(-index);
                             portValues.push_back(
@@ -2585,12 +2587,11 @@ bool liftGraph(
         // its Join. Which arm is which, and what each arm yields, is read from the original graph;
         // nothing about branches is decided a second time here.
         for (gc_node_ref_t ref = 0; complete && ref < function.nodeCount(); ++ref) {
-            const NodeFace *node = function.node(ref);
+            const rt::GCNode *node = nodeOf(function, ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Brch) {
                 continue;
             }
-            rt::GCBrchBody brchBody{};
-            const auto *body         = function.bodyOf(ref, brchBody) ? &brchBody : nullptr;
+            const auto *body = nodeBodyOrNull<rt::GCBrchBody>(function, ref);
             const gc_node_ref_t brch = copyOf[ref];
             if (body == nullptr || brch == rt::kInvalidNodeRef) {
                 complete = false;
@@ -2672,7 +2673,7 @@ bool liftGraph(
         // the pair the body computes. The loop's value is then a lifted value like any other, so a
         // reader of it needs nothing special, including the body's exit.
         for (gc_node_ref_t ref = 0; complete && ref < function.nodeCount(); ++ref) {
-            const NodeFace *node = function.node(ref);
+            const rt::GCNode *node = nodeOf(function, ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
                 continue;
             }
@@ -2684,8 +2685,11 @@ bool liftGraph(
             // How many values this loop collects into arrays each round: the shape of its value and
             // of its body's result (`LoopView::collectionCount`). Read here as well as in the walk,
             // from the one node, so the two readings are the same reading.
+            const rt::GCLoopBody *read = nodeBodyOrNull<rt::GCLoopBody>(function, ref);
             rt::GCLoopBody body{};
-            function.bodyOf(ref, body);
+            if (read != nullptr) {
+                body = *read;
+            }
             const size_t stateCount = loopStateCountOf(ref, body);
             // The body region comes first: its result is the pair the state becomes, and the loop
             // node's *first with-input* is that same result (LoopView::bodyResult reads it there),
@@ -2764,7 +2768,7 @@ bool liftGraph(
                     complete = false;
                     break;
                 }
-                const NodeFace *in       = function.node(input);
+                const rt::GCNode *in       = nodeOf(function, input);
                 const gc_node_ref_t copy = copyOf[input];
                 if (inputIndex++ < stateStart) {
                     // The array a `for` loop walks (`LoopView::iterable`). It is copied as it
@@ -2886,7 +2890,7 @@ bool liftGraph(
         // the pair, and their exits are the shapes `split` already cuts as `Branch` and `Loop`;
         // wrapping those in a `Fill` would hide a region behind a tuple and turn a cuttable exit
         // into a wall.
-        const NodeFace *exitSource = function.node(oldValue);
+        const rt::GCNode *exitSource = nodeOf(function, oldValue);
         const bool exitIsApplication =
             exitSource != nullptr &&
             (exitSource->kind == rt::GCNodeKind::Call || exitSource->kind == rt::GCNodeKind::Func);
@@ -2928,8 +2932,8 @@ bool liftGraph(
         // is a gate over the pair with the same waits, so the effect runs once, at the same point.
         gc_node_ref_t exit               = out;
         const gc_node_ref_t originalExit = function.exitNodeRef();
-        if (originalExit < function.nodeCount() && function.node(originalExit) != nullptr &&
-            function.node(originalExit)->kind == rt::GCNodeKind::Gate) {
+        if (originalExit < function.nodeCount() && nodeOf(function, originalExit) != nullptr &&
+            nodeOf(function, originalExit)->kind == rt::GCNodeKind::Gate) {
             Type *gateType =
                 exitShape.type != nullptr
                     ? exitShape.type
@@ -2951,7 +2955,8 @@ bool liftGraph(
             draft.setNormInputs(
                 gate,
                 std::span<const gc_node_ref_t>(gateInputs.data(), gateInputs.size()));
-            for (gc_node_ref_t edge : function.syncInputsOf(originalExit)) {
+            for (const rt::GCGraphSyncEdge &sync : function.syncPredsOf(originalExit)) {
+                const gc_node_ref_t edge = sync.pred;
                 if (edge < function.nodeCount() && copied[edge]) {
                     (void)draft.appendChainStatement(gate, copyOf[edge]);
                 }

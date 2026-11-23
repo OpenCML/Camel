@@ -23,11 +23,12 @@
 /// plot. matplotlib is used when it is importable, and an SVG file is written otherwise.
 /// @effect writes an image file
 /// @example plot([1.0, 2.0, 3.0], "myplot.png")
-export func plot(data: i32[]): void
-export func plot(data: int[]): void
-export func plot(data: f32[]): void
-export func plot(data: float[]): void
-export func plot(data: i32[], filename: string): void
-export func plot(data: int[], filename: string): void
-export func plot(data: f32[], filename: string): void
-export func plot(data: float[], filename: string): void
+#op('pyplot:plot')
+export func plot(data: i32[]): void panic
+export func plot(data: int[]): void panic
+export func plot(data: f32[]): void panic
+export func plot(data: float[]): void panic
+export func plot(data: i32[], filename: string): void panic
+export func plot(data: int[], filename: string): void panic
+export func plot(data: f32[], filename: string): void panic
+export func plot(data: float[], filename: string): void panic

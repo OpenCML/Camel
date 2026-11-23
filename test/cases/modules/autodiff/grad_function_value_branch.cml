@@ -6,7 +6,7 @@ import { grad } from autodiff
 with <p: f64[...]>
 func loss(): float {
     let s = float(sum(p))
-    let g = if s > 0.0 then (t: f64[...]): f64[...] => tanh(t * s) else (t: f64[...]): f64[...] => t * s
+    let g = if s > 0.0 then func (t: f64[...]) => f64[...] { tanh(t * s) } else func (t: f64[...]) => f64[...] { t * s }
     let a = g(p)
     let b = g(a * 0.5)
     return float(sum(b))

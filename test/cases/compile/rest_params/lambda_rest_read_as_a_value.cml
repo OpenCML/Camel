@@ -25,8 +25,8 @@ func twenty(g: (a: float, b: float) => float): float {
 }
 
 func main(): int sync {
-    let small = two((...xs) => xs.[0] + xs.[1])
-    let big = twenty((...xs) => xs.[0] + xs.[1])
+    let small = two(func (...xs) { xs.[0] + xs.[1] })
+    let big = twenty(func (...xs) { xs.[0] + xs.[1] })
     println(small)
     println(big)
     return 0

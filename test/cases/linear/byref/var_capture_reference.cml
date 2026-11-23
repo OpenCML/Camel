@@ -39,7 +39,7 @@ func nested(): int sync {
 }
 
 func through(var out: int): int sync {
-    let add = (x: int): int => sync {
+    let add = func (x: int) => int sync {
         out += x
         return out
     }
@@ -50,7 +50,7 @@ func through(var out: int): int sync {
 
 func counted(): int sync {
     var total = 0
-    [1, 2, 3]->foreach<(x: int) => sync {
+    [1, 2, 3]->foreach<func (x: int) sync {
         total += x
     }>
     return total

@@ -12,7 +12,7 @@
 
 func make(x: int): ((k: int) => int, int) pure {
     var acc = 0
-    let add = (k: int): int => sync {
+    let add = func (k: int) => int sync {
         acc = acc + k
         acc
     }

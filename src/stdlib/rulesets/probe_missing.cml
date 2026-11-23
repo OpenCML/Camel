@@ -7,17 +7,17 @@
 // a state the code can be put in on purpose, rather than by taking a rule out of the production
 // ruleset.
 rule add_ok(x: float, w: float) {
-    x + w => (dx: float, dw: float) => dx + dw
+    x + w => func (dx: float, dw: float) { dx + dw }
 }
 
 rule sub_ok(x: float, w: float) {
-    x - w => (dx: float, dw: float) => dx - dw
+    x - w => func (dx: float, dw: float) { dx - dw }
 }
 
 rule mul_ok(x: float, w: float) {
-    x * w => (dx: float, dw: float) => dx * w + x * dw
+    x * w => func (dx: float, dw: float) { dx * w + x * dw }
 }
 
 rule neg_ok(x: float) {
-    -x => (dx: float) => -dx
+    -x => func (dx: float) { -dx }
 }

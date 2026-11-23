@@ -13,9 +13,9 @@ graph-based ML stack end to end. Every directory holds:
   `origin=<ORIGIN>` still asserts that a node has an origin;
 - `run.log` - the full record of the last recorded run.
 
-`node exemplars/check.mjs` re-runs every exemplar and checks it (the test plan
+`node internal/exemplars/check.mjs` re-runs every exemplar and checks it (the test plan
 `test/plans/feat/exemplars.plan.toml` runs it per exemplar);
-`node exemplars/check.mjs --update [name ...]` re-records `expected/` and
+`node internal/exemplars/check.mjs --update [name ...]` re-records `expected/` and
 `run.log` from the current build.
 
 | # | Exemplar | Shows |

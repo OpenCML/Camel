@@ -14,7 +14,7 @@ func inner(a: int): int sync {
 
 func main(): int sync {
     println("main 1")
-    let block = (a: int): int => sync {
+    let block = func (a: int) => int sync {
         println("block 1", a)
         let y = inner(a)
         println("block 2", y)

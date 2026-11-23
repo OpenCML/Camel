@@ -47,7 +47,7 @@ func main(): int sync {
     println(n, zs)
 
     var fs = [2.5, -1.0, 0.5]
-    let resort = (): float[] => sync {
+    let resort = func () => float[] sync {
         return fs->sort
     }
     let sorted_fs = resort()

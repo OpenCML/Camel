@@ -49,8 +49,8 @@ struct Footprint {               // 一个函数（图）对调用者的样子
     SmallVec<Access> accesses;   // 已遮蔽
     bool external, mayFault, mayNotTerminate;
 };
-NodeEffect effectOf(const GraphReadFace&, NodeRef);
-Footprint  footprintOf(const GraphReadFace&);          // 调用图上的最小不动点
+NodeEffect effectOf(const GraphView&, NodeRef);
+Footprint  footprintOf(const GraphView&);          // 调用图上的最小不动点
 ```
 
 - 节点级与图级是**同一条规则**的两个粒度：`footprintOf` 是对图里所有节点的 `effectOf` 求并再遮蔽，调用节点的 `effectOf` 取被调者的 `footprintOf`。

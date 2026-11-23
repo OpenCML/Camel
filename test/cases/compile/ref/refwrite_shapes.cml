@@ -81,7 +81,7 @@ func read_in_the_caller(): int {
 func carried_box(): () => int {
     let c = state::ref(0)
     state::set(c, 2)
-    return (): int => state::get(c)
+    return func () => int { state::get(c) }
 }
 
 func read_on_a_later_call(): int {

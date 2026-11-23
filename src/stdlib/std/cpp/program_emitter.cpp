@@ -247,7 +247,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
         for (gc_node_ref_t ref : graph->execPlan().topo) {
             const auto *node = graph->node(ref);
             if (node->kind == GCNodeKind::Data) {
-                if (GCGraph *function = functionConstant(graph, ref);
+                if (auto *function = functionConstant(graph, ref);
                     function != nullptr && !seen.contains(function)) {
                     work.push_back(function);
                 }
@@ -256,7 +256,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
             if (node->kind != GCNodeKind::Func) {
                 continue;
             }
-            GCGraph *callee = parts_.program->calleeOf(*graph, ref);
+            auto *callee = parts_.program->calleeOf(*graph, ref);
             if (callee == nullptr) {
                 continue;
             }
@@ -267,7 +267,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
     };
 
     while (!work.empty()) {
-        GCGraph *graph = work.back();
+        auto *graph = work.back();
         work.pop_back();
         if (!seen.insert(graph).second) {
             continue;
@@ -292,11 +292,11 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
     // The signatures first: a function whose parameters or result have no translation is
     // refused at its definition before anything in a body is looked at.
     std::vector<std::unique_ptr<FunctionEmitter>> probes;
-    for (GCGraph *graph : functions) {
+    for (auto *graph : functions) {
         probes.push_back(std::make_unique<FunctionEmitter>(parts_, std::vector<GCGraph *>{graph}));
     }
     for (size_t i = 0; i < functions.size(); ++i) {
-        GCGraph *graph = functions[i];
+        auto *graph = functions[i];
         probes[i]->definition();
         for (const GCGraph *callee : probes[i]->tailCallees()) {
             calls[graph].push_back(const_cast<GCGraph *>(callee));
@@ -314,7 +314,7 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
         index[g] = low[g] = next++;
         stack.push_back(g);
         onStack.insert(g);
-        for (GCGraph *callee : calls[g]) {
+        for (auto *callee : calls[g]) {
             if (!index.contains(callee)) {
                 visit(callee);
                 low[g] = std::min(low[g], low[callee]);
@@ -334,7 +334,7 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
             components.push_back(std::move(component));
         }
     };
-    for (GCGraph *graph : functions) {
+    for (auto *graph : functions) {
         if (!index.contains(graph)) {
             visit(graph);
         }
@@ -358,7 +358,7 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
         if (component.size() > 1 && sameResult) {
             groups.push_back(component);
         } else {
-            for (GCGraph *g : component) {
+            for (auto *g : component) {
                 groups.push_back({g});
             }
         }
@@ -615,7 +615,7 @@ std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, 
         }
         roots.push_back(entry.main);
     } else {
-        for (GCGraph *graph : runtimeProgram.subGraphs(*root)) {
+        for (auto *graph : runtimeProgram.subGraphs(*root)) {
             if (graph != nullptr && !isAnonymous(graph->name())) {
                 roots.push_back(graph);
             }
@@ -633,7 +633,7 @@ std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, 
     for (const std::vector<GCGraph *> &group : tailCallGroups(functions)) {
         std::string name;
         if (group.size() > 1) {
-            for (GCGraph *graph : group) {
+            for (auto *graph : group) {
                 name += parts_.functionNames.at(graph) + "_";
             }
             name = globals_.unique(name + "loop");

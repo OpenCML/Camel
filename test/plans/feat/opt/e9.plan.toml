@@ -63,7 +63,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 # (`validateRuntimeRegions`, src/runtime/graph.cpp) -- the commit refusing a graph a pass had already
 # broken. The region is the loop body and its port table is how the loop enters it: an entry a rewrite
 # took, or one dropped from the middle, renames every state after it
-# (`LoopDraftView::bodyStateParam(j)` is entry `j`). So a port of a control region is a name the graph
+# (`LoopView::bodyStateParam(j)` is entry `j`). So a port of a control region is a name the graph
 # keeps even when nothing in the region reads it, and the policies that erase unread nodes now ask one
 # question (`GraphDraft::namesNode`) instead of each keeping its own list -- the rules driver's list and
 # extraction's list disagreed, which is the window this program fell through.

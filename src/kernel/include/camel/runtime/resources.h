@@ -474,6 +474,14 @@ struct CommitViolation {
 /// both promises passes both false and this reading returns nothing, in every build. The record is
 /// the rule (docs/design/graph-editing/README.cn.md 8.1's table), and the two flags are that table's
 /// right-hand columns.
+///
+/// The tier is not the whole of the effect question. Containment compares two sides -- what the body
+/// reaches and what the signature declares -- and a commit that republishes a graph under another
+/// type moves the second one without making a node or adding an access. So the effect question is
+/// also asked whenever the graph's declared clause differs from the clause of the graph the commit
+/// started from (`before`), and a clause that narrowed is refused where the body already stands
+/// outside it; the refusal names the access and both clauses. The order question has no such other
+/// side: a clause says nothing about who goes first.
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,

@@ -23,7 +23,7 @@ func main(): int sync {
     let s = 'a'
     func g(a: int): int { return a + b }
     func h(a: int): int { return a - b }
-    let lam = (x: int) => x * 2
+    let lam = func (x: int) { x * 2 }
 
     // argument
     println('arg', apply(inc, 1), apply(g, 1), apply(lam, 1))
@@ -38,7 +38,7 @@ func main(): int sync {
     let fs = [inc, dec]
     let gs = [g, h]
     println('array', fs[0](1), fs[1](1), gs[0](1), gs[1](1), [inc, lam][1](4))
-    println('array map', [inc, dec]->map<(f: (x: int) => int) => f(10)>)
+    println('array map', [inc, dec]->map<func (f: (x: int) => int) { f(10) }>)
     // element of a tuple literal
     let t = (inc, g, 3)
     println('tuple', t.0(1), t.1(1))
@@ -61,9 +61,9 @@ func main(): int sync {
     let m2 = match s { case 'b' => g  case _ => h }
     println('match arm', m1(1), m2(1))
     // captured by a lambda
-    let l1 = (x: int) => inc(x) + g(x)
-    let l2 = (x: int) => k1(x)
-    let l3 = (x: int) => apply(inc, x) + apply(g, x)
+    let l1 = func (x: int) { inc(x) + g(x) }
+    let l2 = func (x: int) { k1(x) }
+    let l3 = func (x: int) { apply(inc, x) + apply(g, x) }
     println('capture', l1(1), l2(1), l3(1))
     // with argument
     let w1 = withf<inc>(1)

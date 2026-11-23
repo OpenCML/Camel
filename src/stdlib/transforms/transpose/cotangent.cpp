@@ -64,9 +64,8 @@ std::string addUriOfSpace(Type *space) {
 /// if the answer is ever consulted before it is filled. An empty `addUri` is a value whose type has
 /// no cotangent space -- and every caller has already asked `hasTangentSpace` of the value before a
 /// cotangent of it exists -- so an empty answer is a defect of this walk and refused as one.
-std::string addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref, Type *&addType) {
-    const camel::runtime::GCNode *node = function->node(ref);
-    const Type *type                   = node != nullptr ? node->dataType() : nullptr;
+std::string addUriFor(const camel::graph::GraphView *function, gc_node_ref_t ref, Type *&addType) {
+    const Type *type = function != nullptr ? function->typeOf(ref) : nullptr;
     const camel::core::TangentSpaceAnswer space =
         type == nullptr ? camel::core::TangentSpaceAnswer{} : camel::core::tangentSpaceOf(type);
     addType = space.hasSpace() ? space.space : nullptr;
@@ -161,12 +160,6 @@ Type *cotangentTypeOfResultType(const Type *result) {
 
 Type *resultCotangentType(const FunctionType *function) {
     return cotangentTypeOfResultType(function != nullptr ? function->exitType() : nullptr);
-}
-
-Type *resultCotangentType(const camel::runtime::GCGraph *function) {
-    return cotangentTypeOfResultType(
-        function != nullptr && function->funcType() != nullptr ? function->funcType()->exitType()
-                                                               : nullptr);
 }
 
 /// The law's refusal, asked from outside this file: the operator's call site

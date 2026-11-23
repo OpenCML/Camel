@@ -33,7 +33,7 @@ func main(): int sync {
     bump(c)
     countdown(d, 3)
     let r = state::ref(c)
-    let inc = (): void => sync { state::set(r, state::get(r) + 1) }
+    let inc = func () => void sync { state::set(r, state::get(r) + 1) }
     inc()
     c = state::get(r)
     var xs = [3, 1, 2]

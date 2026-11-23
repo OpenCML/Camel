@@ -4,15 +4,15 @@
  * `last(xs)`.
  */
 
-func part(xs: int[], a: int, b: int): int[] { return xs[a:b] }
+func part(xs: int[], a: int, b: int): int[] { return xs[a..b] }
 
-func after(xs: int[], a: int): int[] { return xs[a:] }
+func after(xs: int[], a: int): int[] { return xs[a..] }
 
-func till(xs: int[], b: int): int[] { return xs[:b] }
+func till(xs: int[], b: int): int[] { return xs[..b] }
 
-func whole(xs: int[]): int[] { return xs[:] }
+func whole(xs: int[]): int[] { return xs[..] }
 
-func stepped(xs: int[], a: int, b: int): int[] { return xs[a:b:1] }
+func stepped(xs: int[], a: int, b: int): int[] { return xs[range(a, b, 1)] }
 
 func rows(xs: int[], idx: int[]): int[] { return xs[idx] }
 

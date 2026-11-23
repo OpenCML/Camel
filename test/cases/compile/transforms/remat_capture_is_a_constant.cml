@@ -16,7 +16,7 @@ import rulesets.vmap
 import { vmap, remat } from transforms
 
 func make(c: float): (x: float) => float {
-    return (x: float) => x + c
+    return func (x: float) { x + c }
 }
 
 func main(): int sync {

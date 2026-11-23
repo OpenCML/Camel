@@ -235,8 +235,8 @@ For the functions each module exports (signature, whether it is pure, behaviour 
   import { trim, split, to_upper } from str
   import { sort_by, take } from array
 
-  let words = '  pear, fig ,apple '->trim->split<','>->map<(w) => trim(w)>
-  let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
+  let words = '  pear, fig ,apple '->trim->split<','>->map<func (w) { trim(w) }>
+  let shortest = words->sort_by<func (w: string) { len(w) }>->take<2>     // ['fig', 'pear']
   ```
 
 - A function that may have no result returns `T?` (`find` and `index_of` when nothing is found, `min`, `max` and `median` of an empty array), handled with `??`; only operations declared as fallible return `T!` (such as decoding by code point a string that is not valid UTF-8); out-of-range arguments and arguments outside the domain are faults.

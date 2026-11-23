@@ -18,11 +18,11 @@ import rulesets.vmap
 import { vmap } from transforms
 
 func make(c: float): (x: float) => float {
-    return (x: float) => x + c
+    return func (x: float) { x + c }
 }
 
 func make2(a: float, b: float): (x: float) => float {
-    return (x: float) => x * a + b
+    return func (x: float) { x * a + b }
 }
 
 func main(): int sync {

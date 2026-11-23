@@ -27,14 +27,14 @@ import { to_array } from bytes
 /// The same elements widened to f64. `array_sum` over an f64 array accumulates in f64 (an f64
 /// accumulator is the f64 rule already), so this is the independent f64 reference for the vector.
 func widened(xs: f32[]): f64[] {
-    return xs->map<(x: f32) => float(x)>
+    return xs->map<func (x: f32) { float(x) }>
 }
 
 /// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
 /// rounds — this is what "round after every step" means, and what `array_sum` did for an f32
 /// array before the array reduction's rule.
 func foldF32(xs: f32[]): f32 {
-    return xs->reduce<(acc: f32, item: f32): f32 => acc + item, f32(0.0)>
+    return xs->reduce<func (acc: f32, item: f32) => f32 { acc + item }, f32(0.0)>
 }
 
 /// The four bytes of one f32 value, read back through a one-element f32 tensor.
@@ -48,10 +48,10 @@ func sameBits(a: int[], b: int[]): bool {
 }
 
 func main(): int sync {
-    let a = (0..1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
+    let a = (0..1026)->map<func (i: int) { if i == 0 then f32(16777216.0) else f32(1.0) }>
     let b = (0..4096)
-                ->map<(i: int) => if i == 0 then f32(16777216.0)
-                                  else if i % 2 == 0 then f32(1.0) else f32(0.5)>
+                ->map<func (i: int) { if i == 0 then f32(16777216.0)
+                                  else if i % 2 == 0 then f32(1.0) else f32(0.5) }>
 
     let sumA = array_sum(a)
     let refA = array_sum(widened(a))

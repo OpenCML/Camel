@@ -18,11 +18,11 @@ func opText(n: Node): string {
 }
 
 func opsOf(g: Graph): string[] spelling {
-    return nodes(g)->map<(n: Node): string => opText(n)>->filter<(s: string): bool => s != ''>
+    return nodes(g)->map<func (n: Node) => string { opText(n) }>->filter<func (s: string) => bool { s != '' }>
 }
 
 func countOf(ops: string[], which: string): int {
-    return len(ops->filter<(s: string): bool => s == which>)
+    return len(ops->filter<func (s: string) => bool { s == which }>)
 }
 
 /// The edges of the graph: every input of every node is one edge, of one of the three kinds.
@@ -49,7 +49,7 @@ func line(g: Graph) spelling {
 /// The table of `p`, in graph order, with the root graph (`__root__`) left out: it holds the entry
 /// call alone and is the same on both sides.
 export func report::<F>(p: F): F! spelling sync {
-    let gs = graphs_of(p)->filter<(g: Graph): bool => name(g) != '__root__'>
+    let gs = graphs_of(p)->filter<func (g: Graph) => bool { name(g) != '__root__' }>
     let _ = loop n = 0 for g in gs do sync {
         line(g)
         return n + 1

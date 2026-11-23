@@ -122,7 +122,7 @@ func plus(x: (float, int), y: (float, int)): (float, int) {
 
 // How many of the differences are not exactly zero.
 func mismatches(drifts: float[]): int {
-    return drifts->reduce<(acc: int, d: float): int => if d != 0.0 then acc + 1 else acc, 0>
+    return drifts->reduce<func (acc: int, d: float) => int { if d != 0.0 then acc + 1 else acc }, 0>
 }
 
 func main(steps: int): int sync {

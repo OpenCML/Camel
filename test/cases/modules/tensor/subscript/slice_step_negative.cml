@@ -2,7 +2,7 @@
  * A negative step runs backwards: the core's one slice takes any non-zero step, and a negative one
  * walks the positions from the start down while they are above the end. The result is a copy, not
  * a view (the deviation recorded for a stepped slice, and the same one for another axis), so
- * `b[3:0:-1]` is the elements at 3, 2 and 1 -- position 0 is not taken, because the end is where
+ * `b[range(3, 0, -1)]` is the elements at 3, 2 and 1 -- position 0 is not taken, because the end is where
  * the walk stops; an end left out stands for the position before the first.
  */
 import { reshape, shape, sum } from tensor
@@ -10,9 +10,9 @@ import { reshape, shape, sum } from tensor
 func main(): int sync {
     println('ran')
     let b = reshape<[4]>([1.0, 2.0, 3.0, 4.0])
-    println(shape(b[3:0:-1]))
-    println(sum(b[3:0:-1]))
-    println(shape(b[3::-1]))
-    println(shape(b[:0:-1]))
+    println(shape(b[range(3, 0, -1)]))
+    println(sum(b[range(3, 0, -1)]))
+    println(shape(b[range(3, -1, -1)]))
+    println(shape(b[range(len(b) - 1, 0, -1)]))
     return 0
 }

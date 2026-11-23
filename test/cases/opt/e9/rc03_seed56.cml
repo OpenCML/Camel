@@ -9,7 +9,7 @@ func e22(g25: (a0: int) => int, a24: P, a23: int): float sync {
 }
 
 func e33(var c34: bool, var c35: int, a36: string): int sync {
-    let n43 = e22((p42: int): int => sync {
+    let n43 = e22(func (p42: int) => int sync {
         return 0;
     }, { x: 0, y: 0 }, 0);
     return 0;
@@ -17,7 +17,7 @@ func e33(var c34: bool, var c35: int, a36: string): int sync {
 
 func main(): int sync {
     let n73 = loop s67 = ((-3) -(-1)) for q68 in [0] do sync {
-        let n72 = e22((p70: int): int => sync {
+        let n72 = e22(func (p70: int) => int sync {
             return 0;
         }, { x: 0, y: 0 }, 5);
         return 0;

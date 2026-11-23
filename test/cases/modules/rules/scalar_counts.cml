@@ -14,11 +14,11 @@ func opText(n: Node): string {
 }
 
 func countOf(ops: string[], which: string): int {
-    return len(ops->filter<(s: string): bool => s == which>)
+    return len(ops->filter<func (s: string) => bool { s == which }>)
 }
 
 func reportGraph(g: Graph) spelling {
-    let ops = nodes(g)->map<(n: Node): string => opText(n)>->filter<(s: string): bool => s != ''>
+    let ops = nodes(g)->map<func (n: Node) => string { opText(n) }>->filter<func (s: string) => bool { s != '' }>
     println(
         'scalar', name(g), len(ops),
         countOf(ops, 'math:log_d') + countOf(ops, 'math:log_f'),
@@ -30,7 +30,7 @@ func reportGraph(g: Graph) spelling {
 }
 
 export func report::<F>(p: F): F! spelling sync {
-    let gs = graphs_of(p)->filter<(g: Graph): bool => name(g) != 'main' && name(g) != '__root__'>
+    let gs = graphs_of(p)->filter<func (g: Graph) => bool { name(g) != 'main' && name(g) != '__root__' }>
     let _ = loop n = 0 for g in gs do sync {
         reportGraph(g)
         return n + 1
