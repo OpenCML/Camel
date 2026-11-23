@@ -191,7 +191,7 @@ funcDecl   :
         (WITH angledParams)?
         EXPORT? modifiers?
         FUNC identRef parentParams (('=>' | ':') typeExpr)? stmtBlock ;
-The result type is written `=> T` (design principles 4.4, the author 2026-11-23); `: T` is the
+The result type is written `=> T` (design principles 4.4); `: T` is the
 older spelling and is still read while the corpus is written that way.
 */
 Value Builder::visitFuncDecl(cst::FuncDecl context) {

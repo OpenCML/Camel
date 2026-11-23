@@ -1723,7 +1723,7 @@ rangeExpr
     : additiveExpr (('..' | '<>') additiveExpr)*
     ;
 `..` and `<>` are binary operators and are written with the spaces every binary operator gets
-(design principles 4.1, the author 2026-11-23): the spacing is what tells `a .. b` from the
+(design principles 4.1): the spacing is what tells `a .. b` from the
 elements it binds, and the same rule writes `f <> g`. Only the `..` of a slice stays tight, and
 that one is not this node: it is `sliceIndices` inside `[ ]`, which writes its own separators
 (visitSliceIndices).

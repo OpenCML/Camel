@@ -117,7 +117,7 @@ node_handle_t Builder::visitLinkNode(
         return composed;
     }
     // `f <> g` (gct.compose): the composition and nothing else, so the interval reading is not
-    // offered here (design principles 4.2, the author 2026-11-23).
+    // offered here (design principles 4.2).
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kComposeCall) {
         node_handle_t composed = buildComposition(gct, expectedResult, true);

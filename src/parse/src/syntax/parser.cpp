@@ -781,7 +781,7 @@ void ParserImpl::parseFrontMatter() {
 ///            'func' (identRef | operatorName) typeParams? parentParams (('=>' | ':') typeExpr)?
 ///            resourceClause? whenClause? stmtBlock?
 ///
-/// The result type follows `=>` (design principles 4.4, the author 2026-11-23); `: 类型` is the
+/// The result type follows `=>` (design principles 4.4); `: 类型` is the
 /// older spelling and is still read while the corpus is written that way.
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
@@ -1005,7 +1005,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseTypeParams();
     }
     parseParentParams(true, true);
-    // The result type is written `=> T` (design principles 4.4, the author 2026-11-23): the same
+    // The result type is written `=> T` (design principles 4.4): the same
     // arrow a function type and a lambda write before theirs, so a declaration reads like the
     // type of what it declares. `: T` is the older spelling, and it is still read while the
     // corpus is written that way -- one rewriting pass changes the files, and no file has to

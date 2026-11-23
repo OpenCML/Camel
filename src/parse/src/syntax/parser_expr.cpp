@@ -243,7 +243,7 @@ void ParserImpl::parseRelational() {
 /// composition by pipe).
 /// `..` is the interval, and it keeps its second reading as the composition while the corpus
 /// still spells it that way (`lane/notation-b3`); `<>` is the composition and has no other
-/// reading (design principles 4.2, the author 2026-11-23). The AST builder tells them apart by
+/// reading (design principles 4.2). The AST builder tells them apart by
 /// the operator token.
 /// Inside a subscript the `..` is the slice's separator, and `noRange_` is on there: the
 /// dimension reads `a..b` as two ends, not as a range value (see `parseSliceIndices`).
@@ -939,7 +939,7 @@ void ParserImpl::parseAngledValues() {
 /// The arguments are all positional or all named (design principles 5.9): `f::<int, string>`
 /// or `f::<A: int, B: string>`. The colon says the argument is named, as it does in a parameter
 /// and in a field; `=` is the older spelling, still read while the corpus is written that way
-/// (design principles 5.9, the author 2026-11-23).
+/// (design principles 5.9).
 void ParserImpl::parseTypeArguments() {
     const size_t m = mark();
     bump(); // ::
