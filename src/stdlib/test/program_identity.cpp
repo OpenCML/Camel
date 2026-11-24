@@ -176,14 +176,17 @@ ProgramIdentityTestPass::apply(const camel::runtime::Program *program, std::ostr
         camel::runtime::GraphTransaction &transaction = session.edit(program->root());
         camel::runtime::GraphDraft &draft             = transaction.edit();
         retained                                     = draft.nodeSlotCount();
-        const bool holdsIt   = program->holds(draft);
-        const bool inProgram = context_->programOfRuntimeGraph(draft) == program;
-        foreign              = !holdsIt && !inProgram;
+        const bool holdsIt = program->holds(draft);
+        // Not "some other program": *no* program. The answer a context gives for a value it does
+        // not hold is none, and a manager that answered with any program of the context -- the
+        // newest one, say -- would still look right if this asked only `!= program`.
+        const bool named = context_->programOfRuntimeGraph(draft) != nullptr;
+        foreign          = !holdsIt && !named;
         if (!foreign) {
             ++failures;
         }
         os << "[PI] foreign draft=1 holds=" << (holdsIt ? 1 : 0)
-           << " program=" << (inProgram ? 1 : 0) << "\n";
+           << " program=" << (named ? 1 : 0) << "\n";
     }
     // Two places in the source, one graph: the sites are grouped by the value they named, so
     // "different text, one value" is a count and not an opinion. `shared` is the largest group --
