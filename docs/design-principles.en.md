@@ -643,7 +643,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 9.2 The explicit pipeline
 
 - **The pipeline is composed explicitly by the user**, and the language core does not restrict the order of passes; a module cannot add passes on import, nor change the pipeline automatically.
-- A graph that is not empty when the written passes are done (also when none is written) goes to `std::default`, which points to the node virtual machine.
+- A graph that is not empty when the written passes are done (also when none is written) goes to `std::default`, which points to the bytecode virtual machine `std::fvm`, the one that carries performance. The node virtual machine `std::nvm` is the reference the implementations are held to (the reference semantics), and the other back ends are compared with it.
 - **The `std::` prefix is given only to the core's own passes**; a module's passes use the module's own name, and aliases are registered by the module.
 - When a pass of a module (such as `onnx::export`) is written on the command line, the compiler loads that module automatically; a pure program need not `import` a module it does not use just to be exported.
 - **A library checks its own preconditions**: when a pass it needs is not in the pipeline, a diagnostic is given saying which pass to add.
