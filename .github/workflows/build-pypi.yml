@@ -511,9 +511,13 @@ jobs:
         # therefore signed.
         #
         # MACOSX_DEPLOYMENT_TARGET=13.0 is already in the job env: delocate reads it and takes
-        # max(the binaries' own minimum, 13.0) for the platform tag, so the name stays
-        # `macosx_13_0_arm64`, and a library that needs a newer system raises here instead of
-        # shipping under a tag it cannot honour.
+        # max(the binaries' own minimum, 13.0) for the platform tag, and a library that needs a
+        # newer system raises here instead of shipping under a tag it cannot honour. It only
+        # *narrows* the tag the wheel already claims, though, it never widens it -- which is why
+        # `macosPlatformTag()` in scripts/pypi-rollup.js had to stop asking the interpreter
+        # (`sysconfig.get_platform()` answers `macosx-10.9-universal2` for the setup-python
+        # framework build) and start asking `process.arch` + `MACOSX_DEPLOYMENT_TARGET`. Run
+        # 45349410016 shipped `...-macosx_13_0_arm64.macosx_13_0_x86_64.whl` off that difference.
         if: runner.os == 'macOS'
         env:
           CAMEL_PYPI_PYTHON: ${{ steps.python.outputs.python-path }}
@@ -525,12 +529,14 @@ jobs:
             --require-archs arm64 -w wheelhouse dist/pypi/*.whl
           ls -la wheelhouse/
 
-      - name: Check the macOS wheels (otool -L and codesign)
-        # 5.37 item 6, on the artifact and not on the intention. For every Mach-O in the wheel,
-        # `otool -L` has to name only `/usr/lib` or `/System` libraries or files reached through
-        # `@loader_path` / an `@rpath` that stays inside the package -- anything else is a path on
-        # the build host -- and `codesign --verify --strict` has to pass. The tag check below is the
-        # other half: a wheel can be tagged correctly and still be unloadable.
+      - name: Check the macOS wheels (lipo, otool -L and codesign)
+        # 5.37 item 6, on the artifact and not on the intention. Every Mach-O has to carry the
+        # architecture the file *name* claims (`lipo -archs`), because that name is what pip offers
+        # to a machine; for every one of them `otool -L` has to name only `/usr/lib` or `/System`
+        # libraries or files reached through `@loader_path` / an `@rpath` that stays inside the
+        # package -- anything else is a path on the build host -- and `codesign --verify --strict`
+        # has to pass. The tag check below is the other half: a wheel can be tagged correctly and
+        # still be unloadable.
         #
         # `python3`, not `python`: this step runs only on macOS, and setup-python always provides
         # `python3` there while `python` has depended on the image.

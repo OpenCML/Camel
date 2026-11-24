@@ -203,8 +203,18 @@ Mac mini 上 `pip install camel-lang` 找不到版本，原因是 `build-pypi.ym
 macos-arm64 腿只证明能编译、能跑，与"打得出一个装得上、跑得起来的包"是两件事。补上的是最后那一步打包（5.37 第 6 项），
 随下一版发布，不进 0.2.46。
 
-- 矩阵多一格 `macos-latest` / `macosx_13_0_arm64`（`MACOSX_DEPLOYMENT_TARGET=13.0`）。标签不是难点：
-  `scripts/pypi-rollup.js` 用 `sysconfig.get_platform()` 本来就会给出这个标签。只发 Apple Silicon，Intel Mac 不发布。
+- 矩阵多一格 `macos-latest` / `macosx_13_0_arm64`（`MACOSX_DEPLOYMENT_TARGET=13.0`）。只发 Apple Silicon，Intel Mac
+  不发布。标签本身是踩过的坑：`scripts/pypi-rollup.js` 原来在这一格用 `sysconfig.get_platform()` 取标签，而
+  `setup-python` 那份 CPython 是 universal2 构建，答的是 `macosx-10.9-universal2`——那是**解释器**怎么编的，不是这个 wheel
+  里有什么。它影响的不只是名字：`delocate-wheel` 不重写标签，它只会**收窄**（`delocating.py` 的 "Limit architecture tags
+  to whatever the wheel already claimed to support"，`arch_version.keys() - wheel_arch_version.keys()` 被删掉），于是
+  第 45349410016 次运行真的产出了 `camel_lang-0.2.47-cp310-abi3-macosx_13_0_arm64.macosx_13_0_x86_64.whl`：pip 会在 Intel
+  Mac 上装它，而包里唯一有 x86_64 切片的文件是 delocate 顺手拷进来的 CPython framework，camel 自己的二进制全是 arm64。
+  现在 macOS 的标签由 `macosPlatformTag()` 从 `process.arch` 与 `MACOSX_DEPLOYMENT_TARGET` 算（架构与部署版本都是产物的
+  事实），`CAMEL_PYPI_PLATFORM_TAG` 仍是覆盖口。
+- 标签是**承诺**，所以 `scripts/check_macos_wheel.py` 再加一条：`lipo -archs` 里每个 Mach-O 都必须带文件名所声明的架构
+  （`universal2` 展开成两个）。上面那次两标签的名字就是这条检查要拦的东西——它会在 arm64-only 的 `camel`、`.cmo`、
+  `_camel.abi3.so` 上直接失败。
 - `delocate-wheel` 把在包外解析得到的动态库拷进 `camel/.dylibs/`、把加载路径改成包内相对路径，并重算 `RECORD`
   （delocate 的 `rewrite_record`），让 pip 安装时的哈希与真正落地的字节一致。在 Apple 上这一步不只是"搬家"：
   `CMakeLists.txt` 关掉了 `CMAKE_MACOSX_RPATH`，libcamel 的 install name 因此是构建树里的**绝对路径**，工具、`.cmo`
@@ -223,7 +233,7 @@ macos-arm64 腿只证明能编译、能跑，与"打得出一个装得上、跑�
   `_delete_rpaths` 删 rpath 时同样补签（`--sanitize-rpaths` 是 CLI 默认，构建树与 Conan 缓存的绝对 `LC_RPATH` 在这里被删掉，
   而 `strip_build_rpath.py` 只能在 Linux 上改 ELF），所以工作流不再单独签一次；签没签由 `scripts/check_macos_wheel.py`
   在**产物**上验证（逐个 Mach-O `codesign --verify --strict`），同一支脚本还要求每个 Mach-O 的 `otool -L` 只出现系统库
-  （`/usr/lib`、`/System`）或包内文件。
+  （`/usr/lib`、`/System`）或包内文件，并且带文件名声明的那个架构。
 - arm64 上 JIT 没有代码生成（`cmake/Options.cmake` 在其他处理器上关掉 `ENABLE_FASTVM_JIT`），所以不涉及 JIT 的签名授权。
 - 冒烟与 Windows 同一步（`setup-python` 3.10 的干净 venv）：`camel --version`、跑一个 import 了 stdlib 模块的程序
   （`std::nvm` 与 `std::jit` 各一次，后者在 arm64 上走字节码解释器）、`import camel`。

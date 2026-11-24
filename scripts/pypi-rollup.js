@@ -195,6 +195,9 @@ function runPythonProbe(pyExe, snippet, what) {
  * thing that knows which glibc the bundled libraries actually need; `scripts/check_wheel_tags.py`
  * fails the build if that repair did not happen.
  *
+ * macOS is the exception the sentence above argues for: there the answer comes from the binaries
+ * and `MACOSX_DEPLOYMENT_TARGET`, not from the interpreter (see `macosPlatformTag`).
+ *
  * @param {string} pyExe
  */
 function nativePlatformTag(pyExe) {
@@ -202,12 +205,55 @@ function nativePlatformTag(pyExe) {
     if (forced) {
         return forced
     }
+    if (process.platform === 'darwin') {
+        return macosPlatformTag()
+    }
     const platform = runPythonProbe(
         pyExe,
         'import sysconfig;print(sysconfig.get_platform())',
         'sysconfig.get_platform()'
     )
     return platform.replace(/[-.]/g, '_')
+}
+
+/**
+ * `macosx_<major>_<minor>_<arch>` from what the build compiled for, not from the interpreter.
+ *
+ * `sysconfig.get_platform()` on the macOS cell answers `macosx-10.9-universal2`, because that is
+ * how the setup-python framework build of CPython was itself built -- it says nothing about this
+ * wheel. It matters because `delocate-wheel` does not *replace* the tag, it narrows it:
+ * `delocating.py` keeps "architecture tags [limited] to whatever the wheel already claimed to
+ * support" (`arch_version.keys() - wheel_arch_version.keys()` are dropped). Claiming universal2
+ * therefore named the wheels
+ *
+ *   camel_lang-0.2.47-cp310-abi3-macosx_13_0_arm64.macosx_13_0_x86_64.whl
+ *   camel_lang-0.2.47-py3-none-macosx_13_0_arm64.macosx_13_0_x86_64.whl
+ *
+ * in build-pypi.yml run 45349410016 -- a file pip installs on an Intel Mac, where not one of the
+ * camel binaries has an x86_64 slice (the only x86_64 code it carried was the CPython framework
+ * delocate bundled in). The architecture is this machine's, the version is what CMake was told to
+ * compile against; both are facts about the artifact, which is the standard the Linux comment
+ * above sets.
+ *
+ * Since macOS 11 the minor version is not part of the release version, and pip reads
+ * `macosx_14_0`, never `macosx_14_4` (delocate's `get_macos_platform_tag` zeroes it too).
+ */
+function macosPlatformTag() {
+    const target = (process.env.MACOSX_DEPLOYMENT_TARGET || '').trim()
+    const [major, minor = '0'] = target.split('.')
+    const parsedMajor = Number(major)
+    if (!target || !Number.isInteger(parsedMajor) || parsedMajor <= 0) {
+        logFail(
+            `Cannot name a macOS wheel without MACOSX_DEPLOYMENT_TARGET (got ` +
+                `${JSON.stringify(target)}). CMake compiled every binary against that version, so ` +
+                `it is the only honest source for the tag; set it, or set ` +
+                `CAMEL_PYPI_PLATFORM_TAG explicitly.`
+        )
+        process.exit(1)
+    }
+    const arch = process.arch === 'x64' ? 'x86_64' : process.arch
+    const releaseMinor = parsedMajor >= 11 ? '0' : minor
+    return `macosx_${parsedMajor}_${releaseMinor}_${arch}`
 }
 
 /**

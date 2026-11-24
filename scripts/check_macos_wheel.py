@@ -8,9 +8,16 @@ whether the *content* is: every binary the wheel carries has to be able to start
 nothing but this wheel installed, and on arm64 a Mach-O whose bytes changed after the linker signed
 it does not start at all (`Killed: 9`).
 
-Two checks, both against the unpacked wheel:
+Three checks, all against the unpacked wheel:
 
-1. **Dependencies.** For every Mach-O file, `otool -L` has to name only
+1. **Architecture.** Every Mach-O has to carry the architecture the *file name* claims, because
+   that is the machine pip offers the file to. `lipo -archs` is the source. A wheel named
+   `macosx_13_0_arm64.macosx_13_0_x86_64` has to have an x86_64 slice in every binary inside it;
+   the run that produced such a name (build-pypi.yml 45349410016) carried exactly one x86_64 file,
+   the CPython framework `delocate-wheel` bundled, and would have been installed on Intel Macs
+   where `camel` cannot run.
+
+2. **Dependencies.** For every Mach-O file, `otool -L` has to name only
 
    - a system library (`/usr/lib`, `/System`), which every Mac has, or
    - a file inside the wheel, reached through `@loader_path` / an `@rpath` that stays inside it.
@@ -20,7 +27,7 @@ Two checks, both against the unpacked wheel:
    `CMAKE_MACOSX_RPATH OFF`), a Conan cache copy, or a framework under `/Library` that the user may
    not have. `auditwheel` does this job on Linux and has no opinion about a wheel it never saw.
 
-2. **Signatures.** `codesign --verify --strict` has to pass for every Mach-O. `delocate-wheel`
+3. **Signatures.** `codesign --verify --strict` has to pass for every Mach-O. `delocate-wheel`
    rewrites install names with `install_name_tool`-equivalent calls, which invalidates the linker's
    ad-hoc signature; delocate 0.13.0 re-signs the files it rewrites (`delocate.tools.set_install_name`
    and `set_install_id` -> `replace_signature(..., "-")`, and `_delete_rpaths` for the rpath
@@ -32,7 +39,7 @@ own name update does that (`MACOSX_DEPLOYMENT_TARGET=13.0` makes the tag `macosx
 library that needs a newer SDK raises instead), and `check_wheel_tags.py --expect` then checks the
 name.
 
-Runs on macOS only: `otool` and `codesign` are there.
+Runs on macOS only: `otool`, `lipo` and `codesign` are there.
 
     python3 scripts/check_macos_wheel.py wheelhouse/*.whl
 """
@@ -204,6 +211,39 @@ def signature(path):
     return True, kind, ""
 
 
+def claimed_archs(wheel):
+    """The architectures the file name claims, expanded (`universal2` is two), or None.
+
+    The name is what pip decides with: a wheel called `...-macosx_13_0_arm64.whl` is offered to an
+    arm64 Mac and never to an Intel one, so every Mach-O inside has to carry arm64. The reverse --
+    a name that claims an architecture the binaries do not have -- is how
+    `...-macosx_13_0_arm64.macosx_13_0_x86_64.whl` came to be built (build-pypi.yml run
+    45349410016): delocate narrowed the interpreter's `universal2` claim instead of the binaries'
+    one, and pip would have installed that file on an Intel Mac where no camel binary runs.
+    """
+    name = os.path.basename(wheel)
+    if not name.endswith(".whl"):
+        return None
+    archs = set()
+    for tag in name[: -len(".whl")].split("-")[-1].split("."):
+        parts = tag.split("_")
+        # `macosx_<major>_<minor>_<arch>`, and the arch is the rest: `x86_64` has an underscore
+        # in it, so `parts[-1]` answers `64`.
+        if len(parts) < 4 or parts[0] != "macosx":
+            continue
+        arch = "_".join(parts[3:])
+        archs |= {"x86_64", "arm64"} if arch == "universal2" else {arch}
+    return archs or None
+
+
+def archs_of(path):
+    """`lipo -archs` for one Mach-O: the architectures it actually carries."""
+    code, out, err = run(["lipo", "-archs", path])
+    if code != 0:
+        raise RuntimeError("lipo -archs failed: %s" % (err.strip() or out.strip()))
+    return set(out.split())
+
+
 def check_wheel(wheel, verbose):
     """Return `(problems, notes)` for one wheel."""
     problems = []
@@ -216,6 +256,30 @@ def check_wheel(wheel, verbose):
         if not binaries:
             problems.append("no Mach-O file in the wheel: a native distribution has to carry some")
             return problems, notes
+
+        # The name claims an architecture; every binary has to be able to run on the machine that
+        # name is offered to. This is checked before the load commands so a mislabelled wheel is
+        # reported as mislabelled rather than as a pile of missing dependencies.
+        claimed = claimed_archs(wheel)
+        if claimed:
+            for relative in binaries:
+                path = os.path.join(tmpdir, relative)
+                try:
+                    have = archs_of(path)
+                except RuntimeError as error:
+                    problems.append("%s: %s" % (relative, error))
+                    continue
+                missing = claimed - have
+                if missing:
+                    problems.append(
+                        "%s carries %s but not %s, which the file name claims (%s)"
+                        % (
+                            relative,
+                            ", ".join(sorted(have)) or "no architecture",
+                            ", ".join(sorted(missing)),
+                            os.path.basename(wheel),
+                        )
+                    )
 
         referenced = set()
         signed_with = {}
