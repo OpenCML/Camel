@@ -108,11 +108,16 @@ elements to take` —— 同一个 `lane/range-ri` 留下的债（`D-1123-49`）
 
 ## 6 我没能确定的，以及留给作者的两个问题
 
-1. **"594 条" 这个数我核不出来。** 树上按 import 图实读：`src/stdlib` 里**没有**别的模块导入 `random`
-   或 `str`；`test/cases` 下直接或间接导入这两个模块的用例 95 个，落在 fast 层里是 **159 条 test entry**
-   （算上 `backends` 展开约 **264 次运行**）。要把这个数抬到 594，得把"逐个枚举 stdlib 模块"那类计划
-   （`stdlib_registry`、`stdlib_values`、`docs_*`）里被一条模块失败带倒的条目也算进去；树上没有那份
-   1512 条红名单可以对账，所以我按"同一个符号直接导致的"报 159/264，而不是 594。
+1. **"594 条" 这个数我核不出来，而且它**不可能**全是这个符号。** 三份读数：
+   - `src/stdlib` 里**没有**别的模块导入 `random` 或 `str`（闭包就是这两个自己）；
+   - `test/cases` 下导入 `random` 的 61 个、导入 `str` 的 33 个、两个都导入的 1 个，共 **95 个用例**，
+     落在 fast 层里是 **159 条 test entry**（算上 `backends` 展开约 **264 次运行**）；
+   - 整棵树里**没有**一个用例把 prelude 的 `to_array` 不 import 就写出来（写 `to_array` 的三个用例
+     `compile/native/bytes_{arity,tag,type}.cml` 写的是 `bytes::to_array`，或自己 `#op('bytes:to_array')`）。
+
+   所以这个符号的直接受益面就是"编译 `random` 或 `str` 的程序"这 95 个用例 / 159 条 entry。要把数抬到
+   594，得把别的族（上一份报告里 `grad` 的重载歧义那一族，以及 `registry.*` 的签名/文档漂移）算进来；
+   树上没有那份 1512 条红名单可以对账，我不把它们的数记在 `C-1123-64` 名下。
 2. **设计问题（要作者裁）：`prelude.cml` 里带体的导出名要不要进第 5 层？** 若要，最小改法是
    `Module::importedBindingsForRef`（`kernel/core/module/module.cpp:265`）在 `Ambient`（和 `All`）
    时给 prelude 加一条兜底绑定，**同时**要处理 `gir/builder_expr.cpp:1309`：一个"算子组 + 函数集"
