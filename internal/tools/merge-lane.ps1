@@ -53,6 +53,18 @@
     which claimed nothing had been committed while a merge commit sat on the branch that origin did
     not have.
 
+.PARAMETER MainCheckout
+    The merge seat's own worktree: the checkout a merge is made in, built in and measured in. Left
+    empty, it is read from this machine's settings file (`internal/tools/camel-gate.local.json`,
+    key `mergeWorktree`), which is where a machine-specific path belongs. There is no default path
+    and no fallback: a run that cannot read the setting stops with exit 2 and says whether the file
+    is missing or the key is, because a default that names a real tree does not fail -- it merges
+    into somebody else's checkout.
+
+.PARAMETER LocalConfig
+    The settings file to read when it is not the one beside this script. Same parameter, same
+    meaning, as camel-build.ps1, camel-test.ps1 and camel-remote.ps1.
+
 .PARAMETER Branch
     The lane branch to merge, e.g. lane/range-ri.
 
@@ -103,9 +115,18 @@ param(
     # pushes to the target, so this is the only thing that decides where a merge goes.
     [ValidateSet('develop', 'integration')]
     [string] $Target = 'develop',
-    # The merge seat's own worktree. D:\Projects\Camel is the author's workspace (iron rule 17):
-    # nothing is merged, built or measured there.
-    [string] $MainCheckout = 'D:\Projects\Camel-wt\merge',
+    # The merge seat's own worktree. EMPTY means "read it from this machine's settings", which is the
+    # only place a machine-specific path belongs (internal/tools/camel-gate.local.json,
+    # `mergeWorktree`, git-ignored). It used to default to a path on the author's workstation: the
+    # first default was the author's own checkout, which rule 17 forbids, and the repair -- another
+    # seat's tree -- kept the same defect with a different victim, because a default that happens to
+    # name an existing tree does not fail, it merges into somebody else's checkout. So there is no
+    # default now: a run that cannot read the setting stops and names what is missing.
+    [string] $MainCheckout = '',
+    # The machine's settings file, when it is not the one beside this script. Same parameter as
+    # camel-build.ps1, camel-test.ps1 and camel-remote.ps1, for the same reason: a run that has to
+    # point at another file says so on its command line instead of editing the repository.
+    [string] $LocalConfig = '',
     # Where the baseline is measured. It has to be a tree that is NOT the one being compared, and it
     # has to be a real checkout (the gate builds it), so it is a worktree of this repository detached
     # at the first parent. One fixed path and not one per merge: the host keeps the build of that
@@ -120,6 +141,72 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# --- which checkout a merge lands in -----------------------------------------
+#
+# The merge position is a machine-local path, so it belongs in the machine's settings file and
+# nowhere else: internal/tools/camel-gate.local.json, key `mergeWorktree`, git-ignored, the key the
+# pre-push hook already reads to decide which tree may push develop. This script reads the same key,
+# which is the point -- one setting says which tree is the merge position, so the hook that guards
+# the push and the tool that makes the merge cannot disagree about it.
+#
+# There is no default. The parameter used to default to a path on the author's workstation, and when
+# that was repaired it defaulted to another seat's tree instead: a default that happens to name an
+# existing checkout does not fail, it does the work in somebody else's tree and reports success. So a
+# run that cannot read the setting stops, and the two ways to fail say different things -- no file
+# means this machine was never set up, no key means it was set up without naming a tree -- because a
+# reader acts differently on each.
+#
+# Returns @{ Path; Problem }. `Problem` empty means `Path` is the answer.
+function Resolve-MergeCheckout {
+    param(
+        [string] $Given = '',
+        [string] $LocalConfig = '',
+        # Where camel-gate-config.ps1 lives (the settings loader, shared with the other gate tools).
+        [string] $ToolsRoot = ''
+    )
+
+    # An explicit path is the answer: what a seat types on the command line overrides the file for one
+    # run, and that is the rule the other tools in this directory keep. The file is not even read, so
+    # a machine with no settings can still merge by naming its tree.
+    if ($Given) { return @{ Path = $Given; Problem = '' } }
+
+    if (-not $ToolsRoot) { $ToolsRoot = $PSScriptRoot }
+    . (Join-Path $ToolsRoot 'camel-gate-config.ps1')
+    $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $ToolsRoot
+
+    if (-not $cfg.localConfigFound) {
+        return @{
+            Path    = ''
+            Problem = "there is no settings file at $($cfg.localConfigPath), and -MainCheckout was not given. The merge checkout is a machine-local path, so this run cannot name one: copy internal/tools/camel-gate.example.json to that path and set 'mergeWorktree', or pass -MainCheckout."
+        }
+    }
+    $value = "$($cfg.mergeWorktree)".Trim()
+    if (-not $value) {
+        return @{
+            Path    = ''
+            Problem = "the settings file at $($cfg.localConfigPath) has no 'mergeWorktree', and -MainCheckout was not given. That key is what says which checkout a merge lands in (the same key the pre-push hook reads), and nothing here may guess one: set it in that file, or pass -MainCheckout."
+        }
+    }
+    # The key takes more than one value for the hook's sake (a machine that keeps the merge tree in
+    # more than one place); a merge position is one checkout, and merging into "the first of them" is
+    # the guess this function exists to refuse.
+    $trees = @($value -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($trees.Count -ne 1) {
+        return @{
+            Path    = ''
+            Problem = "'mergeWorktree' in $($cfg.localConfigPath) names $($trees.Count) trees ($($trees -join '; ')), and a merge lands in one checkout. Pass -MainCheckout to say which."
+        }
+    }
+    $tree = $trees[0]
+    if (-not (Test-Path -LiteralPath $tree -PathType Container)) {
+        return @{
+            Path    = ''
+            Problem = "'mergeWorktree' in $($cfg.localConfigPath) names $tree, and there is no directory there. A merge position is a checkout that exists; nothing here will create one or use another."
+        }
+    }
+    return @{ Path = $tree; Problem = '' }
+}
 
 # The branch every reading in this script is about: the start point, the state a stop prints, the
 # push, and the line that says the push landed. Read once here so Write-GitState -- which runs from
@@ -684,6 +771,18 @@ function Format-RecoveryConclusion {
     return ('merged {0} at {1}; {2} is {3} (partial re-run: {4} plan(s) -- {5} -- selected by the {6} documentation file(s) that landed on origin/{2} while this merge was read; the plans this merge selected were measured on tree {7}, and no layer was measured)' -f `
             $Branch, $Head, $Target, (& $short $Local), @($Targets).Count, (@($Targets) -join ', '), $Files, (& $short $MeasuredTree))
 }
+
+# Which checkout a merge lands in, read before anything is done in one. A stop here has touched no
+# repository: no fetch, no lock, no branch, no build.
+$mergeCheckout = Resolve-MergeCheckout -Given $MainCheckout -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
+if ($mergeCheckout.Problem) {
+    Write-Host ''
+    Write-Host 'STOPPED: the checkout a merge lands in is not named (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
+    Write-Host "  $($mergeCheckout.Problem)"
+    Write-Host ''
+    exit 2
+}
+$MainCheckout = $mergeCheckout.Path
 
 Push-Location $MainCheckout
 try {
