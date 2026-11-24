@@ -127,13 +127,7 @@ idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the
 
 # ---- 丙: the model operators (`modules/nn`), none of which the rulesets file for ---------------
 
-avg_pool2d	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
-batch_norm_train	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
-conv2d	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
-embedding	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
-max_pool2d	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
-softmax_cross_entropy	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
-softmax_cross_entropy_labels	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+batch_norm_train	lane-rulesets	`nn`: a forward law needs the per-channel affine `gamma*xhat+beta` over `[N,C,H,W]`, i.e. a `[C]` vector applied to axis 1, and every stated broadcast right-aligns (`tensor/kernels/elementwise.cpp`, `BroadcastPlan`) so a `[C]` operand meets `W`; the only operators that index the channel axis are `batch_norm_train` and its gradient, and the gradient's transpose needs second-order terms of the same operator -- recorded in `src/stdlib/rulesets/jvp.cml`
 
 # ---- 甲, settled elsewhere: the rows another lane owns ----------------------------------------
 
