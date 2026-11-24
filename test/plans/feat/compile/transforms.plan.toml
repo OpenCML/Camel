@@ -334,7 +334,7 @@ timeout_ms = 8000
 # The stop this pins: `vjp` over a loop used to end at `transpose` of `split`'s backward half with
 # `skip=state`, because that half reads the round's *primal* values -- the tape `split` appends one
 # member of per round -- and the reverse loop had nowhere to hand them in
-# (`arm-stop ... callee=autodiff::add_tangent<float>` after the arm's first value argument). The
+# (`arm-stop ... callee=laws::add_tangent<float>` after the arm's first value argument). The
 # backward half itself was never wrong: `split(jvp(f))`'s `lin(1.0)` answered the tangent before and
 # answers it now. What was missing is the wire the case reads: the round's element port is the one
 # value both loops have, and it is where the tape's per-round residuals come from.
@@ -928,8 +928,8 @@ timeout_ms = 20000
 # question is `rule_types.h`'s (the element of the first value operand) and not the operand's type.
 #
 # With `{Type::Float64()}` written into the instance call, this program did not read a wrong number:
-# it built `autodiff::mul_tangent<float>` around `f32` operands and the pass refused the graph it was
-# handed -- "passes a f32 as ordinary argument 0 of 'autodiff::mul_tangent<float>', which takes a
+# it built `laws::mul_tangent<float>` around `f32` operands and the pass refused the graph it was
+# handed -- "passes a f32 as ordinary argument 0 of 'laws::mul_tangent<float>', which takes a
 # float", four edges. `g(x) = x * x` at 1 reads `(1, 2)`.
 [[tests]]
 name = "jvp_rule_instance_at_the_operand_type.f32"
@@ -961,7 +961,7 @@ args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_pick_backward graph=", "type=(float) => (float,) nodes=11 arms=2", "TRANSPOSE function=split_of_jvp_of_merged_backward graph=", "type=(float) => (float,) nodes=16 arms=2", "TRANSPOSE function=autodiff::mul_tangent<float> graph=", "rhs=add_t,mul_t", "(2.0)", "(3.0)", "(7.0)", "(4.0)"]
+expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_pick_backward graph=", "type=(float) => (float,) nodes=11 arms=2", "TRANSPOSE function=split_of_jvp_of_merged_backward graph=", "type=(float) => (float,) nodes=16 arms=2", "TRANSPOSE function=laws::mul_tangent<float> graph=", "rhs=add_t,mul_t", "(2.0)", "(3.0)", "(7.0)", "(4.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1530,7 +1530,7 @@ args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+expect_output_contains = ["TRANSPOSE function=laws::add_tangent<float> graph=", "type=(float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1656,7 +1656,7 @@ args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
 expect_exit = 0
-expect_output_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=autodiff::add_tangent<float> graph="]
+expect_output_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=laws::add_tangent<float> graph="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1915,7 +1915,7 @@ case = "../../../cases/compile/transforms/grad_of_a_division.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=autodiff::div_tangent<float> graph="]
+expect_output_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=laws::div_tangent<float> graph="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

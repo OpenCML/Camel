@@ -34,10 +34,10 @@ import {
     mul_cotangent,
     mul_cotangent_c,
     neg_cotangent,
-    stop_gradient,
     sub_cotangent,
     sub_cotangent_c
-} from autodiff
+} from laws
+import { stop_gradient } from autodiff
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
