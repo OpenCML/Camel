@@ -1963,7 +1963,10 @@ void Builder::settleGenericOperatorArguments(
         for (const Argument &input : normInputs) {
             statics.push_back(isWaiting(input) ? StaticArg{} : staticArgOf(input.node));
         }
-        if (ops->resolve(withTypes, normTypes, statics).has_value()) {
+        // The name may stand for a set of declarations without a built-in group (`map` over a
+        // range reaches the operator group's own path; a set gathered for a name applies the
+        // same question below).
+        if (ops != nullptr && ops->resolve(withTypes, normTypes, statics).has_value()) {
             return true;
         }
         if (overloads == nullptr) {
@@ -2187,7 +2190,7 @@ void Builder::settleGenericOperatorArguments(
                 "suggested by its other arguments is one it accepts{}; its type variable(s) {} "
                 "stay undetermined. Write the call in a function whose parameter types are "
                 "written out, e.g. '(x: int) => {}(x)'",
-                ops->name(),
+                ops != nullptr ? ops->name() : std::string("the operator"),
                 tried.empty() ? std::string() : " (tried: " + tried + ")",
                 strutil::join(names, ", ", [](const std::string &n) { return n; }),
                 tmpl->name));
@@ -2197,6 +2200,12 @@ void Builder::settleGenericOperatorArguments(
     // the name stands for, so the name stays unsettled and is refused. A rule whose signature is
     // not declared (a computed one) says nothing here, and the name is tried as before.
     const auto positionTakesFunction = [&](bool with, size_t index) {
+        // A name gathered as a set of declarations and no built-in group beside it: no rule says
+        // what the position takes, which is the same answer as a rule whose signature is not
+        // declared -- the name is tried.
+        if (ops == nullptr) {
+            return true;
+        }
         for (const auto &[uri, resolver] : ops->resolvers()) {
             FunctionType *sig = resolver->fixedSignature();
             if (sig == nullptr) {

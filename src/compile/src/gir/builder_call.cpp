@@ -1044,6 +1044,19 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
     bool negateResult                    = false;
     if (auto overloads = operatorOverloads_.find(targetNode);
         overloads != operatorOverloads_.end()) {
+        // An argument that is still a name gets its function value before the set is asked,
+        // exactly as it does on the operator group's own path: a `with` argument of function
+        // type that is a generic name has no type until a candidate settles it, and asking the
+        // set first would judge the call on a type that does not exist yet. An argument that
+        // was settled already is not waiting, so this settles each one once.
+        settleGenericOperatorArguments(
+            nullptr,
+            &overloads->second,
+            withInputs,
+            normInputs,
+            withInputTypes,
+            normInputTypes,
+            gct);
         operatorOverload = chooseOperatorOverload(
             overloads->second,
             withInputs,
