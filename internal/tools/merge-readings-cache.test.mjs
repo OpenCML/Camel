@@ -203,7 +203,16 @@ check('a changed runner is a changed tool, so a miss', /readings-cache: MISS/.te
 const newerToolAgain = read(base)
 check('the new tool then hits its own entry', /readings-cache: HIT/.test(newerToolAgain.text) && runs() === 7, newerToolAgain.text)
 
-// --- 7: a cache inside the tree is refused ----------------------------------
+// --- 7: the tier is a key component too -------------------------------------
+// A debug reading is a reading of another install; the same tree, plans and jobs do not make it the
+// same reading.
+const debug = read(['--tree-path', repo, '--plans', plansAlpha, '--jobs', '8', '--tier', 'debug', '--readings-cache', cache])
+check('changing the tier misses', debug.code === 0 && /readings-cache: MISS/.test(debug.text) && runs() === 8, debug.text)
+check('the debug reading was taken with the debug tier', /tier debug/.test(debug.text) && /\[provenance\].*tier debug/.test(debug.text), debug.text)
+const debugAgain = read(['--tree-path', repo, '--plans', plansAlpha, '--jobs', '8', '--tier', 'debug', '--readings-cache', cache])
+check('the debug reading is then a hit of its own', /readings-cache: HIT/.test(debugAgain.text) && runs() === 8, debugAgain.text)
+
+// --- 8: a cache inside the tree is refused ----------------------------------
 const insideRun = read(['--tree-path', repo, '--plans', plansAlpha, '--jobs', '8', '--readings-cache', path.join(repo, '.cache')])
 check('a cache directory inside the measured tree is refused', insideRun.code === 2 && /inside this work tree/.test(insideRun.text), insideRun.text)
 
