@@ -29,7 +29,17 @@ The wrapper transports the current branch and uncommitted changes, builds, runs 
 
 A reading taken while the host is busy is still a verdict but not a timing: `[load]` above 8 carries
 the wrapper's own warning that the numbers are not comparable to quiet-host readings, so quote the
-`[SUMMARY]` and the exit codes, and say which `[load]` they were taken under.
+`[SUMMARY]` and the exit codes, and say which `[load]` they were taken under. That last part is the
+condition on which two readings can be compared at all, not a courtesy.
+
+**The main checkout is not a reading station.** `D:\Projects\Camel` belongs to the author, and it is
+only ever fast-forwarded while it sits cleanly on `develop`: no session detaches it to take a
+reading. A baseline reading uses a worktree that already exists, or one of its own from
+`git worktree add` that it removes afterwards. Restoring the checkout cleanly is not the same as it
+not having happened -- during that window the author can walk into a tree that is not on `develop`,
+and has no way to know who moved it. (Measured on 2026-11-24: a lane detached the main checkout for a
+baseline run and put it back, and the reading was sound, which is exactly why the rule has to be a
+rule rather than a judgement about how careful a session is.)
 
 During development, run the plans touched by the change plus `smoke`. Before finishing, run `smoke` and `feat/**` on the host. A plan file named explicitly runs in full, regardless of the selected tier; a directory selects its `fast` layer by default.
 
