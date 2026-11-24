@@ -7,7 +7,8 @@
  * Two families of false red appeared in one night (C-1124-183, C-1124-185) and looked exactly like a
  * real red in the tables, because the table said nothing about the `jobs` and the `load` it was taken
  * at: a timeout-margin failure under load 84 and a neighbour writing scratch under `-Jobs 8` were both
- * "a case the baseline did not have".
+ * "a case the baseline did not have". And the comparison that called ten cases `removed` was reading
+ * their names with `\S+`, which stops at the first space, while the same ten cases had run (C-1124-186).
  *
  * The checks below are the two rules:
  *
@@ -31,6 +32,7 @@ import {
     readRedTable,
     compareRedTables,
     formatComparison,
+    parseVerdictLines,
 } from './red-table-context.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -69,6 +71,29 @@ const row = (name, why, record = 'run-1') => {
 const QUIET = { tip: 'a'.repeat(40), anchor: 'a'.repeat(40), jobs: 2, load: [3.1, 3.0, 2.9], tier: 'fast', generatedAt: '2026-11-24T23:00:00Z', source: 'flat run' }
 const LOUD = { tip: 'b'.repeat(40), anchor: 'b'.repeat(40), jobs: 8, load: [84.5, 87.2, 90.1], tier: 'fast', generatedAt: '2026-11-25T00:10:00Z', source: 'flat run' }
 const LOUD_SAME = { ...LOUD, tip: LOUD.tip, generatedAt: '2026-11-25T00:40:00Z' }
+
+// ---------------------------------------------------------------- 2. a name is read whole
+{
+    const lines = [
+        `[FAIL] ${SPACED}  0.95 s`,
+        `[PASS] ${SPACED2}  1.20 s`,
+        `[FAIL] ${MEAN}  2.00 s`,
+        `[SKIP] ${PLAIN}`,
+        '  [FAIL] indented line is not a verdict line  1.0 s',
+    ].join('\n')
+    const parsed = parseVerdictLines(lines)
+    check(
+        'a verdict line keeps the whole case name (spaces included)',
+        parsed.length === 4 && parsed[0].name === SPACED && parsed[1].name === SPACED2 &&
+            parsed[2].name === MEAN && parsed[3].name === PLAIN,
+        JSON.stringify(parsed, null, 2)
+    )
+    check(
+        'the metric is not part of the name',
+        parsed[0]?.metric === '0.95 s' && parsed[2]?.metric === '2.00 s',
+        JSON.stringify(parsed.slice(0, 3))
+    )
+}
 
 // ---------------------------------------------------------------- 1. the header carries the context
 {

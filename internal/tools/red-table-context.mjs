@@ -36,6 +36,35 @@ export const LOAD_BOUNDARY = 8
 const clean = (s) => String(s ?? '').replace(/[\t\r\n]+/g, ' ').trim()
 
 /**
+ * One verdict line, read whole.
+ *
+ * The runner prints `[FAIL] <case name><padding><metric>` and the padding is at least one space; a
+ * case name may itself contain single spaces, so the only safe cut is the column gap (two or more
+ * spaces) before the metric. A line with no gap is all name. The leading tag may be indented by a
+ * nested run, which is why the tag is matched anywhere at the start of the trimmed line.
+ *
+ * `\S+` is exactly the bug this replaces: it stops at the first space and hands the caller a shorter
+ * name, which the diff then reports as a case that disappeared.
+ */
+export function parseVerdictLines(text) {
+    const out = []
+    for (const raw of String(text ?? '').split('\n')) {
+        // A verdict line starts in column 0. An indented line is a detail of the case above it
+        // (`    [INFO] ...`), and reading one as a verdict invents a case the run never started.
+        const line = raw.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r$/, '')
+        const m = line.match(/^\[(PASS|FAIL|SKIP|XFAIL)\]\s+(.*)$/)
+        if (!m) continue
+        const rest = m[2]
+        const gap = rest.match(/^(.*?)\s{2,}(.*)$/)
+        const name = (gap ? gap[1] : rest).trim()
+        const metric = gap ? gap[2].trim() : ''
+        if (!name) continue
+        out.push({ verdict: m[1], name, metric })
+    }
+    return out
+}
+
+/**
  * Write a table that carries the conditions it was taken under.
  *
  * The header is `#` lines so `cut`/`awk` and every existing reader of a two-column table keep
@@ -114,6 +143,15 @@ export function readRedTable(file) {
             rows.set(`${plan}/${kase}`, { plan, case: kase, why, record, observedAt, cls })
         }
         return { provenance, rows, format: 'tsv' }
+    }
+    const verdicts = parseVerdictLines(text)
+    if (verdicts.length) {
+        for (const v of verdicts) {
+            if (v.verdict !== 'FAIL') continue
+            const [plan, ...rest] = v.name.split('/')
+            rows.set(v.name, { plan, case: rest.join('/'), why: '', record: '', observedAt: '', cls: '' })
+        }
+        return { provenance: null, rows, format: 'verdicts' }
     }
     for (const line of lines) {
         if (!line.trim() || line.startsWith('#')) continue

@@ -94,12 +94,13 @@ node internal/tools/red-table.mjs --diff <a.tsv> <b.tsv>
 两个显式开关 `--allow-unknown-jobs` / `--allow-unknown-load` 让人**说出来**再比；默认不猜。
 `tip` **不**作为拒绝理由（基线与被测树本来就该是不同提交），但会打印。
 
-名字按整段读：TSV 按制表符切，**不按空白切** —— 名字里的空格是名字的一部分。
+名字按整段读：TSV 按制表符切；`[FAIL]` 行取标记后的整段、只在「两格以上空格」处切掉末尾的耗时列。
+**不许用 `\S+`** —— 它在名字的第一个空格处停下，名字带空格的用例于是变成 `removed`，而它其实跑了（`C-1124-186`）。
 
 ## 自测
 
 ```
-node internal/tools/red-table-context.test.mjs      # 16 项，含 CLI 的 --tsv/--diff
+node internal/tools/red-table-context.test.mjs      # 18 项，含 CLI 的 --tsv/--diff
 ```
 
 覆盖两条规矩：表头写上 `tip`/`jobs`/`load`，不同 `jobs`/`load` 的表被拒而不是逐条列 new；名字带空格的用例改档后是 `changed`，不是 `removed`。
