@@ -39,7 +39,7 @@ expect_stdout_starts_with = "digraph"
 name = "one_dump_runs_it"
 desc = "`std::gir` alone prints the graph and hands it on: nothing consumes it, so the default scheduling pass runs the program and its 7 is the exit code."
 case = "../../../cases/trans/hand_on/hand_on.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir"]  # camel-pass-scan: keep -- this case pins that the program runs
 expect_exit = 7
 expect_stdout_starts_with = "digraph"
 
@@ -55,7 +55,7 @@ expect_stdout_exact = ""
 name = "after_nop_never_run"
 desc = "`std::nop` answered with an empty graph, so the `std::gir` written after it never runs -- and the warning names it."
 case = "../../../cases/trans/hand_on/hand_on.cml"
-args = ["${case}", "std::nop", "std::gir"]
+args = ["${case}", "std::nop", "std::gir"]  # camel-pass-scan: keep -- gir is after the nop, so it never runs
 expect_exit = 0
 expect_stdout_not_contains = "digraph"
 expect_stderr_contains = "will not run"
