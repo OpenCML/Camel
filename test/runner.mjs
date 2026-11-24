@@ -889,7 +889,8 @@ export function main(argv = process.argv.slice(2)) {
         ? selectChangedTargets({ changedFilesList: options.changedFilesList })
         : { targets: options.targets, layered: [], widened: false }
     // The arguments that describe *this* change to the case engine: the same base (through
-    // `CAMEL_TEST_BASE`/`--files`, never recomputed differently) and the same layer.
+    // `CAMEL_TEST_BASE`/`--files`, never recomputed differently) and the same layer, plus the target
+    // list below (`--targets`).
     const engineArgs = (extra) => {
         const args = [SELECTION_ENGINE]
         const tier = tierRequested(options.runnerArgs)
@@ -958,16 +959,34 @@ export function main(argv = process.argv.slice(2)) {
     let runEmpty = selection.empty === true
     if (selection.targets.length > 0) {
         const caseFile = path.join(os.tmpdir(), `camel-selection-${process.pid}-${Date.now()}.json`)
+        // The targets this run is about to start, in the form the engine narrows its list to. The record
+        // is computed for exactly this list, so it names the cases of *this* run and not a case the
+        // run would refuse -- the narrowing belongs where the record is computed, which is why
+        // `--selection-cases` stays a guard against a record from somewhere else rather than the
+        // mechanism the gate depends on. Passed as a file rather than on the command line because a
+        // target is a path: one with a space or a comma in it would be read as two targets or one
+        // broken one.
+        const targetFile = path.join(os.tmpdir(), `camel-targets-${process.pid}-${Date.now()}.txt`)
+        fs.writeFileSync(targetFile, `${selection.targets.join('\n')}\n`)
         // `--names`: this record is not a reading to keep, it is the list the run starts, so it must
         // hold the names even when the selection is larger than a stored reading keeps. Without it a
         // wide selection stored a count and a digest, the run was handed a record with no cases, and
         // `--selection-cases` refused it -- exit 2 and 0 rows for every merge that selected more
         // than a thousand cases.
-        const engine = spawnSync(process.execPath, engineArgs(['--write', caseFile, '--quiet', '--names']), {
-            cwd: REPO_ROOT,
-            stdio: 'inherit',
-            env: process.env
-        })
+        const engine = spawnSync(
+            process.execPath,
+            engineArgs(['--write', caseFile, '--quiet', '--names', '--targets', targetFile]),
+            {
+                cwd: REPO_ROOT,
+                stdio: 'inherit',
+                env: process.env
+            }
+        )
+        try {
+            fs.rmSync(targetFile, { force: true })
+        } catch {
+            /* already gone */
+        }
         if (engine.error || engine.status !== 0) {
             console.error(
                 `[ERROR] --changed: the cases this change selects could not be computed` +

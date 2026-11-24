@@ -33,18 +33,31 @@
  * Usage
  *   node scripts/selection-cases.mjs [--base <ref>] [--files <list>] [--tier fast]
  *        [--print] [--write <record.json>] [--verify <record.json>] [--head <ref>] [--quiet]
- *        [--names]
+ *        [--names] [--targets <list>]
  *
  * `--base` is the ref the change is read against (`CAMEL_TEST_BASE` when omitted); `--files` reads
  * the changed paths from a file instead, which is how a merge is replayed: the list is
  * `git diff --name-only <merge>^1 <merge>`, and the record names both the merge (`--head`) and the
  * tree the plan rules came from (`tree`, HEAD of the checkout).
  *
+ * `--targets` names the plans **this run** starts, one path per line, and makes the record a
+ * description of that run: the case list is computed over those targets, so a plan the run does not
+ * start contributes no case, and the record cannot name a case the run would then refuse. The
+ * narrowing belongs here, at the step that computes the record, not in the runner: a record and a
+ * target list that disagree are two different selections, and only the one the run executes is a
+ * reading of the run. `test/runner.mjs` passes this for `--changed`, so the record it hands over is
+ * computed for exactly the targets it starts.
+ *
  * `--names` writes the case rows even when the selection is larger than `CASES_IN_RECORD_MAX`. A
  * stored reading keeps a count and a digest past that size; a *run* cannot: `--selection-cases`
  * starts the cases by name, so a record it reads must hold the names. `--changed` writes its
  * transient list with `--names` for exactly that reason, and a record without its rows is refused
  * by the runner as a digest rather than read as "nothing was selected".
+ *
+ * A record written here is computed on the spot, always: the records kept in the tree under
+ * `test/selection/` are historical readings of past changes, kept so a replay can be compared with
+ * them, and no gate step reads one. A gate that read a record kept in the tree would be a gate whose
+ * answer depends on the last commit that wrote it, and any commit adding a case would move it.
  *
  * A change that no rule matches selects **nothing**: it is refused (exit 2) and named with the
  * files that matched no rule, instead of widening to the whole fast layer. The widening read like
@@ -93,6 +106,7 @@ function parseArgv(argv) {
         head: null,
         quiet: false,
         names: false,
+        targets: null,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
@@ -100,6 +114,8 @@ function parseArgv(argv) {
         else if (arg.startsWith('--base=')) options.base = arg.slice('--base='.length)
         else if (arg === '--files' && i + 1 < argv.length) options.files = path.resolve(argv[++i])
         else if (arg.startsWith('--files=')) options.files = path.resolve(arg.slice('--files='.length))
+        else if (arg === '--targets' && i + 1 < argv.length) options.targets = path.resolve(argv[++i])
+        else if (arg.startsWith('--targets=')) options.targets = path.resolve(arg.slice('--targets='.length))
         else if (arg === '--tier' && i + 1 < argv.length) options.tier = argv[++i]
         else if (arg.startsWith('--tier=')) options.tier = arg.slice('--tier='.length)
         else if (arg === '--print') options.print = true
@@ -130,6 +146,28 @@ function under(absolute, target) {
     const a = path.resolve(absolute)
     const t = path.resolve(target)
     return a === t || a.startsWith(`${t}${path.sep}`)
+}
+
+/**
+ * The plans a run starts, read from `--targets`. An empty list is refused rather than passed on:
+ * `test/tools/run-tests.mjs#loadPlans` reads "no target" as the whole plan tree, so an empty target
+ * list would compute a record for 386 plans while the run starts none -- the same empty-selection
+ * read as a layer that this whole file exists to keep apart.
+ */
+function readTargetList(file) {
+    let text
+    try {
+        text = fs.readFileSync(file, 'utf8')
+    } catch (error) {
+        die(`cannot read the target list ${file} (${error.message})`)
+    }
+    const targets = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => path.resolve(REPO_ROOT, line))
+    if (targets.length === 0) die(`the target list ${file} names no plan, so it names no case to compute`)
+    return targets
 }
 
 /** A plan name from the selection file, as the plan file or directory it resolves to. */
@@ -240,8 +278,15 @@ function select(options, filesOverride = null) {
                 'plan expansion -- name the plans (node scripts/test.js <plan>) if that is the question'
         )
     }
-    const targets = resolvedSelection(plans)
-    const layered = [...new Set(plans.layered)].map(planTarget).filter(Boolean)
+    // The record describes a run: when the caller names the targets that run starts (`--targets`),
+    // those are the targets, and a plan the change selected but the run does not start contributes
+    // no case. That is the narrowing this file owes its reader -- a record and a target list that
+    // disagree are two selections, and a run can only execute one of them.
+    const targets = options.targets === null ? resolvedSelection(plans) : readTargetList(options.targets)
+    const layered = [...new Set(plans.layered)]
+        .map(planTarget)
+        .filter(Boolean)
+        .filter((plan) => targets.some((target) => under(plan, target)))
     const rows = listCases(targets, layered, options.tier)
     const causes = plans.causes || []
     const keepWhole = causes.filter((cause) => cause.kind !== 'case')
@@ -384,8 +429,12 @@ function verify(file, options) {
     } catch (error) {
         die(`cannot read the record ${file} (${error.message})`)
     }
-    const selection = select({ ...options, base: held.base, tier: held.tier || options.tier }, held.files)
-    const fresh = recordOf({ ...options, base: held.base, tier: held.tier || options.tier }, selection)
+    // A replay narrows nothing: the record's own file list decides its targets, on this tree.
+    // `--targets` cannot arrive here -- the dispatch refuses the pair -- so the comparison is always
+    // one record against its own change, never against another run.
+    const replay = { ...options, base: held.base, tier: held.tier || options.tier }
+    const selection = select(replay, held.files)
+    const fresh = recordOf(replay, selection)
     const problems = []
     if (fresh.files_digest !== held.files_digest) problems.push(`changed files differ: ${held.files_digest} vs ${fresh.files_digest}`)
     if (fresh.widened !== held.widened) problems.push(`widened differs: ${held.widened} vs ${fresh.widened}`)
@@ -418,6 +467,9 @@ function verify(file, options) {
 
 const options = parseArgv(process.argv.slice(2))
 if (options.verify) {
+    // A record is replayed against the targets its own file list selects; a target list beside it
+    // would compare one record with another run's selection, which is two questions in one answer.
+    if (options.targets !== null) die('--verify replays the record\'s own targets; --targets names a run\'s, and the two disagree by definition')
     process.exit(verify(options.verify, options))
 }
 const selection = select(options)

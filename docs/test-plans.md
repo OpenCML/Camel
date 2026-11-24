@@ -611,13 +611,22 @@ The run executes exactly that list. `--changed` writes it beside the run and pas
 was given, and refuses (exit 2) a name it would not start, because a stale record must not become a
 run that quietly proves less than the record says.
 
+The record the run reads is computed for that run's **targets**: `--targets <list>` names the plans
+the run starts, and the case list is computed over those, so a plan the change selected but the run
+does not start contributes no case. `--changed` passes its own target list, which is why the record
+it hands over is a description of the run and not a second selection. The narrowing lives where the
+record is computed, not in the runner: a record and a target list that disagree are two different
+selections, and only the one the run executes can be a reading of the run. `--selection-cases`
+remains what it is -- a guard against a record from somewhere else, whose refusal is exit 2 and one
+`[PLAN ERROR]` line.
+
 `scripts/selection-cases.mjs` is the engine and the record:
 
 ```bash
 node scripts/test.js --changed --list-cases      # the cases this change selects
 node scripts/selection-cases.mjs --print         # the same, with base, tree, counts and digest
-node scripts/selection-cases.mjs --write test/selection/readings/<merge>.json
-node scripts/selection-cases.mjs --verify test/selection/readings/<merge>.json
+node scripts/selection-cases.mjs --write /tmp/this-run.json --names   # the list a run executes
+node scripts/selection-cases.mjs --verify test/selection/readings/<merge>.json   # a past change, by hand
 ```
 
 A record names the base, the head, the tree the plan rules were read from, the changed files with a
@@ -629,6 +638,16 @@ sorted names, so the comparison is not weaker. A **run** cannot take a digest: `
 starts cases by name, so the list `--changed` hands to the run is written with `--names`, which keeps
 the rows past the size a stored reading caps at. A record that holds only a digest is refused by the
 run as a digest -- not as an empty selection, which is a different answer.
+
+**No gate step reads a stored record.** The records kept under `test/selection/` are readings of past
+changes: they say what a past tree selected, and `--verify` replays one by hand. A gate that read one
+would answer with the last commit that wrote it, and the next commit that adds a case would move the
+answer without touching the gate -- so a gate computes its record on the spot, every time, and
+`test/tools/selftest/selection-cases.mjs` fails if a surface a gate runs (a plan, `scripts/`,
+`test/tools/`, `internal/tools/`, CI, `package.json`) so much as names that directory. A stored
+record that no longer replays is a fact about the policy it was taken under, not a broken gate: the
+one recorded during the whole-layer widening (`38b7aec1bf`) no longer reproduces, because its change
+selects nothing now.
 
 A merge is replayed with `--base <merge>^1 --head <merge> --files <git diff --name-only list>`: the
 record then names the tree it was taken on, which is the only tree it is a reading of.
@@ -647,7 +666,12 @@ plainly. A change with **no file in it** selects nothing and starts nothing, and
 `test/tools/run-tests.mjs#loadPlans` as "no target", and no target is the whole plan tree, so a
 measured-empty selection travels as `--selection-empty` instead of as an absent target. It used to
 widen there: 0 changed files started 336 plan files and printed a `[SUMMARY]` with no failure -- the
-reading a correct selection of one plan gives -- so the number was the only symptom. A base branch, a
+reading a correct selection of one plan gives -- so the number was the only symptom. **A run that
+starts no test exits 2** -- not measured, and neither red nor green. The code is the only place that
+difference can live: a zero-row `[SUMMARY]` prints the same three numbers a green run prints, and 1
+would blame a test that never ran. It printed `total: 0` and exited 0 before that ruling, so a lane
+that ran nothing read as a lane that found nothing wrong; the run now says
+`nothing was started, so nothing was measured: exit 2` above the summary it explains. A base branch, a
 changed-file list or a rule file that cannot be **read**
 is refused with exit 2: the plans the change touches are unknown, so none is selected and no layer
 is run, and the refusal names the base (or the list, or the rules file) that failed and the layer

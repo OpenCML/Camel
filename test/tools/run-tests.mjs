@@ -3529,6 +3529,18 @@ function selectionCaseName(entry) {
 }
 
 /**
+ * A refusal that is a plan error, not a crash: `main` prints one `[PLAN ERROR]` line and exits 2.
+ * A selection this run cannot read is not measured -- nothing starts -- and 2 is the code this
+ * runner already gives "not measured" (a missing install, an unreadable base). A throw would exit 1,
+ * which says a test failed: the wrong answer, because no test ran.
+ */
+function selectionRefusal(message) {
+    const error = new Error(message)
+    error.planRefusal = true
+    return error
+}
+
+/**
  * `--selection-cases`: the names a run must execute. An empty or unreadable list is refused rather
  * than read as "no narrowing": the two mean opposite things, and only one of them is a selection.
  *
@@ -3538,29 +3550,29 @@ function selectionCaseName(entry) {
  * as the digest it is rather than reported as "names no case".
  */
 function readCaseSelection(file) {
-    if (!fs.existsSync(file)) throw new Error(`--selection-cases: ${file} does not exist`)
+    if (!fs.existsSync(file)) throw selectionRefusal(`--selection-cases: ${file} does not exist`)
     let doc
     try {
         doc = JSON.parse(fs.readFileSync(file, 'utf8'))
     } catch (error) {
-        throw new Error(`--selection-cases: ${file} is not JSON (${error.message})`)
+        throw selectionRefusal(`--selection-cases: ${file} is not JSON (${error.message})`)
     }
     const names = Array.isArray(doc) ? doc : doc && doc.cases
     if (!Array.isArray(names)) {
-        throw new Error(
+        throw selectionRefusal(
             `--selection-cases: ${file} carries no 'cases' array; a selection record writes one ` +
                 '(scripts/selection-cases.mjs --names writes the rows a run executes)'
         )
     }
     if (names.length === 0) {
         if (doc && doc.cases_recorded === false) {
-            throw new Error(
+            throw selectionRefusal(
                 `--selection-cases: ${file} keeps ${doc.case_count} case(s) as ${doc.case_digest} and ` +
                     `not as rows, so it cannot name what a run must start. Write the run's list with ` +
                     'scripts/selection-cases.mjs --names, or replay this record with --verify.'
             )
         }
-        throw new Error(
+        throw selectionRefusal(
             `--selection-cases: ${file} names no case; an empty selection must not become a plan expansion`
         )
     }
@@ -4799,6 +4811,27 @@ async function main() {
         )
     )
 
+    // A run that starts no test measures nothing, and the code says which kind of nothing: 2 is
+    // "not measured" -- the same code a missing install and an unreadable selection get -- while 0
+    // would read as a green run (a zero-row `[SUMMARY]` is the same three numbers a green one
+    // prints) and 1 would blame a test that never ran. `--selection-empty` is the way a gate reaches
+    // this on purpose: a change whose plans hold no case in this layer. Refusing to call that a pass
+    // is the point -- a run that proves nothing is not a run that found nothing wrong.
+    //
+    // The count is the summary's own four fields, the same sum `printRunSummary` prints as `total`:
+    // the summary has no `total` field, and reading one would have made this condition always false
+    // -- the run would have exited 0 while these words said 2.
+    const nothingStarted =
+        outcome.summary.pass + outcome.summary.fail + outcome.summary.skip + outcome.summary.xfail === 0
+    if (nothingStarted) {
+        // Before the `[provenance]` line, which has to stay right before `[SUMMARY]`
+        // (test/cases/tools/provenance.mjs pins the pair): the sentence explains the numbers that
+        // follow, so it goes on the near side of them.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} nothing was started, so nothing was measured: ` +
+                'exit 2, which is not a green run and not a red one'
+        )
+    }
     printProvenance(options)
     printRunSummary(outcome.summary)
     // After the numbers, and not between them and the line that states what they belong to: a
@@ -4855,7 +4888,7 @@ async function main() {
     // `[provenance]` line unable to name the tree the reading belongs to, and what the wrapper
     // carries to the host on the next run. A tree that could not be read at all counts as the
     // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
-    const exitCode = outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    const exitCode = nothingStarted ? 2 : outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
     // The whole of `--list-known`'s output, emitted last: one `{name, verdict, reading}` per test.
     // Last because the reader is a program that takes the lines after this point, and every line
     // before it is the run a person reads -- the summary, the tree verdict, the roster, the
@@ -4871,6 +4904,16 @@ async function main() {
 // `loadPlanTests` and `expandSweeps` from here, and importing a module must not run the tests.
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
     main().catch((error) => {
+        if (error && error.planRefusal === true) {
+            // A recorded selection this run cannot read: one line and exit 2, no stack. The stack a
+            // throw prints says which line of this file refused, which is not the question a reader
+            // of a gate log has; and exit 1 would say a test failed when nothing was started.
+            console.error(`${COLORS.red}[PLAN ERROR]${COLORS.reset} ${error.message}`)
+            console.error(
+                `${COLORS.cyan}[INFO]${COLORS.reset} nothing was started, so nothing was measured: exit 2`
+            )
+            process.exit(2)
+        }
         console.error(error && error.stack ? error.stack : String(error))
         if (fs.existsSync(TEST_SCRATCH_RUN)) {
             console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)

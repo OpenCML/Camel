@@ -28,10 +28,15 @@
 //   * an entry that is not a name is refused **by its shape**, not coerced into one;
 //   * a change that matches no rule is refused as an empty selection and does not widen to the fast
 //     layer (`--changed --list` and the engine both);
-//   * two refusals that held before any of this was changed and still hold, so a green here is not
-//     just "something ran": an empty case list is still refused with `an empty selection must not
-//     become a plan expansion`, and a name the selection would not start is still a `[PLAN ERROR]`
-//     with exit 2.
+//   * a record computed for a named target list (`--targets`) lists only the cases of those targets,
+//     and the run over them accepts it -- narrowing at computation, not a refusal at the runner;
+//   * no gate surface (plans, `scripts`, `test/tools`, `internal/tools`, CI, `package.json`) names a
+//     stored reading under `test/selection/`: the record a gate runs on is computed on the spot, and
+//     a checked-in record would be a gate whose answer the next case-adding commit moves;
+//   * one refusal that held before any of this was changed and still holds, so a green here is not
+//     just "something ran": a name the selection would not start is a `[PLAN ERROR]` with exit 2.
+//     The empty-list refusal's *sentence* held too, and its exit code did not -- it was 1 (a throw)
+//     and is 2 now that a run that starts nothing is "not measured" rather than "red".
 //
 // Run it directly (`node test/tools/selftest/selection-cases.mjs`) or through the runner self-test,
 // which folds these problems into its own list.
@@ -249,14 +254,27 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
             problems.push(`selection: a nameless row was not refused by its shape: ${head(shapelessRun)}`)
         }
 
-        // ---- 4. held before and after: an empty case list is still refused -----------------------
+        // ---- 4. an empty case list is refused, and the refusal is a plan error -------------------
+        // The sentence held before any of this was touched: an empty selection must not become a
+        // plan expansion. The exit code did not: it was 1, because the reader threw and `main`'s
+        // catch exits 1 -- the code that says a test failed, for a run that started nothing. It is
+        // 2 now ("not measured"), which is the code a missing install and an unreadable base get.
+        // Measured on the tree before the ruling (2b141ad836): exit 1 with a stack trace; after it:
+        // exit 2 with one `[PLAN ERROR]` line.
         const emptyFile = path.join(scratch, 'empty.json')
         fs.writeFileSync(emptyFile, `${JSON.stringify({ version: 1, plans: [], cases: [] }, null, 2)}\n`, 'utf8')
         const emptyRun = listCases(['test/plans/smoke'], ['--selection-cases', emptyFile])
-        if (emptyRun.status === 0) {
-            problems.push('selection: an empty case list was accepted')
-        } else if (!/names no case; an empty selection must not become a plan expansion/.test(emptyRun.output)) {
+        if (emptyRun.status !== 2) {
+            problems.push(`selection: an empty case list read exit ${emptyRun.status}, expected 2 (not measured)`)
+        }
+        if (!/names no case; an empty selection must not become a plan expansion/.test(emptyRun.output)) {
             problems.push(`selection: an empty case list was refused without the sentence that says why: ${head(emptyRun)}`)
+        }
+        if (!/\[PLAN ERROR\]/.test(emptyRun.output)) {
+            problems.push(`selection: an empty case list was refused without a [PLAN ERROR] line: ${head(emptyRun)}`)
+        }
+        if (/\n\s+at .*run-tests\.mjs:/.test(emptyRun.output)) {
+            problems.push(`selection: an empty case list printed a stack instead of a refusal: ${head(emptyRun)}`)
         }
 
         // ---- 5. held before and after: a name the selection would not start is a plan error ------
@@ -275,8 +293,12 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
         }
 
         // ---- 6. a change no rule matches selects nothing, and does not widen ---------------------
+        // The candidate list holds only rule-less *classes* whose files a plan does not read. It
+        // deliberately does not hold the directory of stored records under `test/selection/`: check 8
+        // below asserts that nothing a gate runs names it, and a probe that listed it here would be
+        // the one reading the check would then have to except.
         let unruled = null
-        for (const candidate of ['internal/reports/', 'test/selection/readings/']) {
+        for (const candidate of ['internal/reports/']) {
             const dir = path.join(repoRoot, candidate)
             if (!fs.existsSync(dir)) continue
             const first = fs.readdirSync(dir).sort().find((entry) => fs.statSync(path.join(dir, entry)).isFile())
@@ -327,6 +349,151 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
                 }
             }
         }
+    // ---- 7. the record lists the cases of the run's targets, not of the change's plans ------
+        // `--targets` is how a run tells the engine what it starts. The record must then name only
+        // those cases: the narrowing belongs at the step that computes the record, so a run is never
+        // handed a case it would not start and never has to refuse its own record. `CASE_INPUT`
+        // selects two plans; the record is computed for one of them and replayed over that one.
+        const fullFile = path.join(scratch, 'full-targets.json')
+        const fullWritten = select(caseList, ['--write', fullFile, '--quiet', '--names'])
+        const fullDoc = fullWritten.status === 0 ? readJson(fullFile) : null
+        if (!fullDoc || (fullDoc.plans || []).length < 2) {
+            problems.push(
+                `selection: ${CASE_INPUT} no longer selects two plans, so the narrowing check has nothing to narrow`
+            )
+        } else {
+            // The plain plan rather than the layered one, so the replay below is about the narrowing
+            // and not about the layer.
+            const layeredOf = new Set(fullDoc.layered || [])
+            const narrowed = [fullDoc.plans.find((plan) => !layeredOf.has(plan)) || fullDoc.plans[0]]
+            const targetsFile = path.join(scratch, 'targets.txt')
+            fs.writeFileSync(targetsFile, `${narrowed.join('\n')}\n`, 'utf8')
+            const narrowFile = path.join(scratch, 'narrowed.json')
+            const narrowWritten = select(caseList, ['--write', narrowFile, '--quiet', '--names', '--targets', targetsFile])
+            const narrowDoc = narrowWritten.status === 0 ? readJson(narrowFile) : null
+            if (narrowWritten.status !== 0) {
+                problems.push(`selection: the engine refused --targets (exit ${narrowWritten.status}): ${head(narrowWritten)}`)
+            } else if (!narrowDoc) {
+                problems.push('selection: the engine wrote no record for a named target list')
+            } else {
+                const named = (narrowDoc.plans || []).join(', ')
+                if (named !== narrowed.join(',')) {
+                    problems.push(`selection: the record lists ${named} for a run that starts ${narrowed.join(',')}`)
+                }
+                if (narrowDoc.case_count < 1) {
+                    problems.push(`selection: the record lists no case for ${narrowed[0]}`)
+                }
+                if (narrowDoc.case_count > fullDoc.case_count) {
+                    problems.push(
+                        `selection: narrowing to ${narrowed[0]} produced ${narrowDoc.case_count} case(s), ` +
+                            `more than the ${fullDoc.case_count} of the whole change`
+                    )
+                }
+                // Narrowed, not invented: every case it names is one the change selects.
+                const whole = new Set((fullDoc.cases || []).map((row) => row.name))
+                const invented = (narrowDoc.cases || []).map((row) => row.name).filter((name) => !whole.has(name))
+                if (invented.length > 0) {
+                    problems.push(
+                        `selection: the narrowed record invented ${invented.length} case(s): ${invented.slice(0, 3).join(', ')}`
+                    )
+                }
+                // And the run over exactly those targets accepts it: no refusal for a case it would
+                // not start, which is the failure mode this narrowing exists to remove.
+                const layers = (narrowDoc.layered || []).length > 0 ? ['--selection-layer', narrowDoc.layered.join(',')] : []
+                const replay = listCases(narrowed, ['--selection-cases', narrowFile, ...layers])
+                if (replay.status !== 0) {
+                    problems.push(
+                        `selection: the run refused the record computed for its own targets (exit ${replay.status}): ${head(replay)}`
+                    )
+                } else {
+                    const listing = listed(replay)
+                    if (listing.claimed !== narrowDoc.case_count) {
+                        problems.push(
+                            `selection: the run for ${narrowed[0]} listed ${listing.claimed} case(s) for a record naming ${narrowDoc.case_count}`
+                        )
+                    }
+                }
+            }
+        }
+
+        // ---- 8. no gate step reads a stored selection record -------------------------------------
+        // The record a gate runs on is computed on the spot, always. The records kept in the tree under
+        // `test/selection/` are readings of past changes, kept so a replay can be compared with them;
+        // a gate that read one would answer with the last commit that wrote it, and any commit adding
+        // a case would move a gate's answer. This walks the surfaces a gate can run -- plans,
+        // `scripts`, the tooling under `test/tools`, the host helpers under `internal/tools`, CI,
+        // `package.json` -- and refuses a file of them that names that directory. The needle is
+        // assembled from two halves so that this file, which is scanned like any other, cannot match
+        // itself; prose that has to name the directory can write `test/selection/` and the segment
+        // after it in words.
+        const needle = ['selection', 'readings'].join('/')
+        const gateRoots = ['test/plans', 'internal/tools', 'scripts', 'test/tools', '.github']
+        const scanned = []
+        const hits = []
+        const walk = (dir) => {
+            let entries = []
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true })
+            } catch {
+                return
+            }
+            for (const entry of entries) {
+                const full = path.join(dir, entry.name)
+                if (entry.isDirectory()) {
+                    if (entry.name === 'node_modules' || entry.name === '.git') continue
+                    walk(full)
+                } else if (entry.isFile()) {
+                    scanned.push(full)
+                }
+            }
+        }
+        for (const root of gateRoots) walk(path.join(repoRoot, root))
+        scanned.push(path.join(repoRoot, 'package.json'))
+        // The rules file the gate reads is a surface too: a comment in it is read by whoever changes
+        // the rules, so a name of the stored records there would be a step towards reading one.
+        scanned.push(path.join(repoRoot, 'test', 'plan-selection.json'))
+        for (const file of scanned) {
+            let text = ''
+            try {
+                text = fs.readFileSync(file, 'utf8')
+            } catch {
+                continue
+            }
+            if (!text.includes(needle)) continue
+            const line = text.split(/\r?\n/).findIndex((row) => row.includes(needle)) + 1
+            hits.push(`${path.relative(repoRoot, file).split(path.sep).join('/')}:${line}`)
+        }
+        if (hits.length > 0) {
+            problems.push(
+                `selection: a gate step names the stored readings (${hits.slice(0, 4).join(', ')}); ` +
+                    'the record a gate runs on is computed on the spot'
+            )
+        }
+        if (scanned.length < 50) {
+            problems.push(`selection: the stored-record scan read ${scanned.length} file(s), too few to be a reading`)
+        }
+
+        // ---- 9. a run that starts nothing exits 2, and says so -----------------------------------
+        // The code, not the wording: `--selection-empty` is a real run of the run machinery that
+        // starts no test, and it needs no install, so this is the one zero-row run that can be
+        // measured anywhere. It exited 0 before this ruling (measured on 2b141ad836: exit 0 with
+        // `[SUMMARY] total: 0, pass: 0, fail: 0`), which is the same three numbers a green run
+        // prints. The `[SUMMARY]` line below is asserted too, because the fix must not have bought
+        // its exit code by not printing the summary a green run also prints.
+        const zeroRowRun = sh([runner, '--selection-empty', '--jobs', '1'], repoRoot)
+        if (zeroRowRun.status !== 2) {
+            problems.push(`selection: a run that started nothing read exit ${zeroRowRun.status}, expected 2 (not measured)`)
+        }
+        if (!/nothing was started, so nothing was measured: exit 2/.test(zeroRowRun.output)) {
+            problems.push(`selection: a zero-row run did not say why its exit code is 2: ${head(zeroRowRun, 4)}`)
+        }
+        // The `.*` is the colour reset between `[SUMMARY]` and its numbers, not slack.
+        if (!/\[SUMMARY\].*total: 0, pass: 0, fail: 0/.test(zeroRowRun.output)) {
+            problems.push(`selection: a zero-row run lost its summary line: ${head(zeroRowRun, 4)}`)
+        }
+        if (!/discovered plans: 0/.test(zeroRowRun.output)) {
+            problems.push(`selection: a zero-row run read an empty target list as the plan tree: ${head(zeroRowRun, 4)}`)
+        }
     } finally {
         fs.rmSync(scratch, { recursive: true, force: true })
     }
@@ -339,5 +506,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         console.error(problems.join('\n'))
         process.exit(1)
     }
-    console.log('selection-cases self-test ok: a recorded case is read by its name, a rule-less change selects nothing')
+    console.log(
+        'selection-cases self-test ok: a recorded case is read by its name, a record lists the run\'s ' +
+            'own targets, a zero-row run exits 2, and a rule-less change selects nothing'
+    )
 }
