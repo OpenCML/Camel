@@ -217,10 +217,11 @@ args = ["${case}", "--default-roots", "--no-pending", "--camel", "${camel}"]
 expect_exit = 1
 expect_stdout_contains = ["[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope", "stale snippet problem(s)"]
 normalizers = ["normalize_newlines"]
-# 300000 ms at the 4x rule, from the reading of this case rather than from its neighbour's: on the
-# build host it used 63710 ms of CPU (17.2 s of wall clock -- the checker spawns one compiler per
-# snippet, so the CPU is the sum of eight jobs) against a 180000 ms bound, which is 2.8x and was
-# itself the red. 300000 ms puts it at 4.7x.
+# 300000 ms at the 4x rule, and the reason is the shape of the work, not its size: this case starts
+# one compiler per snippet across eight jobs, so its CPU time is not its wall clock -- on the build
+# host it used 63710 ms of CPU and 17.2 s of wall clock. A bound read off the wall clock is wrong
+# here: 180000 ms looks generous against 17 s, and is 2.8x of the CPU the 4x rule reads, which was
+# itself the red. 300000 ms puts it at 4.7x of the CPU.
 timeout_ms = 300000
 # The same work as `docs.snippets_compile` -- it compiles the whole reader-facing scope -- so it
 # costs what that case costs and belongs on the same side of the 2 s line.
