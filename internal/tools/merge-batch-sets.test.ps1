@@ -7,10 +7,12 @@
 # Prints `N checks, M failed` and exits 1 when any check failed -- the same shape as
 # `camel-remote-args.test.ps1`, so a reader does not have to learn a second convention.
 #
-# The hash check runs `scripts/merge-readings.mjs#planSetHash` through node on the same list and
-# requires the same string. It is the one check here that is not about this file's own idea of
-# correctness: a record that names its plan set by a different hash than the baseline cache does
-# cannot be joined to a baseline, and nothing downstream would say so.
+# The hash check runs `scripts/plan-set.mjs#planSetHash` through node on the same list and requires
+# the same string. It is the one check here that is not about this file's own idea of correctness: a
+# record that names its plan set by a different hash than the baseline cache does cannot be joined to
+# a baseline, and nothing downstream would say so. The check imports the shipped module rather than
+# spelling the algorithm out again -- a second copy here would agree on the day it was written and
+# say nothing on the day the module moved, which is the shape of the defect the module exists to end.
 #
 # The scratch-root checks run the tool itself against a throwaway git repository whose settings file
 # names a merge worktree but no scratchRoot, because "exit 2" is a property of the script and not of
@@ -88,20 +90,18 @@ Check 'the order the lanes are given does not change the set' (($plans -join ','
 # --- the hash, against the comparer's own function ---------------------------
 $names = @('test/plans/feat/modules/std.plan.toml', 'test/plans/feat/docs_links.plan.toml', 'test/plans/feat/parse/frontend.plan.toml')
 $mine = Get-PlanSetHash -Names $names
-$script = @'
-const names = JSON.parse(process.env.PLAN_NAMES)
-const list = [...new Set(names.map((n) => n.trim()).filter(Boolean))].sort()
-let h = 0
-for (const ch of list.join('\n')) h = (h * 31 + ch.codePointAt(0)) >>> 0
-process.stdout.write(`${list.length}-${h.toString(16)}`)
-'@
+$planSetModule = 'file:///' + ((Join-Path $root 'scripts/plan-set.mjs') -replace '\\', '/')
+$script = @"
+import { planSetHash } from '$planSetModule'
+process.stdout.write(planSetHash(JSON.parse(process.env.PLAN_NAMES)))
+"@
 $scriptFile = Join-Path ([System.IO.Path]::GetTempPath()) ("merge-batch-sets-$PID.mjs")
 [System.IO.File]::WriteAllText($scriptFile, $script, (New-Object System.Text.UTF8Encoding($false)))
 try {
     $env:PLAN_NAMES = ($names | ConvertTo-Json -Compress)
     $theirs = "$(& node $scriptFile)".Trim()
     Remove-Item Env:\PLAN_NAMES -ErrorAction SilentlyContinue
-    Check 'the plan-set hash equals the comparer''s own' ($mine.Hash -eq $theirs) "mine $($mine.Hash), merge-readings $theirs"
+    Check 'the plan-set hash equals the shipped module''s own' ($mine.Hash -eq $theirs) "mine $($mine.Hash), plan-set.mjs $theirs"
     Check 'the hash carries the count first' ($mine.Hash.StartsWith("$($names.Count)-")) $mine.Hash
 } finally {
     Remove-Item -LiteralPath $scriptFile -Force -ErrorAction SilentlyContinue
