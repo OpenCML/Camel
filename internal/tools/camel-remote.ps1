@@ -573,7 +573,11 @@ $checkers = [ordered]@{
     # every unit that includes a changed header, from the build's own dependency graph; a file the graph
     # cannot answer for widens it to every unit rather than narrowing it to "fast but leaky". Not in
     # `all`: it takes minutes over the whole tree, and the reading a merge needs is the change's.
-    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true }
+    # `compiles`: this checker starts compilers on the host, so it is a build with another name and
+    # takes a build slot like one (see the checker stage, and `-Jobs` from the slot it gets). Without
+    # that it ran after the build slots were released: the panel showed no build holder while the box
+    # ran at load 192, and the reading was taken with nothing excluding anyone (2026-11-24).
+    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true; compiles = $true }
     # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
     # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
     # tool `frontend.ast_snapshot` itself starts -- with the line
@@ -1186,6 +1190,11 @@ $run = @{
     slots           = 2
     slot            = $null
     testSlot        = $null
+    # The wait is a reading of its own. `phase=built` standing still for twenty-two minutes is what a
+    # queued run looks like when nobody writes the wait down -- and on 2026-11-24 it was read as
+    # `waiters = []` twice, which says "nobody is waiting" about three runs that were.
+    testWaitSince   = $null
+    testWaitSlots   = $null
     noslotWaitedFor = $null
     overlapping     = @{ atStart = $null; atEnd = $null }
     loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
@@ -1517,6 +1526,11 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         ':'
     }
 
+    # The plan runs as a child of `camel-run`, which takes the slot and holds it until that command
+    # exits. The command travels as a file, byte for byte: quoting it into `bash -c` would rewrite it,
+    # and a rewritten command is exactly how a run ends up looking normal while running less.
+    $runPlanExec = 'exec "$CAMEL_RUN" plan --lane "${CAMEL_LANE:-}" --branch "${CAMEL_BRANCH:-}" -- bash ''' +
+        $remoteScratch + '/plan.sh'''
     # --- does a plan in this run declare itself time sensitive? ---------------
     # A reading that is a duration (perf/**, a `perf_budget_*` entry, an `opt_twice`-style
     # measurement) is only comparable to another duration taken in the same company, and the host
@@ -1580,12 +1594,12 @@ code=${PIPESTATUS[0]}
 echo '__CAMEL_REMOTE_ROWS_START__'
 grep '^{' 'TEETMP' || true
 echo '__CAMEL_REMOTE_ROWS_END__'
-'@.Replace('RUNPLAN', $runPlan).Replace('TEETMP', "$remoteScratch/rows.txt")
+'@.Replace('RUNPLAN', $runPlanExec).Replace('TEETMP', "$remoteScratch/rows.txt")
     } else {
         @'
 RUNPLAN 2>&1
 code=${PIPESTATUS[0]}
-'@.Replace('RUNPLAN', $runPlan)
+'@.Replace('RUNPLAN', $runPlanExec)
     }
 
     # The width the plan is started at, decided by the slot the host script holds and not by -Jobs:
@@ -1746,6 +1760,41 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
     # back, so the console shows one line per checker and the run can summarise them at the end;
     # `checkfail` carries the first failure out of the stage as the run's exit code.
     $checkBlocks = ''
+    # The build slots are released as soon as the build ends -- and the checkers run after that, which
+    # was right for the checkers that read a finished run and wrong for the one that compiles. This
+    # block takes the build slots back for the check stage when a checker compiles, and hands the
+    # width to the checker through `chk_jobs`; the release follows the blocks. A run that holds all
+    # three slots (a time-sensitive one) has released them by this point, so nothing here re-opens a
+    # descriptor the hold still stands on.
+    $checkSlotBlock = ''
+    $checkSlotRelease = ''
+    if ($checkNames -contains 'clang-syntax') {
+        $checkSlotBlock = @"
+    exec 9>/tmp/camel-host-build-1.lock
+    exec 8>/tmp/camel-host-build-2.lock
+    chk_jobs=8
+    chk_slot=
+    if flock -n 9; then chk_slot=1; fi
+    if flock -n 8; then chk_slot="`$chk_slot"2; fi
+    if [ -z "`$chk_slot" ]; then
+        echo '[camel-remote] waiting for a host build slot for the checker (clang-syntax compiles)'
+        chk_waited=0
+        while [ -z "`$chk_slot" ]; do
+            if flock -n 9; then chk_slot=1; elif flock -n 8; then chk_slot=2; else
+                sleep 3; chk_waited=`$((chk_waited + 3))
+                if [ `$((chk_waited % 30)) -eq 0 ]; then echo "[camel-remote] still waiting for a host build slot for the checker (`${chk_waited}s)"; fi
+            fi
+        done
+    fi
+    if [ "`$chk_slot" = "12" ] || [ "`$chk_slot" = "21" ]; then chk_jobs=16; fi
+    echo "HOST_CHECK_SLOT=`$chk_slot"
+    echo "HOST_CHECK_JOBS=`$chk_jobs"
+"@
+        $checkSlotRelease = @"
+    exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
+    echo 'HOST_CHECK_SLOT_RELEASED=1'
+"@
+    }
     foreach ($checkName in $checkNames) {
         $entry = $checkers[$checkName]
         # A `--changed` checker reads a diff, and a diff needs two different commits. When this
@@ -1778,7 +1827,10 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
         # Every entry but the generated-file pair is a node script; those two name their own
         # interpreter because their generators are python (see the table above).
         $interp = if ($entry.interpreter) { $entry.interpreter } else { 'node' }
-        $shownCommand = "$interp $($entry.script) $($entry.args -join ' ')$camelArg"
+        # A checker that compiles is handed the width the build slot it took says, not a width it
+        # chooses for itself: `${chk_jobs:-8}` is set by the acquire block the stage runs before it.
+        $jobsArg = if ($entry.compiles) { ' --jobs ${chk_jobs:-8}' } else { '' }
+        $shownCommand = "$interp $($entry.script) $($entry.args -join ' ')$camelArg$jobsArg"
         if ($entry.reportOnly) {
             # The same invocation, with one difference that is the whole point of the entry: its
             # output is captured so the reading can be reduced out of the checker's own summary, and
@@ -2265,6 +2317,16 @@ budget_jobs() {
 # only so that a missed branch cannot abort a run under `set -u`.
 CAMEL_JOBS=`$requested_jobs
 echo "HOST_JOBS_REQUESTED=`$requested_jobs"
+# The host's shared budget, handed out per worker process rather than per run (internal/tools/
+# host-tokens.sh). Exported here and nowhere else, so every stage of this run -- the plan's cases, the
+# clang check, the build -- draws from one pool. A run that does not set these keeps its old behaviour
+# exactly: the per-case wrapper execs the case unchanged when CAMEL_TOKEN_DIR is unset, so this is the
+# switch, and it is one line to see in the generated script.
+export CAMEL_TOKEN_DIR="`${CAMEL_TOKEN_DIR:-/tmp/camel-tokens}"
+export CAMEL_TOKENS="`${CAMEL_TOKENS:-24}"
+export CAMEL_LANE='$name'
+export CAMEL_BRANCH='$branch'
+echo "HOST_TOKEN_POOL=`$CAMEL_TOKEN_DIR size=`$CAMEL_TOKENS"
 echo '__CAMEL_REMOTE_SYNCED__'
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
@@ -2300,16 +2362,23 @@ if [ '$timeSensitive' = 'True' ]; then
     while [ "`$held_all" = 0 ]; do
         exec 9>/tmp/camel-host-build-1.lock
         exec 8>/tmp/camel-host-build-2.lock
-        exec 7>/tmp/camel-host-test.lock
+        # All three test slots, because "exclusive" means the machine is this run's: a time-sensitive
+        # measurement that left one test slot open would be measuring beside whatever took it.
+        exec 21>/tmp/camel-host-test-1.lock
+        exec 22>/tmp/camel-host-test-2.lock
+        exec 23>/tmp/camel-host-test-3.lock
         miss=
         flock -n 9 || miss=build-1
         if [ -z "`$miss" ]; then flock -n 8 || miss=build-2; fi
-        if [ -z "`$miss" ]; then flock -n 7 || miss=test; fi
+        if [ -z "`$miss" ]; then flock -n 21 || miss=test-1; fi
+        if [ -z "`$miss" ]; then flock -n 22 || miss=test-2; fi
+        if [ -z "`$miss" ]; then flock -n 23 || miss=test-3; fi
         if [ -z "`$miss" ]; then
             held_all=1
-            echo '[camel-remote] time sensitive: hold taken on build-1, build-2 and test'
+            echo '[camel-remote] time sensitive: hold taken on build-1, build-2 and test-1, test-2, test-3'
         else
-            exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null; exec 7>&- 2>/dev/null
+            exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
+            exec 21>&- 2>/dev/null; exec 22>&- 2>/dev/null; exec 23>&- 2>/dev/null
             if [ "`$ts_waited" -ge '$SlotWaitSeconds' ]; then
                 echo "[camel-remote] noslot: waited `${ts_waited}s and the host `$miss slot is still held by another run; this plan is time sensitive, so it does not start without build-1, build-2 and test together" >&2
                 echo "HOST_NOSLOT=`$miss"
@@ -2324,7 +2393,7 @@ if [ '$timeSensitive' = 'True' ]; then
         fi
     done
     echo 'HOST_BUILD_SLOT=1&2'
-    echo 'HOST_TEST_SLOT=1'
+    echo 'HOST_TEST_SLOT=1&2&3'
     # Holding the host means holding its whole process budget too: nothing else is running, so the
     # plan and the build both get all 32 (still no more than the caller asked for).
     export CAMEL_JOBS="`$(budget_jobs `$EXCLUSIVE_JOBS)"
@@ -2401,32 +2470,33 @@ $vscodeDeps
 # lock covers the plan and nothing else -- the transfer and the build are outside it, and the build
 # has its own slots -- so a full queue costs waiting time, never a wrong number. Waiting is not a
 # failure: only the plan's own exit code reaches the caller.
-if [ "`$held_all" = 1 ]; then
-    # The plan slot was taken with the two build slots before the build. Re-opening fd 7 here would
-    # close the descriptor the hold stands on, and the lock with it: nothing is opened, nothing is
-    # waited for, and the hold lasts until the line after the plan below.
-    :
-else
-    exec 7>/tmp/camel-host-test.lock
-    test_wait_started_ns=`$(date +%s%N)
-    if ! flock -w 1800 7; then
-        echo '[camel-remote] no host test slot within 1800 s' >&2
-        exit 4
-    fi
-    test_wait_ms=`$(( (`$(date +%s%N) - test_wait_started_ns) / 1000000 ))
-    if [ `$test_wait_ms -gt 2000 ]; then
-        echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$test_wait_ms/1000}") s for the host test slot"
-    fi
-    # The plan slot is a slot of its own: a run that built nothing still holds one here, and the
-    # registry says so instead of reading slot=0 as "this reading was taken with no exclusion at
-    # all".
-    echo 'HOST_TEST_SLOT=1'
-    run_note plan
+# The test slot is NOT taken here. It is taken by `camel-run plan`, inside the process that runs the
+# plan, because a lock lives on a file descriptor and a descriptor does not cross a process boundary:
+# a slot opened here would be held by this shell and be invisible to the run it protects.
+#
+# What used to be here was a second implementation of taking a lock. On 2026-11-24 three slots were
+# added and the merge position's worktree -- still running the older copy of this generator -- never
+# took one of them; two takers that do not know about each other are the same thing as no lock.
+#
+# The old single lock `/tmp/camel-host-test.lock` is taken by `camel-run` during the transition, not
+# here, so that one process holds both and every run waits in the same order.
+CAMEL_RUN="`${CAMEL_RUN:-`$HOME/camel-work/bin/camel-run}"
+if [ ! -x "`$CAMEL_RUN" ]; then
+    echo "[camel-remote] no lock taker at `$CAMEL_RUN; refusing to run without one." >&2
+    echo "[camel-remote] install it from a checkout tracking origin/integration: camel-run.sh install" >&2
+    exit 3
 fi
+echo "CAMEL_RUN_AT=`$CAMEL_RUN"
+run_note plan
 # The plan's budget belongs to the plan slot it now holds: 16, or the whole 32 when this run holds
 # all three. -UpdateGolden rewrites files and the runner drops to one test at a time whatever
 # --jobs says (run-tests.mjs), so that run's actual width is 1 and the registry says 1.
 $jobsBudget
+# Taken while this run holds the plan slot and before its own runner starts: every process this
+# counts is a plan running BESIDE this one. A slot is a promise only to the runs that ask for it --
+# a plan started by hand over ssh holds nothing -- so this is the number that says whether the
+# reading about to be taken was taken alone. One line, and the caller carries it into `busy`.
+echo "HOST_TEST_PROCS_AT_START=`$(pgrep -fc 'run-tests\.mjs' 2>/dev/null || echo 0)"
 $planMarker
 # The plan's stderr is folded into its own stdout here, on the host, before it leaves this script.
 # The runner writes a red run's reason to stderr ("this run selected no test at all", the ENOENT
@@ -2452,8 +2522,10 @@ else
 fi
 $goldenStage
 $fetchStage
-# Released here, before the checkers: they read a finished run and need no exclusion. A
-# time-sensitive run lets go of all three slots here, at the same moment and for the same reason.
+# The plan slot is released here, before the checkers: they read a finished run and need no
+# exclusion. A time-sensitive run lets go of all three slots here, for the same reason -- and the
+# build half is taken back by the check stage itself when a checker compiles (clang-syntax does),
+# so "released" here does not mean the checkers run outside the box.
 if [ "`$held_all" = 1 ]; then
     exec 7>&- 2>/dev/null; exec 8>&- 2>/dev/null; exec 9>&- 2>/dev/null
 else
@@ -2466,7 +2538,9 @@ fi
 if [ -n '$checkList' ]; then
     checkfail=0
     echo '__CAMEL_REMOTE_CHECKS_START__'
+$checkSlotBlock
 $checkBlocks
+$checkSlotRelease
     if [ `$checkfail -ne 0 ]; then
         echo '__CAMEL_REMOTE_CHECKS_FAILED__'
         if [ `$code -eq 0 ]; then code=`$checkfail; fi
@@ -2488,6 +2562,11 @@ exit `$code
 
     # The script travels as a file: a string piped into `ssh bash -s` arrives with the pipe's
     # encoding, and a CR before a newline makes `exit 0` fail with "numeric argument required".
+    # The plan command, byte for byte. `camel-run plan` executes this file and holds the slot for as long
+    # as it runs, so the command the gate meant to run and the command that ran are the same characters.
+    $planFile = Join-Path $scratch 'plan.sh'
+    [System.IO.File]::WriteAllText($planFile, ($runPlan -replace "`r`n", "`n") + "`n",
+        (New-Object System.Text.UTF8Encoding($false)))
     $scriptFile = Join-Path $scratch 'run.sh'
     [System.IO.File]::WriteAllText($scriptFile, ($remoteScript -replace "`r`n", "`n"),
         (New-Object System.Text.UTF8Encoding($false)))
@@ -2639,8 +2718,20 @@ exit `$code
                 Write-Host $line
                 return
             }
-            if ($cleanLine -match '^HOST_TEST_SLOT=(\d+)$') {
-                $run.testSlot = [int]$Matches[1]
+            if ($cleanLine -match '^HOST_TEST_WAIT_START=([0-9 ]+) (\S+)$') {
+                $run.testWaitSlots = ($Matches[1].Trim() -replace ' ', ',')
+                $run.testWaitSince = $Matches[2]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_TEST_SLOT=([0-9&]+)$') {
+                $run.testWaitSince = $null
+                $run.testWaitSlots = $null
+                # `1&2&3` is a run that holds every slot (a time-sensitive measurement); a single
+                # number is the slot an ordinary run took. Kept as text in the second case so the
+                # registry does not lose which slots were actually held.
+                $run.testSlot = if ($Matches[1] -match '^\d+$') { [int]$Matches[1] } else { $Matches[1] }
                 Publish-Run
                 Write-Host $line
                 return
