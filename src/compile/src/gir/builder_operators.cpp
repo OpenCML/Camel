@@ -361,6 +361,18 @@ Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normT
     return found;
 }
 
+bool Builder::isElementFunction(const GCT::node_ptr_t &func) const {
+    if (func == nullptr) {
+        return false;
+    }
+    const auto sourceContext = context_->sourceContext();
+    if (sourceContext == nullptr) {
+        return false;
+    }
+    const auto *record = sourceContext->origin(func->origin());
+    return record != nullptr && record->label == "gct.func.element";
+}
+
 Type *Builder::walkedElementTypeOf(Type *type) {
     type = valueTypeOf(type);
     if (type == nullptr || containsTypeVar(type)) {

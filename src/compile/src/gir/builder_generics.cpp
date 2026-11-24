@@ -2169,7 +2169,7 @@ void Builder::settleGenericOperatorArguments(
             type     = refusedType;
             return;
         }
-        if (tmpl->name.empty()) {
+        if (isElementFunction(tmpl->func)) {
             // The element function of a list comprehension: nothing to take `x` from.
             Type *source = !normTypes.empty() ? valueTypeOf(normTypes.front()) : nullptr;
             quiet.attach();

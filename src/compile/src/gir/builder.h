@@ -3635,6 +3635,14 @@ class Builder {
     /// ask it, so neither says "the element is this" a second time. Null for a type nothing
     /// walks, and for a type that still has a type variable.
     camel::core::type::Type *walkedElementTypeOf(camel::core::type::Type *type);
+    /// Whether this function is a list comprehension's element function: the one the compiler
+    /// makes from `[e for x in xs]`, which has no name and wrote no clause about resources. Its
+    /// signature keeps saying no clause -- a measurement of its body is a fact about the body,
+    /// not a promise the element function makes (design principles 3.3) -- and this is the one
+    /// place that answers "which function is a comprehension's element function": the
+    /// measurement of a body asks it, and the refusal of a comprehension asks it, so the
+    /// compiler-made function is identified once, by the label it was made with.
+    bool isElementFunction(const GCT::node_ptr_t &func) const;
     /// Adds what the declaring modules of the operands export as overloads of `group` to the
     /// set of `dref`, once each: an overload the module also imports (or one found by both
     /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the
