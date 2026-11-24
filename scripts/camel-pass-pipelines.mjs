@@ -159,7 +159,17 @@ export function stringsOf(body) {
 export function scriptPipelines(file, text) {
   const out = []
   text.split('\n').forEach((line, index) => {
-    if (!/\bcamel\b|\bEXE\b/.test(line)) return
+    // A line that runs `camel`, names the binary as `EXE`, or declares the list the command is built
+    // from (`EXPORT = ["std::macro", "std::opt", "onnx::export"]` in `ort_entry_export.py`). All three
+    // write a pipeline; the third is invisible to every other reading of the file.
+    //
+    // The third is only a pipeline when its name says so: a `PIPELINE`, `PIPELINES` or `EXPORT`
+    // constant is a command line, while an uppercased array of pass words that ends differently
+    // (`SCHEDULERS = [None, "std::fvm", ...]`, `BACKENDS`, `WIDE_PASSES`) is a vocabulary the script
+    // chooses from, and reading it as a pipeline would report a list the tree never runs. Measured on
+    // the tree: the looser `[A-Z][A-Z_]{2,}\s*=\s*\[` matched 213 lines, of which those vocabularies
+    // are the ones that carry pass words at all.
+    if (!/\bcamel\b|\bEXE\b|\b[A-Z][A-Z_]*(?:PIPELINES?|EXPORT)\s*=\s*\[/.test(line)) return
     const strings = [...line.matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => m[1] ?? m[2])
     const passes = strings.flatMap(passesOfElement)
     if (passes.length === 0) return
