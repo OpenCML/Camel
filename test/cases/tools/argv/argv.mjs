@@ -180,10 +180,14 @@ console.log(`PASS argv.${facet}`)
  * The tool's exits, one reading each, because `0` and `1` and the two faces of `2` are all just
  * numbers and only the sentences tell them apart.
  *
- * The red and the second `2` need a consumer that answers badly, and there is no way to make the
- * real one do that on demand: so they run against a scratch copy of the tool whose consumer is a
- * stand-in. That is the one place a stand-in is honest -- it is the *wrong answer* being fed in, not
- * the thing under test -- and the tool's own words are what the assertions land on.
+ * A stand-in has two uses, and only one of them checks anything. Used as the *thing under test*, it
+ * verifies the words its author wrote and nothing else. Used as an *input*, it feeds a wrong answer
+ * to a real tool, and the assertions still land on the tool's own verdict: a stand-in may fake the
+ * words, never the verdict.
+ *
+ * The red and the two `2`s that need a bad consumer are the second kind: there is no way to make the
+ * real consumer answer badly on demand, so a scratch copy of the tool is given a consumer that says
+ * the wrong thing, and what is asserted is the tool's sentence about it.
  */
 function runExits() {
     const scratch = []
@@ -222,10 +226,21 @@ function runExits() {
         if (reading.status !== code) problems.push(`${label}: expected exit ${code}, got ${reading.status}`)
         if (said === '') problems.push(`${label}: the output does not say '${says}'`)
     }
-    // The two refusals share a code; they must not share a sentence.
+    // Every exit 2 shares a code, so the sentence is the only thing telling the three refusals
+    // apart -- a ref that cannot be read, a word this tool does not know, and a checkout that is not
+    // a green starting point. Saying "the two are different" is a claim about one pair, so each
+    // reading is held against the other two's phrases: a cause that borrows another's words fails
+    // here, and so does a tool that starts answering all three with one generic line.
     const refusals = expected.filter((entry) => entry[1] === 2).map((entry) => entry[0])
-    const said = refusals.map((label) => (lines.find((line) => line.startsWith(`[EXITS] ${label}:`)) || '').split(':: ')[1])
-    if (said[0] === said[1]) problems.push('the two exits that are both 2 say the same thing')
+    if (refusals.length !== 3) problems.push(`expected 3 exits that are 2, found ${refusals.length}`)
+    for (const [label] of expected) {
+        const reading = readings.find((candidate) => candidate.label === label)
+        const text = `${reading.stdout || ''}${reading.stderr || ''}`
+        for (const [otherLabel, , otherSays] of expected) {
+            if (otherLabel === label) continue
+            if (text.includes(otherSays)) problems.push(`'${label}' also says '${otherSays}', which belongs to '${otherLabel}'`)
+        }
+    }
     for (const tree of scratch) fs.rmSync(tree, { recursive: true, force: true })
     for (const line of lines) console.log(line)
     if (problems.length > 0) {
