@@ -456,6 +456,7 @@ const neverCovered = planFiles.filter((p) => !coveredPlans.has(p));
 
 const tally = (xs, f) => xs.reduce((m, x) => { const k = f(x); m[k] = (m[k] ?? 0) + 1; return m; }, {});
 const byClass = tally(all, (r) => r.cls.cls);
+const byTag = tally(all, (r) => r.cls.tag ?? '(无)');
 const byAns = tally(all, (r) => r.ans.ans);
 const byDebt = tally(all.filter((r) => r.cls.cls === '债'), (r) => r.cls.id);
 const planRows = new Map();
@@ -601,7 +602,7 @@ L('`--develop` 缺省取 `origin/develop`；`--out` 缺省是 `internal/reports/
 L();
 L('## 七、这份口径自己缺什么');
 L();
-L('1. **闸门读数不存失败原文，这是本页最大的一处缺。** `2080` 行里 `' + `${byClass['说不清'] ?? 0}` + '` 行只能给出 `expected exit 0, got exit 1` —— 闸门写进 `.git/camel-readings` 的每行只有 `name / verdict / reading`，`reading` 就是那一句退出码。**改法很小**：让闸门把失败用例的 stderr 首行一起写进 `reading`（或另给一个字段），下一版这张表的「归类」就能从 6% 变成绝大部分。');
+L(`1. **闸门读数不存失败原文，这是本页最大的一处缺。** ${all.length} 行里有 ${byClass['说不清'] ?? 0} 行归不进前四类，其中 ${byTag['只有退出码'] ?? 0} 行的记录只写着 \`expected exit 0, got exit 1\` 那一句（另 ${byTag['不点名拒绝'] ?? 0} 行那一行不点名任何拒绝）。闸门写进 \`.git/camel-readings\` 的每行只有 \`name / verdict / reading\`，\`reading\` 就是那一句退出码。**改法很小**：让闸门把失败用例的 stderr 首行一起写进 \`reading\`（或另给一个字段），下一版这张表的「归类」就能从 ${pct((all.length - (byClass['说不清'] ?? 0)), all.length)} 变成绝大部分。`);
 L('2. **跳过在记录里与绿不可分。** 一次跑样本选中了某个计划，而某个用例不在它的 `fail/` 下，本页读作「那次它绿了」—— 但它也可能被那层 tier 滤掉、或者 `skip`。所以「最近一次记录说它绿」的准确形状是「最近一次记录没有说它红」。');
 L('3. **脏树的样本算进来了**（记录 id 后面的 `†`）。它们证明的是那棵树，严格说不算 `develop`；只看干净树的读数要另起一份。');
 L('4. **`是`/`否` 只覆盖锚点那一步选中的计划**（这次是 1 个计划、21 条用例）。闸门只测「这次合并碰到的计划」，而那正是这张表要暴露的东西：一个很久没被任何合并碰到的计划，它的红可以一直红下去而没人知道。**要让 `是`/`否` 有覆盖面，唯一不违铁律的办法是让合并位在合并后顺手把那棵树上「没被选中的计划」轮着测一遍**，或者让每条车道交工时顺手测一个它没碰过的计划。');
