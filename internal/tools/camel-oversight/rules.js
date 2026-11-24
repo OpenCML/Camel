@@ -22,12 +22,15 @@ export const RULES = [
         id: 'branch-gate',
         level: 'urgent',
         hold: 0,
-        cooldown: 15,
+        cooldown: 60,
         check: ({ m, limits }) => {
             const b = readable(m.branches) && m.branches
             if (!b || (b.unmerged <= limits.unmerged && b.maxBehind <= limits.maxBehind)) return null
             return {
-                key: `${b.unmerged}/${b.maxBehind}`,
+                // The news is that the gate is crossed, not each count while it stays crossed: a key
+                // holding the counts turned every new branch into a fresh urgent interruption of a
+                // coordinator who had already stopped dispatching.
+                key: 'crossed',
                 text: `分支闸门破线：未合车道分支 ${b.unmerged}（上限 ${limits.unmerged}），最落后 ${b.maxBehind} 笔（上限 ${limits.maxBehind}）。本轮停派新分支，转审计合并。`,
             }
         },
