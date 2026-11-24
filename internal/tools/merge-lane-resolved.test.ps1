@@ -130,6 +130,16 @@ Check 'a merge commit that is not HEAD is refused' ($wrongHead.Exit -ne 0) "exit
 $plain = Run-MergeLane
 Check 'without -MergeCommit the start point is still asserted' (($plain.Exit -ne 0) -and ($plain.Text -match 'is not origin')) "exit $($plain.Exit): $($plain.Text)"
 
+# 6. The shape D-1124-78 is about: the seat merged integration into itself and made its merge on top,
+#    so the first parent is an OLDER origin/<Target>. That is a different mistake from starting from a
+#    base origin never had, and the refusal has to say which one it is -- the repair differs.
+Invoke-RepoGit 'push -q origin elsewhere:integration' | Out-Null
+Invoke-RepoGit "checkout -q -B oldtip $origin" | Out-Null
+Invoke-RepoGit 'merge --no-ff -q lane/x -m merge-lane-on-an-old-tip' | Out-Null
+$staleTip = Invoke-RepoGit 'rev-parse HEAD'
+$mergedIn = Run-MergeLane -MergeCommit $staleTip
+Check 'a merge made on an older origin tip is refused' ($mergedIn.Exit -ne 0) "exit $($mergedIn.Exit)"
+Check 'and the refusal says integration was merged into the seat, not the lane into integration' ($mergedIn.Text -match 'merging integration into the seat') $mergedIn.Text
 if (-not $Keep) { Remove-Item -LiteralPath $script:root -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host ''
