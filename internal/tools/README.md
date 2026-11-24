@@ -36,7 +36,9 @@ internal/tools/camel-gate.local.json        # this machine's values; git-ignored
 To create it:
 
 1. Copy `internal/tools/camel-gate.example.json` to `internal/tools/camel-gate.local.json` beside it.
-2. Fill in the placeholders. `sshHost` and `stateDir` are required; the rest have defaults.
+2. Fill in the placeholders, and delete the example's `_comment` line while you are there: it is not
+   a setting, and it is the one key the loader has nothing to compare it to. `sshHost` and `stateDir`
+   are required; the rest have defaults.
 3. Worktree-local: the file is git-ignored, so each checkout of the repository needs its own copy.
 
 The example file gives the shape only -- every value in it is a placeholder, and no host, drive letter
@@ -44,8 +46,13 @@ or user's home appears anywhere in the repository. The real file is the one plac
 
 Rules the loader keeps:
 
-- An unknown key is an error, not a silent no-op: a key that is misspelled would otherwise leave a
-  run measuring the machine its owner thought they had changed.
+- A key one or two characters from a known name is an error, not a silent no-op: a key that is
+  misspelled would otherwise leave a run measuring the machine its owner thought they had changed.
+  A key nothing here is close to is a **file newer than the tree's scripts** -- the file is
+  git-ignored and shared by path, so a checkout on an older branch reads a file written for a newer
+  one. That one warns, naming the key, the file and the tree that does not read it, and the run
+  continues; the alternative reports a correct file as a broken one and stops every run of the older
+  tree.
 - A tool that needs a setting the file does not carry stops with exit 2 and prints the path of the
   file to create. It never guesses a host.
 - A parameter with the same name as a key overrides it for one run (`-LocalConfig`, `-StateDir`,

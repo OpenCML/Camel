@@ -18,6 +18,25 @@
 # layout of the Camel build host (a home directory with camel-work/ and camel-eval/ under it); they
 # name no machine, so a fresh clone works once the local file says how to reach the host.
 
+# How many single-character edits turn $A into $B, case-folded. The key check uses it to tell a
+# misspelling (distance 1 or 2 from a name this table has) from a key that belongs to a newer file.
+function Get-CamelKeyDistance([string] $A, [string] $B) {
+    $a = $A.ToLowerInvariant()
+    $b = $B.ToLowerInvariant()
+    $prev = New-Object 'int[]' ($b.Length + 1)
+    $cur = New-Object 'int[]' ($b.Length + 1)
+    for ($j = 0; $j -le $b.Length; $j++) { $prev[$j] = $j }
+    for ($i = 1; $i -le $a.Length; $i++) {
+        $cur[0] = $i
+        for ($j = 1; $j -le $b.Length; $j++) {
+            $cost = if ($a[$i - 1] -eq $b[$j - 1]) { 0 } else { 1 }
+            $cur[$j] = [Math]::Min([Math]::Min($cur[$j - 1] + 1, $prev[$j] + 1), $prev[$j - 1] + $cost)
+        }
+        $swap = $prev; $prev = $cur; $cur = $swap
+    }
+    return $prev[$b.Length]
+}
+
 function Get-CamelGateConfig {
     [CmdletBinding()]
     param(
@@ -83,13 +102,34 @@ function Get-CamelGateConfig {
             }
             if ($text.Trim()) { $settings[$key] = $text }
         }
-        # An unknown key is a typo or a leftover, and silently ignoring it is how a machine keeps
-        # running with a setting its owner believes changed.
+        # A key the file carries and this table does not is one of two things, and they want opposite
+        # answers.
+        #
+        # A key one or two characters from a known name is a misspelling. Ignoring it leaves the run
+        # on the default the owner believed they had changed, and a default that happens to look
+        # right is the case rule 6 asks about, so that one stays an error.
+        #
+        # A key no name here is close to is a file newer than these scripts. The file is git-ignored
+        # and shared by path, so a checkout on an older branch reads a file written for a newer one;
+        # the setting is real and this tree simply does not read it yet. Refusing that stops every
+        # run of the older tree for a reason that is nobody's mistake, and it reports a correct file
+        # as a broken one. So it is a warning, and the warning names the key, the file and the tree
+        # that does not read it -- the three things a reader needs to know which side is behind.
+        $treeRoot = Split-Path -Parent (Split-Path -Parent $ScriptRoot)
         foreach ($property in $file.PSObject.Properties) {
-            if (-not $settings.Contains($property.Name)) {
-                Write-Host "[camel-gate] $path has an unknown key '$($property.Name)'; known keys: $($settings.Keys -join ', ')"
+            if ($settings.Contains($property.Name)) { continue }
+            $nearest = ''
+            $best = [int]::MaxValue
+            foreach ($key in $settings.Keys) {
+                $d = Get-CamelKeyDistance $property.Name $key
+                if ($d -lt $best) { $best = $d; $nearest = $key }
+            }
+            if ($best -le 2) {
+                Write-Host "[camel-gate] $path has an unknown key '$($property.Name)': it is $best character(s) from '$nearest', so it is a misspelling rather than a setting from a newer tree."
+                Write-Host "[camel-gate] known keys: $($settings.Keys -join ', ')"
                 exit 2
             }
+            Write-Host "[camel-gate] warning: $path sets '$($property.Name)', which the tools in $treeRoot do not know. That file is newer than this tree (it is git-ignored and shared by path, so a checkout on an older branch reads a file written for a newer one); the run continues and ignores that key. Run the gate from the tree whose scripts know it."
         }
     }
 
