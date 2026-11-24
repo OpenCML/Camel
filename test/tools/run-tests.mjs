@@ -582,6 +582,36 @@ const TIMEOUT_MARGIN = 4
 // kills the child at it either way, so a test that really runs too long still fails.
 export const NO_CPU_TIME_SKIP = 'skipped: this host reports no CPU time'
 
+// What a case's record says about the CPU time it cost. A record carries a figure or a sentence
+// saying why there is none; it never carries 0, which a reader would take as "this case is free"
+// while the truth is "nobody measured it". The figure comes from the wrapper the runner already
+// starts for the test (`test/tools/child-cpu.mjs`, fd 3): the kernel's `cutime` + `cstime` for
+// exactly this test's process tree, so the wrapper's own time is not in it. No second process is
+// started to read it, on any platform: where the kernel reports no such figure the record says so
+// and the runner does nothing else about it.
+export const CPU_READING_WRAPPED =
+    'process-tree CPU time (user + system) the kernel charged this test, read by test/tools/child-cpu.mjs'
+export const CPU_READING_ABSENT =
+    'absent: this platform reports no per-process CPU time (there is no /proc/self/stat), and the ' +
+    'runner starts no process to invent one'
+
+/**
+ * One case's CPU cost, as its record carries it. Three shapes, kept apart so that a later reader
+ * can tell "this case was cheap" from "this platform cannot say" from "this case did not run":
+ *
+ *   * a figure -- the case's own CPU time, with where it came from;
+ *   * no figure although the host could report one -- the wrapper said nothing, and the reason it
+ *     gave is quoted (`cpuReason`); on this shape the timeout-margin rule fails the case, so the
+ *     record and the verdict agree;
+ *   * no figure and no way to get one -- `CPU_READING_ABSENT`, which names the platform's gap
+ *     rather than the case's cost.
+ */
+export function cpuReadingRecord({ cpuMs, cpuReason, canReadCpu }) {
+    if (Number.isFinite(cpuMs)) return { cpuMs, cpuReading: CPU_READING_WRAPPED }
+    if (!canReadCpu) return { cpuMs: null, cpuReading: CPU_READING_ABSENT }
+    return { cpuMs: null, cpuReading: `absent: ${cpuReason || 'the wrapper reported nothing'}` }
+}
+
 // How many tests this run left unjudged that way, for the line it prints at the end.
 let marginSkippedTests = 0
 
@@ -2057,6 +2087,9 @@ async function runVerification(test, result) {
         // meta.json records (see `costRecord`).
         cpu_ms: result.cpuMs ?? null,
         cpu_budget_ms: result.cpuBudgetMs ?? null,
+        // The sentence that goes with `cpu_ms`: where the figure was read, or why this platform
+        // cannot supply one. A script that reports a case's cost reads this before it divides.
+        cpu_reading: result.cpuReading ?? null,
         cpu_limit_ms: result.cpuLimitMs ?? null,
         cpu_margin_x: result.cpuMarginX ?? null,
         cpu_margin_basis: result.cpuMarginBasis ?? null,
@@ -2664,7 +2697,14 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // payload carry all four, so "how far from red" is in the record and not only inferable
         // from a bound somebody has to know to divide by four.
         cpuBudgetMs,
-        cpuMs: cpuReading.cpuMs,
+        // `cpuMs` and the sentence that goes with it: the figure the wrapper reported, or the
+        // reason this platform has none (`cpuReadingRecord`). meta.json, the verify payload and the
+        // per-case timing record all carry the pair, so a null figure always travels with its why.
+        ...cpuReadingRecord({
+            cpuMs: cpuReading.cpuMs,
+            cpuReason: cpuReading.reason,
+            canReadCpu: CAN_READ_CHILD_CPU,
+        }),
         cpuReason: cpuReading.reason,
         ...costFields,
         // The card the runner chose for this test, if it chose one: which card a GPU test ran on
@@ -2847,6 +2887,10 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 // provenance, not the bound.
                 cpu_ms: result.cpuMs ?? null,
                 cpu_budget_ms: result.cpuBudgetMs ?? null,
+                // Where that figure came from, or the sentence saying why this platform has none.
+                // Beside `cpu_ms` so that a null is never read as "this case cost nothing": the
+                // record answers "nobody can measure it here" in words.
+                cpu_reading: result.cpuReading ?? null,
                 // The same reading every test now records, with the line it was judged against and
                 // how many times it fits under that line: `cpu_limit_ms` is the test's
                 // `cpu_budget_ms` when it declares one and `timeout_ms / 4` otherwise (the timeout
@@ -3559,11 +3603,29 @@ function slotTiming(entry, clock, marks, windows) {
     const result = entry.outcome ? entry.outcome.result : null
     const verification = result ? result.verification : null
     const verifyMs = verification && verification.wallMs ? verification.wallMs : 0
+    // The one figure in this record that is the case's own work rather than its share of the
+    // host's: its CPU time, on the record of every case, beside the intervals above. `cpu_reading`
+    // says where the figure came from, or why this platform has none; a skipped case did not run,
+    // so its record says that instead of quoting a cost of zero.
+    const skipped = entry.outcome ? entry.outcome.status === 'skip' : false
+    const reading = cpuReadingRecord({
+        cpuMs: result ? result.cpuMs : null,
+        cpuReason: result ? result.cpuReason : null,
+        canReadCpu: CAN_READ_CHILD_CPU,
+    })
     return {
         plan: entry.plan.id,
         test: entry.test.name,
         status: entry.outcome ? entry.outcome.status : 'fail',
         serial: clock.serial === true,
+        // `cpu_ms` is the CPU time this case cost; it is null when the host cannot report one, and
+        // `cpu_reading` is then the sentence that says so. A reader asking "which cases are
+        // expensive" reads this pair and never the wall clock beside it, which on a shared host is
+        // a reading of the neighbours.
+        cpu_ms: skipped ? null : reading.cpuMs,
+        cpu_reading: skipped
+            ? 'not run: the case was skipped, so this run charged it no CPU'
+            : reading.cpuReading,
         // How many of the run's slot permits this test held: a `parallel = false` test and a
         // benchmark ask for all of them, so it is the one case where a held slot is not one
         // eighth of the run's capacity.
@@ -3757,9 +3819,24 @@ function summarizeSlotTimings(records, planWallMs, jobs, stalls, logWindows, run
         (total, record) => total + ((record.tokens || 1) - 1) * record.slot_ms,
         0
     )
+    // The cases that carry a CPU figure, and the sentences of the ones that do not: the run states
+    // which half of its own record answers "what did this cost", so a reading of 0 cases is a fact
+    // about the host and never an empty total that reads as a cheap layer.
+    const cpuRecords = records.filter((record) => Number.isFinite(record.cpu_ms))
+    const absentReadings = [...new Set(
+        records.filter((record) => !Number.isFinite(record.cpu_ms)).map((record) => record.cpu_reading)
+    )].sort()
     return {
         tests: records.length,
         plan_wall_ms: Math.round(planWallMs),
+        cpu: {
+            read: cpuRecords.length,
+            absent: records.length - cpuRecords.length,
+            cpu_ms_total: Math.round(cpuRecords.reduce((total, record) => total + record.cpu_ms, 0)),
+            cpu_ms: distribution(cpuRecords.map((record) => record.cpu_ms)),
+            top_cpu_ms: topContributors(cpuRecords, 'cpu_ms'),
+            absent_reading: absentReadings,
+        },
         // Inside a slot: the test child, and the runner work that still happens while the slot is
         // held (creating the child).
         child_ms_total: Math.round(childTotal),
@@ -4622,6 +4699,17 @@ async function main() {
         + `, after the last release ${((slotTiming.plan_wall_ms - slotTiming.last_release_ms) / 1000).toFixed(1)} s`
         + ` (${(slotTiming.post_release_per_slot_ms / 1000).toFixed(1)} s of it per slot)`
         + `, loop stalls ${(slotTiming.loop_lag.stall_ms_total / 1000).toFixed(1)} s`
+    )
+    // The per-case CPU record, in one line: how many cases carry a figure of their own and what
+    // the rest say. A run where the second number is everything is not a run whose costs are
+    // unknown by accident -- it is a run on a host that cannot report them, and the line quotes
+    // the sentence its cases carry rather than leaving the column empty.
+    console.log(
+        `${COLORS.cyan}[CPU]${COLORS.reset} ${slotTiming.cpu.read}/${slotTiming.tests} case(s) carry`
+        + ` the CPU time they cost (${(slotTiming.cpu.cpu_ms_total / 1000).toFixed(1)} s)`
+        + (slotTiming.cpu.absent > 0
+            ? `, ${slotTiming.cpu.absent} say why not: ${slotTiming.cpu.absent_reading.join(' | ')}`
+            : '')
     )
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} wall: ${(outcome.wallMs / 1000).toFixed(1)} s, jobs: ${options.jobs}, tier: ${options.tier}`

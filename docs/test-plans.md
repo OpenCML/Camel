@@ -356,6 +356,25 @@ total without names is how the wrong thing gets optimized. `test_timings` is one
 with all of those intervals and its `at` marks relative to the start of the run. The run prints
 one `[SLOT]` line with the ratio and the totals.
 
+Each of those records also carries the case's own cost in the currency the case spends: `cpu_ms`
+is the CPU time (user + system) the kernel charged this case's process tree, read by the wrapper
+the runner already starts for it (`test/tools/child-cpu.mjs`, fd 3), so no extra process exists to
+measure it. `cpu_reading` is the sentence that goes with the number: where it was read, or why this
+platform has none. Three readings, kept apart on purpose, because "cheap", "nobody measured it" and
+"this case did not run" are three different answers to "which cases are expensive":
+
+- the figure, with `CPU_READING_WRAPPED` saying how it was read;
+- `absent: this platform reports no per-process CPU time (there is no /proc/self/stat), and the
+  runner starts no process to invent one` -- a Windows or macOS developer machine. The record never
+  carries `0` here, which a reader would take as "this case is free";
+- `not run: the case was skipped, so this run charged it no CPU`, for a case a `skip_unless`
+  precondition held back.
+
+The run prints one `[CPU]` line with how many cases carry a figure and what the rest say, and
+`summary.json`'s `slot_timing.cpu` holds the count, the total, the distribution, the top cases by
+CPU and the distinct absence sentences. The wall clock in the same record is provenance, not a
+cheap stand-in for this figure: on a shared host it measures what the neighbours were doing.
+
 Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (a 32-core host shared with
 other gates), eight runs before and eight after:
 
