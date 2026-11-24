@@ -19,8 +19,10 @@
 //     (no flag)   one summary: how many pipelines end in a translating pass, how many need
 //                 `std::nop`, how many already hand the graph on, and a count per pass
 //     --list      the same, then one line per pipeline: file:line, the passes, and the verdict
-//     --check     exit 0 when no pipeline needs `std::nop`, 1 when one does, 2 when the tree could
-//                 not be read; the gate entry, for whoever wires it
+//     --check     exit 0 when no pipeline is left undecided, 1 when one is -- a pipeline that the
+//                 reader's rule names (the last pass hands the graph on) and that is neither
+//                 patched nor listed in a keep list; a stale keep entry also refuses. The gate
+//                 answers the three conditions below together, not the first one alone
 //     --audit     compare the pass words this script parsed with the same words read by a second,
 //                 independent reader (a quoted-string regex, which is how the bug this file once had
 //                 would be written). Exit 3 when a pass word an element writes is missing from the
@@ -46,6 +48,18 @@
 //
 // A pipeline that ends in a translating pass on purpose says so on its own line and is listed, never
 // silently skipped: `# camel-pass-scan: keep`.
+//
+// The case scripts below match the reader's rule and must still not get a `std::nop`, so they are
+// listed with the reason instead of looking like an oversight. Each runs `camel <case> <passes>`
+// where the last pass prints a dump; nothing then consumes the graph, so the program runs as well,
+// and the case's expectation is written against that whole run -- its stdout and its exit code.
+// Whether that run is load-bearing is a question about each case, so each line is decided on its
+// own: the entries live in `scripts/camel-pass-keep.mjs`, one `{ file, line, why }` per line, and
+// this file reads them rather than repeating them.
+//
+// `--check` is green on those and red on anything not decided, and a line number that no longer
+// matches a pipeline is reported as stale: an exception nobody re-reads becomes the rule with age.
+import { KEPT_CASE_SCRIPTS } from './camel-pass-keep.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
@@ -105,12 +119,22 @@ function pipelines() {
           kept.push({ file, line: p.line, passes: p.passes, why: p.text.slice(p.text.indexOf('# camel-pass-scan: keep')).trim() })
           continue
         }
+        // A case script whose decision is written down in `scripts/camel-pass-keep.mjs`: listed
+        // with that entry's own reason, never silently skipped.
+        const key = `${relFile(file)}:${p.line}`
+        const decision = KEPT_CASE_SCRIPTS.find((k) => `${k.file}:${k.line}` === key)
+        if (decision) {
+          kept.push({ file, line: p.line, passes: p.passes, why: decision.why })
+          continue
+        }
         found.push(p)
       }
     }
   }
   return { found, differences }
 }
+
+const relFile = (file) => path.relative(root, file).replaceAll('\\', '/')
 
 const kept = []
 const { found: all, differences } = pipelines()
@@ -125,14 +149,22 @@ for (const p of ending) {
 const rel = (file) => path.relative(root, file).replaceAll('\\', '/')
 const plans = ending.filter((p) => p.file.endsWith('.plan.toml')).length
 const scripts = ending.length - plans
+// A keep entry that no longer names a pipeline is a decision about a line that is gone: reported,
+// and the gate refuses, so the list cannot rot into permission.
+const keptKeys = new Set(kept.map((k) => `${rel(k.file)}:${k.line}`))
+const staleKeep = KEPT_CASE_SCRIPTS.filter((k) => !keptKeys.has(`${k.file}:${k.line}`))
 
 console.log(`pipelines read: ${all.length}`)
 console.log(`ending in a translating pass: ${ending.length} (plans ${plans}, scripts ${scripts})`)
 console.log(`  already hand the graph on: ${alreadyOnes.length} (${[...ALREADY_HANDS_ON].join(', ')})`)
 console.log(`  need std::nop: ${needsNop.length}`)
 console.log(`by pass: ${Object.entries(byPass).sort().map(([k, v]) => `${k}=${v}`).join(' ')}`)
-console.log(`kept by '# camel-pass-scan: keep': ${kept.length}`)
+console.log(`kept (each with its own reason, in scripts/camel-pass-keep.mjs): ${kept.length}`)
 for (const p of kept) console.log(`  ${rel(p.file)}:${p.line}  ${p.passes.join(' ')}  -- ${p.why}`)
+if (staleKeep.length > 0) {
+  console.log(`stale keep entr${staleKeep.length === 1 ? 'y' : 'ies'}: ${staleKeep.length}`)
+  for (const k of staleKeep) console.log(`  ${k.file}:${k.line}  -- names no pipeline any more`)
+}
 if (list) {
   for (const p of needsNop) console.log(`  ${rel(p.file)}:${p.line}  ${p.passes.join(' ')}`)
 }
@@ -144,5 +176,9 @@ if (audit) {
     console.log(`  ${rel(d.file)}:${d.line}  '${d.word}' not in [${d.passes.join(' ')}]`)
   }
 }
-if (check) process.exit(needsNop.length === 0 ? 0 : 1)
+// The gate answers the three conditions, not one: a pipeline is undone only when the last pass hands
+// the graph on (the scan's rule), the case says nothing about the run (the keep lists), and nothing
+// after it needs the graph. So the red count is `needsNop`, which is already what is left after both
+// keep decisions, plus a stale entry -- a keep that no longer names a line is a decision nobody read.
+if (check) process.exit(needsNop.length === 0 && staleKeep.length === 0 ? 0 : 1)
 if (audit && differences.length > 0) process.exit(3)

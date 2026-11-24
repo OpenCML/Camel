@@ -19,6 +19,8 @@
  *   [x] `std::nvm/10` is `std::nvm`, and a scheduling pass ends the pipeline (no nop)
  *   [x] a case script that runs the binary as `EXE ... std::jgir` is a pipeline too
  *   [x] `# camel-pass-scan: keep` is listed and not patched
+ *   [x] a case script listed in `scripts/camel-pass-keep.mjs` is kept with its own reason
+ *   [x] removing that entry makes `--check` red again, and a stale entry is refused
  *   [x] the audit's set difference is empty on a tree where every spelling is read
  *
  * Every check runs the real script on a throwaway root, so the reader tested is the one that patches
@@ -105,7 +107,7 @@ check('a scheduling pass ends the pipeline without nop',
 check('a script that runs EXE is a pipeline',
     /run\.py:\d+\s+std::jgir/.test(out), out)
 check('the keep line is listed, not patched',
-    /kept by '# camel-pass-scan: keep': 1/.test(out), out)
+    /kept \(each with its own reason, in scripts\/camel-pass-keep\.mjs\): 1/.test(out), out)
 check('the audit difference is empty', /audit: 0 pass word\(s\)/.test(out), out)
 check('the audit exits 0 on a clean read', listed.status === 0, `exit ${listed.status}`)
 
@@ -127,6 +129,53 @@ check('the plans are clean after the patch', /ending in a translating pass: 1 \(
 check('a single-quoted array keeps its own quoting', /'onnx::export out="\$\{test_tmp\}\/m\.onnx"', "std::nop"/
     .test(fs.readFileSync(path.join(root, 'test', 'plans', 'spellings.plan.toml'), 'utf8')))
 check('the audit is still empty after the patch', /audit: 0 pass word\(s\)/.test(after.stdout ?? ''), after.stdout)
+
+// The keep list is a decision per line, with its reason, and it has to be load-bearing: an entry
+// makes `--check` green on a pipeline that needs `std::nop`, and deleting that one entry makes the
+// same tree red again. A list nobody deletes from is permission, not a decision.
+//
+// The list is a module the scanner imports, so the check runs the real scanner against a keep module
+// written for this tree: the reading is the one the tree gets, with one entry a person wrote.
+function scannerWith(entries) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-pass-scan-keep-'))
+    for (const name of ['camel-pass-scan.mjs', 'camel-pass-pipelines.mjs']) {
+        fs.copyFileSync(path.join(here, '..', '..', 'scripts', name), path.join(dir, name))
+    }
+    fs.writeFileSync(path.join(dir, 'camel-pass-keep.mjs'),
+        `export const KEPT_CASE_SCRIPTS = ${JSON.stringify(entries, null, 4)}\n`)
+    return path.join(dir, 'camel-pass-scan.mjs')
+}
+
+const keepRoot = tree()
+// `std::jgir` on line 3 is the pipeline; line 4 is what makes the run part of the case's reading.
+fs.writeFileSync(path.join(keepRoot, 'test', 'cases', 'x', 'dump.py'), [
+    'import subprocess',
+    'EXE = "camel"',
+    'result = subprocess.run([EXE, "p.cml", "std::jgir"], capture_output=True, text=True)',
+    'doc = json.loads(result.stdout)',
+    '',
+].join('\n'))
+const decision = [{
+    file: 'test/cases/x/dump.py', line: 3,
+    why: 'the case parses the dump and the run after it is its exit code',
+}]
+
+const keptScanner = scannerWith(decision)
+const withEntry = spawnSync(process.execPath, [keptScanner, '--root', keepRoot, '--check'], { encoding: 'utf8' })
+check('the keep entry decides the pipeline and the gate is green',
+    withEntry.status === 0 && /need std::nop: 0/.test(withEntry.stdout ?? ''), `exit ${withEntry.status}\n${withEntry.stdout}`)
+check('the entry\'s own reason is what the listing prints',
+    /the case parses the dump and the run after it is its exit code/.test(withEntry.stdout ?? ''), withEntry.stdout)
+
+const withoutEntry = spawnSync(process.execPath, [scannerWith([]), '--root', keepRoot, '--check'], { encoding: 'utf8' })
+check('deleting the entry makes --check red on the same tree',
+    withoutEntry.status === 1 && /need std::nop: 1/.test(withoutEntry.stdout ?? ''), `exit ${withoutEntry.status}\n${withoutEntry.stdout}`)
+
+const stale = spawnSync(process.execPath, [scannerWith([
+    { file: 'test/cases/x/dump.py', line: 99, why: 'a line no pipeline is on any more' },
+]), '--root', keepRoot, '--check'], { encoding: 'utf8' })
+check('a keep entry that names no pipeline is refused as stale',
+    stale.status === 1 && /stale keep entr/.test(stale.stdout ?? ''), `exit ${stale.status}\n${stale.stdout}`)
 
 fs.rmSync(root, { recursive: true, force: true })
 
