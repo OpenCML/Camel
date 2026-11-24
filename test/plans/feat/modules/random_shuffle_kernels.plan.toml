@@ -22,7 +22,7 @@ name = "random_shuffle_kernels.graph"
 desc = "The calls of `shuffle` in that program are the kernel operators of their element types (`rand:shuffle_i`, `_l`, `_f`, `_d`) in the graph, not the body expanded."
 kind = "behavior"
 case = "../../../cases/modules/random/shuffle_kernels.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"rand:shuffle_i\"", "label=\"rand:shuffle_l\"", "label=\"rand:shuffle_f\"", "label=\"rand:shuffle_d\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

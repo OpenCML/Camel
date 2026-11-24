@@ -171,7 +171,7 @@ name = "var.loop_write_outside_read_graph"
 desc = "The canonical graph (`std::jgir canonical=true`) of the `var` writing of the loop program. The reference document for `var.loop_write_outside_read_is_the_let_writing`; it is not asserted against a stored shape, because the reading this plan takes is that the two writings agree, not that either has a particular shape."
 kind = "behavior"
 case = "../../../cases/compile/var/loop_write_outside_read.cml"
-args = ["${case}", "std::jgir", "canonical=true"]
+args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
 expect_exit = 0
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
@@ -186,7 +186,7 @@ name = "var.loop_write_outside_read_is_the_let_writing"
 desc = "`loop_write_outside_read.cml` and `loop_write_outside_read_let.cml` are one program written with a `var` and with a loop whose state carries the value instead; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing still carries the value in a unit (`:var/new`, `:op/assn_l`, the `:var/get` after the loop, and one loop state) where the `let` writing carries it as the loop's second state; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says is carried state (the read is after the loop, so no written value can answer it), which is a defect, not progress."
 kind = "differential"
 case = "../../../cases/compile/var/loop_write_outside_read_let.cml"
-args = ["${case}", "std::jgir", "canonical=true"]
+args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
 compare_to = "var.loop_write_outside_read_graph"
 compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["normalize_newlines"]
@@ -213,7 +213,7 @@ name = "var.closure_read_graph"
 desc = "The canonical graph (`std::jgir canonical=true`) of the `var` writing of the closure program. The reference document for `var.closure_read_is_the_let_writing`; asserted only to be produced, because the reading is the agreement of the two writings, not a stored shape."
 kind = "behavior"
 case = "../../../cases/compile/var/closure_read.cml"
-args = ["${case}", "std::jgir", "canonical=true"]
+args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
 expect_exit = 0
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
@@ -227,7 +227,7 @@ name = "var.closure_read_is_the_let_writing"
 desc = "`closure_read.cml` and `closure_read_let.cml` are one program written with a `var` read by a closure and with a `let` binding the closure captures; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing's closure graph holds a `:var/get` that reads the unit through the closure's context, and its body graph holds `:var/new` and `:op/assn_l`, where the `let` writing's closure receives the value as a captured input and has no such nodes; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says another place reads (the closure reads the cell from its own graph), which is a defect, not progress."
 kind = "differential"
 case = "../../../cases/compile/var/closure_read_let.cml"
-args = ["${case}", "std::jgir", "canonical=true"]
+args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
 compare_to = "var.closure_read_graph"
 compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["normalize_newlines"]
@@ -482,7 +482,7 @@ name = "var.branch_carry_is_a_value_not_a_cell"
 desc = "The taken-writes program under `std::jgir` holds no `:var/new`: the name written inside the arm is built as a value, which is what makes the five pins above pins of the phi rather than pins of a cell."
 kind = "behavior"
 case = "../../../cases/compile/var/branch_carry_taken_writes.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -529,7 +529,7 @@ name = "var.arm_shadow_is_a_value_not_a_cell"
 desc = "The same program under `std::jgir` holds no `:var/new` and no `:var/get`: both `x`s are built as values, so the entry above is a pin of the JOIN rather than of a cell. A cell here would let the entry above pass for the wrong reason."
 kind = "behavior"
 case = "../../../cases/compile/var/arm_shadow_var.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -696,7 +696,7 @@ name = "var.loop_head_phi_has_two_sources"
 desc = "`loop_phi_two_sources.cml` under `std::jgir`: one LOOP node with two normal inputs (the declared `i` and the name's entry value), its `loop_body` region handing back a value that is neither of them, and no `:var/new`/`:var/get` in the graph. The two inputs *and* the region's own result are the phi's two sources; the graph is where they are read."
 kind = "behavior"
 case = "../../../cases/compile/var/loop_phi_two_sources.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -729,7 +729,7 @@ name = "var.loop_carry_two_names_are_two_states"
 desc = "`loop_two_states.cml` under `std::jgir`: one LOOP node with three normal inputs (the declared `i` and the two names' entry values) and no `:var/new`/`:var/get`. Two writes in one round are two states of one head, which is the reading a branch's join cannot have."
 kind = "behavior"
 case = "../../../cases/compile/var/loop_two_states.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

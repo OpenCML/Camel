@@ -1751,7 +1751,7 @@ timeout_ms = 20000
 name = "struct_member_by_index.jgir"
 kind = "behavior"
 case = "../../../cases/compile/transforms/struct_member_by_index.cml"
-args = ["${case}", "std::jgir", "canonical=true"]
+args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
 expect_exit = 1
 expect_output_contains = ["Invalid access index: '1'"]
 expect_output_not_contains = ["Segmentation fault"]
@@ -1767,7 +1767,7 @@ timeout_ms = 15000
 name = "cml_var_holding_a_lambda"
 kind = "behavior"
 case = "../../../cases/compile/transforms/cml_var_holding_a_lambda.cml"
-args = ["${case}", "std::cml"]
+args = ["${case}", "std::cml", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["((x: int): int => x + 100)(1)"]
 expect_output_not_contains = ["Segmentation fault"]
@@ -3131,7 +3131,7 @@ name = "extent_of_answers_a_known_operand.graph"
 desc = "The other half of the same reading, and the one that can fail while the numbers stay right: the graph holds the answer itself. `std::gir` of the case above shows a `DATA` node labelled `[2, 3]` of type `int[]` and **no** `:op/extent_of` node at all -- no operand of the answer exists to read, so nothing of `xs` reaches it. A reader that took the shape from the value (as `shape(xs)` does) would print the same four lines and put an OPER node in the graph, so this entry, not the numbers, is what says the answer is the type's."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_answers_a_known_operand.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["label=\"[2, 3]\"", "value_type=\"int[]\""]
 expect_output_not_contains = [":op/extent_of"]
@@ -3156,7 +3156,7 @@ name = "extent_of_a_name_is_a_value_everywhere.graph"
 desc = "The graph half: every one of those spellings holds its answer as a constant `DATA` node of type `int[]`, and the graph has **no** `:op/extent_of` node -- the answer of this builtin is never a call, so no path reaches a kernel. The `from_param` instance settles when the type argument is bound, which is the same rule applied at a type that was a name at the point the name was written."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_a_name_is_a_value_everywhere.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["label=\"[2, 3]\"", "value_type=\"int[]\"", "label=\"[4]\""]
 expect_output_not_contains = [":op/extent_of"]

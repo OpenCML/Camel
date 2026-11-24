@@ -85,7 +85,7 @@ verify_script = '''
 [[tests]]
 name = "control_data.graph"
 case = "../../../cases/opt/generic/control_data_paths.cml"
-args = ["${case}", "std::macro", "std::opt", "std::jgir"]
+args = ["${case}", "std::macro", "std::opt", "std::jgir", "std::nop"]
 verify_script = '''
 ({ input, assert }) => {
  const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')

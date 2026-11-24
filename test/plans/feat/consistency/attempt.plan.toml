@@ -390,7 +390,7 @@ desc = "std::cpp translates a fault boundary: the value `attempt(f)` is the clos
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["rt::attempt<double>(depth, at_10_12, tagged0, x)", "if (v1_call.failed()) {", "Function(graph=risky, tupleSlots=0)"]
 expect_output_not_contains = ["TranslationRefused", "Segmentation fault", "dumped core"]

@@ -24,7 +24,7 @@ name = "permissions.gir"
 desc = "std::gir shows a permission tag in the `numeric=` column and never in `attrs=`: `tagged` has contract, `tagged2` reassociate, `finite` the group, `grouped` both, `drifting` nondeterministic; a tag before a block grants inside it; `plain` has none. `#strict` is a tag of the code: its nodes carry `strict` in `attrs=` and keep their explicit permissions in `numeric=` (the effective set is empty, but the facts are what the code wrote), and an inner `#contract` inside `#strict` still shows contract."
 kind = "behavior"
 case = "../../../cases/compile/tags/permissions.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -79,7 +79,7 @@ name = "permissions.strict_algebra"
 desc = "The strict policy allows no permission, so it must not turn `x*0.1 + x*0.1` into `x*0.2`: that reassociation changes the rounding path and needs `reassociate`. It may still use exact transformations -- common-subexpression merging, and the exact doubling `x + x => x*2.0` that needs no permission (7.4, stdlib/rules.cml) -- so the strict functions may keep the sum or carry the doubled product. `tightPair` has two different coefficients, where no exact transformation exists: the reassociating combine does not fire there, while the default policy folds the same expression into `x*0.4`."
 kind = "behavior"
 case = "../../../cases/compile/tags/strict_algebra.cml"
-args = ["${case}", "std::opt", "std::gir"]
+args = ["${case}", "std::opt", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

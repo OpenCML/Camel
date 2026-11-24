@@ -103,7 +103,7 @@ static const camel::runtime::Program *applyMirDump(
         }
         os << "\n";
     }
-    return nullptr;
+    return &program;
 }
 #endif
 

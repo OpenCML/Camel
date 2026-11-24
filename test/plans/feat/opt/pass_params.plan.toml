@@ -52,7 +52,7 @@ expect_stdout_starts_with = "camel-ran-marker\n"
 name = "string.word_as_written"
 desc = "The declared type decides how a value is read, not its text (design principles 9.3): `onnx::export` declares `out: string`, so the word is taken as written even though it is no constant expression, and the model is written to the path the word names."
 case = "../../../cases/modules/onnx/entry/forward.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export out=${test_tmp}/word_as_written.onnx"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export out=${test_tmp}/word_as_written.onnx", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/word_as_written.onnx"]
 verify_script = """

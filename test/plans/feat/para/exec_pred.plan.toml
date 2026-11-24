@@ -177,7 +177,7 @@ order 30
 name = "linear.predecessors"
 desc = "The linear chain's predecessor set, line by line: what every node that runs waits for, and the kind of edge that says so. The two calls the last line adds are the case's only unordered pair (`# 11 <- [data:9, data:10]`). The chain orders the five printing statements and nothing else -- a pure, infallible call is not a statement of a `sync` block (design principles 3.4 read with 3.1, c7cb7f32f), so `step` is only these nodes' data -- and the order edges the builder writes before the printing statements are in it too, which the plan now waits for like NodeVM does."
 case = "../../../cases/para/exec_pred/linear.cml"
-args = ["${case}", "std::tfdump"]
+args = ["${case}", "std::tfdump", "std::nop"]
 verify_script = """({ input, assert }) => {
 const out = input.normalized.stdout
 const lines = out.split('\n')
@@ -231,7 +231,7 @@ for (let i = 0; i < count; i++) {
 name = "sync_block.predecessors"
 desc = "The sync block's predecessor set. The GATE that forwards the block's value (`# 7 <- [data:4, control:6, sync:6]`) waits for the statement the chain wrote before it, and the lambda's own graph is held to its set as well, so a predecessor added to or lost from any of the four graphs is named."
 case = "../../../cases/para/exec_pred/sync_block.cml"
-args = ["${case}", "std::tfdump"]
+args = ["${case}", "std::tfdump", "std::nop"]
 verify_script = """({ input, assert }) => {
 const out = input.normalized.stdout
 const lines = out.split('\n')
@@ -284,7 +284,7 @@ for (let i = 0; i < count; i++) {
 name = "fault.predecessors"
 desc = "The faulting computation's predecessor set. The call that may fault stays on the chain and its value reaches the next statement through a GATE (`# 15 <- [data:12, control:19]`), and the arm the fault is caught in is a graph of its own, held to its set like the others."
 case = "../../../cases/para/exec_pred/fault.cml"
-args = ["${case}", "std::tfdump"]
+args = ["${case}", "std::tfdump", "std::nop"]
 verify_script = """({ input, assert }) => {
 const out = input.normalized.stdout
 const lines = out.split('\n')

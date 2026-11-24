@@ -210,7 +210,7 @@ name = "slice_one_node"
 desc = "`x[1:4]`, `x[2:]`, `slice(x, 0, 1, 4)` and `x[[0, 2]]` on a rank-1 tensor whose length is stated: the three slice spellings are the core's one slice node and the row form is the core's take (std::gir prints the operators)."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_one_node.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\"", "label=\":op/idx_take\""]
 expect_stdout_not_contains = ["label=\"tensor:idx_take\""]
@@ -222,7 +222,7 @@ name = "slice_node_subscript"
 desc = "`x[1:4]` on a rank-1 value whose length is stated: the core's slice node, printed by std::gir."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_node_subscript.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -233,7 +233,7 @@ name = "slice_node_open_end"
 desc = "`x[2:]` on a rank-1 value whose length is stated: the core's slice node, printed by std::gir."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_node_open_end.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -244,7 +244,7 @@ name = "slice_node_function"
 desc = "`slice(x, 0, 1, 4)` on a rank-1 value whose length is stated: the same core slice node `x[1:4]` builds, printed by std::gir."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_node_function.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -255,7 +255,7 @@ name = "slice_node_take"
 desc = "`x[[0, 2]]` on a rank-1 value whose length is stated: the core's `:op/idx_take`, printed by std::gir."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_node_take.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/idx_take\""]
 expect_stdout_not_contains = ["label=\"tensor:idx_take\""]

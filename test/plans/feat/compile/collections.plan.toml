@@ -499,7 +499,7 @@ name = "macro_constants.graph"
 desc = "After std::macro the collections are DATA nodes of the graph (constants), not calls."
 kind = "behavior"
 case = "../../../cases/compile/collections/macro_constants.cml"
-args = ["${case}", "std::macro", "std::gir"]
+args = ["${case}", "std::macro", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"{1: one, 2: two, 4: more}\", type=\"DATA\"", "label=\"{alpha, beta, gamma}\", type=\"DATA\"", "label=\"{outer: {xs: [1, 2, 3]}}\", type=\"DATA\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -510,7 +510,7 @@ name = "graph_shape"
 desc = "On the graph the conversion is the `:op/cast` operator and every operation one OPER node: `m[k]` is `:coll/map_idx`, an array subscript stays `:op/idx_arr`."
 kind = "behavior"
 case = "../../../cases/compile/collections/graph_shape.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/cast\", type=\"OPER\"", "label=\":coll/map_idx\", type=\"OPER\"", "label=\":coll/map_put\", type=\"OPER\"", "label=\":coll/set_contains\", type=\"OPER\"", "label=\":op/idx_arr\", type=\"OPER\"", "label=\":op/tag_is_null\", type=\"OPER\"", "type=\"BRCH\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -704,7 +704,7 @@ name = "refuse_cpp"
 desc = "std::cpp does not translate a program over a set: a located TranslationRefused, no crash."
 kind = "negative"
 case = "../../../cases/compile/collections/refuse_export.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 5

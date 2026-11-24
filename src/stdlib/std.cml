@@ -51,21 +51,21 @@ export func defunctionalize::<F>(f: F) => F! when is_function::<F>()
 // Dumps and translations of the graph
 // -----------------------------------------------------------------------------
 
-/// Prints the compact GIR of the graph and consumes it.
+/// Prints the compact GIR of the graph and hands it on.
 export func gir::<F>(f: F) => F! when is_function::<F>()
 
-/// Prints the rich GIR of the graph, styled for Graphviz, and consumes it.
+/// Prints the rich GIR of the graph, styled for Graphviz, and hands it on.
 export func rgir::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the compact GIR with the regions (the arms, bodies and areas of a node) drawn as
-/// clusters, and consumes the graph.
+/// clusters, and hands the graph on.
 export func gir_regions::<F>(f: F) => F! when is_function::<F>()
 
-/// Prints the rich GIR, styled for Graphviz, with the regions drawn as clusters, and consumes the
+/// Prints the rich GIR, styled for Graphviz, with the regions drawn as clusters, and hands the
 /// graph.
 export func rgir_regions::<F>(f: F) => F! when is_function::<F>()
 
-/// Prints the versioned JSON GIR of the graph and consumes it.
+/// Prints the versioned JSON GIR of the graph and hands it on.
 with <
     /// Write the JSON with its keys in a canonical order, so two runs compare byte for byte.
     canonical: bool = false,
@@ -76,7 +76,7 @@ with <
 >
 export func jgir::<F>(f: F) => F! when is_function::<F>()
 
-/// Prints the graph as Camel source and consumes it.
+/// Prints the graph as Camel source and hands it on.
 with </// The longest literal the printed source may hold before it is written as a call that
 /// rebuilds it.
 max_literal_bytes: int = 64 * 1024>
@@ -136,13 +136,13 @@ with <
 >
 export func profile::<F>(f: F) => F! when is_function::<F>()
 
-/// Prints the graph as standalone C++ source and consumes it.
+/// Prints the graph as standalone C++ source and hands it on.
 export func cpp::<F>(f: F) => F! when is_function::<F>()
 
-/// Prints the graph as a topological node sequence and consumes it.
+/// Prints the graph as a topological node sequence and hands it on.
 export func topo_node_seq::<F>(f: F) => F! when is_function::<F>()
 
-/// Prints the task graph the parallel scheduler would build and consumes the program.
+/// Prints the task graph the parallel scheduler would build and hands the program on.
 export func tfdump::<F>(f: F) => F! when is_function::<F>()
 
 /// Prints the array type implementation's self-test and hands the graph on.
@@ -152,7 +152,7 @@ export func arraytype::<F>(f: F) => F! when is_function::<F>()
 export func identitytype::<F>(f: F) => F! when is_function::<F>()
 
 namespace cpp {
-    /// Builds a C++ module from the graph and consumes it.
+    /// Builds a C++ module from the graph and hands it on.
     export func module_file::<F>(f: F) => F! when is_function::<F>()
     
     /// Prints what a C++ module built from the graph exports.
@@ -221,10 +221,10 @@ stats: string? = null>
 export func fvm::<F>(f: F) => F! when is_function::<F>()
 
 namespace fastvm {
-    /// Prints the bytecode of every graph and consumes the program.
+    /// Prints the bytecode of every graph and hands the program on.
     export func bytecode::<F>(f: F) => F! when is_function::<F>()
     
-    /// Prints the linked bytecode of every graph and consumes the program.
+    /// Prints the linked bytecode of every graph and hands the program on.
     export func linked_bytecode::<F>(f: F) => F! when is_function::<F>()
     
     /// Executes the program on the bytecode interpreter with on-demand native code.
@@ -236,16 +236,16 @@ namespace fastvm {
     >
     export func jit::<F>(f: F) => F! when is_function::<F>()
     
-    /// Prints the machine code the JIT generated and consumes the program.
+    /// Prints the machine code the JIT generated and hands the program on.
     export func jit_asm::<F>(f: F) => F! when is_function::<F>()
     
-    /// Prints the generated binary of the JIT and consumes the program.
+    /// Prints the generated binary of the JIT and hands the program on.
     export func jit_bin::<F>(f: F) => F! when is_function::<F>()
     
-    /// Prints the register machine IR of the JIT and consumes the program.
+    /// Prints the register machine IR of the JIT and hands the program on.
     export func jit_rmir::<F>(f: F) => F! when is_function::<F>()
     
-    /// Prints the machine IR of the JIT and consumes the program.
+    /// Prints the machine IR of the JIT and hands the program on.
     export func jit_mir::<F>(f: F) => F! when is_function::<F>()
 }
 /// Executes the program on the parallel task scheduler.

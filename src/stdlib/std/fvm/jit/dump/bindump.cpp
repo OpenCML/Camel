@@ -173,7 +173,7 @@ JitBinaryDumpPass::apply(const camel::runtime::Program *program, std::ostream &o
         os << "\n";
     }
 
-    return nullptr;
+    return program;
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump machine code.\n";

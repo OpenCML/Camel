@@ -52,7 +52,7 @@ CppDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
         }
         diag.commit(passName(mode_), refusal.reason);
     }
-    return nullptr;
+    return program;
 }
 
 namespace {

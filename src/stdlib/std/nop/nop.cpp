@@ -7,7 +7,7 @@
  * to a program still has to answer with one; the implementation and its registration live here.
  */
 
-#include "camel/execute/pass/base.h"
+#include "camel/execute/pass/sched.h"
 #include "camel/execute/pass/registration.h"
 
 #include <ostream>

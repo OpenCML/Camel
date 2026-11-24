@@ -74,14 +74,6 @@ class GraphIRPass {
     slot_t errorValue_ = NullSlot;
 };
 
-class NopPass : public GraphIRPass {
-  public:
-    NopPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~NopPass() = default;
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override;
-};
 
 using PassFactory =
     std::function<std::unique_ptr<GraphIRPass>(const camel::core::context::context_ptr_t &ctx)>;
@@ -144,24 +136,24 @@ void requireKnownPasses(
     const camel::core::context::context_ptr_t &ctx = nullptr);
 
 /**
- * The index of the first pass of the list that consumes the graph by its kind (a scheduling or
- * a translation pass); the passes written after it can never run. nullopt when there is none.
- * Unknown names are skipped.
+ * The index of the first scheduling pass of the list: it executes the program and answers with
+ * the residual graph or an empty one, so the passes written after it can never run. A rewriting
+ * pass and a translation pass both hand a graph on and do not stop the list. nullopt when there
+ * is no scheduling pass. Unknown names are skipped.
  */
 std::optional<size_t> firstConsumingPass(
     const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**
- * True when the first pass of the list that consumes the graph is a translation pass: the list
- * produces a translated artefact (a dump, generated code, ...) and the program is never
- * executed. False when no pass consumes the graph (the fallback then runs it) or when the first
- * consumer is a scheduling pass. Unknown names are skipped: a module pass that the program does
- * not load cannot be a translation of it.
+ * True when the list ends without executing anything: its last pass is `std::nop`, the
+ * scheduling pass that produces no effect. A translation pass does not answer this -- it prints
+ * or exports the graph and hands it on, so the run still happens. False for an empty list: the
+ * fallback scheduling pass then runs the program.
  *
- * A caller decides with this whether the entry module must define `main`: translation passes
- * work on library modules too, execution does not.
+ * A caller decides with this whether the entry module must define `main`: a program that is
+ * only printed is not executed, and every scheduling pass but `std::nop` executes.
  */
-bool passListTranslatesProgram(
+bool passListEndsWithoutExecuting(
     const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**

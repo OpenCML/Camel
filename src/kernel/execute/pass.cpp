@@ -2357,34 +2357,21 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         if (!pass) {
             continue; // construction reported; the pipeline build below is where it stops
         }
-        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
-            dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
+        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
             return i;
         }
     }
     return std::nullopt;
 }
 
-bool passListTranslatesProgram(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
-    for (const auto &name : passes) {
-        auto factory = resolvePassWithModule(name, ctx).factory;
-        if (!factory) {
-            continue;
-        }
-        const auto pass = constructPass(ctx, name);
-        if (!pass) {
-            continue; // construction reported; the pipeline build below is where it stops
-        }
-        // The first pass that consumes the graph decides what the list does. Before it, rewrite
-        // passes only transform the program; after it, the graph is gone.
-        if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
-            return true;
-        }
-        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
-            return false;
-        }
+bool passListEndsWithoutExecuting(const std::vector<std::string> &passes, const context_ptr_t &) {
+    if (passes.empty()) {
+        return false; // the fallback scheduling pass runs the program
     }
-    return false;
+    // std::nop is the scheduling pass that produces no effect, so a list that ends in it
+    // executes nothing. Every other scheduling pass runs the program, and a translation pass
+    // hands the graph on to whatever follows -- the fallback when nothing does.
+    return resolveAlias(specName(passes.back())) == "std::nop";
 }
 
 std::optional<Diagnostic>

@@ -38,7 +38,7 @@ BytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os
         os << std::format("  [used: {}, allocated: {}]\n", bytecodes.size(), bytecodes.capacity());
     }
 
-    return nullptr;
+    return program;
 }
 
 const camel::runtime::Program *
@@ -68,7 +68,7 @@ LinkedBytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostre
         }
     }
 
-    return nullptr;
+    return program;
 }
 
 namespace {
