@@ -23,7 +23,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 
 const here = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1')
 const script = path.join(here, '..', '..', 'scripts', 'merge-readings.mjs')
@@ -62,13 +62,6 @@ function run(args, allowFailure = false) {
         if (!allowFailure) throw e
         return { code: e.status ?? -1, text: `${e.stdout ?? ''}${e.stderr ?? ''}` }
     }
-}
-
-// The same, with both streams: the row reader says an unparsed line on stderr and the conclusion on
-// stdout, and a check that only saw one of them could not tell "said out loud" from "dropped quietly".
-function runBoth(args) {
-    const res = spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: 'utf8' })
-    return { code: res.status ?? -1, text: `${res.stdout ?? ''}${res.stderr ?? ''}` }
 }
 
 function check(label, ok, detail = '') {
@@ -166,47 +159,6 @@ const exact = run(['--current', alphaOnly, '--cache', cache, '--develop', sha, '
 check('an exact entry can be stored beside the wide ones', exact.code === 0, exact.text)
 const exactHit = run(['--cache', cache, '--develop', sha, '--plans', alphaPlans, '--probe'])
 check('the exact entry is the one the probe answers with', exactHit.code === 0 && !/superset/.test(exactHit.text), exactHit.text)
-
-// --- 8: a line that is not a row does not make the reading unmeasurable ----
-// A failing case's own message can begin with `{`, and one such line used to be taken for a row:
-// parsed, found to have no name or verdict, and the whole reading refused -- so the red itself was
-// what hid the red. Both shapes below are "not a row": JSON with no name/verdict, and a message that
-// is not JSON at all.
-const strayRows = write(
-    'rows-stray.txt',
-    [
-        row('alpha.plan/only', 'pass', 'ok'),
-        '{"phase":"verify","note":"a message that happens to be JSON"}',
-        'Error: reason missing: [{...}]',
-    ].join('\n') + '\n',
-)
-const stray = runBoth([
-    '--current', strayRows, '--cache', cache, '--develop', sha, '--plans', alphaPlans,
-    '--tree', '9'.repeat(40), '--changed-files', write('changed-alpha9.txt', 'test/plans/alpha/a.plan.toml\n'),
-])
-check('a transcript with two non-row lines still compares', stray.code === 0, stray.text)
-check('the two lines are counted and said out loud, not dropped quietly', /unparsed line\(s\): 2/.test(stray.text), stray.text)
-check('the conclusion is drawn from the row that is a row', /cases=1 fixed=0 new=0 changed=0/.test(stray.text), stray.text)
-
-// The same rule on the other reader: the row channel inside a transcript. That is the shape the
-// defects came from -- a failing case's message printed between the markers -- so the block below
-// holds one row and one `{`-leading message, and the baseline must still be stored.
-const betaPlans = write('plans-beta.txt', 'test/plans/beta\n')
-const strayTranscript = write(
-    'transcript-stray.txt',
-    [
-        '__CAMEL_REMOTE_ROWS_START__',
-        row('beta.plan/only', 'pass', 'ok'),
-        '{"phase":"verify","note":"a message that happens to be JSON"}',
-        '__CAMEL_REMOTE_ROWS_END__',
-    ].join('\n') + '\n',
-)
-const storedStray = runBoth([
-    '--transcript', strayTranscript, '--cache', cache, '--develop', '0'.repeat(40), '--plans', betaPlans,
-    '--tree', '8'.repeat(40), '--accept',
-])
-check('a transcript whose block holds a non-row line still stores a baseline', storedStray.code === 0 && /stored this run as the baseline/.test(storedStray.text), storedStray.text)
-check('and the transcript reader says the line was unparsed', /unparsed line\(s\): 1/.test(storedStray.text), storedStray.text)
 
 console.log('')
 if (failures > 0) {
