@@ -104,11 +104,14 @@ async function mergedOf(git) {
 /// and the hot-reloaded files: the main checkout is the author's workspace and may stand on another
 /// branch, or hold an edit nobody pushed.
 async function backlogOf(git) {
-    // The coordinator records rows on its docs branch and pushes them between merges; until then that
-    // branch is the newer record. Without it, the line documents are pushed to: integration, then develop.
-    const text = await git(['show', 'docs/coordinator:internal/backlog.md'])
-        .catch(() => git(['show', 'origin/integration:internal/backlog.md']))
-        .catch(() => git(['show', 'origin/develop:internal/backlog.md']))
+    // The record is the line documents are pushed to: integration, or develop where there is none. The
+    // coordinator's docs branch is read instead only while it holds rows not pushed yet (it descends
+    // from that line); a docs branch left behind is an old record, not a newer one.
+    const isRef = (ref) => git(['rev-parse', '--verify', '--quiet', ref]).then(() => true, () => false)
+    const line = (await isRef('origin/integration')) ? 'origin/integration' : 'origin/develop'
+    const docsAhead = (await isRef('docs/coordinator')) &&
+        await git(['merge-base', '--is-ancestor', line, 'docs/coordinator']).then(() => true, () => false)
+    const text = await git(['show', `${docsAhead ? 'docs/coordinator' : line}:internal/backlog.md`])
     const rows = new Map()
     const ownRows = new Set()
     for (const line of text.split('\n')) {

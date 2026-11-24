@@ -249,3 +249,16 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/rewrite
 **为什么不更远**：`rewrite` 的 23 行一行没动，且这一轮核过、确认它们没有一行属于身份类——`fact.cpp` 的 `Source::graph` 与 `module.cpp` 的 `WhenCall::graph` 都既被当身份用（比较、进 `Anchor`）**又**被读内容（`graph->node(...)`、`staticSlots()`、经 `const_cast` 交给 node VM），把成员类型换掉只会在读侧塞进向下转；剩下的是 D/B/H 与 3b 的写入口。
 
 **这一轮的读数是干净的**：`test/plans/feat/opt` 全目录在 `a03836c6cf` 上是 `total: 1636, pass: 1495, fail: 141`。带这一笔改动重跑（`feat/opt` 全目录加 `smoke`）是 `total: 1646, pass: 1505, fail: 141`；`smoke` 那 10 条全过，所以 `feat/opt` 那部分仍是 1636 / 1495 / 141，红的 141 条逐 plan 分布也逐条相同（`gate_value` 60、`splice_place` 29、`camel_passes` 4、`pass_params` 4、`algebra` 2、`writings` 2、`commit_refusal` 1、`effects_kept` 1、`opt_second_pass` 1、`rounds_warning` 1）。这 141 条全部是这棵落后 `origin/develop` 二十一笔的树自己的红：`stdlib/random.cml` 的 `to_array` 未解析、`stdlib/perf.cml` 的 `<:mark/reduce_arr>` 无匹配、`test/cases/opt/writings` 找不到 stdlib、golden 里的节点号差一。没有一条落在这一笔改动能触及的地方。
+## 决策者答（2026-11-24）
+
+这一页答的都是实现架构，不涉及语义，不用拿给负责人。按类答，排序按建议的先后：
+
+- **K（视图的 `nodes()` 不含 JOIN）**：以视图为准。图只有一个定义（架构 2.1），视图不数的东西不算图里的节点。所以增长预算、计数函数一律按视图数，`mayMerge` 里显式跳过 JOIN 的那一行随之删掉。这样做会改变内联的决定：预算少数了 JOIN，可内联的就会多一些。这是这个启发式跟着图的定义走，不是为让检查变绿改语义。迁移那一笔要报出内联结果变了的用例，逐条写明原因。交 `lane/view-gaps`，排在 A/B/C 之前，因为它不会报错，只会静默地少数。
+- **D（静态区的槽）**：并给 `lane/view-gaps`，跟 A/B/C 一起做，不再是没人管。
+- **E（`Program` 侧收 `const Graph *`）**：这是 3a 身份迁移的一部分，交 `lane/view-graph-identity`，它做的正是图的身份。
+- **I（`GraphId`）**：视图不答编号，这一点不变。`TypePlan::variants` 改成以 `const Graph *` 为键，这就是身份，用不着等 3c。
+- **J（区域是不是内联拼进来的）**：这不是视图的缺口。内联的来处是内联遍自己的记账，所以由内联遍在会话里自己记（草稿侧已经有 `inlinedCopyOf`），不去问冻结图。`nodeCameFromInlineSplice` 改读这份记录。
+- **`isPureOperNode` 的分岔**：存储的 OPER 节点一定有有效的 `oper`，这是一条不变式。由提交检查断言它（gir-opertarget 那条做的正是 OPER 的身份），断言之后照视图的读法迁过去。
+- **F、H**：维持归 3b。
+
+顺序：K → D → A/B/C 归 view-gaps；E、I 归 view-graph-identity；J 与 `isPureOperNode` 随 gir-opertarget 之后的前端车道一起做。
