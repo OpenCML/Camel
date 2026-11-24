@@ -111,9 +111,20 @@ stops with PowerShell's "no positional parameter accepts 'smoke'" instead of qui
 `-LocalConfig smoke` -- a run that looks right and reads another settings file.
 
 Exit codes: the build's or the plan's own; `5` when the gpu observation read a case red that its
-baseline does not record; `4` when the `-NoBuild` guard refused or a host lock was not obtained; `3`
-when the host is short of disk; `2` when the worktree, the push, the transfer or a `-Check` name was
-wrong.
+baseline does not record, and also when the host script could not get a shared hold on the old test
+lock within its wait (`internal/tools/host/camel-run.sh`, which uses `4` for "no test slot in time"):
+both are runs that measured nothing, and a run that measured nothing is not a red; `4` when the
+`-NoBuild` guard refused or a host lock was not obtained; `3` when the host is short of disk; `2` when
+the worktree, the push, the transfer or a `-Check` name was wrong.
+
+Reading the host's lock files: `fuser -v /tmp/camel-host-test*.lock` lists the processes that have each
+file **open**, which is not the same as holding the lock. A run that opened the descriptor and never
+took the lock still appears; a descriptor inherited by a child appears under the child's pid; a process
+that has released the lock can still have the file open. So a `fuser` listing answers "who could be
+holding this" and nothing else -- the authority is `flock`, and the tool that takes it prints what it
+holds on its own lines (`HOST_TEST_SLOT=`, `lockFrom=`, `oldLockWaitSeconds=`). Read a slot number
+there and not off a `fuser` listing: on 2026-11-24 an open descriptor on the old single lock was read as
+"the old lock is held", and those are two different code paths.
 
 The gpu plans are in no other gate: the fast layer is `test/plans/smoke` plus `test/plans/feat`, and
 `test/plans/gpu` is under neither, so a red case there was read by nothing. Every run that takes a
