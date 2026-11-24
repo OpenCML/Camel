@@ -3369,7 +3369,14 @@ function planLineOf(planPath, needle) {
     return index === -1 ? null : index + 1
 }
 
-function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false) {
+/**
+ * The plans a selection resolves to, with every test the layer keeps from them. Exported because
+ * the coverage table (`scripts/coverage-table.mjs`) must count the cases a selection selects
+ * through this loader: a second definition of "which cases are in this plan" -- entries only, no
+ * `[[sweeps]]` copies, no back-end expansion, no companion closure -- would agree with a run today
+ * and disagree the first time a plan learned a sweep.
+ */
+export function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
     // plans a directory reaches follow the layer. The same plan reached both ways is named,
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
