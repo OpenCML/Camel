@@ -74,6 +74,12 @@ $files | ForEach-Object { "{0,-46} {1,6}" -f $_, (Get-Content $_).Count }
 | `src/stdlib/autodiff.cml` | 190 | 引擎（Camel 面，**但库要用**） | `stop_gradient`，以及 `add_tangent`/`mul_cotangent` 这一批"局部律的数学"。`rulesets/jvp.cml`、`rulesets/transpose.cml` 各 `import ... from autodiff` 拿它们 |
 | 小计 | **6178** | | |
 
+> **第 1 步做过之后的读数（2026-11-25，本分支 `lane/route5-one-autodiff`）。** 上两张表是 `d6503a197c`
+> 的读数。同一天把「局部律的数学」搬出 `autodiff`（见 §4 第 1 步）之后：`src/stdlib/autodiff.cml`
+> 190 → **71** 行（只剩 `stop_gradient` 与模块注释），新增 `src/stdlib/laws.cml` **144** 行
+> （含文件头与模块注释，14 个函数体逐字未改）；引擎侧小计 **6178 → 6059**，库侧 **3138 → 3282**。
+> 命令：`(Get-Content src/stdlib/autodiff.cml).Count`、`(Get-Content src/stdlib/laws.cml).Count`。
+
 **C++ 规则表本身不在 `autodiff/` 里。** 它是 `DerivativeRegistry` 的注册，散在 10 个文件里
 （`setVjp(defs, "<name>", &fn)` 72 处 + `setRule(uri, fn)` 的调用点）：
 
@@ -125,7 +131,7 @@ git grep -n -E '\b(grad|with_grad|vjp)\s*\(' -- 'src/*' |
 所以「剩下的引擎 `grad` 用户先迁」这句话，**在库内没有对象**：库自己（`nn`、`optim`、`tile`…）
 一次也没调用 `grad`/`with_grad`/`vjp`。这让路线五的难点整体从"库内迁移"挪到了"测试与示例"。
 
-但有两条**依赖边**，删引擎时会一起断（见 §4 第 1 步）：
+但有两条**依赖边**，删引擎时会一起断（见 §4 第 1 步）。`d6503a197c` 上它们是这样：
 
 ```powershell
 git grep -n 'from autodiff' -- 'src/*'
@@ -133,8 +139,23 @@ git grep -n 'from autodiff' -- 'src/*'
 # src/stdlib/rulesets/transpose.cml:40 ... } from autodiff
 ```
 
-即：库的数学律（`add_tangent` 这一批，190 行的 `src/stdlib/autodiff.cml`）今天是**挂在引擎文件上的**，
-而库的规则集是它唯一的读者。删 `src/stdlib/autodiff/` 之前必须先把它搬出引擎的归属。
+即：库的数学律（`add_tangent` 这一批）与 `stop_gradient` 挤在同一个 `from autodiff` 里，
+库的规则集是这批律唯一的读者。**第 1 步搬完之后（本分支）**，同一条命令的结果变成：
+
+```powershell
+git grep -n 'from autodiff' -- 'src/*'
+# src/stdlib/rulesets/jvp.cml:23        import { stop_gradient } from autodiff
+# src/stdlib/rulesets/transpose.cml:40  import { stop_gradient } from autodiff
+git grep -n 'from laws' -- 'src/*'
+# src/stdlib/rulesets/jvp.cml:22        import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from laws
+# src/stdlib/rulesets/transpose.cml:29  import { ... add_cotangent … sub_cotangent_c } from laws
+```
+
+**律那一半搬走了，`stop_gradient` 那一半搬不走**：它的声明在 `autodiff.cml`，而它的内核是
+`autodiff:stop_gradient`，登记在 `src/stdlib/autodiff/operators.cpp`（`stopGradientKernel`，两处
+元数据注册同在这个文件）。声明搬家会把算子 URI 从 `autodiff:stop_gradient` 变成 `laws:stop_gradient`，
+而没有任何内核用新 URI 注册——那不是搬归属，是改语义，所以它留在原地，等删引擎那一步连同内核一起
+重新落位（§4 第 1b 步）。这也是为什么本页把这一条从"两条 import"改写成"一条律的边 + 一条内核的边"。
 
 ### b) 测试自己在用（`test/`）：**897 行 / 414 个文件**
 
@@ -245,13 +266,14 @@ exempt, 0 new, stale=0
 
 | # | 步骤 | 依赖 | 能不能并行 | 为什么在这一步 |
 |---|---|---|---|---|
-| 1 | 把 `src/stdlib/autodiff.cml`（`stop_gradient` + 局部律的数学，190 行）从引擎的归属里搬出来，放到库侧（`rulesets/` 旁边或自己的 `laws` 模块），改 `src/stdlib/rulesets/jvp.cml` 与 `src/stdlib/rulesets/transpose.cml` 里各自那条 `import … from autodiff` | 无 | **可**，与 2、3 并行 | 今天它是引擎目录里唯一被库 `import` 的文件；不搬，删引擎必删库的数学 |
-| 2 | 合并 `Gradient<F>` / `GradientOf<F>` 两个名字（`types.cml`），以及决定 `ValueAndGradient*` 家族归谁 | 无 | **可**，与 1、3 并行 | 一个类型两个名字是读者要学的一种拼法；引擎一删，`Gradient<F>` 就没人写了 |
-| 3 | 给 15 个"引擎有、库无"的律补 `jvp_*` / `*_t`：`nn` 7（`conv2d`、`batch_norm_train`、`avg_pool2d`、`max_pool2d`、`embedding`、`softmax_cross_entropy`、`softmax_cross_entropy_labels`）、`math` 4（`erf_d`/`erf_f`/`erfc_d`/`erfc_f`），以及 `pow`、`slice_sub`、`sqrt_d`、`idx_take` | 无（但 `nn` 那 7 个要求规则集 `import nn`，见豁免理由原文"the rulesets declare and import nothing from `nn`"） | **可**，与 1、2 并行；内部按模块再并行 | 这 15 个键是"删引擎就丢"的能力。另外 31 个（`:tangent/*`、`:struct/*`、比较、离散转换、`access`、`cast`）是机器算子，**不搬**，也不该搬 |
+| ~~1~~ | ~~把 `src/stdlib/autodiff.cml` 里的局部律数学搬出引擎归属~~ **2026-11-25 已做**：14 个律函数逐字搬到新模块 `src/stdlib/laws.cml`（144 行），`autodiff.cml` 190 → 71 行只留 `stop_gradient`；两条 `from …` 各拆成一条 `from laws` + 一条 `from autodiff` | 无 | **已并行完成** | 见 §2 a 的两段读数：律那一半搬走了，`stop_gradient` 那一半搬不走（内核是 `autodiff:stop_gradient`） |
+| 1b | 把 `stop_gradient` 的声明与内核一起落位到库侧：`src/stdlib/autodiff/operators.cpp` 里的 `stopGradientKernel` 与两处元数据注册（`autodiff:stop_gradient`）搬进一个新模块或 `laws`，URI 随之改名，随后全树改 `import ... from laws` | 1 | **可**，与 2、3 并行 | 这是"删引擎不删库"的最后一条硬边；它要动 C++ 与一个算子 URI，所以不能并进第 1 步的零语义变化 |
+| 2 | 合并 `Gradient<F>` / `GradientOf<F>` 两个名字（`types.cml`），以及决定 `ValueAndGradient*` 家族归谁 | 无 | **可**，与 1b、3 并行 | 一个类型两个名字是读者要学的一种拼法；引擎一删，`Gradient<F>` 就没人写了 |
+| 3 | 给 15 个"引擎有、库无"的律补 `jvp_*` / `*_t`（逐条见 §8） | 无（但 `nn` 那 7 个要求规则集 `import nn`，见豁免理由原文"the rulesets declare and import nothing from `nn`"） | **可**，与 1b、2 并行；内部按模块再并行 | 这 15 个键是"删引擎就丢"的能力。另外 31 个（`:tangent/*`、`:struct/*`、比较、离散转换、`access`、`cast`）是机器算子，**不搬**，也不该搬 |
 | 4 | 给 `#vjp(rule)` 在库路线找一个读者（或者明确宣布这条标签随引擎一起消失，并把 `custom_rule.cml`、`transform_rules.cml` 一排测试按新语义改写） | 1（律库要在库侧） | 与 3 并行 | 今天用户自定义导数只有引擎读得到；这是**语言能力**，不是实现细节，必须做决定 |
 | 5 | 把家族用例文件里只走引擎入口的 127 个迁到库入口（先把 `scripts/autodiff-migration-ledger.mjs` 的读数往上推） | 3、4 | 与 3 的后半并行，但**必须在 3 之后** | 迁移的判据是那个脚本：现在 `test/cases/tools/autodiff_migration_ledger/baseline.json` 记的是 **23 个案**能在库上跑（145 个案里的 23） |
 | 6 | 补齐库路线缺的形状：`has_aux` 的通用声明（pack 参数）、`with_grad` 的库拼法、二阶 | 5 | 与 4 之后可并行 | 这决定了"迁过去"是不是"降级" |
-| 7 | 删 `src/stdlib/autodiff/`（10 个文件 6178 行）、`src/stdlib/autodiff/signatures/autodiff.cml`、引擎侧 10 个文件里的 122 个注册、以及 `vjp-parity` 那套对照脚本（清单、自检、迁移台账） | 5、6 **且** 3 清空 | 不可并行，这是最后一步 | 这就是路线五的"完成" |
+| 7 | 删 `src/stdlib/autodiff/`（10 个文件，第 1 步后 6059 行）、`src/stdlib/autodiff/signatures/autodiff.cml`、引擎侧 10 个文件里的 122 个注册、以及 `vjp-parity` 那套对照脚本（清单、自检、迁移台账） | 1b、5、6 **且** 3 清空 | 不可并行，这是最后一步 | 这就是路线五的"完成" |
 
 **硬前置（不做完就不能删 C++ 版）是第 3 步。** 理由不是风格：46 个引擎独有的键里，15 个是程序写得出来
 的算子（`conv2d`、`erf`、`pow`…）。引擎一删，这 15 个算子就再也导数不出来了，
@@ -305,35 +327,80 @@ Select-String -Path $fam -Pattern '^\s*\[\[tests\]\]' | Measure-Object -Line    
 条目数与文件数不等，是因为一个用例文件常被多条条目跑（`nvm`/`fvm`/`macro`/`opt` 各一条），
 这也是最容易把"用例数"数错的地方：**条目是 517，文件是 421。**
 
-### 5.2 当前 `develop`（`d6503a197c`）上求导家族的已知红：**57 行**
+### 5.2 求导家族的已知红：**develop 上 57 行，integration 上 58 行**
+
+两份报告各记一次晋级，各对应一棵树；本树（`d6503a197c`）只带得动前者。
 
 ```powershell
-git -C . ls-files | Select-String 'promotion-4'      # 0 行：2026-11-24-promotion-4-reds.tsv 在这棵树上不存在
+git ls-files | Select-String 'promotion-4'      # 本树 0 行：promotion-4 的报告不在 develop 上
+git show 22aa42ad27:internal/reports/2026-11-24-promotion-4-reds.tsv |
+  Where-Object { ($_ -split "`t")[0] -match 'autodiff|transforms|jax|gradient|transpose' } | Measure-Object -Line
+# 58
 Get-Content internal/reports/2026-11-24-promotion-3-reds.tsv |
   Where-Object { ($_ -split "`t")[0] -match 'autodiff|transforms|jax|gradient|transpose' } | Measure-Object -Line
 # 57
 ```
 
-| 计划 id | 红行数 |
-|---|---:|
-| `transforms` | 35 |
-| `modules.autodiff` | 15 |
-| `modules.jax_alignment` | 6 |
-| `tools.autodiff_migration_ledger` | 1 |
-| 合计 | **57** |
+| 计划 id | promotion-3（develop，本树） | promotion-4（integration，`22aa42ad27`） |
+|---|---:|---:|
+| `transforms` | 35 | 35 |
+| `modules.autodiff` | 15 | 15 |
+| `modules.jax_alignment` | 6 | 6 |
+| `tools.autodiff_migration_ledger` | 1 | 1 |
+| `showcase_s2_first_step_gradient` | — | 1 |
+| 合计 | **57** | **58** |
 
-三个必须说清的口径：
-- 指定的 `2026-11-24-promotion-4-reds.tsv` **不存在**（`promotion-2`、`promotion-3` 在，`promotion-4` 不在）。
-  上表用的是 `promotion-3`（1082 行），它测的是 promotion-3 那次的闸门，**不是 `d6503a197c` 本身**。
-- 按 `internal/reports/2026-11-24-develop-reds.cn.md` 的口径，这些行是"最近一次记录判它红"，
-  第三列"在这个提交上还成立吗"多数是"未知"。所以 57 是**已知红的行数**，不是"今天还红 57 条"。
-- 我没有跑测试（本轮纪律：不跑整层，只在需要时跑 `-Plan smoke` 探针；本轮不改源码，故未跑）。
-  要一个"今天的"数，得在构建好的树上跑 `internal\tools\camel-remote.ps1 -Plan smoke -Jobs 8 -NoGpuWatch`，
-  那是另一次读数。
+两张表只差一格：`showcase_s2_first_step_gradient` 在 integration 的报告里被记了一行红，
+develop 的 promotion-3 报告里没有它（showcase 的梯度用例不在 `test/plans` 下，所以 §5.1 的
+517 条不含它）。**两份都是"晋级那一次闸门的记录"，不是某棵树今天的实跑**：
+promotion-3 记的是晋级 3 那次（基线在 develop 的 `d6503a197c` 一带）；promotion-4 记的是晋级 4
+先推 develop、报告随后随合并进 integration 的那一次（`22aa42ad27`），所以它在 develop 上不存在，
+只能从 integration 的提交里读。
+
+第三个口径：按 `internal/reports/2026-11-24-develop-reds.cn.md` 的写法，这些行是"最近一次记录判它红"，
+第三列"在这个提交上还成立吗"多数是"未知"。所以 57/58 是**已知红的行数**，不是"今天还红 57/58 条"。
+全量的"今天"要另跑一次整层；本轮只抽了 3 个计划单跑（第 1 步的判据），读数在交回里。
 
 ---
 
-## 6. 数不出来的，和为什么
+## 6. 第 3 步的 15 条律，逐条（硬前置）
+
+数据来自 `node scripts/vjp-parity.mjs --tables`（每行原话是 `the library's table: no rule files <key>`，
+表格最后一列是那条原话之外、人要做的动作）。行号是 `d6503a197c` 上的读数，命令即上表那条：
+工具自己打印"文件（形式，行 N）"。
+
+| # | 模块 | 键 | 引擎侧登记（文件 · 形式） | 行 | 库侧今天 | 要补什么 |
+|---:|---|---|---|---:|---|---|
+| 1 | `nn` | `conv2d` | `src/stdlib/nn/tensor_ops.cpp` · setVjp | 863 | 规则集不提这个名字 | 一条 `jvp_conv2d`（左式 `conv2d(...)`）+ 一条 `conv2d_t`；规则集得先 `import nn`（今天零依赖） |
+| 2 | `nn` | `batch_norm_train` | 同上 · setVjp | 864 | 同上 | 同上 |
+| 3 | `nn` | `max_pool2d` | 同上 · setVjp | 865 | 同上 | 同上 |
+| 4 | `nn` | `avg_pool2d` | 同上 · setVjp | 866 | 同上 | 同上 |
+| 5 | `nn` | `embedding` | 同上 · setVjp | 867 | 同上 | 同上（索引叶的余切是"累加到被取的行走"） |
+| 6 | `nn` | `softmax_cross_entropy` | 同上 · setVjp | 868 | 同上 | 同上 |
+| 7 | `nn` | `softmax_cross_entropy_labels` | 同上 · setVjp（`tensor:softmax_cross_entropy_labels`） | 869 | 同上 | 同上（标签叶不可微，只剩 logits 那一路） |
+| 8 | `math` | `erf_f` | `src/stdlib/math/module.cpp` · setRule | 116 | 规则集有**数组** `erf` 的律（`jvp_erf`），没有这个标量函数 | 一条 `jvp_erf_f` + 反向；判据是 `erf` 的斜率 `2/√π·exp(-x²)` |
+| 9 | `math` | `erf_d` | 同上 · setRule | 116 | 同上 | 同上（`erf_d` 是 `erf` 的导数函数本身，它的导数要再导一次） |
+| 10 | `math` | `erfc_f` | 同上 · setRule | 119 | 同上 | 同上，符号相反 |
+| 11 | `math` | `erfc_d` | 同上 · setRule | 119 | 同上 | 同上 |
+| 12 | `tensor` | `pow`（元数推不出来：键是 `pow` 而不是 `pow@2`） | `src/stdlib/tensor/ops/elementwise_ops.cpp` · setVjp | 790 | 库里**有** `jvp_pow`，左式写的是 `x ^ w`，可它**不在 `--json` 的任何一栏里**；`transpose.cml` 里也没有 `^` 的律（`jvp.cml` 的注释自己记着 `^` 的反向被 `skip=call-no-transpose` 挡住过） | 这条不是"缺一条律"：先定 `^` 与 `tensor:pow` 是不是同一个键（工具从名字推元数，`setVjp` 那一行读不出元数），再判是补工具还是补反向律 |
+| 13 | `math` | `sqrt_d` | `src/stdlib/math/module.cpp` · setRule | 114 | 有数组 `sqrt` 的律（`jvp_sqrt`），没有这个标量导数函数 | 一条 `jvp_sqrt_d` + 反向（斜率 `1/(2√x)` 的二阶导） |
+| 14 | 核心 | `:op/slice_sub` | `src/stdlib/std/builtin/operators/derivative.cpp` · setRule | 752 | 规则集不提 `slice_sub`（`t[a:b:s]` 的语言算子） | 一条前向 + 一条反向（切片是线性算子，反向是零填充回原形状） |
+| 15 | `tensor` | `idx_take` | `derivative.cpp` · setRule（`:op/idx_take`）+ `src/stdlib/tensor/ops/layout_ops.cpp` · setVjp（`tensor:idx_take`） | 749 / 910 | 规则集不提 | 一条前向 + 一条反向（同 5 的"累加到被取的行走"） |
+
+**结论（回答"一条车道还是四条"）：开三条，不互相阻塞；第 12 行先查账、不排产。**
+
+- **车道 A（最大）**：`nn` 的 7 条。它同时带一个结构性的第一步——规则集要 `import nn`，
+  而今天 `rulesets.jvp`/`rulesets.transpose` 对 `nn` 的依赖是零（豁免清单里那 7 行的理由原文就是
+  "the rulesets declare and import nothing from `nn`"）。7 条律里 5 条（conv2d、两个 pool、
+  batch_norm_train、embedding）要写到 `nn` 的 C++ 内核同构的算术，是这个硬前置里最重的一条。
+- **车道 B**：`math` 的 5 条（`erf_f`/`erf_d`/`erfc_f`/`erfc_d`/`sqrt_d`）。同一个模块、同一种形状
+  （标量导数函数），一次做完最省；和 A 完全不重叠。
+- **车道 C**：核心/tensor 的 2 条（`slice_sub`、`idx_take`）。都落在"索引写入"这一族，共用一条数学
+  （累加到被索引的位置），可以一人两条。
+- **第 12 行（`pow`）**：不排产，先花半小时查账——它是本表里唯一一条"库里可能已经有律、只是键对不上"
+  的。查清之前把它排进任何车道都会白写一条重复的律。
+
+## 7. 数不出来的，和为什么
 
 | 想数的 | 结果 | 为什么数不出来 |
 |---|---|---|
@@ -342,10 +409,11 @@ Get-Content internal/reports/2026-11-24-promotion-3-reds.tsv |
 | "两套各被多少**程序**（用户）调用" | 数不出来 | 只有仓库内的程序（examples/showcase/benchmarks，154 行 / 85 文件）；仓库外的用户没有读数 |
 | 库入口是否有"运行时"（不展开宏）的路径 | 数不出来（只能数到 91 条用例的 `args` 里没有 `std::macro`） | 这是块级正则，不是逐字的语义判断；要真答案得构造一个只调 `vjp` 不跑 `std::macro` 的探针，本轮没做 |
 | `vjp-parity` 的 46 个引擎独有键里，哪些**真的**会在用户程序里出现 | 数不出来 | 需要把每个键反查有没有用例调它；`--tables` 给的是键与注册点，不是调用次数 |
+| `tensor:pow` 的元数 | 数不出来 | `setVjp` 那一行不带签名，工具只能给它一个无元数的键 `pow`（§6 第 12 行） |
 
-## 7. 最该先做的一步
+## 8. 最该先做的一步
 
-**先做第 1 步：把 `src/stdlib/autodiff.cml`（`stop_gradient` + 那批 tangent/cotangent 数学）搬出引擎的归属。**
-它只有 190 行、两条 import、零语义变化，却是"删引擎必删库的数学"这条硬耦合的唯一钉子；
-它不搬，后面 15 条律的补齐（第 3 步）都得写在别人的文件里。
-搬完立刻可以做第 2 步（合并 `Gradient<F>` / `GradientOf<F>`）与第 3 步的一部分，三者互不阻塞。
+**先做第 1b 步：把 `stop_gradient` 的声明与它的内核一起落位到库侧。**
+第 1 步（2026-11-25 已做）把 14 条律搬走了，但两条 `from autodiff` 一条也没少——它们剩下的
+唯一内容就是 `stop_gradient`，而它的内核是引擎文件里的 `autodiff:stop_gradient`。这 40 行级别的搬家
+是"删引擎不删库"的最后一条硬边；它一落地，第 3 步的三条车道就可以全部在库侧写律，不必再回头看引擎。
