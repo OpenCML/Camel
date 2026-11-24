@@ -42,6 +42,13 @@ import {
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
 import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt } from math
+// The `nn` module's primitives and the gradients they answer with: this module's left sides spell
+// the operators (`conv2d(x, w, b)`) and its right sides are the engine's own gradient operators, so
+// both halves of each law name `nn`'s declarations and nothing else. The direction is the one
+// design principles 10.1 allows between modules (only a *type* cycle is diagnosed; the one-way
+// layering the build enforces is the C++ kernel's, 10.5) and `rulesets.jvp` records the same
+// import from the forward side.
+import { avg_pool2d, avg_pool2d_grad, conv2d, conv2d_bias_grad, conv2d_input_grad, conv2d_kernel_grad, embedding, embedding_table_grad, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 import { is_float } from types
 

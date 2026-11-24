@@ -27,6 +27,14 @@ import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_
 // `pow_tangent`'s `log(x)` stops resolving: "No matching function found for
 // argument types: <> (float)"). So the scalar one is named here instead.
 import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt } from math
+// The `nn` module's primitives, whose forward rules file below. This is the first `import` from a
+// module that is a library into a module that is a ruleset, and it is the direction design
+// principles 10.1 allows (modules may import each other; only a *type* cycle is diagnosed) -- the
+// one-way layering the build enforces is the C++ kernel's (10.5), and `rulesets` and `nn` are both
+// modules on the same side of it. What a ruleset needs of the library is the operator's own name:
+// a law's left side spells the operator (`nn/signatures/nn.cml`), and a family cannot read
+// another module's private function.
+import { avg_pool2d, conv2d, embedding, max_pool2d, max_pool2d_grad } from nn
 import { abs, add_stated, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 import { is_float, is_integer, is_same, is_string, Tangent } from types
 
@@ -1642,3 +1650,105 @@ func log_d(x: float) => float {
 export rule jvp_log_d(x: float) { log_d(x) => func (dx: float) {
     dx / x
 } }
+
+// ---- the `nn` module's primitives ----
+//
+// The operators of `nn` the engine's table answered and this library did not: `conv2d`,
+// `max_pool2d`, `avg_pool2d`, `embedding`, `softmax_cross_entropy` and its label form. Their
+// pullbacks are `nn/tensor_ops.cpp#setVjp`, and every rule below answers with the operator *that*
+// pullback calls -- `conv2d_input_grad` and its two siblings, `*_pool2d_grad`,
+// `embedding_table_grad`, `softmax_cross_entropy_grad` -- so the two legs are one arithmetic
+// written twice, not two arithmetics that agree today.
+//
+// A law is filed under its operator's name and its operand count (`ruleKeyOf`), and the transform
+// hands a forward rule the tangents of the operands and nothing of what they are tangents of. Each
+// rule here is therefore "the same operator over the tangents" wherever the operator is linear in
+// an operand, which is what these five are by construction; the loss is not, and its law is the
+// inner product of the engine's own gradient with the logits' tangent.
+//
+// Every law here is written at the operator's **minimal** port count, the trade
+// `jvp_layer_norm` above records: a node that states `stride`/`padding` (or `momentum`/`eps`)
+// carries one port more, and a law of three ports describes a node of three. What that costs is
+// that the library answers the default spelling and refuses the stated one by port count, which is
+// a refusal and not a wrong number.
+
+/// `conv2d(input, kernel, bias)` is linear in each of its three tensors, so its tangent is the same
+/// convolution with one tangent in the place of one operand and a zero in the others:
+///
+///     dy = conv2d(dx, w, 0) + conv2d(x, dw, 0) + conv2d(0, 0, db)
+///
+/// The bias's tangent arrives as the third operand of a neutral convolution and not as a
+/// broadcast, which is how the kernel reads a bias at all (`tensor/kernels/conv.cpp`: one value
+/// per output channel, added once), so this law writes no extent of the output.
+///
+/// The sums are `add_stated`, and what they are handed is the extents of the **output** -- which
+/// none of the operands' own shapes is. A tangent states no extents in its type (`float[...]`,
+/// design principles 5.4), so a sum over tangents has to be handed them as values, and this
+/// operator has no `_stated` form to read them off (`matmul_stated` is the one that does). Reading
+/// them costs a second call of the convolution over the **primals**, which is a residual of this
+/// law and reads no tangent: the law is correct and computes the forward value twice, and a
+/// `conv2d_stated` is the one change that would remove the four calls below.
+export rule jvp_conv2d::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>() {
+    conv2d(x, w, b) => func (dx: T[...], dw: T[...], db: T[...]) {
+        add_stated(
+            add_stated(
+                conv2d(dx, w, zeros_like(b)),
+                conv2d(x, dw, zeros_like(b)),
+                shape(conv2d(x, w, b)),
+                shape(conv2d(x, w, b))),
+            conv2d(zeros_like(x), zeros_like(w), db),
+            shape(conv2d(x, w, b)),
+            shape(conv2d(x, w, b)))
+    }
+}
+
+/// `d(max_pool2d(x, kernel))`: the window each output reads is chosen by `x` and **not by the
+/// tangent**, so the law cannot be `max_pool2d(dx, kernel)` -- that would answer the maximum of the
+/// tangents in each window, which is a different matrix. What it is instead is the selection the
+/// engine's own pullback uses, read as a mask:
+///
+///     mask    = max_pool2d_grad(x, ones_like(y), kernel)        // 1 at each window's maximum
+///     dy      = avg_pool2d(mask ⊙ dx, kernel) * kernel²         // the window's one survivor, summed
+///
+/// The mask is a **residual** (it reads `x` and the output's shape, no tangent), and the two
+/// operators over the tangent are linear, so the linear half is transposable: `avg_pool2d_t` and
+/// `mul_stated_t` are its two laws. A window whose maximum is tied is shared equally by
+/// `max_pool2d_grad`, which is the same convention the reverse half answers with, so the two
+/// halves are adjoints of one map and not two conventions that agree on distinct maxima.
+///
+/// Nothing is bound to a `let`: the mask and the output's extents are read by the **linear** half,
+/// and a local name there is a value the transposed function is not handed ("the rule's right side
+/// reads a value the transposed function is not handed"). `jvp_maximum` pays the same price, with
+/// `shape(maximum(x, w))` written four times.
+export rule jvp_max_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
+    max_pool2d(x, kernel) => func (dx: T[...]) {
+        mul_stated(
+            avg_pool2d(
+                mul_stated(
+                    max_pool2d_grad(x, ones_like(max_pool2d(x, kernel)), kernel),
+                    dx,
+                    shape(x),
+                    shape(x)),
+                kernel),
+            full(shape(max_pool2d(x, kernel)), float(kernel * kernel)),
+            shape(max_pool2d(x, kernel)),
+            shape(max_pool2d(x, kernel)))
+    }
+}
+
+/// `d(avg_pool2d(x, kernel)) = avg_pool2d(dx, kernel)`: a mean of a window is a sum of its elements
+/// divided by a count that reads no element, so the tangent is the mean of the tangents -- and the
+/// padding's `+0` terms are `+0` on both sides.
+export rule jvp_avg_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
+    avg_pool2d(x, kernel) => func (dx: T[...]) {
+        avg_pool2d(dx, kernel)
+    }
+}
+
+/// `d(embedding(table, indices)) = embedding(dtable, indices)`: a gather is a choice of rows, so it
+/// is linear in the table and the indices are a discrete operand with no tangent.
+export rule jvp_embedding::<T>(table: T[...], indices: int[]) when is_float::<T>() {
+    embedding(table, indices) => func (dtable: T[...]) {
+        embedding(dtable, indices)
+    }
+}
