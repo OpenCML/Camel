@@ -34,49 +34,65 @@
 // of the same id is acknowledged and dropped, so a retried request does not start a second turn.
 
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { readFile, stat } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import * as bootMeasure from './measure.js'
 import * as bootRules from './rules.js'
 
 // The parts that change most often -- the rules, their limits and texts, and what is measured --
-// are reloaded from disk when their file changes, at the next beat, without restarting the host:
-// a restart stops every agent that is working. A file that fails to load leaves the version in use
-// in place and is reported. The routes, the tools and the session wiring in this file still need a
-// restart.
-const HERE = path.dirname(fileURLToPath(import.meta.url))
+// are reloaded when they change, at the next beat, without restarting the host: a restart stops
+// every agent that is working. They are read from origin/develop, the content that has passed the
+// merge gate and been pushed, never from the checkout's working tree: a merge in progress there
+// holds content that has not been measured yet, and a lane's half-done edit may sit there too. A
+// file that fails to load leaves the version in use in place and is reported. The routes, the tools
+// and the session wiring in this file still need a restart.
+const HOT_REF = 'origin/develop'
+const HOT_DIR = path.join(os.homedir(), '.camel-oversight', 'hot')
 const hot = {
-    rules: { module: bootRules, stamp: null, error: null },
-    measure: { module: bootMeasure, stamp: null, error: null },
+    rules: { module: bootRules, blob: null, error: null },
+    measure: { module: bootMeasure, blob: null, error: null },
 }
-async function reloadHot(onChange) {
+const gitIn = (repo, args) =>
+    new Promise((resolve, reject) =>
+        execFile('git', ['-C', repo, ...args], { env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, maxBuffer: 16 << 20 },
+            (error, stdout) => (error ? reject(error) : resolve(stdout))))
+// The text of a file as origin/develop has it, or null when it cannot be read.
+async function pushedText(repo, file) {
+    return gitIn(repo, ['show', `${HOT_REF}:${file}`]).catch(() => null)
+}
+async function reloadHot(repo, onChange) {
+    if (!repo) return
     for (const [name, file] of [['rules', 'rules.js'], ['measure', 'measure.js']]) {
         const slot = hot[name]
-        const full = path.join(HERE, file)
-        let stamp
+        const spec = `internal/tools/camel-oversight/${file}`
+        let blob
         try {
-            stamp = (await stat(full)).mtimeMs
+            blob = (await gitIn(repo, ['rev-parse', `${HOT_REF}:${spec}`])).trim()
         } catch (error) {
-            slot.error = `${file}: ${error.message}`
+            slot.error = `${spec} at ${HOT_REF}: ${String(error.message).split(/\r?\n/)[0]}`
             continue
         }
-        if (slot.stamp === null) {
-            slot.stamp = stamp // the version imported at start is the one on disk now
+        if (slot.blob === null) {
+            slot.blob = blob // the version imported at start stands until the pushed one changes
             continue
         }
-        if (stamp === slot.stamp) continue
+        if (blob === slot.blob) continue
+        slot.blob = blob // a broken version is not retried every beat
         try {
-            slot.module = await import(`${pathToFileURL(full).href}?v=${stamp}`)
-            slot.stamp = stamp
+            const text = await gitIn(repo, ['show', `${HOT_REF}:${spec}`])
+            mkdirSync(HOT_DIR, { recursive: true })
+            const copy = path.join(HOT_DIR, `${name}-${blob.slice(0, 12)}.mjs`)
+            if (!existsSync(copy)) writeFileSync(copy, text)
+            slot.module = await import(pathToFileURL(copy).href)
             slot.error = null
-            onChange && onChange({ file, stamp, ok: true })
+            onChange && onChange({ file, blob: blob.slice(0, 12), ok: true })
         } catch (error) {
-            slot.stamp = stamp // do not retry the same broken file every beat
             slot.error = `${file}: ${error.message}`
-            onChange && onChange({ file, stamp, ok: false, error: error.message })
+            onChange && onChange({ file, blob: blob.slice(0, 12), ok: false, error: error.message })
         }
     }
 }
@@ -513,7 +529,9 @@ export function apply(ctx, rawConfig) {
     let rulesText = ''
     const loadRules = async () => {
         if (!config.repo) return
-        const text = await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
+        // As pushed, not as the checkout's working tree has it mid-merge (see HOT_REF).
+        const pushed = await pushedText(config.repo, config.rulesFile)
+        const text = pushed !== null ? pushed : await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
         if (text.trim()) rulesText = text.trim()
     }
     void loadRules()
@@ -633,7 +651,7 @@ export function apply(ctx, rawConfig) {
         beating = true
         try {
             const now = Date.now()
-            await reloadHot((change) => {
+            await reloadHot(config.repo, (change) => {
                 const entry = { kind: 'hot-reload', at: now, ...change }
                 record(entry)
                 emit(entry)
@@ -756,7 +774,7 @@ export function apply(ctx, rawConfig) {
             promptReach,
             blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
             watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
-            hotLoaded: Object.fromEntries(Object.entries(hot).map(([name, slot]) => [name, { stamp: slot.stamp, error: slot.error }])),
+            hotLoaded: Object.fromEntries(Object.entries(hot).map(([name, slot]) => [name, { blob: slot.blob && slot.blob.slice(0, 12), error: slot.error }])),
         })
     })
 
