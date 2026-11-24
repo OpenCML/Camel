@@ -87,7 +87,7 @@ param(
     # parameter would make PowerShell prompt for one. A merge without them is refused below, by name.
     [string] $Branch = '',
     [string] $Message = '',
-    # The merge seat's own worktree. D:\Projects\Camel is the author's workspace (iron rule 17):
+    # The merge seat's own worktree. D:\Projects\Camel is the author's workspace (the iron rule on the main checkout):
     # nothing is merged, built or measured there.
     [string] $MainCheckout = 'D:\Projects\Camel-wt\merge',
     # Where the baseline is measured. It has to be a tree that is NOT the one being compared, and it

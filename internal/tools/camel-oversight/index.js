@@ -578,7 +578,7 @@ export function apply(ctx, rawConfig) {
             pendingCalls.set(String(d.callId), { name: d.name, at, warned: false })
             if (QUESTION_TOOLS.has(d.name) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问、不等——按默认建议继续；真是问句就写 internal/questions/ 一页，再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问负责人、不等——按默认做法继续；真有问题就用 oversight_tell 直接问决策者（问句、读数、默认做法）。')
             }
         } else if (event.type === 'tool/result') {
             const callId = d.message && d.message.source ? d.message.source.callId : d.callId
@@ -592,7 +592,7 @@ export function apply(ctx, rawConfig) {
             const aborted = d.reason && d.reason.kind === 'aborted'
             if (!aborted && asksOwner(lastAssistantText) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问、不等——按默认建议继续干；真是问句就写 internal/questions/ 一页（问句、读数、两三条路各带代价、默认建议），再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问负责人、不等——按默认做法继续干；真有问题就用 oversight_tell 直接问决策者（问句、读数、两三条路各带代价、默认做法）。')
             }
         }
     }
@@ -615,7 +615,7 @@ export function apply(ctx, rawConfig) {
             if ((config.blockExempt || []).includes(call.name)) continue
             if (held.length && (config.waitTools || ['job_output']).includes(call.name)) {
                 pendingCalls.delete(callId)
-                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律 5）。`
+                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律：你只做判断，不在会话里久等）。`
                 nudge('wait-ended', 'urgent', text, (a) => {
                     a.cancel({ kind: 'user' }, { keepInbox: true })
                     a.followup(Object.freeze({
@@ -630,12 +630,12 @@ export function apply(ctx, rawConfig) {
             if (minutes >= config.blockCancelMinutes) {
                 pendingCalls.delete(callId)
                 nudge('blocked-cancelled', 'urgent',
-                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
+                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
                     (a) => {
                         a.cancel({ kind: 'user' }, { keepInbox: true })
                         a.followup(Object.freeze({
                             id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
-                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
+                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
                         }))
                         return 'cancel+followup'
                     })

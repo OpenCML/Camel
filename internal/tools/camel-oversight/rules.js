@@ -68,7 +68,7 @@ export const RULES = [
             if (late.length === 0) return null
             return {
                 key: 'stuck',
-                text: `${late.length} 条派工排在你这一轮之后没送到（${late.map((e) => `${e.id} ${e.minutes} 分钟`).join('、')}）。后台任务留着跑，结束这一轮；读数好了推送会叫醒你（铁律 5）。`,
+                text: `${late.length} 条派工排在你这一轮之后没送到（${late.map((e) => `${e.id} ${e.minutes} 分钟`).join('、')}）。后台任务留着跑，结束这一轮；读数好了推送会叫醒你（铁律：你只做判断，不在会话里久等）。`,
             }
         },
     },
@@ -205,7 +205,7 @@ export const RULES = [
             if (!g || g.mergedLocal.length <= limits.mergedLocal) return null
             return {
                 key: String(g.mergedLocal.length),
-                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉（铁律 12 与 13：先确认工作树干净、没有活会话在里面）。`,
+                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉（按清理那条铁律：先确认工作树干净、没有活会话在里面）。`,
             }
         },
     },
