@@ -60,3 +60,71 @@ function Test-DocsOnlyMerge {
     }
     return $true
 }
+
+# --- what a selection's exit code and output mean for a merge -------------------
+#
+# The judgement used to be one line inside `merge-lane`:
+#
+#     $docsOnly = ($selectExit -eq 0 -and $planTargets.Count -eq 0) -and (Test-DocsOnlyMerge ...)
+#
+# Two clauses that cannot both hold. An empty selection is exit 2 by the runner's own rule --
+# `test/runner.mjs#selectChangedTargets` refuses it instead of widening to the layer, and
+# `test/plan-selection.json` states the same sentence in its own comment, "A change no rule matches is
+# refused (exit 2)" -- so `$selectExit -eq 0` was false in exactly the case the branch was written
+# for. A documentation-only merge therefore reached the "could not be selected" stop: `fsh-dev` on
+# 2026-11-24 hit it twice in one evening, first through `camel-remote -Changed` and then through this
+# tool, and both times the change was one question page and no plan could have read it.
+#
+# The exit code alone cannot answer it, and neither can the path list: exit 2 has two causes that mean
+# opposite things, and they are told apart by the sentence the runner prints rather than by assuming
+# the same number means the same thing.
+#
+#   * the no-rule refusal says the selection rules named nothing for *these paths*. If every changed
+#     path is documentation, that is a fact about the change: no plan covers a page, and the merge has
+#     nothing to measure. This is `docs-only` with the selection stage having refused, and the merge
+#     records and advances on it (a merge that was never meant to be measured must not be refused as
+#     if the measuring had gone wrong);
+#   * every other exit 2 -- a base that does not resolve, selection rules that do not parse, a plan the
+#     rules name that the tree does not hold -- says the change itself is unknown. That is the gate
+#     being blind, and no path list turns it into a documentation merge. This is `unreadable`, and it
+#     is refused whatever the extensions say.
+#
+# The sentence below is the runner's, verbatim (`test/runner.mjs`, `refuseChanged(...)` in
+# `selectChangedTargets`); the test beside this file checks that the runner still prints it, so the
+# marker cannot drift away from the message it is matching.
+$script:NoRuleRefusal = 'so the selection is empty; an empty selection must not become a plan expansion'
+
+function Test-NoRuleRefusal {
+    param([string[]] $Output = @())
+    $text = ($Output | ForEach-Object { "$_" }) -join "`n"
+    return $text.Contains($script:NoRuleRefusal)
+}
+
+# The four verdicts, and what each licenses:
+#
+#   docs-only-listed    exit 0, no plan named, every path documentation -- the listed-empty change.
+#   docs-only-refused   exit 2, the no-rule refusal, every path documentation -- the case the old
+#                       conjunction could not reach.
+#   plans               exit 0 and at least one plan named: the rows stage reads them.
+#   no-plan             the selection answered and named nothing, and at least one path is not
+#                       documentation (or the change is empty): a hole in the rules, not a reading.
+#   unreadable          exit 2 that is not the no-rule refusal: base/rules/list unknown. Never
+#                       documentation-only, whatever the path list looks like.
+function Get-SelectionVerdict {
+    param(
+        [int] $SelectExit,
+        [string[]] $SelectOutput = @(),
+        [string[]] $ChangedFiles = @(),
+        [int] $PlanCount = 0
+    )
+    if ($SelectExit -eq 0) {
+        if ($PlanCount -gt 0) { return 'plans' }
+        if (Test-DocsOnlyMerge -Files $ChangedFiles) { return 'docs-only-listed' }
+        return 'no-plan'
+    }
+    if ($SelectExit -eq 2 -and (Test-NoRuleRefusal -Output $SelectOutput)) {
+        if (Test-DocsOnlyMerge -Files $ChangedFiles) { return 'docs-only-refused' }
+        return 'no-plan'
+    }
+    return 'unreadable'
+}
