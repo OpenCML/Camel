@@ -1282,7 +1282,19 @@ verify_script = """
 const out = input.normalized.stdout + input.normalized.stderr
 assert(out.includes('"stage":"pass:test::leak_branch_arm"'), `stage missing: ${out}`)
 assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
-assert(/Runtime graph 'main' breaks the branch-arm invariant: [A-Z]+ \d+ runs between BRCH \d+ and its JOIN \d+ and belongs to no arm/.test(out), `reason missing: ${out}`)
+// The reported node is named by `describe()`, which appends what the kind and the index do not
+// say: ` (uri)` for an OPER, ` (calls 'name')` for a FUNC, nothing for any other kind. The stray
+// node test::leak_branch_arm adds is `anchorNode`, which is a `:op/cast` by construction (it has
+// to be a conversion: the seal lets an order edge end on one, lib/std/test/anchor.h), so this
+// program reports an OPER and did report a CAST before a conversion became an operator call. The
+// assertion is about the shape of the sentence, not about which kind is reported, so the suffix
+// is optional and the three shapes are each checked below.
+const shape = /Runtime graph 'main' breaks the branch-arm invariant: [A-Z]+ \d+( \([^)]*\))? runs between BRCH \d+ and its JOIN \d+ and belongs to no arm/
+assert(shape.test(out), `reason missing: ${out}`)
+assert(shape.test("Runtime graph 'main' breaks the branch-arm invariant: OPER 15 (:op/cast) runs between BRCH 6 and its JOIN 5 and belongs to no arm: it waits on the BRCH"), 'the OPER shape is not matched')
+assert(shape.test("Runtime graph 'main' breaks the branch-arm invariant: FUNC 7 (calls 'opaque') runs between BRCH 6 and its JOIN 5 and belongs to no arm: it waits on the BRCH"), 'the FUNC shape is not matched')
+assert(shape.test("Runtime graph 'main' breaks the branch-arm invariant: DATA 3 runs between BRCH 6 and its JOIN 5 and belongs to no arm: it waits on the BRCH"), 'the plain shape is not matched')
+assert(!shape.test("Runtime graph 'main' breaks the branch-arm invariant: OPER runs between BRCH 6 and its JOIN 5 and belongs to no arm"), 'the shape matches a node with no index')
 assert(!out.includes('main start'), `the program ran: ${out}`)
 }
 """
