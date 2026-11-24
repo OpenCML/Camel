@@ -29,16 +29,25 @@
  *
  *   GCNode::kind                             kindOf
  *   GCNode::dataType                         typeOf
+ *   GCGraph::nodeAttrs                       attrsOf
+ *   GCGraph::nodePermissions                 permissionsOf, and effectivePermissionsOf for the
+ *                                            permission in effect under a policy (`#strict`)
  *   GCNode::flags (macro, constant)          nothing: a macro is the record of the callee or of
  *                                            the operator (2.2), a constant is `constantOf`
  *   normInputsOf / withInputsOf              inputs(ref, Normal) / inputs(ref, Context)
  *   normUsersOf / withUsersOf                users(ref, Normal) / users(ref, Context)
- *   normInputsOf / withInputsOf / both       predecessors(ref, Data)
- *   syncPredsOf                              predecessors(ref, Sync)     (edge.pred)
+ *   normInputsOf / withInputsOf / both       predecessors(ref, Data) / successors(ref, Data)
+ *   syncPredsOf / ctrlInputsOf               predecessors(ref, Sync) / (the control run has no
+ *                                            query of its own: predecessors(ref, Wait) is the
+ *                                            union, and `edges(Wait)` the whole table)
  *   orderPredsOf                             predecessors(ref, Order)    (edge.pred)
+ *   uses().sync / uses().order               successors(ref, Sync) / successors(ref, Order)
+ *   waitInputsOf / waitUsersOf               predecessors(ref, Wait) / successors(ref, Wait)
+ *   syncEdges / orderEdges                   edges(Sync) / edges(Order), as (pred, user) pairs
  *   regionCount / region / nodeRegion        regionCount / region / regionOf
  *   regionPorts / (nodes of a region)        regionParameters / regionNodes
  *   GCRegion{kind,owner,index,parent,result} RegionRecord, copied
+ *   GCRegion::attrs                          RegionRecord::attrs, copied
  *   loopKindOf, loopIterableFormOf,
  *   loopCollectionCountOf, loopBodyOf        loopFormOf, as one record
  *   calleeIdOf / GCFuncRef                   calleeOf, as the graph that id names (by value)
@@ -84,6 +93,7 @@
 #include <optional>
 #include <span>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::graph {
@@ -118,10 +128,16 @@ class FrozenGraphAdapter final : public GraphView {
     std::optional<std::uint32_t> staticIndexOf(NodeRef ref) const override;
     std::uint32_t staticSlotCount() const override;
     std::uint64_t originOf(NodeRef ref) const override;
+    camel::core::attr::AttrSetId attrsOf(NodeRef ref) const override;
+    camel::core::sem::PermissionMask permissionsOf(NodeRef ref) const override;
+    camel::core::sem::PermissionMask effectivePermissionsOf(
+        NodeRef ref, const camel::core::sem::NumericPolicy &policy) const override;
 
     std::span<const NodeRef> inputs(NodeRef ref, PortGroup group) const override;
     std::span<const NodeRef> users(NodeRef ref, PortGroup group) const override;
     std::vector<NodeRef> predecessors(NodeRef ref, EdgeKind kind) const override;
+    std::vector<NodeRef> successors(NodeRef ref, EdgeKind kind) const override;
+    std::span<const Edge> edges(EdgeKind kind) const override;
 
     std::uint32_t regionCount() const override;
     RegionRecord region(RegionId id) const override;
@@ -141,8 +157,16 @@ class FrozenGraphAdapter final : public GraphView {
     /// view does not have and is not asked for.
     static NodeKind viewKind(camel::runtime::GCNodeKind stored);
 
+    /// The whole table of one edge kind, built once per kind (`edges`). A table of (pred, user)
+    /// pairs is a projection of the two side arrays and of the input runs, and neither can be
+    /// handed out where it lies -- the sync table is sorted by user and the input runs belong to
+    /// the nodes -- so the adapter keeps the copy it answered with. It decides nothing: the same
+    /// graph answers the same table.
+    const std::vector<Edge> &tableOf(EdgeKind kind) const;
+
     const camel::runtime::GCGraph &graph_;
     CalleeGraphOf calleeGraphOf_;
+    mutable std::unordered_map<std::uint8_t, std::vector<Edge>> tables_;
 };
 
 } // namespace camel::graph

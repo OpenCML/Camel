@@ -117,7 +117,7 @@ class DebuggerServer {
     void setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids);
     void setGirBreakpointNodeIdsFromStrings(const std::vector<std::string> &nodeIds);
     /// Origin-based GIR breakpoints: the canonical ID space shared with gir-json's `originId`
-    /// and resolvable at runtime via GCGraph::nodeOrigin(). Full replacement, like node IDs.
+    /// and resolvable at runtime via the view's originOf(). Full replacement, like node IDs.
     void setGirBreakpointOrigins(std::vector<uint64_t> origins);
     bool isGirBreakpointNode(uintptr_t nodePtr) const;
     bool isGirBreakpointNodeKey(const std::string &nodeKey) const;

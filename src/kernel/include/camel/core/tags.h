@@ -267,6 +267,12 @@ sem::PermissionMask effectivePermissions(
 sem::PermissionMask effectivePermissions(
     const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node,
     const sem::NumericPolicy &policy);
+/// The same answer for a node read through another face (`GraphView::effectivePermissionsOf`):
+/// the node's tag set and the permission column are the two values every representation has, and
+/// the rule over them is this one. A reader that has both values asks here rather than writing
+/// `#strict`'s meaning a third time.
+sem::PermissionMask permissionsInEffect(
+    attr::AttrSetId tags, sem::PermissionMask permissions, const sem::NumericPolicy &policy);
 
 /// Whether the function of `graph` declares its elements independent (design principles 3.6):
 /// the standard tag `independent` on the function declaration. The fact is on the graph's exit

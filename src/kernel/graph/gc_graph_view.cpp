@@ -26,6 +26,7 @@
 
 #include "graph/gc_graph_view.h"
 
+#include "camel/core/tags.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -210,6 +211,28 @@ std::uint64_t FrozenGraphAdapter::originOf(NodeRef ref) const {
     return graph_.nodeOrigin(static_cast<camel::runtime::gc_node_ref_t>(ref));
 }
 
+camel::core::attr::AttrSetId FrozenGraphAdapter::attrsOf(NodeRef ref) const {
+    // A place the graph holds no record at carries nothing: the frozen graph's columns are indexed
+    // by node, and asking one about a gap would read another node's entry or past the end.
+    if (!holdsRecord(graph_, ref)) {
+        return camel::core::attr::kNoAttrs;
+    }
+    return static_cast<camel::core::attr::AttrSetId>(
+        graph_.nodeAttrs(static_cast<camel::runtime::gc_node_ref_t>(ref)));
+}
+
+camel::core::sem::PermissionMask FrozenGraphAdapter::permissionsOf(NodeRef ref) const {
+    if (!holdsRecord(graph_, ref)) {
+        return camel::core::sem::kNoPermissions;
+    }
+    return graph_.nodePermissions(static_cast<camel::runtime::gc_node_ref_t>(ref));
+}
+
+camel::core::sem::PermissionMask FrozenGraphAdapter::effectivePermissionsOf(
+    NodeRef ref, const camel::core::sem::NumericPolicy &policy) const {
+    return camel::core::tag::permissionsInEffect(attrsOf(ref), permissionsOf(ref), policy);
+}
+
 std::span<const NodeRef> FrozenGraphAdapter::inputs(NodeRef ref, PortGroup group) const {
     const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
     if (!holdsRecord(graph_, ref)) {
@@ -270,9 +293,82 @@ std::vector<NodeRef> FrozenGraphAdapter::predecessors(NodeRef ref, EdgeKind kind
             preds.push_back(edge.pred);
         }
         break;
+    case EdgeKind::Wait:
+        // The two forms of a wait as one list, with a pair both forms name counted once: the
+        // graph already answers that union (GCGraph::waitInputsOf), and the view does not spell it
+        // again (graph_view.h, the control-input paragraph).
+        return graph_.waitInputsOf(node);
     }
     return preds;
 }
+
+std::vector<NodeRef> FrozenGraphAdapter::successors(NodeRef ref, EdgeKind kind) const {
+    const camel::runtime::gc_node_ref_t node = static_cast<camel::runtime::gc_node_ref_t>(ref);
+    std::vector<NodeRef> users;
+    if (!holdsRecord(graph_, ref)) {
+        return users;
+    }
+    switch (kind) {
+    case EdgeKind::Data:
+        for (const camel::runtime::gc_node_ref_t user : graph_.normUsersOf(node)) {
+            users.push_back(user);
+        }
+        for (const camel::runtime::gc_node_ref_t user : graph_.withUsersOf(node)) {
+            users.push_back(user);
+        }
+        break;
+    case EdgeKind::Sync:
+        for (const camel::runtime::gc_node_ref_t user : graph_.uses().sync(node)) {
+            users.push_back(user);
+        }
+        break;
+    case EdgeKind::Order:
+        for (const camel::runtime::gc_node_ref_t user : graph_.uses().order(node)) {
+            users.push_back(user);
+        }
+        break;
+    case EdgeKind::Wait:
+        return graph_.waitUsersOf(node);
+    }
+    return users;
+}
+
+const std::vector<Edge> &FrozenGraphAdapter::tableOf(EdgeKind kind) const {
+    const auto found = tables_.find(static_cast<std::uint8_t>(kind));
+    if (found != tables_.end()) {
+        return found->second;
+    }
+    std::vector<Edge> table;
+    switch (kind) {
+    case EdgeKind::Sync:
+        for (const camel::runtime::GCGraphSyncEdge &edge : graph_.syncEdges()) {
+            table.push_back({static_cast<NodeRef>(edge.pred), static_cast<NodeRef>(edge.user)});
+        }
+        break;
+    case EdgeKind::Order:
+        for (const camel::runtime::GCGraphOrderEdge &edge : graph_.orderEdges()) {
+            table.push_back({static_cast<NodeRef>(edge.pred), static_cast<NodeRef>(edge.user)});
+        }
+        break;
+    case EdgeKind::Data:
+    case EdgeKind::Wait:
+        // No stored table: these edges live in the nodes' input runs (and, for a wait, in the sync
+        // array beside them), so the whole table is a walk. The same pairs `predecessors` answers,
+        // node by node, in node order.
+        for (NodeRef ref = 0; ref < nodeSlotCount(); ++ref) {
+            if (!holdsRecord(graph_, ref)) {
+                continue;
+            }
+            for (const NodeRef pred : predecessors(ref, kind)) {
+                table.push_back({pred, ref});
+            }
+        }
+        break;
+    }
+    return tables_.emplace(static_cast<std::uint8_t>(kind), std::move(table)).first->second;
+}
+
+std::span<const Edge> FrozenGraphAdapter::edges(EdgeKind kind) const { return tableOf(kind); }
 
 std::uint32_t FrozenGraphAdapter::regionCount() const {
     // The view's region 0 is the body, and the frozen table holds the body's record only when the
@@ -320,6 +416,8 @@ RegionRecord FrozenGraphAdapter::region(RegionId id) const {
     record.result = stored->result == camel::runtime::kInvalidNodeRef
                         ? kNoNode
                         : static_cast<NodeRef>(stored->result);
+    // The region's tag set is a field of the record the graph keeps, so it is copied with the rest.
+    record.attrs = static_cast<camel::core::attr::AttrSetId>(stored->attrs);
     return record;
 }
 
