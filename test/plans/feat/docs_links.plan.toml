@@ -195,6 +195,37 @@ timeout_ms = 180000
 # internal/reports/2026-11-24-test-suite-inventory.cn.md).
 tier = "slow"
 
+# The zero reading. `--no-pending` reads the pending list as empty, so the run has nothing waiting
+# and prints the sentence that says so. Two zeros look alike on a screen that shows only problems:
+# "nothing waits" and "nobody is looking". This case keeps the first one a reading -- the number and
+# the reason are printed from the list on every run, and when the list is empty the line has to say
+# the list is empty rather than stay silent.
+#
+# The exit is 1 by design, and it is the second half of the same reading: emptying the list does not
+# make the tree pass, it exposes the snippets the list was exempting. So the run says "0 snippet(s)
+# wait" and refuses on the same breath, which is what an emptied list has to do -- a zero that bought
+# a green would be the exact "nobody is looking" this case exists to rule out. The count of those
+# exposed snippets is not pinned, because it decays as the docs catch up; the day the list is empty
+# for real the run turns green and this case has to be revisited with it.
+[[tests]]
+name = "docs.snippets_pending_zero_says_why"
+desc = "With the pending list read as empty, the run says `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope` and still refuses on the snippets it no longer exempts, so a zero names itself instead of looking like a run that never looked."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "--default-roots", "--no-pending", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope", "stale snippet problem(s)"]
+normalizers = ["normalize_newlines"]
+# 300000 ms at the 4x rule, from the reading of this case rather than from its neighbour's: on the
+# build host it used 63710 ms of CPU (17.2 s of wall clock -- the checker spawns one compiler per
+# snippet, so the CPU is the sum of eight jobs) against a 180000 ms bound, which is 2.8x and was
+# itself the red. 300000 ms puts it at 4.7x.
+timeout_ms = 300000
+# The same work as `docs.snippets_compile` -- it compiles the whole reader-facing scope -- so it
+# costs what that case costs and belongs on the same side of the 2 s line.
+tier = "slow"
+
 [[tests]]
 name = "docs.snippets_dump_is_compared"
 desc = "A `graph-dump` fence's text block is checked against the dump the graph pass prints: a page whose dump is not its program's graph fails, naming the first line that differs."

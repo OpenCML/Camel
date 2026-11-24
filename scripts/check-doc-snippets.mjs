@@ -93,7 +93,7 @@ function usage(message) {
     if (message) console.error(`check-doc-snippets: ${message}`)
     console.error(
         'usage: node scripts/check-doc-snippets.mjs [--default-roots] [--pages|--source-examples] ' +
-            '[--camel PATH] [FILE|DIR ...]',
+            '[--no-pending] [--camel PATH] [FILE|DIR ...]',
     )
     process.exit(2)
 }
@@ -150,8 +150,11 @@ const EXCERPTS = [
 //     one file has not seen the rest of the tree.
 // The count is held at or below PENDING_MAX; deleting entries is routine, and adding one means
 // raising the ceiling in the same edit, which a review can see. Every run prints each entry it
-// used, with its reason, so the list can be reviewed from the output without reading this file.
-const PENDING = [
+// used, with its reason and with the state it is in, and ends the list with one line saying how many
+// snippets wait and for what: the list is a debt whose balance is printed, not an exemption that
+// stays in force. `--no-pending` reads the list as empty, which is how the plan pins that line's
+// zero (see below).
+const PENDING_ALL = [
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: '12ee3b07b5c68a43',
@@ -391,6 +394,12 @@ const PENDING = [
             'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
     },
 ]
+
+// `--no-pending` reads the list as empty. It is the way to run the one case that pins the zero
+// reading, and the only honest way to see what a run says when nothing waits: a screen that shows
+// only problems cannot tell "nothing waits" from "nobody is looking", so the zero is printed and
+// this switch is how it gets exercised without emptying the list for the other pages.
+const PENDING = ARGV.includes('--no-pending') ? [] : PENDING_ALL
 
 const PENDING_MAX = 30
 
