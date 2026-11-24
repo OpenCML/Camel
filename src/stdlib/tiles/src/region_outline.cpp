@@ -544,7 +544,7 @@ const runtime::Program *outlineRegions(
                     const auto operandIsKnown = [&](const auto &operands) {
                         return std::any_of(
                             operands.begin(), operands.end(), [&](rt::gc_node_ref_t operand) {
-                                return holdsStaticFunction(*graph, operand);
+                                return holdsStaticFunction(graph->view(), operand);
                             });
                     };
                     const auto normOperands = graph->normInputsOf(id);
@@ -576,7 +576,7 @@ const runtime::Program *outlineRegions(
                     // A device answer on the node itself is the operator having no device
                     // implementation; an untagged graph the scope reaches adds this operator to a
                     // device unit, and the module that provides it has no device program.
-                    const bool own = placementOf(*graph, id).onDevice();
+                    const bool own = placementOf(graph->view(), id).onDevice();
                     auto &group    = groupOf(*graph);
                     (own ? group.unsupported : group.noProgram)
                         .push_back({name,
@@ -738,7 +738,7 @@ const runtime::Program *outlineRegions(
                 // The value is read where this upload is written, or under it: the upload has to
                 // run before what reads it, so the reader -- or the branch or loop that owns the
                 // read, when it is written deeper -- is ordered after the upload.
-                for (auto reader : graph->uses().norm(input)) {
+                for (auto reader : graph->view().users(input, camel::graph::PortGroup::Normal)) {
                     const auto standing = standingIn(*graph, control, where, reader);
                     if (standing != rt::kInvalidNodeRef && standing != upload)
                         effects.readsBefore(upload, standing);

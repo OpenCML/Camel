@@ -194,7 +194,7 @@ std::string residencyReport(const rt::Program &program) {
             if (node == nullptr || node->kind == runtime::GCNodeKind::Port) {
                 continue; // A port is the caller's value: its block is the argument's (§3.2).
             }
-            const Placement placement = placementOf(*graph, ref).placement;
+            const Placement placement = placementOf(graph->view(), ref).placement;
             blockOf.emplace(ref, placement);
             onDevice(placement) ? ++deviceValues : ++hostValues;
         }
@@ -237,12 +237,12 @@ std::string residencyReport(const rt::Program &program) {
                 }
                 nlohmann::json row;
                 row["callee"]    = callee->name();
-                row["caller"]    = className(placementOf(*graph, ref).placement);
-                row["callee_at"] = className(bodyPlacementOf(*callee).placement);
+                row["caller"]    = className(placementOf(graph->view(), ref).placement);
+                row["callee_at"] = className(bodyPlacementOf(callee->view()).placement);
                 // A parameter follows its argument's block, so a call between two graphs of one
                 // class moves no value; only a call that changes class needs the pair.
                 row["transfers"] =
-                    placementOf(*graph, ref).placement == bodyPlacementOf(*callee).placement ? 0
+                    placementOf(graph->view(), ref).placement == bodyPlacementOf(callee->view()).placement ? 0
                                                                                             : 1;
                 calls.push_back(std::move(row));
             }
@@ -255,7 +255,7 @@ std::string residencyReport(const rt::Program &program) {
         }
         nlohmann::json entry;
         entry["graph"]     = graph->name();
-        entry["body"]      = className(bodyPlacementOf(*graph).placement);
+        entry["body"]      = className(bodyPlacementOf(graph->view()).placement);
         entry["blocks"]    = {{"device", deviceValues}, {"host", hostValues}};
         entry["uploads"]   = uploads;
         entry["downloads"] = downloads;

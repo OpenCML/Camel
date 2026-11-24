@@ -560,7 +560,7 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
         // `#gpu` scope the host is this operator's own contract — the device when it can serve
         // the graph, the host otherwise — and stays.
         auto *fn = with.get<::Function *>(0);
-        if (device && bodyPlacementOf(*fn->graph()).placement == Placement::GpuRequired) {
+        if (device && bodyPlacementOf(fn->graph()->view()).placement == Placement::GpuRequired) {
             // A refusal with no operator names the class the compiler could not build, which is
             // always about the use's shapes or types; one with an operator says which one.
             const bool shape = refusalOper.empty() || refusalShape;

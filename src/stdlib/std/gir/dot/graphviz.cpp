@@ -676,7 +676,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     }
 
     // The graph names the node its result comes from, through the same call the JSON document reads
-    // it with (`GCGraph::exitNodeRef`, src/runtime/graph.cpp#GCGraph::exitNode). The two dumps
+    // it with (the face names it `exit`; GraphView::exit). The two dumps
     // differ only in what they can say when there is none, and they say the same thing: a document
     // writes `null` (src/passes/trans/json/gir.cpp#dumpJsonRuntimeGraph, and the canonical document
     // before it), and this one writes the comment over the EXIT node and draws no edge into it --
@@ -825,8 +825,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         // arrays rather than from an input run (docs/design/effects/edges.cn.md 1.5). They are
         // drawn apart from the port edges and from each other: an order edge only orders (dotted,
         // no arrowhead filled in), a sync edge orders *and* is used (solid, diamond arrowhead).
-        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(nodeIndex)) {
-            if (!graph->containsNodeRef(edge.pred)) {
+        for (const camel::graph::NodeRef pred : graph->view().predecessors(nodeIndex, camel::graph::EdgeKind::Order)) {
+            if (!graph->containsNodeRef(pred)) {
                 continue;
             }
             if (!config_.rich) {
@@ -834,19 +834,19 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "{}{}{} -> {} [label=\"ORDER\", type=\"ORDER\"];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             } else {
                 res += std::format(
                     "{}{}{} -> {} [label=\"ORDER\", type=\"ORDER\", style=dotted];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             }
         }
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(nodeIndex)) {
-            if (!graph->containsNodeRef(edge.pred)) {
+        for (const camel::graph::NodeRef pred : graph->view().predecessors(nodeIndex, camel::graph::EdgeKind::Sync)) {
+            if (!graph->containsNodeRef(pred)) {
                 continue;
             }
             if (!config_.rich) {
@@ -854,7 +854,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "{}{}{} -> {} [label=\"SYNC\", type=\"SYNC\"];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             } else {
                 res += std::format(
@@ -862,7 +862,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "arrowhead=diamond];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             }
         }
@@ -921,7 +921,9 @@ std::string dumpCompactRuntimeGraph(camel::runtime::GCGraph *graph, const contex
 
 const camel::runtime::Program *
 GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    // The entry point hands over the graph as a value (`program->root()`); the dump does not name
+    // its type, only the face it reads it through.
+    auto *graph = program->root();
     program_                       = camel::runtime::ProgramHold(*context_, program);
     os << dumpGraph(graph);
     return nullptr;

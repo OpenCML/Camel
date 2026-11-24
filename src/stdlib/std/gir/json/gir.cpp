@@ -510,7 +510,7 @@ std::string dumpJsonRuntimeGraph(
 }
 const camel::runtime::Program *
 JsonGirDumpPass::apply(const camel::runtime::Program *program, std::ostream &out) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
     out << dumpJsonRuntimeGraph(*program, graph, context_, options_) << '\n';
     return nullptr;
 }
