@@ -24,14 +24,27 @@
  *                  says nothing was started and nothing was measured, and the plan tree was not
  *                  widened to fill it.
  *
+ *   `--gate`       the whole chain, not a part of it: a scratch tree is assembled here (this
+ *                  checkout's `test/tools`, `test/runner.mjs`, `plan-selection.json` and a plan, plus
+ *                  its `scripts/selection-cases.mjs`) and **its runner is made older than the
+ *                  caller** by renaming the `--list-cases` branch, which is exactly what a tree cut
+ *                  before that option did. The real `selection-cases.mjs` then lists that tree's
+ *                  cases, and what a gate would print is asserted: the version-mismatch sentence,
+ *                  and neither `refused this selection` nor `the cases this change selects could not
+ *                  be computed` -- the line that cost the merge position a round on 2026-11-24.
+ *                  The runner's refusal is painted red, and the first version of the consumer's
+ *                  branch never fired because of it: this case is why that is now known.
+ *
  * Each facet asserts its own sentence **and the absence of the other two**, so the check fails both
  * when a sentence goes missing and when two causes collapse into one sentence again. The exit codes
- * are asserted as they are (`1`, `2`, `2`): this check is about which words a reader gets, and it
- * does not move a code the gate reads.
+ * are asserted as they are (`1`, `2`, `2`, `2`): this check is about which words a reader gets, and
+ * it does not move a code the gate reads.
  *
- * Usage: node argv.mjs --unknown | --preflight | --empty
+ * Usage: node argv.mjs --unknown | --preflight | --empty | --gate
  */
 
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import url from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -68,6 +81,17 @@ const FACETS = {
         contains: ['--selection-empty', SENTENCES.empty],
         absent: ['unknown option', SENTENCES.preflight, 'refused this selection'],
     },
+    gate: {
+        exit: 2,
+        contains: [
+            "this tree's runner does not know --list-cases",
+            'this is not an empty selection',
+            '[ARGV] this tree is',
+        ],
+        // The two sentences a gate printed before this lane, one about a selection and one about the
+        // cases it could not compute: neither may come back for a version mismatch.
+        absent: ['refused this selection', 'the cases this change selects could not be computed'],
+    },
 }
 
 const facet = process.argv[2] === undefined ? null : process.argv[2].replace(/^--/, '')
@@ -77,16 +101,65 @@ if (!Object.hasOwn(FACETS, facet)) {
 }
 
 const spec = FACETS[facet]
-// `CAMEL_TEST_RESULTS_ROOT` is not set here on purpose: a refusal that never starts a run must not
-// need a place to write one, and the three facets below all refuse before the first test.
-const run = spawnSync(process.execPath, [RUNNER, ...spec.args], {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-    windowsHide: true,
-    env: { ...process.env, CAMEL_TEST_RUN_DIRS_KEEP: '1' },
-})
-const out = `${run.stdout || ''}${run.stderr || ''}`
+let run
+let out
+if (facet === 'gate') {
+    const tree = buildTreeOlderThanTheCaller()
+    try {
+        const list = path.join(tree, 'changed.txt')
+        fs.writeFileSync(list, 'test/plans/smoke/core.plan.toml\n')
+        run = spawnSync(process.execPath, [path.join(tree, 'scripts', 'selection-cases.mjs'), '--files', list], {
+            cwd: tree,
+            encoding: 'utf8',
+            windowsHide: true,
+        })
+        out = `${run.stdout || ''}${run.stderr || ''}`
+    } finally {
+        fs.rmSync(tree, { recursive: true, force: true })
+    }
+} else {
+    // `CAMEL_TEST_RESULTS_ROOT` is not set on purpose: a refusal that never starts a run must not
+    // need a place to write one, and these facets all refuse before the first test.
+    run = spawnSync(process.execPath, [RUNNER, ...spec.args], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        windowsHide: true,
+        env: { ...process.env, CAMEL_TEST_RUN_DIRS_KEEP: '1' },
+    })
+    out = `${run.stdout || ''}${run.stderr || ''}`
+}
 const problems = []
+
+/**
+ * A tree that predates `--list-cases`, assembled from this checkout: the same runner with that one
+ * branch renamed, so the option falls where it fell on 2026-11-24 -- into the parser's `-`-word
+ * refusal. Nothing else is synthesised: the consumer that runs against it is this checkout's own
+ * `scripts/selection-cases.mjs`, and the runner's words are this checkout's own refusal.
+ *
+ * The commit is real (a fresh repository with one commit and `origin/develop` pointing at it),
+ * because the consumer reads its `tree` and `base` from git and a tree it cannot read is a third
+ * kind of failure this case must not be measuring by accident.
+ */
+function buildTreeOlderThanTheCaller() {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-argv-gate-'))
+    for (const rel of ['test/tools', 'test/runner.mjs', 'test/plan-selection.json', 'test/plans/smoke/core.plan.toml', 'scripts/selection-cases.mjs']) {
+        fs.cpSync(path.join(REPO_ROOT, rel), path.join(tree, rel), { recursive: true })
+    }
+    const runner = path.join(tree, 'test', 'tools', 'run-tests.mjs')
+    const text = fs.readFileSync(runner, 'utf8')
+    const older = text.replace("arg === '--list-cases'", "arg === '--list-cases-not-in-this-tree'")
+    if (older === text) {
+        throw new Error('the runner has no --list-cases branch to remove, so no older tree can be built')
+    }
+    fs.writeFileSync(runner, older)
+    const git = (...args) => spawnSync('git', args, { cwd: tree, encoding: 'utf8', windowsHide: true })
+    git('init', '-q', '-b', 'develop')
+    git('config', 'core.autocrlf', 'false')
+    git('add', '-A')
+    git('-c', 'user.email=argv@invalid', '-c', 'user.name=argv', 'commit', '-q', '-m', 'a tree older than the caller')
+    git('update-ref', 'refs/remotes/origin/develop', 'HEAD')
+    return tree
+}
 
 if (run.error) {
     problems.push(`the runner could not be started: ${run.error.message}`)

@@ -53,3 +53,21 @@ expect_exit = 0
 expect_stdout_contains = ["PASS argv.empty"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 120000
+
+# The end-to-end one: the three above check the parts, this one checks the sentence a gate prints.
+# It assembles a tree from this checkout whose runner predates `--list-cases` and runs the real
+# `scripts/selection-cases.mjs` against it, so the assertion lands on the pair -- and on the fact
+# that the mismatch arrives as "this tree's runner does not know ... this is not an empty selection"
+# rather than as "refused this selection" or "the cases this change selects could not be computed".
+[[tests]]
+name = "argv.gate"
+desc = "A tree whose runner predates --list-cases, asked for its cases by this checkout's selection-cases.mjs, answers with the version mismatch itself: the tree's runner does not know the word, nothing was selected and this is not an empty selection -- and neither 'refused this selection' nor 'the cases this change selects could not be computed' appears."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/argv/argv.mjs"
+args = ["${case}", "--gate"]
+expect_exit = 0
+expect_stdout_contains = ["PASS argv.gate"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+# Copies `test/tools` (2 MB) and makes one commit: seconds, not minutes, but not milliseconds.
+timeout_ms = 180000
