@@ -74,10 +74,10 @@ class GraphIRPass {
     slot_t errorValue_ = NullSlot;
 };
 
-class NullGraphIRPass : public GraphIRPass {
+class NopPass : public GraphIRPass {
   public:
-    NullGraphIRPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
-    virtual ~NullGraphIRPass() = default;
+    NopPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
+    virtual ~NopPass() = default;
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;

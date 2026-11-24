@@ -17,7 +17,7 @@ import { is_function } from types
 // The program itself
 // -----------------------------------------------------------------------------
 
-/// A pass that does nothing: the graph is handed on unchanged.
+/// Discards the graph without executing it: returns an empty graph and has no effect.
 export func nop::<F>(f: F) => F! when is_function::<F>()
 
 /// Expands the macro operators over functions (`grad`, `with_grad`, `vjp` of autodiff) ahead of

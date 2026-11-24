@@ -127,7 +127,6 @@ const std::map<std::string, std::string> passAliases = {
     // Common translation and dump aliases
     // Names whose leaf is a keyword of the language: the declaration uses a name that can be
     // written, and the old spelling keeps resolving to it.
-    {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
     {"std::type::identity", "std::identitytype"},
     // `std::cxx` is not a shorthand of the C++ exporter, `std::cpp`:

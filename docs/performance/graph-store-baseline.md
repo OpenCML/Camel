@@ -16,8 +16,8 @@
 
 每个程序，八次独立的 `camel` 进程：
 
-- **编译**：`camel <程序> std::stats std::null`。`std::stats` 打印 `GRAPH_STATS`（图数、节点、边、图字节），`std::null` 消费掉程序所以不执行。记录整个进程的墙钟时间（含进程启动、模块加载、解析、建图）、峰值工作集，以及 `std::stats` 报的节点数与字节数。
-- **优化**：`camel <程序> std::cxx::inline std::null` 的峰值工作集；时间取 `camel --timeit std::cxx::inline/<轮数> <程序> --output-format json` 的 `mean_ms`。`--timeit` 每次迭代都重新编译，计时窗口只包住被计时的那个 pass。
+- **编译**：`camel <程序> std::stats std::nop`。`std::stats` 打印 `GRAPH_STATS`（图数、节点、边、图字节），`std::nop` 消费掉程序所以不执行。记录整个进程的墙钟时间（含进程启动、模块加载、解析、建图）、峰值工作集，以及 `std::stats` 报的节点数与字节数。
+- **优化**：`camel <程序> std::cxx::inline std::nop` 的峰值工作集；时间取 `camel --timeit std::cxx::inline/<轮数> <程序> --output-format json` 的 `mean_ms`。`--timeit` 每次迭代都重新编译，计时窗口只包住被计时的那个 pass。
 - **执行**：`std::nvm`、`std::fvm`、`std::jit` 各一次完整运行取峰值工作集；时间取 `--timeit std::<后端>/<轮数>` 的 `mean_ms`（同样只包住那个 pass，不含编译）。
 - **图字节**：`std::stats` 的 `bytes` 字段，按可达图累加：每个节点一条 `GCNode` 记录（16 字节）+ 每个输入引用（`gc_node_ref_t`）+ 节点载荷（`nodePayloadBytes`，按字对齐）。这是**图存储本身的账**，不是进程堆。字节/节点是它与节点数之商。
 - **峰值工作集**：进程结束后读 `GetProcessMemoryInfo` 的 `PeakWorkingSetSize`。句柄在进程启动时打开、结束后才关闭，Windows 因此仍保留进程对象，数字是精确峰值而不是采样。非 Windows 上这一列是 `n/a`。

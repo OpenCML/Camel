@@ -127,7 +127,7 @@ expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
 # expects, so an effect that goes missing shows up as a wrong line. A program whose effect is left in
 # no chain of its graph has no wrong line to show: it exits 0, its diagnostics are empty, and the
 # lines it no longer prints are simply not there. `nn.mnist` did exactly that -- `std::opt` dropped
-# `Iteration 0` -- and no plan noticed, because `nn.mnist` is run with `std::null` and compared with
+# `Iteration 0` -- and no plan noticed, because `nn.mnist` is run with `std::nop` and compared with
 # nothing.
 #
 # So this one compares the two runs with each other instead of with a golden: same binary, same host,
