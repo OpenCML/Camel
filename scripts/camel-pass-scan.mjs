@@ -34,6 +34,13 @@
 //                 see that line -- the command is assembled inside a helper that does not name the
 //                 binary on the line that writes the passes. Same class of answer as `--audit`:
 //                 not "the tree is wrong" but "this file did not read it".
+//     --blind     print the pipelines the reader's own rule cannot name: a line that writes the
+//                 binary as `CAMEL` carries a pass word and is a command, and the rule above looks
+//                 for `camel` or `EXE`, so none of these is in any count this file prints. Exit 3
+//                 when one exists -- again the class of answer that is about the reading, not the
+//                 tree. They are not reported as `need std::nop`: whether the program is meant to run
+//                 after that pass is a question about each line (the cpp tool compiles and then runs
+//                 what it compiled), so this mode names them and stops.
 //
 // The reader itself lives in scripts/camel-pass-pipelines.mjs, shared with the patch script so the
 // two cannot drift. It reads an element written each of the three ways a TOML array allows --
@@ -81,6 +88,7 @@ const check = args.includes('--check')
 const audit = args.includes('--audit')
 const redIndex = args.indexOf('--red')
 const red = redIndex >= 0 ? args.slice(redIndex + 1).filter((a) => !a.startsWith('--')) : []
+const blindMode = args.includes('--blind')
 
 // Every command line this tree writes, as { file, line, passes }.
 function pipelines() {
@@ -230,6 +238,10 @@ if (red.length > 0) {
     }
   }
   const blind = []
+  // One entry per line, not one per plan: a tool such as `test/tools/cppexec/run.py` is the `case` of
+  // a dozen plans, and a list that repeats the same line once per user of it reads as a bigger
+  // blindness than there is. The count is of lines the reader cannot see, so it is counted once.
+  const blindLines = new Set()
   console.log(`red-plan blindness: ${planFiles.length} plan(s) checked`)
   for (const planFile of planFiles) {
     const text = fs.readFileSync(planFile, 'utf8')
@@ -261,6 +273,9 @@ if (red.length > 0) {
         if (listText === null) return
         const elements = listText.split(',').map((s) => s.trim()).filter(Boolean)
         if (!elements.some((e) => !/^['"].*['"]$/.test(e))) return
+        const key = `${rel(script)}:${at}`
+        if (blindLines.has(key)) return
+        blindLines.add(key)
         blind.push({ file: rel(script), line: at, last, text: line.trim() })
       })
     }
@@ -271,6 +286,35 @@ if (red.length > 0) {
     for (const b of blind) console.log(`  ${b.file}:${b.line}  ${b.last}  ${b.text.slice(0, 120)}`)
     console.log('  these build the command inside a helper that does not name the binary on the line:')
     console.log('  `need std::nop: 0` is not a reading of them, and a red plan is what says so')
+    process.exit(3)
+  }
+}
+// `--blind`: the second way this file can report zero without having read anything is its own rule,
+// which names the binary as `camel` or `EXE` on the line. The tree also writes `CAMEL`, and a line
+// such as `run([CAMEL, file, 'std::nvm'])` is a command that nothing above counted -- measured on
+// this tree, 18 of them in 7 files (`test/tools/cppexec/run.py`, `test/tools/import-audit.mjs`, and
+// four case scripts). They are not added to `need std::nop`, because whether the program is meant to
+// run after that pass is a question about each line: the cpp tool compiles and then runs what it
+// compiled, so its last pass handing the graph on is the point of the tool. Naming them is the
+// honest reading, and it keeps `need std::nop: 0` from meaning two different things.
+if (blindMode) {
+  const unread = []
+  for (const dir of ['test/cases', 'test/tools', 'benchmarks', 'test/plans']) {
+    for (const file of walk(path.join(root, dir))) {
+      if (!/\.(mjs|js|py|ps1|toml)$/.test(file)) continue
+      fs.readFileSync(file, 'utf8').split('\n').forEach((line, index) => {
+        // A line the rule already reads is not unread, whatever else it spells.
+        if (!/\bCAMEL\b/.test(line) || /\bcamel\b|\bEXE\b/.test(line)) return
+        const strings = [...line.matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => m[1] ?? m[2])
+        if (strings.flatMap(passesOfElement).length === 0) return
+        unread.push({ file: rel(file), line: index + 1, text: line.trim() })
+      })
+    }
+  }
+  console.log(`unread: ${unread.length} line(s) name the binary as \`CAMEL\` and carry a pass word`)
+  for (const u of unread) console.log(`  ${u.file}:${u.line}  ${u.text.slice(0, 120)}`)
+  if (unread.length > 0) {
+    console.log('  the rule names `camel` and `EXE`, so none of these is inside the total above')
     process.exit(3)
   }
 }

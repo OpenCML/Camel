@@ -58,6 +58,12 @@ said zero. The mode exists because those two read the same on screen: `--list` o
 behind a run. Naming the invisible lines is the point; widening the reader until the count is
 non-zero would trade the admission for a number.
 
+`node scripts/camel-pass-scan.mjs --blind` names the other kind of line the rule cannot see at all:
+the tree also writes the binary as `CAMEL`, and `spawnSync(CAMEL, [file, 'std::opt', 'std::jgir'])`
+is a command that no count in that file includes (18 lines, 7 files, measured 2026-11-24). It exits 3
+and lists them; it is a report, not a to-do list, because whether the program is meant to run after
+that pass is a question about each line.
+
 ## Test layers
 
 - `fast`: `smoke` and `feat/**`, the ordinary acceptance layer.
