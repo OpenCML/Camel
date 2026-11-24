@@ -98,8 +98,10 @@ constructionKindOf(node_handle_t node, const Type *type) {
         if (!nodeIsKind(node, runtime::GCNodeKind::Oper) || type == nullptr) {
             return std::nullopt;
         }
-        const auto op = nodeGraphOf(node)->operTarget(node);
-        if (op == nullptr || op->uri() != ":op/fill") {
+        const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+        // A call written by URI alone records no declaration here, and it states no construction
+        // this helper can name: that is the answer every other node without one gets.
+        if (op == nullptr || (*op)->uri() != ":op/fill") {
             return std::nullopt;
         }
         return fillKindForType(const_cast<Type *>(type));
@@ -137,8 +139,8 @@ inline std::vector<std::pair<size_t, node_handle_t>> constructionValuesOf(node_h
     if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return values;
     }
-    const auto op = nodeGraphOf(node)->operTarget(node);
-    if (op == nullptr || op->uri() != ":op/fill") {
+    const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+    if (op == nullptr || (*op)->uri() != ":op/fill") {
         return values;
     }
     const auto norm = normInputsOf(node);
@@ -165,11 +167,11 @@ inline bool isMemberRead(node_handle_t node) {
     if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
+    const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
     if (op == nullptr) {
         return false;
     }
-    const std::string_view uri = op->uri();
+    const std::string_view uri = (*op)->uri();
     return uri == ":op/access" || uri == ":op/access_key";
 }
 
@@ -321,8 +323,8 @@ inline bool isCopyNode(node_handle_t node) {
     if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const auto op = nodeGraphOf(node)->operTarget(node);
-    return op != nullptr && op->uri() == ":op/copy";
+    const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+    return op != nullptr && (*op)->uri() == ":op/copy";
 }
 
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
@@ -731,10 +733,13 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
     if (kind == runtime::GCNodeKind::Oper) {
-        // The operator of a node being built is named by its target, not yet by a payload.
-        const auto &op = nodeGraphOf(node)->operTarget(node);
-        const auto id  = op == nullptr ? std::optional<camel::core::OperId>{}
-                                       : camel::core::OperatorTable::instance().lookup(op->uri());
+        // The operator is the target this builder recorded, or, for a call a pass wrote by URI
+        // alone, the one its payload names -- and neither kind of operator is known until the
+        // table answers for that URI (the comment above says what an unknown operator leaves out).
+        const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+        const auto id            = op == nullptr ? std::optional<camel::core::OperId>{}
+                                                 : camel::core::OperatorTable::instance().lookup(
+                                                       (*op)->uri());
         return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
     }
     return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
@@ -809,8 +814,8 @@ inline bool isFailCall(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const auto &op = nodeGraphOf(node)->operTarget(node);
-    return op != nullptr && op->uri() == camel::core::kFailOperatorUri;
+    const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+    return op != nullptr && (*op)->uri() == camel::core::kFailOperatorUri;
 }
 
 /// The chain link itself. No control edge: this is the pair as the model wants it, for a caller

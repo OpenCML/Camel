@@ -124,7 +124,12 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
         }
     }
     if (header && header->kind == GCNodeKind::Oper) {
-        j["operName"] = graph->operTarget(node)->name();
+        // The name the debugger shows for a call. A call a pass wrote by URI alone records no
+        // declaration in the builder, so there is no name to show and the key is left out -- the
+        // node's label already carries the URI the payload names (GCOperBody::uri()).
+        if (const oper_idx_ptr_t *op = graph->operTarget(node); op != nullptr) {
+            j["operName"] = (*op)->name();
+        }
     }
     if (header && header->kind == GCNodeKind::Loop) {
         const auto &draft = graph->transaction().graph();
