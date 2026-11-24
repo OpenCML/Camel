@@ -48,6 +48,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { READING_NORMAL_VERSION } from '../test/tools/reading-normal.mjs'
+import { planSetHash, planSetNames } from './plan-set.mjs'
 
 /** The two lines the plan stage brackets its rows with (`internal/tools/camel-remote.ps1`). */
 const ROWS_START = '__CAMEL_REMOTE_ROWS_START__'
@@ -167,19 +168,10 @@ const treeSha = (arg('--tree') || '').trim()
 const storeFile = process.argv.includes('--accept')
 const probeOnly = process.argv.includes('--probe')
 
-function planSetHash(names) {
-    // Order-independent and content-sensitive: the same plans listed in another order are the same
-    // set, and one plan added or removed is a different one.
-    const list = [...new Set(names.map((n) => n.trim()).filter(Boolean))].sort()
-    let h = 0
-    for (const ch of list.join('\n')) h = (h * 31 + ch.codePointAt(0)) >>> 0
-    return `${list.length}-${h.toString(16)}`
-}
-
-/** The names `--plans` names: a file of one name per line, or a comma list. */
-function planSetNames(list) {
-    return fs.existsSync(list) ? fs.readFileSync(list, 'utf8').split('\n') : list.split(',')
-}
+// The plan set's hash and its names live in `plan-set.mjs`, not here: `merge-record.mjs` reads both
+// out of the `diff.json` this program writes and recomputes the hash from the names to prove the
+// document says which plans were read. One definition, so the cache key below and the record's
+// `planSet.hash` cannot drift apart -- and a copy in each file would agree until one of them changed.
 
 /** A target as both sides spell it: trimmed, forward slashes, no trailing slash. */
 const normTarget = (s) => String(s).trim().replace(/\\/g, '/').replace(/\/+$/, '')
