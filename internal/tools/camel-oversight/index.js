@@ -291,7 +291,16 @@ export function apply(ctx, rawConfig) {
             }),
         )
 
-    const pending = () => [...delivered.values()].filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id)).map((entry) => entry.id)
+    // A dispatch is owed an answer once the coordinator has read it. One still waiting in its queue is
+    // listed by `queuedDispatches`, not here: naming its id before its text arrives asks for an
+    // answer to a message the coordinator cannot see.
+    const pending = () => {
+        const agent = target()
+        return [...delivered.values()]
+            .filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id))
+            .filter((entry) => !(agent && entry.messageId && stillQueued(agent, entry.messageId)))
+            .map((entry) => entry.id)
+    }
 
     // Whether a message is still waiting in the agent's queue, unread.
     const stillQueued = (agent, messageId) => {
