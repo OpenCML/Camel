@@ -32,7 +32,10 @@ case = "../../../cases/opt/generic/graph_identity.cml"
 args = ["${case}", "test::view_types", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["[VT] graph 0 nodes=", " static=", " static-untyped=0 typed=", "[VT] agree=1 graphs=", " untyped=0 typed=", " draft-differ=0"]
+# The reading itself: two nodes of this program sit in a graph's static area and both answer a
+# type through the face, no node answers none, and a draft of every graph answers the same type node
+# by node. The counts are the point, so they are pinned: a run that read fewer nodes cannot pass.
+expect_output_contains = ["[VT] graph 0 nodes=2 static=1 static-untyped=0 typed=2", "[VT] graph 3 nodes=5 static=1 static-untyped=0 typed=5", "[VT] draft graph=3 nodes=5 differ=0", "[VT] agree=1 graphs=4 nodes=10 static=2 untyped=0 typed=10 draft-nodes=10 draft-differ=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -44,6 +47,11 @@ case = "../../../cases/opt/generic/graph_identity.cml"
 args = ["${case}", "test::program_identity", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["[PI] graph 0 holds=1 program=1 nodes=", "[PI] call graph=", " answer=1 routes=1", "[PI] cross graph=", " answer=none", "[PI] foreign draft=1 holds=0 program=0", "[PI] sameness callees=", " sites=", " shared=2", "[PI] agree=1 graphs=", " crossed=0 routes=", " foreign=1"]
+# The reading itself: this program holds all four of its graphs and the context names it for each;
+# its three call sites each answer a callee and the two routes name one value; a ref asked of another
+# graph where it is not a call answers none; two places in the source named `twice` and both answered
+# the same graph (`shared=2`); a draft of the root -- the same nodes, another identity -- is held by
+# no program and named by none; and the totals say the readings were taken on a program with calls.
+expect_output_contains = ["[PI] graph 3 holds=1 program=1 nodes=5", "[PI] call graph=3 ref=2 answer=1 routes=1", "[PI] cross graph=3 ref=2 other=0 answer=none", "[PI] foreign draft=1 holds=0 program=0", "[PI] sameness callees=2 sites=3 shared=2", "[PI] agree=1 graphs=4 calls=3 crossed=0 routes=3 retained=2 foreign=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
