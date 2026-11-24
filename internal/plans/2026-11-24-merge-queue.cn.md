@@ -53,3 +53,19 @@
 - 两项相干（造一对改同一文件的探针车道）：进同一个合并位、按顺序合；让前一项故意红，后一项不会被带进 `integration`。
 - 晋级：`develop` 每次前进前都有一份全快层读数，与上一次逐条比过。
 - 一天下来报：已交回到进 `integration` 的中位等待时间、`integration` 每两小时前进几次、`develop` 晋级几次。
+
+## 晋级：`integration` → `develop`
+
+`develop` 只在晋级时前进，而晋级是**快进**，不是合并：`integration` 里已经有 `develop` 的全部历史，所以推过去不带任何新提交。
+
+三步，按顺序，第二步可以说不：
+
+1. **把 `develop` 尖端合进 `integration`**（第一父 = `integration` 当前尖端），使 `develop` 是 `integration` 的祖先。没做到这一点，后面的快进会变成合并。
+2. **在 `integration` 尖端跑一遍整层 `--tier fast`**，红表与 `develop` 尖端上一次的红表逐条比。**只有「新增红 = 0」才进第三步。** 新增红 > 0 就停，报红表，不推——晋级不成功比晋级错了好。
+3. `git push origin origin/integration:refs/heads/develop`（快进），再核对 `git ls-remote origin refs/heads/develop` 的 sha 等于 `integration` 的 sha。
+
+报一行：`promoted <sha> | fast: <N> cases, <pass>/<fail> | new reds: 0 | slot 3 | queue <秒>`。
+
+**多久一次**：`integration` 前进后三小时内，或攒够若干笔（以队列里已交回待合的车道数计），先到者为准。两次晋级之间，`develop` 不前进——插件、钩子与规则读的是 `origin/develop`，所以上游那批修正要晋级之后才生效，而这段时间里它们报出的数仍是旧的判据。
+
+**为什么要比红表而不是只看红数**：整层跑一次会带上上游所有改动（判据修正、唤醒、收尾规矩），那些改动第一次被整层跑时，红的位置会动；只看红数会把「换了一条红」读成「没有新增红」。
