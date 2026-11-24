@@ -128,8 +128,14 @@ if ($Branch.Count -eq 0) { Write-Host '[batch] -Branch names no lane'; exit 1 }
 # ValidateSet refuses it before this line is reached, and this refuses it again for any caller that
 # skipped the parameter. `$script:targetBranch` is read by Stop-With, which can run before the start
 # point is asserted, so it is set here and never defaulted anywhere else.
-$target = Resolve-BatchTarget -Target $Target
-$script:targetBranch = $target.Name
+#
+# The resolved object is `$targetInfo` and not `$target`: PowerShell variable names are
+# case-insensitive, so `$target` IS the `-Target` parameter, and assigning a PSCustomObject to it
+# re-runs the parameter's [ValidateSet] -- the run then dies on the assignment with "cannot validate
+# ... as a valid value for variable Target", before a single git command. That is what the first
+# end-to-end run of this script did.
+$targetInfo = Resolve-BatchTarget -Target $Target
+$script:targetBranch = $targetInfo.Name
 
 $script:pushHappened = $false
 $script:pushedSha = ''
@@ -234,7 +240,7 @@ if (-not (Test-Path -LiteralPath $cfgPath)) {
 $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
 if (-not $MergeWorktree) { $MergeWorktree = $cfg.mergeWorktree }
 if (-not $MergeWorktree) {
-    Stop-With 'the settings file names no mergeWorktree' "Add ``mergeWorktree`` to ${cfgPath}: only that tree may push $($target.Name), so the batch pushes from it and nowhere else." 2
+    Stop-With 'the settings file names no mergeWorktree' "Add ``mergeWorktree`` to ${cfgPath}: only that tree may push $($targetInfo.Name), so the batch pushes from it and nowhere else." 2
 }
 $MergeWorktree = "$MergeWorktree".TrimEnd('\', '/')
 if ($cfg.sshHost) { $script:sshHost = $cfg.sshHost }
@@ -268,17 +274,17 @@ try {
         Stop-With 'git fetch failed' "A batch against a stale origin is a batch against what you think is there. $($fetch.Text)" 2
     }
 
-    $baseResolve = Invoke-Git $ToolTree @('rev-parse', '--verify', "$($target.Origin)^{commit}")
+    $baseResolve = Invoke-Git $ToolTree @('rev-parse', '--verify', "$($targetInfo.Origin)^{commit}")
     if ($baseResolve.Code -ne 0 -or $baseResolve.Text -notmatch '^[0-9a-f]{40}$') {
-        Stop-With "$($target.Origin) does not resolve to a commit" "The batch lands on $($target.Name), and the base it is measured against is the tip of $($target.Origin): a target branch that does not exist on origin has nothing to batch onto. Nothing was merged." 2
+        Stop-With "$($targetInfo.Origin) does not resolve to a commit" "The batch lands on $($targetInfo.Name), and the base it is measured against is the tip of $($targetInfo.Origin): a target branch that does not exist on origin has nothing to batch onto. Nothing was merged." 2
     }
     $script:base = $baseResolve.Text
     $script:baseShort = $script:base.Substring(0, 9)
     $base = $script:base
 
     Write-Host ''
-    Write-Host "[batch] $($target.Statement) -- the branch this batch writes and pushes" -ForegroundColor Cyan
-    Write-Host "[batch] $($Branch.Count) lane(s) against $($target.Name) $($script:baseShort)"
+    Write-Host "[batch] $($targetInfo.Statement) -- the branch this batch writes and pushes" -ForegroundColor Cyan
+    Write-Host "[batch] $($Branch.Count) lane(s) against $($targetInfo.Name) $($script:baseShort)"
 
     # --- 1. the lanes, read as numbers before anything is merged -------------
     # Every lane's changed-file set is the lane's OWN changes: `merge-base..tip` is the three-dot
@@ -295,11 +301,11 @@ try {
 
         $ahead = [int](Invoke-Git $ToolTree @('rev-list', '--count', "$base..$tipSha")).Text
         if ($ahead -le 0) {
-            Stop-With "$trimmed has no commit that $($target.Name) does not already have" 'Nothing to merge: an empty merge commit would be a claim with no content.' 1
+            Stop-With "$trimmed has no commit that $($targetInfo.Name) does not already have" 'Nothing to merge: an empty merge commit would be a claim with no content.' 1
         }
         $behind = [int](Invoke-Git $ToolTree @('rev-list', '--count', "$tipSha..$base")).Text
         $common = (Invoke-Git $ToolTree @('merge-base', $base, $tipSha)).Text
-        if (-not $common) { Stop-With "$trimmed shares no merge-base with $($target.Origin)" 'An unrelated history has no "its changes" to read.' 1 }
+        if (-not $common) { Stop-With "$trimmed shares no merge-base with $($targetInfo.Origin)" 'An unrelated history has no "its changes" to read.' 1 }
 
         $files = @((Invoke-Git $ToolTree @('diff', '--name-only', $common, $tipSha)).Lines |
             ForEach-Object { "$_".Trim().Replace('\', '/') } | Where-Object { $_ })
@@ -374,7 +380,7 @@ try {
 
     if ($WhatIf) {
         Write-Host ''
-        Write-Host "[batch] -WhatIf: $($lanes.Count) lane(s) would be merged into $($target.Name) in one temporary tree at $($script:baseShort)" -ForegroundColor Yellow
+        Write-Host "[batch] -WhatIf: $($lanes.Count) lane(s) would be merged into $($targetInfo.Name) in one temporary tree at $($script:baseShort)" -ForegroundColor Yellow
         Write-Host "[batch] and $($planSet.Count) plan(s) would be run twice -- once on $($script:baseShort), once on the merge."
         exit 0
     }
@@ -415,7 +421,7 @@ try {
 
     $script:loadStart = Get-LoadAverage
     Write-Host ''
-    Write-Host "[batch] baseline tree: $baseTree ($($target.Name) $($script:baseShort), a separate tree from the merge)"
+    Write-Host "[batch] baseline tree: $baseTree ($($targetInfo.Name) $($script:baseShort), a separate tree from the merge)"
     Initialize-Tree -Path $baseTree -BranchName 'probe/batch-base' -Sha $base
 
     # --- 5. measure one tree with the plan set, given explicitly ------------
@@ -517,7 +523,7 @@ try {
                 $conflicted = @((Invoke-Git $script:mergeTree @('diff', '--name-only', '--diff-filter=U')).Lines | Where-Object { "$_".Trim() })
                 if ($conflicted.Count -gt 0) {
                     Invoke-Git $script:mergeTree @('merge', '--abort') | Out-Null
-                    Stop-With "$($lane.Name) does not merge cleanly into the batch" ("{0} file(s) conflicted: {1}. The lanes touch no file in common, so this is {2} having moved under one of them: resolve it in that lane, push it, and batch again." -f $conflicted.Count, ($conflicted -join ', '), $target.Name) 1
+                    Stop-With "$($lane.Name) does not merge cleanly into the batch" ("{0} file(s) conflicted: {1}. The lanes touch no file in common, so this is {2} having moved under one of them: resolve it in that lane, push it, and batch again." -f $conflicted.Count, ($conflicted -join ', '), $targetInfo.Name) 1
                 }
                 Stop-With "git merge exited $($merge.Code) for $($lane.Name)" "git merge exited non-zero with no conflicted file -- the shape that reads like success. $($merge.Text)" 1
             }
@@ -656,7 +662,7 @@ try {
     $headers = @(& node (Join-Path $ToolTree 'scripts\headers.mjs') --check 2>&1)
     if ($LASTEXITCODE -ne 0) {
         $headers | Select-Object -Last 4 | ForEach-Object { "    $_" }
-        Stop-With 'the header check failed' "A file without its two-line header does not go to $($target.Name): it stops a whole CI run before the build starts." 1
+        Stop-With 'the header check failed' "A file without its two-line header does not go to $($targetInfo.Name): it stops a whole CI run before the build starts." 1
     }
     Write-Host '[batch] headers: ok'
 
@@ -689,7 +695,7 @@ try {
     # ones, and the tip whose tree the readings came off -- because a batch measures ONCE, on the
     # tip, and a record that let a reader believe each merge commit was measured on its own tree
     # would be the quieter lie. The bisect can then walk back to a single lane by name.
-    $baselineSource = if ($probeExit -eq 0) { "cached: measured earlier on the first parent $($script:baseShort) of $($target.Name)" } else { "measured in $baseTree at the first parent of $($target.Name), in this batch" }
+    $baselineSource = if ($probeExit -eq 0) { "cached: measured earlier on the first parent $($script:baseShort) of $($targetInfo.Name)" } else { "measured in $baseTree at the first parent of $($targetInfo.Name), in this batch" }
     $batchLaneArgs = @()
     foreach ($m in $built.Merges) { $batchLaneArgs += @('--batch-lane', $m.Lane.Name) }
     foreach ($m in $built.Merges) {
@@ -717,9 +723,9 @@ try {
     # names and from no other. Both refs below are spelled from -Target.
     function Get-PushVerdict {
         if (-not (Test-Path -LiteralPath $MergeWorktree)) {
-            return [pscustomobject]@{ Ok = $false; Why = "the merge worktree $MergeWorktree does not exist; the settings file's mergeWorktree names the tree that pushes $($target.Name)" }
+            return [pscustomobject]@{ Ok = $false; Why = "the merge worktree $MergeWorktree does not exist; the settings file's mergeWorktree names the tree that pushes $($targetInfo.Name)" }
         }
-        $localTarget = Invoke-Git $MergeWorktree @('rev-parse', '--verify', '--quiet', "refs/heads/$($target.Name)^{commit}")
+        $localTarget = Invoke-Git $MergeWorktree @('rev-parse', '--verify', '--quiet', "refs/heads/$($targetInfo.Name)^{commit}")
         if ($localTarget.Code -ne 0 -or $localTarget.Text -eq $base) { return [pscustomobject]@{ Ok = $true; Why = '' } }
         $inBatch = Invoke-Git $MergeWorktree @('merge-base', '--is-ancestor', $localTarget.Text, $script:mergeTip)
         if ($inBatch.Code -eq 0) { return [pscustomobject]@{ Ok = $true; Why = '' } }
@@ -727,13 +733,13 @@ try {
         # fast-forward on origin, so it would be accepted -- and it would leave that checkout's
         # target branch diverged from origin, which is somebody else's work to reconcile. That is the
         # one state a merge position must not create from a side lane, so it is refused and named.
-        $why = "That $($target.Name) carries commits this batch does not, so pushing the batch would leave it diverged.`n" +
+        $why = "That $($targetInfo.Name) carries commits this batch does not, so pushing the batch would leave it diverged.`n" +
         "  Finish that push first (agents/dispatch.md 8.1: already merged and not pushed is more expensive`n" +
-        "  than not merged), then run this batch again -- a batch based on an older $($target.Name) is not a`n" +
+        "  than not merged), then run this batch again -- a batch based on an older $($targetInfo.Name) is not a`n" +
         "  fast-forward. The merged tree is kept at $($script:mergeTree) ($($script:mergeTip)), and this is`n" +
         "  the push it would have run:`n" +
-        "      git -C $MergeWorktree push origin $($script:mergeTip):$($target.Push)"
-        return [pscustomobject]@{ Ok = $false; Why = "the merge worktree's $($target.Name) is $($localTarget.Text.Substring(0, 9)) and the batch's first parent is $($script:baseShort)`n  $why" }
+        "      git -C $MergeWorktree push origin $($script:mergeTip):$($targetInfo.Push)"
+        return [pscustomobject]@{ Ok = $false; Why = "the merge worktree's $($targetInfo.Name) is $($localTarget.Text.Substring(0, 9)) and the batch's first parent is $($script:baseShort)`n  $why" }
     }
 
     $verdict = Get-PushVerdict
@@ -747,7 +753,7 @@ try {
             Write-Host '[batch]   and a push would be refused anyway:' -ForegroundColor Yellow
             Write-Host "  $($verdict.Why)"
         }
-        Write-Host "[batch]   git -C $MergeWorktree push origin $($script:mergeTip):$($target.Push)"
+        Write-Host "[batch]   git -C $MergeWorktree push origin $($script:mergeTip):$($targetInfo.Push)"
         $script:mergesPushed = $built.Merges.Count
         Write-BatchSummary
         exit 0
@@ -755,14 +761,14 @@ try {
 
     if (-not $verdict.Ok) { Stop-With "the push was refused before it ran" $verdict.Why 1 }
 
-    $remoteNow = ((& git -C $ToolTree ls-remote origin $($target.Remote)) -split "`t") | Select-Object -First 1
+    $remoteNow = ((& git -C $ToolTree ls-remote origin $($targetInfo.Remote)) -split "`t") | Select-Object -First 1
     if ($remoteNow -ne $base) {
-        Stop-With "$($target.Origin) moved to $remoteNow while this batch was being measured" "The comparison was against $($script:baseShort), so a push now would publish a tree nothing compared. Run the batch again against the new $($target.Name)." 2
+        Stop-With "$($targetInfo.Origin) moved to $remoteNow while this batch was being measured" "The comparison was against $($script:baseShort), so a push now would publish a tree nothing compared. Run the batch again against the new $($targetInfo.Name)." 2
     }
 
     $pushOk = $false
     for ($attempt = 1; $attempt -le 3; $attempt++) {
-        $push = @(& git -C $MergeWorktree push origin "$($script:mergeTip):$($target.Push)" 2>&1)
+        $push = @(& git -C $MergeWorktree push origin "$($script:mergeTip):$($targetInfo.Push)" 2>&1)
         if ($LASTEXITCODE -eq 0) { $pushOk = $true; break }
         $push | Select-Object -Last 2 | ForEach-Object { "    $_" }
         Start-Sleep -Seconds 4
@@ -778,20 +784,20 @@ try {
     $script:pushedSha = $script:mergeTip
     $script:mergesPushed = $built.Merges.Count
 
-    $remoteAfter = ((& git -C $ToolTree ls-remote origin $($target.Remote)) -split "`t") | Select-Object -First 1
+    $remoteAfter = ((& git -C $ToolTree ls-remote origin $($targetInfo.Remote)) -split "`t") | Select-Object -First 1
     if ($remoteAfter -ne $script:mergeTip) {
-        Stop-With "$($target.Origin) is not the commit just pushed" "local $($script:mergeTip), remote $remoteAfter" 1
+        Stop-With "$($targetInfo.Origin) is not the commit just pushed" "local $($script:mergeTip), remote $remoteAfter" 1
     }
     Write-Host ''
-    Write-Host "[batch] pushed $($script:mergeTip.Substring(0, 9)) to $($target.Name) ($($built.Merges.Count) merge commit(s))" -ForegroundColor Green
+    Write-Host "[batch] pushed $($script:mergeTip.Substring(0, 9)) to $($targetInfo.Name) ($($built.Merges.Count) merge commit(s))" -ForegroundColor Green
 
     # --- 12. the trees go, and only after the push -------------------------
     # Deletion judged by a rule and not by "it looks unused": the merge worktree's target branch must
     # be the commit just pushed, which is also the only reading under which this tree holds nothing
     # that exists nowhere else.
-    $targetAfter = (Invoke-Git $MergeWorktree @('rev-parse', '--verify', '--quiet', "refs/heads/$($target.Name)^{commit}")).Text
+    $targetAfter = (Invoke-Git $MergeWorktree @('rev-parse', '--verify', '--quiet', "refs/heads/$($targetInfo.Name)^{commit}")).Text
     if ($targetAfter -and $targetAfter -ne $script:mergeTip) {
-        Write-Host "[batch] warning: keeping $ScratchRoot -- the merge worktree's $($target.Name) is $($targetAfter.Substring(0, 9)), not the pushed $($script:mergeTip.Substring(0, 9))" -ForegroundColor Yellow
+        Write-Host "[batch] warning: keeping $ScratchRoot -- the merge worktree's $($targetInfo.Name) is $($targetAfter.Substring(0, 9)), not the pushed $($script:mergeTip.Substring(0, 9))" -ForegroundColor Yellow
         Write-Host '[batch]   that is somebody''s unpushed work in that checkout, not this run''s; the trees are kept.'
     } elseif ($script:createdTrees.Count -gt 0) {
         foreach ($path in $script:createdTrees) {
