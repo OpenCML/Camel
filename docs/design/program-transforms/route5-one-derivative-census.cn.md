@@ -64,7 +64,7 @@ $files | ForEach-Object { "{0,-46} {1,6}" -f $_, (Get-Content $_).Count }
 | 路径 | 行数 | 归属 | 管什么 |
 |---|---:|---|---|
 | `src/stdlib/autodiff/pullback.cpp` | 5326 | 引擎（主体） | 前向改写、反向发射、循环磁带、`findRule` 按 URI 查规则；16 处 `failAt`/`throwRuntimeFault` |
-| `src/stdlib/autodiff/operators.cpp` | 290 | 引擎（算子） | 注册 `autodiff:grad`、`grad_aux`、`with_grad`、`with_grad_aux`、`vjp` 标签读取；`GradResolver` 算签名；`NotDifferentiable` 由这里发出 |
+| `src/stdlib/autodiff/operators.cpp` | 278 | 引擎（算子） | 注册 `autodiff:grad`、`grad_aux`、`with_grad`、`with_grad_aux`、`vjp` 标签读取；`GradResolver` 算签名；`NotDifferentiable` 由这里发出（第 1b 步之后 `stop_gradient` 那一条已不在这里） |
 | `src/stdlib/autodiff/operators.h` | 37 | 引擎 | |
 | `src/stdlib/autodiff/pullback.h` | 84 | 引擎 | |
 | `src/stdlib/autodiff/module.cpp` / `.h` | 66 / 19 | 引擎（登记） | 模块与算子表的入口 |
@@ -79,13 +79,20 @@ $files | ForEach-Object { "{0,-46} {1,6}" -f $_, (Get-Content $_).Count }
 > 190 → **71** 行（只剩 `stop_gradient` 与模块注释），新增 `src/stdlib/laws.cml` **144** 行
 > （含文件头与模块注释，14 个函数体逐字未改）；引擎侧小计 **6178 → 6059**，库侧 **3138 → 3282**。
 > 命令：`(Get-Content src/stdlib/autodiff.cml).Count`、`(Get-Content src/stdlib/laws.cml).Count`。
+>
+> **第 1b 步之后（同一分支，晚一轮）。** `stop_gradient` 的声明、内核与注册一起搬到 `laws`：
+> `src/stdlib/autodiff.cml` 71 → **62**（模块注释，不再声明任何名字）、`src/stdlib/laws.cml` 144 → **158**
+> （多出 `stop_gradient` 的注释与声明）、新增 C++ 半边 `src/stdlib/laws/` **150** 行
+> （`operators.cpp` 52 / `module.cpp` 53 / `operators.h` 33 / `module.h` 12）、
+> `src/stdlib/autodiff/operators.cpp` 290 → **278**、`src/stdlib/autodiff/` 目录 **6059 → 5971**。
+> 引擎侧合计（目录 + `autodiff.cml`）**6059+71=6130 → 5971+62=6033**；库侧 **3282 → 3282+14+150=3446**。
 
 **C++ 规则表本身不在 `autodiff/` 里。** 它是 `DerivativeRegistry` 的注册，散在 10 个文件里
 （`setVjp(defs, "<name>", &fn)` 72 处 + `setRule(uri, fn)` 的调用点）：
 
 ```powershell
 git grep -c 'setVjp(' -- 'src/*'   # 72 处注册（含 vjp.h 的定义行）
-git grep -n 'setRule(' -- 'src/*'  # derivative.cpp 27 / math/module.cpp 4 / autodiff/operators.cpp 1
+git grep -n 'setRule(' -- 'src/*'  # derivative.cpp 27 / math/module.cpp 4 / laws/operators.cpp 1
 node scripts/vjp-parity.mjs        # 权威读数：122 个注册，压成 104 个键
 ```
 
@@ -100,7 +107,7 @@ node scripts/vjp-parity.mjs        # 权威读数：122 个注册，压成 104 �
 | `src/stdlib/tensor/ops/registry.cpp` | 把 `setVjp(defs, "<name>")` 变成 `tensor:<name>` |
 | `src/stdlib/nn/tensor_ops.cpp` | 7 处（`conv2d`、`batch_norm_train`、两个 pool、`embedding`、两个 cross-entropy） |
 | `src/stdlib/math/module.cpp` | 4 处（`erf`/`erfc` 的 `_d`/`_f`） |
-| `src/stdlib/autodiff/operators.cpp` | 1 处 |
+| `src/stdlib/laws/operators.cpp` | 1 处（第 1b 步搬来的 `stop_gradient` → `noGradient`） |
 
 **对照脚本**
 
@@ -140,22 +147,37 @@ git grep -n 'from autodiff' -- 'src/*'
 ```
 
 即：库的数学律（`add_tangent` 这一批）与 `stop_gradient` 挤在同一个 `from autodiff` 里，
-库的规则集是这批律唯一的读者。**第 1 步搬完之后（本分支）**，同一条命令的结果变成：
+库的规则集是这批律唯一的读者。**第 1 步搬完之后（本分支）**，同一条命令的结果变成
+两条 `from autodiff` 各只剩一个名字：
 
 ```powershell
 git grep -n 'from autodiff' -- 'src/*'
-# src/stdlib/rulesets/jvp.cml:23        import { stop_gradient } from autodiff
-# src/stdlib/rulesets/transpose.cml:40  import { stop_gradient } from autodiff
+# （第 1 步之后）src/stdlib/rulesets/jvp.cml:23        import { stop_gradient } from autodiff
+# （第 1 步之后）src/stdlib/rulesets/transpose.cml:40  import { stop_gradient } from autodiff
 git grep -n 'from laws' -- 'src/*'
-# src/stdlib/rulesets/jvp.cml:22        import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from laws
-# src/stdlib/rulesets/transpose.cml:29  import { ... add_cotangent … sub_cotangent_c } from laws
+# src/stdlib/rulesets/jvp.cml:22        import { add_tangent, div_tangent, … } from laws
+# src/stdlib/rulesets/transpose.cml:29  import { … add_cotangent … sub_cotangent_c } from laws
 ```
 
-**律那一半搬走了，`stop_gradient` 那一半搬不走**：它的声明在 `autodiff.cml`，而它的内核是
-`autodiff:stop_gradient`，登记在 `src/stdlib/autodiff/operators.cpp`（`stopGradientKernel`，两处
-元数据注册同在这个文件）。声明搬家会把算子 URI 从 `autodiff:stop_gradient` 变成 `laws:stop_gradient`，
-而没有任何内核用新 URI 注册——那不是搬归属，是改语义，所以它留在原地，等删引擎那一步连同内核一起
-重新落位（§4 第 1b 步）。这也是为什么本页把这一条从"两条 import"改写成"一条律的边 + 一条内核的边"。
+**第 1b 步之后（同一个分支，晚一轮）**，读数变成 **0**：
+
+```powershell
+git grep -n 'from autodiff' -- 'src/*'
+# （空：src/ 下没有一行）
+git grep -n 'from laws' -- 'src/*'
+# src/stdlib/rulesets/jvp.cml:22        import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_tangent } from laws
+# src/stdlib/rulesets/transpose.cml:29  import { add_cotangent, … , stop_gradient, … sub_cotangent_c } from laws
+```
+
+**第 1 步搬走了律，`stop_gradient` 那一半搬不走；第 1b 步把内核一起搬过去，它才走。** 理由在
+`d6503a197c` 上是这样：声明在 `autodiff.cml`，内核与两处元数据注册（`autodiff:stop_gradient`）
+在 `src/stdlib/autodiff/operators.cpp`。第 1 步只搬声明会把 URI 变成 `laws:stop_gradient` 而
+没有任何内核用新 URI 注册——那不是搬归属，是改语义，所以当时留在原地。第 1b 步的做法是
+**声明 + 内核 + 注册一起搬**：新模块 `laws` 的 C++ 半边（`src/stdlib/laws/`，一个恒等内核、
+一条 `noGradient` 规则），URI 随之从 `autodiff:stop_gradient` 改名为 `laws:stop_gradient`。
+改名是**语义可见**的（`docs/design-principles.cn.md` 第 660 行：URI 的语法只有 `模块:路径`，
+`std` 留给核心，登记时检查冒号前的模块就是正在登记的模块），所以这是本轮唯一一处需要
+在提交说明里写明"URI 变了、为什么变"的改动。
 
 ### b) 测试自己在用（`test/`）：**897 行 / 414 个文件**
 
@@ -267,7 +289,7 @@ exempt, 0 new, stale=0
 | # | 步骤 | 依赖 | 能不能并行 | 为什么在这一步 |
 |---|---|---|---|---|
 | ~~1~~ | ~~把 `src/stdlib/autodiff.cml` 里的局部律数学搬出引擎归属~~ **2026-11-25 已做**：14 个律函数逐字搬到新模块 `src/stdlib/laws.cml`（144 行），`autodiff.cml` 190 → 71 行只留 `stop_gradient`；两条 `from …` 各拆成一条 `from laws` + 一条 `from autodiff` | 无 | **已并行完成** | 见 §2 a 的两段读数：律那一半搬走了，`stop_gradient` 那一半搬不走（内核是 `autodiff:stop_gradient`） |
-| 1b | 把 `stop_gradient` 的声明与内核一起落位到库侧：`src/stdlib/autodiff/operators.cpp` 里的 `stopGradientKernel` 与两处元数据注册（`autodiff:stop_gradient`）搬进一个新模块或 `laws`，URI 随之改名，随后全树改 `import ... from laws` | 1 | **可**，与 2、3 并行 | 这是"删引擎不删库"的最后一条硬边；它要动 C++ 与一个算子 URI，所以不能并进第 1 步的零语义变化 |
+| ~~1b~~ | ~~把 `stop_gradient` 的声明与内核一起落位到库侧~~ **2026-11-25 已做**：声明进 `laws.cml`，内核（恒等）与 `noGradient` 规则进新模块 `src/stdlib/laws/`（150 行 C++），URI `autodiff:stop_gradient` → **`laws:stop_gradient`**；12 个 `.cml` 的 import 跟改（含 1 个 benchmark），onnx 的 lowering 改名，`git grep 'from autodiff' -- src/*` = **0** | 1 | **已并行完成** | 见 §2 a 的第三段读数与 §1 的 1b 数字；URI 改名按 `docs/design-principles.cn.md` 第 660 行（`模块:路径`，登记时检查冒号前的模块就是正在登记的模块）|
 | 2 | 合并 `Gradient<F>` / `GradientOf<F>` 两个名字（`types.cml`），以及决定 `ValueAndGradient*` 家族归谁 | 无 | **可**，与 1b、3 并行 | 一个类型两个名字是读者要学的一种拼法；引擎一删，`Gradient<F>` 就没人写了 |
 | 3 | 给 15 个"引擎有、库无"的律补 `jvp_*` / `*_t`（逐条见 §8） | 无（但 `nn` 那 7 个要求规则集 `import nn`，见豁免理由原文"the rulesets declare and import nothing from `nn`"） | **可**，与 1b、2 并行；内部按模块再并行 | 这 15 个键是"删引擎就丢"的能力。另外 31 个（`:tangent/*`、`:struct/*`、比较、离散转换、`access`、`cast`）是机器算子，**不搬**，也不该搬 |
 | 4 | 给 `#vjp(rule)` 在库路线找一个读者（或者明确宣布这条标签随引擎一起消失，并把 `custom_rule.cml`、`transform_rules.cml` 一排测试按新语义改写） | 1（律库要在库侧） | 与 3 并行 | 今天用户自定义导数只有引擎读得到；这是**语言能力**，不是实现细节，必须做决定 |
@@ -411,9 +433,19 @@ promotion-3 记的是晋级 3 那次（基线在 develop 的 `d6503a197c` 一带
 | `vjp-parity` 的 46 个引擎独有键里，哪些**真的**会在用户程序里出现 | 数不出来 | 需要把每个键反查有没有用例调它；`--tables` 给的是键与注册点，不是调用次数 |
 | `tensor:pow` 的元数 | 数不出来 | `setVjp` 那一行不带签名，工具只能给它一个无元数的键 `pow`（§6 第 12 行） |
 
-## 8. 最该先做的一步
+## 8. 下一步：一条车道先做，另外三条等负载
 
-**先做第 1b 步：把 `stop_gradient` 的声明与它的内核一起落位到库侧。**
-第 1 步（2026-11-25 已做）把 14 条律搬走了，但两条 `from autodiff` 一条也没少——它们剩下的
-唯一内容就是 `stop_gradient`，而它的内核是引擎文件里的 `autodiff:stop_gradient`。这 40 行级别的搬家
-是"删引擎不删库"的最后一条硬边；它一落地，第 3 步的三条车道就可以全部在库侧写律，不必再回头看引擎。
+**1b 已落地（2026-11-25）。** 引擎的 Camel 面现在是空的：`src/stdlib/autodiff.cml` 不再声明任何
+名字，`src/` 下 `from autodiff` 的行数是 **0**，`stop_gradient` 的声明、内核与规则都在 `laws`。
+「删引擎会删掉一个程序能写的名字」这条硬边清零了，剩下的账全部是能力账（§6 的 15 条律）与
+迁移账（§5 的 127 个只能走引擎入口的用例）。
+
+**接下来按依赖排，不按人手排：**
+
+1. **先查 `pow` 那条的账**（半小时，只读，不起构建）：`--json` 里 `pow` 的键没有元数、
+   `jvp_pow` 又不在三张表的任何一栏里——先定 `^` 与 `tensor:pow` 是不是同一个键，
+   再决定是补工具还是补一条反向律。查清之前把它排进任何车道都会白写。
+2. **然后才开三条律车道**（§6：A `nn` 7 条、B `math` 5 条、C 索引 2 条），而且**要等主机负载降下来**：
+   本轮 536 条用例的读数是在 1 分钟负载 48 到 87 的机器上取的，三条车道并行会把这个读数变成噪声，
+   而它们的判据恰恰是"规则集里多了一条律"这种小读数。
+3. 第 2 步（合并 `Gradient<F>` / `GradientOf<F>`）与这三条车道不冲突，可以随时插进来。
