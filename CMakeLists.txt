@@ -283,7 +283,7 @@ endif()
 # CAMEL_PACKAGE_MINIMAL -- the full list minus the modules CAMEL_MINIMAL_DROPS names.
 set(CAMEL_ALL_MODULES
     io process math time random this fs hash re str env json para test_support
-    sim tensor tiles nn transforms autodiff ckpt bytes graph state verify rewrite onnx
+    sim tensor tiles nn transforms autodiff laws ckpt bytes graph state verify rewrite onnx
 )
 # The only place the minimal package's module set is written: what a minimal package leaves out is
 # the GPU back end, the deployment exporter, and the checkpoint library built on tensor, plus the

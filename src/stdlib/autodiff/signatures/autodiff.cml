@@ -4,7 +4,8 @@
 /**
  * Computed signatures of the `autodiff` module (C++ operators, lib/autodiff).
  *
- * `stop_gradient` and the tag `vjp` are declared in lib/autodiff/autodiff.cml. The entries here take
+ * The tag `vjp` is declared in `stdlib/autodiff.cml`; `stop_gradient` is the `laws` module's now,
+ * declaration and kernel both (`stdlib/laws.cml`). The entries here take
  * a function and give a function whose parameter list and result type come from the argument,
  * which a declaration cannot write (the arbitrary-function-type gap). `Gradient<F>` and
  * `ValueAndGradient<F>` below name the result types the resolver computes (`gradientSignature(f)`

@@ -6,7 +6,8 @@
  * every parameter as an input and an (identity-updated) output.
  */
 
-import { with_grad, stop_gradient } from autodiff
+import { with_grad } from autodiff
+import { stop_gradient } from laws
 import { get_env } from env
 import { sgd } from nn
 import { export_model } from onnx

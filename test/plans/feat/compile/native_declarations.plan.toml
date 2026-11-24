@@ -1047,16 +1047,16 @@ expect_stdout_exact = "7\ntext\n2\n"
 
 [[tests]]
 name = "native.autodiff_wrong_arity"
-desc = "`autodiff:stop_gradient` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's `(x: T) => T` — `stdlib/autodiff.cml`, not the C++ module."
+desc = "`laws:stop_gradient` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's `(x: T) => T` — `stdlib/laws.cml`, not the kernel."
 kind = "negative"
 case = "../../../cases/compile/native/autodiff_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "autodiff_arity.cml:10:26", "argument types: <> (float, float)", "<autodiff:stop_gradient>: (x: T) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "autodiff_arity.cml:10:26", "argument types: <> (float, float)", "<laws:stop_gradient>: (x: T) => T"]
 
 [[tests]]
 name = "native.autodiff_result_type"
-desc = "The result of `autodiff:stop_gradient` is the declaration's type variable instantiated with the argument's type: binding a `float` result to an `int` is refused with the value's type taken from the declaration. A type-variable parameter has no wrong-type case, so this is the type case the declaration can have."
+desc = "The result of `laws:stop_gradient` is the declaration's type variable instantiated with the argument's type: binding a `float` result to an `int` is refused with the value's type taken from the declaration. A type-variable parameter has no wrong-type case, so this is the type case the declaration can have."
 kind = "negative"
 case = "../../../cases/compile/native/autodiff_result_type.cml"
 args = ["${case}"]

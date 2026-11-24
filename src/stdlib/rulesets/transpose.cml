@@ -37,11 +37,11 @@ import {
     stop_gradient,
     sub_cotangent,
     sub_cotangent_c
-} from autodiff
+} from laws
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
-import { log as math_log, pow } from math
+import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt } from math
 import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 import { is_float } from types
 
@@ -1137,6 +1137,68 @@ func log_d(x: float) => float {
 /// `1 / x` wherever the logarithm has a real value.
 export rule log_d_t(x: float) { log_d(x) => func (ct: float) {
     ct / x
+} }
+
+// ---- the transposes of the scalar math kernels ----
+//
+// The backward half of the five forward laws at the end of `lib/rulesets/jvp.cml` (`sqrt_d`,
+// `erf_d`, `erfc_d`, `erf_f`, `erfc_f`). Each is the engine's own rule read backwards, in the
+// engine's grouping, for the reason the array laws above record: the two legs of one `grad` are
+// compared bit for bit, and `(ct * k) * exp(...)` and `ct * (k * exp(...))` are the same number on
+// paper and a different last place in the register.
+
+/// `sqrt(x)` in the double width: what `math:sqrt_d` means, and the left side this rule is filed under.
+/// @example sqrt_d(9.0)    // 3.0
+func sqrt_d(x: float) => float {
+    return math_sqrt(x)
+}
+
+/// The transpose of `sqrt(x)`: `(ct * 0.5) / sqrt(x)`, the grouping `sqrtVjp` builds and the array
+/// law `sqrt_t` above uses -- the multiplication first, then the division.
+export rule sqrt_d_t(x: float) { sqrt_d(x) => func (ct: float) {
+    (ct * 0.5) / math_sqrt(x)
+} }
+
+/// `erf(x)` in the double width.
+/// @example erf_d(0.0)    // 0.0
+func erf_d(x: float) => float {
+    return math_erf(x)
+}
+
+/// The transpose of `erf(x)`: `(ct * 2/sqrt(pi)) * exp(-(x * x))`.
+export rule erf_d_t(x: float) { erf_d(x) => func (ct: float) {
+    (ct * 1.1283791670955126) * math_exp((x * x) * -1.0)
+} }
+
+/// `erfc(x)` in the double width.
+/// @example erfc_d(0.0)    // 1.0
+func erfc_d(x: float) => float {
+    return math_erfc(x)
+}
+
+/// The transpose of `erfc(x)`: the law above with the sign of the constant changed.
+export rule erfc_d_t(x: float) { erfc_d(x) => func (ct: float) {
+    (ct * -1.1283791670955126) * math_exp((x * x) * -1.0)
+} }
+
+/// `erf(x)` in the single width: what `math:erf_f` means.
+func erf_f(x: f32) => f32 {
+    return math_erf(x)
+}
+
+/// The transpose of `erf(x)` over `f32`, with the constant at that width.
+export rule erf_f_t(x: f32) { erf_f(x) => func (ct: f32) {
+    (ct * f32(1.1283791670955126)) * math_exp((x * x) * f32(-1.0))
+} }
+
+/// `erfc(x)` in the single width.
+func erfc_f(x: f32) => f32 {
+    return math_erfc(x)
+}
+
+/// The transpose of `erfc(x)` over `f32`.
+export rule erfc_f_t(x: f32) { erfc_f(x) => func (ct: f32) {
+    (ct * f32(-1.1283791670955126)) * math_exp((x * x) * f32(-1.0))
 } }
 
 

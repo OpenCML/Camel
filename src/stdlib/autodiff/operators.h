@@ -6,7 +6,10 @@
  *
  *   grad(f)            <W...>(N...) => gradient of W0   (macro)
  *   with_grad(f)       <W...>(N...) => (value, gradient of W0)  (macro)
- *   stop_gradient(x)   x, through which no gradient flows
+ *
+ * `stop_gradient` used to be listed here. It is the `laws` module's now (`laws:stop_gradient`,
+ * declared in `stdlib/laws.cml` with its kernel in `stdlib/laws/operators.cpp`): a name a program
+ * can call should not live in the engine that is being deleted, and this file is the engine.
  *
  * A custom derivative rule is a declaration tag, not an operator of this module
  * (design principles 6.2, 8): `#vjp(rule)` before a function declaration attaches the

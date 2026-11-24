@@ -929,7 +929,7 @@ void addGradientLowerings(const std::function<void(std::string, LowerFn, int64_t
     add("nn:max_pool2d_grad", lowerMaxPool2dGrad, 11);
     // stop_gradient is the identity at run time; its meaning lives in differentiation, which
     // the export has already resolved by the time the operator is seen.
-    add("autodiff:stop_gradient", [](const LowerContext &ctx) { return ctx.arg(0); }, 1);
+    add("laws:stop_gradient", [](const LowerContext &ctx) { return ctx.arg(0); }, 1);
 }
 
 } // namespace camel::onnx

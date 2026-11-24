@@ -19,14 +19,14 @@
  *
  */
 
-import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_tangent } from autodiff
+import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_tangent } from laws
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
 // second import of a name does not add an overload to the first, it hides it (with both imported,
 // `pow_tangent`'s `log(x)` stops resolving: "No matching function found for
 // argument types: <> (float)"). So the scalar one is named here instead.
-import { log as math_log, pow } from math
+import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt } from math
 import { abs, add_stated, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 import { is_float, is_integer, is_same, is_string, Tangent } from types
 
@@ -1092,6 +1092,82 @@ func pow_d(x: float, y: float) => float {
 /// constant exponent's term is omitted where the rule is expanded, exactly as `jvp_pow`'s is.
 export rule jvp_pow_d(x: float, y: float) { pow_d(x, y) => func (dx: float, dy: float) {
     y * pow(x, y - 1.0) * dx + pow(x, y) * math_log(x) * dy
+} }
+
+// ---- the forward rules of the scalar math kernels ----
+//
+// `sqrt`, `erf` and `erfc` are declared once and lowered to one kernel per float width
+// (`stdlib/math.cml`: `#impl(sqrt_kernel)` over `math:sqrt_d` and `math:sqrt_f`, `#impl(erf_kernel)`
+// over `math:erf_d` and `math:erf_f`). A lifted program meets the **kernel**, not the generic name
+// (`skip=rule uri=math:erf_d reason=the operator has no forward rule bound at all`), so each law is
+// filed under the kernel's own name, and the shims below are how this module names one: a rule's
+// left side spells its operator with the operator's own name, and the name `erf_d` is the key the
+// engine's table uses for the double kernel.
+//
+// The arithmetic is the array law's, at the scalar type: `stdlib/rulesets/transpose.cml#erf_t`
+// transposes the same function in the tensor width, and the two must agree lane for lane, which is
+// why the constant and the grouping are copied from it rather than rewritten.
+//
+// The single-width pair (`erf_f`, `erfc_f`) is a second law and not the same one: `math:erf_f` takes
+// and gives `f32`, so its tangent is `f32` and the constant is the `f32` the engine's `erfVjp`
+// stores (`static_cast<Float32>(kScale)`); written in `float` the law would answer a tangent of the
+// wrong width and the addition at the accumulation would refuse it.
+
+/// `sqrt(x)` in the double width: what `math:sqrt_d` means, and the left side this rule is filed under.
+/// @example sqrt_d(9.0)    // 3.0
+func sqrt_d(x: float) => float {
+    return math_sqrt(x)
+}
+
+/// `d(sqrt(x)) = dx * 0.5 / sqrt(x)`: one over twice the root, in the grouping the engine's
+/// `sqrtVjp` builds and the array law uses (`stdlib/rulesets/transpose.cml#sqrt_t`).
+export rule jvp_sqrt_d(x: float) { sqrt_d(x) => func (dx: float) {
+    (dx * 0.5) / math_sqrt(x)
+} }
+
+/// `erf(x)` in the double width: what `math:erf_d` means, and the left side this rule is filed under.
+/// @example erf_d(0.0)    // 0.0
+func erf_d(x: float) => float {
+    return math_erf(x)
+}
+
+/// `d(erf(x)) = dx * 2/sqrt(pi) * exp(-(x * x))`, the array law's constant and grouping: the scale
+/// first, then the bell, so a cotangent reaches the exponential on the same side of the constant as
+/// the engine's rule puts it.
+export rule jvp_erf_d(x: float) { erf_d(x) => func (dx: float) {
+    (dx * 1.1283791670955126) * math_exp((x * x) * -1.0)
+} }
+
+/// `erfc(x)` in the double width: the same law with the sign of the constant changed, which is
+/// `erfVjp<true>` on the engine's side.
+/// @example erfc_d(0.0)    // 1.0
+func erfc_d(x: float) => float {
+    return math_erfc(x)
+}
+
+/// `d(erfc(x)) = dx * -2/sqrt(pi) * exp(-(x * x))`.
+export rule jvp_erfc_d(x: float) { erfc_d(x) => func (dx: float) {
+    (dx * -1.1283791670955126) * math_exp((x * x) * -1.0)
+} }
+
+/// `erf(x)` in the single width: the same function as `erf_d`, over `f32`.
+func erf_f(x: f32) => f32 {
+    return math_erf(x)
+}
+
+/// `d(erf(x))` over `f32`: the law above, with the constant the engine stores at this width.
+export rule jvp_erf_f(x: f32) { erf_f(x) => func (dx: f32) {
+    (dx * f32(1.1283791670955126)) * math_exp((x * x) * f32(-1.0))
+} }
+
+/// `erfc(x)` in the single width.
+func erfc_f(x: f32) => f32 {
+    return math_erfc(x)
+}
+
+/// `d(erfc(x))` over `f32`.
+export rule jvp_erfc_f(x: f32) { erfc_f(x) => func (dx: f32) {
+    (dx * f32(-1.1283791670955126)) * math_exp((x * x) * f32(-1.0))
 } }
 
 // ---- the forward rules of the conversions ----
