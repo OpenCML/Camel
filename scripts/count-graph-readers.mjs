@@ -166,10 +166,8 @@ function inspectDirectory(root, rev, directory) {
     const files = listing.stdout.split('\n').filter(Boolean)
     const sources = files.filter((file) => SOURCE.test(file))
     if (sources.length === 0) {
-        return {
-            ok: false,
-            reason: `holds no source file (${SOURCE_LIST})${files.length > 0 ? `; it holds ${files.length} other file(s)` : ''}`
-        }
+        const others = files.length > 0 ? `; it holds ${files.length} other file(s)` : ''
+        return { ok: false, reason: `holds no source file (${SOURCE_LIST})${others}` }
     }
     return { ok: true, sources: sources.length }
 }
@@ -229,10 +227,12 @@ function count(root, rev, directories) {
             process.stderr.write(`${NAME}: ${failure}\n`)
         }
         process.stderr.write(
-            `${NAME}: ${failures.length} of ${directories.length} path(s) cannot be counted; nothing was counted\n`
+            `${NAME}: ${failures.length} of ${directories.length} path(s) cannot be counted; ` +
+                'nothing was counted\n'
         )
         process.stderr.write(
-            `${NAME}: a path that is not in the revision is not a zero: \`git grep\` exits 1 for it exactly as it does for no match\n`
+            `${NAME}: a path that is not in the revision is not a zero: \`git grep\` exits 1 ` +
+                'for it exactly as it does for no match\n'
         )
         return 2
     }
@@ -252,12 +252,16 @@ function count(root, rev, directories) {
     const short = git(root, ['rev-parse', '--short=12', rev]).stdout.trim()
     for (const row of rows) console.log(row)
     console.log(
-        `total  graph=${total.graph}  kind=${total.kind}  addNode=${total.addNode}  dirs=${directories.length}  rev=${short}`
+        `total  graph=${total.graph}  kind=${total.kind}  addNode=${total.addNode}  ` +
+            `dirs=${directories.length}  rev=${short}`
     )
     return 0
 }
 
-/** Runs this file as a child process, so the self-test exercises the exit code and stderr a caller sees. */
+/**
+ * Runs this file as a child process, so the self-test exercises the exit code and the stderr that
+ * a caller sees.
+ */
 function runSelf(args, cwd) {
     const result = spawnSync(process.execPath, [SELF, ...args], {
         cwd,
