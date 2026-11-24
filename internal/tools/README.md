@@ -267,6 +267,11 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   it waited on (`slot` for a host build/test slot, `local` for a local helper's machine-wide mutex).
   Rows written before that field existed have no `queuedAtKind` and were slot waits; one field is not
   asked to mean two things across one file.
+- the local helpers (`camel-build.ps1`, `camel-test.ps1`) write the registry too, so a local run is
+  not a run the panel cannot see. Their rows have no `tokens`: the pool is the build host's, and a
+  local run draws nothing from it.
+- `run-registry.ps1` is the one writer of that file; all three callers use it, because a second copy
+  of the append-and-compact rule is how two writers end up disagreeing about one file.
 ## The two DSH plugins
 
 Two directories here are loaded as plugins by the agent runtime rather than run as scripts. Their
