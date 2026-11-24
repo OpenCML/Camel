@@ -174,7 +174,7 @@ export const RULES = [
             if (!g || g.mergedLocal.length <= limits.mergedLocal) return null
             return {
                 key: String(g.mergedLocal.length),
-                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉。远端的已合分支只在读数里列出，删它们要负责人另行授权，不在提醒里催。`,
+                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉（铁律 12 与 13：先确认工作树干净、没有活会话在里面）。`,
             }
         },
     },
