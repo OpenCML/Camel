@@ -28,6 +28,15 @@
 // files scanned" print the same otherwise, and a checker whose pattern stopped matching anything
 // would then report green forever. The reading also names the directories it read.
 //
+// A pattern always catches some of the same word in another domain, and the check has met this
+// twice: `/*` in a shell comment is a glob (`out/*/`), not the start of a block, and `lane-1` or
+// `<lane>-<time>` in a documented path is a placeholder for some lane, not the name of one. Both
+// were fixed by giving the word a semantic condition -- a block only opens in C-like languages, a
+// lane code holds at least one letter -- and neither by an allowlist, because an allowlist of
+// one-word exceptions grows until nobody reads it while a condition is stated where the pattern is.
+// When a hit turns out to be a different domain, ask which condition distinguishes it, and put that
+// condition in the pattern.
+//
 // Usage: node scripts/check-process-traces.mjs --root <dir>   exit 0 when clean, 1 with a list
 //
 // `--root` is required and has no default: the directory a process was started in is not
