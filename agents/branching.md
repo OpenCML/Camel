@@ -75,12 +75,15 @@ Some plans are deliberately unreachable from `--changed` (`test/plans/perf/**`, 
 
 ## Release assembly
 
-`release` is the only branch used to assemble a version. It is cut from `develop` and lives for that version.
+`main` is the published line: it answers "which commit is the release", and the tag is created on it. A version is assembled on a short-lived `release/<version>` branch cut from `develop`; that branch exists to be measured and dies the same day. This is the shape the mainstream models share (trunk-based, GitLab Flow, Git Flow alike): **the tag is permanent and sits on the long-lived released branch; the release branch is temporary.**
 
-1. Merge the intended `develop` boundary into `release` with `--no-ff`.
-2. Before a `develop` to `main` release merge, explicitly confirm the version to publish, the next development version and the `changes.log` release-note content with the user.
-3. Push `release` before tagging so CI can build and test it. Fix build/test-only issues there; semantic fixes belong in `develop` and are cherry-picked with `-x` onto `release`.
-4. After a green run, create the tag on `release`, then move `main` to that commit. Do not tag `main` separately.
-5. Merge `release` back into `develop` with `--no-ff` and verify `git merge-base --is-ancestor release develop`. Apply the next development-version bump and return to a feature branch.
+1. Cut `release/<version>` from the intended `develop` boundary.
+2. Explicitly confirm the version to publish, the next development version and the `changes.log` release-note content with the user.
+3. Push `release/<version>` before tagging so CI builds and tests it. Fix build/test-only issues there; semantic fixes belong in `develop` and are cherry-picked with `-x` onto the release branch.
+4. After a green run, move `main` onto the measured commit with `git merge --ff-only release/<version>` -- fast-forward, not a merge commit, so that no untested commit sits between the measurement and the tag -- then create the tag on `main` and push it. The invariant is one sentence: **the tagged commit is the commit the gate measured and the wheels were built from**, and it is checkable: `git rev-parse main` must equal `git rev-list -n1 <tag>`.
+5. Delete `release/<version>`. Merge `main` back into `develop` with `--no-ff` and verify `git merge-base --is-ancestor main develop`.
+6. Apply the next development-version bump on `develop` only. The published line receives no commit after the fast-forward -- not a version bump, not a documentation one -- because every commit after it is one the tag does not contain, and `main` and the tag would then answer the same question differently.
 
-Do not guess release versions, rewrite release history, or publish from an unverified commit. A red release run blocks the tag.
+A patch to an already published minor is a `maintenance/<major>.<minor>` branch cut from that minor's tag; it carries the tag for its own patch release, and it is the only place a fix for an old version lands.
+
+Do not guess release versions, rewrite published history, move a published tag, or publish from an unverified commit. A red run blocks the tag.

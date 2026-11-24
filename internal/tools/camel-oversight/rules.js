@@ -91,12 +91,33 @@ export const RULES = [
         hold: 0,
         cooldown: 30,
         check: ({ m, lanes, limits }) => {
-            const d = readable(m.develop) && m.develop
+            // With an integration branch, lanes land there and develop follows on promotion: the branch
+            // that stalls when the merge seats stall is integration; develop is late by design.
+            const i = readable(m.integration) && !m.integration.absent && m.integration
+            const d = i || (readable(m.develop) && m.develop)
+            const name = i ? 'integration' : 'develop'
             if (!d || d.ageMinutes <= limits.developStallMinutes) return null
             if (!readable(lanes) || lanes.running === 0) return null
             return {
                 key: d.head,
-                text: `develop ${d.ageMinutes} 分钟没有前进（${d.head}），而有 ${lanes.running} 条车道在跑。问合并车道在等什么；每条车道一落地就合、就推。`,
+                text: `${name} ${d.ageMinutes} 分钟没有前进（${d.head}），而有 ${lanes.running} 条车道在跑。问合并位在等什么；交回的车道排进合并队列，排着的多就多开合并位。`,
+            }
+        },
+    },
+    {
+        // Promotion: develop is advanced from integration after a full fast-layer run. Late by design,
+        // but not without end.
+        id: 'promotion-due',
+        level: 'quiet',
+        hold: 0,
+        cooldown: 60,
+        check: ({ m, limits }) => {
+            const i = readable(m.integration) && !m.integration.absent && m.integration
+            const d = readable(m.develop) && m.develop
+            if (!i || !d || i.developBehind === 0 || d.ageMinutes <= limits.promotionMinutes) return null
+            return {
+                key: i.head,
+                text: `develop 落后 integration ${i.developBehind} 笔、上次前进在 ${d.ageMinutes} 分钟前：在 integration 尖端跑一遍全快层，与上次晋级的读数逐条比，干净就把 develop 快进过去。`,
             }
         },
     },
@@ -133,7 +154,10 @@ export const RULES = [
         id: 'backlog-stale',
         level: 'quiet',
         hold: 0,
-        cooldown: 60,
+        // The list is long when the backlog is behind, and repeating it hourly says nothing new: the
+        // reminder names the count and the oldest few, and comes back when the count grows or after four
+        // hours.
+        cooldown: 240,
         check: ({ m, now, limits }) => {
             if (!readable(m.backlog)) return null
             // A row recorded under its own id and again under the item it belongs to is named once,
@@ -142,11 +166,14 @@ export const RULES = [
             const stale = [...m.backlog.entries()]
                 .filter(([, row]) => row.doing && row.updated !== null && now - row.updated > limits.staleMinutes * 60_000)
                 .filter(([, row]) => !seen.has(row) && seen.add(row))
-                .map(([id]) => id)
+                .sort((a, b) => a[1].updated - b[1].updated)
             if (stale.length === 0) return null
+            const shown = stale.slice(0, limits.staleShown).map(([id, row]) => `${id}（${Math.round((now - row.updated) / 3_600_000)} 小时）`)
+            const more = stale.length > shown.length ? `等` : ``
             return {
-                key: stale.join(','),
-                text: `backlog 里「在做」超过 ${limits.staleMinutes / 60} 小时没更新：${stale.join('、')}。卡住了就标卡住并写原因，停了就收，还在做就更新时间。`,
+                // A bucket of five: a few rows coming and going does not make it news again.
+                key: String(Math.ceil(stale.length / 5)),
+                text: `backlog 里「在做」超过 ${limits.staleMinutes / 60} 小时没更新的有 ${stale.length} 条，最久的是 ${shown.join('、')}${more}。逐条处理：卡住的标卡住并写原因，做完或作废的收掉，还在做的更新时间——backlog 只放手上真有的活。`,
             }
         },
     },
@@ -155,12 +182,15 @@ export const RULES = [
         level: 'quiet',
         hold: 15,
         cooldown: 60,
+        // The main checkout is the author's own workspace: nothing is merged, built or tested in it.
+        // The only thing asked of the coordinator is to keep it in step with origin/develop while it
+        // stands on develop with nothing uncommitted; on another branch, or with changes, it is his.
         check: ({ m }) => {
             const c = readable(m.checkout) && m.checkout
-            if (!c || (c.dirty === 0 && c.behind === 0)) return null
+            if (!c || c.head !== 'develop' || c.dirty !== 0 || c.behind === 0) return null
             return {
-                key: `${c.dirty}/${c.behind}`,
-                text: `主检出（${c.head}）${c.dirty ? `有 ${c.dirty} 个未提交改动` : ''}${c.dirty && c.behind ? '，且' : ''}${c.behind ? `落后 origin/develop ${c.behind} 笔` : ''}。在它上面量的读数都是旧的：脏就存 patch 再还原，落后就 ff 合上。`,
+                key: String(c.behind),
+                text: `主检出在 develop 上、没有改动，落后 origin/develop ${c.behind} 笔：fast-forward 合上（只做 git merge --ff-only，不做别的）。`,
             }
         },
     },
@@ -280,6 +310,8 @@ export const DEFAULT_LIMITS = {
     mergedLocal: 20,
     developStallMinutes: 25,
     staleMinutes: 120,
+    promotionMinutes: 180,
+    staleShown: 5,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 45,
     stuckMinutes: 15,

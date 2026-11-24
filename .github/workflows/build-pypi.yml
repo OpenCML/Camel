@@ -41,7 +41,8 @@ name: Build and package (PyPI wheel)
 on:
   push:
     branches:
-      - release
+      - main
+      - "release/**"
     tags:
       - "v*"
       - "V*"
