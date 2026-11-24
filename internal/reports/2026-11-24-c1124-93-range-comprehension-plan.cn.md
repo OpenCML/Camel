@@ -108,3 +108,22 @@
 ⇒ 所以 ③ 的阻塞点不是效果位（`pure` 那笔已证），也不是「实参是怎么来的」这种模糊说法，而是：**元素函数经 `settleGenericOperatorArguments` 换成实例之后，`nodeTypeOf` 给不出它的函数类型**，`withTypes[i]` 因此是 `void`。
 
 ⇒ 下一步（一处）：看 `settleOne` 里 `arg.node = createFuncDataNode(chosen, true, false)` 之后 `type = valueTypeOf(nodeTypeOf(arg.node))` 为什么是 `void` —— 是节点本就是函数值（类型在它的 TYPE 子节点上），还是实例的签名没被挂上去。判据：**同一个实参不该有两个类型读数**。
+
+## 十一、形状与次序：判定发生在代入之前
+
+第二组临时诊断（`settleGenericOperatorArguments` 的进/出各一行、`chooseOperatorOverload` 的 `fits` 一行；量完即删，树已还原重建）：
+
+```
+[fits] map entering=0 graphs=0 templates=0 builtin=0 fits=0
+[fits] map entering=1 graphs=0 templates=0 builtin=0 fits=0
+[settle] enter withs=[void] norms=[Range]
+[settle] exit  withs=[(i: int) => int] norms=[Range]
+```
+
+⇒ 两次候选筛选都发生在**代入之前**，那时 `with` 是 `void`，`fits=0`；代入随后把它变成具体的函数类型，**但没有任何一次重新筛选**。而报错文本里的 `<(i: int) => int>` 是在**代入之后**读的同一个向量 —— 于是：
+
+**同一个实参有两个类型读数，不是因为两处类型算法不同，而是因为两次读发生在代入的两侧。** 判定的那次读在前，报错的那次读在后。
+
+⇒ 所以修法不是让候选判定去取一个更好的类型，而是：**代入完成之后，让判定再跑一次**（`settleGenericOperatorArguments` 成功返回后重新筛选，而不是直接落到 `NoMatchingFunction`）。这与「一个实参一个读数」的判据一致：读数只有一份，先后两次读要在同一个值上。
+
+⇒ 待确认（一处读代码即可）：`builder_call.cpp` 里 `settleGenericOperatorArguments`（约 1500 行）与报错（约 1447 行）的先后 —— 若代入确在判定之后、报错之前，则报错能读到具体类型、判定读不到，正是上面这组读数。
