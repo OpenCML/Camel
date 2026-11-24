@@ -16,6 +16,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/resources.h"
+#include "graph/graph_view.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
@@ -267,18 +268,20 @@ runtime::gc_node_ref_t transferAggregate(
 /// `where`, and an ordering never leaves the region that holds it, so this is the node it can be
 /// ordered against for the read to wait for it.
 runtime::gc_node_ref_t standingIn(
-    const runtime::GCGraph &graph, const runtime::ControlRegions &control, uint32_t where,
+    const camel::graph::GraphView &g, const runtime::ControlRegions &control, uint32_t where,
     runtime::gc_node_ref_t reader) {
     namespace rt    = runtime;
     uint32_t region = control.controlOf(reader);
     if (region == where)
         return reader;
     rt::gc_node_ref_t standing = rt::kInvalidNodeRef;
-    for (uint32_t steps = 0; region != where && steps <= graph.regionCount(); ++steps) {
-        const rt::GCRegion *one = region < graph.regionCount() ? graph.region(region) : nullptr;
-        if (one == nullptr)
+    // The view's `region(id)` answers a default record -- owner `kNoNode` -- for an id the graph
+    // does not have, where the representation handed back nothing at all, so the bound is asked
+    // first and an id past the graph is still "no node" here.
+    for (uint32_t steps = 0; region != where && steps <= g.regionCount(); ++steps) {
+        if (region >= g.regionCount())
             return rt::kInvalidNodeRef;
-        standing             = one->owner;
+        standing             = g.region(region).owner;
         const uint32_t outer = control.parentControl(region);
         if (outer == region)
             return rt::kInvalidNodeRef;
@@ -739,7 +742,7 @@ const runtime::Program *outlineRegions(
                 // run before what reads it, so the reader -- or the branch or loop that owns the
                 // read, when it is written deeper -- is ordered after the upload.
                 for (auto reader : graph->uses().norm(input)) {
-                    const auto standing = standingIn(*graph, control, where, reader);
+                    const auto standing = standingIn(graph->view(), control, where, reader);
                     if (standing != rt::kInvalidNodeRef && standing != upload)
                         effects.readsBefore(upload, standing);
                 }
