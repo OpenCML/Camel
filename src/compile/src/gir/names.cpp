@@ -5,21 +5,15 @@
  * What a name written in a function body or an initializer stands for (design principles
  * 10.2, "模块与命名空间"; the graph model, section 8). Namespaces are not objects: a name of
  * a module is a path (`Tools::inc`), and these rules only decide which path a written name
- * means. There is one rule of precedence, the first layer that has the name wins:
+ * means.
  *
- *   1. local names (parameters, `let`s of the body, captured names of enclosing functions);
- *   2. the module's own names, from the innermost namespace the code is written in out to
- *      the top level (N1); the module's own name may qualify them (N7);
- *   3. names imported by name, or reached through an imported module or namespace (`m::f`);
- *   4. names a `using namespace` in force brings (N2: a `using` applies to the block it is
- *      written in; two that bring things that cannot be told apart are AmbiguousName where
- *      the name is used);
- *   5. what the built-in module and the modules of operators bring along -- the prelude's
- *      exports are what the built-in module brings, so a name of it is written without an
- *      `import` (`preludeEntity`).
+ * There is one rule of precedence -- the first row that has the name wins -- and its rows are
+ * listed in ONE place: `name_layers.h`. This file asks that order for a value name once, in
+ * `valueNameByRow`. The type names are the chain that still carries its own copy of the rows
+ * (`lookupType`, `builder_type.cpp`); it is joined to this table in the step after this one.
  *
- * Within a layer, functions of one name form a set of overloads; across layers nothing is
- * merged, except the operators (`__add__` and the like), whose overloads come from everywhere.
+ * Within a row, functions of one name form a set of overloads; across rows nothing is merged,
+ * except the operators (`__add__` and the like), whose overloads come from everywhere.
  */
 
 #include "builder.h"
@@ -229,6 +223,99 @@ std::optional<camel::core::module::entity> Builder::preludeEntity(const std::str
         return std::nullopt;
     }
     return found;
+}
+
+auto Builder::valueNameByRow(
+    const std::string &written, const std::string &preludeName, const GCT::node_ptr_t &at)
+    -> RowAnswer<ValueName> {
+    // The rows of `name_layers.h`, in that table's order, each read from the import bindings of
+    // this module and the `using` frames in force. Which row wins is the table's answer: a row
+    // that has the name stops the walk, and no layer is named in this function's order.
+    return firstRowHolding<ValueName>(
+        rowsFrom(NameRow::ImportedByName),
+        [&](NameRow row) -> RowAnswer<ValueName> {
+            switch (row) {
+            case NameRow::Local:
+            case NameRow::Module:
+                // The scopes and the module's own names: answered before a name reaches its
+                // module's imports (visitDRefNode reads them from the graph, template and decorated
+                // scopes).
+                return RowAnswer<ValueName>::absent();
+            case NameRow::ImportedByName: {
+                // A name brought by name is the name the program means, whatever it is: the
+                // reference written here with an import of it in force has that import's entity and
+                // no other row's (`import { range } from tensor` is tensor's `range`; the built-in
+                // of the same spelling is the prelude, the last row). A name the imported module
+                // does not export leaves the name to the rows below, and is reported only when none
+                // has it.
+                if (module_->hasImportedRef(written, ImportLayer::Named)) {
+                    if (auto named = importedEntity(written, ImportLayer::Named);
+                        named.has_value()) {
+                        return RowAnswer<ValueName>::has(ValueName{std::move(named), {}});
+                    }
+                }
+                return RowAnswer<ValueName>::absent();
+            }
+            case NameRow::UsingNamespace: {
+                // A `using namespace` applies to the block it is written in; two that bring things
+                // that cannot be told apart are AmbiguousName here (throughUsing reports it).
+                auto match = throughUsing(written, at);
+                if (!match.has_value()) {
+                    return RowAnswer<ValueName>::absent();
+                }
+                if (!match->ownName.empty()) {
+                    // A name of this module, opened by a `using namespace` of one of its
+                    // namespaces: the answer is the module's own name, read again from its head.
+                    return RowAnswer<ValueName>::has(ValueName{std::nullopt, match->ownName});
+                }
+                if (!match->entity.has_value()) {
+                    return RowAnswer<ValueName>::nothing();
+                }
+                return RowAnswer<ValueName>::has(ValueName{match->entity, {}});
+            }
+            case NameRow::EveryImport: {
+                // An operator takes its overloads from every layer (design principles 10.2; the
+                // graph model, N3), and a name a prefix of an imported module or namespace reaches
+                // (`m::f`) is read from every binding of it at once as well: one answer of the
+                // import bindings. A name no import brings and no spelling makes an operator is not
+                // this row's.
+                if (!isOperatorName(written) && !module_->hasImportedRef(written)) {
+                    return RowAnswer<ValueName>::absent();
+                }
+                if (auto merged = importedEntity(written); merged.has_value()) {
+                    return RowAnswer<ValueName>::has(ValueName{std::move(merged), {}});
+                }
+                // Written as an operator's name, or imported, and nothing to give: this row has the
+                // name, and an import of a name without an entity is what the caller reports.
+                return RowAnswer<ValueName>::nothing();
+            }
+            case NameRow::AmbientImport: {
+                // What the imports bring unasked, with no name written for them.
+                if (!module_->hasImportedRef(written, ImportLayer::Ambient)) {
+                    return RowAnswer<ValueName>::absent();
+                }
+                if (auto ambient = importedEntity(written, ImportLayer::Ambient);
+                    ambient.has_value()) {
+                    return RowAnswer<ValueName>::has(ValueName{std::move(ambient), {}});
+                }
+                return RowAnswer<ValueName>::nothing();
+            }
+            case NameRow::Prelude: {
+                // The prelude is what the built-in module brings, and what it exports comes along
+                // unasked: a name of it needs no import. The reading is the export table's own
+                // (`ProgramExports::exportedEntity`: what this program declared for the module,
+                // merged with the module's own entity), so the prelude's declarations reach a name
+                // without a second mechanism beside that one. A spelling a row above already
+                // answered -- the built-in module's operator group for `map`, say -- is that row's
+                // answer and is not read here.
+                if (auto fromPrelude = preludeEntity(preludeName); fromPrelude.has_value()) {
+                    return RowAnswer<ValueName>::has(ValueName{std::move(fromPrelude), {}});
+                }
+                return RowAnswer<ValueName>::absent();
+            }
+            }
+            return RowAnswer<ValueName>::absent();
+        });
 }
 
 bool Builder::sameParameterTypes(FunctionType *a, FunctionType *b) {

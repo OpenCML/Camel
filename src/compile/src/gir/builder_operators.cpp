@@ -57,10 +57,10 @@ namespace camel::compile::gir {
 // ---- Operator overloads of the program (design principles 10.2) --------------------------
 //
 // Where this meets the resolution of names: an operator is the one kind of name that does not
-// take the first layer having it (visitDRefNode, "local > this module > imported > using >
-// built-in"); operatorOverloadsOf gathers every layer instead. The layers it reads are the
-// graph scopes of this module (local functions and the module's own), the module's generic
-// operator templates, and ProgramExports::importedOperatorOverloads (every import of a
+// take the first row having it (`name_layers.h` is the one list of those rows, and
+// `visitDRefNode` walks it); operatorOverloadsOf gathers every row instead. The layers it reads
+// are the graph scopes of this module (local functions and the module's own), the module's
+// generic operator templates, and ProgramExports::importedOperatorOverloads (every import of a
 // module brings its operator overloads, as for a C++ module's operators). Nothing else of the
 // name lookup is involved, so the lookup can change around it as long as those three stay
 // reachable.
