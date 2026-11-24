@@ -128,8 +128,18 @@ origin/integration   22aa42ad27   （陈旧快照：整机断网，读数建在�
 ## 6. 闸门与推送（不要混在一起）
 
 - **合并后必须重跑第 1 层**（`-Jobs 8 -NoGpuWatch -Plan all -Tier fast`），比 `plan_id + 用例名`。
-- **一次过闸的产物不止是读数，还有「这次过闸发生过」那条记录。** 演练两次都在 `[SPLIT]` 之后卡在收尾 ssh：
-  读数完整、退出码未取到、`merge-record` 的 pass 记录没落 ⇒ **那两次都不算合规过闸**，交回里要写明。⟵ 实测
+- **一次过闸的产物不止是读数，还有「这次过闸发生过」那条记录**（`C-1124-270`）。
+  根因不是「ssh 慢」：`exit $code` 结束的是远端 shell，**不是所有进程继承的 fd 1**；对端只要还有一个进程握着它，
+  ssh 的读循环就等不到 EOF，永远不返回（实测 `sleep 45 &` 挂 >12 s，`>/dev/null 2>&1 &` 0.7 s 返回）。
+  修法：run.sh 最后一行打印 `__CAMEL_REMOTE_EXIT__=$code`，本地 `Start-Process` + 轮询 + 有界截止并 kill。
+  ⟵ 实测
+- **退出码 7 = 读数完整、退出码未取到：既不是通过，也不是失败。** 记录里 `exit` 字段 `"0"` 或 `"unknown"`，
+  **缺省视为 `"0"`**（老记录不迁移）；`merge-record` 的 verify 对非 `"0"` 一律拒，修复方式是「再测同一个 merge commit」。
+  ⟵ 实测
 - `exit=1` **分不出**「跑死了」与「跑完了且有用例失败」；分得出的是有没有 `[SUMMARY]` 那一行。⟵ 实测
 - SIGSEGV 单独一张表：`host_resident_parallel` 从 `⑭` 起稳定 rc=139，`native_parallel.scheduler`/`.linear`
   在测点之间 PASS↔SIGSEGV 来回跳 ⇒ **布局相关的未初始化/悬垂**，不挂在任何一步名下。⟵ 实测
+- **陷阱：**`2fa4e56c1e`（存在于 `develop`、`merge2`、`merge1b`）把 plan 写成 `exec "$CAMEL_RUN" plan …`，
+  替换掉 run.sh 的 shell ⇒ 尾部（`RUN_EXIT`、after-plan tree probe、goldens、checkers、`rm -rf`）全部不可达，
+  上面那个 marker 也不可达。在那几份拷贝上闸门退化为「等截止时间后报 `exit=unknown`」，不再永挂。
+  主机上成堆的 `/tmp/camel-remote-*` 就是它的签名。
