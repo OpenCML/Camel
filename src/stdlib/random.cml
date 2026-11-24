@@ -109,17 +109,10 @@ export func uniform::<T>(k: Key) => T[...] when is_float::<T>() {
     let n = shape->reduce<func (a: int, b: int) => int {
         a * b
     }, 1>
-    // A comprehension is the array operators applied to what it walks (`xs->filter<(x) => c>`,
-    // then the map), and those rules take an array: `[e for i in 0 .. n]` is refused today as a
-    // source that has no elements to take, with a constant end and a computed one alike, while
-    // `for i in r` walks a range through the loop's own `operator for` -- a statement, and not a
-    // comprehension. So the integers are written as the array they are not, and `to_array` is the
-    // one conversion from a range.
-    //
-    // This call does not resolve and the function does not compile today: `to_array` is a function
-    // of the built-in module, and a module reaches such a name through the operator group of its
-    // spelling, which has no rule for a range. A defect of this module, noted where the code is.
-    return reshape<shape>([uniform::<T>(fold(k, i)) for i in to_array(0 .. n)])
+    // A comprehension walks what `for` walks, so the integers of the range are the source as
+    // they are: each element function is applied to one of them, and the array is the shape the
+    // caller asked for.
+    return reshape<shape>([uniform::<T>(fold(k, i)) for i in 0 .. n])
 }
 
 /// A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Muller).
@@ -152,8 +145,7 @@ export func normal::<T>(k: Key) => T[...] when is_float::<T>() {
     let n = shape->reduce<func (a: int, b: int) => int {
         a * b
     }, 1>
-    // The same as in `uniform`: the array rules a comprehension applies do not take a range.
-    return reshape<shape>([normal::<T>(fold(k, i)) for i in to_array(0 .. n)])
+    return reshape<shape>([normal::<T>(fold(k, i)) for i in 0 .. n])
 }
 
 /// An integer drawn uniformly from low (included) to high (excluded).

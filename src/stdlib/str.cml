@@ -117,17 +117,8 @@ func cut(s: string, sep: string) => string[] {
 with <sep: string>
 export func split(s: string) => string[] {
     let n = len(sep)
-    // A comprehension is the array operators applied to what it walks (`xs->filter<(x) => c>`,
-    // then the map), and those rules take an array: `[e for i in 0 .. n]` is refused today as a
-    // source that has no elements to take, with a constant end and a computed one alike, while
-    // `for i in r` walks a range through the loop's own `operator for` -- a statement, and not a
-    // comprehension. So the integers are written as the array they are not, and `to_array` is the
-    // one conversion from a range.
-    //
-    // This call does not resolve and the function does not compile today: `to_array` is a function
-    // of the built-in module, and a module reaches such a name through the operator group of its
-    // spelling, which has no rule for a range. A defect of this module, noted where the code is.
-    return if n == 0 then [s[i] for i in to_array(0 .. len(s))] else cut(s, sep)
+    // A comprehension walks what `for` walks: the range is the source as it is.
+    return if n == 0 then [s[i] for i in 0 .. len(s)] else cut(s, sep)
 }
 
 /// The lines of s, cut at a line feed or a carriage return followed by a line feed. A line
@@ -151,8 +142,7 @@ export func replace(s: string) => string {
 #impl(repeat_kernel)
 with <count: int>
 export func repeat(s: string) => string {
-    // The same as in `split`: the array rules a comprehension applies do not take a range.
-    return [s for i in to_array(0 .. count)]->join<''>
+    return [s for i in 0 .. count]->join<''>
 }
 
 // ---- white space ----
