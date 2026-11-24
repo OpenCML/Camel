@@ -1,6 +1,48 @@
 # `to_array`：一条声明在 `prelude.cml` 里的**普通函数**为什么不在作用域里
 
-**2026-11-24，`lane/red-b-fixes`（`C-1123-64`）。** 一句话：**编译器没有把人弄丢——`prelude.cml`
+## 0 更正（同日 14:40，以本节为准）
+
+**本页第 1–7 节全部是在 `bc90856729` 之前的基点上量的**（`git merge-base --is-ancestor
+bc90856729 HEAD` 读 1）。那天 07:31 `bc90856729`「merge prelude-ambient: the prelude is the
+built-in layer, visible without an import」把原则定下来了：**prelude 的导出就是第 5 层，不导入
+也看得见**，`prelude.cml` 自己那段"不导入不算随程序带来"的注释随之被改写，
+`test/cases/compile/stream/range_value.cml` 也删掉了它的 `import { ... } from prelude`。
+
+所以下面"谁不 `import` 谁就没有"这个结论**只对旧基点成立，对新原则不成立**。把基点换成
+`origin/develop`（合并 `cd795d8a93`）并在 `random.cml`/`str.cml` 里**不写** import 之后实测：
+
+| 读法 | 读数 |
+|---|---|
+| 普通程序写 `to_array(0 .. 3)`，不导入 | **通**（原则成立） |
+| `stdlib/str.cml`（普通函数体，不导入） | **通**——它今天不再报错 |
+| `stdlib/random.cml:114:62`（`uniform::<T>` 里，不导入） | **仍报** `Unresolved reference: 'to_array'` |
+| 普通函数体写 `to_array`，不导入 | **通** |
+| **泛型**函数体写 `to_array`，不导入 | **仍报** `Unresolved reference: 'to_array'` |
+
+**漏洞在泛型体的声明处检查，正是"为什么 stdlib 模块拿不到这一层"的答案，一句能核的话：**
+
+> `prelude-ambient` 只把 prelude 教给了 `Builder::resolveDRefNode` 那条层序（`Builder::preludeEntity`，
+> `gir/names.cpp`）；而泛型模板的函数体在**声明时**由 `Builder::resolveGenericTemplateNames`
+> （`gir/builder_static.cpp`）→ `walkStaticBodyNames` 的 DREF 分支 → `Builder::valueNameExists`
+> （`gir/builder_expr.cpp`）判名字在不在，**这一路的最后一句还是
+> `module_->hasImportedRef(written, Ambient) && importedEntity(written, Ambient)`，从来没问
+> `preludeEntity`** —— 于是 `uniform::<T>`/`normal::<T>` 里的 `to_array` 在**任何实例造出来之前**
+> 就被判成"未声明"，而同一段正文写在非泛型函数里走 `resolveDRefNode`，解析得到。
+
+在 `preludeEntity` 里加计时的实测支持这句：`str.cml` 的普通体打印
+`[PB] preludeEntity(to_array) … -> entity`，泛型体那条**一行都不打印**（层序根本没进）。
+`str.cml` 通过而 `random.cml` 不通过，正是这条分界线——**与"是不是 stdlib 模块"无关**。
+
+因此：**那两行 `import { to_array } from prelude` 是错的形式**（对已定的原则相反），已在本页之后
+的提交里撤回；留下的红是 `random.cml` 那 13 条，**记录在案，等泛型体那一处补上 `preludeEntity`**。
+本页第 6 节里"prelude 的非算子名字要不要进第 5 层"这个问句**已经作废**（原则已定），只剩
+"`len`/`map` 的 Range 重载要不要进算子组"仍由作者裁。
+
+---
+
+**以下为旧基点的读数，保留原样（它是"为什么当时看错了"的证据）。**
+
+一句话：**编译器没有把人弄丢——`prelude.cml`
 里带函数体的名字，只有写成 `#op` 声明的那一半会进第 5 层（内建层，随每个模块白给）；不写
 `#op` 的普通函数只是模块 `prelude` 自己导出的名字，谁不 `import` 谁就没有。** `to_array` 正是
 `prelude.cml` 里第一个"有体、无 `#op`、也没有同名算子组"的导出名，所以它是唯一一个连名字都
@@ -118,7 +160,7 @@ elements to take` —— 同一个 `lane/range-ri` 留下的债（`D-1123-49`）
    所以这个符号的直接受益面就是"编译 `random` 或 `str` 的程序"这 95 个用例 / 159 条 entry。要把数抬到
    594，得把别的族（上一份报告里 `grad` 的重载歧义那一族，以及 `registry.*` 的签名/文档漂移）算进来；
    树上没有那份 1512 条红名单可以对账，我不把它们的数记在 `C-1123-64` 名下。
-2. **设计问题（要作者裁）：`prelude.cml` 里带体的导出名要不要进第 5 层？** 若要，最小改法是
+2. **（已作废，见第 0 节：`bc90856729` 已把这一层定死。）设计问题：`prelude.cml` 里带体的导出名要不要进第 5 层？** 若要，最小改法是
    `Module::importedBindingsForRef`（`kernel/core/module/module.cpp:265`）在 `Ambient`（和 `All`）
    时给 prelude 加一条兜底绑定，**同时**要处理 `gir/builder_expr.cpp:1309`：一个"算子组 + 函数集"
    的 overload-set 实体现在会走 `isGraphSet` 那支而丢掉组里的规则（`len([1,2])` 会因此坏掉），

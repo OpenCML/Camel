@@ -1,8 +1,7 @@
 /**
- * The same call with the import: a prelude function is reached through `import { ... } from
- * prelude`, and beside it `to_range` — an operator of the same file — is reached unasked, because
- * the prelude's `#op` declarations are the built-in layer. The two halves of the rule in one
- * program.
+ * An explicit import of a prelude name is still accepted -- naming the module costs nothing, it is
+ * only not required. Beside it `to_range`, an operator of the same file, is reached with no import
+ * of it exactly as `to_array` now is.
  */
 import { to_array } from prelude
 
