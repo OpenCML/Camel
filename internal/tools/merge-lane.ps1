@@ -116,7 +116,17 @@ param(
     [string] $BaselineBranch = 'camel-baseline',
     [switch] $WhatIf,
     [switch] $NoPush,
-    [switch] $WarmBaseline
+    [switch] $WarmBaseline,
+    # A merge commit the seat already made, because the merge needed a resolution this tool cannot
+    # make: `git merge --no-ff` stopped on a conflict, the seat resolved the files and committed, and
+    # from then on this tool's own merge step has nothing to add -- it would either be refused by the
+    # start-point assertion (HEAD is no longer origin) or repeat a merge that now conflicts with its
+    # own resolution. Given here, the four stages after the merge (clang, readings, record, push) run
+    # exactly as they always do, on that commit; what is asserted instead of the merge is the shape a
+    # merge this tool would have made has: first parent == origin/<Target>, second parent == the
+    # lane's tip, HEAD == the commit itself. Anything else is refused, because a commit whose parents
+    # are not that is not the merge it claims to be.
+    [string] $MergeCommit = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -434,13 +444,52 @@ try {
         exit 2
     }
 
+    # `-MergeCommit`: the seat merged and resolved by hand, and this run is the four stages after the
+    # merge. What replaces the merge step's own two checks is the same question asked about a commit
+    # that already exists -- is this the merge this tool would have made? Three answers, all read off
+    # git rather than off the seat's word: the first parent is origin/<Target> (so the push is a
+    # fast-forward and the reading is about a tree that lands), the second parent is the lane's tip
+    # (so the record names the lane that came in), and HEAD is the commit (so what is measured and
+    # pushed is the thing that was checked). Each refusal names which one is wrong, because the
+    # repair differs: a wrong first parent means the seat started from another tip, a wrong second
+    # parent means another lane was merged, and a HEAD that is something else means the seat is not
+    # holding the merge it says it made.
+    $mergeSecondParent = ''
+    if ($MergeCommit) {
+        $mc = "$(& git rev-parse --verify "$MergeCommit^{commit}" 2>$null)".Trim()
+        if (-not $mc) {
+            Stop-With "-MergeCommit '$MergeCommit' does not resolve to a commit" 'Pass the sha (or the ref) of the merge commit the seat made; nothing was measured and nothing was pushed.' 2
+        }
+        $mcParents = @("$(& git rev-list --parents -n 1 $mc 2>$null)".Trim() -split '\s+' | Where-Object { $_ })
+        if ($mcParents.Count -lt 3) {
+            Stop-With "-MergeCommit $($mc.Substring(0, 9)) is not a merge commit" "It has $($mcParents.Count - 1) parent(s); a merge of the lane into $Target has two. Nothing was measured and nothing was pushed." 2
+        }
+        $mcFirst = $mcParents[1]
+        $mcSecond = $mcParents[2]
+        $laneTip = "$(& git rev-parse --verify "$Branch^{commit}" 2>$null)".Trim()
+        if (-not $laneTip) {
+            Stop-With "-MergeCommit was given with -Branch $Branch, which does not resolve to a commit" 'The second parent is compared against the lane the merge names, so the lane has to be nameable. Nothing was measured and nothing was pushed.' 2
+        }
+        if ($mcFirst -ne $originTarget) {
+            Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, not origin/$Target $($originTarget.Substring(0, 9))" "Its first parent is the tip the merge lands on, and the push is a fast-forward only from origin/$Target. Merge the lane from a checkout whose HEAD is origin/$Target and pass that commit; nothing was measured and nothing was pushed." 2
+        }
+        if ($mcSecond -ne $laneTip) {
+            Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcSecond.Substring(0, 9)) as its second parent, not the tip of $Branch $($laneTip.Substring(0, 9))" 'The second parent is the lane the record names, so a merge of another lane cannot be recorded as this one. Nothing was measured and nothing was pushed.' 2
+        }
+        if ($headTip -ne $mc) {
+            Stop-With "-MergeCommit is $($mc.Substring(0, 9)) and HEAD is $($headTip.Substring(0, 9))" 'The readings and the push are about HEAD, so HEAD has to be the merge commit that was checked. Check the commit out here, or pass the one HEAD holds; nothing was measured and nothing was pushed.' 2
+        }
+        $mergeSecondParent = $mcSecond
+        Write-Host "merging nothing: -MergeCommit $($mc.Substring(0, 9)) is already a merge of $($mcSecond.Substring(0, 9)) into origin/$Target $($originTarget.Substring(0, 9)), and its parents and HEAD are the shape this tool would have made"
+    }
+
     # The assertion: this checkout's HEAD is the target's recorded tip, so the merge commit's first
     # parent is the commit on origin and the push is a fast-forward. A seat works on a branch of its
     # own, so the local branch need not be named like the target; HEAD is what is asserted, and the
     # local branch (when it exists) is read beside it in the messages below.
     $rangeName = if ($localTarget) { "local $Target" } else { 'HEAD' }
     $rangeRight = if ($localTarget) { $Target } else { 'HEAD' }
-    if ($headTip -ne $originTarget) {
+    if ($headTip -ne $originTarget -and -not $MergeCommit) {
         # What the branch holds and origin does not: every commit, so the reader sees what a merge
         # brought with it as well. The judgement, though, is about develop's FIRST-PARENT chain only:
         # the commits a merge pulls in from a lane are not on that chain, were never merges this tool
@@ -686,10 +735,19 @@ try {
 
     Write-Host "merging $Branch at $head"
 
-    # Test 1: the exit code.
-    $mergeOutput = & git merge --no-ff $Branch -m "$Message`n`nLane branch: $Branch at $head" 2>&1
-    $mergeExit = $LASTEXITCODE
-    $mergeOutput | ForEach-Object { "  $_" }
+    # Test 1: the exit code. Skipped for `-MergeCommit`: the merge exists and its shape was asserted
+    # above, which is the same question `git merge` answers by exiting 0 and that assertion asks by
+    # comparing parents. Running the merge anyway is not an option -- on a conflicted merge it would
+    # stop on the resolution the seat just made, and on a clean one it would make a second merge
+    # commit on top of the first.
+    if ($MergeCommit) {
+        $mergeExit = 0
+        $mergeOutput = @()
+    } else {
+        $mergeOutput = & git merge --no-ff $Branch -m "$Message`n`nLane branch: $Branch at $head" 2>&1
+        $mergeExit = $LASTEXITCODE
+        $mergeOutput | ForEach-Object { "  $_" }
+    }
 
     if ($mergeExit -ne 0) {
         $conflicted = @(& git diff --name-only --diff-filter=U 2>$null)
