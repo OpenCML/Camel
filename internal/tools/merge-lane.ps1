@@ -1031,9 +1031,15 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
     Write-Host ("  {0} row(s) from the run, camel-remote exit {1}, {2} plan target(s){3}" -f `
         $rowsCount, $rowsExit, $planTargets.Count, $(if ($widened) { ' (the whole fast layer)' } else { '' }))
 
+    # The pass record is built from the comparer's own file -- the sets it judged, the plan set and
+    # its hash, the baseline it compared against -- so `--out` is asked for here. Reassembling that
+    # from the transcript would read a second time what was already read once, and the second reading
+    # is where the two would disagree.
+    $diffDir = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-diff-$PID")
+    New-Item -ItemType Directory -Force -Path $diffDir | Out-Null
     $compare = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $transcript `
         --cache $compareDir --develop $developTip --plans $planSetFile --tree $comparedTree `
-        --changed-files $changedFilesFile --message-file $messageFile 2>&1)
+        --changed-files $changedFilesFile --message-file $messageFile --out $diffDir 2>&1)
     $compareExit = $LASTEXITCODE
 
     # The same three-way convention as the clang step. 1 is a reading -- the cases that moved are
@@ -1088,16 +1094,41 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
         exit 0
     }
 
+    # --- the record the pre-push hook reads -------------------------------------
+    # A merge commit may reach the target only when a gate wrote down that it passed. The hook
+    # (`scripts/hooks/pre-push`) walks the first-parent range of the push and refuses a merge commit
+    # with no record, so the record is written before the push and removed if the push does not land:
+    # a claim about a commit nobody can fetch has no reader, and one left behind would let a later
+    # push of this commit pass on a reading taken now. That is the same mistake as a merge made on
+    # local `develop` -- a judgement outliving the tree it was about.
+    $passedDir = Join-Path $commonDir 'camel-passed'
+    New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+    $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
+        --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
+        --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `
+        --baseline-source $(if ($seededFrom) { "measured now on $($developTip.Substring(0, 9))" } else { "cached from an earlier measurement of $($developTip.Substring(0, 9))" }) `
+        --gate headers --gate clang-syntax --gate rows 2>&1)
+    $recordExit = $LASTEXITCODE
+    $recordOut | ForEach-Object { "  $_" }
+    if ($recordExit -ne 0) {
+        Stop-With "the pass record for $($mergeCommit.Substring(0, 9)) could not be written (exit $recordExit)" 'The pre-push hook refuses a merge commit without one, so the push is not attempted.' $mergeCommit
+    }
+    $recordFile = Join-Path $passedDir "$mergeCommit.json"
+
     for ($i = 1; $i -le 3; $i++) {
         & git push origin "HEAD:$Target" 2>&1 | Select-Object -Last 1
         if ($LASTEXITCODE -eq 0) { break }
         Start-Sleep -Seconds 4
     }
-    if ($LASTEXITCODE -ne 0) { Stop-With 'git push failed after 3 attempts' "The merge is committed locally and not on origin/$Target." $mergeCommit }
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
+        Stop-With 'git push failed after 3 attempts' "The merge is committed locally and not on origin/$Target, and the pass record was removed with the push's claim." $mergeCommit
+    }
 
     $remote = ((& git ls-remote origin "refs/heads/$Target") -split "`t") | Select-Object -First 1
     $local = "$(& git rev-parse HEAD)".Trim()
     if ($remote -ne $local) {
+        Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
         Stop-With "origin/$Target is not the commit just made" "local $local, remote $remote" $mergeCommit
     }
 
@@ -1147,6 +1178,7 @@ finally {
     if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
     if ($changedFilesFile) { Remove-Item -LiteralPath $changedFilesFile -Force -ErrorAction SilentlyContinue }
     if ($messageFile) { Remove-Item -LiteralPath $messageFile -Force -ErrorAction SilentlyContinue }
+    if ($diffDir) { Remove-Item -LiteralPath $diffDir -Recurse -Force -ErrorAction SilentlyContinue }
     # (the changed-file list is not a temp file: both sides read it from git)
     Pop-Location
 }
