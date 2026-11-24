@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：19 页
+## 现在在等作者：20 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -25,6 +25,7 @@
 | [`2026-11-23-what-a-read-of-a-cell-costs`](2026-11-23-what-a-read-of-a-cell-costs.cn.md) | 「读一个格子」算不算一个效应，以及算子记录的沉默在放置判断里值多少 |
 | [`2026-11-23-who-owns-a-store`](2026-11-23-who-owns-a-store.cn.md) | 「一个 Store」由谁造、由谁结束、由谁证它对 |
 | [`2026-11-23-who-owns-freely-arrangeable`](2026-11-23-who-owns-freely-arrangeable.cn.md) | 「可自由调度」这句判断归谁：事实层给一个 kind，还是各处自己拼 |
+| [`2026-11-24-an-identity-entry-for-a-reader-the-view-cannot-serve`](2026-11-24-an-identity-entry-for-a-reader-the-view-cannot-serve.cn.md) | 给不出读取的读者，该不该有身份入口？—— `collectReachableRuntimeGraphs` 的 20 处调用点 |
 | [`2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two`](2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two.md) | 一个守卫过滤掉的推导，是「一个重载」还是「两个」？ |
 | [`2026-11-24-stream-range-value-map-no-instance`](2026-11-24-stream-range-value-map-no-instance.cn.md) | `map(1..5)` 该拒绝还是该编译？ |
 | [`2026-11-24-what-the-graph-view-does-not-answer`](2026-11-24-what-the-graph-view-does-not-answer.cn.md) | 视图答不出什么：`onnx` 与 `tiles` 停下来的地方，按能力归类 |
