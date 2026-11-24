@@ -2326,6 +2326,12 @@ export CAMEL_TOKEN_DIR="`${CAMEL_TOKEN_DIR:-/tmp/camel-tokens}"
 export CAMEL_TOKENS="`${CAMEL_TOKENS:-24}"
 export CAMEL_LANE='$name'
 export CAMEL_BRANCH='$branch'
+# The plan is a child of `camel-run` now, in a process of its own, and a shell variable of this
+# script is not that process's environment. `R` names the checkout the plan must run in, so it
+# crosses the boundary like the lane and the branch do: without it the plan's own `cd `$R/` empties
+# to `cd /`, and every plan dies with `Cannot find module '/scripts/test.js'` -- a reading that looks
+# like a broken tree rather than a variable that did not travel (measured, 2026-11-24).
+export R
 echo "HOST_TOKEN_POOL=`$CAMEL_TOKEN_DIR size=`$CAMEL_TOKENS"
 echo '__CAMEL_REMOTE_SYNCED__'
 if [ '$NoBuild' = 'True' ]; then
