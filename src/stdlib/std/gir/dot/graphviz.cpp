@@ -930,7 +930,7 @@ GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os
     camel::runtime::GCGraph *graph = program->root();
     program_                       = camel::runtime::ProgramHold(*context_, program);
     os << dumpGraph(graph);
-    return nullptr;
+    return program;
 }
 
 

@@ -53,9 +53,9 @@ INPUT SETS (`--sets small,medium,large,modules`; default all):
   modules  generated projects of N small modules (gen_modules.py) for N in --modules
            (default 1,2,4,8,16,32,64,128), in the shapes flat, chain and fan
 
-Pipelines per input: `compile` (`std::null`: everything up to the graph, nothing executed);
+Pipelines per input: `compile` (`std::nop`: everything up to the graph, nothing executed);
 for inputs that can run, `passes` (std::macro, the four std::opt sub-passes, std::cxx::inline,
-std::cxx::specialize, then std::null), and the back ends std::nvm, std::fvm, std::jit, and
+std::cxx::specialize, then std::nop), and the back ends std::nvm, std::fvm, std::jit, and
 std::bc (bytecode compiled and printed, not executed: an upper bound of what std::fvm
 spends before it executes).
 
@@ -88,9 +88,9 @@ sys.path.insert(0, str(REPO / "test" / "tools" / "scale"))
 import gen_modules  # noqa: E402
 
 PASS_PIPELINE = ["std::macro", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce", "std::opt",
-                 "std::cxx::inline", "std::cxx::specialize", "std::null"]
+                 "std::cxx::inline", "std::cxx::specialize", "std::nop"]
 PIPELINES = {
-    "compile": ["std::null"],
+    "compile": ["std::nop"],
     "passes": PASS_PIPELINE,
     "nvm": ["std::nvm"],
     "fvm": ["std::fvm"],
@@ -648,7 +648,7 @@ def render(data: dict) -> str:
                        if r["modules"] == max(x["modules"] for x in results if x.get("set") == "modules")]
         columns = compile_cols + modules_big
         if columns:
-            out += [f"## Compile only (`std::null`){heading}: median", "", phase_table(columns, "median")]
+            out += [f"## Compile only (`std::nop`){heading}: median", "", phase_table(columns, "median")]
             out += [f"## Compile only{heading}: minimum", "", phase_table(columns, "min")]
             out += [f"## Heap allocations, compile only{heading}", "", alloc_table(columns)]
             split = [r for r in columns if "parse_split" in r]
@@ -778,7 +778,7 @@ def cmd_check(_args) -> int:
                 problems.append(f"{name}: {r['error']}")
                 continue
             phases = r["phases_ms"]
-            for kind in ("startup", "parse", "gct", "gir", "encode", "teardown", "pass:std::null"
+            for kind in ("startup", "parse", "gct", "gir", "encode", "teardown", "pass:std::nop"
                          if r["pipeline"] != "fvm" else "pass:std::fvm"):
                 if kind not in phases:
                     problems.append(f"{name}: no phase '{kind}'")
@@ -862,7 +862,7 @@ def cmd_check(_args) -> int:
                                 f"output {done.stdout.strip()!r}, {len(phases)} phases")
         # The environment variable asks for the report where the option cannot be given.
         by_env = work / "by_env.json"
-        subprocess.run([str(tool_path(default_home(), "camel")), inputs[0]["path"], "std::null"],
+        subprocess.run([str(tool_path(default_home(), "camel")), inputs[0]["path"], "std::nop"],
                        env=camel_env(default_home(), {"CAMEL_TIME_PHASES": str(by_env)}),
                        stdout=subprocess.DEVNULL, cwd=tmp)
         if not by_env.exists() or "phases" not in json.loads(by_env.read_text(encoding="utf-8")):

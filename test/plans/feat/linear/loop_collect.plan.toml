@@ -37,7 +37,7 @@ name = "loops.collect.macro"
 desc = "std::macro evaluates a collecting loop ahead of time: a two-value state keeps its first component where the program reads it and the two tapes travel with it."
 kind = "behavior"
 case = "../../../cases/loops/macro.cml"
-args = ["${case}", "test::loop_collect", "std::macro", "std::rgir"]
+args = ["${case}", "test::loop_collect", "std::macro", "std::rgir", "std::nop"]
 
 expect_exit = 0
 expect_stdout_contains = ["label=\"500500\""]

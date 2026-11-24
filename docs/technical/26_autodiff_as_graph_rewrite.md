@@ -456,7 +456,7 @@ What exists (`lib/onnx/passes/export.cpp`, `docs/cli.md`):
     camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
 
 - `onnx::export` is registered by the `onnx` module and is the last pass of the
-  pipeline; it consumes the graph, so the program does not run. The export
+  pipeline; it hands the graph on, so write `std::nop` after it when the program is not to run. The export
   request is the program's own `onnx.export_model<out: path>(fn, example)`
   call, which the pass finds in the entry graph with constant arguments (no new
   syntax, no new command-line option). the parameter `out` of the pass overrides the file.

@@ -744,7 +744,7 @@ expect_stdout_exact = ""
 name = "rc17_seed193.std_cpp"
 desc = "The writer's text for the program of the `non-void function 'lambda' should return a value` shape: the branch that gives the lambda's value is no longer the sequence's last word (`let n67 = len(...)` stands after it), so its join was neither the tail nor anybody's input and the writer ended the function with `return ;`. What is held here is that the text carries no bare `return` -- the run that builds and runs it is the program's line in `test/tools/cppexec/expect.txt`."
 case = "../../../cases/opt/e9/rc17_seed193.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_output_not_contains = ["return ;", "return;"]
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -804,7 +804,7 @@ expect_stdout_exact = "r true\n"
 name = "rc19_seed70.std_cpp"
 desc = "The writer's text after the same pass: the closure that fills the second surviving parameter is spelled with that parameter's own type -- `rt::Fn<bool(rt::Str, int64_t)>(` and not its predecessor's `rt::Fn<int64_t(double)>(`. Before the fix the text carried the wrong spelling and clang refused it; the run that builds and runs the text, and compares what it prints with `std::fvm`, is `feat/trans/cpp.rc19_seed70_builds_after_specialize`."
 case = "../../../cases/opt/e9/rc19_seed70.cml"
-args = ["${case}", "std::cxx::specialize", "std::cpp"]
+args = ["${case}", "std::cxx::specialize", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["rt::Fn<bool(rt::Str, int64_t)>("]
 expect_output_not_contains = ["TranslationRefused"]

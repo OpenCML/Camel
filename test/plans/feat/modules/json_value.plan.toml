@@ -336,7 +336,7 @@ name = "json.kind.failed.export"
 desc = "A match over a `Json!` that failed, exported after std::opt: the arm that would look into the document is the case the tag does not select, and folding it early leaves no document to look into. The export succeeds and its document parses; the fold used to materialize that absence as a null Json constant and `kind` read it through a null pointer."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_kind_failed.cml"
-args = ["${case}", "std::opt", "std::jgir", "canonical=true"]
+args = ["${case}", "std::opt", "std::jgir", "canonical=true", "std::nop"]
 expect_exit = 0
 expect_output_not_contains = ["Segmentation fault", "core dumped"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

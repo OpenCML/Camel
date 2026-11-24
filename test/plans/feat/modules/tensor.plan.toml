@@ -433,7 +433,7 @@ name = "fuse_linear_graph"
 desc = "tensor::fuse changes no operator: the graph keeps every matmul/add/relu and records tensor.kernel on each matmul and tensor.fusion on the nodes of the five groups it found; the product with a second reader is in no group."
 kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_linear.cml"
-args = ["${case}", "tensor::fuse", "std::gir"]
+args = ["${case}", "tensor::fuse", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -460,7 +460,7 @@ name = "fuse_linear_graph_safe"
 desc = "tensor::fuse safe_fp=true keeps the groups but records the canonical algorithm on every matmul (design principles 7.4)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_linear.cml"
-args = ["${case}", "tensor::fuse safe_fp=true", "std::gir"]
+args = ["${case}", "tensor::fuse safe_fp=true", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

@@ -161,7 +161,7 @@ def main() -> int:
     compile_times = []
     for _ in range(3):
         c = run_command(camel_command(camel, data, "linear", profile,
-                                      ["std::macro", "std::stats", "std::null"]), camel_env(REPO))
+                                      ["std::macro", "std::stats", "std::nop"]), camel_env(REPO))
         compile_times.append(c["seconds"])
     compile_time = statistics.median(compile_times)
 

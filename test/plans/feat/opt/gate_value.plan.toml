@@ -72,7 +72,7 @@ verify_script = '''
 [[tests]]
 name = "covered_value.graph.false"
 case = "../../../cases/modules/autodiff/collapse_random.cml"
-args = ["${case}", "std::macro", "std::opt safe_fp=false", "std::jgir"]
+args = ["${case}", "std::macro", "std::opt safe_fp=false", "std::jgir", "std::nop"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -93,7 +93,7 @@ tier = "slow"
 [[tests]]
 name = "covered_value.graph.true"
 case = "../../../cases/modules/autodiff/collapse_random.cml"
-args = ["${case}", "std::macro", "std::opt safe_fp=true", "std::jgir"]
+args = ["${case}", "std::macro", "std::opt safe_fp=true", "std::jgir", "std::nop"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -115,7 +115,7 @@ tier = "slow"
 name = "other_wait.graph"
 desc = "A wait the value's own producer does not carry is moved to the consumer, and the value a consumer reads is the value the producer made: what a print reads, once the forwarding gates it passes through are looked through, is the `dtod` node itself -- a gate orders the value it reads and changes nothing else (docs/design/effects/edges.cn.md 4.6), and the prints still happen in the source's order."
 case = "../../../cases/opt/generic/gate_value_dependency.cml"
-args = ["${case}", "std::macro", "std::opt", "std::jgir"]
+args = ["${case}", "std::macro", "std::opt", "std::jgir", "std::nop"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -237,7 +237,7 @@ verify_script = '''
 [[tests]]
 name = "branch.graph"
 case = "../../../cases/opt/generic/gate_branch_wait.cml"
-args = ["${case}", "std::opt", "std::jgir"]
+args = ["${case}", "std::opt", "std::jgir", "std::nop"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');

@@ -1412,7 +1412,7 @@ name = "literal.type_is_the_element_type"
 desc = "The graph itself: the literal operand of a tensor operator is built in the tensor's element type (`f32` beside an `f32` tensor, `bf16` beside a `bf16` one, and the tensor parameter of the `f64` spelling stays `float`). Printed as GIR, where every DATA node states its value type."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/scalar_literal.cml"
-args = ["--devices", "cpu", "${case}", "std::gir"]
+args = ["--devices", "cpu", "${case}", "std::gir", "std::nop"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 verify_script = """

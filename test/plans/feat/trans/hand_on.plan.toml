@@ -1,0 +1,61 @@
+id = "trans.hand_on"
+order = 918
+tier = "fast"
+tags = ["feat", "trans", "nop", "pipeline"]
+desc = "A translating pass prints or exports and hands the graph on; `std::nop` is how a pipeline prints and does not run"
+
+# Design principles 9.1 (docs/design-principles.cn.md:636): a translation pass prints or exports and
+# hands the original graph down, so it can be written anywhere in the pipeline; the pipeline has one
+# rule -- the passes written run in order, and when the graph is still there at the end it goes to
+# `std::default` (9.2, line 646). To look without running, write `std::nop` at the end: it is the
+# scheduling pass that answers with an empty graph and produces no effect.
+#
+# The four cases are the four answers that rule allows:
+#
+#   two_dumps_and_nop   `std::gir std::opt std::gir std::nop` -- the shape the principles write out:
+#                       the graph before and after the optimizer, and the program does not run
+#   one_dump_runs_it    `std::gir` alone -- the graph is printed, nothing consumed it, so the
+#                       default scheduling pass runs the program
+#   nop_alone           `std::nop` alone -- nothing printed, nothing run
+#   after_nop_never_run `std::nop std::gir` -- the `gir` after the empty graph never runs, and the
+#                       warning says so
+#
+# The case returns 7: 0 is "nothing ran" and 7 is "it ran", and no graph carries an exit code.
+
+[defaults]
+kind = "behavior"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "two_dumps_and_nop"
+desc = "The principles' own example: the graph before and after `std::opt` is printed, and the program is not executed."
+case = "../../../cases/trans/hand_on/hand_on.cml"
+args = ["${case}", "std::gir", "std::opt", "std::gir", "std::nop"]
+expect_exit = 0
+expect_stdout_starts_with = "digraph"
+
+[[tests]]
+name = "one_dump_runs_it"
+desc = "`std::gir` alone prints the graph and hands it on: nothing consumes it, so the default scheduling pass runs the program and its 7 is the exit code."
+case = "../../../cases/trans/hand_on/hand_on.cml"
+args = ["${case}", "std::gir"]  # camel-pass-scan: keep -- this case pins that the program runs
+expect_exit = 7
+expect_stdout_starts_with = "digraph"
+
+[[tests]]
+name = "nop_alone"
+desc = "`std::nop` consumes the graph without executing it: no output at all, and the program's 7 never happens."
+case = "../../../cases/trans/hand_on/hand_on.cml"
+args = ["${case}", "std::nop"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "after_nop_never_run"
+desc = "`std::nop` answered with an empty graph, so the `std::gir` written after it never runs -- and the warning names it."
+case = "../../../cases/trans/hand_on/hand_on.cml"
+args = ["${case}", "std::nop", "std::gir"]  # camel-pass-scan: keep -- gir is after the nop, so it never runs
+expect_exit = 0
+expect_stdout_not_contains = "digraph"
+expect_stderr_contains = "will not run"

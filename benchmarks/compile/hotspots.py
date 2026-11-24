@@ -8,7 +8,7 @@ r"""Where a Camel run spends its time and makes its allocations, by function and
     python3 benchmarks/compile/hotspots.py allocs FILE [PASS...] [--every 17] [--out DIR]
     python3 benchmarks/compile/hotspots.py report SAMPLES_FILE...      saved sample files again
 
-The default pass list is `std::null` (compile, execute nothing). Both commands run camel
+The default pass list is `std::nop` (compile, execute nothing). Both commands run camel
 under test/tools/allocshim: `cpu` with its sampling profiler (a CPU-time timer, one stack
 per tick), `allocs` with one stack per N-th allocation. The stacks are resolved with
 addr2line against the binaries the process had mapped, and summed three ways:
@@ -304,7 +304,7 @@ def cmd_profile(args) -> int:
     if shim is None:
         print("profile: the shim could not be built (Linux with a C compiler is needed)", file=sys.stderr)
         return 2
-    passes = args.passes or ["std::null"]
+    passes = args.passes or ["std::nop"]
     source = str(Path(args.file).resolve())
     parts: List[Path] = []
     runs = args.runs if args.cmd == "cpu" else 1

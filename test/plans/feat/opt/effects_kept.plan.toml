@@ -127,7 +127,7 @@ expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
 # expects, so an effect that goes missing shows up as a wrong line. A program whose effect is left in
 # no chain of its graph has no wrong line to show: it exits 0, its diagnostics are empty, and the
 # lines it no longer prints are simply not there. `nn.mnist` did exactly that -- `std::opt` dropped
-# `Iteration 0` -- and no plan noticed, because `nn.mnist` is run with `std::null` and compared with
+# `Iteration 0` -- and no plan noticed, because `nn.mnist` is run with `std::nop` and compared with
 # nothing.
 #
 # So this one compares the two runs with each other instead of with a golden: same binary, same host,
@@ -264,7 +264,7 @@ tier = "slow"
 name = "no_exit.dot"
 desc = "A graph that names no exit at all: `std::gir` draws it, says so over the EXIT node, and draws no EXIT edge."
 case = "../../../cases/compile/static_expansion/fields_and_access.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["// exit: none -- this graph names no result", "label=\"EXIT\", type=\"EXIT\""]
@@ -274,7 +274,7 @@ expect_output_not_contains = ["Runtime graph exit node is missing"]
 name = "no_exit.json"
 desc = "The same graph in `std::jgir`: the field is `null`, which is what the drawing's comment says in words."
 case = "../../../cases/compile/static_expansion/fields_and_access.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["\"exit\": null"]
@@ -595,7 +595,7 @@ name = "a_statement_before_a_branch_is_ordered_with_its_arm"
 desc = "No pass: the print written before `pick`'s branch and the branch that owns the arm's print are joined by an order edge -- the front end's own, which a splice copies and a commit asks about."
 kind = "behavior"
 case = "../../../cases/opt/effects/statement_before_branch_is_ordered.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["\"format\": \"camel.gir\""]
