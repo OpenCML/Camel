@@ -300,15 +300,18 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
 /// declaration (`addOperNode(op, ...)`, whose target the graph holds) or by URI alone (a call the
 /// builder writes for an operation no declaration in scope answers -- `addOperNode(type, uri)`),
 /// whose payload is the only place the name is kept until the graph is encoded.
+///
+/// A node of any other kind stands for no operator, so the question is answered before the
+/// builder's operator-target table is asked: that table is keyed by OPER node only, and
+/// `operTarget` is a witness that an entry exists (it refuses a node it has none for). Asking it
+/// of, say, a value node is asking the wrong table, not finding a builder that broke a promise --
+/// it aborts on every graph, not on the one call written by URI alone.
 inline std::string_view operUriOf(node_handle_t node) {
-    if (node == nullptr) {
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return {};
     }
     if (const auto op = nodeGraphOf(node)->operTarget(node); op != nullptr) {
         return op->uri();
-    }
-    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        return {};
     }
     const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
     if (payload.size() < sizeof(runtime::GCOperBody)) {
