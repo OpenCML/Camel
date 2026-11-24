@@ -15,7 +15,7 @@ speaks back, and both are pushed as they happen.
 | `/oversee/say` | POST | `{"id": "D-1123-43", "text": "...", "mode": "queue"}` queues a dispatch prefixed `[decision-maker · D-1123-43]`; `mode: "steer"` delivers at the nearest step; a repeated id is dropped |
 | `/oversee/acks` | GET | acknowledgements and the coordinator's own messages |
 | `/oversee/events` | GET | server-sent events: acknowledgements, `oversight_tell`, reminders, the claimed session ending, and a `beat` after each measurement |
-| `/oversee/reload` | POST | sync the plugin directory out of `origin/develop` into the live directory, reload this one plugin, and answer with the commit it came from; a tree that fails a check is refused with `file:line` and the live directory is left alone |
+| `/oversee/reload` | POST | sync the plugin directory out of the pushed line (`origin/integration`, or `origin/develop` without it) into the live directory, reload this one plugin, and answer with the commit it came from; a tree that fails a check is refused with `file:line` and the live directory is left alone |
 
 Model tools: `oversight_claim`, `oversight_ack`, `oversight_tell`, `oversight_readings`.
 
@@ -48,7 +48,7 @@ message; an urgent reminder stays until clicked.
 2. Machine-local values in `%USERPROFILE%\.camel-oversight\config.json`:
    `{"repo": "D:\\Projects\\Camel", "buildHost": "<ssh target>"}`; `repo` turns the watch on, `buildHost`
    (key-based ssh) adds the build host's load. Optional: `logFile`, `stateDir`, `watchSeconds`, `limits`,
-   `liveDir`, `syncScript`, `syncRef`.
+   `liveDir`; `syncScript` and `syncRef` only to test a change to the sync script (left unset, both come from the pushed line the plugin reads, never from a checkout's working tree).
 3. Keep the web server on loopback and publish it on the tailnet with `tailscale serve --bg <port>`. The
    routes are outside the GUI's login; the tailnet is the gate.
 4. What needs a DSH restart and what does not: `rules.js` (the rules, their texts and default limits) and `measure.js` (the readings) are reloaded at the next beat after they change on `origin/integration` (or `origin/develop` where there is no integration branch: the pushed, gated content -- never the working tree, which holds a merge in progress), and a file that fails to load leaves the version in use in place (reported as a `hot-reload` event and under `hotLoaded` in `/oversee/state`); the limits in `~/.camel-oversight/config.json` and `internal/collab/rules.md` (also read from that line) are read afresh too. `client.js` (the band) is a browser module and needs a page refresh, and a session sees new tools only once it starts afresh; `index.js` (routes, tools, the session wiring) is replaced by the reload route below.
@@ -64,7 +64,7 @@ merges in flight and lane half-work, and DSH's replacement does not fall back to
 
 **The button.** The band's `重载插件` calls `POST /oversee/reload`, which:
 
-1. runs `internal/tools/sync-oversight-live.mjs`: it reads the plugin directory out of `origin/develop`
+1. runs `internal/tools/sync-oversight-live.mjs`: it reads the plugin directory out of the pushed line the plugin reads (`origin/integration`, or `origin/develop` without it)
    (`git ls-tree` + `git cat-file`, no worktree, no `stash`), writes it to a temporary directory beside the
    live one, and gates every `.js` with `node --check`, then imports the staged `index.js` and `client.js` in
    a child process. A file that fails stops everything: the temporary directory is removed, the live
