@@ -1,0 +1,49 @@
+// `softmax_cross_entropy`'s label form through the library and through the engine, in both
+// directions.
+//
+// The call below is spelled `softmax_cross_entropy(logits, [1, 0])` and the **target's element type**
+// is what makes it a different operator: the front end sends an integer target to the URI
+// `nn:softmax_cross_entropy_labels` (`nn/tensor_ops.cpp#softmaxCrossEntropyLabelsInfer`), whose
+// key is `softmax_cross_entropy_labels@2` and not the distribution form's. A law is filed under the
+// operator's own name, so the library's two laws for it name that URI's name through a declaration
+// of its own (`src/stdlib/rulesets/jvp.cml`,
+// `src/stdlib/rulesets/transpose.cml`) -- no name a program writes is that one.
+//
+// The labels are integers, so the only operand with a cotangent is the logits, and the answer is
+// one value rather than a tuple.
+//
+//     camel test/cases/modules/nn/library_law_softmax_cross_entropy_labels.cml
+import { grad } from autodiff
+import { softmax_cross_entropy } from nn
+import rulesets.jvp
+import { abs, sum } from tensor
+import { jvp } from transforms
+import { vjp } from vjp
+
+/// The engine's spelling: the logits are the `with` parameter, one label per row is an argument.
+with <logits: float[2, 3]>
+func loss_engine(labels: int[]) => float {
+    return softmax_cross_entropy(logits, labels)
+}
+
+func main() => int sync {
+    let logits = [[1.0, 2.0, 0.5], [0.0, 1.0, 2.0]] as float[2, 3]
+    let labels = [1, 0] as int[]
+    let seed = [[1.0, -1.0, 0.5], [0.25, 0.0, -2.0]] as float[2, 3]
+    
+    let engine = grad(loss_engine)<[[1.0, 2.0, 0.5], [0.0, 1.0, 2.0]] as float[2, 3]>(labels)
+    
+    let library_loss = func (ll: float[2, 3]) => float {
+        return softmax_cross_entropy(ll, labels)
+    }
+    let (_, pullback) = vjp(library_loss)(logits)
+    let library = pullback(1.0).0
+    let (_, forward) = jvp(library_loss)(logits, seed)
+    
+    let reverseDiff = sum(abs(engine - library))
+    let forwardDiff = forward - sum(engine * seed)
+    let reverseOk = reverseDiff < 1e-6
+    let forwardOk = forwardDiff < 1e-6 && forwardDiff > -1e-6
+    `softmax_cross_entropy_labels reverse_ok={} forward_ok={} reverse_diff={:.12e} forward_diff={:.12e}`->format<reverseOk, forwardOk, reverseDiff, forwardDiff>->println
+    return 0
+}

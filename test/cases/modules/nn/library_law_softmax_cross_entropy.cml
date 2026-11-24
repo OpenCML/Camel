@@ -1,0 +1,51 @@
+// `softmax_cross_entropy`'s derivative through the library and through the engine, in both
+// directions: the loss against a target **distribution**.
+//
+// The loss is `-sum(target * log_softmax(logits)) / batch`, so the derivative in the direction
+// `dlogits` is `sum(grad ⊙ dlogits)` with `grad` the engine's own
+// `softmax_cross_entropy_grad(logits, target, 1.0)` -- a residual of the forward law, which reads
+// the primals and no tangent (`src/stdlib/rulesets/jvp.cml#jvp_softmax_cross_entropy`). The
+// transpose answers that same gradient, scaled by the cotangent
+// (`src/stdlib/rulesets/transpose.cml#softmax_cross_entropy_t`).
+//
+// The target is a float tensor and its own cotangent is answered as **zero**, on purpose and for a
+// reason the forward law records: the true value is `-ct * log_softmax(logits) / batch`, a scalar
+// times a tensor, and a scalar becomes a tensor only through `full`, which has no transpose -- so
+// writing it would make the whole key un-transposable. This program therefore asks about the
+// logits, which is the operand the engine differentiates too (`softmaxCrossEntropyVjp`).
+//
+//     camel test/cases/modules/nn/library_law_softmax_cross_entropy.cml
+import { grad } from autodiff
+import { softmax_cross_entropy } from nn
+import rulesets.jvp
+import { abs, sum } from tensor
+import { jvp } from transforms
+import { vjp } from vjp
+
+/// The engine's spelling: the logits are the `with` parameter.
+with <logits: float[2, 3]>
+func loss_engine(target: float[2, 3]) => float {
+    return softmax_cross_entropy(logits, target)
+}
+
+func main() => int sync {
+    let logits = [[1.0, 2.0, 0.5], [0.0, 1.0, 2.0]] as float[2, 3]
+    let target = [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]] as float[2, 3]
+    let seed = [[1.0, -1.0, 0.5], [0.25, 0.0, -2.0]] as float[2, 3]
+    
+    let engine = grad(loss_engine)<[[1.0, 2.0, 0.5], [0.0, 1.0, 2.0]] as float[2, 3]>(target)
+    
+    let library_loss = func (ll: float[2, 3]) => float {
+        return softmax_cross_entropy(ll, target)
+    }
+    let (_, pullback) = vjp(library_loss)(logits)
+    let library = pullback(1.0).0
+    let (_, forward) = jvp(library_loss)(logits, seed)
+    
+    let reverseDiff = sum(abs(engine - library))
+    let forwardDiff = forward - sum(engine * seed)
+    let reverseOk = reverseDiff < 1e-6
+    let forwardOk = forwardDiff < 1e-6 && forwardDiff > -1e-6
+    `softmax_cross_entropy reverse_ok={} forward_ok={} reverse_diff={:.12e} forward_diff={:.12e}`->format<reverseOk, forwardOk, reverseDiff, forwardDiff>->println
+    return 0
+}
