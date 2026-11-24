@@ -2,11 +2,13 @@
  * Three graphs and one callee named at two call sites.
  *
  * `twice` is called from `pair` and from `main` -- two positions in the source, one graph -- and
- * `pair` is called from `main`. The constants `4`, and the parameter types, give nodes whose value
+ * `pair` is called from `main`. The constants, and the parameter types, give nodes whose value
  * sits in a graph's static area, which is the other reading the view layer had been arguing about
  * (`test::view_types`). There is deliberately no operator call here: these two readings are about
  * graphs and the identity a Program answers with, so the case is calls, parameters and constants
- * and nothing whose meaning another layer decides.
+ * and nothing whose meaning another layer decides. `main` declares no return type, so the run's
+ * exit code is 0 and the value `pair(twice(4))` is printed as `4` -- the program the graph
+ * identities were read on is a program that ran.
  */
 
 func twice(x: int) => int {
@@ -17,6 +19,6 @@ func pair(a: int) => int {
     return twice(a)
 }
 
-func main() => int sync {
-    return pair(twice(4))
+func main() sync {
+    println(pair(twice(4)))
 }
