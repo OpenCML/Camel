@@ -14,6 +14,7 @@
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
+#include "graph/graph_view.h"
 #include "src/stdlib/tensor/type.h"
 #include "src/stdlib/transforms/node_operator.h"
 #include "tiles/device.h"
@@ -449,10 +450,10 @@ namespace {
 
 namespace rt = runtime;
 
-/// Whether a parameter of `graph` is declared as a device value.
-bool parameterIsDevice(const rt::GCGraph &graph, rt::gc_node_ref_t port) {
-    const rt::GCNode *node = graph.node(port);
-    return node != nullptr && asDeviceType(node->dataType()) != nullptr;
+/// Whether a parameter of `g` is declared as a device value. `typeOf` answers the node's value
+/// type, which is the one field this reading asked the record for.
+bool parameterIsDevice(const camel::graph::GraphView &g, camel::graph::NodeRef port) {
+    return asDeviceType(g.typeOf(port)) != nullptr;
 }
 
 /// Whether a call node hands a value to a parameter the callee declares as an ordinary value. A
@@ -463,7 +464,7 @@ bool passesOrdinaryArgument(
     if (callee == nullptr)
         return true;
     for (auto port : callee->normPorts())
-        if (!parameterIsDevice(*callee, port))
+        if (!parameterIsDevice(callee->view(), port))
             return true;
     return false;
 }
@@ -471,8 +472,8 @@ bool passesOrdinaryArgument(
 /// Whether the host observes what the graph returns: its exit type declares an ordinary value, and
 /// the graph hands the caller one. A `Device<T>` exit type hands it a value that stays on the
 /// device.
-bool returnsToHost(const rt::GCGraph &graph) {
-    const auto *type = graph.funcType();
+bool returnsToHost(const camel::graph::GraphView &g) {
+    const auto *type = g.funcType();
     return type == nullptr || !type->hasExitType() || asDeviceType(type->exitType()) == nullptr;
 }
 
@@ -493,7 +494,7 @@ ResidencyPlan planResidency(
     const std::vector<Segment> &regions) {
     ResidencyFacts facts;
     facts.values.resize(nodes.size());
-    facts.returnsToHost = returnsToHost(graph);
+    facts.returnsToHost = returnsToHost(graph.view());
     for (size_t ref = 0; ref < nodes.size(); ++ref) {
         const auto id       = static_cast<rt::gc_node_ref_t>(ref);
         const rt::GCNode *node = graph.node(id);
@@ -501,7 +502,8 @@ ResidencyPlan planResidency(
             continue;
         auto &value = facts.values[ref];
         if (node->kind == rt::GCNodeKind::Port)
-            value.block.placement = parameterIsDevice(graph, id) ? Placement::Gpu : Placement::Host;
+            value.block.placement = parameterIsDevice(graph.view(), id) ? Placement::Gpu
+                                                                       : Placement::Host;
         else
             value.block = placementOf(graph, id);
         value.readsInPlace = readsInPlace(program, graph, *node, id);

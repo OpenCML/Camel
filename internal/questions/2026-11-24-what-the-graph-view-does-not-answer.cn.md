@@ -1,187 +1,220 @@
-# 视图答不出什么：`onnx` 与 `tiles` 停下来的 11 处
+# 视图答不出什么：`onnx` 与 `tiles` 停下来的地方，按能力归类
 
 2026-11-24 ｜ 来自 `lane/3a-onnx-tiles`（阶段 3a，目录 `src/stdlib/onnx`、`src/stdlib/tiles`）｜ 对象：`kernel/graph/graph_view.h`
 
-## 这一页是什么
+## 0. 这一页是什么，读数是哪三个
 
 这一页记的是 **`GraphView` 的缺口**，不是 `onnx`/`tiles` 欠的活。作者的原话：「读不了视图的（需要视图没有的能力）不硬改，列成清单交回，那是视图的缺口。」
 
-计数（`git grep -cE '\bGCGraph\b|\bGraphDraft\b' -- src/stdlib/onnx src/stdlib/tiles`）：改前 `onnx 84 / tiles 74`；本轮改后 `onnx 72 / tiles 74`。**`tiles` 一处没减，原因就是下面第 1 至第 4 条**——那四条覆盖了 `tiles` 的 74 处里几乎每一处。凡是视图现有能力能等价表达的，本轮都改掉了（8 处）。
+判据命令（**路径是 `src/stdlib/onnx`、`src/stdlib/tiles`**。判据原文写的 `src/stdlib/std/onnx`、`src/stdlib/std/tiles` 在 `develop` 与本车道都不存在，按原文跑是 `exit 1`、无输出，见 §8）：
 
-第 ④ 项分三档，不许混：
+```
+git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/onnx
+git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/tiles
+```
 
-- **可以** —— 写清怎么替；
-- **部分** —— 写清**哪一半**能替、哪一半不能；
-- **不能** —— 写出**缺的那个方法名**。
-
-**当前总账：可以 1 ／ 部分 2 ／ 不能 5**（8 条）。上一版的读数是 `可以 0 ／ 部分 2 ／ 不能 6`；差值来自另一条车道把 `C-1123-59` 的四项视图能力落进了 `origin/develop`（`3185345334`），其中两项正好落在本页的缺口上，见第四节。
-
-本页的行号是**本车道基线 `98b56b3d5d` 的读数**；第四节谈的四项按 `origin/develop` 的 `3185345334` 读。
-
-本轮那 8 处改动**已在构建槽上取过读数**（`feat/modules/onnx`＋`feat/modules/tiles`，268 例逐条比对，改前/改后**完全相同**：pass 233 / fail 27 / skip 6 / known 2；其中 `tiles` 109 例一例未动）。所以下面这张清单是「能改的都改完、读数确认没动」之后剩下的。
-
----
-
-## 一、八条缺口
-
-### 1. 节点与区域的属性（`attrsOf` / `RegionRecord` 的 tag set）
-
-**① 位置**：`tiles/src/placement.cpp:27`（`functionGraphOf`）、`:41`（`bodyAttrs`）、`:47`（`factRegion`）、`:175`（`placementOf`）、`:348`（`GpuScopes::covers`）；`tiles/src/compiler.cpp:75`（`checkAttributeFates`）；`onnx/exporter.cpp:741`（`recordFates`，读 `nodeAttrs`/`nodePermissions`）。
-
-**② 缺的能力**：节点属性 `attrsOf(NodeRef) -> AttrSetId`、节点权限、以及区域的 tag set（`GCRegion::attrs`）。`RegionRecord` 明确写了「its tag set (a fact, not a place)」——视图刻意不交；节点侧的读标签入口在 `graph_view.h` 末尾只注明「arrives as an addition」，今天没有。
-
-**③ 今天为何需要**：Tiles 的放置查询读的是**写在节点或最近一层区域上的 `tiles.placement` 标签**——`placementOf` 问节点自己的标签，`factRegion` 沿 `region->parent` 上溯找最近一条带该键的区域标签，`bodyAttrs` 读区域 0 的标签。`checkAttributeFates` 与 `recordFates` 更直接：把属性集逐条过 fate 表，没有 fate 就拒绝。
-
-**④ 三分**：**不能**（**仍是本车道的主诉：四項新能力一项都没碰它**）。
-
-要的是两个方法，消费者各一处：
-
-- `attrsOf(NodeRef) -> AttrSetId` —— 消费者 `tiles/src/placement.cpp#placementOf`：它先看节点自己的 `tiles.placement` 标签，没有再沿区域上溯；
-- `RegionRecord::attrs`（或 `regionAttrs(RegionId)`）—— 消费者 `tiles/src/placement.cpp#factRegion`：它沿 `region->parent` 找**最近一条带该键的区域标签**，`RegionRecord` 今天五个字段里没有 tag set，所以这半截根本没有入口。
-
-这条也是 `tiles 74 → 74` 的**唯一主要原因**：放置/编译两侧都要读标签，而标签不在视图上。
-
-### 2. 区域抽取所需的存储细节
-
-**① 位置**：`tiles/src/region_extract.cpp:29`（`typeOf` 读 `dataIndex`/`staticSlots`/`staticDataType`）、`:41`（`loopInternals`）、`:67`（`copyLoopNodes`）、`:119`（`makeLoopRegions`）、`:146`（`extractRegion`）。
-
-**② 缺的能力**：原始 16 种 `GCNodeKind`（CAST/COPY/FILL/ACCS 不被折叠）、`GCNode::flags`、`nodePayloadBytes`（把算子/LOOP 的 payload 原样搬走）、`ctrlInputsOf`、`regionPorts` 与 `GCRegion::params`。（**常量槽那一半已经不再是缺口**，见 ④。）
-
-**③ 今天为何需要**：抽取是**把一整个区域复制成一张新草稿**——每个成员节点按 `.kind/.flags/.payload/.permissions/.origin` 逐字节搬过去，输入三组（norm/with/ctrl）逐条重映射，区域按 `regionPorts`/`params` 复制。这不是读一个谓词，是复制一段存储。
-
-**④ 三分**：**部分**（比上一版好了一半）。
-
-- **新补齐的一半：常量槽可以替。** `origin/develop` 的视图有了 `staticIndexOf(NodeRef)` 与 `staticSlotCount()`（`C-1123-59` 的第 ④ 项），于是 `typeOf` 里那一支「`dataIndex < 0` → `staticSlots()[-dataIndex]`」可以写成「`staticIndexOf(ref)` 有值 → 那份常量」，配上 `constantOf`/`typeOf` 就够了；读者不再需要 `dataIndex` 的**编号语义**。
-- 仍是**不能**的一半：`nodePayloadBytes`（视图不交 payload 字节，`graph_view.h` 明说「no payload bytes leave this face」）、原始 kind（四种被折进 `Oper`，而这里要按 `Cast`/`Fill`/`Accs` 分支）、`flags`、`ctrlInputsOf`。这些**不该**由只读面加方法（那正是视图拒绝的东西）——这一半的等价物在 3b 的编辑入口（`GraphTransaction::edit()` 的区域复制）。
-
-### 3. `uses()` 反向索引、`syncEdges()` 全表、`outputNodeRef`
-
-**① 位置**：`tiles/src/graph_regions.cpp:128`（`chainMembers` 建在 `syncEdges()` 上）、`:161`（读 `uses().sync`）、`:515`/`:525`（按 `nodeCount()` 建 `RegionNode` 表）、`:647`（`outputNodeRef`）、`:670`（`nodeOrigin`）。
-
-**② 缺的能力**：正向的 `users()`（视图有，但按组），**反向**的使用索引 `uses()`（一次答「谁读过我」，含 data/sync/ctrl 三种）、`syncEdges()`（整张图的 sync 边表）、`outputNodeRef()`（图的输出节点，与 `exit()` 不是同一个）。
-
-**③ 今天为何需要**：`chainMembers` 要先知道一个 `sync` 块里哪些节点在链上（按 `syncEdges` 的 user/pred 建并查集）；`region` 划分要按「谁读谁」连边，控制边决定同一臂内的语句顺序，sync 边决定环形；`outputNodeRef` 标记区域里哪个节点是结果。
-
-**④ 三分**：**部分**。能替的一半：`users(ref, Normal|Context)` 可替 `normUsersOf`/`withUsersOf`，`predecessors(ref, Sync)` 可替 `syncPredsOf` 的逐节点读，`originOf` 可替 `nodeOrigin`。不能替的一半：(a) `syncEdges()` 是**全表扫描**，视图只按节点答，改成「遍历 `nodes()` 再问每个节点的 sync 前驱」会漏掉 JOIN/DREF 上的边（`contains` 对它们答 false）；(b) `uses()` 是反向索引，视图只答 `users()`（正向），要自己建表就失去索引意义；(c) `outputNodeRef()`：视图只有 `exit()`。缺的方法：`outputOf()`（若输出与 exit 确是两个概念），以及一个「按边种类答全表」的入口。
-
-### 4. 程序侧：图→Program 的解析、可达图枚举、草稿写句柄
-
-**① 位置**：`tiles/src/compiler.cpp:60`/`:67`/`:146`（`Frame` 与 `active` 持有 `GCGraph *`）、`:362`（`call` 的 `home` 指针）、`:1375`（`const_cast` 回 `GCGraph *`）；`tiles/src/region_outline.cpp:317`/`:1012`（`session.collectReachableRuntimeGraphs()`）、`:436`、`:465`、`:512`、`:678`；`tiles/src/graph_values.cpp:69`/`:100` 与 `graph_values.h:14`/`:18`（`GraphDraft &`）；`tiles/src/region_outline.cpp:105`–`:218`（`finish`/`order`/`upload` 都写草稿）。
-
-**② 缺的能力**：(a) 「程序里有哪些图」与「这张图属于哪个 Program」；(b) `GraphTransaction`/`GraphDraft` 的**写**入口。
-
-**③ 今天为何需要**：编译与抽取都从「程序的可达图集合」开始，逐图切区域、再逐区域抽成草稿；解析 callee 必须知道当前图属于哪个 Program（`runtimeProgram`），因为 `Program::calleeOf(graph, id)` 是按图指针查的。写草稿是抽取的产物。
-
-**④ 三分**：**不能**。缺的是两侧：`Program` 侧要接受 `const Graph *`（`graphs()` 交出 `vector<const Graph *>`，`calleeOf` 收 `const Graph *`），视图本身不答「谁持有我」；写侧不在只读面上，等价物是 3b 的编辑原语（`GraphTransaction::edit()`）。
-
-### 5. `programOfRuntimeGraph(GCGraph *)`
-
-**① 位置**：`onnx/exporter.cpp:186`（`programOf`）、`:317`（`Evaluator::programOf`）；同一形状在 `onnx/passes/export.cpp:359`（`programOfGraph`）。
-
-**② 缺的能力**：`core::context::Context::programOfRuntimeGraph` 只收 `const GCGraph *`，没有收 `const graph::Graph *` 的重载，也没有「这张图属哪个 Program」的视图查询。
-
-**③ 今天为何需要**：导出每遇到一个 callee 都要拿到持有它的 Program，才能 `program.calleeOf(...)`、才能遍历可达图做递归/效应检查。
-
-**④ 三分**：**不能**。缺 `Context::programOf(const graph::Graph *)`（内部按同一张表查）。视图侧无可替：`CalleeRef::graph` 只答「我调到谁」，答不出「我属于谁」。
-
-### 6. `ctrlInputsOf`（`runsBefore`）
-
-**① 位置**：`onnx/exporter.cpp:549`（`runsBefore`）；`:565` 处 `for (const auto preds : {g->normInputsOf(ref), g->withInputsOf(ref), g->ctrlInputsOf(ref)})`。
-
-**② 缺的能力**：控制输入边（输入表的第三段 run）。
-
-**③ 今天为何需要**：判断「同一条臂/同一个块里，这次赋值是否一定在读之前」——变量读写能不能导出，全押在这条顺序上。
-
-**④ 三分**：**不能**。视图删掉了控制输入，理由是「控制输入不是边，它说的是区域（加上 sync 边）」。但 `runsBefore` 问的正是**区域内语句的先后**：`regionOf` 只答「同不同一个区域」，`predecessors(Order)` 答的是 order 边，都不是 `ctrlInputsOf`。缺的方法：`predecessors(ref, EdgeKind::Wait)`，或者一条明说「这张图里 `from` 是否先于 `to`」的查询——**视图必须自己给出这条规则**，否则每个读者各写一份，正是这条面要消除的东西。
-
-### 7. `hasNodePayload()`——一个循环依赖，不只是一个缺方法
-
-**① 位置**：`onnx/exporter.cpp:590`、`:1043`、`:1070`、`:1108`、`:1134`、`:5211`（六处图遍历的入口）。
-
-**② 缺的能力**：`hasPayload()`——「这张图挂上 payload 了没有」。
-
-**③ 今天为何需要**：遍历程序里的可达图时，有些图（未编码的、只作名字存在的）没有 payload，读它的 `kind` 会读到空。今天每一条遍历都用 `!g->hasNodePayload()` 当**闸门**：没挂就跳过，不报错。
-
-**④ 三分**：**不能**，而且是最难看的一条：**视图读 `kind`/`operatorOf`/`originOf` 本身就要在 payload 之上**，所以「先问它挂没挂 payload，再读」在视图上已经晚了——问的时候视图已经在用 payload 了。缺的方法：`hasPayload()`。
-
-**这一裁已下（2026-11-24，语言作者，经协调者转达）**：「没有任何节点的图是**空图**，不是**拒绝**」。依据：空图是合法的中间状态（刚建出来、还没填），而「拒绝」会让每个调用方必须分两种情况处理；空图仍可遍历，只是遍历出 0 个节点——这与「有 3 个节点」在读数上不同，与「读不到」也不同。所以不存在「无 payload 该怎么办」的分叉：视图照常答 `kindOf`（没有节点可问），`nodes()` 交出 0 个。六处遍历**因此可以迁移**，但迁移是另一次改动（本轮未做）。
-
-### 8. `name()`
-
-**① 位置**：`onnx/exporter.cpp:4824`（`checkArity`）、`:4885`（`checkExamples`）、`:733`（`unsupported`）；`tiles/src/graph_regions.cpp:724`（`segment.graph->graph()->name()`，报告里印图名）、`tiles/src/placement.cpp` 的放置报告同形。
-
-**② 缺的能力**：视图上的图名字（上一版写作 `Graph::name()`）。
-
-**③ 今天为何需要**：诊断要说清是**哪个函数**——`checkArity` 报「'foo' takes 2 arguments but 1 example was given」，`unsupported` 报「in 'foo$tspec0': ...」（后缀是特化标记，要削掉），报告里按图名分行。
-
-**④ 三分**：**可以**（本轮能力补上了，`C-1123-59` 第 ③ 项）。
-
-`origin/develop` 的 `GraphView` 已有 `virtual std::string_view name() const`，落法是把这三处收参数的形参从 `GCGraph *` 换成 `const GraphView &`，把 `graph->name()` 换成 `g.name()`；`name()` 对草稿答空（`graph_view.h` 的注释写明了），而这三处拿到的都是冻结图，空值也不会出现。旁证：这条最早由 `internal/questions/2026-11-23-does-a-graph-view-name-the-graph.cn.md` 提出（`lane/view-surface`，建议「先只答冻结图」）；本页补的是它的**第二、第三个消费者**——`onnx` 的诊断与 `tiles` 的报告，二者都不是「跳过规则那一侧」那种用法，而是**必须把名字印出来**。
-
----
-
-## 二、三处「集合无法保证」——视图与旧图语义不等价的证据
-
-这一节不是「还没做完的活」，是**三处证明**：把「按编号走」换成「按视图迭代」时，视图枚举出来的节点**不是**旧图枚举出来的那一批。三处都**没有改**，理由写在每一条里。
-
-### E1. `onnx/passes/export.cpp:394` `graphOriginOf`
-
-**① 位置**：`graphOriginOf`（`for (auto it = g->nodes()...)`，取第一个 `origin != kInvalidOriginId` 的节点）。
-
-**② 不等价在哪**：旧 `GCGraph::nodes()` **只跳 `GCNodeKind::Dead`**（`graph.h:1213-1219`），JOIN 与 DREF 都会交出来；视图的 `nodes()` 跳 Dead、JOIN、DREF 三者（`graph_view.h:324-331` 明说不许把 JOIN 放进 `nodes()`）。所以「第一个带 origin 的节点」可能是旧图的 JOIN、而在视图上根本不被枚举。
-
-**③ 今天为何需要它**：拿不到图级 origin 时，用「第一个有源位置的节点」当诊断位置。
-
-**④ 三分**：**不能**（不靠新方法解决）。要等价只能在**编号**上走（`nodeSlotCount()` + 旧 `nodes()` 的语义），而编号在视图上正是被去掉的那一半。若作者认为「诊断位置允许落到 JOIN 的源位置之外」，那这条可以改成视图迭代并**明说读数的差**；今天按「证不出相同」停手。
-
-### E2. `onnx/passes/export.cpp:272` `runtimeBranchOver`
-
-**① 位置**：`runtimeBranchOver` 对每个 BRCH 的每条臂调 `camel::execute::collectRuntimeBranchArmRegion(g, brch, arm)`，取 `topoIndices` 的 **size** 挑**最内层**的臂。
-
-**② 不等价在哪**：成员判断可以等价（`isAncestorOf(arm, regionOf(ref))`），但 **size 的择优不可**：`collectRuntimeBranchArmRegion` 交的是该臂的拓扑序（含嵌套区域的影响），`regionNodes(arm).size()` 是另一回事，两者在嵌套臂上会给出不同的「最小」。
-
-**③ 今天为何需要它**：分支条件是不是常量（能不能在导出期定臂），取决于哪个臂真正包住这个条件节点。
-
-**④ 三分**：**部分**。能替的一半：找到「这个 BRCH 的哪条臂包住节点」= `isAncestorOf(arm, regionOf(node))`；不能替的一半：`size` 的选择键（拓扑序大小）视图没有。缺的方法：一条「区域里节点的拓扑序/传递大小」的查询，或 `collectRuntimeBranchArmRegion` 收到 `const GraphView &`。
-
-### E3. `tiles/src/region_extract.cpp:41` `loopInternals`
-
-**① 位置**：`loopInternals`：按 `for (ref = 0; ref < source.nodeCount(); ++ref)` 枚举，再按 `nodeRegion(ref)` 沿 `region->parent` 上溯，判定是否落在 LOOP 的条件/体区域。
-
-**② 不等价在哪**：`nodeCount()` 枚举**含 JOIN/DREF**；视图的 `nodes()` 不含。若某个 loop 区域里恰好有 JOIN（或将来有），旧代码把它收进 `nodes`（并在 `copyLoopNodes` 的 `require` 上炸），视图则根本不枚举它。**「视图上同一个集合」证不出**——这取决于「loop 区域里能不能有 JOIN」，而这不是视图承诺过的事。
-
-**③ 今天为何需要它**：把 LOOP 的条件/体区域里的节点整批复制进新草稿。
-
-**④ 三分**：**不能**。`regionsOwnedBy` + `regionOf` + `isAncestorOf` 能表达「哪些节点在区域内」，但只能在视图枚举出的节点上问；旧代码枚举的**是编号空间**。两者相等当且仅当「区域里没有 JOIN/DREF」，而这正是需要证明、今天证不出的那一句。
-
-**这一条是本页措辞上最要紧的一条**：它说的是「**证不出相同**」，不是「看起来相同」。三处里只有它同时踩了两件事——按编号枚举、且集合依赖于 JOIN 是否占位。
-
----
-
-## 三、谁认领了，谁没认领
-
-`C-1123-59` 记的是**四项**视图能力（`internal/backlog.md`），`D-1123-96` 把它们派给 `lane/graph-view-doc-caps`，读数已交。四项与本页六条的对照：
-
-| `C-1123-59` 的四项 | 本页哪一条 | 结果 |
+| 读数 | `onnx` | `tiles` |
 |---|---|---|
-| ③ 图的 `name()` | 第 8 条 | **可以**（已落地） |
-| ④ `dataIndex` 索引本身 → `staticIndexOf`/`staticSlotCount` | 第 2 条的一半 | **可以**（已落地） |
-| ① 「是不是真正的 OPER 记录」 | 无（本页用 `operatorOf != kNoOper` 已经表达） | 与本页无关 |
-| ② `kernelArgumentsOf` | 无（`onnx`/`tiles` 都不读算子的实参表） | 与本页无关 |
+| `develop`（判据的 84 / 74 就在这一侧） | **84** | **74** |
+| 本车道本轮开工时（`14c791d1c6`） | 72 | 74 |
+| **本轮改后** | **70** | **71** |
 
-**所以六条 `不能` 里只有一条被这四项覆盖。剩下四条，今天没有认领者：**
+本轮动了 6 行（3 个函数），§8 逐条写清为什么是这三个、为什么不是别的。
 
-- 第 1 条：`attrsOf(NodeRef)` 与 `RegionRecord::attrs` —— **本车道主诉，覆盖 `tiles` 的 74 处里绝大部分**；
-- 第 4 条：`Program` 侧收 `const Graph *`（`graphs()`/`calleeOf`）、以及草稿的编辑入口（写侧，属 3b）；
-- 第 5 条：`Context::programOf(const graph::Graph *)`；
-- 第 6 条：控制输入那条顺序（`predecessors(ref, EdgeKind::Wait)` 或一条「谁先于谁」的查询）。
+**这一版把缺口按能力重新归了口：A / B / C 三样是 `lane/view-gaps` 正在补的，D 至 H 五样不是它补的、也没人认领。** 上一版按用例列了 8 条 11 处，读得出「哪儿不能改」，读不出「缺的是哪一样、谁在补、谁没补」；这一版换掉的是这个。
 
-第 7 条（`hasPayload()`）也已裁定怎么答（空图，不是拒绝），但它仍是一个**待加的方法**，同样没有认领者。
+**本地行号一律是本车道本轮改后的读数**（`D:\Projects\Camel-wt\3a-onnx`，`lane/3a-onnx-tiles`）。
 
-**这一节是这张清单最要紧的部分**：只说「不能」，这张页会读成「做不到」；说清「没人认领」，它才是**派工的输入**。
+## 默认：这一侧希望视图车道先做哪一样
+
+**默认建议：先做 A，其次 D。** 理由是可量：A 一条挡住 `tiles` 的 13 处直接消费，加下游 30 多行被它钉死的签名——它是 `tiles` 从 71 往下走的唯一门槛；B 与 C 挡的处数少，而且 B 那六处还压在 E/H 下面（§3），单补 `hasPayload()` 一行都掉不下来。D 只有 1 处、却挡住 `onnx` 的 6 行，而且它是三个已认领项之外**唯一还没人认领、又能被视图自己解决**的一条（E 视图答不了，F 属 3b）。若这一侧按默认开工，下一步就是拿着 §5 的那两句去问 D 该由谁加。
 
 ---
 
-## 四、给视图车道的一句话
+## 1. 总账
 
-八条里，1、4、5、7 是**加方法**（`attrsOf`/`RegionRecord::attrs`、`Program` 侧收 `const Graph *`、`programOf(const Graph *)`、`hasPayload()`）；2、3、6 是**加读法**（payload/原始 kind 的复制入口、反向使用索引与全表边、控制顺序）。第 8 条已经从这张清单里结清（`name()` 已答）。第 7 条那一裁（空图不是拒绝）只解决了「怎么答」，没有解决「谁加、谁迁」。
+「位置」= 一处要该能力的地方（一个调用点，不是一个用例）。同一个能力被一个文件里的三个函数各要一次，就记 3 处。
+
+| 类 | 缺的能力 | `onnx` | `tiles` | 本轮能迁吗 | 谁在补 |
+|---|---|---|---|---|---|
+| **A** | `attrsOf(NodeRef) -> AttrSetId`、区域的 tag set、节点权限 | 1 | 13 | **不能** | `lane/view-gaps`（在补） |
+| **B** | `hasPayload()`，以及被折叠那四种 kind 自己的载荷字节 | 10 | 4 | **不能**（§3 说明：不是语义问题） | `lane/view-gaps`（在补，裁已下） |
+| **C** | `predecessors(ref, EdgeKind::Wait)`：同一条臂/块里谁先于谁 | 2 | 5 | **不能** | `lane/view-gaps`（在补） |
+| **D** | 静态区的**类型**（`staticDataType()->typeAt(i)`）与静态槽的整片读取 | 6 行悬在 1 处 | 1 | **不能** | **没人**（本页新提） |
+| **E** | `Program` 侧收 `const Graph *`（`calleeOf`/`graphs()`/`programOf`/`collectReachableRuntimeGraphs`） | 最大一类 | 最大一类 | **不能** | **没人**（视图侧无解） |
+| **F** | 写侧：`GraphDraft`/`GraphTransaction` 的编辑入口 | 0 | 12 | **不能** | 3b 的编辑原语 |
+| **G** | 反向索引 `uses()`、全表 `syncEdges()` | 0 | 2 | **不能** | **没人** |
+| **H** | 原始 16 种 kind、`GCNode::flags` | 若干 | 若干 | **部分** | **没人** |
+
+**一句话答作者的问题：`tiles` 71 处几乎每一处都落在 A 上（13 处直接读标签/权限，其余落到它的下游），`onnx` 70 处的主干落在 E 上。A/B/C 三样补齐后，这两个数不会同时归零——D、E、F、G 各挡一段，而 E 那一段视图本身答不了。**
+
+---
+
+## 2. A — 节点与区域的属性（`lane/view-gaps` 在补）
+
+**缺三样**：`attrsOf(NodeRef) -> AttrSetId`；`RegionRecord` 的 tag set（`regionAttrs(RegionId)`，或把这半截叫别的名字——`RegionRecord` 今天五个字段里没有它，注释明说 tag set「is a fact, not a place」）；节点权限（`effectivePermissions` 要的那张表）。
+
+**14 处，按三种消费形状分：**
+
+1. **`nodeAttrs(NodeRef)` 直接读一处节点的标签** —— 4 处：
+   - `onnx/exporter.cpp:744`（`recordFates`，把属性集逐条过 fate 表，没有 fate 就拒绝）
+   - `tiles/compiler.cpp:84`（`checkAttributeFates`，同形）
+   - `tiles/placement.cpp:198`（`placementOf`：先问节点自己的 `tiles.placement`）
+   - `tiles/placement.cpp:251`（`hasPlacementFact`：扫全图问有没有这条键）
+2. **区域的 tag set，含沿 `region->parent` 上溯** —— 5 处，全在 `tiles/placement.cpp`：
+   - `:42`（`bodyAttrs`，读区域 0 的标签）
+   - `:48`（`factRegion`，沿 `region->parent` 找**最近一条带该键的区域标签**）
+   - `:206`（`placementOf` 的区域内层）
+   - `:246`（`hasPlacementFact` 扫区域）
+   - `:295`（`placementReport` 按区域印 `region.attrs`）
+3. **`core::tag::effectivePermissions(graph, id, policy)`** —— 5 处：
+   - `tiles/compiler.cpp:801`、`tiles/graph_regions.cpp:233`、`:668`、`tiles/region_extract.cpp:81`、`:213`
+
+第 3 种形状值得单说：`effectivePermissions` 是 `core/tags` 里的免费函数，**它自己就是一个读者**，形参是 `const GCGraph &`。所以 A 补齐不等于这 5 处能改——要么它收 `const GraphView &`，要么每个调用方自己把节点标签和上溯拼一遍（后者正是这条面要消除的东西）。
+
+**为什么这一条是 `tiles` 的主因**：放置查询（`placementOf`/`bodyPlacementOf`/`factRegion`/`hasPlacementFact`）与属性 fate 检查，全部建在「写在节点或最近一层区域上的标签」上。标签不在视图上，这 13 处就一个也动不了，而它们又被 `graph_regions.cpp` 的 `eligibility`/`planResidency`/`analyzeRegions` 一排函数调用，于是那些函数也必须继续收 `const rt::GCGraph &`——**一个能力缺口把 30 多行的签名钉死**。
+
+---
+
+## 3. B — 载荷（`lane/view-gaps` 在补；裁已下，但这一轮迁不动）
+
+作者已裁（2026-11-24，经协调者转达）：「没有任何节点的图是**空图**，不是**拒绝**」。所以不存在「无 payload 该怎么办」的分叉：视图照常答 `kindOf`，`nodes()` 交出 0 个。
+
+**`hasNodePayload()` 那六处（`onnx/exporter.cpp:590`/`:1043`/`:1070`/`:1108`/`:1134`/`:5215`）本轮一处也没迁，理由是硬的，不是语义的：**
+
+那六处不是六个孤立的闸门，是**六个图遍历的入口**，每个循环体里同时要：
+
+- `program.calleeOf(*g, ref)`（E 类：`Program` 收 `const GCGraph *`）——六处里五处有；
+- `(*it)->kind`，即 `GCNode` 记录本身（H 类）——`nodes()` 迭代器交的是 `const GCNode *`；
+- 一处还要 `g->staticArea()`（D 类，`refuseEffectsOf` 的静态函数常量分支）。
+
+`hasNodePayload()` 只是这些函数里**最浅**的一层。把闸门按裁定换成「遍历 0 个节点」之后，`GCGraph` 仍然在这一行出现（`Program::calleeOf` 收的就是它），**grep 不会掉一行**。所以这六处的正确记法是：**B 是表层的缺口，E/H 是底下的缺口，六处跟着 E/H 一起迁，不单独迁第二遍**。
+
+另外两处 B 与六处形状不同：
+
+- `tiles/region_extract.cpp:92`、`:224`：`source.nodePayloadBytes(ref)` —— 把算子的 payload **逐字节搬进新草稿**。`graph_view.h` 明说「no payload bytes leave this face」，这半截的等价物在 3b 的 `GraphTransaction::edit()`（F 类）。
+- `GCFillBody::slots()` / `GCAccsBody`（6 处：`onnx/exporter.cpp:885`/`:891`/`:3114`、`onnx/passes/export.cpp:180`、`tiles/compiler.cpp:664`/`:675`）：视图把 FILL/ACCS/CAST/COPY 折进 `Oper`，而 `operatorOf` 对它们答 `kNoOper`——**被折叠那四种自己的载荷在视图上没有名字**。这是 B 类里唯一「加了 `hasPayload()` 也不够」的一半。
+
+---
+
+## 4. C — 控制/顺序边：`predecessors(ref, EdgeKind::Wait)`（`lane/view-gaps` 在补）
+
+`graph_view.h` 的 `EdgeKind` 只有 `Data`/`Sync`/`Order`，文件头自己写了「This face has three edge kinds and no `Wait`」。而 `ctrlInputsOf` 问的正是**同一臂/同一块内语句的先后**。
+
+**7 处读侧：**
+
+- `onnx/exporter.cpp:561`（`runsBefore`：回溯走 `norm ∪ with ∪ ctrl`）——变量读写能不能导出，全押在这条顺序上；
+- `onnx/exporter.cpp:665`（`refuseEffectsOf` 的同一形状并集）；
+- `tiles/compiler.cpp:582`（`for (auto dep : g->ctrlInputsOf(id))`）；
+- `tiles/graph_regions.cpp:162`、`:564`、`:589`（区域的 arm/顺序判定：`ctrlInputsOf` 与 `ctrlOutputsOf` 一起决定区域能不能成立）；
+- `tiles/region_extract.cpp:108`（复制 loop 节点时把 ctrl 一组逐条重映射）。
+
+`region_outline.cpp:190`/`:889`/`:902` 也读 `ctrlInputsOf`，但读的是**草稿**的（`draft.ctrlInputsOf`），属 F 类写侧，不算 C。
+
+**这一条为什么必须由视图给规则**：`regionOf` 只答「同不同一个区域」，`predecessors(Order)` 答的是 order 边，都不是「谁先于谁」。各读者自己写一份，正是这条面要消除的东西。
+
+---
+
+## 5. D — 静态区（**不是** A/B/C，本页新提，没人认领）
+
+上一版说「常量槽那一半已经不再是缺口」，**这一句只对了一半，本版改掉**。
+
+视图有了 `staticIndexOf(ref)`、`staticSlotCount()`、`constantOf(ref)`——**值**这一半确实够了。但两处读者要的不是值，是**类型**：
+
+- `onnx/passes/export.cpp:96` `constantOf` 自己：
+
+  ```cpp
+  const auto index     = static_cast<size_t>(-n->dataIndex);
+  core::type::Type *ty = g->staticDataType()->typeAt(index);   // ← 视图没有这一句的替身
+  return Example{g->staticArea()->get<slot_t>(index), ty ? ty : n->dataType()};
+  ```
+
+  它一个挡住 6 行：`:96`、`:138`、`:153`、`:159`、`:165`、`:216`（`constantArgAt`/`constantArg`/`constantWithArg`/`readFunction`/`readRequest` 全部建在它上面）。
+
+- `tiles/region_extract.cpp:29` `typeOf`：`if (auto *type = node->dataType()) return type;` 之后有一支 `staticDataType()->typeAt(-dataIndex)`。
+
+**为什么视图答不了**：视图的 `typeOf`（`gc_graph_view.cpp:176-179`）只答 `node->dataType()`，也就是记录自己的 `typeId`；**记录里没有类型的那种节点，视图答 `nullptr`**，而上面两支正是为它们写的。静态区的形状（`TupleType *staticDataType()`，`typeAt(index)`）在视图上没有入口——`staticSlotCount()` 只给个数。
+
+**这一条我留了一个读数没取**：那种「记录里没有类型、类型只在静态区」的 DATA 节点今天到底有没有、有多少，本页没有测。所以 D 的措辞是「视图没有这个入口，而代码里有一支为它存在」，不是「一定在跑」。要么视图加一条「静态槽 `i` 的类型」，要么把 `constantOf` 的定义搬进适配器（它本来就持有静态区）；两条都还没人认领。
+
+---
+
+## 6. E / F / G / H — 也不是 A/B/C
+
+### E. `Program` 侧收 `const Graph *` —— 行数最大的一类，视图侧无解
+
+`Program::calleeOf(const GCGraph *, ref)`、`Context::programOfRuntimeGraph(const GCGraph *)`、`RuntimeGraphDraftSession::collectReachableRuntimeGraphs()` 全收表示。视图不答「谁持有我」——`CalleeRef::graph` 只答「我调到谁」。
+
+`onnx` 侧：`programOf`(`:186`)、`Evaluator::programOf`(`:317`)、`callReaches`(`:1037`)、`findTreeRecursion`(`:1063`)、`findRecursiveCall`(`:1101`)、`reachableStats`(`:1127`)、`refuseUnendedUnrolling`(`:5184`)、`passes/export.cpp` 的 `programOfGraph`(`:359`)/`calleeGraphOf`(`:368`)/`calleeNameOf`(`:384`)/`requestIsReachable`(`:452`)。
+`tiles` 侧：`placement.cpp` 的 `functionGraphOf`/`calleeGraphOf`/`GpuScopes`（3 处）、`graph_regions.cpp` 的 `passesOrdinaryArgument`/`eligibility`、`compiler.cpp` 的 `Frame`/`active`/`const_cast`、`region_outline.cpp` 的 `collectReachableRuntimeGraphs` 两处。
+
+**这一类我没做逐行归属**（要读 30 多个函数体才能定），所以只报机制与位置清单，不报行数——不比把估数写成实测。
+
+### F. 写侧（3b 的 `GraphTransaction::edit()`）
+
+`tiles/graph_values.h:14`/`:18`、`graph_values.cpp:69`/`:100`、`region_extract.cpp:67`/`:119`、`region_outline.cpp:105`/`:152`/`:172`/`:202`/`:218`、加 `draft.ctrlInputsOf` 三处。12 行悬在这一个入口上：抽取的产物是草稿，草稿不是只读面。
+
+### G. 反向索引与全表边
+
+`graph_regions.cpp:129` 的 `chainMembers` 要 `syncEdges()` 全表建并查集；`region_outline.cpp:743` 要 `graph->uses().norm(input)`。视图只答 `users()`（正向、按组），要自己建反向表就失去索引意义；`syncEdges()` 全表改成「遍历 `nodes()` 再问每个节点的 sync 前驱」会漏 JOIN/DREF 上的边（`contains` 对它们答 false）。
+
+### H. 原始 kind 与 `flags`
+
+视图的九种 kind 把 CAST/COPY/FILL/ACCS 折进 `Oper`，把 JOIN 折进 `Brch`，DREF/DEAD 不出现。`tiles/region_extract.cpp:73-76`、`:89` 要按 `Cast`/`Fill`/`Accs` 分支、要 `node->flags`——这一半是 3b 的编辑入口，**不该**由只读面加方法。`onnx` 侧受它影响的是 `nodes()` 迭代器交 `const GCNode *` 的六处（§3）。
+
+---
+
+## 7. 三处「集合无法保证」，仍是证据，不是活
+
+这一节不是缺口清单，是**三处证明**：把「按编号走」换成「按视图迭代」时，视图枚举出的节点**不是**旧图枚举的那一批。三处都没改。
+
+- **E1. `onnx/passes/export.cpp:394` `graphOriginOf`。** 旧 `GCGraph::nodes()` 只跳 `Dead`，视图 `nodes()` 跳 Dead/JOIN/DREF，所以「第一个带 origin 的节点」可能是旧图的 JOIN。**本版新发现第二个理由**：它先查 `source->debugMap().graphOrigin(g->id())`，而 `GraphId` 正是视图明说不答的东西（`graph_view.h` 的 `CalleeRef` 注释）。所以这一处**两重**不可替。
+- **E2. `onnx/passes/export.cpp:272` `runtimeBranchOver`。** 成员判断可等价（`isAncestorOf`），但**择优键不可**：它比 `collectRuntimeBranchArmRegion` 交的拓扑序大小，`regionNodes(arm).size()` 是另一回事。
+- **E3. `tiles/src/region_extract.cpp:41` `loopInternals`。** 旧代码按 `nodeCount()` 枚举**编号空间**（含 JOIN/DREF），视图只枚举节点。两者相等当且仅当「loop 区域里没有 JOIN/DREF」，而这正是证不出的那一句——**「证不出相同」不等于「看起来相同」**。
+
+---
+
+## 8. 本轮动了什么，为什么是这三个
+
+6 行，3 个函数，判据从「72 / 74」到「70 / 71」：
+
+| 位置 | 改法 | 为什么等价 |
+|---|---|---|
+| `onnx/exporter.cpp:4826` `checkArity` | 收 `const GraphView &`；`withPorts()/normPorts()` → `ports(Context)/ports(Normal)`，`name()` → `name()` | 端口三组就是 `ports` 的三个组；`name()` 对冻结图答同一个串 |
+| `onnx/exporter.cpp:4889` `checkExamples` | 收 `const GraphView &`；`funcType()`/`name()` | 两个入口都在视图上 |
+| `tiles/graph_regions.cpp:455` `parameterIsDevice` | 收 `const GraphView &`；`node(port)->dataType()` → `typeOf(port)` | `typeOf` 答的就是记录的 `dataType()` |
+| `tiles/graph_regions.cpp:475` `returnsToHost` | 收 `const GraphView &`；`funcType()` | 同 |
+| `tiles/region_outline.cpp:270` `standingIn` | 收 `const GraphView &`；`regionCount()`/`region(id)->owner` | `RegionRecord::owner` 就是 `GCRegion::owner`；视图的 `region(id)` 对不存在的 id 答默认记录而非 `nullptr`，所以**先问边界**再取 `owner`，与旧代码 `region < regionCount() ? ... : nullptr` 同一判定 |
+
+**为什么只动这三个**：`tiles` 剩下的 71 行里，签名级的（`placement.h:9`、`regions.h:8`、`residency.h:1`、`graph_values.h:2`）是**被函数体钉住的**——函数体里一句 `nodeAttrs` 或 `nodeBodyAs` 就让签名必须留着 `const GCGraph &`，改签名不改体编译不过、改了体又没有能力，这正是 A/B/H 的价值。`onnx` 剩下 70 行里没有第三个同形的短函数：`constantOf` 撞 D、`runsBefore` 撞 C、六个闸门撞 E/H、`programOf` 撞 E。
+
+**判据命令的路径**：判据原文的两条写的是 `src/stdlib/std/onnx`、`src/stdlib/std/tiles`；这两个目录在 `develop`（`git ls-tree develop src/stdlib/std/` 只有 builtin/cml/cpp/cxx/exec/fvm/gc/gir/macro/nop/nvm/prl/profile/rulesets/selftest/stats/tns）和本车道都不存在，按原文跑是 `exit 1`、无输出。本页与交回一律用 `src/stdlib/onnx`、`src/stdlib/tiles`，数值 84/74 是对得上的（`develop` 侧 84 与 74 精确重现）。
+
+---
+
+## 9. 谁认领了，谁没认领
+
+| 类 | 认领者 | 状态 |
+|---|---|---|
+| A（`attrsOf` + 区域 tag set + 节点权限） | `lane/view-gaps` | 在补，**未落地**（该分支尚不领先 `develop`） |
+| B（`hasPayload()`） | `lane/view-gaps` | 在补；裁已下（空图不是拒绝） |
+| C（`predecessors(ref, EdgeKind::Wait)`） | `lane/view-gaps` | 在补 |
+| **D（静态区的类型 / 整片读取）** | **没有** | 本页新提 |
+| **E（`Program` 侧收 `const Graph *`）** | **没有** | 视图侧无解，是 `Program` 的活 |
+| **F（写侧编辑入口）** | 3b | 属阶段 3b |
+| **G（`uses()` 反向、`syncEdges()` 全表）** | **没有** | |
+| **H（原始 kind、`flags`）** | 3b | 区域抽取的存储复制 |
+
+**这一节是这张清单最要紧的部分**：只说「不能」，这张页会读成「做不到」；说清「缺哪一类、谁在补、谁没补」，它才是**派工的输入**。A/B/C 补齐之后 `tiles` 会掉一大块、`onnx` 的 70 不会归零——D/E 各挡一段，而 E 视图本身答不了。
+
+---
+
+## 10. 本轮读数：取过什么，没取什么
+
+**取过的**：`feat/modules/onnx` ＋ `feat/modules/tiles` 两个计划，**在同一台构建槽上跑了两次**——一次在本轮改动上，一次把三个源文件退回 `HEAD`——268 例按**名字与判决逐条比对**（`Compare-Object` 269 行，无差异）。两次都是 pass 233 / fail 27 / skip 6 / known 2（含 1 例超时），其中 `onnx` 13 红、`tiles` 14 红，与上一轮记录的两份分布（13 / 14）一致；那 27 红是 `develop` 自己的，改前改后同一批。两次构建的 footprint 都是 `7580f3c78f7c`，即同一份源码。
+
+**没取过的，三处，明说**：
+
+- 第 1 版 `feat/modules/onnx` 的红里有 1 例超时（`resnetbn_train_step_export`，300 s 上限），本轮没有追它是否与 `develop` 的记录一致——它在改前改后两次里都红且都超时，判决没动，超时的**原因**没查。
+- D 类「记录里没有类型、类型只在静态区的 DATA 节点今天有没有」没测（§5）。
+- E 类没有逐行归属，只给位置清单（§6）。

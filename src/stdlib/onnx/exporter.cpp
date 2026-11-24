@@ -4821,13 +4821,17 @@ const CapabilityTable *capabilitiesFor(const ExportOptions &options) {
     return capabilities;
 }
 
-void checkArity(GCGraph *graph, size_t examples) {
-    if (graph->withPorts().size() != 0 || graph->normPorts().size() != examples) {
+/// The function's own parameters, by group, and its name: the three readings this check makes are
+/// all on the view (`ports` and `name`), so it asks the view and not the representation.
+void checkArity(const graph::GraphView &g, size_t examples) {
+    const size_t with = g.ports(graph::PortGroup::Context).size();
+    const size_t norm = g.ports(graph::PortGroup::Normal).size();
+    if (with != 0 || norm != examples) {
         throw ExportError(
             std::format(
                 "'{}' takes {} arguments but {} examples were given",
-                graph->name(),
-                graph->withPorts().size() + graph->normPorts().size(),
+                g.name(),
+                with + norm,
                 examples));
     }
 }
@@ -4882,12 +4886,12 @@ bool exampleFits(type::Type *want, type::Type *have) {
 /// function is specialized for the examples' types whatever its parameters declare, so without
 /// this a tuple given where a tensor is declared surfaces later, as a failure of whatever
 /// operator first uses the parameter.
-void checkExamples(GCGraph *graph, std::span<type::Type *const> exact) {
-    const auto *funcType = graph->funcType();
+void checkExamples(const graph::GraphView &g, std::span<type::Type *const> exact) {
+    const auto *funcType = g.funcType();
     if (!funcType) {
         return;
     }
-    const std::string fn = graph->name().substr(0, graph->name().find('$'));
+    const std::string fn(g.name().substr(0, g.name().find('$')));
     for (size_t i = 0; i < exact.size() && i < funcType->normTypesCount(); ++i) {
         type::Type *declared = funcType->normTypeAt(i);
         if (exampleFits(declared, exact[i])) {
@@ -5110,14 +5114,14 @@ Model exportBound(
         throw ExportError("expected a function value");
     }
     auto *graph = fn->graph();
-    checkArity(graph, examples.size());
+    checkArity(graph->view(), examples.size());
 
     Emitter emitter(options.opset, capabilitiesFor(options), options.target);
     emitter.graph().name                        = options.graphName;
     const BoundInputs bound                     = bindInputs(emitter, options, examples);
     const std::vector<Value> &inputs            = bound.values;
     const std::vector<type::Type *> &inputTypes = bound.types;
-    checkExamples(graph, inputTypes);
+    checkExamples(graph->view(), inputTypes);
 
     // The function applied to inputs of the examples' types, with its captures bound, is a
     // program of its own: simplification specializes it for the input shapes, inlines its
