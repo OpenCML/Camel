@@ -45,11 +45,12 @@ async function attempt(read) {
 }
 
 const PROTECTED = ['develop', 'main', 'release', 'fsh-dev', 'integration']
-// The branch gate counts the branches the agents make, which all live under a namespace (lane/,
-// probe/, ...). A branch without one is a person's -- the author picking a release commit on
-// tmp-rel-0246, a contributor's xxx-dev: it is no lane waiting to be merged, and counting it held the
-// gate shut over work that was never the coordinator's.
-const AGENT_BRANCH = /^[a-z0-9][a-z0-9-]*\//
+// The branch gate counts lanes waiting to be merged, and lanes live under lane/. Everything else is
+// not a lane waiting: a person's branch (the author picking a release commit on tmp-rel-0246, a
+// contributor's xxx-dev), the coordinator's docs branch, a merge seat's own branch, the gate's
+// baseline branches and measurement probes. Counting those held the gate shut at 31 while far fewer
+// lanes were actually waiting, and the coordinator ran two lanes.
+const LANE_BRANCH = /^lane\//
 
 /// Lane branches not yet merged, how far each is ahead and behind, and the worst behind. Merged means
 /// into integration once that branch exists (lanes land there; develop follows it on promotion), into
@@ -60,7 +61,7 @@ async function branchesOf(git) {
         : 'origin/develop'
     const names = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
         .split('\n')
-        .filter((name) => name && !PROTECTED.includes(name) && AGENT_BRANCH.test(name) && !name.startsWith('seat/'))
+        .filter((name) => name && !PROTECTED.includes(name) && LANE_BRANCH.test(name))
     const rows = []
     for (const branch of names) {
         const ahead = Number(await git(['rev-list', '--count', `${base}..${branch}`]).catch(() => 'x'))
