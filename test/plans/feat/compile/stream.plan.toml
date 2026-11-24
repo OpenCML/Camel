@@ -68,6 +68,18 @@ expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
+# The name form of `count` and `find` over a range: the prelude declares them with a body, and a
+# call that writes the function in angle brackets resolves it there.
+[[tests]]
+name = "stream.range_count_find"
+desc = "count and find of the integers a range names, written in angle brackets"
+kind = "behavior"
+case = "../../../cases/compile/stream/range_count_find.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3\n4\n"]
+timeout_ms = 10000
+
 [[tests]]
 name = "stream.range_value_map"
 desc = "A range's `map` is the prelude's own declaration of the name beside the array rule: one name, one overload set, and the value's type chooses. `map<dbl>(1 .. 5)` walks the integers of the range and doubles them, `[2, 4, 6, 8]`. The case file keeps the name it pinned the no-match under; a parse snapshot records the path."
