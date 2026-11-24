@@ -577,6 +577,11 @@ export function apply(ctx, rawConfig) {
                 limits,
                 now,
                 unacked: unackedOlderThan(20),
+                stuck: agent
+                    ? [...delivered.values()]
+                          .filter((entry) => entry.messageId && !superseded.has(entry.id) && stillQueued(agent, entry.messageId))
+                          .map((entry) => ({ id: entry.id, minutes: Math.floor((now - entry.at) / 60_000) }))
+                    : [],
                 taken: takenIds(),
                 backlogOpen: backlogOpen(),
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,

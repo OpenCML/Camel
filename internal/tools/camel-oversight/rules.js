@@ -56,6 +56,23 @@ export const RULES = [
         },
     },
     {
+        // A dispatch waits in the queue until the coordinator's turn ends. A turn kept open by long
+        // waits on background jobs holds every dispatch behind it, however urgent; a single call that
+        // blocks is caught elsewhere, a chain of shorter waits is caught here.
+        id: 'dispatch-stuck',
+        level: 'urgent',
+        hold: 0,
+        cooldown: 20,
+        check: ({ stuck, limits }) => {
+            const late = (stuck || []).filter((entry) => entry.minutes >= limits.stuckMinutes)
+            if (late.length === 0) return null
+            return {
+                key: 'stuck',
+                text: `${late.length} 条派工排在你这一轮之后没送到（${late.map((e) => `${e.id} ${e.minutes} 分钟`).join('、')}）。后台任务留着跑，结束这一轮；读数好了推送会叫醒你（铁律 5）。`,
+            }
+        },
+    },
+    {
         id: 'unacked',
         level: 'wake',
         hold: 0,
@@ -265,6 +282,7 @@ export const DEFAULT_LIMITS = {
     staleMinutes: 120,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 45,
+    stuckMinutes: 15,
     dayEndMinutes: 23 * 60 + 30,
 }
 
