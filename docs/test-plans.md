@@ -543,7 +543,9 @@ makes every edit in that directory pay for the whole plan. `test/tools/selftest/
 derives each plan's cost class from the tree (its `tier`, its tests' tiers, a test timeout of five
 minutes or more), the plans that run each case from their `case` entries, and the selection
 `--changed` returns; a fast case path that selects a slow-cost plan in full fails by name unless
-that plan is the only plan running the case. The two exceptions the original rules hid are named
+that plan is the only plan running the case. That is a statement about the *plan* list: `--changed`
+no longer hands plans to the run (see "The cases a change selects" below), so the guard now reads
+the plan list's cost while the run executes the case list. The two exceptions the original rules hid are named
 now: the graph-space gradient case in `test/cases/feat/mm/gc/` and the formatted-print case in
 `test/cases/trans/cpp/exec/` each resolve through their directory to a slow plan that does not run
 them, so a narrower directory rule comes first and the file rule names the plan that does. A slow
@@ -573,6 +575,60 @@ it" in a new place). The reason for the door is that a check no change selects d
 classes of red that `--tier fast` hid went unseen for exactly that reason. The reason for the lock
 is cost: the plan is 1,025 compiler runs (27 s of wall at `-Jobs 8`), which must not ride on an
 ordinary change of that corpus.
+
+### The cases a change selects
+
+`--changed` no longer hands the run a list of plans. A plan is a directory of cases, so "the plan
+was selected" is not a reason for a case to run: a change to one `.cml` case used to select the plan
+file or directory that mirrors it, and every case of that plan ran -- a `--tier fast` gate run
+included the plan's slow cases too, because a *named* plan runs in full whatever the layer says.
+
+`node scripts/test.js --changed --list-cases` prints the **cases** instead, one JSON row each:
+`{name, plan, case, tier, cause}`. The plan list is still computed (and printed by `--changed
+--list`); the case list is that list narrowed by three causes, and every case carries the one that
+put it in:
+
+- `case:<file>` -- the changed file is one of the `case` inputs a plan names (a `.cml`, a script, a
+  directory of them). Only the cases that name that input are selected. This is the narrowing: a
+  change to `test/cases/compile/enum/shapes.cml` selects the five `compile.enum` cases that name it,
+  not the plan's cases as a whole.
+- `plan:<target>` -- the changed file names the plan itself (a plan file, a golden, a rule's `also`
+  entry, a file rule). Every case of that target is the reading the rule asked for, so the target is
+  kept whole -- and the record says so per case, so this is a stated plan-level reading rather than
+  an expansion nobody can see.
+- `source:<dir>` -- a source directory mirrors the target (`src/kernel/**` -> `feat/trans`, ...).
+  Without a coverage table this is the honest residue: the plan's cases, not a claim that each one
+  executes the changed file. Its count is what still rides on a plan, and it is the reading the
+  coverage step (plan page `internal/plans/2026-11-24-precise-test-selection.cn.md`) is meant to
+  shrink.
+
+The layer applies to every case by its own declaration, including a plan the change named: a slow
+case does not run in the fast gate because its plan was selected. `--tier slow`/`all` select the
+same way at those layers, and the daily layer runs what the gate leaves out.
+
+The run executes exactly that list. `--changed` writes it beside the run and passes
+`--selection-cases <file>`; `test/tools/run-tests.mjs` keeps only the named cases of the plans it
+was given, and refuses (exit 2) a name it would not start, because a stale record must not become a
+run that quietly proves less than the record says.
+
+`scripts/selection-cases.mjs` is the engine and the record:
+
+```bash
+node scripts/test.js --changed --list-cases      # the cases this change selects
+node scripts/selection-cases.mjs --print         # the same, with base, tree, counts and digest
+node scripts/selection-cases.mjs --write test/selection/readings/<merge>.json
+node scripts/selection-cases.mjs --verify test/selection/readings/<merge>.json
+```
+
+A record names the base, the head, the tree the plan rules were read from, the changed files with a
+digest over them, the plan-level count and the case-level count, the case list with each case's
+cause, and a digest over the sorted case names. `--verify` replays the record's own file list and
+compares count, digest and every cause: same input, same tree, same list, or a named difference. A
+whole-layer selection keeps its count and digest rather than its 9,000 rows; the digest is over the
+same sorted names, so the comparison is not weaker.
+
+A merge is replayed with `--base <merge>^1 --head <merge> --files <git diff --name-only list>`: the
+record then names the tree it was taken on, which is the only tree it is a reading of.
 
 Three ways the selection can come up empty are not the same answer and no longer read the same
 either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for

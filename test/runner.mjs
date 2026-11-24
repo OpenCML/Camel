@@ -3,6 +3,7 @@
 
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
 import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 
@@ -16,6 +17,10 @@ const RUNNER = path.join(TEST_ROOT, 'tools', 'run-tests.mjs')
 // because it reads the tree the way that check does, and it is started through this file so that
 // `node scripts/test.js --tier-report` and `npm run test` name one entry point.
 const TIER_REPORT = path.join(REPO_ROOT, 'scripts', 'tier-report.mjs')
+// The case-level selection: one engine, used both to print the cases a change selects
+// (`--changed --list-cases`) and to hand the run the exact list to execute. A second
+// implementation of "which cases are in this selection" is the shape this step removes.
+const SELECTION_ENGINE = path.join(REPO_ROOT, 'scripts', 'selection-cases.mjs')
 const SELECTION_PATH = path.join(TEST_ROOT, 'plan-selection.json')
 // `--changed` answers what this checkout changed relative to the base branch. `origin/develop`
 // is the branch work lands on; CAMEL_TEST_BASE overrides it (a release branch, a fork's base).
@@ -152,6 +157,10 @@ function parseArgs(argv) {
     const targets = []
     let changed = false
     let list = false
+    // `--list-cases`: print the *cases* a selection resolves to, not only its plans. A plan is a
+    // directory of cases and the change touches some of them; the case list is the answer the
+    // selection can be held to, and `scripts/selection-cases.mjs` records it.
+    let listCases = false
     // `--tier-report` asks what a layer's entry count is made of -- the entries the plan files
     // declare and the entries a `[[sweeps]]` entry derives from them -- instead of running
     // anything. It is a query about the plan tree, so its own script (`scripts/tier-report.mjs`)
@@ -173,6 +182,8 @@ function parseArgs(argv) {
             // Print the plans a selection resolves to instead of running them. `--changed --list`
             // is the answer to "what would this change run?" without paying for the run.
             list = true
+        } else if (arg === '--list-cases') {
+            listCases = true
         } else if (arg === '--tier-report') {
             tierReport = true
         } else if (
@@ -225,6 +236,7 @@ function parseArgs(argv) {
                     : DEFAULT_TARGETS,
         changed,
         list,
+        listCases,
         tierReport,
         // Whether a target was actually named on the command line. `targets` cannot answer it: it
         // defaults to the fast layer, and `--tier-report` must refuse a target, not the default.
@@ -498,6 +510,24 @@ function selectionPlanRunsFile(name, file) {
     return walkPlanPaths(target).some((planPath) => planCaseFiles(planPath).has(absolute))
 }
 
+let caseInputCache = null
+
+/**
+ * Every file a plan names as a case input, read once. A change to one of these is a *case-level*
+ * cause: the case whose input changed is the case the change touches, not every case of the plan
+ * that happens to mirror the directory the file lives in. This is the table the selection answers
+ * from, and it is a reading of the plan files, not a coverage record -- it says which case *names*
+ * the file, never which source file a case executed.
+ */
+export function caseInputFiles() {
+    if (caseInputCache) return caseInputCache
+    caseInputCache = new Set()
+    for (const planPath of walkPlanPaths(PLANS_ROOT)) {
+        for (const file of planCaseFiles(planPath)) caseInputCache.add(file)
+    }
+    return caseInputCache
+}
+
 export function plansForChanges(files) {
     const rules = loadSelectionRules()
     const names = new Set()
@@ -508,10 +538,21 @@ export function plansForChanges(files) {
     // count of plans is what a correct selection and a wrong one both print; the rule match is the
     // part that can disagree with the intent, so `--changed` prints it beside the count.
     const reasons = []
+    // Why each selected target is in the selection, one entry per (target, changed file): `case`
+    // when the changed file is a case input of a plan under the target, `source` when a source
+    // directory mirrors the target, `plan` when a plan file, a golden or an `also` rule named it.
+    // A `case` cause narrows the plan to the cases that name the file; the other two keep the
+    // target's cases as the plan declares them. The distinction is the answer to "did this case get
+    // selected because the change touches it, or because its whole plan was selected": only `case`
+    // can say the former.
+    const causes = []
     let matched = false
     for (const file of files) {
         let added = false
         const hits = []
+        // Is this file an input of some case? Read once per file: the same answer decides the kind
+        // of every cause this file contributes.
+        const caseInput = caseInputFiles().has(path.resolve(REPO_ROOT, file))
         // Directory first: the plan that mirrors the changed path is the narrow selection. The
         // file rules do not replace it, they add the plans that live outside that mirrored tree
         // (a `modules/tiles/` change needs `gpu/**`, which no directory rule can reach).
@@ -520,6 +561,11 @@ export function plansForChanges(files) {
             matched = true
             targets.add(byDirectory.target)
             added = true
+            causes.push({
+                target: byDirectory.target,
+                kind: caseInput ? 'case' : 'source',
+                file,
+            })
             hits.push(`directory rule ${byDirectory.prefix} -> ${relativeToRepo(byDirectory.target)}`)
         }
         const rule = rules.find((candidate) =>
@@ -557,6 +603,16 @@ export function plansForChanges(files) {
                 names.add(plan.name)
                 if (plan.layer) layered.add(plan.name)
                 added = true
+                // The rule names this plan because it can catch the change. When the changed file is a case
+                // input, the cause is that case: the plans this rule names are narrowed to the cases
+                // that name the file (an `ownCases` entry says the same thing about itself, and a plain
+                // entry is no wider a reading than its own cases). Keeping the whole target here would
+                // select every case of the plan because the plan was selected.
+                causes.push({
+                    target: absoluteSelectionTarget(plan.name),
+                    kind: caseInput ? 'case' : 'plan',
+                    file,
+                })
                 hits.push(`rule ${rulePath} -> ${plan.name}${plan.layer ? ' (follows --tier)' : ''}`)
             }
             if (rule.self && !excluded) {
@@ -565,6 +621,7 @@ export function plansForChanges(files) {
                     if (fs.existsSync(target)) {
                         targets.add(target)
                         added = true
+                        causes.push({ target, kind: 'plan', file })
                         hits.push(`self rule -> ${relativeToRepo(target)}`)
                     }
                 } else {
@@ -575,6 +632,7 @@ export function plansForChanges(files) {
                     if (target) {
                         targets.add(target)
                         added = true
+                        causes.push({ target, kind: 'plan', file })
                         hits.push(`self rule -> ${relativeToRepo(target)} (the directory that owns it)`)
                     }
                 }
@@ -592,6 +650,10 @@ export function plansForChanges(files) {
                 if (plan.layer) layered.add(plan.name)
                 matched = true
                 added = true
+                // `also` names a plan that reads *every* change under the directory (the front-end
+                // snapshot hashes every `.cml`), so its cases are the reading, not an expansion of
+                // the changed file's own case: the cause keeps the target whole.
+                causes.push({ target: absoluteSelectionTarget(plan.name), kind: 'plan', file })
                 hits.push(
                     `directory rule ${byDirectory.prefix} -> also ${plan.name}${plan.layer ? ' (follows --tier)' : ''}`
                 )
@@ -605,8 +667,17 @@ export function plansForChanges(files) {
     }
     if (layered.size > 0) matched = true
     return matched
-        ? { names: [...names], targets: [...targets], layered: [...layered], unmatched, reasons }
+        ? { names: [...names], targets: [...targets], layered: [...layered], unmatched, reasons, causes }
         : null
+}
+
+/** A plan named by the selection file, as the absolute target it resolves to (for the causes). */
+function absoluteSelectionTarget(name) {
+    try {
+        return resolveSelectionTarget(name)
+    } catch {
+        return path.join(PLANS_ROOT, ...String(name).replace(/\\/g, '/').split('/'))
+    }
 }
 
 /** A plan named by the selection file, relative to test/plans (a directory or a *.plan.toml). */
@@ -827,6 +898,34 @@ export function main(argv = process.argv.slice(2)) {
     const selection = options.changed && options.targets.length === 0
         ? selectChangedTargets({ changedFilesList: options.changedFilesList })
         : { targets: options.targets, layered: [], widened: false }
+    // The arguments that describe *this* change to the case engine: the same base (through
+    // `CAMEL_TEST_BASE`/`--files`, never recomputed differently) and the same layer.
+    const engineArgs = (extra) => {
+        const args = [SELECTION_ENGINE]
+        const tier = tierRequested(options.runnerArgs)
+        if (tier) args.push('--tier', tier)
+        if (options.changedFilesList) args.push('--files', options.changedFilesList)
+        return args.concat(extra)
+    }
+    if (options.list && options.listCases) {
+        console.error('[ERROR] --list names plans and --list-cases names cases: ask one question')
+        process.exit(2)
+    }
+    if (options.listCases) {
+        // `--changed --list-cases`: the cases this change selects, printed as JSON rows and never
+        // started. It is the selection the record holds and the reading a second run is compared
+        // with -- same change, same tree, same list.
+        const proc = spawnSync(process.execPath, engineArgs(['--print']), {
+            cwd: REPO_ROOT,
+            stdio: 'inherit',
+            env: process.env
+        })
+        if (proc.error) {
+            console.error(proc.error.message)
+            process.exit(1)
+        }
+        process.exit(typeof proc.status === 'number' ? proc.status : 1)
+    }
     if (options.list) {
         // `--changed --list`: the selection without the run. It is how a change's plan list is
         // checked (and recorded in a report) without paying for the plans.
@@ -857,12 +956,73 @@ export function main(argv = process.argv.slice(2)) {
     // target" is the whole plan tree to `loadPlans`, so the two readings have to differ before they
     // reach it. It is the only way `--changed` starts nothing, and it is a measured zero, not a
     // failed selection -- an unreadable base still refuses with exit 2 above.
-    const emptyArgs = selection.empty === true ? ['--selection-empty'] : []
-    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...selection.targets, ...layeredArgs, ...emptyArgs], {
-        cwd: REPO_ROOT,
-        stdio: 'inherit',
-        env: process.env
-    })
+    // The case list, before the run: `--changed` hands over the exact cases this change selects, so
+    // the run is the list the record can be checked against. It is not a widening and not a second
+    // selection -- the run still loads the same targets; it only stops expanding them past the
+    // cases that name the changed files. A case list that cannot be computed is a refusal: running
+    // the plans anyway would answer a wider question under this change's name.
+    let caseArgs = []
+    // A case selection that is empty is a *measured* zero for this layer (a change whose plan has
+    // no case in it, or whose cases all belong to another layer), not a plan expansion: it travels
+    // as `--selection-empty` with no target, and the run starts nothing and says which zero it is.
+    let runTargets = selection.targets
+    let runEmpty = selection.empty === true
+    if (selection.targets.length > 0) {
+        const caseFile = path.join(os.tmpdir(), `camel-selection-${process.pid}-${Date.now()}.json`)
+        const engine = spawnSync(process.execPath, engineArgs(['--write', caseFile, '--quiet']), {
+            cwd: REPO_ROOT,
+            stdio: 'inherit',
+            env: process.env
+        })
+        if (engine.error || engine.status !== 0) {
+            console.error(
+                `[ERROR] --changed: the cases this change selects could not be computed` +
+                    `${engine.error ? ` (${engine.error.message})` : ''}; the plans are not run in their ` +
+                    'place, because "many cases" is not the same answer as "these cases".'
+            )
+            process.exit(2)
+        }
+        let record = null
+        try {
+            record = JSON.parse(fs.readFileSync(caseFile, 'utf8'))
+        } catch (error) {
+            console.error(`[ERROR] --changed: the case list could not be read back (${error.message})`)
+            process.exit(2)
+        }
+        if (record.case_count === 0) {
+            console.log(
+                `[INFO] --changed: ${record.plan_case_count} case(s) would run at the plan level, but this ` +
+                    `change selects none of them at --tier ${record.tier}; nothing is started`
+            )
+            runTargets = []
+            runEmpty = true
+            try {
+                fs.rmSync(caseFile, { force: true })
+            } catch {
+                /* already gone */
+            }
+        } else {
+            caseArgs = ['--selection-cases', caseFile]
+        }
+    }
+    const proc = spawnSync(
+        process.execPath,
+        [RUNNER, ...options.runnerArgs, ...runTargets, ...layeredArgs, ...(runEmpty ? ['--selection-empty'] : []), ...caseArgs],
+        {
+            cwd: REPO_ROOT,
+            stdio: 'inherit',
+            env: process.env
+        }
+    )
+    if (caseArgs.length > 0) {
+        // The run has read the list by now (it exits after loading and starting the cases); the
+        // file is this process's own, named by its pid, so removing it cannot take another run's.
+        try {
+            fs.rmSync(caseArgs[1], { force: true })
+        } catch {
+            /* already gone */
+        }
+    }
     if (proc.error) {
         console.error(proc.error.message)
         process.exit(1)
