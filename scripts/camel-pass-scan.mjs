@@ -28,6 +28,12 @@
 //                 would be written). Exit 3 when a pass word an element writes is missing from the
 //                 parse. The reading is a set difference on words, never a count: two totals that
 //                 agree by luck are what missed 35 single-quoted `onnx::export` pipelines.
+//     --red PLAN  the plans a run just showed red, for the reason this file is about: the dump is
+//                 printed and the program runs behind it. Exit 3 when one of their case scripts
+//                 writes a command whose last pass hands the graph on and the reader above cannot
+//                 see that line -- the command is assembled inside a helper that does not name the
+//                 binary on the line that writes the passes. Same class of answer as `--audit`:
+//                 not "the tree is wrong" but "this file did not read it".
 //
 // The reader itself lives in scripts/camel-pass-pipelines.mjs, shared with the patch script so the
 // two cannot drift. It reads an element written each of the three ways a TOML array allows --
@@ -73,6 +79,8 @@ const root = path.resolve(rootIndex >= 0 ? args[rootIndex + 1] : process.cwd())
 const list = args.includes('--list')
 const check = args.includes('--check')
 const audit = args.includes('--audit')
+const redIndex = args.indexOf('--red')
+const red = redIndex >= 0 ? args.slice(redIndex + 1).filter((a) => !a.startsWith('--')) : []
 
 // Every command line this tree writes, as { file, line, passes }.
 function pipelines() {
@@ -174,6 +182,96 @@ if (audit) {
   console.log(`audit: ${differences.length} pass word(s) written but not parsed`)
   for (const d of differences) {
     console.log(`  ${rel(d.file)}:${d.line}  '${d.word}' not in [${d.passes.join(' ')}]`)
+  }
+}
+// `--red`: the reading above answers "is any pipeline I read undecided". It cannot answer "did I
+// read the pipeline that is there", and the two answers look identical on screen when both are zero.
+// A case script that assembles its command inside a helper --
+// `run([str(paths[name]), "std::jgir", "canonical=true"])` -- names neither `camel` nor `EXE` on the
+// line that writes the passes, so nothing above looks at it: measured on this tree, three case
+// scripts and one tool of the `std::nop` patch were invisible that way, and the scan said
+// `need std::nop: 0` while their plans were red. So the plans a run has just shown red are handed
+// in, and the answer for each is in words: the scripts those plans run, how many pipelines were read
+// in them, and every line whose last pass hands the graph on that the reader did not see.
+//
+// Exit 3 is `--audit`'s class of answer, not `--check`'s: not "the tree is wrong" but "this file did
+// not read it, so its zero is not a reading". The rule is deliberately narrow -- the last pass on the
+// line must hand the graph on -- because the point is to name what is invisible, not to guess at
+// every line that mentions a pass word. Widening it until the number is non-zero would trade the one
+// thing this mode is for (saying "I cannot see") for a number that looks like counting.
+if (red.length > 0) {
+  // The outermost `[...]` on the line, with its own `]` found by depth, so that
+  // `run([str(paths["a"]), "std::jgir"])` is read as one argument list rather than as the `["a"]`
+  // inside it -- the inner one is all strings and would hide the line's actual shape.
+  const firstArgumentList = (line) => {
+    const open = line.indexOf('[')
+    if (open < 0) return null
+    let depth = 0
+    for (let i = open; i < line.length; i++) {
+      if (line[i] === '[') depth++
+      else if (line[i] === ']') {
+        depth--
+        if (depth === 0) return line.slice(open + 1, i)
+      }
+    }
+    return null
+  }
+  const planFiles = []
+  for (const target of red) {
+    const resolved = path.resolve(root, target)
+    if (!fs.existsSync(resolved)) {
+      console.log(`red-plan blindness: ${target} -- no such plan`)
+      process.exit(3)
+    }
+    if (fs.statSync(resolved).isDirectory()) {
+      planFiles.push(...walk(resolved).filter((f) => f.endsWith('.plan.toml')))
+    } else {
+      planFiles.push(resolved)
+    }
+  }
+  const blind = []
+  console.log(`red-plan blindness: ${planFiles.length} plan(s) checked`)
+  for (const planFile of planFiles) {
+    const text = fs.readFileSync(planFile, 'utf8')
+    const scripts = [...text.matchAll(/^case\s*=\s*"([^"]+)"/gm)]
+      .map((m) => path.resolve(path.dirname(planFile), m[1]))
+    let seen = 0
+    for (const script of scripts) {
+      if (!fs.existsSync(script)) continue
+      const scriptText = fs.readFileSync(script, 'utf8')
+      const read = new Set(scriptPipelines(script, scriptText).map((p) => p.line))
+      seen += read.size
+      scriptText.split('\n').forEach((line, index) => {
+        const at = index + 1
+        if (read.has(at)) return
+        if (line.trim().startsWith('#')) return
+        // A line that says `keep` is decided, and a decided line is not this mode's question.
+        if (line.includes('# camel-pass-scan: keep')) return
+        const strings = [...line.matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => m[1] ?? m[2])
+        const passes = strings.flatMap(passesOfElement)
+        if (passes.length === 0) return
+        const last = passes[passes.length - 1]
+        if (!TRANSLATE.has(last)) return
+        // An argument list, not prose: `[...]` holding a pass word and at least one element that is
+        // not a plain string -- `run([source, 'std::cml'])`. A diagnostic that mentions `std::cml`
+        // (`assert x, "std::cml printed nothing"`), a parameter default (`passes=("std::cml",)`) and
+        // a tuple handed to a helper that builds its own command are not command lines, and the
+        // narrowness is the price of a mode whose whole job is naming what is really invisible.
+        const listText = firstArgumentList(line)
+        if (listText === null) return
+        const elements = listText.split(',').map((s) => s.trim()).filter(Boolean)
+        if (!elements.some((e) => !/^['"].*['"]$/.test(e))) return
+        blind.push({ file: rel(script), line: at, last, text: line.trim() })
+      })
+    }
+    console.log(`  ${rel(planFile)}  case scripts ${scripts.length}, pipelines read in them ${seen}`)
+  }
+  if (blind.length > 0) {
+    console.log(`cannot see: ${blind.length} line(s) whose last pass hands the graph on`)
+    for (const b of blind) console.log(`  ${b.file}:${b.line}  ${b.last}  ${b.text.slice(0, 120)}`)
+    console.log('  these build the command inside a helper that does not name the binary on the line:')
+    console.log('  `need std::nop: 0` is not a reading of them, and a red plan is what says so')
+    process.exit(3)
   }
 }
 // The gate answers the three conditions, not one: a pipeline is undone only when the last pass hands
