@@ -54,18 +54,20 @@
 - 晋级：`develop` 每次前进前都有一份全快层读数，与上一次逐条比过。
 - 一天下来报：已交回到进 `integration` 的中位等待时间、`integration` 每两小时前进几次、`develop` 晋级几次。
 
-## 晋级：`integration` → `develop`
+## 晋级由空闲的合并位做
 
-`develop` 只在晋级时前进，而晋级是**快进**，不是合并：`integration` 里已经有 `develop` 的全部历史，所以推过去不带任何新提交。
+晋级不需要一个专门的人：`integration` 前进之后，**空闲的那个合并位**接这一笔。它有 3 号槽的使用权，也已经有热的工作树，所以它做的只是「合一次 `develop` 尖端、跑一次整层快层、比红表、够了就推」。
 
-三步，按顺序，第二步可以说不：
+- **触发**：`integration` 前进之后，或距上次晋级三小时，先到者为准。
+- **谁做**：三个合并位里当时空闲的那一个；两个都在跑时，谁先空谁做。
+- **失败就停**：新增红不为 0 时**不推**，报红的用例名与失败的第一条期望，然后停——晋级失败比晋级错了好。
+- **报一行**：`promoted <sha> | fast: <N> cases, <pass>/<fail> | new reds: <n> | slot 3 | queue <秒>`。
+- **文档不再推 `develop`**：有了 `integration` 之后，backlog、问题页、计划页一律推 `integration`，`develop` 只由晋级快进；推前核 `git rev-list origin/integration..HEAD` 里只有文档提交。
+
+**怎么做**：`develop` 只在晋级时前进，而晋级是快进，不是合并。三步，按顺序，第二步可以说不：
 
 1. **把 `develop` 尖端合进 `integration`**（第一父 = `integration` 当前尖端），使 `develop` 是 `integration` 的祖先。没做到这一点，后面的快进会变成合并。
 2. **在 `integration` 尖端跑一遍整层 `--tier fast`**，红表与 `develop` 尖端上一次的红表逐条比。**只有「新增红 = 0」才进第三步。** 新增红 > 0 就停，报红表，不推——晋级不成功比晋级错了好。
 3. `git push origin origin/integration:refs/heads/develop`（快进），再核对 `git ls-remote origin refs/heads/develop` 的 sha 等于 `integration` 的 sha。
-
-报一行：`promoted <sha> | fast: <N> cases, <pass>/<fail> | new reds: 0 | slot 3 | queue <秒>`。
-
-**多久一次**：`integration` 前进后三小时内，或攒够若干笔（以队列里已交回待合的车道数计），先到者为准。两次晋级之间，`develop` 不前进——插件、钩子与规则读的是 `origin/develop`，所以上游那批修正要晋级之后才生效，而这段时间里它们报出的数仍是旧的判据。
 
 **为什么要比红表而不是只看红数**：整层跑一次会带上上游所有改动（判据修正、唤醒、收尾规矩），那些改动第一次被整层跑时，红的位置会动；只看红数会把「换了一条红」读成「没有新增红」。
