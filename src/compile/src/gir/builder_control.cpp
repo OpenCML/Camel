@@ -504,7 +504,7 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
 /// declaration states (`__access_value__`, `builtin/operators/struct.cpp`: `norm.size() == 1`,
 /// `with.size() == 1`). The node-kind spelling says the same thing from its payload, with the value
 /// as its one ordinary input -- a graph built before the read was an operator still reads that way,
-/// and the two faces this lane reads (`GCGraph`, `GraphDraft`) both carry such graphs. Both
+/// and the two faces read here (`GCGraph`, `GraphDraft`) both carry such graphs. Both
 /// spellings answer the same question, and the value operand is the ordinary one either way, which
 /// is what tells the caller the read is of the value it asked about.
 std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {

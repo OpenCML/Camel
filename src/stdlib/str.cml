@@ -118,8 +118,8 @@ with <sep: string>
 export func split(s: string) => string[] {
     let n = len(sep)
     // `to_array` here is a debt, not the answer: a comprehension walks something that has elements,
-    // and a range will have them once `operator for` lands as the iterator of `Range` (ruling
-    // D-1123-49); then the source goes back to `0 .. len(s)`.
+    // and a range will have them once `operator for` lands as the iterator of `Range`;
+    // then the source goes back to `0 .. len(s)`.
     return if n == 0 then [s[i] for i in to_array(0 .. len(s))] else cut(s, sep)
 }
 

@@ -36,13 +36,13 @@
  * Items whose value carries a `std::function` cannot be compared (`TypeFolder`, `InstantiateFn`,
  * `AttrGrant::value`, `CallSpec::checkFormat`, `BinaryLaws::elementOf`, and the type rule is a
  * `shared_ptr` that compares by pointer, not by rule). For those the first statement stands and a
- * second one is not refused: **待审** -- whether the record needs a comparable spelling of them (or
+ * second one is not refused: whether the record needs a comparable spelling of them (or
  * a `Stated`-style witness) is a question for the interface's review, and it is not decided here.
  *
  * --- the kernel -------------------------------------------------------------
  * `kernel(void *)` is not a record item ("a target registers its own implementations against the
  * same OperId and they do not enter the record"), so the pointer is kept beside the record, per
- * OperId, inside this registry, and `Registry::kernel(OperId)` (**待审**, added by this lane) is
+ * OperId, inside this registry, and `Registry::kernel(OperId)` is
  * its reader. It is not a side table: `registerOperator` is the only writer, and the registry is
  * the only owner.
  *

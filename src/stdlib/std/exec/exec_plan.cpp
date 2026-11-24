@@ -1083,7 +1083,7 @@ bool forwardsItsValue(const View &graph, gc_node_ref_t at) {
     //
     // The view folds a JOIN into the kind of the BRCH it merges (`graph_view.h`: one kind for a
     // branch and its merge point) and answers "not a node of this graph" for it, because a
-    // merge point takes no place of the numbering's own (C-1123-17). So the two are told apart by
+    // merge point takes no place of the numbering's own. So the two are told apart by
     // `contains`: a BRCH owns the arm regions and does not hand a value on; a JOIN does.
     const ViewKind kind = graph.kindOf(at);
     if (kind == ViewKind::Gate || kind == ViewKind::Port) {

@@ -154,7 +154,7 @@ class CostModel {
 // There is no cost model in the kernel: no table of them by name, no built-in that judges a
 // writing dear, and no name the pipeline extracts by. What a writing costs is the cost function
 // the target library supplies (`CostModel` above, called with the cost a caller passed), and the
-// kernel only asks it for the choice (D-1123-78).
+// kernel only asks it for the choice.
 
 /// A term of a rule (rewrite design 2.2, 2.3). On the left it is matched against the writings
 /// of the values; on the right it is built. A variable stands for a value (the same variable
