@@ -133,7 +133,10 @@ export const RULES = [
         id: 'backlog-stale',
         level: 'quiet',
         hold: 0,
-        cooldown: 60,
+        // The list is long when the backlog is behind, and repeating it hourly says nothing new: the
+        // reminder names the count and the oldest few, and comes back when the count grows or after four
+        // hours.
+        cooldown: 240,
         check: ({ m, now, limits }) => {
             if (!readable(m.backlog)) return null
             // A row recorded under its own id and again under the item it belongs to is named once,
@@ -142,11 +145,14 @@ export const RULES = [
             const stale = [...m.backlog.entries()]
                 .filter(([, row]) => row.doing && row.updated !== null && now - row.updated > limits.staleMinutes * 60_000)
                 .filter(([, row]) => !seen.has(row) && seen.add(row))
-                .map(([id]) => id)
+                .sort((a, b) => a[1].updated - b[1].updated)
             if (stale.length === 0) return null
+            const shown = stale.slice(0, limits.staleShown).map(([id, row]) => `${id}（${Math.round((now - row.updated) / 3_600_000)} 小时）`)
+            const more = stale.length > shown.length ? `等` : ``
             return {
-                key: stale.join(','),
-                text: `backlog 里「在做」超过 ${limits.staleMinutes / 60} 小时没更新：${stale.join('、')}。卡住了就标卡住并写原因，停了就收，还在做就更新时间。`,
+                // A bucket of five: a few rows coming and going does not make it news again.
+                key: String(Math.ceil(stale.length / 5)),
+                text: `backlog 里「在做」超过 ${limits.staleMinutes / 60} 小时没更新的有 ${stale.length} 条，最久的是 ${shown.join('、')}${more}。逐条处理：卡住的标卡住并写原因，做完或作废的收掉，还在做的更新时间——backlog 只放手上真有的活。`,
             }
         },
     },
@@ -174,7 +180,7 @@ export const RULES = [
             if (!g || g.mergedLocal.length <= limits.mergedLocal) return null
             return {
                 key: String(g.mergedLocal.length),
-                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉。远端的已合分支只在读数里列出，删它们要负责人另行授权，不在提醒里催。`,
+                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉（铁律 12 与 13：先确认工作树干净、没有活会话在里面）。`,
             }
         },
     },
@@ -280,6 +286,7 @@ export const DEFAULT_LIMITS = {
     mergedLocal: 20,
     developStallMinutes: 25,
     staleMinutes: 120,
+    staleShown: 5,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 45,
     stuckMinutes: 15,

@@ -23,13 +23,13 @@
 | 9 | `feat/compile` 归零的 B 组 | 等 `op-overload-merge` 落地（它改写约 369 条红，实为 `fixed=309`）；落地后在那时的 develop 上跑 feat/compile，剩下的红按 `D-1123-93` red-bisect 的口径归组：B 组 = 不属 61 链、每条指名一条带进它的车道；那张名单就是判据，每合一笔报红数（作者 `D-1123-133`） |
 | 10 | 61 链收尾 | 接在 `op-overload-merge` 之后：四处 `to_array(0 .. n)` 换回 `0 .. n`，`random.cml:114` 一并；报 feat/compile 红数下降多少 |
 | 11 | 合并前补测那三笔 | `D-1123-102`：d2c3f10d6、973868aec、4b528b928 在各自第一父上补测，有新红或换红就修或回退（**在跑**） |
-| 12 | 3a 重写车道的余量 | `src/kernel/rewrite` 与 `cxx/opt`（**路径须先核，`src/stdlib/std/cxx/opt` 可能不存在**）；写图经编辑会话的入口；判据同 3a（**在跑**） |
+| 12 | 3a 重写车道的余量 | `src/stdlib/rewrite` 与 `src/stdlib/std/cxx/opt`（**2026-11-24 11:17 核过：`src/kernel/rewrite` 不存在，`src/stdlib/std/cxx/opt` 存在**）；`node scripts/count-graph-readers.mjs src/stdlib/rewrite src/stdlib/std/cxx/opt` → **24 / 88**；写图经编辑会话的入口；判据同 3a（**在跑**） |
 | 13 | rewrite 分类里 N=1 那一处 | 行为有差异而没有测试：补一条能区分两种行为的用例，再定改法 |
 | 14 | GPU 补测（`C-1123-65`） | 只在构建机空闲（无车道运行、负载低）时跑那 4 处按 NaN 比的 GPU 用例，不和车道抢 |
 | 15 | `lane/count-script` | 把 3a 与 kinds 的计数做成 `scripts/count-graph-readers.mjs`：路径不存在 ⇒ **exit 2 并点名**，合法的零照常读成 0（**在跑**） |
 
 ## 三条对所有车道都成立的
 
-1. **交回 = 已提交且已推车道分支**（铁律 13）。「完成、未提交、等点名」不算交回。
+1. **交回 = 已提交在车道分支上**（铁律 13；车道分支不推 GitHub）。「完成、未提交、等点名」不算交回。
 2. **读不了视图就写缺口页，按能力归类，交回时给页名**（作者 `D-1123-130`）。
-3. **3a 类车道交回必须报本目录的单一前后数；数没降就说明为什么，缺口页就是那个为什么**（作者 `D-1123-127`）。
+3. **3a 类车道交回必须报本目录的单一前后数；数没降就说明为什么，缺口页就是那个为什么**（作者 `D-1123-127`）。3a 与 kinds-to-oper 的数一律用 `node scripts/count-graph-readers.mjs [--rev <rev>] <目录>...` 量，不再手抄 `git grep`：路径不存在或目录里没有源文件时它 **exit 2 并点名那个路径**，而手抄的 `git grep` 对这两件事都只给「0 行、exit 1」——读起来像一个最好的零。`--self-test` 就是这两件事本身的用例。

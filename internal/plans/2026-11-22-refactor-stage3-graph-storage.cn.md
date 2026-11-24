@@ -45,7 +45,7 @@
 | 车道 | 目录 | 迁什么 |
 |---|---|---|
 | 变换 | `src/stdlib/transforms`、`src/stdlib/autodiff` | 读冻结图或草稿的地方一律改读 `GraphView`；判断性质的谓词改问事实，不自己推 |
-| 重写 | `src/kernel/rewrite`、`src/stdlib/rewrite`、`src/stdlib/std/cxx/opt` | 同上；写图一律经编辑会话的两个入口（这一步先走现有的草稿，见 3b） |
+| 重写 | `src/stdlib/rewrite`、`src/stdlib/std/cxx/opt` | 同上；写图一律经编辑会话的两个入口（这一步先走现有的草稿，见 3b） |
 | 执行 | `src/stdlib/std/{nvm,fvm,prl,cpp,exec}` | 后端读图改读视图；执行计划改为向事实框架要 |
 | 前端 | `src/compile` | 建图器写图改经编辑会话的底层原语 |
 | 工具与差分 | `src/tools`、`test/tools` | 打印、导出、调试器、剖析器改读视图 |
