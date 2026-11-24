@@ -1,4 +1,4 @@
-# 视图答不出什么：`transforms` 与 `autodiff` 停下来的 31 处
+# 视图答不出什么：`transforms` 与 `autodiff` 停下来的 32 处
 
 2026-11-24 ｜ 来自 `lane/3a-transforms-autodiff`（阶段 3a，目录 `src/stdlib/transforms`、`src/stdlib/autodiff`）｜ 对象：`kernel/graph/graph_view.h`
 
@@ -43,9 +43,11 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/autodiff
 
 所以判据「往 0 走」在这两个目录里的天花板不是 0。**B 20 + C 9 = 29 行是视图今天能靠补 A/B/C 拿掉的；剩下 83 行（transforms）和 40 行（autodiff）要的是 3b 的写侧入口和 3c 的身份合一。**
 
+按**处**数（一处是一个读者位置，与行数无关）：「32 处」= A 2 + B 22 + C 8。B 的 22 处里只有 14 处占计数里的行，另外 8 处拿着局部引用；C 的 8 处里只有 4 处占行。**所以「行」和「处」在这里是两个数，判据只数行 —— 这也是为什么判据降到 0 不等于读者都上了视图。**
+
 ---
 
-## 二、A 类：这两处读者，一行都不在计数里
+## 二、A 类：这 2 处读者，一行都不在计数里
 
 A 是 `onnx`/`tiles` 的主诉（`attrsOf(NodeRef)`、`RegionRecord::attrs`、节点权限），在那里它让 `tiles` 的 74 处一处没动。**在这两个目录里它只有 2 个消费者，而这两个消费者都不按名字提 `GCGraph`/`GraphDraft`** —— 它们拿着一个 `GraphDraft &` 的**局部引用**：
 

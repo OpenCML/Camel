@@ -26,7 +26,7 @@
 | [`2026-11-23-who-owns-a-store`](2026-11-23-who-owns-a-store.cn.md) | 「一个 Store」由谁造、由谁结束、由谁证它对 |
 | [`2026-11-23-who-owns-freely-arrangeable`](2026-11-23-who-owns-freely-arrangeable.cn.md) | 「可自由调度」这句判断归谁：事实层给一个 kind，还是各处自己拼 |
 | [`2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two`](2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two.md) | 一个守卫过滤掉的推导，是「一个重载」还是「两个」？ |
-| [`2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view`](2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view.cn.md) | 视图答不出什么：`transforms` 与 `autodiff` 停下来的 31 处 |
+| [`2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view`](2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view.cn.md) | 视图答不出什么：`transforms` 与 `autodiff` 停下来的 32 处 |
 
 ## 生成器不会删的行：243 行（页已不在 `questions/` 里）
 
