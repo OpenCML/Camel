@@ -140,6 +140,27 @@ const LOUD_SAME = { ...LOUD, tip: LOUD.tip, generatedAt: '2026-11-25T00:40:00Z' 
     )
 }
 
+// ---------------------------------------------------------------- fixed vs removed need an inventory
+{
+    const a = file('gone-a.tsv')
+    const b = file('gone-b.tsv')
+    writeRedTable(a, LOUD, [row(SPACED, 'x'), row(MEAN, 'y')])
+    writeRedTable(b, LOUD_SAME, [row(SPACED, 'x')])
+    const noInventory = compareRedTables(a, b)
+    check(
+        'a red present only in A is fixed, not removed, when there is no inventory',
+        noInventory.counts.fixed === 1 && noInventory.counts.removed === 0 &&
+            noInventory.lists.fixed.includes(MEAN),
+        formatComparison(noInventory)
+    )
+    const gone = compareRedTables(a, b, { cases: [SPACED] })
+    check(
+        'with an inventory that lacks it, the same row is removed',
+        gone.counts.removed === 1 && gone.counts.fixed === 0 && gone.lists.removed.includes(MEAN),
+        formatComparison(gone)
+    )
+}
+
 // ---------------------------------------------------------------- not comparable: jobs differ
 {
     const a = file('jobs-a.tsv')

@@ -55,12 +55,29 @@ const T0 = process.hrtime.bigint();
       process.stderr.write('red-table: --diff needs two files: --diff <a.tsv> <b.tsv>\n');
       process.exit(2);
     }
+    let cases = null;
+    const casesFile = argOf('--cases');
+    if (casesFile) {
+      // The inventory is what turns "red in A, absent from B" into `removed` instead of `fixed`:
+      // without it this module refuses to claim a case was deleted. One `plan/case` per line, a
+      // `#` line is a comment, and a TSV's `plan<TAB>case` is accepted too.
+      try {
+        cases = readFileSync(casesFile, 'utf8').split('\n')
+          .map((l) => l.replace(/\r$/, ''))
+          .filter((l) => l.trim() && !l.startsWith('#'))
+          .map((l) => (l.includes('\t') ? l.split('\t').slice(0, 2).join('/') : l.trim()));
+      } catch (e) {
+        process.stderr.write(`red-table: --cases could not be read: ${e?.message ?? e}\n`);
+        process.exit(2);
+      }
+    }
     let result;
     try {
       result = compareRedTables(a, b, {
         allowUnknownLoad: argv.includes('--allow-unknown-load'),
         allowUnknownJobs: argv.includes('--allow-unknown-jobs'),
         allowDifferentTier: argv.includes('--allow-different-tier'),
+        cases,
       });
     } catch (e) {
       // A file that cannot be read is "nothing was compared", which is exit 2 and not a diff with

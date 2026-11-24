@@ -81,8 +81,12 @@ node internal/tools/red-table.mjs --diff <a.tsv> <b.tsv>
 node internal/tools/red-table.mjs --diff <a.tsv> <b.tsv>
 ```
 
-退出码：**0** 可比且没有 new/changed/removed；**1** 可比且有差异（逐条列名）；**2** **不可直接比**或读不了。
+退出码：**0** 可比且没有 new/changed/removed/fixed；**1** 可比且有差异（逐条列名）；**2** **不可直接比**或读不了。
 被拒时输出**只有拒绝理由，没有任何 new/fixed/removed 行** —— 「条件不同」不是一个有一百行的 diff。
+
+**红表里「A 有、B 无」读作 `fixed`（不再红），不是 `removed`。** 两份红表都不含绿行，所以它们分不出「修好了」与「用例被删了」；说 `removed` 需要一份用例清单。给了 `--cases <list>`（一行一个 `plan/case`，`#` 是注释，TSV 的 `plan<TAB>case` 也认）才按清单判：清单里没有它 ⇒ `removed`，有它 ⇒ `fixed`。没给清单时输出会明说这一句，`removed` 保持 0 —— **「我不知道」不是「它被删了」**（`C-1124-186` 那 10 条名字带空格的用例，正是被「基线里有、新名单里没有 ⇒ removed」的判法误伤的）。
+
+**别把 `fixed` 读成「修好了」**：在这里它只等于「这条红不再出现」。它可能是修好了、可能是负载变了、也可能用例被删了 —— 前两个要靠重跑与条件去分，第三个只有 `--cases` 能分。
 
 拒绝的判据（实现在 `internal/tools/red-table-context.mjs`）：
 
@@ -100,7 +104,7 @@ node internal/tools/red-table.mjs --diff <a.tsv> <b.tsv>
 ## 自测
 
 ```
-node internal/tools/red-table-context.test.mjs      # 18 项，含 CLI 的 --tsv/--diff
+node internal/tools/red-table-context.test.mjs      # 20 项，含 CLI 的 --tsv/--diff
 ```
 
 覆盖两条规矩：表头写上 `tip`/`jobs`/`load`，不同 `jobs`/`load` 的表被拒而不是逐条列 new；名字带空格的用例改档后是 `changed`，不是 `removed`。

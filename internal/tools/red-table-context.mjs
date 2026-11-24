@@ -233,12 +233,20 @@ export function compareRedTables(fileA, fileB, options = {}) {
         return refuse(`not directly comparable: A tier=${tierA}, B tier=${tierB}; a tier decides which cases exist.`)
     }
 
+    // A red table holds reds only, so "in A and not in B" means **no longer red**, not "the case
+    // is gone". Those are two different claims and only a case inventory can tell them apart: the
+    // older comparison reported the ten names with spaces as `removed` because it had a list of
+    // cases and the truncated names were not in it (C-1124-186). Without an inventory this module
+    // says `fixed` and leaves `removed` at zero -- "I cannot tell" is not "it was deleted".
+    const inventory = options.cases ? new Set([...options.cases]) : null
     const names = new Set([...a.rows.keys(), ...b.rows.keys()])
     for (const name of names) {
         const ra = a.rows.get(name)
         const rb = b.rows.get(name)
-        if (ra && !rb) base.lists.removed.push(name)
-        else if (!ra && rb) base.lists.new.push(name)
+        if (ra && !rb) {
+            if (inventory && !inventory.has(name)) base.lists.removed.push(name)
+            else base.lists.fixed.push(name)
+        } else if (!ra && rb) base.lists.new.push(name)
         else if (whyKey(ra) !== whyKey(rb)) base.lists.changed.push(name)
         else base.countsUnchanged = (base.countsUnchanged ?? 0) + 1
     }
@@ -246,11 +254,12 @@ export function compareRedTables(fileA, fileB, options = {}) {
         base.lists[k].sort()
         base.counts[k] = base.lists[k].length
     }
-    const differences = base.counts.new + base.counts.changed + base.counts.removed
+    const differences = base.counts.new + base.counts.changed + base.counts.removed + base.counts.fixed
     return {
         ...base,
         comparable: true,
         code: differences > 0 ? 1 : 0,
+        hasInventory: !!inventory,
         caution: la !== null && la > LOAD_BOUNDARY ? `both tables were taken under load (${la} and ${lb}); every new/changed row is still suspect` : '',
         a,
         b,
@@ -271,6 +280,11 @@ export function formatComparison(result) {
     )
     lines.push(`[red-table] tip ${p.tip ? p.tip.slice(0, 12) : 'unknown'} -> ${q.tip ? q.tip.slice(0, 12) : 'unknown'}`)
     if (result.caution) lines.push(`[red-table] caution: ${result.caution}`)
+    if (result.counts.fixed > 0 && !result.hasInventory) {
+        lines.push(
+            `[red-table] no case inventory (--cases): "red in A, absent from B" is counted as fixed -- it may also have been deleted, and this table cannot tell the two apart`
+        )
+    }
     lines.push(
         `[red-table] cases=${result.a.rows.size} new=${result.counts.new} fixed=${result.counts.fixed} ` +
         `changed=${result.counts.changed} removed=${result.counts.removed}`
