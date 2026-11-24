@@ -26,7 +26,7 @@ digraph GraphIR {
         O01 [label="EXIT", type="EXIT"];
         N07 [label="abc", type="DATA", origin=103, span="9:23-9:28", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml", value_type="string"];
         N08 [label="len_or_zero", type="FUNC", origin=105, span="9:11-9:29", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml", value_type="int"];
-        N09 [label="CAST", type="CAST", origin=104, span="9:23-9:28", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml", value_type="string?"];
+        N09 [label=":op/cast", type="OPER", origin=104, span="9:23-9:28", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml", value_type="string?"];
         N08 -> O01 [label="0", type="EXIT"];
         N09 -> N08 [label="0|0", type="NORM"];
         N07 -> N09 [label="0|0", type="NORM"];

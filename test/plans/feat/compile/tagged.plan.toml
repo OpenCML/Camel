@@ -1081,7 +1081,10 @@ verify_script = """
 const out = input.normalized.stdout
 const count = (text) => out.split(text).length - 1
 assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch')
-assert(count(':op/tag_') === 0 && count('type="CAST"') === 0, 'no tagged operator and no cast')
+// A conversion is a call of `:op/cast` (plan 2.3, step 1), and the rich dump wraps its label at
+  // the slash (`:op/\ncast`), so the word is what is asked for: `type="CAST"` is no longer a
+  // spelling any node has, and asking for it here would pass without looking at anything.
+  assert(count(':op/tag_') === 0 && count('cast') === 0, 'no tagged operator and no cast')
 }
 """
 timeout_ms = 8000
