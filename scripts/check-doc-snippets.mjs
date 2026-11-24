@@ -3,11 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 // Fails when a reader-facing page shows a Camel snippet that the current language does not
-// accept, or whose printed output is not what the page says it is.
+// accept, or whose printed output is not what the page says it is; and when a generated
+// reference's example, written as an `@example` line of `src/stdlib/**/*.cml`, does not compile.
 //
-//   node scripts/check-doc-snippets.mjs              check the reader-facing pages
+//   node scripts/check-doc-snippets.mjs              both halves: the pages and the source examples
 //   node scripts/check-doc-snippets.mjs --default-roots  the same, ignoring a script path argument
-//   node scripts/check-doc-snippets.mjs FILE DIR  check the given files and directories
+//   node scripts/check-doc-snippets.mjs --pages      the reader-facing pages only
+//   node scripts/check-doc-snippets.mjs --source-examples
+//                                                 the `@example` lines of src/stdlib only
+//   node scripts/check-doc-snippets.mjs FILE DIR  check the given files and directories (pages)
 //   --camel PATH                                  the compiler the snippets are run with;
 //                                                 this tree's `out/latest/bin/camel` without it
 //
@@ -60,7 +64,11 @@
 // fences that contain `func main` are compiled. The rule is in EXCERPTS below, with the reason.
 // The record directories (internal, docs/reviews) are not pages and are not scanned; three
 // generated or dated references are allowlisted because their `camel` fences are signatures,
-// diagnostics or excerpts of an earlier state, not programs.
+// diagnostics or excerpts of an earlier state, not programs. An allowlist entry is about the
+// *fences*, not about the page: `docs/stdlib-reference.md` prints its examples as inline code,
+// written as the `@example` lines of `src/stdlib/**/*.cml`, and the source half of this run
+// compiles those. So "every example on the page compiles" is answered by looking at the place the
+// example is written, not by skipping the page.
 //
 // The run is parallel (one camel process per snippet, up to JOBS at a time) because every
 // snippet is its own entry file and its own temp directory; batching them into one process
@@ -84,7 +92,8 @@ const TIMEOUT_MS = Number(process.env.CAMEL_SNIPPET_TIMEOUT_MS || 15000)
 function usage(message) {
     if (message) console.error(`check-doc-snippets: ${message}`)
     console.error(
-        'usage: node scripts/check-doc-snippets.mjs [--default-roots] [--camel PATH] [FILE|DIR ...]',
+        'usage: node scripts/check-doc-snippets.mjs [--default-roots] [--pages|--source-examples] ' +
+            '[--camel PATH] [FILE|DIR ...]',
     )
     process.exit(2)
 }
@@ -97,9 +106,12 @@ const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), ROOT, usag
 const RECORDS = ['internal/', 'docs/reviews/']
 
 // A generated reference is not a teaching page: its `camel` fences are signatures (one per
-// overload) and the triggering examples of diagnostics, deliberately wrong.
+// overload) and the triggering examples of diagnostics, deliberately wrong. The second entry's
+// examples are programs of the test suite pinned in src/kernel/diagnostics/examples.tsv (not
+// `@example` lines), and the source half of this run does not read that file; the diagnostics
+// plan compiles the examples it pins.
 const ALLOWED_FILES = [
-    ['docs/stdlib-reference.md', 'generated: signature lines, one per overload, not programs'],
+    ['docs/stdlib-reference.md', 'generated: the `camel` fences are signature lines, one per overload; its examples are checked at their source, the @example lines of src/stdlib'],
     ['docs/diagnostics.md', 'generated: each example is a program that raises the diagnostic on purpose'],
     ['docs/design-principles-log.cn.md', 'a dated implementation log: the fences are excerpts of the state then'],
 ]
@@ -1096,9 +1108,483 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
     }
 }
 
+// ---- The standard library's own examples -----------------------------------------------------
+//
+// A generated reference is a copy of something. `docs/stdlib-reference.md` is a copy of the
+// `@example` lines of `src/stdlib/**/*.cml`: its own `camel` fences are signature lines, one per
+// overload, and the examples are printed as inline code, so a page check can neither compile them
+// nor see them. An allowlist entry that says "generated" is therefore not an answer to "are the
+// examples spelled right" -- the promise is about the `.cml` lines, and this pass compiles them
+// where they are written.
+//
+// The convention is the reference generator's (`scripts/stdlib-reference.mjs`), because the page is
+// what a reader compares an example with: the module's names are in scope, the example's arguments
+// are bound to the declared parameter types, the types it mentions are imported, an expression
+// becomes `let __doc_example = ...`, and one that starts with a statement keyword is a statement (a
+// call that returns nothing is retried as one). A `@example-fragment <reason>` says the example is
+// not a program of its own: it is compiled too, and a *semantic* failure is exempted -- the marker
+// names something the example needs and has not got -- while a syntax or lexical failure never is,
+// because no marker makes a spelling the parser refuses into a legal one.
+const STDLIB_ROOT = 'src/stdlib'
+const DOC_NAME = /^[A-Za-z_]\w*$/
+const DOC_RESERVED = new Set([
+    'true', 'false', 'null', 'func', 'let', 'var', 'if', 'else', 'for', 'while', 'match', 'return',
+    'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
+])
+// Types that resolve nowhere because they are built in. `Map` and `Set` included, as in the
+// reference generator: a signature file never imports them.
+const DOC_BUILTIN_TYPES = new Set([
+    'int', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize',
+    'float', 'f32', 'f64', 'bool', 'string', 'char', 'void', 'null', 'any', 'never',
+    'Map', 'Set', 'Bytes', 'T', 'U', 'V', 'K', 'P', 'R', 'A', 'F',
+])
+const DOC_STATEMENT = /^(let|var|if|for|while|return|sync|match)\b/
+const DOC_DIAGNOSTIC_CLASS = /(?:name=)?([A-Za-z]+)Diag::/
+
+function collectSource(dir, out) {
+    const abs = path.resolve(ROOT, dir)
+    for (const name of fs.readdirSync(abs).sort()) {
+        const child = path.join(abs, name)
+        if (fs.statSync(child).isDirectory()) collectSource(path.join(dir, name), out)
+        else if (name.endsWith('.cml')) out.push(relative(child))
+    }
+}
+
+// The module a `.cml` file belongs to, and which of the three shapes it is: a module written in
+// Camel (`src/stdlib/<name>.cml`), a body-less signature file (`<name>/signatures/<file>.cml`,
+// whose declarations stand for C++ operators and do not compile by themselves), or a rule set
+// (`rulesets/<file>.cml`, which is imported by a transform rather than as a module).
+function docFileOf(rel) {
+    const parts = rel.split('/')
+    const file = parts[parts.length - 1]
+    const stem = file.replace(/\.cml$/, '')
+    if (parts.length >= 5 && parts[3] === 'signatures') {
+        return { module: parts[2], signature: true, ruleset: false }
+    }
+    if (parts[2] === 'rulesets') return { module: null, signature: false, ruleset: true }
+    return { module: stem === 'prelude' ? 'globals' : stem, signature: false, ruleset: false }
+}
+
+// `skipBalanced`, `splitArguments`, `typeWithoutDefault` and `findCall` are the reference
+// generator's, kept here because this pass is about the same text: an example's call is found by
+// its own name, with the receiver of `->` as argument 0, and the arguments are split at top-level
+// commas only.
+function docSkipBalanced(text, start, open, close) {
+    let depth = 0
+    for (let index = start; index < text.length; index++) {
+        if (text[index] === open) depth++
+        else if (text[index] === close) {
+            depth--
+            if (depth === 0) return index + 1
+        }
+    }
+    return text.length
+}
+
+function docFindCall(code, name) {
+    const pattern = new RegExp(`\\b${name}\\b`, 'g')
+    let match
+    while ((match = pattern.exec(code))) {
+        let index = match.index + name.length
+        while (index < code.length && /\s/.test(code[index])) index++
+        if (code[index] === '<') index = docSkipBalanced(code, index, '<', '>')
+        while (index < code.length && /\s/.test(code[index])) index++
+        let args = null
+        if (code[index] === '(') {
+            const end = docSkipBalanced(code, index, '(', ')')
+            args = code.slice(index + 1, end - 1)
+        }
+        const receiver = code.slice(0, match.index).match(/([A-Za-z_]\w*)\s*->\s*$/)
+        return { receiver: receiver ? receiver[1] : null, args }
+    }
+    return null
+}
+
+function docSplitArguments(text) {
+    if (text === null) return []
+    const parts = []
+    let depth = 0
+    let quote = ''
+    let start = 0
+    for (let index = 0; index < text.length; index++) {
+        const char = text[index]
+        if (quote) {
+            if (char === quote && text[index - 1] !== '\\') quote = ''
+            continue
+        }
+        if (char === "'" || char === '"') quote = char
+        else if ('([{<'.includes(char)) depth++
+        else if (')]}>'.includes(char)) depth--
+        else if (char === ',' && depth === 0) {
+            parts.push(text.slice(start, index).trim())
+            start = index + 1
+        }
+    }
+    if (text.slice(start).trim() !== '') parts.push(text.slice(start).trim())
+    return parts
+}
+
+function docTypeWithoutDefault(type) {
+    let depth = 0
+    for (let i = 0; i < type.length; i++) {
+        const char = type[i]
+        if ('([{<'.includes(char)) depth++
+        else if (')]}>'.includes(char)) depth--
+        else if (char === '=' && type[i + 1] !== '>' && depth === 0) return type.slice(0, i).trim()
+    }
+    return type.trim()
+}
+
+// A parameter list's entries: `name: type`, a pack's dots before the name, an optional `?` after
+// it. A type variable makes a parameter unwritable and binds nothing (`typeAtScalar`), so the
+// example has to supply that value itself, as the reference generator says.
+function docParams(inner) {
+    return docSplitArguments(inner)
+        .map((text) => {
+            const match = text.match(/^(?:\.{2,3})?(\w+)\s*\??\s*:\s*(.+)$/)
+            return match ? { text, name: match[1], type: docTypeWithoutDefault(match[2]) } : null
+        })
+        .filter(Boolean)
+}
+
+function docTypeAtScalar(type) {
+    const text = (type || '').trim()
+    if (!/\b[A-Z]\b/.test(text)) return text
+    if (!text.includes('=>')) return null
+    return text.replace(/\b[A-Z]\b/g, 'float')
+}
+
+// The *code* of one `@example`: the `// result` a page appends to it is the page's, not the
+// example's. The split is the generator's (two or more spaces, then `//`).
+function docExampleCode(text) {
+    return text.split(/\s{2,}\/\/\s*/)[0].trim()
+}
+
+// The angle group of a `with <...>` list, closing on `>` and stepping over the `>` of `=>`.
+function docAngleEnd(text, start) {
+    let depth = 0
+    for (let i = start; i < text.length; i++) {
+        if (text[i] === '=' && text[i + 1] === '>') {
+            i++
+            continue
+        }
+        if (text[i] === '<') depth++
+        else if (text[i] === '>' && --depth === 0) return i
+    }
+    return -1
+}
+
+// The declaration a `///` block belongs to. The block may be followed by blank lines, a `#op(...)`
+// tag and a `with <...>` list -- all of them the declaration's front matter -- and the parameter
+// list itself may run over several lines, which is how the formatter writes a long one.
+function docDeclarationBelow(lines, start) {
+    let k = start
+    let withText = ''
+    while (k < lines.length) {
+        const text = lines[k].trim()
+        if (text === '' || text.startsWith('//') || text.startsWith('#')) {
+            k++
+            continue
+        }
+        if (/^with\s*</.test(text)) {
+            let acc = text
+            while (docAngleEnd(acc, acc.indexOf('<')) < 0 && k + 1 < lines.length) {
+                k++
+                acc += ' ' + lines[k].trim()
+            }
+            withText += ' ' + acc
+            k++
+            continue
+        }
+        break
+    }
+    if (k >= lines.length) return null
+    const declaration = lines[k]
+    const func = /^\s*(?:export\s+)?func\s+([A-Za-z_]\w*)/.exec(declaration)
+    if (func) {
+        let text = declaration
+        let end = k
+        const open = text.indexOf('(', func.index + func[0].length)
+        while (open >= 0 && docSkipBalanced(text, open, '(', ')') >= text.length && end + 1 < lines.length) {
+            end++
+            text += ' ' + lines[end].trim()
+        }
+        const close = open < 0 ? -1 : docSkipBalanced(text, open, '(', ')')
+        const inner = close < 0 ? '' : text.slice(open + 1, close - 1)
+        const angle = withText.indexOf('<')
+        const withInner = angle < 0 ? '' : withText.slice(angle + 1, docAngleEnd(withText, angle))
+        const tail = close < 0 ? '' : text.slice(close)
+        const result = /=>\s*([^{]+?)\s*(?=[{]|when\b|uses\b|sync\b|$)/.exec(tail)?.[1] || null
+        return { name: func[1], line: k + 1, params: docParams(inner), withParams: docParams(withInner), result }
+    }
+    const value = /^\s*(?:export\s+)?let\s+([A-Za-z_]\w*)\s*:\s*(.+)$/.exec(declaration)
+    if (value) return { name: value[1], line: k + 1, params: [], withParams: [], result: value[2].trim() }
+    // A type or a rule is documented the same way, and its example is about the name rather than a
+    // call of it (`@example is_same::<PayloadOf<float?>, float>()` above `export type PayloadOf`).
+    // A rule's parameters bind like a function's; a type's do not bind at all.
+    const rule = /^\s*(?:export\s+)?rule\s+([A-Za-z_]\w*)/.exec(declaration)
+    if (rule) {
+        const open = declaration.indexOf('(', rule.index + rule[0].length)
+        const close = open < 0 ? -1 : docSkipBalanced(declaration, open, '(', ')')
+        const inner = close < 0 ? '' : declaration.slice(open + 1, close - 1)
+        return { name: rule[1], line: k + 1, params: docParams(inner), withParams: [], result: null }
+    }
+    const type = /^\s*(?:export\s+)?(?:type|struct|enum|tag)\s+([A-Za-z_]\w*)/.exec(declaration)
+    if (type) return { name: type[1], line: k + 1, params: [], withParams: [], result: null }
+    return null
+}
+
+// Every `@example` of one `///` block, in the order written, with the line it is on.
+function docBlockEntries(lines, start, end) {
+    const examples = []
+    const fragments = []
+    for (let i = start; i < end; i++) {
+        const text = lines[i].replace(/^\s*\/\/\/\s?/, '')
+        if (text.startsWith('@example-fragment')) fragments.push({ text: text.slice('@example-fragment'.length).trim(), line: i + 1 })
+        else if (text.startsWith('@example')) examples.push({ text: text.slice('@example'.length).trim(), line: i + 1 })
+    }
+    return { examples, fragments }
+}
+
+// The names the example's arguments bind: the receiver of `->` is parameter 0 and argument i is
+// parameter i (shifted by the receiver). A literal or an expression is not a name and binds
+// nothing.
+function docBindings(entry, code) {
+    const call = docFindCall(code, entry.name)
+    if (!call) return []
+    const params = entry.params
+    const bindings = []
+    const bind = (name, param) => {
+        if (!param || !DOC_NAME.test(name) || DOC_RESERVED.has(name)) return
+        const type = docTypeAtScalar(docTypeWithoutDefault(param.type))
+        if (type === null) return
+        if (!bindings.some((binding) => binding.name === name)) bindings.push({ name, type })
+    }
+    if (call.receiver) bind(call.receiver, entry.params[0])
+    docSplitArguments(call.args).forEach((argument, index) => {
+        bind(argument, params[call.receiver ? index + 1 : index])
+    })
+    return bindings
+}
+
+// The capitalized names the example needs in scope: the types of the parameters it binds, and the
+// ones it writes itself (`(j: Json) => ...`, `is_same::<Tangent<f32>, f32>()`).
+function docTypeNames(bindings, code) {
+    const names = []
+    for (const binding of bindings) {
+        for (const name of binding.type.match(/\b[A-Z]\w*/g) || []) if (!names.includes(name)) names.push(name)
+    }
+    for (const name of code.match(/\b[A-Z]\w*/g) || []) if (!names.includes(name)) names.push(name)
+    return names.filter((name) => !DOC_BUILTIN_TYPES.has(name))
+}
+
+// One example as a program: the module's documented names in scope, the arguments bound to their
+// declared types, the example inside a function, and an entry point. An example that starts with a
+// statement keyword is used as a statement; anything else is an expression. A call that returns
+// nothing cannot be bound, so the caller retries a failed expression as a statement.
+function docExampleSource(context, entry, code, asStatement) {
+    const lines = []
+    if (context.ruleset) {
+        // A rule set is not importable as a module: its own text is what gives the example its
+        // names (its types, its rules, and the imports it already writes).
+        lines.push(context.text)
+    } else if (entry.module !== 'globals') {
+        if (context.names.length > 0) lines.push(`import { ${context.names.join(', ')} } from ${entry.module}`)
+    }
+    for (const [name, owner] of context.typeImports) {
+        lines.push(`import { ${name} } from ${owner}`)
+    }
+    const bindings = docBindings(entry, code)
+    const params = bindings.map((binding) => `${binding.name}: ${binding.type}`).join(', ')
+    const fallible = /^return\s+error\(/.test(code)
+    lines.push(`func __doc_example(${params}) => ${fallible ? 'int!' : 'void'} {`)
+    if (asStatement || entry.result === 'void' || DOC_STATEMENT.test(code)) {
+        lines.push(`    ${code}`)
+    } else {
+        lines.push(`    let __doc_example = ${code}`)
+    }
+    lines.push('}')
+    lines.push('func main() => int sync { return 0 }')
+    return lines.join('\n') + '\n'
+}
+
+// One example compiled: what the fragment compiler said, and which of the two writings was used.
+async function compileDocExample(context, entry, code) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-example-'))
+    try {
+        const file = path.join(dir, 'example.cml')
+        let result = null
+        for (const asStatement of [false, true]) {
+            fs.writeFileSync(file, docExampleSource(context, entry, code, asStatement))
+            result = await runCamel([file, 'std::gir'], dir)
+            if (result.code === 0) return { ok: true, result }
+            // A statement retry is for a call that returns nothing; a syntax error is the same
+            // both ways, so only retry what parsed.
+            if (result.timedOut || /SyntaxDiag|LexicalDiag/.test(`${result.stdout}\n${result.stderr}`)) break
+        }
+        return { ok: false, result }
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+}
+
+// The whole source pass. Returns the red lines and the counts the summary prints.
+async function checkSourceExamples() {
+    const files = []
+    collectSource(STDLIB_ROOT, files)
+    if (files.length === 0) {
+        console.log(`${STDLIB_ROOT}: no .cml file found; refusing to report a pass over no source`)
+        return { failed: true }
+    }
+    // Every exported type, so an example's capitalized name can be imported from the module that
+    // declares it (`Match` is `re`'s, `Json` is `json`'s). A module's *library* file wins over a
+    // signature file: `Tangent` is declared both by `transforms`'s signature file and by `types`,
+    // and the one an `import` brings is `types`'s.
+    const typeOwners = new Map()
+    const fileContexts = new Map()
+    for (const rel of files) {
+        const text = fs.readFileSync(path.resolve(ROOT, rel), 'utf8')
+        const info = docFileOf(rel)
+        const types = [...text.matchAll(/^\s*export\s+type\s+([A-Za-z_]\w*)/gm)].map((one) => one[1])
+        fileContexts.set(rel, { ...info, text, types })
+        if (info.module && !info.ruleset && !info.signature) {
+            for (const name of types) if (!typeOwners.has(name)) typeOwners.set(name, info.module)
+        }
+    }
+    for (const rel of files) {
+        const context = fileContexts.get(rel)
+        if (!context.module || context.ruleset || !context.signature) continue
+        for (const name of context.types) if (!typeOwners.has(name)) typeOwners.set(name, context.module)
+    }
+    // Which declarations a file documents. A module's examples see the names its module documents,
+    // library file and signature file together -- `zeros` is documented in
+    // `tensor/signatures/tensor.cml` and called by an example of `tensor.cml`, which is the
+    // reference generator's convention. So every file is parsed before any example is compiled.
+    const entryNames = new Map()
+    const parsed = []
+    for (const rel of files) {
+        const context = fileContexts.get(rel)
+        const lines = context.text.replace(/\r\n/g, '\n').split('\n')
+        const blocks = []
+        for (let i = 0; i < lines.length; i++) {
+            if (!/^\s*\/\/\//.test(lines[i])) continue
+            const blockStart = i
+            while (i < lines.length && /^\s*\/\/\//.test(lines[i])) i++
+            const block = docBlockEntries(lines, blockStart, i)
+            if (block.examples.length === 0) continue
+            const declaration = docDeclarationBelow(lines, i)
+            const entry = declaration ? { ...declaration, module: context.module, fragments: block.fragments } : null
+            if (entry !== null && context.module && !context.ruleset) {
+                if (!entryNames.has(context.module)) entryNames.set(context.module, new Set())
+                entryNames.get(context.module).add(entry.name)
+            }
+            blocks.push({ entry, examples: block.examples, fragments: block.fragments })
+        }
+        parsed.push({ rel, context, blocks })
+    }
+    const jobs = []
+    for (const { rel, context, blocks } of parsed) {
+        for (const block of blocks) {
+            if (block.entry === null) {
+                for (const example of block.examples) {
+                    jobs.push({
+                        rel, line: example.line, code: docExampleCode(example.text), entry: null,
+                        fragments: block.fragments, context,
+                    })
+                }
+                continue
+            }
+            const entry = block.entry
+            // A documented *type* is imported from the module that exports it, which is not alway the
+            // one the example is written in: `import { Tangent } from transforms` brings no type,
+            // and `types` does. A name the module line already carries is not imported twice.
+            const names = entry.module && !context.ruleset && entry.module !== 'globals' ? [...(entryNames.get(entry.module) || [])] : []
+            const baseTypes = new Map()
+            const moduleNames = []
+            for (const name of names) {
+                const owner = typeOwners.get(name)
+                if (owner && owner !== 'globals') baseTypes.set(name, owner)
+                else moduleNames.push(name)
+            }
+            for (const example of block.examples) {
+                const code = docExampleCode(example.text)
+                const typeImports = new Map(baseTypes)
+                if (!context.ruleset) {
+                    for (const name of docTypeNames(docBindings(entry, code), code)) {
+                        const owner = typeOwners.get(name)
+                        if (owner && owner !== 'globals' && !moduleNames.includes(name)) typeImports.set(name, owner)
+                    }
+                }
+                jobs.push({ rel, line: example.line, code, entry, fragments: block.fragments, context: { ...context, typeImports, names: moduleNames } })
+            }
+        }
+    }
+    if (jobs.length === 0) {
+        console.log(`${STDLIB_ROOT}: no @example found; refusing to report a pass over no example`)
+        return { failed: true }
+    }
+    const results = new Array(jobs.length)
+    let next = 0
+    const worker = async () => {
+        while (next < jobs.length) {
+            const index = next++
+            const job = jobs[index]
+            if (job.entry === null) {
+                results[index] = { ...job, ok: false, diagnostic: 'the @example has no declaration below it to bind its names' }
+                continue
+            }
+            const compiled = await compileDocExample(job.context, job.entry, job.code)
+            const text = `${compiled.result.stdout}\n${compiled.result.stderr}`
+            const match = DOC_DIAGNOSTIC_CLASS.exec(text)
+            const kind = match ? match[1].toLowerCase() : null
+            results[index] = {
+                ...job,
+                ok: compiled.ok,
+                kind,
+                excused: !compiled.ok && job.fragments.length > 0 && (kind === 'semantic' || kind === 'internal'),
+                diagnostic: compiled.ok ? '' : firstDiagnostic(compiled.result),
+            }
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(JOBS, jobs.length) }, worker))
+
+    const red = results.filter((one) => !one.ok && !one.excused)
+    const excused = results.filter((one) => one.excused)
+    const classes = new Map()
+    for (const one of red) {
+        const label = one.kind ? `a ${one.kind} error` : 'no diagnostic class'
+        classes.set(label, (classes.get(label) || 0) + 1)
+    }
+    for (const one of red) {
+        console.log(`${one.rel}:${one.line}: ${one.kind ? `a ${one.kind} error` : 'no diagnostic class'} -- ${one.code}`)
+        console.log(`    ${one.diagnostic}`)
+    }
+    for (const [label, count] of [...classes].sort(([a], [b]) => a.localeCompare(b))) {
+        console.log(`    ${label}: ${count}`)
+    }
+    console.log(
+        `${red.length} of the standard library's ${jobs.length} @example(s) do not compile` +
+            `${excused.length > 0 ? `, ${excused.length} more are exempted by their @example-fragment marker` : ''}: ` +
+            'each line above is the file, the line and the example as it is written',
+    )
+    return { failed: red.length > 0 }
+}
+
 // ---- Main ----------------------------------------------------------------------------------
 
 const args = ARGV.filter((arg) => !arg.startsWith('--'))
+// Two halves of one question. The pages half reads the reader-facing documents; the source half
+// reads the `@example` lines of `src/stdlib/**/*.cml`, which is where the generated reference's
+// examples are written. A run over named files or directories is the pages half (the fixtures of
+// its plan); the default run is both, because a generated page is a copy and the promise is about
+// the source.
+const wantSources = ARGV.includes('--source-examples') || (args.length === 0 && !ARGV.includes('--pages'))
+const wantPages = !ARGV.includes('--pages') && (args.length > 0 || !ARGV.includes('--source-examples'))
+let sourceFailed = false
+if (wantSources) {
+    sourceFailed = (await checkSourceExamples()).failed
+    if (!wantPages) process.exit(sourceFailed ? 1 : 0)
+}
 const entries = ARGV.includes('--default-roots') || args.length === 0 ? ['README.md', 'docs'] : args
 // The default roots are the whole reader-facing scope; a run over named files or directories has
 // seen only part of the tree, which is what the third pending-list rule below turns on.
@@ -1363,3 +1849,6 @@ console.log(
         `(${skippedFiles.length} generated/dated reference(s) allowlisted; ` +
         `${RECORDS.length} record directories not scanned; ${seconds} s)`,
 )
+// The two halves are one answer: a page that holds is not enough when the examples it prints were
+// not compiled at their source.
+if (sourceFailed) process.exit(1)
