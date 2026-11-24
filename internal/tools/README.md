@@ -162,6 +162,43 @@ The header of the script states the rest as rules: the staging push, what the `-
 compares and why content rather than a commit, how a checker stage reports, why the plan's stderr is
 folded into its stdout, and the exact shape of the panel's state files.
 
+## The readings cache: one tree, one reading
+
+`scripts/merge-readings.mjs --read` measures one plan set on one tree and caches what it measured. The
+merge position asks for the same reading more than once per judgement (the tree the merge lands on,
+the merged tree) and a night of merges re-measures the same tip; the rows cannot differ, and the host
+should not be asked to produce them again.
+
+The key contains the identity of the thing cached and everything a reading depends on:
+
+| component | value |
+|---|---|
+| tree | `git -C <tree> rev-parse HEAD` — the commit, never the directory and never an mtime |
+| plan selection | the `<count>-<hash>` from `scripts/plan-set.mjs`, the same value the baseline cache uses |
+| jobs | the runner's `-Jobs` width |
+| tier | `release` or `debug` — two installs of one commit are two binaries |
+| tool | sha256 over `scripts/merge-readings.mjs`, `scripts/plan-set.mjs` and the runner |
+
+A hit is replayed with a line that says the reading came from the cache and names the full tree OID;
+a miss runs `camel-remote` (or `--runner`'s stand-in) and stores what came back. A dirty working tree
+is neither served nor stored: a reading of commit C is not a reading of C plus an uncommitted edit.
+An entry whose transcript holds no row block is not stored either — a build that stopped wrote no
+reading.
+
+**Who creates it, and how it is cleared:** the first successful store creates the cache root, its
+entries and `MANIFEST.md` (which repeats this). It lives *outside every work tree* — the default is
+`D:\Temp\camel-readings-cache`, `--readings-cache` or `CAMEL_READINGS_CACHE` names another one, and a
+path inside a checkout is refused, because an entry there would be a file the next measurement
+carries as a change. Clearing it is always safe; every entry can be measured again:
+
+```powershell
+Remove-Item -LiteralPath D:\Temp\camel-readings-cache -Recurse -Force
+```
+
+The self-test that pins the behaviour down — hit, miss per key component, dirty tree not stored, a
+clone and an mtime touch still hitting — is `internal/tools/merge-readings-cache.test.mjs`; it uses a
+stand-in runner and needs no build host.
+
 ## Cleaning up: the record, not the guess
 
 Twice today a cleanup deleted something that had a user, and both times the criterion was the same
