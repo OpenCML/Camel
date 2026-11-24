@@ -1075,6 +1075,27 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
 // the two rules belongs here, beside this line.
 void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
     work_->adoptMissing(program);
+    // A graph `program` declares it made, and that the work table now holds as one this session
+    // gained by adoption, is the pass's own edit here: the commit records it on the program it
+    // hands back (`recordMade`), so the boundary reads it as made instead of as introduced. The
+    // filter is the work table's own record, and it is what keeps the record honest. That record
+    // is empty when the session opens because `*work_ = *program` is `Program::operator=`, which
+    // clears `made_` (the same place a copy is told not to carry the source's record): so only an
+    // adoption marks it, and a graph the session's given program already held is never recorded
+    // as made here. If that clear were ever dropped, this filter would silently turn the given
+    // program's own graphs into the pass's, and the check below would lose its meaning.
+    //
+    // A library or definition program -- `Program::bind`, no made record at all -- still brings
+    // nothing, so a graph taken from it is refused and named exactly as before. The record cannot
+    // be written at the adoption point instead of here: this is also the path a library's or a
+    // definition's function value comes in by (`definitions.cpp`'s `expandDefinition`,
+    // `graph/txn.cpp`'s `graph.inline`), so registering there would delete the reason the check
+    // exists.
+    for (const uint32_t id : program.madeGraphs()) {
+        if (work_->madeGraphs().contains(id) && work_->graph(static_cast<GraphId>(id)) != nullptr) {
+            madeIds_.insert(id);
+        }
+    }
 }
 
 void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
@@ -1094,8 +1115,8 @@ void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
     }
     // The session encoded this graph itself, so it is a graph the pass that runs this session
     // made: the commit records it on the program it hands back (`madeIds_`), and the pass
-    // boundary reads given ∪ made. A graph taken from another program goes through
-    // `adoptProgram`, which is not this record: that is the adoption the boundary refuses.
+    // boundary reads given ∪ made. A graph taken from another program is not a graph this line
+    // marks -- `adoptProgram` takes it in, and records only the ones that program declared it made.
     madeIds_.insert(toValue(graph->id()));
 }
 
