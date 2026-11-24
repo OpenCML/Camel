@@ -85,12 +85,12 @@ case-digest: sha256:9993ade9abc6b300844feb621483be73594d157420a0e80dc2d709719063
 ## 五、闸门
 
 `pwsh -File internal/tools/camel-remote.ps1 -Path <worktree> -Jobs 8 -NoGpuWatch` 在 `94e3e0f3f9`
-上：exit 0，build 34 s，`RUN_EXIT=0`，`TREE_STATE=clean`（跑前跑后）。这次改动自身的选择：
+（机制）与 `422a01d448`（记录 + 本报告）上各跑一次，两次都 exit 0：`BUILD_EXIT=0`、`RUN_EXIT=0`、
+`TREE_STATE=clean`（跑前跑后）。中间有一次重试在主机排队 1,800 s 内没拿到测试槽，`exit 4`——那是闸门的
+调度拒绝（同一台主机上别的车道占着槽，跑前 load 93），不是红。这次改动自身的选择：
 `plan-cases: 49 / cases: 36`，`case-digest: sha256:ff061cebdc7099826420d21c357d7f218715d0b2cb19bc125dc61366c6636b06`
-——计划级 49 个用例里 13 个在慢层，fast 闸门只起 36 个。此后再往报告里改过一行哈希（改成上面的
-`case-digest`），代码与记录未动；最终提交的构建同样通过（`BUILD_EXIT=0`，stamp clean），但那次测试阶段
-在主机排队 1,800 s 内没拿到测试槽——`exit 4` 是闸门的调度拒绝（同一台主机上别的车道占着测试槽，
-跑前 load 93），不是红。
+——计划级 49 个用例里 13 个在慢层，fast 闸门只起 36 个。此后再往本报告里改过几行文字（哈希换成摘要、
+13 笔里哪一笔是放宽的、记录大小），代码与记录未动。
 
 ## 六、这一步没做的
 
