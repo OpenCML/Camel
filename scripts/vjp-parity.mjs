@@ -475,26 +475,69 @@ function* cppFiles(dir) {
     }
 }
 
-/// The protocol a `setVjp(defs, ...)` lands in: `OpRegistry::instance().add("<protocol>", ...)`
-/// in the tensor module's catalog. Read, not assumed, and refused when the catalog names more
-/// than one, because then one of the two would be attributed to the wrong namespace.
-function tensorProtocol() {
-    const text = withoutComments(read('src/stdlib/tensor/ops/catalog.cpp'))
-    const protocols = new Set()
-    for (const match of text.matchAll(/OpRegistry::instance\(\)\.add\(\s*"([^"]+)"/g)) {
-        protocols.add(match[1])
+/// The protocol each module publishes its operators under, read from every
+/// `OpRegistry::instance().add("<protocol>", ...)` under `src/stdlib` and grouped two ways: by the
+/// file that writes the call and by the module (`src/stdlib/<name>`) the file belongs to.
+///
+/// The URI of a module operator is `<protocol>:<def.name>` (`src/stdlib/tensor/ops/registry.cpp`
+/// copies `OpDef` into the registry under it), so the protocol of a `setVjp` is the one of the
+/// module that **publishes the list the call is written against** -- and that is not always one
+/// module: `src/stdlib/nn/tensor_ops.cpp` publishes its own list from the same file
+/// (`OpRegistry::instance().add("nn", nnTensorOps())`), while every `src/stdlib/tensor/ops/*.cpp`
+/// returns its list to the module's catalog (`src/stdlib/tensor/ops/catalog.cpp`), which is the
+/// only file there that calls `add`. Reading the tensor catalog's protocol for the whole tree filed
+/// the `nn` rows under `tensor:` -- the right key, the wrong namespace printed beside it
+/// (C-1124-203). Read, not assumed; a module that publishes two protocols is refused rather than
+/// guessed, because one of the two would be attributed to the wrong namespace.
+function moduleProtocols() {
+    const byFile = new Map()
+    const byModule = new Map()
+    for (const file of cppFiles(path.join(ROOT, 'src/stdlib'))) {
+        const relative = path.relative(ROOT, file).replaceAll(path.sep, '/')
+        const text = withoutComments(fs.readFileSync(file, 'utf8'))
+        for (const match of text.matchAll(/OpRegistry::instance\(\)\.add\(\s*"([^"]+)"/g)) {
+            byFile.set(relative, match[1])
+            const module = relative.split('/').slice(0, 3).join('/')
+            if (!byModule.has(module)) {
+                byModule.set(module, new Set())
+            }
+            byModule.get(module).add(match[1])
+        }
     }
-    if (protocols.size !== 1) {
+    if (byFile.size === 0) {
         fail(
-            `src/stdlib/tensor/ops/catalog.cpp registers ${protocols.size} protocol(s) ` +
-                `(${[...protocols].join(', ')}): a setVjp cannot be attributed by this reader`
+            'no module under src/stdlib calls `OpRegistry::instance().add(...)`: the protocol of a ' +
+                '`setVjp` row would be invented by this reader'
         )
     }
-    return [...protocols][0]
+    return { byFile, byModule }
 }
 
 function readEngine() {
-    const protocol = tensorProtocol()
+    const protocols = moduleProtocols()
+    // The protocol of the file a `setVjp` is written in: its own if it publishes one, else the one
+    // its module publishes. Called only from a `setVjp` row, so a file with neither is not a refusal.
+    const protocolOf = (relative) => {
+        const own = protocols.byFile.get(relative)
+        if (own !== undefined) {
+            return own
+        }
+        const module = relative.split('/').slice(0, 3).join('/')
+        const published = protocols.byModule.get(module)
+        if (published === undefined) {
+            fail(
+                `${relative}: a setVjp is written here and ${module} publishes no operator protocol: ` +
+                    `the URI of the row cannot be stated`
+            )
+        }
+        if (published.size !== 1) {
+            fail(
+                `${module} registers ${published.size} protocol(s) (${[...published].join(', ')}): ` +
+                    `the URI of a setVjp in ${relative} cannot be attributed by this reader`
+            )
+        }
+        return [...published][0]
+    }
     const registrations = []
     let transportsRead = 0
     for (const root of ENGINE_ROOTS) {
@@ -627,7 +670,7 @@ function readEngine() {
                 }
                 for (const name of names) {
                     registrations.push({
-                        uri: `${protocol}:${name}`,
+                        uri: `${protocolOf(relative)}:${name}`,
                         file: relative,
                         line: lineOf(raw, match.index),
                         call: 'setVjp',
