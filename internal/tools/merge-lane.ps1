@@ -87,9 +87,11 @@ param(
     # parameter would make PowerShell prompt for one. A merge without them is refused below, by name.
     [string] $Branch = '',
     [string] $Message = '',
-    # The merge seat's own worktree. D:\Projects\Camel is the author's workspace (iron rule 17):
-    # nothing is merged, built or measured there.
-    [string] $MainCheckout = 'D:\Projects\Camel-wt\merge',
+    # The merge seat's own worktree. Empty means "ask the settings file": `camel-gate.local.json`
+    # under `mergeWorktree`, the same key `scripts/hooks/pre-push` reads to decide which tree may
+    # push develop. Two merge positions and a constant here is how the tool came to merge in a tree
+    # the hook would then refuse -- after the merge had run. `-MainCheckout` is the one-off override.
+    [string] $MainCheckout = '',
     # Where the baseline is measured. It has to be a tree that is NOT the one being compared, and it
     # has to be a real checkout (the gate builds it), so it is a worktree of this repository detached
     # at the first parent. One fixed path and not one per merge: the host keeps the build of that
@@ -193,6 +195,37 @@ function Stop-With {
     Write-GitState -MergeCommit $MergeCommit
     exit 1
 }
+
+# --- which tree this merges in ----------------------------------------------
+# One name for one machine-local fact: the tree the pre-push hook will accept a push from. A caller
+# that has already decided passes `-MainCheckout`; otherwise the settings file answers, and a file
+# that names two trees stops the run here rather than at the push.
+#
+# These two refusals do not go through `Stop-With`: that one reports what git holds, and the git it
+# would read is the directory this was started in, not the merge seat -- a wrong tree reported as
+# fact is worse than no report. Nothing has been touched at this point, so there is nothing to state.
+. (Join-Path $PSScriptRoot 'merge-lane-config.ps1')
+try {
+    $MainCheckout = Get-MergeWorktree -Config (Join-Path $PSScriptRoot 'camel-gate.local.json') -Explicit $MainCheckout
+} catch {
+    Write-Host ''
+    Write-Host "STOPPED: the merge worktree could not be read" -ForegroundColor Red
+    Write-Host "  $($_.Exception.Message)"
+    Write-Host '  Nothing was merged and nothing was pushed.'
+    Write-Host ''
+    exit 1
+}
+if (-not (Test-Path -LiteralPath $MainCheckout)) {
+    Write-Host ''
+    Write-Host "STOPPED: the merge worktree is not there: $MainCheckout" -ForegroundColor Red
+    Write-Host "  The settings file names the tree the pre-push hook accepts a push from; a rename leaves both pointing at nothing."
+    Write-Host '  Nothing was merged and nothing was pushed.'
+    Write-Host ''
+    exit 1
+}
+# Said before the merge, not after: a merge takes twenty minutes and a refused push takes the result
+# back to the start, so the tree is named while saying no is still free.
+Write-Host "[merge-lane] merging in $MainCheckout (the worktree the pre-push hook accepts a push from)"
 
 # The baseline's own checkout: a worktree of THIS repository, held at the sha it must measure.
 # Returns $null when the tree is ready, or a sentence saying why it is not -- the caller turns that
