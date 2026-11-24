@@ -63,3 +63,14 @@
 - **失败就停**：新增红不为 0 时**不推**，报红的用例名与失败的第一条期望，然后停——晋级失败比晋级错了好。
 - **报一行**：`promoted <sha> | fast: <N> cases, <pass>/<fail> | new reds: <n> | slot 3 | queue <秒>`。
 - **文档不再推 `develop`**：有了 `integration` 之后，backlog、问题页、计划页一律推 `integration`，`develop` 只由晋级快进；推前核 `git rev-list origin/integration..HEAD` 里只有文档提交。
+
+**第 3 步的两条逐字命令**：
+
+```powershell
+git push origin origin/integration:refs/heads/develop
+git ls-remote origin refs/heads/develop
+```
+
+第 1 条把 `integration` 快进到 `develop`（不带任何新提交）；第 2 条是核对，输出里 `refs/heads/develop` 的 sha 必须等于 `integration` 的 sha，否则这次晋级没有落。
+
+**为什么要比红表而不是只看红数**：整层跑一次会带上上游所有改动（判据修正、唤醒、收尾规矩），那些改动第一次被整层跑时，红的位置会动；只看红数会把「换了一条红」读成「没有新增红」。
