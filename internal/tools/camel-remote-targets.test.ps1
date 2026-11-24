@@ -88,6 +88,23 @@ Check 'the all shorthand is the plan tree' ($treeTargets.Count -eq 1 -and $treeT
 $line = Format-CamelPlanTargetLine -Targets $treeTargets -Tier 'fast'
 Check 'the tree is a layer question, not a directory subset' ($line -like '*whole plan tree (4 plan file(s))*' -and $line -like '*layer question*' -and $line -like '*at tier fast*') $line
 
+# --- 4b. the whole tree with no layer is refused, and says why --------------
+# The reading that motivated this arrived as `--changed: the cases this change selects could not be
+# computed` for a command that never mentioned `--changed`: a reader is sent to the change selection
+# instead of to the target they typed. The refusal must name the target, the missing layer, and the
+# fact that it is not a change selection.
+$refusal = @(Get-CamelPlanTargetRefusal -Targets $treeTargets -Tier '')
+Check 'the whole tree with no -Tier is refused' ($refusal.Count -gt 0) ($refusal -join ' / ')
+Check 'the refusal says the target is the whole plan tree' (@($refusal | Where-Object { $_ -like '*names the whole plan tree (4 plan file(s))*' }).Count -eq 1) ($refusal -join ' / ')
+Check 'it says which layer word is missing' (@($refusal | Where-Object { $_ -like '*name the layer with -Tier fast|slow|milestone|all*' }).Count -eq 1) ($refusal -join ' / ')
+Check 'it says nothing was sent to the host' (@($refusal | Where-Object { $_ -like '*nothing was sent to the host*' }).Count -eq 1) ($refusal -join ' / ')
+Check 'it says it is not a change selection' (@($refusal | Where-Object { $_ -like '*not a change selection*' -and $_ -like '*no --changed was given or needed*' }).Count -eq 1) ($refusal -join ' / ')
+# The sentence this replaces, kept as the thing that must not come back.
+Check 'it never says the cases of this change could not be computed' (@($refusal | Where-Object { $_ -like '*could not be computed*' }).Count -eq 0) ($refusal -join ' / ')
+Check 'a named layer is not refused' ((@(Get-CamelPlanTargetRefusal -Targets $treeTargets -Tier 'fast')).Count -eq 0) 'with -Tier fast the tree is allowed'
+Check 'a recording is not refused, because it reads no layer' ((@(Get-CamelPlanTargetRefusal -Targets $treeTargets -Tier '' -Golden)).Count -eq 0) '-UpdateGolden names the plans it rewrites'
+Check 'a directory is never refused for being a directory' ((@(Get-CamelPlanTargetRefusal -Targets $twoDirs -Tier '')).Count -eq 0) 'two directories name what they reach'
+
 # --- 5. nothing named is no line --------------------------------------------
 Check 'no target means no sentence' ((Format-CamelPlanTargetLine -Targets @() -Tier '') -eq $null) 'a null line is printed as nothing'
 

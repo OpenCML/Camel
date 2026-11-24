@@ -114,3 +114,38 @@ function Format-CamelPlanTargetLine {
     }
     return "[camel-remote] plan target: " + ($parts -join '; ')
 }
+
+# Why a whole-tree target is refused before the push, as the lines to print. Empty means it may run.
+#
+# The tree is a layer question, and the runner answers it with `fast` when nothing names a layer
+# (`test/tools/run-tests.mjs#selectTier`), so `-Plan test/plans` read as "the whole tree" in the
+# command and as "the fast layer" in the output -- measured on 2026-11-24 as
+# `[tier] fast: 387 plan file(s), 9919 declared test entries, 9919 started`, with nothing in the run
+# saying one layer had been chosen for it. A run that measured the wrong layer cannot be told from a
+# complete one afterwards, so the target is refused here instead: one word (`-Tier`) says what was
+# meant, and this refusal costs no transfer, no build and no slot.
+#
+# The wording matters as much as the refusal. The reading that motivated this arrived as
+# `[ERROR] --changed: the cases this change selects could not be computed` -- a sentence about a
+# flag the caller had not given, which sends a reader to look at the change selection instead of at
+# the target they typed. Every line here is about the target, and the last one says so.
+function Get-CamelPlanTargetRefusal {
+    param(
+        [AllowEmptyCollection()]$Targets = @(),
+        [string]$Tier = '',
+        # `-UpdateGolden` rewrites the goldens of the plans it is given and reads no layer, so a
+        # whole tree is a legitimate recording there and there is no layer to name.
+        [switch]$Golden
+    )
+    $tree = @(@($Targets) | Where-Object { $_.Kind -eq 'tree' })
+    if ($tree.Count -eq 0) { return @() }
+    if ($Golden) { return @() }
+    if ("$Tier".Trim()) { return @() }
+    $names = ($tree | ForEach-Object { $_.Name }) -join ', '
+    $plans = ($tree | Measure-Object -Property Plans -Sum).Sum
+    return @(
+        "[camel-remote] -Plan $names names the whole plan tree ($plans plan file(s)), and no -Tier says which layer of it: the whole tree is a layer question (fast|slow|milestone|all), and the runner quietly answers 'fast' when nothing names one, so the run would read as a complete reading of the tree while covering one layer.",
+        '[camel-remote] name the layer with -Tier fast|slow|milestone|all, or name the plans you mean; nothing was sent to the host (exit 2).',
+        '[camel-remote] this refusal is about the -Plan target; it is not a change selection, and no --changed was given or needed.'
+    )
+}

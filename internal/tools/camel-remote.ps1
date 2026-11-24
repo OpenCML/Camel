@@ -52,8 +52,10 @@
 # this run handed over"). 5 means the gpu observation read a case red
 # that its baseline does not name (see "the gpu layer is observed, and never gates"; the known reds
 # never decide a run). 4 means the -NoBuild guard refused before anything ran; 3 means the host is
-# short of disk; 2 means the worktree, the push or the transfer failed, or -Check named a checker
-# that does not exist.
+# short of disk; 2 means the worktree, the push or the transfer failed, -Check named a checker
+# that does not exist, or `-Plan` named the whole plan tree without -Tier naming a layer of it (that
+# refusal is about the target and is printed before anything is pushed; see
+# `camel-remote-targets.ps1`, which also says why it is not a `--changed` refusal).
 #
 # --- where the machine-specific values live ---------------------------------
 # Nothing in this file names a host, a drive or a user's home. The ssh alias, the ssh/scp binaries,
@@ -868,6 +870,15 @@ if ($Changed -and $Plan.Count -gt 0) {
         $Plan.Count, ($Plan -join ', '))
 } elseif (-not $Clean -and $Plan.Count -gt 0) {
     $planTargets = @(Resolve-CamelPlanTarget -Values $Plan -Root $Path)
+    # The whole plan tree is a layer question, and the runner answers it silently with `fast`. A run
+    # that starts one layer while its target says "the whole tree" cannot be told from a complete
+    # reading afterwards, so the target is refused before anything is pushed -- one word says what
+    # was meant, and `-UpdateGolden` (which reads no layer) is exempt.
+    $targetRefusal = @(Get-CamelPlanTargetRefusal -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
+    if ($targetRefusal.Count -gt 0) {
+        foreach ($reason in $targetRefusal) { Write-Host $reason }
+        exit 2
+    }
     Write-Host (Format-CamelPlanTargetLine -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
 }
 
