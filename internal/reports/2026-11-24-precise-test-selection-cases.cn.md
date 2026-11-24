@@ -13,7 +13,7 @@
 | `test/tools/run-tests.mjs` | 新 `--list-cases`（和真跑同一套 loadPlans/sweep/层/companion 闭合，只打印不启动）与新 `--selection-cases <文件>`：只起名单里的用例，名单里有不会启动的名字就退出 2，而不是静默少跑。 |
 | `scripts/selection-cases.mjs` | 引擎与记录：`--print` 打印名单与摘要，`--write` 写记录，`--verify` 用记录自己的 `files` 重放并逐字段比较。 |
 | `test/plan-selection.json`、`docs/test-plans.md` | 规则文件与文档改成"规则点名计划，运行跑用例"；并写明命名计划不再整份跑。 |
-| `test/selection/readings/*.json` | 19 条记录，共 135 KB。 |
+| `test/selection/readings/*.json` | 19 条记录，共 136 KB。 |
 
 层（`--tier fast`）现在按**用例自己**的 tier 判：一份被点名的计划不再因为"它是命名目标"而跑它的慢用例
 （旧规则原文是"a named plan runs in full whatever `--tier` says"）。日层照旧跑慢用例。
@@ -58,10 +58,11 @@
 | `712ba6f670` | 10 | 10 | 6197 | 6197 | plan=6197 |
 | `38b7aec1bf` | 1 | 2 | 9894 | 9894 | 无规则 → 放宽（`widened=true`） |
 
-**13 笔一笔都没减。** 原因不是这一步没做，而是它们没有一笔改到用例文件：它们的用例 100% 来自
-`plan:` 原因——规则直接点名一份计划，那计划里哪个用例会被碰，规则本身没有说。这正是第一步"仓库里
-没有覆盖表"的结论；现在每笔都有 `cause_counts` 为证，而不是推断。窄得下来的都在改到用例的那一类
-（上面 §二）。
+**13 笔一笔都没减。** 原因不是这一步没做，而是它们没有一笔改到用例文件：其中 12 笔的用例 100% 来自
+`plan:` 原因——规则直接点名一份计划，那计划里哪个用例会被碰，规则本身没有说；剩下的 `38b7aec1bf`
+只改了一页 `internal/plans/`，没有规则匹配，按策略放宽到整个 fast 层（9894）。这正是第一步"仓库里
+没有覆盖表"的结论；现在每笔都有 `cause_counts` 与 `widened` 为证，而不是推断。窄得下来的都在改到
+用例的那一类（上面 §二）。
 
 ## 四、可重复性：同一输入，两次同一份名单
 
