@@ -4,9 +4,12 @@
 node internal/tools/red-table.mjs                    # 重写 internal/reports/<当天日期>-develop-reds.cn.md
 node internal/tools/red-table.mjs --print            # 打印到 stdout，不写文件
 node internal/tools/red-table.mjs --develop <sha> --out <file>
+node internal/tools/red-table.mjs --tsv <file> [--jobs 8] [--load 84.5,87.2,90.1] [--tier fast]
+node internal/tools/red-table.mjs --diff <a.tsv> <b.tsv>
 ```
 
-**它只读记录，不跑测试、不构建、不推远端、不碰 `develop`。** 跑完只在当前工作树里写一个页码（或 `--out` 指的文件）。
+**它只读记录，不跑测试、不构建、不推远端、不碰 `develop`。** 跑完只在当前工作树里写一个页码（或 `--out` / `--tsv` 指的文件）。
+`--tsv` 与 `--diff` 都在写页码**之前**返回：前者不再顺手重写 `.cn.md`，后者一个记录都不读。
 
 ## 为什么需要它
 
@@ -49,6 +52,95 @@ node internal/tools/red-table.mjs --develop <sha> --out <file>
 
 **不要**把它放进闸门当判据：它读的是已经发生的事，拒不了任何一笔合并。
 
+## 表头：这张表是在什么条件下取的
+
+`--tsv` 写出的表以一串 `#` 行开头（所以 `cut`/`awk` 与旧的两列读法都还能用），行本身是
+`plan<TAB>case<TAB>why<TAB>record<TAB>observed-at<TAB>class`：
+
+```
+# red-table v1
+# generated-at 2026-11-24T17:26:35.248Z
+# tip d6503a197c…            ← [provenance] tip：生成时读的是哪个提交（--develop / origin/develop）
+# anchor 7866e1dea64d…       ← 「还成立吗」那一列锚在哪个 develop 提交
+# jobs mixed 4,8,28          ← 或 8；或 unknown
+# jobs-source run.json of the rows' newest records
+# load unknown               ← 或 84.5,87.2,90.1
+# load-source unknown
+# tier fast
+# source 159 readings, 325 runs, 1913 rows
+# rows 1913
+```
+
+- **`jobs`** 从每行最近那条记录的 `run.json` 读。一份表若混了几个宽度，写 `mixed 4,8,28`，**不**挑其中一个当代表 —— 那会让读的人以为这一整份是在一个宽度下取的。
+- **`load`** 任何记录里都没有（`run.json` 只有 `jobs`，没有宿主负载），所以只能由取表的人给：`--load 84.5,87.2,90.1`，或 `--load-from <那次运行的日志>`（读末行 `[load] a b c (1m/5m/15m)`）。没给就是 `unknown`。
+- **`unknown` 不是 0**：它说的是「这份表没有声明」，比较遇到它就拒绝（见下）。这与页首那句「未知不是缺陷，假装已知才是」是同一条规矩，只是这次的单位是表的条件而不是某一行的成立与否。
+
+## 比较两份表：`--diff`
+
+```
+node internal/tools/red-table.mjs --diff <a.tsv> <b.tsv>
+```
+
+退出码：**0** 可比且没有 new/changed/removed/fixed；**1** 可比且有差异（逐条列名）；**2** **不可直接比**或读不了。
+被拒时输出**只有拒绝理由，没有任何 new/fixed/removed 行** —— 「条件不同」不是一个有一百行的 diff。
+
+**红表里「A 有、B 无」读作 `fixed`（不再红），不是 `removed`。** 两份红表都不含绿行，所以它们分不出「修好了」与「用例被删了」；说 `removed` 需要一份用例清单。给了 `--cases <list>`（一行一个 `plan/case`，`#` 是注释，TSV 的 `plan<TAB>case` 也认）才按清单判：清单里没有它 ⇒ `removed`，有它 ⇒ `fixed`。没给清单时输出会明说这一句，`removed` 保持 0 —— **「我不知道」不是「它被删了」**（`C-1124-186` 那 10 条名字带空格的用例，正是被「基线里有、新名单里没有 ⇒ removed」的判法误伤的）。
+
+**别把 `fixed` 读成「修好了」**：在这里它只等于「这条红不再出现」。它可能是修好了、可能是负载变了、也可能用例被删了 —— 前两个要靠重跑与条件去分，第三个只有 `--cases` 能分。
+
+拒绝的判据（实现在 `internal/tools/red-table-context.mjs`）：
+
+- 任一份没有 `# red-table v1` 表头（旧的两列 `*-reds.tsv`、一份 `[FAIL]` 日志）⇒ 它没说自己是在什么 `jobs`/`load` 下取的，**是一次观察，不是基线**；
+- `jobs` 不同，或任一份是 `unknown`/`mixed` ⇒ 宽度会改变用例集合：没启动的用例在 diff 里读作 `removed`；
+- `load` 任一份 `unknown`，或一份静载（1m ≤ 8）一份带载 ⇒ 超时余量判据在带载时测不到，两种机器是两件仪器；
+- `tier` 不同 ⇒ 层决定存在哪些用例。
+
+两个显式开关 `--allow-unknown-jobs` / `--allow-unknown-load` 让人**说出来**再比；默认不猜。
+`tip` **不**作为拒绝理由（基线与被测树本来就该是不同提交），但会打印。
+
+名字按整段读：TSV 按制表符切；`[FAIL]` 行取标记后的整段、只在「两格以上空格」处切掉末尾的耗时列。
+**不许用 `\S+`** —— 它在名字的第一个空格处停下，名字带空格的用例于是变成 `removed`，而它其实跑了（`C-1124-186`）。
+
+## 自测
+
+```
+node internal/tools/red-table-context.test.mjs      # 20 项，含 CLI 的 --tsv/--diff
+```
+
+覆盖两条规矩：表头写上 `tip`/`jobs`/`load`，不同 `jobs`/`load` 的表被拒而不是逐条列 new；名字带空格的用例改档后是 `changed`，不是 `removed`。
+
+## `--recheck-red`：把每条红单独跑一次（设计，未实现）
+
+目的：把「整层读数」和「单跑读数」并排放，让同一个用例的「整层红、单独绿」由工具判，而不是由人猜。
+
+输入必须是一份**带表头**的 `--tsv` 表（`jobs`/`load` 已声明）；缺表头就拒绝，因为「整层读数」那一栏没有条件可写。
+
+逐条：用同一个树、同一个 `tier`、`-Jobs 1` 跑该用例所在的计划。运行器今天没有单用例开关，单用例形式要走 `--selection-cases`（一份只列这一条用例的记录）并让 `camel-remote.ps1` 把它传下去；在那之前，单位是**计划**（一条计划里有多条红时，只能一起重跑）。
+
+输出三栏：
+
+```
+用例 | 整层（verdict, jobs, load） | 单跑（verdict, jobs=1, load） | 结论
+```
+
+结论的判法：
+
+| 单跑 | 整层失败原文 | 结论 |
+|---|---|---|
+| 红，原文同 | — | **真红** |
+| 红，原文不同 | — | **真红（换了红法）**（单独一个值，不折进「真红」） |
+| 绿 | 命中资源判据（`below the 4x margin`、`CPU budget`、`timed out`）或整层 `load` > 8 | **负载型** |
+| 绿 | 其他 | **并发型** |
+| 没跑起来（exit 2、用例不存在、没构建） | — | **未复现**（不是绿） |
+
+三条纪律：
+
+1. **单跑绿从不写成 `fixed`**：它是一次观察，只把这行从「整层红」里拿掉，不把它从树上拿掉。
+2. 判「真红」要比**归一之后的**失败原文：promotion-3 那次 196 条原文差异，归一临时目录名与实测数字后只剩 11 条。不归一，每条红都会被判成「换了红法」。
+3. 代价按计划算：1913 条红分布在 139 个计划上，最坏是 139 次串行宿主运行。所以要有 `--only-plan <p>`、`--limit N`、按 `class` 过滤，并且**必须打印「没重跑的还有多少条」**。没有这个数，一份只重跑了三行的表会被读成整层结论。
+
 ## 交回时说什么
 
 页首五行就是答案的形状：覆盖了多少计划、多少计划一条读数都没有、几条能答「是」/「否」、锚在哪个提交、尖端落后几笔。**「未知」不是缺陷，假装已知才是** —— 表里每一行的 `是/否/未知` 都要能追到一条具名记录。
+
+带条件交回时再多两行：`--tsv` 那条汇总行（`jobs=`/`load=` 与它们的来源）和 `--diff` 的结论行（`comparable` 或 `not directly comparable` 与理由）。
