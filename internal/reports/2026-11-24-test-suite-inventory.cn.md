@@ -452,9 +452,11 @@ debug 35**。`scripts/plan-inventory.mjs` 用同一个 `loadPlanTests` + `expand
    今天 648 条快层用例（6.5%）在记录里没有任何耗时。
 3. **CI 侧只有 2026-10-24 的一次**（`ci-failures.md`，run `40077350582`，`tests: 5956`），
    超出近月窗口，且 CI 只在打标签时跑，不能当"近月红次"的样本。
-4. **`summary.json` 丢了 303 条用例的计划身份。** 16 个计划文件没有 `id`，而记录写的是
-   `plan: entry.plan.id`，`JSON.stringify` 把 `undefined` 丢了——于是那 303 条在 `summary.json` 里
-   没有 `plan` 键，只能靠 `meta.json` 的 `plan_path` 认回来。本页认回来了。
+4. **`summary.json` 丢了 303 条用例的计划身份。** 今天有 **14 个计划文件**没有 `id`（它们名下 369 条
+   用例），而记录写的是 `plan: entry.plan.id`，`JSON.stringify` 把 `undefined` 丢了——于是那 303 条
+   在 `summary.json` 里没有 `plan` 键，只能靠 `meta.json` 的 `plan_path` 认回来。本页认回来了。
+   303 是 11-12 那一次的读数，369 是今天的：中间树长大了（`transforms` 那一个计划今天就占 216 条）。
+   同一处还有第二个后果：这些用例的日志目录叫 `undefined/`，`logPathOf` 拿到的是同一个 `undefined`。
 5. **派生副本的 `meta.json` 里 `plan_path` 与 `plan_id` 指向两个不同的计划。** `plan_id` 是
    `sweep` 那张计划、`plan_path` 是它复制的来源计划（`test.__planPath` 被 `...test` 带过来）。
    两处都是"计划的身份"，却是两个答案——按 `plan_path` 统计会把副本的成本记到来源计划头上
@@ -463,12 +465,175 @@ debug 35**。`scripts/plan-inventory.mjs` 用同一个 `loadPlanTests` + `expand
 
 ## ⑦ 没做的事
 
-- **没有改 `test/` 下任何东西**，没有改 `run-tests.mjs`，没有移任何用例出快层，没有加时间预算。
+- **没有改 `test/` 下的计划与用例**，没有移任何用例出快层，没有加时间预算。
+  盘点那一轮 `run-tests.mjs` 也没动；**① 那一轮改了**（只改记录与身份，见 §⑩），
+  改的是跑测工具自己，不是任何一张计划。
+- **没有改任何 `tier`。** §⑨ 的分诊只是表：三档的去向等 ① 的 CPU 仪器到位后由合并位走。
 - **没有跑测试。** 本页的每个秒数都来自记录；没有"现在跑一遍"冒充历史读数。盘点用的解析脚本
   放在 `%TEMP%` 下、只读，用完即弃，没有进仓库。
 - **没有在本机构建**（本机构建会蓝屏），因此也没有产生新的跑测记录。
 - **没有推任何分支**，`develop` 未动（铁律 13）。
 - 用途归类里 7 条没有硬塞（④），`--gc-check` / `--gc-stress` 那 155 条的取舍留给负责人裁定。
+- 那 11 条常年红的用例**没有修**，只按 `D-1124-3` 的 ④ 在 `internal/backlog.md` 开了 11 行
+  （`C-1124-57` … `C-1124-67`），把每题的证据、能不能修、缺什么写在那里。
+
+## ⑧ 补：按提交号命名的计划，与"像提交号"的判断
+
+这是 `D-1124-3` 的 ⑥，补上一轮自我批评里提到的那一版误判。
+
+**答案：计划文件名里含"像提交号"的十六进制串的，全树 1 个。**
+
+| 计划 | 串 | 长度 | 占满整段名字 | 是提交吗（git 判） |
+|---|---|---:|---|---|
+| `test/plans/feat/opt/adb67e081.plan.toml` | `adb67e081` | 9 | 是 | **是** —— `adb67e081241` |
+
+**判据：正则只提议候选，git 判是不是提交。**
+
+1. 正则 `[0-9a-f]{7,40}` 只负责**提出候选**（7 是 git 自己的默认缩写长度）。
+2. **判据是 `git rev-parse --verify --quiet <token>^{commit}`。** 解得出一笔提交的才算提交号。
+   这是唯一能把 `adb67e081`（解得出 `adb67e081241`）与 `9223372036854775807`（解不出）分开的判据
+   ——两者的形状一模一样。
+3. 只靠正则会把三类东西误当成提交号，上面那条判据把它们排掉：
+   - **纯十进制**：`1000000`（轮数上限）、`9223372036854775807` 与 `9223372036854775808`
+     （int64 边界值）全由 0–9 组成，不是 id；
+   - **嵌在更长名字里的尾数**：`boundary32.1.401298464324817e-45` 里的 `401298464324817e`
+     是一个浮点字面量的一部分；
+   - **带点的版本号**：`1.2.3` 每段都不到 7 位，正则根本不提它，所以这一类不需要判据。
+
+**用例名里的同一件事**，一并报（上一轮那 24 条就是这么来的）：命中 39 处、6 个不同的串、4 个计划。
+
+| 串 | 命中 | 长度 | 全是数字 | 是提交 |
+|---|---:|---:|---|---|
+| `adb67e081` | 9 | 9 | 否 | **是** |
+| `401298464324817e` | 8 | 16 | 否 | 否（`1.401298464324817e-45` 的尾数） |
+| `006492321624085e` | 8 | 16 | 否 | 否（`7.006492321624085e-45` 的尾数） |
+| `1000000` | 6 | 7 | 是 | 否（轮数） |
+| `9223372036854775807` | 4 | 19 | 是 | 否（int64 边界） |
+| `9223372036854775808` | 4 | 19 | 是 | 否（int64 边界） |
+
+所以"名字里带提交号"的用例是 **9 条、2 个计划**：
+
+- `feat/opt/adb67e081.plan.toml` 的 6 条（`adb67e081.rc03_seed30_*`、`adb67e081.rc04_seed72_*`）；
+- `feat/compile/fold_arms.plan.toml` 的 3 条（`fold_arms.adb67e081_reference` / `_fold` / `_std_opt`）
+  ——这是重构计划第 2 条说的那种情况：一笔提交的读数被并进了它所属特性的计划。
+
+`feat/opt/algebra` 的 24 条（8 + 8 + 4 + 4）**全部**是上表里"不是提交"的那四个串，正是上一轮误归成
+"防回归"的那 24 条；改正后它们是正确性用例，已体现在 §④ 的计数里。
+
+## ⑨ 261 条超 2 s 墙钟的逐条分诊
+
+**这一节不改任何 `tier`。** 分诊只是表；改动等 ① 的 CPU 仪器到位后由合并位走——否则我们会拿墙钟
+当 CPU 用。分诊分的是"**这条用例的时间花在什么上**"，不是"它该不该存在"。
+
+### 三档的定义（先定定义，再看数）
+
+| 档 | 定义 | 怎么处置 |
+|---|---|---|
+| **A 留快层** | 秒数来自**同一份用例在本层的多副本**（跨后端 / 跨遍展开）或**重复跑的轮数**，不是这条用例自己的活 | 按重构计划第 3 条把副本收成每类一个代表，其余留矩阵层 |
+| **B 进 slow** | 成本是**环境或语料规模**：要起 C++ 编译器、要起 onnxruntime 会话、要再起一次跑测（嵌套）、要走整棵语料或整份文档、或场景本身按时间做（`millis=` / `rounds=` / 压力模式） | 移到 slow，判据与断言都不动 |
+| **C 说不清** | 单程序、单遍、无驱动 | **缺一条 CPU 读数**（或 `--jobs 1` 的单跑读数）才能判，本页不猜 |
+
+### 汇总
+
+| 去向 | 条数 | 墙钟合计 | 占 1,378.8 s |
+|---|---:|---:|---:|
+| A 留快层（收代表） | 112 | 363.2 s | 26.3% |
+| B 进 slow | 106 | 906.3 s | 65.7% |
+| C 说不清 | 43 | 109.3 s | 7.9% |
+| 合计 | 261 | 1,378.7 s | 100% |
+
+### A：112 条落在 40 个"用例族"上，收代表后 363.2 s → 149.1 s（省 214.1 s）
+
+| 族（计划 / 用例文件） | 副本数 | 现在 | 一个代表 |
+|---|---:|---:|---:|
+| `feat/opt/algebra` / `algebra_boundary.cml` | 16 | 37.9 s | 2.6 s |
+| `feat/consistency/attempt` / `pipelines.cml` | 6 | 31.4 s | 6.1 s |
+| `feat/consistency/attempt` / `resource_release.cml` | 4 | 25.4 s | 6.4 s |
+| `feat/opt/algebra` / `algebra_boundary32.cml` | 11 | 23.4 s | 2.3 s |
+| `feat/opt/algebra` / `algebra.cml` | 10 | 23.1 s | 2.6 s |
+| `feat/consistency/attempt` / `fault_in_argument.cml` | 4 | 20.4 s | 6.1 s |
+| `feat/opt/inline_use` / `inline_keeps_stdout.cml` | 3 | 19.9 s | 6.7 s |
+| `feat/consistency/values` / `deep_enum_chain.cml` | 4 | 12.6 s | 5.0 s |
+| `feat/consistency/attempt` / `many.cml` | 3 | 11.4 s | 4.2 s |
+| `feat/consistency/attempt` / `siblings.cml` | 3 | 8.4 s | 3.5 s |
+| `feat/opt/control_data` / `control_unused_argument.cml` | 4 | 8.3 s | 2.2 s |
+| `feat/consistency/match` / `complete_matches.cml` | 3 | 8.0 s | 2.7 s |
+
+这 12 族占 A 的 363.2 s 里的 241.2 s。**注意收代表之后多数仍在 2 s 上下**（2.2–6.7 s），所以收代表
+不是"变快"，是"不再把同一份程序的 16 个副本都算进快层的账"；留下的那个代表本身可能仍然超预算
+——那是 C 的问题，要 CPU 读数。
+
+### B：106 条压着 906.3 s（三分之二），只来自 43 个计划
+
+- 按工具：**python 驱动 48 条 + node 驱动 44 条**，真正跑 `camel` 的只有 14 条。
+- 最贵的四条：`feat/trans/cpp` 的 `agree_with_fvm` 81.34 s（每条要 C++ 编译 + 链接）、
+  `every_expect_program_links_no_runtime` 78.64 s（同上，还带 `--standalone`）、
+  `feat/tools/debugger` 的 `debugger.dap_fusion_group` 60.79 s（起一个真的 DAP 会话）、
+  `feat/consistency/runner` 的 `runner.backend_matrix` 33.27 s（自己再跑一次整个后端矩阵）。
+- 整条 `feat/modules/onnx`（24 条、152.0 s）都在 B：每条都要起一个 onnxruntime 会话。
+- **这条读数与"快层慢在引擎"的直觉相反**：快层的时间大头是那些**替整棵树做事的驱动测试**
+  （文档片段、诊断目录、注册表、迁移账本、可移植性、clean、层记账），不是某个慢的程序。
+  这也解释了为什么 A 的"提速"空间只有 363 s，而 B 的 906 s 只能靠换层或降频次。
+
+### C：43 条（109.3 s）说不清，缺的是 CPU
+
+43 条都是 camel 单程序、单遍、无驱动。它们的 `queue_ms` 从 0 到 350 s 都有，**但这个字段只说明
+它什么时候开始，不说明它跑的时候有几个在跑**，所以它不能替我判这一档。要判它们只需要一件事：
+一条 `cpu_ms`（或同一棵树 `--jobs 1` 的单跑墙钟）。
+
+261 条逐条见**附录 B**：计划、用例、子进程墙钟、去向、依据。
+
+## ⑩ 仪器：CPU 读数、计划身份、派生副本的归属
+
+这是 `D-1124-3` 的 ①，本轮唯一的代码改动：`test/tools/run-tests.mjs` 与 `docs/test-plans.md`。
+提交 `49e50162b1`。三件事，每件都要求"缺了要说出来"，而不是默认成 0 或不存在。
+
+**CPU 时间。** 读数本来就有：`test/tools/child-cpu.mjs` 把每条用例的命令行套一层，
+从 `/proc/self/stat` 的 `cutime + cstime`（第 13/14 个字段，单位 1/100 s）读**整棵进程树**
+的 user+sys。这不是 `process.resourceUsage()` —— 那是 `RUSAGE_SELF`，会把子进程与孙进程漏掉；
+`cutime/cstime` 正是 `getrusage(RUSAGE_CHILDREN)` 的数字，所以口径是"这条用例自己干的活"。
+缺的是**缺失的表达**：没有读数时 `cpu_ms: null`，而 `null` 读起来像 0。现在：
+`meta.json` 与 `test_timings[]` 每一行都带 `cpu_reason`（为什么没有这个数），
+`summary.json` 多一个 `cpu_readings` 块（这台主机到底有没有读数、多少条读到了、多少条声明了
+`cpu_budget_ms`、原因按条数降序）——"这台主机没有这个数"从一条控制台 WARN 变成记录的一部分。
+
+**计划身份。** 记录写的是 `plan: entry.plan.id`，而没有 `id` 的计划文件（今天 14 个、名下 369 条）
+让这个键被 `JSON.stringify` 整个丢掉：11-12 那次全快层跑里有 **303 行没有 `plan` 键**，
+日志目录还叫 `undefined/`。现在跟 `loadPlanTests` 用同一个回退——文件名的 basename。
+
+**派生副本的归属。** `expandSweeps` 用 `...test` 把来源计划的 `__planPath` 带进了副本，
+于是副本的 `meta.json` 里 `plan_id` 是 sweep 的、`plan_path` 是来源计划的，**两个身份字段
+说两个计划**。现在副本归跑它的那张计划，`case` / `golden` / `verify_script_path` 在展开时
+就按来源计划解析成绝对路径（`path.resolve` 对绝对路径原样返回，所以其余读法不用改），
+来源留在副本名（`<sweep>:<来源计划 id>:<用例名>`）和 `sweep` / `source_plan` / `source_test` 里。
+在 `feat/mm/gc_poison_sweep` 上数：**4,860 条副本全部归 sweep 计划**，`case` 全部解析成绝对且
+**磁盘上一条不缺**，`__sweepSource` 4,860 条齐全。
+
+**验证（在构建主机上真跑过，不是读代码）。**
+`feat/compile/graph_read`（无 `id` 的计划，1 条）+ `feat/opt/splice_place`（4 条 `cpu_budget_ms`），
+`-Jobs 2`，主机 load 62–66。记录 `test/results/log/20261124_000218_2696127`：
+
+```
+cpu_readings= {"available": true, "platform": "linux", "tests": 46, "with_reading": 46,
+               "without_reading": 0, "cpu_budget_tests": 4, "cpu_budget_with_reading": 4, "reasons": []}
+rows=46  rows_without_plan_key=0  plans_seen=['graph_read', 'opt.splice_place']
+graph_read 的 meta.json: plan_id 'graph_read', cpu_ms 30, cpu_limit_ms 5000, cpu_margin_x 166.667
+```
+
+控制台里能直接读到的一条真实 CPU 读数（声明了 `cpu_budget_ms` 的用例才打这个）：
+
+```
+[FAIL] perf_fib_smoke.opt_twice.nvm 80.00 ms cpu of 5.00 s budget, 294.32 ms wall
+[FAIL] perf_fib_smoke.opt_twice.fvm 70.00 ms cpu of 5.00 s budget, 186.23 ms wall
+```
+
+**没验到的，明说。** ① 那台主机有 `/proc/self/stat`，所以 46 条**全都有读数**，
+`cpu_reason` 的那条路径（无读数主机、或套了壳却没拿到报告）**没有在端到端里走过一次**；
+它在 Windows 上才成立，而 Windows 上拿不到子进程 CPU 是 libuv 的限制
+（`uv_getrusage` 只给自己），不是可以用默认值糊过去的东西。② 这次跑还顺带读出一条与 ① 无关的
+事实：`feat/opt/splice_place` 在这棵树上 **46 条里 29 条红**（`perf.cml:37` `No matching function`
+、`random.cml:114` `Unresolved reference: 'to_array'`），与本次改动无关（我一个字都没碰 `.cml` 与 C++），
+但它说明 `origin/develop` 这个提交上 `feat/opt` 是红的——写在这里，免得下一个人把它算到仪器头上。
 
 ## 附录 A：全表（420 个计划）
 
@@ -900,268 +1065,274 @@ debug 35**。`scripts/plan-inventory.mjs` 用同一个 `loadPlanTests` + `expand
 | `probe/refleak.plan.toml` | 8 | 32 | 0 | 0 | — | — | — |  |
 | `smoke/core.plan.toml` | 10 | 10 | 10 | 10 | 4.2 | 11.4 | 0.54 | 正确性10 |
 
-## 附录 B：超 2 s 的用例（逐条，按子进程墙钟降序）
 
-| # | 用例 | 计划 | 子进程墙钟(s) | slot(s) |
-|---:|---|---|---:|---:|
-| 1 | `agree_with_fvm` | `feat/trans/cpp.plan.toml` | 81.34 | 81.35 |
-| 2 | `every_expect_program_links_no_runtime` | `feat/trans/cpp.plan.toml` | 78.64 | 78.65 |
-| 3 | `debugger.dap_fusion_group` | `feat/tools/debugger.plan.toml` | 60.79 | 60.84 |
-| 4 | `runner.backend_matrix` | `feat/consistency/runner.plan.toml` | 33.27 | 33.30 |
-| 5 | `every_fault_program_says_what_fvm_says` | `feat/trans/cpp.plan.toml` | 32.53 | 32.54 |
-| 6 | `root_window.residual_mlp.moving_stress` | `feat/mm/gc_root_window.plan.toml` | 25.36 | 25.37 |
-| 7 | `type_text.roundtrip` | `feat/compile/type_text.plan.toml` | 24.11 | 24.16 |
-| 8 | `registry.docs_complete` | `feat/modules/stdlib_registry.plan.toml` | 20.32 | 20.44 |
-| 9 | `docs.snippets_compile` | `feat/docs_links.plan.toml` | 19.73 | 20.23 |
-| 10 | `tools.find_fix_asks_who_already_fixed_it` | `feat/tools/find_fix.plan.toml` | 18.19 | 18.35 |
-| 11 | `narrow_reductions_needs_no_runtime` | `feat/trans/cpp.plan.toml` | 15.60 | 15.61 |
-| 12 | `catalog.doc_is_generated` | `feat/compile/diag_catalog.plan.toml` | 14.95 | 14.99 |
-| 13 | `ort_entry_export` | `feat/modules/onnx.plan.toml` | 14.55 | 14.56 |
-| 14 | `ort_time_axis` | `feat/modules/onnx.plan.toml` | 14.36 | 14.40 |
-| 15 | `runner.tier_declared_against_started` | `feat/tools/layer_accounting.plan.toml` | 13.97 | 14.05 |
-| 16 | `load_class.shared_place` | `feat/tools/load_class.plan.toml` | 12.82 | 12.87 |
-| 17 | `ort_core_slice` | `feat/modules/onnx.plan.toml` | 12.66 | 12.67 |
-| 18 | `cli.plan_arg_domain_refused` | `feat/tools/cli.plan.toml` | 11.86 | 11.93 |
-| 19 | `import.audit` | `feat/modules/import_cost.plan.toml` | 11.79 | 11.84 |
-| 20 | `type_identity.corpus` | `feat/compile/type_identity.plan.toml` | 11.68 | 11.74 |
-| 21 | `tools.autodiff_migration_ledger.ratchet` | `feat/tools/autodiff_migration_ledger.plan.toml` | 11.47 | 11.50 |
-| 22 | `cli.plan_stdout_matches` | `feat/tools/cli.plan.toml` | 10.81 | 10.86 |
-| 23 | `ort_loop_values` | `feat/modules/onnx.plan.toml` | 10.06 | 10.07 |
-| 24 | `ort_struct_loop` | `feat/modules/onnx.plan.toml` | 9.69 | 9.70 |
-| 25 | `capacity.growth_simplify_gc_stress` | `feat/mm/capacity.plan.toml` | 9.67 | 9.68 |
-| 26 | `frontend.format_keeps_ast` | `feat/parse/frontend.plan.toml` | 8.93 | 8.93 |
-| 27 | `narrow_reductions_four_backends` | `feat/trans/cpp.plan.toml` | 8.83 | 8.83 |
-| 28 | `ort_grad_loop_values` | `feat/modules/onnx.plan.toml` | 8.80 | 8.84 |
-| 29 | `capacity.wide_graph` | `feat/mm/capacity.plan.toml` | 8.51 | 8.51 |
-| 30 | `print_and_recompile` | `feat/trans/cml.plan.toml` | 8.08 | 8.08 |
-| 31 | `gate.conformance_matrix` | `feat/gate/conformance.plan.toml` | 7.83 | 7.89 |
-| 32 | `native_state_checkpoints` | `feat/modules/checkpoints.plan.toml` | 7.55 | 7.59 |
-| 33 | `python_binding.session` | `feat/bindings/python_binding.plan.toml` | 7.35 | 7.38 |
-| 34 | `runner.exit_reporting_names_the_signal` | `feat/tools/exit_reporting.plan.toml` | 7.07 | 7.16 |
-| 35 | `surface.minus.nvm` | `feat/consistency/surface.plan.toml` | 6.84 | 6.85 |
-| 36 | `surface.member_chain.nvm` | `feat/consistency/surface.plan.toml` | 6.78 | 6.79 |
-| 37 | `surface.lambda_call.nvm` | `feat/consistency/surface.plan.toml` | 6.72 | 6.75 |
-| 38 | `surface.zip_many.nvm` | `feat/consistency/surface.plan.toml` | 6.69 | 6.70 |
-| 39 | `inline_keeps_stdout.write.nvm` | `feat/opt/inline_use.plan.toml` | 6.67 | 6.68 |
-| 40 | `gate.plan_inventory` | `feat/gate/plan_inventory.plan.toml` | 6.67 | 6.73 |
-| 41 | `export_loop_cond` | `feat/modules/onnx.plan.toml` | 6.65 | 6.68 |
-| 42 | `inline_keeps_stdout.inline.nvm` | `feat/opt/inline_use.plan.toml` | 6.63 | 6.63 |
-| 43 | `surface.operator_values.nvm` | `feat/consistency/surface.plan.toml` | 6.62 | 6.63 |
-| 44 | `inline_keeps_stdout.drop.nvm` | `feat/opt/inline_use.plan.toml` | 6.57 | 6.58 |
-| 45 | `inline_keeps_stdout.twice_write.nvm` | `feat/opt/inline_use.plan.toml` | 6.56 | 6.56 |
-| 46 | `ort_grad_loop` | `feat/modules/onnx.plan.toml` | 6.55 | 6.56 |
-| 47 | `inline_keeps_stdout.twice_inline.nvm` | `feat/opt/inline_use.plan.toml` | 6.54 | 6.54 |
-| 48 | `gate.case_ledger` | `feat/gate/case_ledger.plan.toml` | 6.52 | 6.58 |
-| 49 | `attempt.resources.isolated.nvm` | `feat/consistency/attempt.plan.toml` | 6.44 | 6.45 |
-| 50 | `attempt.resources.normal.nvm` | `feat/consistency/attempt.plan.toml` | 6.38 | 6.40 |
-| 51 | `attempt.resources.fault.nvm` | `feat/consistency/attempt.plan.toml` | 6.32 | 6.33 |
-| 52 | `attempt.resources.exit.nvm` | `feat/consistency/attempt.plan.toml` | 6.27 | 6.28 |
-| 53 | `attempt.pipeline.places_opt.nvm` | `feat/consistency/attempt.plan.toml` | 6.17 | 6.18 |
-| 54 | `attempt.translate.cpp` | `feat/consistency/attempt.plan.toml` | 6.14 | 6.15 |
-| 55 | `attempt.pipeline.inline_opt.prl` | `feat/consistency/attempt.plan.toml` | 6.14 | 6.15 |
-| 56 | `attempt.pipeline.macro_opt.prl` | `feat/consistency/attempt.plan.toml` | 6.12 | 6.13 |
-| 57 | `runner.provenance_line_names_the_artifact` | `feat/tools/provenance.plan.toml` | 6.11 | 6.15 |
-| 58 | `attempt.pipeline.nested_opt.nvm` | `feat/consistency/attempt.plan.toml` | 6.11 | 6.15 |
-| 59 | `attempt.pipeline.cse_dce.prl` | `feat/consistency/attempt.plan.toml` | 6.11 | 6.11 |
-| 60 | `attempt.not_isolated.fault_in_argument.prl` | `feat/consistency/attempt.plan.toml` | 6.08 | 6.13 |
-| 61 | `ort_branch` | `feat/modules/onnx.plan.toml` | 6.08 | 6.10 |
-| 62 | `attempt.pipeline.fold.prl` | `feat/consistency/attempt.plan.toml` | 6.08 | 6.09 |
-| 63 | `attempt.not_isolated.fault_in_argument.jit` | `feat/consistency/attempt.plan.toml` | 6.03 | 6.07 |
-| 64 | `attempt.not_isolated.fault_in_argument.fvm` | `feat/consistency/attempt.plan.toml` | 6.00 | 6.01 |
-| 65 | `attempt.refuse.onnx` | `feat/consistency/attempt.plan.toml` | 5.96 | 5.97 |
-| 66 | `every_expect_program_five_times` | `feat/trans/cpp.plan.toml` | 5.59 | 5.60 |
-| 67 | `export_loop_for` | `feat/modules/onnx.plan.toml` | 5.57 | 5.61 |
-| 68 | `ort_slice_bounds` | `feat/modules/onnx.plan.toml` | 5.39 | 5.42 |
-| 69 | `capacity.fanout` | `feat/mm/capacity.plan.toml` | 5.27 | 5.30 |
-| 70 | `ort_loop_loaded_weights` | `feat/modules/onnx.plan.toml` | 5.06 | 5.09 |
-| 71 | `value.deep_enum_chain.prl` | `feat/consistency/values.plan.toml` | 4.96 | 4.97 |
-| 72 | `ort_dynamic_params` | `feat/modules/onnx.plan.toml` | 4.92 | 4.94 |
-| 73 | `unused_values.one_input_one_answer` | `feat/compile/unused_values.plan.toml` | 4.84 | 4.85 |
-| 74 | `ort_dynamic_batch` | `feat/modules/onnx.plan.toml` | 4.79 | 4.80 |
-| 75 | `ort_train_step_dynamic` | `feat/modules/onnx.plan.toml` | 4.76 | 4.77 |
-| 76 | `ort_const_under_as` | `feat/modules/onnx.plan.toml` | 4.65 | 4.72 |
-| 77 | `rules.the_coverage_check_refuses_every_refuted_law` | `feat/modules/rules.plan.toml` | 4.52 | 4.57 |
-| 78 | `attempt.pipeline.simplify.prl` | `feat/consistency/attempt.plan.toml` | 4.50 | 6.07 |
-| 79 | `ort_linear_recursion` | `feat/modules/onnx.plan.toml` | 4.46 | 4.47 |
-| 80 | `ort_slice_start` | `feat/modules/onnx.plan.toml` | 4.43 | 4.44 |
-| 81 | `ort_duplicate_outputs` | `feat/modules/onnx.plan.toml` | 4.39 | 4.40 |
-| 82 | `catalog.failure_paths` | `feat/compile/diag_catalog.plan.toml` | 4.38 | 4.42 |
-| 83 | `ort_struct_casts` | `feat/modules/onnx.plan.toml` | 4.29 | 4.30 |
-| 84 | `attempt.many.fvm` | `feat/consistency/attempt.plan.toml` | 4.24 | 4.25 |
-| 85 | `attempt.refuse.grad` | `feat/consistency/attempt.plan.toml` | 3.90 | 3.95 |
-| 86 | `canonical_document_and_equivalence` | `feat/trans/canonical_gir.plan.toml` | 3.87 | 3.88 |
-| 87 | `attempt.many.jit` | `feat/consistency/attempt.plan.toml` | 3.81 | 3.82 |
-| 88 | `process_state.stw_give_up_escalates` | `feat/mm/process_state.plan.toml` | 3.81 | 4.08 |
-| 89 | `nested_return.compile_time` | `feat/compile/return_type.plan.toml` | 3.68 | 4.66 |
-| 90 | `build_stamp.options_change` | `feat/tools/build_stamp.plan.toml` | 3.51 | 3.55 |
-| 91 | `portability.std_includes` | `feat/tools/portability.plan.toml` | 3.48 | 3.52 |
-| 92 | `attempt.collector.stress.nvm` | `feat/consistency/attempt.plan.toml` | 3.47 | 3.51 |
-| 93 | `attempt.siblings.nvm` | `feat/consistency/attempt.plan.toml` | 3.47 | 3.53 |
-| 94 | `attempt.collector.stress.prl` | `feat/consistency/attempt.plan.toml` | 3.45 | 3.45 |
-| 95 | `attempt.collector.stress_both.nvm` | `feat/consistency/attempt.plan.toml` | 3.41 | 3.43 |
-| 96 | `attempt.many.nvm` | `feat/consistency/attempt.plan.toml` | 3.37 | 3.38 |
-| 97 | `attempt.collector.stress.jit` | `feat/consistency/attempt.plan.toml` | 3.36 | 3.41 |
-| 98 | `attempt.collector.stress_both.fvm` | `feat/consistency/attempt.plan.toml` | 3.36 | 3.37 |
-| 99 | `capacity.dead_function_closure_verify` | `feat/mm/capacity.plan.toml` | 3.34 | 3.43 |
-| 100 | `attempt.collector.stress_both.jit` | `feat/consistency/attempt.plan.toml` | 3.29 | 3.30 |
-| 101 | `attempt.collector.stress.fvm` | `feat/consistency/attempt.plan.toml` | 3.23 | 3.28 |
-| 102 | `collfuzz.quick` | `feat/compile/collections.plan.toml` | 3.20 | 3.21 |
-| 103 | `unused_values.help_let_sync_is_not_a_program` | `feat/compile/unused_values.plan.toml` | 3.19 | 3.20 |
-| 104 | `frontend.ast_snapshot` | `feat/parse/frontend.plan.toml` | 3.16 | 3.19 |
-| 105 | `unused_values.called_fallible` | `feat/compile/unused_values.plan.toml` | 3.10 | 3.10 |
-| 106 | `registry.migrations_stay_migrated` | `feat/modules/stdlib_registry.plan.toml` | 3.02 | 3.06 |
-| 107 | `process_state.stw_sleep_leaves_its_region` | `feat/mm/process_state.plan.toml` | 3.00 | 3.26 |
-| 108 | `docs.links.citations` | `feat/docs_links.plan.toml` | 2.98 | 3.21 |
-| 109 | `debugger.dap_tail_steps` | `feat/tools/debugger.plan.toml` | 2.96 | 3.01 |
-| 110 | `grad_structures` | `feat/modules/autodiff.plan.toml` | 2.95 | 2.95 |
-| 111 | `ort_grad_matmul_batched` | `feat/modules/onnx.plan.toml` | 2.93 | 2.99 |
-| 112 | `unused_values.called_fallible_pipeline` | `feat/compile/unused_values.plan.toml` | 2.93 | 2.94 |
-| 113 | `gpu_scope.placement_with_a_device` | `feat/modules/tiles.plan.toml` | 2.92 | 3.02 |
-| 114 | `attempt.collector.stress_both.prl` | `feat/consistency/attempt.plan.toml` | 2.85 | 2.87 |
-| 115 | `rules.accuracy_scalar_every_backend.jit` | `feat/modules/rules_libraries.plan.toml` | 2.84 | 2.85 |
-| 116 | `attempt.concurrent.jit` | `feat/consistency/attempt.plan.toml` | 2.84 | 2.85 |
-| 117 | `attempt.concurrent.fvm` | `feat/consistency/attempt.plan.toml` | 2.83 | 2.83 |
-| 118 | `gpu_scope.host_effect_synchronises` | `feat/modules/tiles.plan.toml` | 2.82 | 2.97 |
-| 119 | `attempt.compiled.jit` | `feat/consistency/attempt.plan.toml` | 2.80 | 2.81 |
-| 120 | `unused_values.help_if_arm_then_sync_runs` | `feat/compile/unused_values.plan.toml` | 2.79 | 2.82 |
-| 121 | `pass_written.inventory.nvm` | `feat/opt/effects_kept.plan.toml` | 2.79 | 2.82 |
-| 122 | `attempt.compiled.fvm` | `feat/consistency/attempt.plan.toml` | 2.78 | 2.79 |
-| 123 | `rules.accuracy_scalar_every_backend.fvm` | `feat/modules/rules_libraries.plan.toml` | 2.77 | 2.78 |
-| 124 | `capacity.scale_check` | `feat/mm/capacity.plan.toml` | 2.76 | 2.81 |
-| 125 | `match.complete.prl` | `feat/consistency/match.plan.toml` | 2.72 | 2.73 |
-| 126 | `value.deep_enum_chain.jit` | `feat/consistency/values.plan.toml` | 2.72 | 2.72 |
-| 127 | `gradient.false` | `feat/opt/algebra.plan.toml` | 2.72 | 2.76 |
-| 128 | `docs.no_unfinished_merge_left_in_the_tree` | `feat/docs_links.plan.toml` | 2.71 | 3.43 |
-| 129 | `value.deep_enum_chain.fvm` | `feat/consistency/values.plan.toml` | 2.70 | 2.71 |
-| 130 | `fixes_apply` | `feat/compile/diag_fixes.plan.toml` | 2.68 | 2.76 |
-| 131 | `match.complete.jit` | `feat/consistency/match.plan.toml` | 2.66 | 2.67 |
-| 132 | `docs.no_unfinished_merge_pattern_sees_all_four_forms` | `feat/docs_links.plan.toml` | 2.65 | 3.42 |
-| 133 | `boundary64.inf.safe.prl` | `feat/opt/algebra.plan.toml` | 2.64 | 2.69 |
-| 134 | `execution.opt_safe.prl` | `feat/opt/algebra.plan.toml` | 2.63 | 2.69 |
-| 135 | `rules.fusion_bit_identical_fused.jit` | `feat/modules/rules_libraries.plan.toml` | 2.62 | 2.63 |
-| 136 | `opt_matches_interpreter.mnist.nvm` | `feat/opt/effects_kept.plan.toml` | 2.61 | 2.64 |
-| 137 | `narrow_one_program_twenty_times` | `feat/trans/cpp.plan.toml` | 2.61 | 2.65 |
-| 138 | `debugger.http_gateway` | `feat/tools/debugger.plan.toml` | 2.61 | 2.65 |
-| 139 | `boundary64.-0.algebra.fvm` | `feat/opt/algebra.plan.toml` | 2.59 | 2.65 |
-| 140 | `match.complete.fvm` | `feat/consistency/match.plan.toml` | 2.58 | 2.62 |
-| 141 | `boundary64.inf.safe.jit` | `feat/opt/algebra.plan.toml` | 2.54 | 2.58 |
-| 142 | `attempt.library.jit` | `feat/consistency/attempt.plan.toml` | 2.53 | 2.57 |
-| 143 | `execution.opt_safe.jit` | `feat/opt/algebra.plan.toml` | 2.52 | 2.58 |
-| 144 | `attempt.siblings.jit` | `feat/consistency/attempt.plan.toml` | 2.51 | 2.56 |
-| 145 | `inline_cycle.splice_place` | `feat/opt/inline_cycle.plan.toml` | 2.50 | 2.59 |
-| 146 | `root_window.gru_lite.moving_stress` | `feat/mm/gc_root_window.plan.toml` | 2.50 | 2.51 |
-| 147 | `gradient.true` | `feat/opt/algebra.plan.toml` | 2.48 | 2.53 |
-| 148 | `attempt.library.fvm` | `feat/consistency/attempt.plan.toml` | 2.47 | 2.52 |
-| 149 | `boundary64.2.5e-323.safe.fvm` | `feat/opt/algebra.plan.toml` | 2.47 | 2.51 |
-| 150 | `attempt.pipeline.simplify.jit` | `feat/consistency/attempt.plan.toml` | 2.46 | 4.49 |
-| 151 | `execution.algebra.jit` | `feat/opt/algebra.plan.toml` | 2.46 | 2.51 |
-| 152 | `attempt.siblings.fvm` | `feat/consistency/attempt.plan.toml` | 2.46 | 2.47 |
-| 153 | `defun.four_backends` | `feat/opt/defun.plan.toml` | 2.46 | 2.49 |
-| 154 | `rules.fusion_bit_identical_fused.fvm` | `feat/modules/rules_libraries.plan.toml` | 2.44 | 2.50 |
-| 155 | `unused_values.help_if_arm_else_sync_runs` | `feat/compile/unused_values.plan.toml` | 2.43 | 2.49 |
-| 156 | `boundary64.5e-324.reference.jit` | `feat/opt/algebra.plan.toml` | 2.43 | 2.44 |
-| 157 | `boundary64.inf.safe.fvm` | `feat/opt/algebra.plan.toml` | 2.43 | 2.48 |
-| 158 | `boundary64.inf.algebra.fvm` | `feat/opt/algebra.plan.toml` | 2.42 | 2.50 |
-| 159 | `attempt.effects.fvm` | `feat/consistency/attempt.plan.toml` | 2.42 | 2.47 |
-| 160 | `debugger.cli_session` | `feat/tools/debugger.plan.toml` | 2.42 | 2.46 |
-| 161 | `attempt.depth.jit` | `feat/consistency/attempt.plan.toml` | 2.41 | 2.41 |
-| 162 | `execution.opt_safe.fvm` | `feat/opt/algebra.plan.toml` | 2.40 | 2.45 |
-| 163 | `boundary64.1e308.reference.jit` | `feat/opt/algebra.plan.toml` | 2.40 | 2.45 |
-| 164 | `boundary64.5e-324.reference.prl` | `feat/opt/algebra.plan.toml` | 2.39 | 2.44 |
-| 165 | `control.pipeline_contract` | `feat/opt/control.plan.toml` | 2.37 | 2.38 |
-| 166 | `library_gemm.tolerance` | `feat/compile/numeric_permissions.plan.toml` | 2.37 | 2.37 |
-| 167 | `attempt.not_isolated.exit.nvm` | `feat/consistency/attempt.plan.toml` | 2.36 | 2.39 |
-| 168 | `ort_var_parameter` | `feat/modules/onnx.plan.toml` | 2.34 | 2.37 |
-| 169 | `gpu_preference.named_device` | `feat/modules/tiles.plan.toml` | 2.34 | 2.41 |
-| 170 | `warn.werror_pass_warning` | `feat/compile/diag_options.plan.toml` | 2.33 | 2.34 |
-| 171 | `ort_argmax` | `feat/modules/onnx.plan.toml` | 2.33 | 2.34 |
-| 172 | `boundary64.nan.algebra.prl` | `feat/opt/algebra.plan.toml` | 2.33 | 2.38 |
-| 173 | `boundary64.1e308.safe.prl` | `feat/opt/algebra.plan.toml` | 2.32 | 2.38 |
-| 174 | `optimization_namespace` | `feat/opt/generic.plan.toml` | 2.31 | 2.36 |
-| 175 | `load_class.tree` | `feat/tools/load_class.plan.toml` | 2.30 | 2.40 |
-| 176 | `library_gemm.tolerance.safe` | `feat/compile/numeric_permissions.plan.toml` | 2.30 | 2.30 |
-| 177 | `execution.safe.fvm` | `feat/opt/algebra.plan.toml` | 2.29 | 2.30 |
-| 178 | `boundary32.3e38.true.fvm` | `feat/opt/algebra.plan.toml` | 2.29 | 2.33 |
-| 179 | `graph_space.function_value_keeps_program` | `feat/mm/graph_space.plan.toml` | 2.29 | 2.29 |
-| 180 | `boundary64.5e-324.reference.fvm` | `feat/opt/algebra.plan.toml` | 2.28 | 2.29 |
-| 181 | `boundary64.1e308.reference.fvm` | `feat/opt/algebra.plan.toml` | 2.27 | 2.31 |
-| 182 | `attempt.not_isolated.fault_outside.nvm` | `feat/consistency/attempt.plan.toml` | 2.27 | 2.31 |
-| 183 | `cse_arm_constants.inline_cse.fvm` | `feat/opt/generic.plan.toml` | 2.27 | 2.31 |
-| 184 | `ort_slice_grad_stride` | `feat/modules/onnx.plan.toml` | 2.27 | 2.28 |
-| 185 | `catalog.coverage_report` | `feat/compile/diag_catalog.plan.toml` | 2.27 | 2.30 |
-| 186 | `clean.tiers` | `feat/tools/clean.plan.toml` | 2.26 | 2.31 |
-| 187 | `attempt.not_isolated.fault_in_argument.nvm` | `feat/consistency/attempt.plan.toml` | 2.25 | 2.26 |
-| 188 | `execution.algebra.fvm` | `feat/opt/algebra.plan.toml` | 2.25 | 2.31 |
-| 189 | `unused_values.help_function_body_sync_runs` | `feat/compile/unused_values.plan.toml` | 2.25 | 2.31 |
-| 190 | `debugger.loop_frames` | `feat/tools/debugger.plan.toml` | 2.25 | 2.29 |
-| 191 | `boundary64.1e308.safe.jit` | `feat/opt/algebra.plan.toml` | 2.23 | 2.28 |
-| 192 | `debugger.dap_frames` | `feat/tools/debugger.plan.toml` | 2.23 | 2.27 |
-| 193 | `boundary32.7.006492321624085e-45.false.nvm` | `feat/opt/algebra.plan.toml` | 2.22 | 2.23 |
-| 194 | `print_then_run_agrees_with_the_origin` | `feat/trans/cml.plan.toml` | 2.22 | 2.25 |
-| 195 | `value.deep_enum_chain.nvm` | `feat/consistency/values.plan.toml` | 2.22 | 2.22 |
-| 196 | `execution.opt_safe.nvm` | `feat/opt/algebra.plan.toml` | 2.21 | 2.22 |
-| 197 | `covered_value.graph.true` | `feat/opt/gate_value.plan.toml` | 2.21 | 2.22 |
-| 198 | `boundary32.1.401298464324817e-45.true.prl` | `feat/opt/algebra.plan.toml` | 2.21 | 2.26 |
-| 199 | `boundary32.3e38.false.fvm` | `feat/opt/algebra.plan.toml` | 2.20 | 2.25 |
-| 200 | `attempt.bad_calls` | `feat/consistency/attempt.plan.toml` | 2.20 | 2.21 |
-| 201 | `specialize_element_type_nest.refused` | `feat/opt/generic.plan.toml` | 2.20 | 2.25 |
-| 202 | `debugger.dap_pipeline` | `feat/tools/debugger.plan.toml` | 2.19 | 2.24 |
-| 203 | `residual_mlp_inline_large` | `feat/modules/nn.plan.toml` | 2.19 | 2.23 |
-| 204 | `tensor_grad_check.simplify.jit` | `feat/modules/autodiff.plan.toml` | 2.19 | 2.20 |
-| 205 | `load_class.explain_under_load` | `feat/tools/load_class.plan.toml` | 2.19 | 2.31 |
-| 206 | `attempt.bad_call.argument` | `feat/consistency/attempt.plan.toml` | 2.18 | 2.19 |
-| 207 | `cse_arm_constants.inline_cse.jit` | `feat/opt/generic.plan.toml` | 2.18 | 2.22 |
-| 208 | `control_data.unused_argument.reference.prl` | `feat/opt/control_data.plan.toml` | 2.16 | 2.17 |
-| 209 | `static_branches.simplify` | `feat/opt/generic.plan.toml` | 2.15 | 2.20 |
-| 210 | `integrated.graph.true` | `feat/opt/algebra.plan.toml` | 2.15 | 2.16 |
-| 211 | `reshape_view_gc.fold_specialize.nvm` | `feat/opt/generic.plan.toml` | 2.14 | 2.19 |
-| 212 | `var_tensor_read.opt_macro_nvm` | `feat/linear/var_reference.plan.toml` | 2.14 | 2.15 |
-| 213 | `boundary32.7.006492321624085e-45.true.nvm` | `feat/opt/algebra.plan.toml` | 2.13 | 2.17 |
-| 214 | `residual_mlp.simplify.fvm` | `feat/modules/nn.plan.toml` | 2.12 | 2.16 |
-| 215 | `docs.word_form_only` | `feat/opt/pass_params.plan.toml` | 2.12 | 2.15 |
-| 216 | `covered_value.graph.false` | `feat/opt/gate_value.plan.toml` | 2.12 | 2.13 |
-| 217 | `control_data.unused_argument.inline.prl` | `feat/opt/control_data.plan.toml` | 2.12 | 2.13 |
-| 218 | `boundary64.2.5e-323.algebra.prl` | `feat/opt/algebra.plan.toml` | 2.12 | 2.18 |
-| 219 | `boundary32.7.006492321624085e-45.false.prl` | `feat/opt/algebra.plan.toml` | 2.11 | 2.16 |
-| 220 | `integrated.graph.false` | `feat/opt/algebra.plan.toml` | 2.10 | 2.15 |
-| 221 | `boundary32.-0.true.prl` | `feat/opt/algebra.plan.toml` | 2.10 | 2.15 |
-| 222 | `graph_faces.readings_absolute` | `feat/opt/graph_faces.plan.toml` | 2.10 | 2.18 |
-| 223 | `pb_statics_gc.runtime.nvm` | `feat/modules/autodiff.plan.toml` | 2.10 | 2.18 |
-| 224 | `var_grad.inline_tf` | `feat/linear/var_reference.plan.toml` | 2.10 | 2.10 |
-| 225 | `fault_narrow_div_zero` | `feat/trans/cpp.plan.toml` | 2.10 | 2.16 |
-| 226 | `boundary32.-0.false.prl` | `feat/opt/algebra.plan.toml` | 2.09 | 2.15 |
-| 227 | `fused_grad_check.fused` | `feat/modules/autodiff.plan.toml` | 2.09 | 2.14 |
-| 228 | `simplify_arm_write_lost.simplify_fvm` | `feat/opt/progen_simplify.plan.toml` | 2.09 | 2.10 |
-| 229 | `execution.opt.nvm` | `feat/opt/algebra.plan.toml` | 2.08 | 2.09 |
-| 230 | `var_grad.opt_tf` | `feat/linear/var_reference.plan.toml` | 2.08 | 2.08 |
-| 231 | `cse_arm_constants.inline_arm_cse.nvm` | `feat/opt/generic.plan.toml` | 2.08 | 2.12 |
-| 232 | `attempt.partial_fault.nvm` | `feat/consistency/attempt.plan.toml` | 2.07 | 2.08 |
-| 233 | `branch.42.opt.prl` | `feat/opt/gate_value.plan.toml` | 2.07 | 2.15 |
-| 234 | `residual_mlp_gir` | `feat/modules/nn.plan.toml` | 2.06 | 2.07 |
-| 235 | `control_data.unused_argument.inline_fold.prl` | `feat/opt/control_data.plan.toml` | 2.05 | 2.08 |
-| 236 | `literal_rank` | `feat/trans/cpp.plan.toml` | 2.05 | 2.06 |
-| 237 | `01_scalar_boundary` | `feat/exemplars.plan.toml` | 2.05 | 2.22 |
-| 238 | `boundary32.-0.false.nvm` | `feat/opt/algebra.plan.toml` | 2.04 | 2.08 |
-| 239 | `other_wait.graph` | `feat/opt/gate_value.plan.toml` | 2.04 | 2.05 |
-| 240 | `pb_statics_gc.runtime.fvm` | `feat/modules/autodiff.plan.toml` | 2.04 | 2.09 |
-| 241 | `static_branches.simplify.rgir` | `feat/opt/generic.plan.toml` | 2.04 | 2.09 |
-| 242 | `control_data.graph` | `feat/opt/control_data.plan.toml` | 2.04 | 2.04 |
-| 243 | `tiny_cnn_gir` | `feat/modules/nn.plan.toml` | 2.03 | 2.04 |
-| 244 | `literal_rows_computed` | `feat/trans/cpp.plan.toml` | 2.03 | 2.04 |
-| 245 | `attempt.forms.jit` | `feat/consistency/attempt.plan.toml` | 2.02 | 2.03 |
-| 246 | `var_capture.macro_fold` | `feat/linear/var_reference.plan.toml` | 2.02 | 2.03 |
-| 247 | `capacity.growth_fvm_gc_stress` | `feat/mm/capacity.plan.toml` | 2.02 | 2.09 |
-| 248 | `dependent_names` | `feat/compile/generics.plan.toml` | 2.02 | 2.03 |
-| 249 | `siamese_shared_encoder.opt.tf` | `feat/modules/nn.plan.toml` | 2.02 | 2.03 |
-| 250 | `boundary64.2.5e-323.algebra.jit` | `feat/opt/algebra.plan.toml` | 2.02 | 2.07 |
-| 251 | `arm_call_then_effect.opt.nvm` | `feat/opt/inline.plan.toml` | 2.01 | 2.07 |
-| 252 | `simplify_arm_write_lost.simplify_jit` | `feat/opt/progen_simplify.plan.toml` | 2.01 | 2.02 |
-| 253 | `boundary32.-0.true.jit` | `feat/opt/algebra.plan.toml` | 2.01 | 2.06 |
-| 254 | `attempt.forms.fvm` | `feat/consistency/attempt.plan.toml` | 2.01 | 2.02 |
-| 255 | `var_grad.simplify_jit` | `feat/linear/var_reference.plan.toml` | 2.01 | 2.01 |
-| 256 | `control_data.unused_argument.ctrl_inline.prl` | `feat/opt/control_data.plan.toml` | 2.01 | 2.01 |
-| 257 | `boundary32.7.006492321624085e-45.true.prl` | `feat/opt/algebra.plan.toml` | 2.00 | 2.06 |
-| 258 | `literal_rows_filled` | `feat/trans/cpp.plan.toml` | 2.00 | 2.01 |
-| 259 | `with_defaults.applied.prl` | `feat/compile/with_defaults.plan.toml` | 2.00 | 2.01 |
-| 260 | `var_read_before_callee_write.macro_simplify_fvm` | `feat/linear/var_reference.plan.toml` | 2.00 | 2.01 |
-| 261 | `simplify_growth_budget.simplify.nvm` | `feat/opt/generic.plan.toml` | 2.00 | 2.07 |
+## 附录 B：超 2 s 的 261 条，逐条分诊
+
+按子进程墙钟降序。`去向` 是 §⑨ 的三档；`依据` 是这一档对这一条的具体判据。
+这一列只用于分诊，不改任何 `tier`。
+
+| # | 用例 | 计划 | 墙钟(s) | 去向 | 依据 |
+|---:|---|---|---:|---|---|
+| 1 | `agree_with_fvm` | `feat/trans/cpp.plan.toml` | 81.34 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。每条要 C++ 编译 + 链接。 |
+| 2 | `every_expect_program_links_no_runtime` | `feat/trans/cpp.plan.toml` | 78.64 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。每条要 C++ 编译 + 链接。 |
+| 3 | `debugger.dap_fusion_group` | `feat/tools/debugger.plan.toml` | 60.79 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 4 | `runner.backend_matrix` | `feat/consistency/runner.plan.toml` | 33.27 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 5 | `every_fault_program_says_what_fvm_says` | `feat/trans/cpp.plan.toml` | 32.53 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。每条要 C++ 编译 + 链接。 |
+| 6 | `root_window.residual_mlp.moving_stress` | `feat/mm/gc_root_window.plan.toml` | 25.36 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 7 | `type_text.roundtrip` | `feat/compile/type_text.plan.toml` | 24.11 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 8 | `registry.docs_complete` | `feat/modules/stdlib_registry.plan.toml` | 20.32 | **B** | node 驱动：它走整棵语料/整份文档，成本随树的大小走，不随这条用例走。 |
+| 9 | `docs.snippets_compile` | `feat/docs_links.plan.toml` | 19.73 | **B** | node 驱动：它走整棵语料/整份文档，成本随树的大小走，不随这条用例走。 |
+| 10 | `tools.find_fix_asks_who_already_fixed_it` | `feat/tools/find_fix.plan.toml` | 18.19 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 11 | `narrow_reductions_needs_no_runtime` | `feat/trans/cpp.plan.toml` | 15.60 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。每条要 C++ 编译 + 链接。 |
+| 12 | `catalog.doc_is_generated` | `feat/compile/diag_catalog.plan.toml` | 14.95 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 13 | `ort_entry_export` | `feat/modules/onnx.plan.toml` | 14.55 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 14 | `ort_time_axis` | `feat/modules/onnx.plan.toml` | 14.36 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 15 | `runner.tier_declared_against_started` | `feat/tools/layer_accounting.plan.toml` | 13.97 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 16 | `load_class.shared_place` | `feat/tools/load_class.plan.toml` | 12.82 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 17 | `ort_core_slice` | `feat/modules/onnx.plan.toml` | 12.66 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 18 | `cli.plan_arg_domain_refused` | `feat/tools/cli.plan.toml` | 11.86 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 19 | `import.audit` | `feat/modules/import_cost.plan.toml` | 11.79 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 20 | `type_identity.corpus` | `feat/compile/type_identity.plan.toml` | 11.68 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 21 | `tools.autodiff_migration_ledger.ratchet` | `feat/tools/autodiff_migration_ledger.plan.toml` | 11.47 | **B** | node 驱动：它走整棵语料/整份文档，成本随树的大小走，不随这条用例走。 |
+| 22 | `cli.plan_stdout_matches` | `feat/tools/cli.plan.toml` | 10.81 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 23 | `ort_loop_values` | `feat/modules/onnx.plan.toml` | 10.06 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 24 | `ort_struct_loop` | `feat/modules/onnx.plan.toml` | 9.69 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 25 | `capacity.growth_simplify_gc_stress` | `feat/mm/capacity.plan.toml` | 9.67 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 26 | `frontend.format_keeps_ast` | `feat/parse/frontend.plan.toml` | 8.93 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 27 | `narrow_reductions_four_backends` | `feat/trans/cpp.plan.toml` | 8.83 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。每条要 C++ 编译 + 链接。 |
+| 28 | `ort_grad_loop_values` | `feat/modules/onnx.plan.toml` | 8.80 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 29 | `capacity.wide_graph` | `feat/mm/capacity.plan.toml` | 8.51 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 30 | `print_and_recompile` | `feat/trans/cml.plan.toml` | 8.08 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 31 | `gate.conformance_matrix` | `feat/gate/conformance.plan.toml` | 7.83 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 32 | `native_state_checkpoints` | `feat/modules/checkpoints.plan.toml` | 7.55 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 33 | `python_binding.session` | `feat/bindings/python_binding.plan.toml` | 7.35 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 34 | `runner.exit_reporting_names_the_signal` | `feat/tools/exit_reporting.plan.toml` | 7.07 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 35 | `surface.minus.nvm` | `feat/consistency/surface.plan.toml` | 6.84 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 36 | `surface.member_chain.nvm` | `feat/consistency/surface.plan.toml` | 6.78 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 37 | `surface.lambda_call.nvm` | `feat/consistency/surface.plan.toml` | 6.72 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 38 | `surface.zip_many.nvm` | `feat/consistency/surface.plan.toml` | 6.69 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 39 | `inline_keeps_stdout.write.nvm` | `feat/opt/inline_use.plan.toml` | 6.67 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 40 | `gate.plan_inventory` | `feat/gate/plan_inventory.plan.toml` | 6.67 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 41 | `export_loop_cond` | `feat/modules/onnx.plan.toml` | 6.65 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 42 | `inline_keeps_stdout.inline.nvm` | `feat/opt/inline_use.plan.toml` | 6.63 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 43 | `surface.operator_values.nvm` | `feat/consistency/surface.plan.toml` | 6.62 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 44 | `inline_keeps_stdout.drop.nvm` | `feat/opt/inline_use.plan.toml` | 6.57 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 45 | `inline_keeps_stdout.twice_write.nvm` | `feat/opt/inline_use.plan.toml` | 6.56 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 46 | `ort_grad_loop` | `feat/modules/onnx.plan.toml` | 6.55 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 47 | `inline_keeps_stdout.twice_inline.nvm` | `feat/opt/inline_use.plan.toml` | 6.54 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 48 | `gate.case_ledger` | `feat/gate/case_ledger.plan.toml` | 6.52 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 49 | `attempt.resources.isolated.nvm` | `feat/consistency/attempt.plan.toml` | 6.44 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 50 | `attempt.resources.normal.nvm` | `feat/consistency/attempt.plan.toml` | 6.38 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 51 | `attempt.resources.fault.nvm` | `feat/consistency/attempt.plan.toml` | 6.32 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 52 | `attempt.resources.exit.nvm` | `feat/consistency/attempt.plan.toml` | 6.27 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 53 | `attempt.pipeline.places_opt.nvm` | `feat/consistency/attempt.plan.toml` | 6.17 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 54 | `attempt.translate.cpp` | `feat/consistency/attempt.plan.toml` | 6.14 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 55 | `attempt.pipeline.inline_opt.prl` | `feat/consistency/attempt.plan.toml` | 6.14 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 6 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 56 | `attempt.pipeline.macro_opt.prl` | `feat/consistency/attempt.plan.toml` | 6.12 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 6 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 57 | `runner.provenance_line_names_the_artifact` | `feat/tools/provenance.plan.toml` | 6.11 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 58 | `attempt.pipeline.nested_opt.nvm` | `feat/consistency/attempt.plan.toml` | 6.11 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 59 | `attempt.pipeline.cse_dce.prl` | `feat/consistency/attempt.plan.toml` | 6.11 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 6 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 60 | `attempt.not_isolated.fault_in_argument.prl` | `feat/consistency/attempt.plan.toml` | 6.08 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 61 | `ort_branch` | `feat/modules/onnx.plan.toml` | 6.08 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 62 | `attempt.pipeline.fold.prl` | `feat/consistency/attempt.plan.toml` | 6.08 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 6 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 63 | `attempt.not_isolated.fault_in_argument.jit` | `feat/consistency/attempt.plan.toml` | 6.03 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 64 | `attempt.not_isolated.fault_in_argument.fvm` | `feat/consistency/attempt.plan.toml` | 6.00 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 65 | `attempt.refuse.onnx` | `feat/consistency/attempt.plan.toml` | 5.96 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 66 | `every_expect_program_five_times` | `feat/trans/cpp.plan.toml` | 5.59 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。每条要 C++ 编译 + 链接。 |
+| 67 | `export_loop_for` | `feat/modules/onnx.plan.toml` | 5.57 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 68 | `ort_slice_bounds` | `feat/modules/onnx.plan.toml` | 5.39 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 69 | `capacity.fanout` | `feat/mm/capacity.plan.toml` | 5.27 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 70 | `ort_loop_loaded_weights` | `feat/modules/onnx.plan.toml` | 5.06 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 71 | `value.deep_enum_chain.prl` | `feat/consistency/values.plan.toml` | 4.96 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 72 | `ort_dynamic_params` | `feat/modules/onnx.plan.toml` | 4.92 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 73 | `unused_values.one_input_one_answer` | `feat/compile/unused_values.plan.toml` | 4.84 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 74 | `ort_dynamic_batch` | `feat/modules/onnx.plan.toml` | 4.79 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 75 | `ort_train_step_dynamic` | `feat/modules/onnx.plan.toml` | 4.76 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 76 | `ort_const_under_as` | `feat/modules/onnx.plan.toml` | 4.65 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 77 | `rules.the_coverage_check_refuses_every_refuted_law` | `feat/modules/rules.plan.toml` | 4.52 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 78 | `attempt.pipeline.simplify.prl` | `feat/consistency/attempt.plan.toml` | 4.50 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 6 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 79 | `ort_linear_recursion` | `feat/modules/onnx.plan.toml` | 4.46 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 80 | `ort_slice_start` | `feat/modules/onnx.plan.toml` | 4.43 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 81 | `ort_duplicate_outputs` | `feat/modules/onnx.plan.toml` | 4.39 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 82 | `catalog.failure_paths` | `feat/compile/diag_catalog.plan.toml` | 4.38 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 83 | `ort_struct_casts` | `feat/modules/onnx.plan.toml` | 4.29 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 84 | `attempt.many.fvm` | `feat/consistency/attempt.plan.toml` | 4.24 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 85 | `attempt.refuse.grad` | `feat/consistency/attempt.plan.toml` | 3.90 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 86 | `canonical_document_and_equivalence` | `feat/trans/canonical_gir.plan.toml` | 3.87 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 87 | `attempt.many.jit` | `feat/consistency/attempt.plan.toml` | 3.81 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 88 | `process_state.stw_give_up_escalates` | `feat/mm/process_state.plan.toml` | 3.81 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 89 | `nested_return.compile_time` | `feat/compile/return_type.plan.toml` | 3.68 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 90 | `build_stamp.options_change` | `feat/tools/build_stamp.plan.toml` | 3.51 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 91 | `portability.std_includes` | `feat/tools/portability.plan.toml` | 3.48 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 92 | `attempt.collector.stress.nvm` | `feat/consistency/attempt.plan.toml` | 3.47 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 93 | `attempt.siblings.nvm` | `feat/consistency/attempt.plan.toml` | 3.47 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 94 | `attempt.collector.stress.prl` | `feat/consistency/attempt.plan.toml` | 3.45 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 95 | `attempt.collector.stress_both.nvm` | `feat/consistency/attempt.plan.toml` | 3.41 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 96 | `attempt.many.nvm` | `feat/consistency/attempt.plan.toml` | 3.37 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 97 | `attempt.collector.stress.jit` | `feat/consistency/attempt.plan.toml` | 3.36 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 98 | `attempt.collector.stress_both.fvm` | `feat/consistency/attempt.plan.toml` | 3.36 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 99 | `capacity.dead_function_closure_verify` | `feat/mm/capacity.plan.toml` | 3.34 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 100 | `attempt.collector.stress_both.jit` | `feat/consistency/attempt.plan.toml` | 3.29 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 101 | `attempt.collector.stress.fvm` | `feat/consistency/attempt.plan.toml` | 3.23 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 102 | `collfuzz.quick` | `feat/compile/collections.plan.toml` | 3.20 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 103 | `unused_values.help_let_sync_is_not_a_program` | `feat/compile/unused_values.plan.toml` | 3.19 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 104 | `frontend.ast_snapshot` | `feat/parse/frontend.plan.toml` | 3.16 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 105 | `unused_values.called_fallible` | `feat/compile/unused_values.plan.toml` | 3.10 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 106 | `registry.migrations_stay_migrated` | `feat/modules/stdlib_registry.plan.toml` | 3.02 | **B** | node 驱动：它走整棵语料/整份文档，成本随树的大小走，不随这条用例走。 |
+| 107 | `process_state.stw_sleep_leaves_its_region` | `feat/mm/process_state.plan.toml` | 3.00 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 108 | `docs.links.citations` | `feat/docs_links.plan.toml` | 2.98 | **B** | node 驱动：它走整棵语料/整份文档，成本随树的大小走，不随这条用例走。 |
+| 109 | `debugger.dap_tail_steps` | `feat/tools/debugger.plan.toml` | 2.96 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 110 | `grad_structures` | `feat/modules/autodiff.plan.toml` | 2.95 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 111 | `ort_grad_matmul_batched` | `feat/modules/onnx.plan.toml` | 2.93 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 112 | `unused_values.called_fallible_pipeline` | `feat/compile/unused_values.plan.toml` | 2.93 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 113 | `gpu_scope.placement_with_a_device` | `feat/modules/tiles.plan.toml` | 2.92 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 114 | `attempt.collector.stress_both.prl` | `feat/consistency/attempt.plan.toml` | 2.85 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 115 | `rules.accuracy_scalar_every_backend.jit` | `feat/modules/rules_libraries.plan.toml` | 2.84 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 116 | `attempt.concurrent.jit` | `feat/consistency/attempt.plan.toml` | 2.84 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 117 | `attempt.concurrent.fvm` | `feat/consistency/attempt.plan.toml` | 2.83 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 118 | `gpu_scope.host_effect_synchronises` | `feat/modules/tiles.plan.toml` | 2.82 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 119 | `attempt.compiled.jit` | `feat/consistency/attempt.plan.toml` | 2.80 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 120 | `unused_values.help_if_arm_then_sync_runs` | `feat/compile/unused_values.plan.toml` | 2.79 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 121 | `pass_written.inventory.nvm` | `feat/opt/effects_kept.plan.toml` | 2.79 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 122 | `attempt.compiled.fvm` | `feat/consistency/attempt.plan.toml` | 2.78 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 123 | `rules.accuracy_scalar_every_backend.fvm` | `feat/modules/rules_libraries.plan.toml` | 2.77 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 124 | `capacity.scale_check` | `feat/mm/capacity.plan.toml` | 2.76 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 125 | `match.complete.prl` | `feat/consistency/match.plan.toml` | 2.72 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 126 | `value.deep_enum_chain.jit` | `feat/consistency/values.plan.toml` | 2.72 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 127 | `gradient.false` | `feat/opt/algebra.plan.toml` | 2.72 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 128 | `docs.no_unfinished_merge_left_in_the_tree` | `feat/docs_links.plan.toml` | 2.71 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 129 | `value.deep_enum_chain.fvm` | `feat/consistency/values.plan.toml` | 2.70 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 130 | `fixes_apply` | `feat/compile/diag_fixes.plan.toml` | 2.68 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 131 | `match.complete.jit` | `feat/consistency/match.plan.toml` | 2.66 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 132 | `docs.no_unfinished_merge_pattern_sees_all_four_forms` | `feat/docs_links.plan.toml` | 2.65 | **B** | node 驱动：它走整棵语料/整份文档，成本随树的大小走，不随这条用例走。 |
+| 133 | `boundary64.inf.safe.prl` | `feat/opt/algebra.plan.toml` | 2.64 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 134 | `execution.opt_safe.prl` | `feat/opt/algebra.plan.toml` | 2.63 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 135 | `rules.fusion_bit_identical_fused.jit` | `feat/modules/rules_libraries.plan.toml` | 2.62 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 136 | `opt_matches_interpreter.mnist.nvm` | `feat/opt/effects_kept.plan.toml` | 2.61 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 137 | `narrow_one_program_twenty_times` | `feat/trans/cpp.plan.toml` | 2.61 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。每条要 C++ 编译 + 链接。 |
+| 138 | `debugger.http_gateway` | `feat/tools/debugger.plan.toml` | 2.61 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 139 | `boundary64.-0.algebra.fvm` | `feat/opt/algebra.plan.toml` | 2.59 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 140 | `match.complete.fvm` | `feat/consistency/match.plan.toml` | 2.58 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 141 | `boundary64.inf.safe.jit` | `feat/opt/algebra.plan.toml` | 2.54 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 142 | `attempt.library.jit` | `feat/consistency/attempt.plan.toml` | 2.53 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 143 | `execution.opt_safe.jit` | `feat/opt/algebra.plan.toml` | 2.52 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 144 | `attempt.siblings.jit` | `feat/consistency/attempt.plan.toml` | 2.51 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 145 | `inline_cycle.splice_place` | `feat/opt/inline_cycle.plan.toml` | 2.50 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 146 | `root_window.gru_lite.moving_stress` | `feat/mm/gc_root_window.plan.toml` | 2.50 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 147 | `gradient.true` | `feat/opt/algebra.plan.toml` | 2.48 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 148 | `attempt.library.fvm` | `feat/consistency/attempt.plan.toml` | 2.47 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 149 | `boundary64.2.5e-323.safe.fvm` | `feat/opt/algebra.plan.toml` | 2.47 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 150 | `attempt.pipeline.simplify.jit` | `feat/consistency/attempt.plan.toml` | 2.46 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 6 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 151 | `execution.algebra.jit` | `feat/opt/algebra.plan.toml` | 2.46 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 152 | `attempt.siblings.fvm` | `feat/consistency/attempt.plan.toml` | 2.46 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 153 | `defun.four_backends` | `feat/opt/defun.plan.toml` | 2.46 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 154 | `rules.fusion_bit_identical_fused.fvm` | `feat/modules/rules_libraries.plan.toml` | 2.44 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 155 | `unused_values.help_if_arm_else_sync_runs` | `feat/compile/unused_values.plan.toml` | 2.43 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 156 | `boundary64.5e-324.reference.jit` | `feat/opt/algebra.plan.toml` | 2.43 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 157 | `boundary64.inf.safe.fvm` | `feat/opt/algebra.plan.toml` | 2.43 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 158 | `boundary64.inf.algebra.fvm` | `feat/opt/algebra.plan.toml` | 2.42 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 159 | `attempt.effects.fvm` | `feat/consistency/attempt.plan.toml` | 2.42 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 160 | `debugger.cli_session` | `feat/tools/debugger.plan.toml` | 2.42 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 161 | `attempt.depth.jit` | `feat/consistency/attempt.plan.toml` | 2.41 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 162 | `execution.opt_safe.fvm` | `feat/opt/algebra.plan.toml` | 2.40 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 163 | `boundary64.1e308.reference.jit` | `feat/opt/algebra.plan.toml` | 2.40 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 164 | `boundary64.5e-324.reference.prl` | `feat/opt/algebra.plan.toml` | 2.39 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 165 | `control.pipeline_contract` | `feat/opt/control.plan.toml` | 2.37 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 166 | `library_gemm.tolerance` | `feat/compile/numeric_permissions.plan.toml` | 2.37 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 167 | `attempt.not_isolated.exit.nvm` | `feat/consistency/attempt.plan.toml` | 2.36 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 168 | `ort_var_parameter` | `feat/modules/onnx.plan.toml` | 2.34 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 169 | `gpu_preference.named_device` | `feat/modules/tiles.plan.toml` | 2.34 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 170 | `warn.werror_pass_warning` | `feat/compile/diag_options.plan.toml` | 2.33 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 171 | `ort_argmax` | `feat/modules/onnx.plan.toml` | 2.33 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 172 | `boundary64.nan.algebra.prl` | `feat/opt/algebra.plan.toml` | 2.33 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 173 | `boundary64.1e308.safe.prl` | `feat/opt/algebra.plan.toml` | 2.32 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 174 | `optimization_namespace` | `feat/opt/generic.plan.toml` | 2.31 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 175 | `load_class.tree` | `feat/tools/load_class.plan.toml` | 2.30 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 176 | `library_gemm.tolerance.safe` | `feat/compile/numeric_permissions.plan.toml` | 2.30 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 177 | `execution.safe.fvm` | `feat/opt/algebra.plan.toml` | 2.29 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 178 | `boundary32.3e38.true.fvm` | `feat/opt/algebra.plan.toml` | 2.29 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 179 | `graph_space.function_value_keeps_program` | `feat/mm/graph_space.plan.toml` | 2.29 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 180 | `boundary64.5e-324.reference.fvm` | `feat/opt/algebra.plan.toml` | 2.28 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 181 | `boundary64.1e308.reference.fvm` | `feat/opt/algebra.plan.toml` | 2.27 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 182 | `attempt.not_isolated.fault_outside.nvm` | `feat/consistency/attempt.plan.toml` | 2.27 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 183 | `cse_arm_constants.inline_cse.fvm` | `feat/opt/generic.plan.toml` | 2.27 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 184 | `ort_slice_grad_stride` | `feat/modules/onnx.plan.toml` | 2.27 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。整条 onnxruntime 会话。 |
+| 185 | `catalog.coverage_report` | `feat/compile/diag_catalog.plan.toml` | 2.27 | **B** | node 驱动：它走整棵语料/整份文档，成本随树的大小走，不随这条用例走。 |
+| 186 | `clean.tiers` | `feat/tools/clean.plan.toml` | 2.26 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 187 | `attempt.not_isolated.fault_in_argument.nvm` | `feat/consistency/attempt.plan.toml` | 2.25 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 188 | `execution.algebra.fvm` | `feat/opt/algebra.plan.toml` | 2.25 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 189 | `unused_values.help_function_body_sync_runs` | `feat/compile/unused_values.plan.toml` | 2.25 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 190 | `debugger.loop_frames` | `feat/tools/debugger.plan.toml` | 2.25 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 191 | `boundary64.1e308.safe.jit` | `feat/opt/algebra.plan.toml` | 2.23 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 192 | `debugger.dap_frames` | `feat/tools/debugger.plan.toml` | 2.23 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 193 | `boundary32.7.006492321624085e-45.false.nvm` | `feat/opt/algebra.plan.toml` | 2.22 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 194 | `print_then_run_agrees_with_the_origin` | `feat/trans/cml.plan.toml` | 2.22 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 195 | `value.deep_enum_chain.nvm` | `feat/consistency/values.plan.toml` | 2.22 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 196 | `execution.opt_safe.nvm` | `feat/opt/algebra.plan.toml` | 2.21 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 197 | `covered_value.graph.true` | `feat/opt/gate_value.plan.toml` | 2.21 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 198 | `boundary32.1.401298464324817e-45.true.prl` | `feat/opt/algebra.plan.toml` | 2.21 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 199 | `boundary32.3e38.false.fvm` | `feat/opt/algebra.plan.toml` | 2.20 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 200 | `attempt.bad_calls` | `feat/consistency/attempt.plan.toml` | 2.20 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 201 | `specialize_element_type_nest.refused` | `feat/opt/generic.plan.toml` | 2.20 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 202 | `debugger.dap_pipeline` | `feat/tools/debugger.plan.toml` | 2.19 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 203 | `residual_mlp_inline_large` | `feat/modules/nn.plan.toml` | 2.19 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 204 | `tensor_grad_check.simplify.jit` | `feat/modules/autodiff.plan.toml` | 2.19 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 205 | `load_class.explain_under_load` | `feat/tools/load_class.plan.toml` | 2.19 | **B** | node 驱动：它自己再起一次跑测（嵌套跑），成本随树的大小走，不随这条用例走。 |
+| 206 | `attempt.bad_call.argument` | `feat/consistency/attempt.plan.toml` | 2.18 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 207 | `cse_arm_constants.inline_cse.jit` | `feat/opt/generic.plan.toml` | 2.18 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 208 | `control_data.unused_argument.reference.prl` | `feat/opt/control_data.plan.toml` | 2.16 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 209 | `static_branches.simplify` | `feat/opt/generic.plan.toml` | 2.15 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 210 | `integrated.graph.true` | `feat/opt/algebra.plan.toml` | 2.15 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 211 | `reshape_view_gc.fold_specialize.nvm` | `feat/opt/generic.plan.toml` | 2.14 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 212 | `var_tensor_read.opt_macro_nvm` | `feat/linear/var_reference.plan.toml` | 2.14 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 213 | `boundary32.7.006492321624085e-45.true.nvm` | `feat/opt/algebra.plan.toml` | 2.13 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 214 | `residual_mlp.simplify.fvm` | `feat/modules/nn.plan.toml` | 2.12 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 215 | `docs.word_form_only` | `feat/opt/pass_params.plan.toml` | 2.12 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 216 | `covered_value.graph.false` | `feat/opt/gate_value.plan.toml` | 2.12 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 217 | `control_data.unused_argument.inline.prl` | `feat/opt/control_data.plan.toml` | 2.12 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 218 | `boundary64.2.5e-323.algebra.prl` | `feat/opt/algebra.plan.toml` | 2.12 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 219 | `boundary32.7.006492321624085e-45.false.prl` | `feat/opt/algebra.plan.toml` | 2.11 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 220 | `integrated.graph.false` | `feat/opt/algebra.plan.toml` | 2.10 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 221 | `boundary32.-0.true.prl` | `feat/opt/algebra.plan.toml` | 2.10 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 222 | `graph_faces.readings_absolute` | `feat/opt/graph_faces.plan.toml` | 2.10 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 223 | `pb_statics_gc.runtime.nvm` | `feat/modules/autodiff.plan.toml` | 2.10 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 224 | `var_grad.inline_tf` | `feat/linear/var_reference.plan.toml` | 2.10 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 225 | `fault_narrow_div_zero` | `feat/trans/cpp.plan.toml` | 2.10 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 226 | `boundary32.-0.false.prl` | `feat/opt/algebra.plan.toml` | 2.09 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 227 | `fused_grad_check.fused` | `feat/modules/autodiff.plan.toml` | 2.09 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 228 | `simplify_arm_write_lost.simplify_fvm` | `feat/opt/progen_simplify.plan.toml` | 2.09 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 229 | `execution.opt.nvm` | `feat/opt/algebra.plan.toml` | 2.08 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 10 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 230 | `var_grad.opt_tf` | `feat/linear/var_reference.plan.toml` | 2.08 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 231 | `cse_arm_constants.inline_arm_cse.nvm` | `feat/opt/generic.plan.toml` | 2.08 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 232 | `attempt.partial_fault.nvm` | `feat/consistency/attempt.plan.toml` | 2.07 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 233 | `branch.42.opt.prl` | `feat/opt/gate_value.plan.toml` | 2.07 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 234 | `residual_mlp_gir` | `feat/modules/nn.plan.toml` | 2.06 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 235 | `control_data.unused_argument.inline_fold.prl` | `feat/opt/control_data.plan.toml` | 2.05 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 236 | `literal_rank` | `feat/trans/cpp.plan.toml` | 2.05 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 237 | `01_scalar_boundary` | `feat/exemplars.plan.toml` | 2.05 | **B** | node 驱动：它驱动一整套检查，成本随树的大小走，不随这条用例走。 |
+| 238 | `boundary32.-0.false.nvm` | `feat/opt/algebra.plan.toml` | 2.04 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 239 | `other_wait.graph` | `feat/opt/gate_value.plan.toml` | 2.04 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 240 | `pb_statics_gc.runtime.fvm` | `feat/modules/autodiff.plan.toml` | 2.04 | **B** | 压力模式（`--gc-stress` / `--gc-check`）：按 ④ 它本来就该进压力层，不是提速问题。 |
+| 241 | `static_branches.simplify.rgir` | `feat/opt/generic.plan.toml` | 2.04 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 242 | `control_data.graph` | `feat/opt/control_data.plan.toml` | 2.04 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 243 | `tiny_cnn_gir` | `feat/modules/nn.plan.toml` | 2.03 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 244 | `literal_rows_computed` | `feat/trans/cpp.plan.toml` | 2.03 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 245 | `attempt.forms.jit` | `feat/consistency/attempt.plan.toml` | 2.02 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 246 | `var_capture.macro_fold` | `feat/linear/var_reference.plan.toml` | 2.02 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 247 | `capacity.growth_fvm_gc_stress` | `feat/mm/capacity.plan.toml` | 2.02 | **B** | python 驱动：一条用例要起多个进程（编译/推理/多程序语料），成本是环境不是程序。 |
+| 248 | `dependent_names` | `feat/compile/generics.plan.toml` | 2.02 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 249 | `siamese_shared_encoder.opt.tf` | `feat/modules/nn.plan.toml` | 2.02 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 250 | `boundary64.2.5e-323.algebra.jit` | `feat/opt/algebra.plan.toml` | 2.02 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 16 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 251 | `arm_call_then_effect.opt.nvm` | `feat/opt/inline.plan.toml` | 2.01 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 252 | `simplify_arm_write_lost.simplify_jit` | `feat/opt/progen_simplify.plan.toml` | 2.01 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 253 | `boundary32.-0.true.jit` | `feat/opt/algebra.plan.toml` | 2.01 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 254 | `attempt.forms.fvm` | `feat/consistency/attempt.plan.toml` | 2.01 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 2 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 255 | `var_grad.simplify_jit` | `feat/linear/var_reference.plan.toml` | 2.01 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 3 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 256 | `control_data.unused_argument.ctrl_inline.prl` | `feat/opt/control_data.plan.toml` | 2.01 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 4 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 257 | `boundary32.7.006492321624085e-45.true.prl` | `feat/opt/algebra.plan.toml` | 2.00 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 11 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 258 | `literal_rows_filled` | `feat/trans/cpp.plan.toml` | 2.00 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 259 | `with_defaults.applied.prl` | `feat/compile/with_defaults.plan.toml` | 2.00 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+| 260 | `var_read_before_callee_write.macro_simplify_fvm` | `feat/linear/var_reference.plan.toml` | 2.00 | **C** | 单程序、单遍、无驱动，秒数可能就是这个程序自己的活，也可能是 28 路争用的放大——缺一条 CPU 读数或 `--jobs 1` 的单跑读数。 |
+| 261 | `simplify_growth_budget.simplify.nvm` | `feat/opt/generic.plan.toml` | 2.00 | **A** | 同一份用例在本层按 backend / 遍展开的多条之一（这份程序在本层有 1 条 >2 s）：按重构计划第 3 条收成每类一个代表，其余留矩阵层。 |
+
+合计：A 112 条（留快层，收代表）、B 106 条（进 slow）、C 43 条（说不清）。

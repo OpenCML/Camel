@@ -729,12 +729,19 @@ try {
     $baselineSource = if ($probeExit -eq 0) { "cached: measured earlier on the first parent $($script:baseShort) of $($targetInfo.Name)" } else { "measured in $baseTree at the first parent of $($targetInfo.Name), in this batch" }
     $batchLaneArgs = @()
     foreach ($m in $built.Merges) { $batchLaneArgs += @('--batch-lane', $m.Lane.Name) }
+    # A batch of one lane IS a single merge -- one merge commit, one tree measured, one lane named --
+    # and the writer refuses the batch fields for exactly that case ("a batch of one lane is a single
+    # merge: write it without the batch fields", exit 2). That is the shape the queue uses to check
+    # the tool before trusting it with three, and it stopped the first end-to-end run of 2026-11-24
+    # one step before the push, after ten minutes of measurement. So the fields are given only when
+    # there is more than one merge to be a batch of.
+    $batchFields = if ($built.Merges.Count -gt 1) { @('--batch-size', "$($built.Merges.Count)", '--batch-tip', $script:mergeTip) + $batchLaneArgs } else { @() }
     foreach ($m in $built.Merges) {
         $write = @(& node (Join-Path $ToolTree 'scripts\merge-record.mjs') write `
             --diff (Join-Path $comparison.OutDir 'diff.json') --merge $m.Sha --first-parent $m.FirstParent `
             --second-parent $m.SecondParent --branch $m.Lane.Name --tree $script:mergeTree --out $passedDir `
             --baseline-source $baselineSource --gate headers --gate clang-syntax --gate rows `
-            --batch-size $built.Merges.Count --batch-tip $script:mergeTip @batchLaneArgs `
+            @batchFields `
             --written-by 'internal/tools/merge-batch.ps1' 2>&1)
         $writeExit = $LASTEXITCODE
         $write | ForEach-Object { "[batch]   $_" }
@@ -744,8 +751,12 @@ try {
     }
     Write-Host ("[batch] pass records: {0} written for {0} merge commit(s), in {1}" -f $built.Merges.Count, $passedDir)
     $built.Merges | ForEach-Object { Write-Host ("  {0}  first parent {1}  {2}" -f $_.Sha.Substring(0, 9), $_.FirstParent.Substring(0, 9), $_.Lane.Short) }
-    Write-Host ("[batch]   each record names the batch: {0} lane(s) [{1}], readings taken on the tip {2}" -f `
-        $built.Merges.Count, (@($built.Merges | ForEach-Object { $_.Lane.Short }) -join ', '), $script:mergeTip.Substring(0, 9))
+    Write-Host ("[batch]   {0}" -f $(if ($built.Merges.Count -gt 1) {
+            "each record names the batch: {0} lane(s) [{1}], readings taken on the tip {2}" -f `
+                $built.Merges.Count, (@($built.Merges | ForEach-Object { $_.Lane.Short }) -join ', '), $script:mergeTip.Substring(0, 9)
+        } else {
+            "one lane, one merge commit: the record is a single merge's, its own tree measured"
+        }))
 
     # --- 11. the push, from the merge worktree and nowhere else -------------
     # The push is made there (`<sha>:<target>`, a fast-forward from the commit this batch measured
