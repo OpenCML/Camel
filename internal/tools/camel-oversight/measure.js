@@ -90,9 +90,11 @@ async function mergedOf(git) {
     return { mergedLocal, mergedRemote }
 }
 
-/// The backlog's rows, by id: status and the stamp of the last update.
-async function backlogOf(repo) {
-    const text = await readFile(path.join(repo, 'internal', 'backlog.md'), 'utf8')
+/// The backlog's rows, by id: status and the stamp of the last update. Read as origin/develop has
+/// it, like the rules and the hot-reloaded files: the main checkout is the author's workspace and may
+/// stand on another branch, or hold an edit nobody pushed.
+async function backlogOf(git) {
+    const text = await git(['show', 'origin/develop:internal/backlog.md'])
     const rows = new Map()
     const ownRows = new Set()
     for (const line of text.split('\n')) {
@@ -257,7 +259,7 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
         ),
         branches: await attempt(() => branchesOf(git)),
         merged: await attempt(() => mergedOf(git)),
-        backlog: await attempt(() => backlogOf(repo)),
+        backlog: await attempt(() => backlogOf(git)),
         panel: await attempt(() => buildPanelOf(repo, stateDir)),
         host: buildHost ? await attempt(() => buildHostOf(buildHost, buildProbe)) : { unconfigured: true },
     }
