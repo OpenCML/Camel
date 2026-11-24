@@ -1333,9 +1333,19 @@ if (/\(the whole fast layer: smoke \+ feat\)/.test(emptySelection.output)) {
 }
 // The run path, not only the listing: a zero has to reach the runner as a zero, or the widest
 // reading of `--changed` is the one nobody checked.
+//
+// The code a zero-row run exits with is 2, not 0 and not 1. 0 is what a green run prints, and a
+// zero-row `[SUMMARY]` is the same three numbers a green one prints, so 0 would make "nothing ran"
+// indistinguishable from "nothing failed" -- the whole reason this file exists. 1 would blame a
+// test that never started. 2 is the code this tree already gives "not measured" (a missing install,
+// an unreadable selection). Pinned here because it is one character of behaviour that no reading
+// above can see: measured before this was written, `--selection-empty` exited 0.
 const emptyRun = runRunner(['--selection-empty'])
-if (emptyRun.status !== 0) {
-    problems.push(`--selection-empty: exit ${emptyRun.status}, expected 0`)
+if (emptyRun.status !== 2) {
+    problems.push(`--selection-empty: exit ${emptyRun.status}, expected 2 (nothing started = not measured)`)
+}
+if (!/nothing was started, so nothing was measured: exit 2/.test(emptyRun.output)) {
+    problems.push(`--selection-empty did not say why its exit code is 2: ${summaryLine(emptyRun.output)}`)
 }
 if (!/discovered plans: 0/.test(emptyRun.output)) {
     problems.push(`--selection-empty widened to the plan tree: ${summaryLine(emptyRun.output)}`)

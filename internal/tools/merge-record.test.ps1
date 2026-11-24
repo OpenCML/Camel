@@ -68,7 +68,7 @@ $null = & git clone --quiet $origin $work 2>&1
 & git -C $work config user.name 'merge record test'
 & git -C $work config commit.gpgsign false
 
-foreach ($rel in @('scripts/hooks/pre-push', 'scripts/merge-record.mjs')) {
+foreach ($rel in @('scripts/hooks/pre-push', 'scripts/merge-record.mjs', 'scripts/plan-set.mjs')) {
     $to = Join-Path $work $rel
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot $rel) -Destination $to -Force
@@ -141,8 +141,22 @@ Check 'and the remote is where it was' (((& git -C $origin rev-parse develop)).T
 # --- 3. a record cannot disagree with git -------------------------------------------------------
 $passedDir = Join-Path $work '.git/camel-passed'
 $diffFile = Join-Path $scratch 'diff.json'
+
+# The plan set's hash in the fixtures below is the value the shipped `scripts/plan-set.mjs` gives,
+# not a string that happens to match: the writer is checked against that function, so a fixture
+# carrying a hand-written hash would be testing a number against itself. The value is pinned as well
+# as computed, because the same hash is a stored baseline cache key in `merge-readings.mjs` -- an
+# algorithm that moved would re-key every baseline on every machine, silently, and that is a thing a
+# test should say out loud rather than permit.
+$planName = 'test/plans/smoke/core.plan.toml'
+$planSetModule = 'file:///' + ((Join-Path $repoRoot 'scripts/plan-set.mjs') -replace '\\', '/')
+$planHash = (& node -e "import('$planSetModule').then((m) => console.log(m.planSetHash(['$planName'])))" 2>&1 | Out-String).Trim()
+Check 'the shipped plan-set hash is the pinned one' ($planHash -eq '1-fead0032') "[$planHash]"
+# A hash that does not describe the names: the pair a hand-written or half-updated document holds.
+$wrongPlanHash = "${planHash}x"
+
 $diff = @{
-    planSet  = @{ names = @('test/plans/smoke/core.plan.toml'); hash = '1-abc' }
+    planSet  = @{ names = @($planName); hash = $planHash }
     baseline = @{ sha = $base; file = 'x.jsonl'; cases = 12; normal = 1 }
     fixed    = @('a_case')
     new      = @()
@@ -171,7 +185,7 @@ Check 'and nothing was written' (-not (Test-Path (Join-Path $passedDir "$mergeNe
 # A record whose reading is not a pass must not be writable either: the tool refuses such a merge
 # before it reaches this call, and a caller that arrives anyway must not be able to certify it.
 $diffFailed = @{
-    planSet  = @{ names = @('test/plans/smoke/core.plan.toml'); hash = '1-abc' }
+    planSet  = @{ names = @($planName); hash = $planHash }
     baseline = @{ sha = $base; file = 'x.jsonl'; cases = 12; normal = 1 }
     fixed    = @()
     new      = @(@{ name = 'x'; reading = 'boom' })
@@ -182,13 +196,34 @@ $failedFile = Join-Path $scratch 'diff-failed.json'
 $out2 = @(& node @(Write-RecordArgs -FirstParent $base -Diff $failedFile) 2>&1)
 Check 'a record with a newly red case is refused' ($LASTEXITCODE -eq 1) (($out2 | ForEach-Object { "$_" }) -join ' / ')
 
+# A diff whose hash does not describe its names must not become a record. Otherwise the field is one
+# the writer carries and nobody checks -- a document saying "these plans" beside a hash of some other
+# set, both from the same writer -- and `verify` would later be reading two answers about one question.
+# Exit 2 and not 1: this is not a refuted reading, it is an unreadable one.
+$diffWrong = @{
+    planSet  = @{ names = @($planName); hash = $wrongPlanHash }
+    baseline = @{ sha = $base; file = 'x.jsonl'; cases = 12; normal = 1 }
+    fixed    = @('a_case')
+    new      = @()
+    changed  = @()
+}
+$wrongFile = Join-Path $scratch 'diff-wrong-plan-set.json'
+[System.IO.File]::WriteAllText($wrongFile, (($diffWrong | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+$out3 = @(& node @(Write-RecordArgs -FirstParent $base -Diff $wrongFile) 2>&1)
+$out3Exit = $LASTEXITCODE
+$out3Text = (($out3 | ForEach-Object { "$_" }) -join ' / ')
+Check 'a diff whose plan-set hash does not describe its names is refused' ($out3Exit -eq 2) $out3Text
+Check 'and the refusal says which hash the names give and which the document states' `
+    ($out3Text -match [regex]::Escape("that hash to $planHash, but it says $wrongPlanHash")) $out3Text
+Check 'and no record was written for it' (-not (Test-Path (Join-Path $passedDir "$mergeNew.json")))
+
 # --- 4. with the record, the same push is allowed -----------------------------------------------
 $good = @(& node @(Write-RecordArgs -FirstParent $base -Diff $diffFile) 2>&1)
 $goodExit = $LASTEXITCODE
 Check 'the record is written' ($goodExit -eq 0 -and (Test-Path (Join-Path $passedDir "$mergeNew.json"))) (($good | ForEach-Object { "$_" }) -join ' / ')
 $saved = Get-Content -LiteralPath (Join-Path $passedDir "$mergeNew.json") -Raw | ConvertFrom-Json
 Check 'it names both commits' ($saved.sha -eq $mergeNew -and $saved.firstParent -eq $base)
-Check 'it carries the plan set and its hash' ($saved.planSet.count -eq 1 -and $saved.planSet.hash -eq '1-abc')
+Check 'it carries the plan set and its hash' ($saved.planSet.count -eq 1 -and $saved.planSet.hash -eq $planHash)
 Check 'it carries the baseline and its source' ($saved.baseline.sha -eq $base -and $saved.baseline.source)
 Check 'it carries the three counts' ($saved.readings.fixed -eq 1 -and $saved.readings.new -eq 0 -and $saved.readings.changed -eq 0)
 
@@ -216,7 +251,7 @@ Set-Content -LiteralPath (Join-Path $work 'second.txt') -Value 'second'
 $second = (& git -C $work rev-parse HEAD).Trim()
 $forged = @{
     sha = $second; firstParent = (& git -C $work rev-parse 'HEAD^1').Trim(); secondParent = 'x'
-    planSet = @{ names = @('p'); hash = 'h'; count = 1 }
+    planSet = @{ names = @('p'); hash = '1-70'; count = 1 }
     baseline = @{ sha = 'x'; source = 'forged' }
     readings = @{ cases = 1; fixed = 0; new = 2; changed = 0 }
 }
@@ -225,6 +260,98 @@ New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
 $push = Invoke-Git $work @('push', 'origin', 'develop')
 Check 'a record with a red case in it does not open the door' ($push.Exit -ne 0) $push.Text
 Check 'and the refusal says the record is not a pass' ($push.Text -match 'not a pass') $push.Text
+
+# --- 7. the record's own plan set has to be one set --------------------------------------------
+# The writer refused a document whose hash did not describe its names, so a disagreeing pair that
+# reached the disk did not come from the writer. That is the whole reason the check is also here:
+# the hook reads a file, not the code path that meant to write it, and a record is a claim anyone
+# with write access to `.git/camel-passed` can make. A hand-made record can still state a coherent
+# set of plans -- nothing local can prove it was measured -- but it can no longer state an incoherent
+# one and be waved through, and those are different amounts of trust, not the same one.
+#
+# The range of this push also carries the earlier refused merge, so the assertions name this commit:
+# a refusal with the right sentence about the wrong commit would otherwise pass as a reading.
+& git -C $work checkout --quiet -B 'lane/third' 2>&1 | Out-Null
+Set-Content -LiteralPath (Join-Path $work 'third.txt') -Value 'third'
+& git -C $work add -A 2>&1 | Out-Null
+& git -C $work commit --quiet -m 'lane: a third change' 2>&1 | Out-Null
+& git -C $work checkout --quiet develop 2>&1 | Out-Null
+& git -C $work merge --quiet --no-ff 'lane/third' -m 'merge third lane' 2>&1 | Out-Null
+$third = (& git -C $work rev-parse HEAD).Trim()
+$incoherent = @{
+    sha = $third; firstParent = (& git -C $work rev-parse 'HEAD^1').Trim(); secondParent = 'x'
+    planSet = @{ names = @($planName); hash = $wrongPlanHash; count = 1 }
+    baseline = @{ sha = 'x'; source = 'forged' }
+    readings = @{ cases = 12; fixed = 1; new = 0; changed = 0 }
+}
+[System.IO.File]::WriteAllText((Join-Path $passedDir "$third.json"), (($incoherent | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+$push = Invoke-Git $work @('push', 'origin', 'develop')
+Check 'a record whose plan-set hash does not describe its names does not open the door' ($push.Exit -ne 0) $push.Text
+Check 'and the refusal is this commit, saying the two hashes differ' `
+    ($push.Text -match [regex]::Escape($third.Substring(0, 9)) -and $push.Text -match [regex]::Escape('the set and its hash are not the same set')) $push.Text
+
+# --- 8. a merge with nothing to measure is a record of its own ----------------------------------
+# Every file a documentation-only merge touches is a file no plan covers, so `--changed` selects no
+# plan and there is nothing to compare. That is not "the gate is down" (exit 2 with no reading) and it
+# is not "measured and green" (a comparison with zeros in it): it is a third claim, and a push has to
+# be able to tell it apart from the other two. The writer refuses `--measured none` unless it says why
+# and names the gate that decided it, and `verify` refuses a hand-written one that carries rows.
+& git -C $work reset --quiet --hard origin/develop 2>&1 | Out-Null
+& git -C $work checkout --quiet -B 'lane/docs' $base 2>&1 | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $work 'internal/questions') | Out-Null
+Set-Content -LiteralPath (Join-Path $work 'internal/questions/scratch.md') -Value 'a question'
+& git -C $work add -A 2>&1 | Out-Null
+& git -C $work commit --quiet -m 'lane: a question page' 2>&1 | Out-Null
+$docsLane = (& git -C $work rev-parse HEAD).Trim()
+& git -C $work checkout --quiet develop 2>&1 | Out-Null
+$docsBase = (& git -C $work rev-parse HEAD).Trim()
+& git -C $work merge --quiet --no-ff 'lane/docs' -m 'merge a question page' 2>&1 | Out-Null
+$docsMerge = (& git -C $work rev-parse HEAD).Trim()
+
+$docsArgs = @((Join-Path $work 'scripts/merge-record.mjs'), 'write',
+    '--merge', $docsMerge, '--first-parent', $docsBase, '--second-parent', $docsLane,
+    '--branch', 'lane/docs', '--tree', $work, '--out', $passedDir)
+
+$noWhy = @(& node @($docsArgs + @('--measured', 'none', '--gate', 'rows', '--gate', 'docs-only')) 2>&1)
+Check 'a docs-only record without a reason is refused' ($LASTEXITCODE -eq 2) (($noWhy | ForEach-Object { "$_" }) -join ' / ')
+$noGate = @(& node @($docsArgs + @('--measured', 'none', '--why', 'documentation only')) 2>&1)
+Check 'a docs-only record without the gate that decided it is refused' ($LASTEXITCODE -eq 2) (($noGate | ForEach-Object { "$_" }) -join ' / ')
+
+$docsOut = @(& node @($docsArgs + @('--measured', 'none', '--why', 'documentation only', '--gate', 'docs-only')) 2>&1)
+$docsExit = $LASTEXITCODE
+Check 'a docs-only record is written' ($docsExit -eq 0 -and (Test-Path (Join-Path $passedDir "$docsMerge.json"))) (($docsOut | ForEach-Object { "$_" }) -join ' / ')
+$savedDocs = Get-Content -LiteralPath (Join-Path $passedDir "$docsMerge.json") -Raw | ConvertFrom-Json
+Check 'it says nothing was measured' ($savedDocs.measured -eq 'none') "$($savedDocs.measured)"
+Check 'it says why' ($savedDocs.why -match 'documentation') "$($savedDocs.why)"
+Check 'it names no plans and no rows' ($savedDocs.planSet.count -eq 0 -and $savedDocs.readings.cases -eq 0) "count=$($savedDocs.planSet.count) cases=$($savedDocs.readings.cases)"
+Check 'it names the gate that decided it' ($savedDocs.gates -contains 'docs-only') ($savedDocs.gates -join ',')
+
+$push = Invoke-Git $work @('push', 'origin', "$($docsMerge):refs/heads/develop")
+Check 'a docs-only merge is pushed' ($push.Exit -eq 0) $push.Text
+Check 'and the remote is that merge' (((& git -C $origin rev-parse develop)).Trim() -eq $docsMerge)
+
+# --- 9. a hand-written docs-only record cannot claim rows ---------------------------------------
+# The hook reads the file, not the writer. A record that says `measured: none` and carries rows is a
+# document contradicting itself, and the whole point of the field is that the two readings are told
+# apart -- so `verify` refuses it rather than reading the zeros.
+& git -C $work checkout --quiet -B 'lane/docs2' $docsMerge 2>&1 | Out-Null
+Set-Content -LiteralPath (Join-Path $work 'internal/questions/second.md') -Value 'another question'
+& git -C $work add -A 2>&1 | Out-Null
+& git -C $work commit --quiet -m 'lane: another question page' 2>&1 | Out-Null
+& git -C $work checkout --quiet develop 2>&1 | Out-Null
+& git -C $work merge --quiet --no-ff 'lane/docs2' -m 'merge another question page' 2>&1 | Out-Null
+$docsAfter = (& git -C $work rev-parse HEAD).Trim()
+$forgedDocs = @{
+    sha = $docsAfter; firstParent = (& git -C $work rev-parse 'HEAD^1').Trim(); secondParent = 'x'
+    planSet = @{ names = @(); hash = '0-9e37'; count = 0 }
+    baseline = @{ sha = 'x'; source = 'none (documentation only)'; cases = $null }
+    readings = @{ cases = 12; fixed = 0; new = 0; changed = 0 }
+    gates = @('headers', 'docs-only'); measured = 'none'; why = 'documentation only'
+}
+[System.IO.File]::WriteAllText((Join-Path $passedDir "$docsAfter.json"), (($forgedDocs | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+$push = Invoke-Git $work @('push', 'origin', 'develop')
+Check 'a docs-only record carrying rows does not open the door' ($push.Exit -ne 0) $push.Text
+Check 'and the refusal says the two readings disagree' ($push.Text -match 'nothing was measured and reports') $push.Text
 
 # --- result ------------------------------------------------------------------
 & git -C $work worktree remove --force $tree 2>&1 | Out-Null

@@ -132,7 +132,7 @@ if [ -n "$develop_local" ]; then
     node "$top/scripts/merge-record.mjs" verify "$develop_remote" "$develop_local" >&2
     state=$?
     if [ "$state" -eq 1 ]; then
-        echo "pre-push: refusing to push $develop_push: the merge commits named above have no reading." >&2
+        echo "pre-push: refusing to push $develop_push: the merge commits named above have no reading that holds." >&2
         echo "pre-push: a gate refuses a push, not a commit -- so a merge it refused is still on this branch" >&2
         echo "pre-push: and this push would publish it. Merge those lanes again through the merge tool." >&2
         exit 1

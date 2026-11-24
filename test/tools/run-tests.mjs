@@ -913,6 +913,19 @@ function parseArgs(argv) {
         // which is what removes the need for a mode that suppresses the narration.
         // `options.listKnownRows` is where `printResult` collects the verdicts while it prints them.
         listKnown: false,
+        // `--list-cases` answers "which cases would this selection run" without starting one: the
+        // same plan loading, `[[sweeps]]` expansion and tier filter a run uses, printed as one JSON
+        // row per case, and no install is consulted because nothing is executed. It is the reading
+        // `--changed` hands to `scripts/selection-cases.mjs` and the one a selection record is
+        // compared against; a second implementation of "which cases are in this selection" would
+        // agree on the day it was written and disagree the first time a plan learned a sweep.
+        listCases: false,
+        // `--selection-cases <file>` runs exactly the cases a recorded selection names
+        // (`{"cases": ["<plan id>/<case name>", ...]}`), instead of every case of the selected
+        // plans. A case list computed from the change is only meaningful if the run executes that
+        // list: handing the plans over and letting the tier expand them again is how a case got
+        // selected because its whole plan was.
+        selectionCases: null,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
@@ -920,6 +933,12 @@ function parseArgs(argv) {
             options.updateGolden = true
         } else if (arg === '--selection-empty') {
             options.selectionEmpty = true
+        } else if (arg === '--list-cases') {
+            options.listCases = true
+        } else if (arg === '--selection-cases' && i + 1 < argv.length) {
+            options.selectionCases = path.resolve(process.cwd(), argv[++i])
+        } else if (arg.startsWith('--selection-cases=')) {
+            options.selectionCases = path.resolve(process.cwd(), arg.slice('--selection-cases='.length))
         } else if (arg === '--list-known') {
             options.listKnown = true
         } else if (arg === '--selection-layer' && i + 1 < argv.length) {
@@ -3254,11 +3273,16 @@ function coveredTiers(tier, compileOnly = false) {
 function relPath(abs) {
     return path.relative(path.resolve(TEST_ROOT, '..'), abs).split(path.sep).join('/')
 }
-function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
+function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false, keep = null) {
     const order = []
     for (const plan of plans) {
         for (const test of plan.tests) order.push({ plan, test })
     }
+    // `keep` is a recorded case selection (`--selection-cases`): a test outside it is not selected
+    // by anything, whatever layer it belongs to. It is applied beside the layer rule instead of
+    // after it, so the accounting below counts what this run starts: a narrowed plan whose entries
+    // were all left out is not a plan that "began no test of its own layer" -- it was not selected.
+    const keptBySelection = (plan, test) => keep === null || keep(listedName(plan, test))
     const wants = (plan, test) => {
         // A plan the schema rejected fails in every layer: its tests never ran, so no layer can
         // honestly say the plan is clean.
@@ -3282,7 +3306,7 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
         // A plan file named as a target runs in full: naming the plan is the intent, and a plan
         // whose tests are mostly slow would otherwise run almost nothing. A directory target
         // still selects the layer, so the whole-tree `--tier` stays meaningful.
-        if (namedPlans.has(entry.plan.__planPath) || wants(entry.plan, entry.test)) {
+        if ((namedPlans.has(entry.plan.__planPath) || wants(entry.plan, entry.test)) && keptBySelection(entry.plan, entry.test)) {
             selected.add(index)
         }
     })
@@ -3328,7 +3352,7 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
         if (tests.length > 0) {
             selectedPlans.push({ ...plan, tests })
             let declaredHere = 0
-            for (const test of plan.tests) if (wants(plan, test)) declaredHere++
+            for (const test of plan.tests) if (wants(plan, test) && keptBySelection(plan, test)) declaredHere++
             tierAccounting.push({
                 plan: relPath(plan.__planPath),
                 declared: declaredHere,
@@ -3344,6 +3368,11 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
             emptyByLayer.push(plan.__planPath)
         } else if (declared === 0) {
             unproven.push(`${key}: the plan declares no test at all, so this run proves nothing about it`)
+        } else if (keep !== null) {
+            // A plan this recorded selection names no case of is not a plan that started nothing:
+            // the selection left its entries out on purpose, and the count of what the change does
+            // touch is the reading, not a zero to explain.
+            emptyByLayer.push(plan.__planPath)
         } else if (covered.has(own)) {
             unproven.push(
                 `${key}: its own tier is '${own}', the layer this run covers, and it declares ` +
@@ -3405,7 +3434,14 @@ function planLineOf(planPath, needle) {
     return index === -1 ? null : index + 1
 }
 
-function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false) {
+/**
+ * The plans a selection resolves to, with every test the layer keeps from them. Exported because
+ * the coverage table (`scripts/coverage-table.mjs`) must count the cases a selection selects
+ * through this loader: a second definition of "which cases are in this plan" -- entries only, no
+ * `[[sweeps]]` copies, no back-end expansion, no companion closure -- would agree with a run today
+ * and disagree the first time a plan learned a sweep.
+ */
+export function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false, keep = null) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
     // plans a directory reaches follow the layer. The same plan reached both ways is named,
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
@@ -3464,10 +3500,186 @@ function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false,
     // another layer -- and the count that separates them is the one before the filter, not after
     // it: `plans` is the post-filter list and reads 0 in that message's own case.
     return {
-        ...selectTier(plans, tier, namedPlans, compileOnly === true),
+        ...selectTier(plans, tier, namedPlans, compileOnly === true, keep),
         reachedNothing,
         reachedButFiltered: plans.length,
     }
+}
+
+/**
+ * One row per case a selection would run: `{name, plan, case, tier, refs}`. `name` is the
+ * `<plan id>/<name>` pair `--list-known` prints, so a listed case can be compared with a recorded
+ * one without a translation table. `case` is the entry's input path (repository-relative) when it
+ * has one -- the thing a case-level selection matches a changed file against; `refs` are the
+ * companions the run pulls in for a differential or back-end entry, so a narrower selection can
+ * keep its closure without a second copy of that rule.
+ */
+function caseRows(selected) {
+    const rows = new Map()
+    for (const plan of selected.plans) {
+        for (const test of plan.tests) {
+            const planId = test.__planId || plan.id || path.basename(plan.__planPath, '.plan.toml')
+            const name = listedName(plan, test)
+            if (rows.has(name)) continue
+            const refs = []
+            if (test.kind === 'differential' && test.compare_to) refs.push(`${planId}/${test.compare_to}`)
+            if (test.__backendReference) refs.push(`${planId}/${test.__backendReference}`)
+            const input = test.case ? path.resolve(path.dirname(plan.__planPath), test.case) : null
+            rows.set(name, {
+                name,
+                plan: relPath(plan.__planPath),
+                case: input ? relPath(input) : null,
+                tier: testTier(plan, test),
+                refs: [...new Set(refs)],
+            })
+        }
+    }
+    return [...rows.values()].sort((lhs, rhs) => lhs.name.localeCompare(rhs.name))
+}
+
+/**
+ * One entry of a record's `cases`: the case's name.
+ *
+ * `scripts/selection-cases.mjs` writes `{ name, cause }` per case -- the cause is what says why the
+ * change selected it, and it is the reading the record exists for. Reading such an entry as a name
+ * (`String(entry)`) makes every one of them the single string `[object Object]`, which the set then
+ * de-duplicates into exactly one name: the run is told it must start a case called [object Object],
+ * refuses with `[PLAN ERROR] ... names 1 case(s) this run would not start`, and starts nothing. Every
+ * merge that handed its record to `--selection-cases` read exit 2 and 0 rows that way, and the
+ * message blamed "a stale record or another tree".
+ *
+ * So an entry is its name, or an object that carries one; anything else is refused **by its shape**
+ * rather than coerced, because a record whose entries this run cannot read is a record it cannot
+ * execute, and a coerced name is a silent one.
+ */
+function selectionCaseName(entry) {
+    if (typeof entry === 'string' && entry.length > 0) return entry
+    if (
+        entry !== null &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        typeof entry.name === 'string' &&
+        entry.name.length > 0
+    ) {
+        return entry.name
+    }
+    const shape = entry === null
+        ? 'null'
+        : Array.isArray(entry)
+          ? 'an array'
+          : typeof entry === 'object'
+            ? `an object whose keys are [${Object.keys(entry).join(', ')}]`
+            : `a ${typeof entry}`
+    throw new Error(
+        `--selection-cases: a case entry in the record is ${shape}, and this run cannot read a name ` +
+            `out of it. A case is its name, or an object that carries one -- a selection record writes ` +
+            `{"name": ..., "cause": ...}. Coercing the entry instead is how every recorded case became ` +
+            `the one name "[object Object]".`
+    )
+}
+
+/**
+ * A refusal that is a plan error, not a crash: `main` prints one `[PLAN ERROR]` line and exits 2.
+ * A selection this run cannot read is not measured -- nothing starts -- and 2 is the code this
+ * runner already gives "not measured" (a missing install, an unreadable base). A throw would exit 1,
+ * which says a test failed: the wrong answer, because no test ran.
+ */
+function selectionRefusal(message) {
+    const error = new Error(message)
+    error.planRefusal = true
+    return error
+}
+
+/**
+ * `--selection-cases`: the names a run must execute. An empty or unreadable list is refused rather
+ * than read as "no narrowing": the two mean opposite things, and only one of them is a selection.
+ *
+ * "Empty" has two causes that must not read the same: a selection that names nothing (refused -- it
+ * must not become a plan expansion), and a record that kept a count and a digest instead of its rows
+ * because the list was too long to store. The second one cannot narrow a run at all, so it is named
+ * as the digest it is rather than reported as "names no case".
+ */
+function readCaseSelection(file) {
+    if (!fs.existsSync(file)) throw selectionRefusal(`--selection-cases: ${file} does not exist`)
+    let doc
+    try {
+        doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch (error) {
+        throw selectionRefusal(`--selection-cases: ${file} is not JSON (${error.message})`)
+    }
+    const names = Array.isArray(doc) ? doc : doc && doc.cases
+    if (!Array.isArray(names)) {
+        throw selectionRefusal(
+            `--selection-cases: ${file} carries no 'cases' array; a selection record writes one ` +
+                '(scripts/selection-cases.mjs --names writes the rows a run executes)'
+        )
+    }
+    if (names.length === 0) {
+        if (doc && doc.cases_recorded === false) {
+            throw selectionRefusal(
+                `--selection-cases: ${file} keeps ${doc.case_count} case(s) as ${doc.case_digest} and ` +
+                    `not as rows, so it cannot name what a run must start. Write the run's list with ` +
+                    'scripts/selection-cases.mjs --names, or replay this record with --verify.'
+            )
+        }
+        throw selectionRefusal(
+            `--selection-cases: ${file} names no case; an empty selection must not become a plan expansion`
+        )
+    }
+    return new Set(names.map(selectionCaseName))
+}
+
+/**
+ * The names a recorded selection carries that this run would not start: a stale record, a record
+ * taken at another tier, or a case another lane removed. Empty means the run is exactly the list.
+ */
+function missingCaseNames(plans, wantedNames) {
+    if (wantedNames === null) return []
+    const started = new Set()
+    for (const plan of plans) for (const test of plan.tests) started.add(listedName(plan, test))
+    return [...wantedNames].filter((name) => !started.has(name))
+}
+
+/**
+ * `--list-cases`: the cases this selection would run, printed as JSON rows, nothing started and no
+ * install consulted. It reads the plan tree through `loadPlans`, so the `[[sweeps]]` copies, the
+ * layer filter and the companion closure are the run's own; a listing that agreed with the run only
+ * by construction would be a second definition of the same selection.
+ */
+function listSelectedCases(options) {
+    const wantedNames = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
+    const keep = wantedNames === null ? null : (name) => wantedNames.has(name)
+    const selected = loadPlans(
+        options.targets,
+        options.tier,
+        options.layeredPlans,
+        options.compileOnly === true,
+        false,
+        keep
+    )
+    if (selected.reachedNothing.length > 0) {
+        for (const target of selected.reachedNothing) {
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${relPath(path.resolve(target))} holds no ` +
+                    '*.plan.toml, so it names no case'
+            )
+        }
+        return 2
+    }
+    const missing = missingCaseNames(selected.plans, wantedNames)
+    if (missing.length > 0) {
+        const shown = missing.slice(0, 5).join(', ')
+        const rest = missing.length > 5 ? ` and ${missing.length - 5} more` : ''
+        console.error(
+            `${COLORS.red}[PLAN ERROR]${COLORS.reset} --selection-cases names ${missing.length} case(s) ` +
+                `this selection would not start: ${shown}${rest}`
+        )
+        return 2
+    }
+    const rows = caseRows(selected)
+    for (const row of rows) console.log(JSON.stringify(row))
+    console.log(`cases: ${rows.length}`)
+    return 0
 }
 
 /** The result of a test the runner itself could not run: its failure is reported like any other. */
@@ -4347,6 +4559,12 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
 async function main() {
     const options = parseArgs(process.argv.slice(2))
+    if (options.listCases) {
+        // A question about the plan tree, not a run: nothing executes, so no install is consulted.
+        const status = listSelectedCases(options)
+        process.exitCode = status
+        return status
+    }
     // An empty selection starts no plan, so no binary is consulted: refusing here for a missing
     // install would turn "nothing to run" into a red about a build, which is a different question.
     if (!options.selectionEmpty) preflightBuild(options)
@@ -4364,14 +4582,37 @@ async function main() {
             return false
         }
     })
+    // A recorded case selection (`--changed` hands one over) runs exactly those cases. It is a
+    // narrowing of the same load, not a second one: the plans are still the selection's targets, and
+    // `keep` decides which of their entries the change touched.
+    const wantedNames = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
+    const keep = wantedNames === null ? null : (name) => wantedNames.has(name)
     const selected = loadPlans(
         options.targets,
         options.tier,
         options.layeredPlans,
         options.compileOnly === true,
-        options.selectionEmpty === true
+        options.selectionEmpty === true,
+        keep
     )
     const plans = selected.plans
+    // A name the recorded selection carries that this run would not start is a stale or wrong
+    // record, and running the rest of it would be a run that silently proves less than the record
+    // says. It is refused with the base the record names, never dropped.
+    if (wantedNames !== null) {
+        const missing = missingCaseNames(plans, wantedNames)
+        if (missing.length > 0) {
+            const shown = missing.slice(0, 5).join(', ')
+            const rest = missing.length > 5 ? ` and ${missing.length - 5} more` : ''
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} --selection-cases names ${missing.length} case(s) ` +
+                    `this run would not start: ${shown}${rest}. The record is stale or was taken against ` +
+                    'another tree, so nothing is started.'
+            )
+            process.exitCode = 2
+            return 2
+        }
+    }
     // A target that reached no plan file refuses the run before anything starts: nothing would run,
     // so no [SUMMARY] could say anything true about it. It gets a sentence of its own -- the layer
     // sentence further down answers "these plans belong to another tier", a different question and
@@ -4669,6 +4910,27 @@ async function main() {
         )
     )
 
+    // A run that starts no test measures nothing, and the code says which kind of nothing: 2 is
+    // "not measured" -- the same code a missing install and an unreadable selection get -- while 0
+    // would read as a green run (a zero-row `[SUMMARY]` is the same three numbers a green one
+    // prints) and 1 would blame a test that never ran. `--selection-empty` is the way a gate reaches
+    // this on purpose: a change whose plans hold no case in this layer. Refusing to call that a pass
+    // is the point -- a run that proves nothing is not a run that found nothing wrong.
+    //
+    // The count is the summary's own four fields, the same sum `printRunSummary` prints as `total`:
+    // the summary has no `total` field, and reading one would have made this condition always false
+    // -- the run would have exited 0 while these words said 2.
+    const nothingStarted =
+        outcome.summary.pass + outcome.summary.fail + outcome.summary.skip + outcome.summary.xfail === 0
+    if (nothingStarted) {
+        // Before the `[provenance]` line, which has to stay right before `[SUMMARY]`
+        // (test/cases/tools/provenance.mjs pins the pair): the sentence explains the numbers that
+        // follow, so it goes on the near side of them.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} nothing was started, so nothing was measured: ` +
+                'exit 2, which is not a green run and not a red one'
+        )
+    }
     printProvenance(options)
     printRunSummary(outcome.summary)
     // After the numbers, and not between them and the line that states what they belong to: a
@@ -4725,7 +4987,7 @@ async function main() {
     // `[provenance]` line unable to name the tree the reading belongs to, and what the wrapper
     // carries to the host on the next run. A tree that could not be read at all counts as the
     // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
-    const exitCode = outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    const exitCode = nothingStarted ? 2 : outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
     // The whole of `--list-known`'s output, emitted last: one `{name, verdict, reading}` per test.
     // Last because the reader is a program that takes the lines after this point, and every line
     // before it is the run a person reads -- the summary, the tree verdict, the roster, the
@@ -4741,6 +5003,16 @@ async function main() {
 // `loadPlanTests` and `expandSweeps` from here, and importing a module must not run the tests.
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
     main().catch((error) => {
+        if (error && error.planRefusal === true) {
+            // A recorded selection this run cannot read: one line and exit 2, no stack. The stack a
+            // throw prints says which line of this file refused, which is not the question a reader
+            // of a gate log has; and exit 1 would say a test failed when nothing was started.
+            console.error(`${COLORS.red}[PLAN ERROR]${COLORS.reset} ${error.message}`)
+            console.error(
+                `${COLORS.cyan}[INFO]${COLORS.reset} nothing was started, so nothing was measured: exit 2`
+            )
+            process.exit(2)
+        }
         console.error(error && error.stack ? error.stack : String(error))
         if (fs.existsSync(TEST_SCRATCH_RUN)) {
             console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)

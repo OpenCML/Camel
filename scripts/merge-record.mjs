@@ -38,6 +38,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { planSetHash } from './plan-set.mjs'
 
 const ZERO = '0'.repeat(40)
 const SHA = /^[0-9a-f]{40}$/
@@ -92,19 +93,51 @@ function doWrite() {
     const outDir = arg('--out')
     const baselineSource = arg('--baseline-source') || 'unknown'
     const gates = argAll('--gate')
-    if (!diffFile || !outDir) refuse(2, 'write needs --diff <diff.json> and --out <dir>')
+    // What this record's numbers are about. `rows` is a comparison of two trees' readings; `none` is a
+    // merge with nothing to measure -- every file it touches is documentation, no plan is selected,
+    // and running the suite anyway would be a reading about some other change. The two are written as
+    // two different claims rather than one claim with zeros in it, because a reader (and the verify
+    // path a push runs) has to be able to tell `measured and green` from `nothing to measure`, and a
+    // zero cannot say which. `none` is refused unless it says why and names the gate that decided it.
+    const measured = arg('--measured') || 'rows'
+    const why = (arg('--why') || '').trim()
+    if (measured !== 'rows' && measured !== 'none') {
+        refuse(2, `--measured takes 'rows' or 'none'; it got '${measured}'`)
+    }
+    const docsOnly = measured === 'none'
+    if (docsOnly) {
+        if (!outDir) refuse(2, 'write needs --out <dir>')
+        if (!why) refuse(2, 'write --measured none needs --why: a record that says nothing was measured has to say why nothing was')
+        if (!gates.includes('docs-only')) {
+            refuse(2, "write --measured none needs --gate docs-only: the gate that decided there was nothing to measure is part of the claim")
+        }
+    }
+    if ((!diffFile && !docsOnly) || !outDir) refuse(2, 'write needs --diff <diff.json> and --out <dir>')
     for (const [name, value] of [['--merge', merge], ['--first-parent', firstParent], ['--second-parent', secondParent]]) {
         if (!value || !SHA.test(value)) refuse(2, `write needs ${name} <full commit sha>; it was '${value ?? ''}'`)
     }
 
-    if (!fs.existsSync(diffFile)) {
+    if (!fs.existsSync(diffFile) && !docsOnly) {
         refuse(2, `no comparison at ${diffFile}: a record of a merge nobody compared would be a claim with no reading`)
     }
     let diff
-    try {
-        diff = JSON.parse(fs.readFileSync(diffFile, 'utf8'))
-    } catch (error) {
-        refuse(2, `${diffFile} is not JSON: ${error.message}`)
+    if (docsOnly) {
+        // The empty plan set, stated rather than left out: `verify` recomputes the hash of the names it
+        // is given, so a document that named no set at all could not be told from one whose set was
+        // dropped. The baseline is named by its sha and by the sentence that says it was not measured.
+        diff = {
+            planSet: { names: [], hash: planSetHash([]) },
+            baseline: { sha: firstParent, source: 'none (documentation only)', file: '', cases: null },
+            fixed: [],
+            new: [],
+            changed: [],
+        }
+    } else {
+        try {
+            diff = JSON.parse(fs.readFileSync(diffFile, 'utf8'))
+        } catch (error) {
+            refuse(2, `${diffFile} is not JSON: ${error.message}`)
+        }
     }
     const fixed = Array.isArray(diff.fixed) ? diff.fixed : null
     const regressed = Array.isArray(diff.new) ? diff.new : null
@@ -112,6 +145,20 @@ function doWrite() {
     if (!fixed || !regressed || !changed) refuse(2, `${diffFile} does not hold the three sets (fixed, new, changed)`)
     if (!diff.planSet || !Array.isArray(diff.planSet.names) || !diff.planSet.hash) {
         refuse(2, `${diffFile} does not name the plan set: a record that cannot say which plans were read is not checkable`)
+    }
+    // The hash is recomputed from the names rather than copied through. A field this file only
+    // carries is a field nobody checks: the document would say "these 5 plans" beside a hash of some
+    // other set, both from the same writer, and the record would look checkable while not being so.
+    // The algorithm is `plan-set.mjs`, the one `merge-readings.mjs` keys a baseline by -- shared, so
+    // the two cannot answer this question differently. A disagreement is exit 2 and not 1: the
+    // reading is not refuted here, it is unreadable as a claim about a plan set.
+    const planHash = planSetHash(diff.planSet.names)
+    if (planHash !== diff.planSet.hash) {
+        refuse(
+            2,
+            `${diffFile} names ${diff.planSet.names.length} plan(s) that hash to ${planHash}, but it says ${diff.planSet.hash}: ` +
+                'the plan set and its hash have to be the same set, and only the writer that produced both can repair it',
+        )
     }
 
     // The commit this claim is about, read from git and not from the caller: the parents are what a
@@ -175,9 +222,16 @@ function doWrite() {
             file: diff.baseline?.file ?? '',
             cases: diff.baseline?.cases ?? null,
         },
-        readings: { cases: diff.baseline?.cases ?? null, fixed: fixed.length, new: regressed.length, changed: changed.length },
+        // cases is the number of rows the baseline held. For a docs-only merge there is no baseline and
+        // no rows, so it is 0 and not null: a document that says `nothing was measured` beside a null
+        // cannot be told from one whose baseline went missing.
+        readings: { cases: docsOnly ? 0 : (diff.baseline?.cases ?? null), fixed: fixed.length, new: regressed.length, changed: changed.length },
         cases: { fixed, new: regressed, changed },
         gates,
+        // Only present when there was nothing to measure: a record that always carried `measured` would
+        // make every row record claim a mode it never chose, and the reader of a file on disk cannot
+        // ask the writer what it meant.
+        ...(docsOnly ? { measured: 'none', why } : {}),
         measuredAt: new Date().toISOString(),
         host: os.hostname(),
         // Which merge position wrote this: one lane, or a batch. A reader needs it to know whether the
@@ -256,6 +310,59 @@ function doVerify() {
             )
             continue
         }
+        // `measured: none` is a claim of its own, and it is checked as one: it has to say why nothing
+        // was measured, it has to name the gate that decided that, and it cannot carry rows. The
+        // alternative -- letting it through on its zeros -- would make `nothing to measure` and `read
+        // nothing` the same record, which is the confusion this field exists to end.
+        if (record.measured === 'none') {
+            const reason = String(record.why || '').trim()
+            if (!reason) {
+                problems.push(`${sha.slice(0, 9)}  ${subject}  -- the record says nothing was measured and does not say why`)
+                continue
+            }
+            if (!Array.isArray(record.gates) || !record.gates.includes('docs-only')) {
+                problems.push(
+                    `${sha.slice(0, 9)}  ${subject}  -- the record says nothing was measured, and no gate in it says ` +
+                        `'docs-only' (it lists: ${(Array.isArray(record.gates) ? record.gates : []).join(', ') || 'none'})`,
+                )
+                continue
+            }
+            if (Number(record.readings?.cases) !== 0) {
+                problems.push(
+                    `${sha.slice(0, 9)}  ${subject}  -- the record says nothing was measured and reports ` +
+                        `${String(record.readings?.cases)} case(s)`,
+                )
+                continue
+            }
+        }
+        // The plan set the record claims, checked against itself. `write` already refused a document
+        // whose hash did not describe its names, so a record that reached the disk through this
+        // program holds a coherent pair -- which means a disagreeing pair was not written by it. That
+        // is exactly why the check belongs here as well as there: the record is a file on disk, and a
+        // file on disk is what the hook reads, not the code path that meant to write it. A hand-made
+        // record can still state a coherent set; it cannot any longer state an incoherent one and be
+        // waved through, which is the difference between a checkable field and a field with a name.
+        const plan = record.planSet
+        if (!plan || !Array.isArray(plan.names) || !plan.hash) {
+            problems.push(
+                `${sha.slice(0, 9)}  ${subject}  -- the record does not name the plan set, so it cannot say which plans were read`,
+            )
+            continue
+        }
+        const recomputed = planSetHash(plan.names)
+        if (recomputed !== plan.hash) {
+            problems.push(
+                `${sha.slice(0, 9)}  ${subject}  -- the record's ${plan.names.length} plan name(s) hash to ${recomputed}, ` +
+                    `but it says ${plan.hash}: the set and its hash are not the same set`,
+            )
+            continue
+        }
+        if (plan.count !== plan.names.length) {
+            problems.push(
+                `${sha.slice(0, 9)}  ${subject}  -- the record says ${String(plan.count)} plan(s) and names ${plan.names.length}`,
+            )
+            continue
+        }
         const read = record.readings || {}
         if (Number(read.new) > 0 || Number(read.changed) > 0) {
             problems.push(
@@ -265,7 +372,7 @@ function doVerify() {
     }
 
     if (problems.length > 0) {
-        say(`merge-record: ${problems.length} merge commit(s) in this push have no reading (${merges} merge(s) in range)`)
+        say(`merge-record: ${problems.length} merge commit(s) in this push have no reading that holds (${merges} merge(s) in range)`)
         for (const problem of problems) say(`  ${problem}`)
         say('')
         say('A gate refuses a push and not a commit, so a merge that was refused is still on the branch and the')

@@ -156,7 +156,7 @@ function Get-BatchPlanSet {
     return @($ordinal)
 }
 
-# The plan set's name, in the shape `scripts/merge-readings.mjs#planSetHash` gives it: `<count>-<hex>`
+# The plan set's name, in the shape `scripts/plan-set.mjs#planSetHash` gives it: `<count>-<hex>`
 # over the names joined by newlines, each character folded in with `h * 31 + c` on 32 bits.
 function Get-PlanSetHash {
     param([string[]] $Names)
