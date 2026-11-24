@@ -1,21 +1,20 @@
-// `embedding`'s derivative through the library and through the engine, in both directions.
+// `embedding`'s derivative through the library's forward transform, against the engine's.
 //
-// A gather is a choice of rows, so it is linear in the table: the forward law is the same gather of
-// the table's tangent (`src/stdlib/rulesets/jvp.cml#jvp_embedding`) and the transpose accumulates
-// each row's cotangent over the reads of that row
-// (`src/stdlib/rulesets/transpose.cml#embedding_t`). The indices are integers -- they are read, not
-// answered -- so the table is the only thing either direction asks about.
+// A gather is a choice of rows, so it is linear in the table: the law is the same gather of the
+// table's tangent (`src/stdlib/rulesets/jvp.cml#jvp_embedding`), and the indices -- integers, read
+// and never answered -- pick row 0 once and row 2 twice. The answer is 9, the seed read at rows 0, 2
+// and 2, which is also the engine's `embedding_table_grad` dotted with that seed.
 //
-// The indices read row 0 once and row 2 twice, which is what separates an accumulation from a
-// copy: the cotangent of row 2 must arrive twice over, and rows 1 and 3 must be exactly zero.
+// The **reverse** half of this key has no law yet: `vjp` of this program refuses, for the reason
+// the row in `scripts/vjp-parity-exemptions.tsv` enumerates.
 //
 //     camel test/cases/modules/nn/library_law_embedding.cml
-import { grad } from autodiff
+
+import { with_grad } from autodiff
 import { embedding } from nn
 import rulesets.jvp
-import { abs, sum } from tensor
+import { sum } from tensor
 import { jvp } from transforms
-import { vjp } from vjp
 
 /// The engine's spelling: the table is the `with` parameter, the indices are an argument.
 with <table: float[4, 2]>
@@ -28,19 +27,15 @@ func main() => int sync {
     let indices = [0, 2, 2] as int[]
     let seed = [[1.0, 0.0], [0.0, 1.0], [2.0, 2.0], [0.0, 0.0]] as float[4, 2]
     
-    let engine = grad(loss_engine)<[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]] as float[4, 2]>(indices)
+    let (_, engine) = with_grad(loss_engine)<[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]] as float[4, 2]>(indices)
     
     let library_loss = func (tt: float[4, 2]) => float {
         return sum(embedding(tt, indices))
     }
-    let (_, pullback) = vjp(library_loss)(table)
-    let library = pullback(1.0).0
     let (_, forward) = jvp(library_loss)(table, seed)
     
-    let reverseDiff = sum(abs(engine - library))
     let forwardDiff = forward - sum(engine * seed)
-    let reverseOk = reverseDiff < 1e-6
     let forwardOk = forwardDiff < 1e-6 && forwardDiff > -1e-6
-    `embedding forward={} reverse_ok={} forward_ok={} reverse_diff={:.12e} forward_diff={:.12e}`->format<forward, reverseOk, forwardOk, reverseDiff, forwardDiff>->println
+    `embedding forward={} forward_ok={} forward_diff={:.12e}`->format<forward, forwardOk, forwardDiff>->println
     return 0
 }

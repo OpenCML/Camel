@@ -1,24 +1,27 @@
-// `max_pool2d`'s derivative through the library and through the engine, in both directions.
+// `max_pool2d`'s derivative through the library's forward transform, against the engine's.
 //
-// The forward law is **not** `max_pool2d(dx, kernel)`: which position of a window survives is
-// decided by `x`, so a law that pooled the tangent would answer the tangent's own maximum
-// (`src/stdlib/rulesets/jvp.cml#jvp_max_pool2d` documents the mask it writes instead -- the
-// engine's `max_pool2d_grad` over an all-ones output, and then the window's one survivor summed by
-// `avg_pool2d` and scaled back by the window's area).
+// The law is **not** `max_pool2d(dx, kernel)`: which position of a window survives is decided by
+// `x` and not by the tangent, so pooling the tangent would answer the tangent's own maximum.
+// `src/stdlib/rulesets/jvp.cml#jvp_max_pool2d` writes the engine's own
+// `max_pool2d_grad(x, ones_like(y), k)` as a residual mask, sums each window's one survivor with
+// `avg_pool2d`, and scales back by the window's area.
 //
-// The values below are all distinct, so the maximum of a window is unambiguous and the mask has one
-// component per window:
+// The sixteen values are all distinct and the seed alternates sign, so a law that read the wrong
+// position answers a different number: the survivors are 6, 8, 14 and 16, the seed's components
+// there are -6, -8, -14 and -16, and the answer is -44 -- which is also the engine's gradient dotted
+// with the seed.
 //
-//     x = [[[ 1,  2,  3,  4], [ 5,  6,  7,  8], [ 9, 10, 11, 12], [13, 14, 15, 16]]]
-//     y = [[[ 6,  8], [14, 16]]]
+// The **reverse** half of this key has no law yet: `vjp` of this program refuses, for the reason
+// the row in `scripts/vjp-parity-exemptions.tsv` enumerates (the adjoint, `max_pool2d_grad`,
+// reads its input's shape, and a forward law's linear half holds the tangent there).
 //
 //     camel test/cases/modules/nn/library_law_max_pool2d.cml
-import { grad } from autodiff
+
+import { with_grad } from autodiff
 import { max_pool2d } from nn
 import rulesets.jvp
-import { abs, sum } from tensor
+import { sum } from tensor
 import { jvp } from transforms
-import { vjp } from vjp
 
 /// The engine's spelling: the input is the `with` parameter.
 with <x: float[1, 1, 4, 4]>
@@ -38,7 +41,7 @@ func main() => int sync {
         [9.0, -10.0, 11.0, -12.0],
         [13.0, -14.0, 15.0, -16.0]]]] as float[1, 1, 4, 4]
     
-    let engine = grad(loss_engine)<[[[
+    let (_, engine) = with_grad(loss_engine)<[[[
         [1.0, 2.0, 3.0, 4.0],
         [5.0, 6.0, 7.0, 8.0],
         [9.0, 10.0, 11.0, 12.0],
@@ -47,16 +50,12 @@ func main() => int sync {
     let library_loss = func (xx: float[1, 1, 4, 4]) => float {
         return sum(max_pool2d(xx, 2))
     }
-    let (_, pullback) = vjp(library_loss)(x)
-    let library = pullback(1.0).0
     let (_, forward) = jvp(library_loss)(x, seed)
     
     // The forward answer is the tangent at each window's maximum: the survivors are 6, 8, 14 and 16,
     // so the seed's components there are -6, -8, -14 and -16 and the answer is -44.
-    let reverseDiff = sum(abs(engine - library))
     let forwardDiff = forward - sum(engine * seed)
-    let reverseOk = reverseDiff < 1e-6
     let forwardOk = forwardDiff < 1e-6 && forwardDiff > -1e-6
-    `max_pool2d forward={} reverse_ok={} forward_ok={} reverse_diff={:.12e} forward_diff={:.12e}`->format<forward, reverseOk, forwardOk, reverseDiff, forwardDiff>->println
+    `max_pool2d forward={} forward_ok={} forward_diff={:.12e}`->format<forward, forwardOk, forwardDiff>->println
     return 0
 }

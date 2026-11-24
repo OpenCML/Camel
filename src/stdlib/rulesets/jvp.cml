@@ -34,7 +34,7 @@ import { log as math_log, pow } from math
 // modules on the same side of it. What a ruleset needs of the library is the operator's own name:
 // a law's left side spells the operator (`nn/signatures/nn.cml`), and a family cannot read
 // another module's private function.
-import { avg_pool2d, conv2d, embedding, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
+import { avg_pool2d, conv2d, embedding, max_pool2d, max_pool2d_grad } from nn
 import { abs, add_stated, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 import { is_float, is_integer, is_same, is_string, Tangent } from types
 
@@ -1596,23 +1596,6 @@ export rule jvp_log_d(x: float) { log_d(x) => func (dx: float) {
 // that the library answers the default spelling and refuses the stated one by port count, which is
 // a refusal and not a wrong number.
 
-/// `softmax_cross_entropy`'s label form: one integer class per row, the operator the URI
-/// `nn:softmax_cross_entropy_labels` names (`nn/tensor_ops.cpp`,
-/// `softmaxCrossEntropyLabelsInfer` chooses it when the target's element type is integer).
-///
-/// The stand-in is here because a law is filed under the **operator's** name and no name a program
-/// writes is this one: a program writes `softmax_cross_entropy` and the target's type is what makes
-/// the label form, so the head this family files `jvp_softmax_cross_entropy_labels` under has no
-/// spelling in the library and needs one declared. It is the same kind of stand-in `add` below is
-/// and for the same reason (a family cannot read another module's private function), and its body
-/// is the dispatch itself, so it answers what the operator answers. `lib/rulesets/transpose.cml`
-/// declares its own copy for the backward half; one name declared privately in two modules is two
-/// names, which is why `add` is declared twice already.
-func softmax_cross_entropy_labels::<T>(logits: T[...], labels: int[]) => float
-    when is_float::<T>() {
-    return softmax_cross_entropy(logits, labels)
-}
-
 /// `conv2d(input, kernel, bias)` is linear in each of its three tensors, so its tangent is the same
 /// convolution with one tangent in the place of one operand and a zero in the others:
 ///
@@ -1631,16 +1614,15 @@ func softmax_cross_entropy_labels::<T>(logits: T[...], labels: int[]) => float
 /// `conv2d_stated` is the one change that would remove the four calls below.
 export rule jvp_conv2d::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>() {
     conv2d(x, w, b) => func (dx: T[...], dw: T[...], db: T[...]) {
-        let extents = shape(conv2d(x, w, b))
         add_stated(
             add_stated(
                 conv2d(dx, w, zeros_like(b)),
                 conv2d(x, dw, zeros_like(b)),
-                extents,
-                extents),
+                shape(conv2d(x, w, b)),
+                shape(conv2d(x, w, b))),
             conv2d(zeros_like(x), zeros_like(w), db),
-            extents,
-            extents)
+            shape(conv2d(x, w, b)),
+            shape(conv2d(x, w, b)))
     }
 }
 
@@ -1657,15 +1639,24 @@ export rule jvp_conv2d::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>(
 /// `mul_stated_t` are its two laws. A window whose maximum is tied is shared equally by
 /// `max_pool2d_grad`, which is the same convention the reverse half answers with, so the two
 /// halves are adjoints of one map and not two conventions that agree on distinct maxima.
+///
+/// Nothing is bound to a `let`: the mask and the output's extents are read by the **linear** half,
+/// and a local name there is a value the transposed function is not handed ("the rule's right side
+/// reads a value the transposed function is not handed"). `jvp_maximum` pays the same price, with
+/// `shape(maximum(x, w))` written four times.
 export rule jvp_max_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
     max_pool2d(x, kernel) => func (dx: T[...]) {
-        let extents = shape(max_pool2d(x, kernel))
-        let mask = max_pool2d_grad(x, ones_like(max_pool2d(x, kernel)), kernel)
         mul_stated(
-            avg_pool2d(mul_stated(mask, dx, shape(x), shape(x)), kernel),
-            full(extents, float(kernel * kernel)),
-            extents,
-            extents)
+            avg_pool2d(
+                mul_stated(
+                    max_pool2d_grad(x, ones_like(max_pool2d(x, kernel)), kernel),
+                    dx,
+                    shape(x),
+                    shape(x)),
+                kernel),
+            full(shape(max_pool2d(x, kernel)), float(kernel * kernel)),
+            shape(max_pool2d(x, kernel)),
+            shape(max_pool2d(x, kernel)))
     }
 }
 
@@ -1680,56 +1671,8 @@ export rule jvp_avg_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
 
 /// `d(embedding(table, indices)) = embedding(dtable, indices)`: a gather is a choice of rows, so it
 /// is linear in the table and the indices are a discrete operand with no tangent.
-export rule jvp_embedding::<T, I>(table: T[...], indices: I) when is_float::<T>() {
+export rule jvp_embedding::<T>(table: T[...], indices: int[]) when is_float::<T>() {
     embedding(table, indices) => func (dtable: T[...]) {
         embedding(dtable, indices)
-    }
-}
-
-/// `softmax_cross_entropy(logits, target)`: the loss is `-sum(target * log_softmax(logits)) /
-/// batch`, so its derivative in the direction `(dlogits, dtarget)` is
-/// `sum(grad ⊙ dlogits)` with `grad` the engine's own `softmax_cross_entropy_grad(logits, target,
-/// 1.0)` -- a residual of this law, because it reads the primals and no tangent.
-///
-/// The second component answers the target's tangent as **zero**, and the target is a float tensor,
-/// so this is a choice that must be written down: the true value is `-ct * log_softmax(logits) /
-/// batch`, which is a scalar times a tensor, and a scalar becomes a tensor only through `full`, an
-/// operator with no transpose. A forward law's right side is transposed as an ordinary computation
-/// (`transpose` of its linear half), so a `full` that reads the tangent would make the whole key
-/// un-transposable, and there is no other way to write the scale. The engine answers the same
-/// thing from the other side -- `softmaxCrossEntropyVjp` accumulates a cotangent for `logits` and
-/// none for `target` (`nn/tensor_ops.cpp`) -- so the zero here is the engine's answer and not a
-/// new one; it is recorded as the one place this law answers less than the calculus does, and the
-/// day `full` has a transpose it is a two-line change.
-export rule jvp_softmax_cross_entropy::<T>(logits: T[...], target: T[...])
-    when is_float::<T>() {
-    softmax_cross_entropy(logits, target) => func (dlogits: T[...], dtarget: T[...]) {
-        (
-            sum_stated(
-                mul_stated(
-                    softmax_cross_entropy_grad(logits, target, 1.0),
-                    dlogits,
-                    shape(logits),
-                    shape(logits)),
-                shape(logits)),
-            zeros_like(target))
-    }
-}
-
-/// The label form of the same loss (`nn:softmax_cross_entropy_labels`): the labels are integers,
-/// so the only tangent is the logits', and the answer is one value and not a tuple -- a port with
-/// no tangent space is a slot the walk never asks for (`lib/rulesets/transpose.cml#take_from_type_t`
-/// is the same shape). The gradient is the engine's `softmax_cross_entropy_grad` on the same
-/// arguments, which the front end sends to the label form's own URI by the target's type.
-export rule jvp_softmax_cross_entropy_labels::<T>(logits: T[...], labels: int[])
-    when is_float::<T>() {
-    softmax_cross_entropy_labels(logits, labels) => func (dlogits: T[...]) {
-        sum_stated(
-            mul_stated(
-                softmax_cross_entropy_grad(logits, labels, 1.0),
-                dlogits,
-                shape(logits),
-                shape(logits)),
-            shape(logits))
     }
 }
