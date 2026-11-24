@@ -52,6 +52,49 @@ Check 'a Windows-spelled documentation path is documentation' (Test-DocsOnlyPath
 Check 'a ./ prefixed documentation path is documentation' (Test-DocsOnlyPath -Path './docs/a.md')
 Check 'a Windows-spelled tool path is not documentation' (-not (Test-DocsOnlyPath -Path 'internal\tools\x.ps1'))
 
+# --- the selection verdict: exit 2 has two causes that mean opposite things ---------------
+# The marker is the runner's sentence, not a copy of it: the test reads `test/runner.mjs` and checks
+# that the sentence this classifier matches is still printed there. A test that restated the string
+# would keep passing after the message changed, which is exactly how the `$selectExit -eq 0`
+# conjunction survived: both halves were individually plausible and the pair was never exercised.
+$runnerSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\test\runner.mjs') -Raw
+# The runner builds that sentence across a string concatenation (`... must not ` + `'become ...'`),
+# so the source is joined the way JavaScript joins it before the sentence is looked for. A check
+# against the raw file would fail for the line break and say nothing about the message.
+$runnerFlat = $runnerSource -replace '`\s*\+\s*\r?\n\s*''', ''
+Check 'the no-rule marker is still the sentence test/runner.mjs prints' `
+    $runnerFlat.Contains($script:NoRuleRefusal)
+
+$noRule = @(
+    '[ERROR] --changed: no rule in test/plan-selection.json matches the 1 changed file(s): internal/questions/x.cn.md, so the selection is empty; an empty selection must not become a plan expansion',
+    '[ERROR] --changed: the plans this change touches are unknown, so none is selected and this run fails.'
+)
+$cannotReadBase = @("[ERROR] --changed: cannot read origin/develop (fatal: bad revision 'origin/develop')")
+$cannotReadRules = @('[ERROR] --changed: cannot read the selection rules test/plan-selection.json (Unexpected token in JSON)')
+
+function Check-Verdict {
+    param([string]$Name, [string]$Expected, [hashtable]$Arguments)
+    $got = Get-SelectionVerdict @Arguments
+    Check $Name ($got -eq $Expected) "expected $Expected, got $got"
+}
+
+Check-Verdict 'a no-rule refusal whose every path is documentation is docs-only' 'docs-only-refused' `
+    @{ SelectExit = 2; SelectOutput = $noRule; ChangedFiles = @('internal/questions/x.cn.md'); PlanCount = 0 }
+Check-Verdict 'a no-rule refusal with one tool in the change is not docs-only' 'no-plan' `
+    @{ SelectExit = 2; SelectOutput = $noRule; ChangedFiles = @('internal/questions/x.cn.md', 'internal/tools/merge-lane.ps1'); PlanCount = 0 }
+Check-Verdict 'an unreadable base is not docs-only, whatever the paths are' 'unreadable' `
+    @{ SelectExit = 2; SelectOutput = $cannotReadBase; ChangedFiles = @('docs/a.md'); PlanCount = 0 }
+Check-Verdict 'selection rules that do not parse are not docs-only' 'unreadable' `
+    @{ SelectExit = 2; SelectOutput = $cannotReadRules; ChangedFiles = @('docs/a.md'); PlanCount = 0 }
+Check-Verdict 'an exit that is neither 0 nor 2 is not documentation' 'unreadable' `
+    @{ SelectExit = 1; SelectOutput = $noRule; ChangedFiles = @('docs/a.md'); PlanCount = 0 }
+Check-Verdict 'the listed-empty path stays docs-only' 'docs-only-listed' `
+    @{ SelectExit = 0; SelectOutput = @(); ChangedFiles = @('internal/backlog.md'); PlanCount = 0 }
+Check-Verdict 'a selection that names plans is read by the rows stage' 'plans' `
+    @{ SelectExit = 0; SelectOutput = @('[INFO] --changed: 2 changed file(s) against a select 1 plan(s)'); ChangedFiles = @('src/a.cpp'); PlanCount = 1 }
+Check-Verdict 'an empty change with no plan named is not docs-only' 'no-plan' `
+    @{ SelectExit = 0; SelectOutput = @(); ChangedFiles = @(); PlanCount = 0 }
+
 Write-Host ''
 Write-Host "$script:checked checks, $script:failed failed"
 if ($script:failed -gt 0) { exit 1 }

@@ -632,6 +632,19 @@ selections, and only the one the run executes can be a reading of the run. `--se
 remains what it is -- a guard against a record from somewhere else, whose refusal is exit 2 and one
 `[PLAN ERROR]` line.
 
+The record must also describe the run that reads it. A `--changed` record narrows the run it was
+computed for, and that is what a change selection is; a record whose `plans` name another target set
+was computed for another run, and a change's case list handed to a layer run is not a narrow layer,
+it is a run that starts a subset while printing the layer's name. Every reading a gate takes (exit 0,
+a `[SUMMARY]` with no failure) would read the same as a complete layer. So such a record is refused
+with exit 2 and the two numbers that make the difference visible: `the selection covers N of M cases
+in this layer; a layer run cannot sign for the layer if the record narrows it`. A whole-tree run is
+the floor under the rule: a record that covers fewer of its cases than the layer holds is a change's
+list whatever its `plans` say. `M` is the layer's own count, read through the same loader a run uses,
+so it is the number `scripts/tier-report.mjs --tier fast --quiet` reports for the same tree, and
+`test/tools/selftest/selection-cases.mjs` fails when that number and the rows of `--list-cases` over
+`test/plans` disagree: two tools that each call themselves the layer must not answer differently.
+
 `scripts/selection-cases.mjs` is the engine and the record:
 
 ```bash
