@@ -74,7 +74,9 @@ async function branchesOf(git) {
     for (const branch of names) {
         const ahead = Number(await git(['rev-list', '--count', '--no-merges', '--cherry-pick', '--right-only', `${base}...${branch}`, ...exclude]).catch(() => 'x'))
         if (!Number.isFinite(ahead) || ahead === 0) continue
-        const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..${base}`]).catch(() => 'x'))
+        // Behind counts what a merge has to absorb: commits outside internal/ (the backlog, plans and
+        // reports are pushed many times an hour and do not meet a lane's code).
+        const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..${base}`, '--', '.', ':(exclude)internal']).catch(() => 'x'))
         rows.push({ branch, ahead, behind: Number.isFinite(behind) ? behind : null })
     }
     const behinds = rows.map((row) => row.behind).filter((value) => value !== null)
