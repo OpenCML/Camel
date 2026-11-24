@@ -624,17 +624,25 @@ A record names the base, the head, the tree the plan rules were read from, the c
 digest over them, the plan-level count and the case-level count, the case list with each case's
 cause, and a digest over the sorted case names. `--verify` replays the record's own file list and
 compares count, digest and every cause: same input, same tree, same list, or a named difference. A
-whole-layer selection keeps its count and digest rather than its 9,000 rows; the digest is over the
-same sorted names, so the comparison is not weaker.
+stored reading keeps a count and a digest rather than 9,000 rows, and the digest is over the same
+sorted names, so the comparison is not weaker. A **run** cannot take a digest: `--selection-cases`
+starts cases by name, so the list `--changed` hands to the run is written with `--names`, which keeps
+the rows past the size a stored reading caps at. A record that holds only a digest is refused by the
+run as a digest -- not as an empty selection, which is a different answer.
 
 A merge is replayed with `--base <merge>^1 --head <merge> --files <git diff --name-only list>`: the
 record then names the tree it was taken on, which is the only tree it is a reading of.
 
 Three ways the selection can come up empty are not the same answer and no longer read the same
-either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for
-a change that only touches a class the project keeps out of `--changed` (perf, GC stress, a progen case)
--- and the widening is printed as a widening, with the files that caused it and the size of the layer
-it runs. A change with **no file in it** selects nothing and starts nothing, and prints
+either. A change that **matches no rule** selects no plan and is refused with exit 2, naming every
+file no rule matched: an empty selection must not become a plan expansion, and a layer is a question
+asked with `--all` or with a plan name. It used to widen to the whole fast layer, and that widening
+is what this refusal replaces: it ran 9,894 cases for a change that names no plan, it printed a
+`[SUMMARY]` no gate can tell from a correct selection, and because a whole-layer selection keeps a
+count and a digest instead of its rows, the record it left held no case at all -- so the run refused
+the record it was handed as an empty selection, after the layer had already been chosen. The classes
+that used to rely on the widening (perf, GC stress, a progen case) are the ones this now names
+plainly. A change with **no file in it** selects nothing and starts nothing, and prints
 `changed: 0 target(s)` beside the size of the layer it did **not** run: an empty target list reaches
 `test/tools/run-tests.mjs#loadPlans` as "no target", and no target is the whole plan tree, so a
 measured-empty selection travels as `--selection-empty` instead of as an absent target. It used to

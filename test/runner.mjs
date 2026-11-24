@@ -726,21 +726,6 @@ function fastLayerInventory() {
 }
 
 /**
- * The sentence a fallback to the layer prints: why the plans the change touches are not the run,
- * and what the run is instead. One way of `--changed` still reaches the layer -- a change no rule
- * matches, which is the documented policy for a class the project keeps out of `--changed` (perf,
- * GC stress, progen) -- and it hands an empty target list to `test/tools/run-tests.mjs`, whose
- * `loadPlans` reads "no target" as the whole plan tree. A selection that really did select plans
- * never reaches this, which is what makes the sentence a reading.
- */
-function announceLayerFallback(reason) {
-    return (
-        `[WARN] --changed: ${reason}; falling back to the whole fast layer ` +
-        `(${fastLayerInventory()}), which is the layer and not the change`
-    )
-}
-
-/**
  * The line a **measured empty** selection prints: what it counted, what it selected, and that the
  * layer is a different question. `changed: 0 target(s)` is the reading a gate can grep for, because
  * a run that starts nothing and a run of the whole layer end the same way -- exit 0 and a
@@ -825,17 +810,22 @@ function selectChangedTargets(options = {}) {
         refuseChanged(`${error.message}`)
     }
     if (!plans) {
-        // No rule matched. That is the documented policy for a change that only touches a class the
-        // project keeps out of `--changed` (perf, GC stress, progen), so the widening stays -- but it
-        // is printed as the widening it is, with the files that caused it and what it costs.
+        // No rule matched, so the selection is empty -- and an empty selection is refused here, not
+        // widened to the whole fast layer. The widening used to be the policy for a change that
+        // only touches a class the project keeps out of `--changed` (perf, GC stress, progen), and
+        // it is the path this refusal replaces: it ran 9,894 cases for a change that names no plan,
+        // it printed a `[SUMMARY]` no gate can tell from a correct selection, and the record it left
+        // held no case at all (a whole-layer selection keeps a count and a digest, not its rows), so
+        // the run it was handed to refused it as "an empty selection must not become a plan
+        // expansion" -- after the layer had already been chosen. `--all` and a plan name are how the
+        // layer is asked for deliberately.
         const shown = files.slice(0, 8).join(', ')
         const rest = files.length > 8 ? ` and ${files.length - 8} more` : ''
-        console.warn(
-            announceLayerFallback(
-                `no rule matches the ${files.length} changed file(s): ${shown}${rest}`
-            )
+        refuseChanged(
+            `no rule in ${relativeToRepo(SELECTION_PATH)} matches the ${files.length} changed ` +
+                `file(s): ${shown}${rest}, so the selection is empty; an empty selection must not ` +
+                'become a plan expansion'
         )
-        return { targets: [], layered: [], widened: true }
     }
     // A file that matches no rule contributes nothing when another file in the same change does
 // match: the aggregate fallback never runs, and the class would otherwise be dropped silently.
@@ -914,8 +904,9 @@ export function main(argv = process.argv.slice(2)) {
     if (options.listCases) {
         // `--changed --list-cases`: the cases this change selects, printed as JSON rows and never
         // started. It is the selection the record holds and the reading a second run is compared
-        // with -- same change, same tree, same list.
-        const proc = spawnSync(process.execPath, engineArgs(['--print']), {
+        // with -- same change, same tree, same list. `--names` because the answer *is* the rows: a
+        // capped record would print `cases: 5765` beside nothing, which reads as a list nobody has.
+        const proc = spawnSync(process.execPath, engineArgs(['--print', '--names']), {
             cwd: REPO_ROOT,
             stdio: 'inherit',
             env: process.env
@@ -940,12 +931,10 @@ export function main(argv = process.argv.slice(2)) {
         }
         for (const target of selection.targets) console.log(target)
         if (selection.targets.length === 0 && selection.layered.length === 0) {
-            // The layer is printed only when this selection really is the layer. A zero that is a
-            // zero -- no changed file, no plan -- printed the same sentence as a widening, and that
-            // is the reading that made the widening invisible in the first place.
-            console.log(selection.widened
-                ? '(the whole fast layer: smoke + feat)'
-                : '(no plan: nothing was selected)')
+            // A zero that is a zero -- no changed file, no plan -- gets its own sentence. It used to
+            // share one with a widening, which is what made the widening invisible; `--changed` no
+            // longer widens (a change no rule matches is refused, see selectChangedTargets).
+            console.log('(no plan: nothing was selected)')
         }
         return
     }
@@ -969,7 +958,12 @@ export function main(argv = process.argv.slice(2)) {
     let runEmpty = selection.empty === true
     if (selection.targets.length > 0) {
         const caseFile = path.join(os.tmpdir(), `camel-selection-${process.pid}-${Date.now()}.json`)
-        const engine = spawnSync(process.execPath, engineArgs(['--write', caseFile, '--quiet']), {
+        // `--names`: this record is not a reading to keep, it is the list the run starts, so it must
+        // hold the names even when the selection is larger than a stored reading keeps. Without it a
+        // wide selection stored a count and a digest, the run was handed a record with no cases, and
+        // `--selection-cases` refused it -- exit 2 and 0 rows for every merge that selected more
+        // than a thousand cases.
+        const engine = spawnSync(process.execPath, engineArgs(['--write', caseFile, '--quiet', '--names']), {
             cwd: REPO_ROOT,
             stdio: 'inherit',
             env: process.env

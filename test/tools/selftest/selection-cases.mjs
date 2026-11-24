@@ -1,0 +1,343 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The record a change writes and the run that reads it must agree on what a case is.
+//
+// What went wrong, and why each check below is here. `scripts/selection-cases.mjs` writes one row
+// per case, `{ name, cause }` -- the cause is the reading (it says whether the case was selected by
+// its own input, by a plan-level rule, or as a companion). The reader,
+// `test/tools/run-tests.mjs#readCaseSelection`, did `String(entry)` on each row, so every case of a
+// change became the single string `[object Object]`, the set de-duplicated them into exactly one
+// name, and the run refused with
+//
+//     [PLAN ERROR] --selection-cases names 1 case(s) this run would not start: [object Object].
+//     The record is stale or was taken against another tree, so nothing is started.
+//
+// exit 2 and zero rows. Every merge that handed its record to the run read that, because `--changed`
+// always hands the record over. A second shape of the same failure sat beside it: a selection wider
+// than `CASES_IN_RECORD_MAX` stored a count and a digest instead of its rows, so the run was handed a
+// record with no cases at all and refused it as "an empty selection". And behind both of them, a
+// change that matched no rule widened to the whole fast layer and left a record that could not be
+// executed or replayed as a list.
+//
+// The checks:
+//   * `--changed` with a change that selects cases: the record it writes is the list the run starts,
+//     by name, with the causes intact -- not one `[object Object]`;
+//   * `--changed` with a change wide enough to exceed the record cap: the run list still carries its
+//     names (a stored reading may keep a digest; a run may not);
+//   * an entry that is not a name is refused **by its shape**, not coerced into one;
+//   * a change that matches no rule is refused as an empty selection and does not widen to the fast
+//     layer (`--changed --list` and the engine both);
+//   * two refusals that held before any of this was changed and still hold, so a green here is not
+//     just "something ran": an empty case list is still refused with `an empty selection must not
+//     become a plan expansion`, and a name the selection would not start is still a `[PLAN ERROR]`
+//     with exit 2.
+//
+// Run it directly (`node test/tools/selftest/selection-cases.mjs`) or through the runner self-test,
+// which folds these problems into its own list.
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const defaultRoot = path.resolve(here, '..', '..', '..')
+
+// The cap a stored reading keeps instead of its rows, mirrored here so check 2 cannot pass on a
+// selection that is merely small: reading the constant out of the engine would let a lowered cap
+// lower the check with it.
+const CAP = 1000
+
+// A `.cml` that a plan names as one of its case inputs: the change whose record is a narrowing.
+const CASE_INPUT = 'test/cases/compile/enum/err_duplicate_field.cml'
+
+// A change has to be found whose selection is wider than the cap. These are read in order and the
+// first one that exceeds it is used; if none does, that is a problem rather than a silent pass,
+// because a check that examined no wide selection would read exactly like a wide selection that
+// works. A source directory is the honest wide change: a rule names its plans and keeps them whole.
+const WIDE_CANDIDATES = ['src/stdlib/std/fvm/', 'src/kernel/graph.cpp', 'src/']
+
+function sh(args, cwd) {
+    const run = spawnSync(process.execPath, args, { cwd, encoding: 'utf8', windowsHide: true })
+    return {
+        status: run.status,
+        stdout: `${run.stdout || ''}`,
+        stderr: `${run.stderr || ''}`,
+        output: `${run.stdout || ''}${run.stderr || ''}`,
+        error: run.error ? run.error.message : null,
+    }
+}
+
+const head = (run, lines = 6) => run.output.trim().split(/\r?\n/).slice(0, lines).join(' / ')
+
+/** The names the listing printed, in order, plus the count it claimed for itself. */
+function listed(run) {
+    const names = []
+    let claimed = null
+    for (const line of run.stdout.split(/\r?\n/)) {
+        const text = line.trim()
+        if (text.startsWith('{')) {
+            try {
+                names.push(JSON.parse(text).name)
+            } catch {
+                return { names, claimed, unreadable: text.slice(0, 80) }
+            }
+        } else if (text.startsWith('cases:')) {
+            claimed = Number(text.slice('cases:'.length).trim())
+        }
+    }
+    return { names, claimed, unreadable: null }
+}
+
+function readJson(file) {
+    try {
+        return JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch {
+        return null
+    }
+}
+
+/**
+ * The problems this check found. Empty means the record and the reader agree.
+ *
+ * `repoRoot` is the checkout whose plan tree is read, so the same code can run from the runner
+ * self-test (which knows its own root) and from this file's command line.
+ */
+export function selectionCaseProblems(repoRoot = defaultRoot) {
+    const problems = []
+    const engine = path.join(repoRoot, 'scripts', 'selection-cases.mjs')
+    const runner = path.join(repoRoot, 'test', 'tools', 'run-tests.mjs')
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-selection-selftest-'))
+    const listFile = (name, files) => {
+        const file = path.join(scratch, name)
+        fs.writeFileSync(file, `${files.join('\n')}\n`, 'utf8')
+        return file
+    }
+    const select = (filesFile, extra = []) => sh([engine, '--files', filesFile, ...extra], repoRoot)
+    const listCases = (targets, extra = []) =>
+        sh([runner, ...targets, '--tier', 'fast', '--list-cases', ...extra], repoRoot)
+
+    try {
+        // ---- 1. the record a change writes is the list the run starts, by name ------------------
+        const caseList = listFile('case-input.txt', [CASE_INPUT])
+        const caseRecord = path.join(scratch, 'case-record.json')
+        const written = select(caseList, ['--write', caseRecord, '--quiet', '--names'])
+        const record = written.status === 0 ? readJson(caseRecord) : null
+        if (written.status !== 0) {
+            problems.push(
+                `selection: the engine refused a change that selects cases (exit ${written.status}): ${head(written)}`
+            )
+        } else if (record === null) {
+            problems.push(`selection: the engine wrote no readable record at ${caseRecord}`)
+        } else {
+            const rows = Array.isArray(record.cases) ? record.cases : []
+            if (record.case_count < 1) {
+                problems.push(`selection: ${CASE_INPUT} selected ${record.case_count} case(s); the check needs a narrowing with cases in it`)
+            }
+            if (rows.length !== record.case_count) {
+                problems.push(
+                    `selection: the record says ${record.case_count} case(s) and holds ${rows.length} row(s); a run list must carry every name`
+                )
+            }
+            const shapeless = rows.filter(
+                (row) => !row || typeof row.name !== 'string' || row.name.length === 0 || typeof row.cause !== 'string'
+            )
+            if (shapeless.length > 0) {
+                problems.push(
+                    `selection: ${shapeless.length} recorded row(s) carry no {name, cause}: ${JSON.stringify(shapeless[0])}`
+                )
+            }
+            const replay = listCases(record.plans || [], ['--selection-cases', caseRecord])
+            const listing = listed(replay)
+            if (replay.status !== 0) {
+                problems.push(
+                    `selection: the run refused the record this change wrote (exit ${replay.status}): ${head(replay)}`
+                )
+            } else if (listing.unreadable) {
+                problems.push(`selection: the listing printed a row this check cannot read: ${listing.unreadable}`)
+            } else {
+                if (listing.claimed !== record.case_count) {
+                    problems.push(
+                        `selection: the run listed ${listing.claimed} case(s) for a record that names ${record.case_count}`
+                    )
+                }
+                const recorded = new Set(rows.map((row) => row.name))
+                const started = new Set(listing.names)
+                const lost = [...recorded].filter((name) => !started.has(name))
+                const added = [...started].filter((name) => !recorded.has(name))
+                if (lost.length > 0) {
+                    problems.push(`selection: the run did not start ${lost.length} recorded case(s): ${lost.slice(0, 3).join(', ')}`)
+                }
+                if (added.length > 0) {
+                    problems.push(`selection: the run started ${added.length} case(s) the record does not name: ${added.slice(0, 3).join(', ')}`)
+                }
+                if (started.has('[object Object]')) {
+                    problems.push('selection: a case was still read as the name "[object Object]"')
+                }
+            }
+        }
+
+        // ---- 2. a selection wider than the cap keeps its names when a run needs them -------------
+        let wide = null
+        for (const candidate of WIDE_CANDIDATES) {
+            const files = listFile('wide.txt', [candidate])
+            const probe = select(files, ['--write', path.join(scratch, 'wide-probe.json'), '--quiet', '--names'])
+            const doc = probe.status === 0 ? readJson(path.join(scratch, 'wide-probe.json')) : null
+            if (doc && doc.case_count > CAP) {
+                wide = { candidate, files, doc }
+                break
+            }
+        }
+        if (wide === null) {
+            problems.push(
+                `selection: no candidate change selects more than ${CAP} case(s) (tried ${WIDE_CANDIDATES.join(', ')}), ` +
+                    'so the record-too-wide path was not exercised'
+            )
+        } else {
+            const cappedFile = path.join(scratch, 'wide-capped.json')
+            const capped = select(wide.files, ['--write', cappedFile, '--quiet'])
+            const cappedDoc = capped.status === 0 ? readJson(cappedFile) : null
+            if (!cappedDoc) {
+                problems.push(`selection: the engine wrote no capped record for ${wide.candidate} (exit ${capped.status})`)
+            } else {
+                // A stored reading keeps the digest; that is not the defect and stays.
+                if (cappedDoc.cases_recorded !== false || (cappedDoc.cases || []).length !== 0) {
+                    problems.push(
+                        `selection: a ${cappedDoc.case_count}-case reading recorded its rows; the cap that keeps a stored reading small is gone`
+                    )
+                }
+                // The same record, asked for as a run list, must carry them.
+                if ((wide.doc.cases || []).length !== wide.doc.case_count) {
+                    problems.push(
+                        `selection: ${wide.candidate} keeps ${(wide.doc.cases || []).length} row(s) for ${wide.doc.case_count} case(s) even with --names`
+                    )
+                }
+                const replay = listCases(wide.doc.plans || [], ['--selection-cases', path.join(scratch, 'wide-probe.json')])
+                const listing = listed(replay)
+                if (replay.status !== 0) {
+                    problems.push(
+                        `selection: the run refused a ${wide.doc.case_count}-case record written with --names (exit ${replay.status}): ${head(replay)}`
+                    )
+                } else if (listing.claimed !== wide.doc.case_count) {
+                    problems.push(
+                        `selection: the run listed ${listing.claimed} case(s) for a ${wide.doc.case_count}-case record`
+                    )
+                }
+                // And a record that really does hold only a digest is refused as a digest, not as an
+                // empty selection: the two are different answers.
+                const refused = listCases(cappedDoc.plans || [], ['--selection-cases', cappedFile])
+                if (refused.status === 0) {
+                    problems.push(`selection: a ${cappedDoc.case_count}-case digest-only record was accepted as a run list`)
+                } else if (/names no case; an empty selection/.test(refused.output)) {
+                    problems.push('selection: a digest-only record was reported as an empty selection')
+                }
+            }
+        }
+
+        // ---- 3. an entry that is not a name is refused by its shape ------------------------------
+        const shapelessFile = path.join(scratch, 'shapeless.json')
+        fs.writeFileSync(
+            shapelessFile,
+            `${JSON.stringify({ version: 1, plans: [], cases: [{ cause: `case:${CASE_INPUT}` }] }, null, 2)}\n`,
+            'utf8'
+        )
+        const shapelessRun = listCases(['test/plans/smoke'], ['--selection-cases', shapelessFile])
+        if (shapelessRun.status === 0) {
+            problems.push('selection: a record row with no name was accepted as a case')
+        } else if (!/an object whose keys are \[cause\]/.test(shapelessRun.output)) {
+            problems.push(`selection: a nameless row was not refused by its shape: ${head(shapelessRun)}`)
+        }
+
+        // ---- 4. held before and after: an empty case list is still refused -----------------------
+        const emptyFile = path.join(scratch, 'empty.json')
+        fs.writeFileSync(emptyFile, `${JSON.stringify({ version: 1, plans: [], cases: [] }, null, 2)}\n`, 'utf8')
+        const emptyRun = listCases(['test/plans/smoke'], ['--selection-cases', emptyFile])
+        if (emptyRun.status === 0) {
+            problems.push('selection: an empty case list was accepted')
+        } else if (!/names no case; an empty selection must not become a plan expansion/.test(emptyRun.output)) {
+            problems.push(`selection: an empty case list was refused without the sentence that says why: ${head(emptyRun)}`)
+        }
+
+        // ---- 5. held before and after: a name the selection would not start is a plan error ------
+        const staleFile = path.join(scratch, 'stale.json')
+        fs.writeFileSync(
+            staleFile,
+            `${JSON.stringify({ version: 1, plans: [], cases: [{ name: 'no.such/case', cause: `case:${CASE_INPUT}` }] }, null, 2)}\n`,
+            'utf8'
+        )
+        const staleRun = listCases(['test/plans/smoke'], ['--selection-cases', staleFile])
+        if (staleRun.status !== 2) {
+            problems.push(`selection: a stale name read exit ${staleRun.status}, expected 2`)
+        }
+        if (!/\[PLAN ERROR\].*--selection-cases names 1 case\(s\).*would not start/.test(staleRun.output)) {
+            problems.push(`selection: a stale name was not refused as a plan error: ${head(staleRun)}`)
+        }
+
+        // ---- 6. a change no rule matches selects nothing, and does not widen ---------------------
+        let unruled = null
+        for (const candidate of ['internal/reports/', 'test/selection/readings/']) {
+            const dir = path.join(repoRoot, candidate)
+            if (!fs.existsSync(dir)) continue
+            const first = fs.readdirSync(dir).sort().find((entry) => fs.statSync(path.join(dir, entry)).isFile())
+            if (first) {
+                unruled = `${candidate}${first}`
+                break
+            }
+        }
+        if (unruled === null) {
+            problems.push('selection: no candidate for a file no rule matches was found, so the empty-selection path was not exercised')
+        } else {
+            // Confirm it really is rule-less rather than trusting the class name: a rule added for
+            // `internal/reports/` someday would turn this check into a comparison of two selections.
+            const probe = sh(
+                ['-e', `import('./test/runner.mjs').then((m) => { const s = m.plansForChanges(${JSON.stringify([unruled])}); process.exit(s === null ? 3 : 0) })`],
+                repoRoot
+            )
+            if (probe.status !== 3) {
+                problems.push(`selection: ${unruled} is matched by a rule, so the empty-selection check has nothing rule-less to read`)
+            } else {
+                const files = listFile('unruled.txt', [unruled])
+                const engineRun = select(files, ['--print'])
+                if (engineRun.status !== 2) {
+                    problems.push(
+                        `selection: the engine read exit ${engineRun.status} for a change no rule matches, expected 2`
+                    )
+                }
+                if (!/an empty selection must not become a plan expansion/.test(engineRun.output)) {
+                    problems.push(`selection: the engine did not name the empty selection: ${head(engineRun)}`)
+                }
+                if (/layer-cases|whole fast layer is the run/.test(engineRun.output)) {
+                    problems.push('selection: the engine still widened a rule-less change to the fast layer')
+                }
+                const listedRun = sh(
+                    [path.join(repoRoot, 'scripts', 'test.js'), '--changed', '--changed-files', files, '--list'],
+                    repoRoot
+                )
+                if (listedRun.status === 0) {
+                    problems.push(
+                        `selection: --changed --list read exit 0 for a change no rule matches: ${head(listedRun)}`
+                    )
+                }
+                if (!/no rule in test\/plan-selection\.json matches/.test(listedRun.output)) {
+                    problems.push(`selection: --changed --list did not name the files no rule matched: ${head(listedRun)}`)
+                }
+                if (/\(the whole fast layer/.test(listedRun.output)) {
+                    problems.push('selection: --changed --list still printed the whole fast layer for a rule-less change')
+                }
+            }
+        }
+    } finally {
+        fs.rmSync(scratch, { recursive: true, force: true })
+    }
+    return problems
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    const problems = selectionCaseProblems(defaultRoot)
+    if (problems.length > 0) {
+        console.error(problems.join('\n'))
+        process.exit(1)
+    }
+    console.log('selection-cases self-test ok: a recorded case is read by its name, a rule-less change selects nothing')
+}

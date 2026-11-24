@@ -3488,8 +3488,54 @@ function caseRows(selected) {
 }
 
 /**
+ * One entry of a record's `cases`: the case's name.
+ *
+ * `scripts/selection-cases.mjs` writes `{ name, cause }` per case -- the cause is what says why the
+ * change selected it, and it is the reading the record exists for. Reading such an entry as a name
+ * (`String(entry)`) makes every one of them the single string `[object Object]`, which the set then
+ * de-duplicates into exactly one name: the run is told it must start a case called [object Object],
+ * refuses with `[PLAN ERROR] ... names 1 case(s) this run would not start`, and starts nothing. Every
+ * merge that handed its record to `--selection-cases` read exit 2 and 0 rows that way, and the
+ * message blamed "a stale record or another tree".
+ *
+ * So an entry is its name, or an object that carries one; anything else is refused **by its shape**
+ * rather than coerced, because a record whose entries this run cannot read is a record it cannot
+ * execute, and a coerced name is a silent one.
+ */
+function selectionCaseName(entry) {
+    if (typeof entry === 'string' && entry.length > 0) return entry
+    if (
+        entry !== null &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        typeof entry.name === 'string' &&
+        entry.name.length > 0
+    ) {
+        return entry.name
+    }
+    const shape = entry === null
+        ? 'null'
+        : Array.isArray(entry)
+          ? 'an array'
+          : typeof entry === 'object'
+            ? `an object whose keys are [${Object.keys(entry).join(', ')}]`
+            : `a ${typeof entry}`
+    throw new Error(
+        `--selection-cases: a case entry in the record is ${shape}, and this run cannot read a name ` +
+            `out of it. A case is its name, or an object that carries one -- a selection record writes ` +
+            `{"name": ..., "cause": ...}. Coercing the entry instead is how every recorded case became ` +
+            `the one name "[object Object]".`
+    )
+}
+
+/**
  * `--selection-cases`: the names a run must execute. An empty or unreadable list is refused rather
  * than read as "no narrowing": the two mean opposite things, and only one of them is a selection.
+ *
+ * "Empty" has two causes that must not read the same: a selection that names nothing (refused -- it
+ * must not become a plan expansion), and a record that kept a count and a digest instead of its rows
+ * because the list was too long to store. The second one cannot narrow a run at all, so it is named
+ * as the digest it is rather than reported as "names no case".
  */
 function readCaseSelection(file) {
     if (!fs.existsSync(file)) throw new Error(`--selection-cases: ${file} does not exist`)
@@ -3499,13 +3545,26 @@ function readCaseSelection(file) {
     } catch (error) {
         throw new Error(`--selection-cases: ${file} is not JSON (${error.message})`)
     }
-    const names = Array.isArray(doc) ? doc : doc.cases
-    if (!Array.isArray(names) || names.length === 0) {
+    const names = Array.isArray(doc) ? doc : doc && doc.cases
+    if (!Array.isArray(names)) {
+        throw new Error(
+            `--selection-cases: ${file} carries no 'cases' array; a selection record writes one ` +
+                '(scripts/selection-cases.mjs --names writes the rows a run executes)'
+        )
+    }
+    if (names.length === 0) {
+        if (doc && doc.cases_recorded === false) {
+            throw new Error(
+                `--selection-cases: ${file} keeps ${doc.case_count} case(s) as ${doc.case_digest} and ` +
+                    `not as rows, so it cannot name what a run must start. Write the run's list with ` +
+                    'scripts/selection-cases.mjs --names, or replay this record with --verify.'
+            )
+        }
         throw new Error(
             `--selection-cases: ${file} names no case; an empty selection must not become a plan expansion`
         )
     }
-    return new Set(names.map((name) => String(name)))
+    return new Set(names.map(selectionCaseName))
 }
 
 /**

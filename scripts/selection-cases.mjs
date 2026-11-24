@@ -33,11 +33,24 @@
  * Usage
  *   node scripts/selection-cases.mjs [--base <ref>] [--files <list>] [--tier fast]
  *        [--print] [--write <record.json>] [--verify <record.json>] [--head <ref>] [--quiet]
+ *        [--names]
  *
  * `--base` is the ref the change is read against (`CAMEL_TEST_BASE` when omitted); `--files` reads
  * the changed paths from a file instead, which is how a merge is replayed: the list is
  * `git diff --name-only <merge>^1 <merge>`, and the record names both the merge (`--head`) and the
  * tree the plan rules came from (`tree`, HEAD of the checkout).
+ *
+ * `--names` writes the case rows even when the selection is larger than `CASES_IN_RECORD_MAX`. A
+ * stored reading keeps a count and a digest past that size; a *run* cannot: `--selection-cases`
+ * starts the cases by name, so a record it reads must hold the names. `--changed` writes its
+ * transient list with `--names` for exactly that reason, and a record without its rows is refused
+ * by the runner as a digest rather than read as "nothing was selected".
+ *
+ * A change that no rule matches selects **nothing**: it is refused (exit 2) and named with the
+ * files that matched no rule, instead of widening to the whole fast layer. The widening read like
+ * a correct selection in every reading a gate takes (exit 0, a `[SUMMARY]` with no failure), and it
+ * fed the case reader a record with no cases -- an empty selection becoming a plan expansion, which
+ * is the one thing the reader refuses.
  *
  * The case list is not computed here twice: `test/tools/run-tests.mjs --list-cases` loads the plan
  * tree, expands `[[sweeps]]`, filters by layer and pulls in companions exactly as a run does, and
@@ -60,7 +73,8 @@ const VERSION = 1
 // A record keeps the whole list when it is small enough to read; a whole-layer selection (9,000
 // rows, ~1 MB) keeps its count and digest instead, because the list is not a reading anybody reads
 // case by case and `--print` reproduces it exactly. The digest is over the same sorted names, so
-// the proof does not rest on the rows being stored.
+// the proof does not rest on the rows being stored. `--names` bypasses the cap for the transient
+// record a run executes: those rows are not a reading, they are the list the run starts.
 const CASES_IN_RECORD_MAX = 1000
 
 function die(why) {
@@ -78,6 +92,7 @@ function parseArgv(argv) {
         verify: null,
         head: null,
         quiet: false,
+        names: false,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
@@ -89,6 +104,7 @@ function parseArgv(argv) {
         else if (arg.startsWith('--tier=')) options.tier = arg.slice('--tier='.length)
         else if (arg === '--print') options.print = true
         else if (arg === '--quiet') options.quiet = true
+        else if (arg === '--names') options.names = true
         else if (arg === '--write' && i + 1 < argv.length) options.write = path.resolve(argv[++i])
         else if (arg.startsWith('--write=')) options.write = path.resolve(arg.slice('--write='.length))
         else if (arg === '--verify' && i + 1 < argv.length) options.verify = path.resolve(argv[++i])
@@ -208,22 +224,21 @@ function select(options, filesOverride = null) {
     }
     const plans = plansForChanges(files)
     if (!plans) {
-        // No rule matched: the documented policy widens to the whole fast layer. The record says
-        // so, and names the layer's size and digest instead of pretending to a case list.
-        const layerRows = listCases(
-            [path.join(REPO_ROOT, 'test', 'plans', 'smoke'), path.join(REPO_ROOT, 'test', 'plans', 'feat')],
-            [],
-            options.tier
+        // No rule matched. This used to widen to the whole fast layer, and that widening is the
+        // defect this refusal replaces: it ran 9,894 cases for a change that names no plan, it
+        // printed a `[SUMMARY]` no gate could tell from a correct selection, and -- because a
+        // whole-layer selection keeps a count and a digest instead of its rows -- the record it
+        // left behind held no case at all, so the reader refused it as "an empty selection must
+        // not become a plan expansion" *after* the layer had already been chosen. A change that
+        // selects nothing is a fact about the change or about the rules, and running everything is
+        // not an answer to it: name the plans, or add the rule.
+        const shown = files.slice(0, 8).join(', ')
+        const rest = files.length > 8 ? ` and ${files.length - 8} more` : ''
+        die(
+            `no rule in test/plan-selection.json matches the ${files.length} changed file(s): ` +
+                `${shown}${rest}, so the selection is empty; an empty selection must not become a ` +
+                'plan expansion -- name the plans (node scripts/test.js <plan>) if that is the question'
         )
-        return {
-            files,
-            widened: true,
-            empty: false,
-            targets: ['test/plans/smoke', 'test/plans/feat'],
-            layered: [],
-            layerCases: layerRows,
-            causes: [],
-        }
     }
     const targets = resolvedSelection(plans)
     const layered = [...new Set(plans.layered)].map(planTarget).filter(Boolean)
@@ -317,7 +332,7 @@ function recordOf(options, selection) {
         // The plan-level expansion (what `--changed --list` + a run used to execute) and the
         // case-level selection beside it: one replay, two answers, so the difference is a number
         // this record carries rather than a comparison of two runs on two trees.
-        plan_case_count: selection.widened ? selection.layerCases.length : selection.planCases,
+        plan_case_count: selection.planCases,
         // A record holds a selection, never a verdict. A merge whose reading was never taken stays
         // without one: the field is null and the note says why, because a blank is not "no reds"
         // and an invented pass would be the one thing the readings store cannot recover from.
@@ -325,12 +340,10 @@ function recordOf(options, selection) {
         verdict_note:
             'selection only: no test verdict was recorded for this change set, and none is inferred from it',
     }
-    if (selection.widened) {
-        const names = selection.layerCases.map((row) => row.name)
-        return { ...base, case_count: names.length, case_digest: digestOf(names), cases: [] }
-    }
+    // `widened` is still written (as `false`): every record taken before the widening was removed
+    // carries the field, and `--verify` compares it.
     const names = selection.cases.map((row) => row.name)
-    const recorded = names.length <= CASES_IN_RECORD_MAX
+    const recorded = options.names === true || names.length <= CASES_IN_RECORD_MAX
     // The summary of why, kept even when the rows are not: a count per cause is the reading that
     // says whether a change narrowed a plan or rode it whole, and it costs three numbers.
     const causeCounts = {}
@@ -357,17 +370,7 @@ function printSelection(options, selection, record) {
         `selection: base=${record.base} tree=${(record.tree || '?').slice(0, 9)} files=${record.files.length} ` +
             `plans=${record.plans.length} widened=${record.widened} tier=${record.tier}`
     )
-    if (record.widened) {
-        console.log(`selection: no rule matched, so the whole fast layer is the run (${record.case_count} case(s))`)
-    }
     for (const row of record.cases) console.log(JSON.stringify(row))
-    if (record.widened) {
-        // The layer is the selection: printing "cases: 9894" beside no rows would read as a list
-        // this script had printed and the reader had lost.
-        console.log(`layer-cases: ${record.case_count}`)
-        console.log(`layer-digest: ${record.case_digest}`)
-        return
-    }
     console.log(`plan-cases: ${record.plan_case_count}`)
     console.log(`cases: ${record.case_count}`)
     console.log(`case-digest: ${record.case_digest}`)
