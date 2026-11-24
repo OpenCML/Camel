@@ -217,6 +217,10 @@ expect_stdout_contains = ["20 of 20: exit 0", "PASS: 20 runs of one command wrot
 expect_output_not_contains = ["FAIL:", "cell(Tuple)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.61 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "every_expect_program_five_times"
@@ -241,6 +245,10 @@ timeout_ms = 600000
 # not about the program (docs/cli.md, "std::jit"), so the entry declares it and is skipped there --
 # the same two-line precondition the entries that assert a compiled line carry
 # (feat/linear/jit_native.plan.toml); `--absent` is its opposite.
+# Slow layer: over the 2 s the fast layer allows -- 5.59 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 [[tests]]
 name = "narrow_reductions_four_backends"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
@@ -254,6 +262,10 @@ expect_stdout_contains = ["PASS: 5 of 5 programs say the same thing on four back
 expect_output_not_contains = ["differs", "not run on", "does not build"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 8.83 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "narrow_reductions_needs_no_runtime"
@@ -273,6 +285,10 @@ expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PAS
 expect_output_not_contains = ["FAIL", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 15.60 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "every_entry_writes_its_own_file"
@@ -303,6 +319,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # two-core CI runner measured 493.3 s of CPU for it, which 900 s was 1.8x -- under the four the
 # margin rule asks for. 2100 s is 4.3x that figure.
 timeout_ms = 2100000
+# Slow layer: over the 2 s the fast layer allows -- 78.64 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "fault_narrow_text_number"
@@ -351,6 +371,10 @@ expect_stdout_contains = ["rt::div(", "Attempted division by zero."]
 expect_output_not_contains = ["TranslationRefused"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "literal_rank"
@@ -363,6 +387,10 @@ expect_stdout_contains = ["const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.05 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "literal_rows_computed"
@@ -375,6 +403,10 @@ expect_stdout_contains = ["const rt::Array<double> array{{1.0, 0.0, 0.0, 2.0}, {
 expect_output_not_contains = ["TranslationRefused", "ElementTypeMismatch", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.03 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "literal_rows_filled"
@@ -387,6 +419,10 @@ expect_stdout_contains = ["rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.00 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "abs_smallest_int"
@@ -761,3 +797,7 @@ expect_stdout_contains = ["fault program(s) print what std::fvm prints"]
 expect_output_not_contains = ["FAIL:", "is not in the baseline", "now prints what std::fvm prints"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 900000
+# Slow layer: over the 2 s the fast layer allows -- 32.53 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"

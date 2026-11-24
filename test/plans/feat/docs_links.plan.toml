@@ -96,6 +96,10 @@ expect_exit = 0
 expect_stdout_contains = ["no unverified citation", "symbol citation(s) verified"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
+# Slow layer: over the 2 s the fast layer allows -- 2.98 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "docs.links.citations_symbol"
@@ -186,6 +190,10 @@ normalizers = ["normalize_newlines"]
 # (`no stale snippet in`, exit 0). 180000 ms puts the margin at 45000 ms, a third above that
 # reading, and still catches a genuine hang inside three minutes.
 timeout_ms = 180000
+# Slow layer: over the 2 s the fast layer allows -- 19.73 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "docs.snippets_dump_is_compared"
@@ -258,6 +266,10 @@ expect_exit = 0
 expect_stdout_contains = ["no conflict markers", "hunk head, a base block, a separator or a tail"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 2.71 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "docs.no_unfinished_merge_pattern_sees_all_four_forms"
@@ -289,6 +301,10 @@ timeout_ms = 60000
 # The axis the crash itself was on -- the type the transform hands a law at build time -- is not
 # reachable from a source-only check and is recorded, with its measurement, in
 # `internal/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`.
+# Slow layer: over the 2 s the fast layer allows -- 2.65 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "docs.every_laws_port_agrees_with_its_body"

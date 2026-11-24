@@ -705,6 +705,10 @@ expect_exit = 0
 expect_stdout_contains = ["then arm: shape [4]", "else arm: shape [4]", "ort run: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 6.08 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_train_step_adam"
@@ -777,6 +781,10 @@ expect_exit = 0
 expect_stdout_contains = ["input dims ['batch', 2]", "batch 1: shape [3]", "batch 7: shape [21]", "ort run: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 4.79 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_train_step_dynamic"
@@ -790,6 +798,10 @@ expect_exit = 0
 expect_stdout_contains = ["input dims ['batch', 2]", "ort train dynamic: worst", "PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 4.76 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "pass_export_fold"
@@ -1851,6 +1863,10 @@ expect_stdout_contains = ["ort dynamic params: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 4.92 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_time_axis"
@@ -1865,6 +1881,10 @@ expect_stdout_contains = ["ort time axis: 14 models, 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 14.36 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_core_slice"
@@ -1904,6 +1924,10 @@ expect_stdout_contains = ["ort core slice: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 150000
+# Slow layer: over the 2 s the fast layer allows -- 12.66 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_core_slice_grad"
@@ -1988,6 +2012,10 @@ expect_stdout_contains = ["ort slice grad stride: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 2.27 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_slice_bounds"
@@ -2002,6 +2030,10 @@ expect_stdout_contains = ["ort slice bounds: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 5.39 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_argmax"
@@ -2016,6 +2048,10 @@ expect_stdout_contains = ["ort argmax: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 2.33 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_slice_start"
@@ -2030,6 +2066,10 @@ expect_stdout_contains = ["ort slice start: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.43 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_linear_recursion"
@@ -2044,6 +2084,10 @@ expect_stdout_contains = ["ort linear recursion: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 4.46 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_grad_loop"
@@ -2058,6 +2102,10 @@ expect_stdout_contains = ["ort grad loop: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 6.55 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_loop_values"
@@ -2072,6 +2120,10 @@ expect_stdout_contains = ["ort loop values: worst", "steps [0, 1, 2, 3, 5, 6]", 
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 10.06 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_loop_for"
@@ -2086,6 +2138,10 @@ expect_stdout_contains = ["onnx::loop node for: PASS"]
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 5.57 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_loop_cond"
@@ -2100,6 +2156,10 @@ expect_stdout_contains = ["onnx::loop node cond: PASS"]
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 6.65 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_struct_loop"
@@ -2114,6 +2174,10 @@ expect_stdout_contains = ["ort struct loop: worst", "steps [0, 1, 2, 3, 5, 6]", 
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 9.69 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_grad_loop_values"
@@ -2128,6 +2192,10 @@ expect_stdout_contains = ["ort grad loop values: worst", "steps [0, 1, 2, 3, 5, 
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 8.80 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_loop_values_dynamic"
@@ -2624,6 +2692,10 @@ expect_stdout_contains = ["ort entry export: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
+# Slow layer: over the 2 s the fast layer allows -- 14.55 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_var_parameter"
@@ -2638,6 +2710,10 @@ expect_stdout_contains = ["operator: max abs error", "pass: max abs error", "var
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 2.34 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "pass_export_refusal_located.growth_budget"
@@ -2822,6 +2898,10 @@ expect_stdout_contains = ["operator affine: worst", "operator checked: worst", "
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.65 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_duplicate_outputs"
@@ -2836,6 +2916,10 @@ expect_stdout_contains = ["operator twice: worst", "operator repeated: worst", "
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.39 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_struct_casts"
@@ -2850,6 +2934,10 @@ expect_stdout_contains = ["operator identity: worst", "operator walk: worst", "p
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.29 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "as_refusal.unproven.pass"
@@ -3021,6 +3109,10 @@ expect_stdout_contains = ["ort loop loaded weights: worst", "batches [1, 2, 3, 5
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 5.06 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "typed_constant_ends_unrolling.pass"
@@ -3156,6 +3248,10 @@ expect_stdout_contains = ["ort grad matmul batched: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 2.93 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_index_axis"

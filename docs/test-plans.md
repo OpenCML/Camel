@@ -90,8 +90,11 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 - `slow` is the release gate's layer: the plan files `scripts/release-gate.mjs` names in
   `SLOW_PLANS`, run one by one. It is everything whose result is still worth having but whose cost
   does not belong in the developer loop, and that a shared host can still carry: the large
-  front-end and debugger suites, single entries of otherwise-fast plans that take about five
-  seconds or more, and the GPU tile plans.
+  front-end and debugger suites, every case that costs more than **2 s** of its own time (measured,
+  never guessed -- see below), and the GPU tile plans. 2 s is the line because below it the case is
+  cheaper than the bookkeeping around it, and above it a case that runs in every developer loop
+  spends the loop's own budget: the fast layer's whole run is about 220 s for about 9,500 cases, so
+  one case over 2 s is already a percent of it.
 - **The slow layer's only whole plan is `gpu/tiles` (103 entries, and it needs devices): it cannot
   move into the fast layer.** Its entries skip when the cards are busy (`tiles:available()`), so
   the number that runs swings with what else is on the host -- a fast-layer green there would mean
@@ -123,9 +126,25 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   count is read beside the card report and never as "the GPU suite passed".
   `feat/modules/random.plan.toml`'s `keyed_random.std_cpp_agrees` is the same shape -- it compiles
   C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
-  left alone on purpose, one move at a time. Some individual entries are still `tier = "slow"` inside fast plans
-  (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
-  `lib/random/`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
+  left alone on purpose, one move at a time.
+  **The layer stopped being "a few single entries" on 2026-11-24**: the first full-record inventory
+  measured every case of the 2026-11-12 fast-layer run and found **261 cases over 2 s**
+  (`internal/reports/2026-11-24-test-suite-inventory.cn.md`, appendix B: child wall clock, because
+  no record of that batch carried CPU time). **257 of them moved**, and they took the layer from
+  164 declared entries to 559: 218 whole entries (396 started cases, because an entry with
+  `backends` moves its back ends with it) and 17 plan files whose every case is over the line,
+  which say `tier = "slow"` on the plan instead of on each entry. Four did not move, each for a
+  reason written where it applies: `agree_with_fvm` (81.3 s, the slowest case in the tree) says
+  `tier = "fast"` and argues it in its own comment -- it is the only test that catches a generated
+  C++ program that builds and runs but prints what the interpreter does not, so it runs with the
+  plan; two belong to `feat/mm/gc_root_window`, a milestone plan that had already left the fast
+  layer; and `var_capture.macro_fold` no longer exists (the entry is `var_capture.default` today).
+  **A moved case is still selectable, and `--tier all` is the reading that says so**: the whole
+  tree at `--tier all` selects every layer but `debug`, so `node scripts/test.js test/plans/feat/gate
+  --tier all` starts the slow-tier gate entries (`13/13` on 2026-11-24) and `--tier slow` starts the
+  same cases alone. Those 63 files are named in `SLOW_PLANS` because naming the file is what makes
+  the gate run its slow tests, so a plan that is fast in part appears in both phases and its fast
+  tests run twice -- the price of not running the slow ones nowhere.
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
   `agents/test.md` holds back (the full suite, the GC poison sweep and stress plans, progen, the
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in

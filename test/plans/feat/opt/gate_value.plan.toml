@@ -85,6 +85,10 @@ verify_script = '''
  assert(ctrl.some(e=>node(e.source).label===':io/println'&&e.target===g.exit),'return completion lost');
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.12 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "covered_value.graph.true"
@@ -102,6 +106,10 @@ verify_script = '''
  assert(ctrl.some(e=>node(e.source).label===':io/println'&&e.target===g.exit),'return completion lost');
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.21 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "other_wait.graph"
@@ -137,6 +145,10 @@ verify_script = '''
  assert(ordered(held,middle)&&ordered(middle,result)&&ordered(result,last)&&ordered(last,node(g.exit)),'consumer waiting order lost');
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.04 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "branch.42.reference"
@@ -157,6 +169,10 @@ backends_agree = ["stdout_normalized"]
 verify_script = '''
 ({input,assert})=>assert(input.normalized.stdout.trim()==="right\n0.4138508284758604",input.normalized.stdout)
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.07 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "branch.42.inline_dce"

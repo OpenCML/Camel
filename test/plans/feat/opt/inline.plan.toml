@@ -922,6 +922,10 @@ assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected outpu
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.01 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "arm_call_then_effect.opt.tf"

@@ -13,6 +13,10 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["the cxx:: names run and the old sub-pass names are refused: PASS"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.31 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "integrated_rewrites"
@@ -165,6 +169,10 @@ assert(out === 'taken\nbig\ntick 3\ntick 2\ntick 1\nbefore call\ntwice=6 ticks=3
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.15 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "static_branches.simplify.rgir"
@@ -195,6 +203,10 @@ assert(!own.some(([kind]) => kind === 'BRCH' || kind === 'JOIN'), `main still br
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.04 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "recursion_unroll.simplify"
@@ -636,6 +648,10 @@ assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output:
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.27 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "cse_arm_constants.inline_cse.jit"
@@ -652,6 +668,10 @@ assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output:
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.18 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "cse_arm_constants.inline_arm_cse.nvm"
@@ -668,6 +688,10 @@ assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output:
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.08 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "cse_arm_constants.simplify_cse.nvm"
@@ -1064,6 +1088,10 @@ assert(!input.normalized.stdout.split('\\n').some((line) => /^\\s*\\d+\\s*$/.tes
 }
 """
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.20 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "reshape_view_gc.fold_specialize.nvm"
@@ -1075,6 +1103,10 @@ expect_exit = 0
 expect_stdout_contains = ["total 16380", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.14 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "simplify_growth_budget.simplify.nvm"
@@ -1091,6 +1123,10 @@ assert(out === '55\n2584\n2639', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.00 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "simplify_growth_budget.inline_simplify.fvm"

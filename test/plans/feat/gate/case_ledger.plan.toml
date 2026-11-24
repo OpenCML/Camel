@@ -1,6 +1,10 @@
 id = "gate.case_ledger"
 order = 922
-tier = "fast"
+# Slow layer: every case of this plan costs more than the 2 s the fast layer allows
+# (2026-11-12 fast-layer record, child wall clock; the list is appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md). The plan is slow as a whole,
+# so the line goes on the plan and not on each entry.
+tier = "slow"
 tags = ["feat", "tools", "gate"]
 desc = "Every file under test/cases is read by code -- a plan that names it, an import of another case, a harness or a tool that opens it -- or it is recorded in CASE_EXCEPTIONS with the reason it is kept. A name in a comment or in a `desc` is not a read"
 

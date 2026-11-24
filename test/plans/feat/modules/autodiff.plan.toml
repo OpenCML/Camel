@@ -543,6 +543,10 @@ assert(fused.length === 0, `no fused operator may appear: ${JSON.stringify(fused
 }
 """
 timeout_ms = 6000
+# Slow layer: over the 2 s the fast layer allows -- 2.09 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "scalar_grad.runtime.fvm"
@@ -923,6 +927,10 @@ assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
 }
 """
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.19 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "tensor_grad_check.macro.jit"
@@ -985,6 +993,10 @@ args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "$
 expect_exit = 0
 expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "pb_statics_gc.runtime.fvm"
@@ -995,6 +1007,10 @@ args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "$
 expect_exit = 0
 expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.04 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control_flow_grad.inline.nvm"
@@ -1848,6 +1864,10 @@ expect_stdout_contains = ["96 gradients checked, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 2.95 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "grad_effects_kept.default"
