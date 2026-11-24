@@ -923,19 +923,41 @@ try {
     # with the reason and the gate that decided it) and pushed, because a merge that was never meant to
     # be measured must not be refused as if the measuring had gone wrong. Anything else stays exit 2:
     # a change with one non-documentation file in it is a change a plan could turn red on.
-    $docsOnly = ($selectExit -eq 0 -and $planTargets.Count -eq 0) -and (Test-DocsOnlyMerge -Files $changedFiles)
-    if ($docsOnly) {
+    #
+    # How that is read is `merge-lane-docs.ps1`'s `Get-SelectionVerdict`, and the reason it is a
+    # function there rather than a conjunction here is the defect this replaces: the judgement used to
+    # be `$selectExit -eq 0 -and $planTargets.Count -eq 0 -and every path documentation`, and an empty
+    # selection is exit 2 by the runner's own rule, so the conjunction could never hold and a
+    # documentation-only merge was always refused as unmeasurable. Both documentation verdicts below
+    # take the same branch; the refused one says in its own line that the selection refused, because
+    # "no rule matches" and "could not read the change" are different facts and only the first one is
+    # a documentation merge.
+    $verdict = Get-SelectionVerdict -SelectExit $selectExit -SelectOutput $selectOut `
+        -ChangedFiles $changedFiles -PlanCount $planTargets.Count
+    if ($verdict -eq 'docs-only-listed' -or $verdict -eq 'docs-only-refused') {
         $firstParentSha = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
         Write-Host ''
-        Write-Host 'docs-only: nothing to measure' -ForegroundColor Yellow
+        if ($verdict -eq 'docs-only-refused') {
+            Write-Host 'docs-only: nothing to measure (selection refused: no rule matches, and every changed path is documentation)' -ForegroundColor Yellow
+        } else {
+            Write-Host 'docs-only: nothing to measure' -ForegroundColor Yellow
+        }
         Write-Host "  Every one of the $($changedFiles.Count) file(s) this merge changes is documentation: $($changedFiles -join ', ')"
-        Write-Host '  `--changed` names no plan because no plan covers these paths, and running the suite anyway would read some other change.'
+        if ($verdict -eq 'docs-only-refused') {
+            Write-Host '  `--changed` exited 2 because no rule in `test/plan-selection.json` matches these paths and the selection is empty; that refusal is about the rules, not about this merge, and the paths are the whole change.'
+        } else {
+            Write-Host '  `--changed` names no plan because no plan covers these paths, and running the suite anyway would read some other change.'
+        }
         Write-Host "  The record says so in those words, and the merge is pushed as a merge that had nothing to measure."
+        $docsWhy = 'documentation only: every file this merge changes is documentation, so no plan is selected and there is nothing to measure'
+        if ($verdict -eq 'docs-only-refused') {
+            $docsWhy = 'documentation only: every file this merge changes is documentation, so the selection names no plan (the runner refuses an empty selection with exit 2) and there is nothing to measure'
+        }
         $passedDir = Join-Path $commonDir 'camel-passed'
         New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
         $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
             --measured none `
-            --why "documentation only: every file this merge changes is documentation, so no plan is selected and there is nothing to measure" `
+            --why $docsWhy `
             --merge $mergeCommit --first-parent $firstParentSha --second-parent $head --branch $Branch `
             --tree $MainCheckout --out $passedDir --gate headers --gate clang-syntax --gate docs-only 2>&1)
         $recordExit = $LASTEXITCODE
@@ -965,20 +987,40 @@ try {
         Write-Host "merged $Branch at $head; origin/$Target is $mergeCommit (docs-only, nothing measured)" -ForegroundColor Green
         exit 0
     }
-    if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
-        # Not a red and not a green: the selection itself did not answer, so the plans this merge
-        # touches are unknown and nothing about the change has been measured. Same shape as the
-        # clang step's exit 2, and for the same reason: `cannot select` must not read as `no reds`.
+    # `unreadable` and `no-plan` are both refusals and they are not the same fact, so they do not
+    # print the same stop. The first says the change itself is unknown -- a base, the rules or the
+    # changed-file list could not be read -- and that is the gate being blind, not a verdict. The
+    # second says the selection was read and named nothing while at least one path is not
+    # documentation: a hole in `test/plan-selection.json` or an empty merge. Neither is a red, and
+    # neither may read as one.
+    if ($verdict -eq 'unreadable') {
         Write-Host ''
-        if ($planTargets.Count -eq 0 -and $widened) {
+        Write-Host "STOPPED: the selection could not be read (exit $selectExit, no reading taken)" -ForegroundColor Yellow
+        Write-Host '  This is not a verdict about your tree: the base, the selection rules or the changed-file list could not be read, so the change itself is unknown -- and whether every path is documentation is not a question an unknown change can answer. Nothing was pushed.'
+        $selectOut | Select-Object -Last 3 | ForEach-Object { "  $_" }
+        Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; its own refusal is the line above, and the usual cause is a base branch that does not resolve in this checkout.'
+        Write-Host ''
+        Write-GitState -MergeCommit $mergeCommit
+        exit 2
+    }
+    if ($verdict -eq 'no-plan') {
+        # Not a red and not a green: the selection answered and named no plan, so the plans this
+        # merge touches are unknown and nothing about the change has been measured. Same shape as
+        # the clang step's exit 2, and for the same reason: `cannot select` must not read as `no reds`.
+        Write-Host ''
+        if ($selectExit -eq 0) {
+            Write-Host 'STOPPED: this merge changes no file, so no plan is selected (exit 0, no reading taken)' -ForegroundColor Yellow
+            Write-Host '  This is not a defect in your tree: `git diff --name-only HEAD^1` is empty, so there is no change to measure case by case and no baseline to compare it with. Nothing was pushed.'
+            Write-Host '  What repairs it: check that the merge commit really brings the lane in -- a merge that reports success and changes nothing is the thing `merge-lane` exists to refuse.'
+        } elseif ($planTargets.Count -eq 0 -and $widened) {
             Write-Host 'STOPPED: this merge selects no plan (exit 2, no reading taken)' -ForegroundColor Yellow
             Write-Host '  This is not a defect in your tree: `--changed` named no plan for this change, so it widened to the whole fast layer, and a whole-suite reading is not a reading about this merge. Nothing was pushed.'
             Write-Host '  What repairs it: `node scripts/test.js --changed --list` is the selection itself and starts nothing -- read it. Either the change names no plan (then nothing about it is measured case by case, and that is a fact worth knowing before merging) or `test/plan-selection.json` has no rule for those files.'
         } else {
             Write-Host "STOPPED: the plans this merge touches could not be selected (exit $selectExit, no reading taken)" -ForegroundColor Yellow
-            Write-Host '  This is not a defect in your tree: the selection is what failed, so nothing was pushed and nothing was learned about this change.'
+            Write-Host '  This is not a defect in your tree: the selection named no plan for these paths, and at least one of them is not documentation, so this is a hole in `test/plan-selection.json` rather than a merge with nothing to measure. Nothing was pushed.'
             $selectOut | Select-Object -Last 3 | ForEach-Object { "  $_" }
-            Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; the line above is its own refusal, and the usual cause is a base branch that does not resolve in this checkout.'
+            Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; the line above is its own refusal. Add the rule the paths belong to, or name the layer deliberately on the command line.'
         }
         Write-Host ''
         Write-GitState -MergeCommit $mergeCommit
