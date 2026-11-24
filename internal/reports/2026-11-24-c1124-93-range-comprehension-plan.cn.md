@@ -127,3 +127,32 @@
 ⇒ 所以修法不是让候选判定去取一个更好的类型，而是：**代入完成之后，让判定再跑一次**（`settleGenericOperatorArguments` 成功返回后重新筛选，而不是直接落到 `NoMatchingFunction`）。这与「一个实参一个读数」的判据一致：读数只有一份，先后两次读要在同一个值上。
 
 ⇒ 待确认（一处读代码即可）：`builder_call.cpp` 里 `settleGenericOperatorArguments`（约 1500 行）与报错（约 1447 行）的先后 —— 若代入确在判定之后、报错之前，则报错能读到具体类型、判定读不到，正是上面这组读数。
+
+## 十二、③ 绿了，而这笔修的是一个**更宽**的缺陷
+
+`d80fcd54d2`：**候选集合那条路也先代入再筛选**，与操作组那条走同一个 `settleGenericOperatorArguments`，并让它在没有操作组时回答（`ops == nullptr`：集合就是问题；没有规则描述的位置取任意，与「签名未声明的规则」同答）。代入是**幂等**的：已代入的实参不再 waiting，所以每个只代一次。
+
+读数（`feat/compile` 按名字）：**2691 / 2539 过 / 149 红**（原 2497 / 191），**fixed 42、broke 0**。
+fixed 里包含：`comprehension_context.*`(3)、`context.comprehension_position.*`(4)、`extent_expressions.*`(18)、`ref.boxes_loop_*`(8)、`ref.boxes_made_per_call_*`(4)、`rules_angle_args.*`(4)、`with_overloads.generic_explicit.*`(2)、`ref.counted_sites_are_a_diagnostic.fvm`。
+
+⇒ 这就是「一处在判定时机上的缺陷，等着它的是十几处调用」：**函数实参是泛型名字的每一次调用**都走在它后面。
+
+## 十三、① 与笔三：`random` 13/13
+
+`f0d03d3d53`：`random.cml` 的 `uniform`/`normal`、`str.cml` 的 `split`/`repeat` 改回 `0 .. n`，删掉 `to_array` 绕行与那两段解释绕行的注释。
+读数：`feat/modules/random.plan.toml` **13 / 13**（原 0/13，红在 `Unresolved reference: 'to_array'`）；`feat/modules/std.plan.toml` 29/30，`array.sort_reference` 红 —— **未与基线比过**，不认领。
+
+## 十四、② 那 18 条：换了一个位置，不是同一个位置
+
+`feat/modules/stdlib_values.plan.toml`：**59 / 41 过 / 18 红**，正是验收里那 18 条。但它们的诊断已经变了：
+
+```
+array_hof.cml:53   The generic function 'flat_map' cannot be called with argument types <(x: int) => Range pure> (Range)
+array_large.cml:26 The generic function 'count' cannot be called with argument types <(n: int) => bool> (Range)
+array_large.cml:33 The generic function 'find' cannot be called with argument types <(n: int) => bool> (Range)
+array_large.cml:37 The generic function 'sort_by' cannot be called with argument types <(n: int) => int> (Range)
+```
+
+⇒ 这不再是我刚修的那条路（候选集合），而是**泛型函数名字的调用**（`count<f>(r)` 这种 `<...>` 形式）在范围上没有实例：`settleOne` 里 `accepted()` 拿到的是 `ops`（函数名所在的组，通常没有规则）与 `overloads == nullptr`，于是问不出一个「接受」。⇒ 与 `map` 那次同形，但下一次要修的是**函数名调用的候选来源**（它的声明本身），不是集合。
+
+⇒ 也就是说：`C-1124-93` 这一族「范围上的名字」至少有两个层次，第一个（集合/算子）已经绿，第二个（泛型函数名）还需要一处。
