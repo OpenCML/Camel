@@ -64,10 +64,13 @@
 - **报一行**：`promoted <sha> | fast: <N> cases, <pass>/<fail> | new reds: <n> | slot 3 | queue <秒>`。
 - **文档不再推 `develop`**：有了 `integration` 之后，backlog、问题页、计划页一律推 `integration`，`develop` 只由晋级快进；推前核 `git rev-list origin/integration..HEAD` 里只有文档提交。
 
-**怎么做**：`develop` 只在晋级时前进，而晋级是快进，不是合并。三步，按顺序，第二步可以说不：
+**第 3 步的两条逐字命令**：
 
-1. **把 `develop` 尖端合进 `integration`**（第一父 = `integration` 当前尖端），使 `develop` 是 `integration` 的祖先。没做到这一点，后面的快进会变成合并。
-2. **在 `integration` 尖端跑一遍整层 `--tier fast`**，红表与 `develop` 尖端上一次的红表逐条比。**只有「新增红 = 0」才进第三步。** 新增红 > 0 就停，报红表，不推——晋级不成功比晋级错了好。
-3. `git push origin origin/integration:refs/heads/develop`（快进），再核对 `git ls-remote origin refs/heads/develop` 的 sha 等于 `integration` 的 sha。
+```powershell
+git push origin origin/integration:refs/heads/develop
+git ls-remote origin refs/heads/develop
+```
+
+第 1 条把 `integration` 快进到 `develop`（不带任何新提交）；第 2 条是核对，输出里 `refs/heads/develop` 的 sha 必须等于 `integration` 的 sha，否则这次晋级没有落。
 
 **为什么要比红表而不是只看红数**：整层跑一次会带上上游所有改动（判据修正、唤醒、收尾规矩），那些改动第一次被整层跑时，红的位置会动；只看红数会把「换了一条红」读成「没有新增红」。
