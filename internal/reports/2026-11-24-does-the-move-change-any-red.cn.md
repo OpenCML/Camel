@@ -1,5 +1,15 @@
 # 那笔移层改掉了几条红？——慢层 169 条与底树快层 1,384 条逐条比
 
+**这张表被采纳为晋级判据的基线**（决策者 2026-11-24）：下一轮任何一层跑完，拿它的红表与
+`2026-11-24-the-base-fast-layer-reds.tsv` 逐条比，"新增红 N 条"由差集给出，不由红数给出。用法：
+
+```powershell
+# 新一轮的红表先按同一格式落成 plan<TAB>case 两列（新跑的计划/用例名都是现成的），再取差集：
+git show <本轮提交>:internal/reports/2026-11-24-the-base-fast-layer-reds.tsv | ForEach-Object { ($_ -split "`t")[0..1] -join "`t" } | Select-Object -Skip 1 | Sort-Object -Unique > $env:TEMP\base.tsv
+Sort-Object -Unique $env:TEMP\new.tsv | Where-Object { (Get-Content $env:TEMP\base.tsv) -notcontains $_ }   # 新增的红
+# 或在 WSL/git bash 里 comm -13 base.tsv new.tsv（两列都先 sort，同一格式）
+```
+
 **问句**：`a5cd47367c` 把 257 条用例移进慢层，它是"只改选择"还是也改了读数？这一页是那一笔的
 验收：把**移层前后同一棵树的两份红表**逐条对上，三类分开报。
 
