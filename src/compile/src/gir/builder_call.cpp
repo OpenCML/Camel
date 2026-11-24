@@ -197,9 +197,13 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             return callResultType(inputNode, callee->funcType()->exitType());
         }
         if (nodeIsKind(inputNode, runtime::GCNodeKind::Oper)) {
-            return callResultType(
-                inputNode,
-                nodeGraphOf(inputNode)->operTarget(inputNode)->funcType()->exitType());
+            // An operator value's exit type is the one its resolved signature gives. A call a pass
+            // wrote by URI alone records no signature here, and its value is the node's own type --
+            // the answer every other non-call value gets below.
+            const oper_idx_ptr_t *op = nodeGraphOf(inputNode)->operTarget(inputNode);
+            if (op != nullptr) {
+                return callResultType(inputNode, (*op)->funcType()->exitType());
+            }
         }
         return nodeTypeOf(inputNode);
     };
