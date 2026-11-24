@@ -49,6 +49,7 @@
 #include "camel/runtime/loop.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/assert.h"
+#include "graph/graph_view.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -444,21 +445,16 @@ std::string sourceLocationOf(
 }
 
 /// The operator of a node, or an empty view for any other node kind.
-std::string_view operUriOf(const GCGraph *g, gc_node_ref_t ref) {
-    const auto *n = g->node(ref);
-    if (n == nullptr || n->kind != GCNodeKind::Oper) {
-        return {};
-    }
-    return g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
+std::string_view operUriOf(const graph::GraphView &g, graph::NodeRef ref) {
+    const core::OperId oper = g.operatorOf(ref);
+    // `kNoOper` is every node that names no operator record: another kind, and the four stored
+    // kinds the view folds into `Oper` (graph_view.h). Both answered an empty URI here before.
+    return oper == core::kNoOper ? std::string_view{} : core::OperatorTable::instance().uri(oper);
 }
 
 /// The operator of an OPER node, kNoOper for any other node.
-core::OperId operIdOf(const GCGraph *g, gc_node_ref_t ref) {
-    const auto *n = g->node(ref);
-    if (n == nullptr || n->kind != GCNodeKind::Oper) {
-        return core::kNoOper;
-    }
-    return g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
+core::OperId operIdOf(const graph::GraphView &g, graph::NodeRef ref) {
+    return g.operatorOf(ref);
 }
 
 /// Reading a variable (`:var/get`) or storing into one (`=`, `+=`, ...).
@@ -476,7 +472,7 @@ bool readsOrAssignsVariable(core::OperId id) {
 /// handed and holds it as its first normal input. `camel::runtime::kInvalidNodeRef` when the
 /// version is not a version of a variable of `g` itself: a `var` parameter is a port, a captured
 /// cell belongs to the closure's own graph, and what a branch's writes meet at is not a write.
-gc_node_ref_t declaringCellOf(const GCGraph *g, gc_node_ref_t version) {
+gc_node_ref_t declaringCellOf(const graph::GraphView &g, graph::NodeRef version) {
     while (version != camel::runtime::kInvalidNodeRef) {
         const core::OperId id = operIdOf(g, version);
         if (id == core::oper::VarNew) {
@@ -485,7 +481,7 @@ gc_node_ref_t declaringCellOf(const GCGraph *g, gc_node_ref_t version) {
         if (!core::OperatorTable::instance().isAssignment(id)) {
             return camel::runtime::kInvalidNodeRef;
         }
-        const auto inputs = g->normInputsOf(version);
+        const auto inputs = g.inputs(version, graph::PortGroup::Normal);
         if (inputs.empty()) {
             return camel::runtime::kInvalidNodeRef;
         }
@@ -498,7 +494,7 @@ gc_node_ref_t declaringCellOf(const GCGraph *g, gc_node_ref_t version) {
 /// never leaves the function, so reads and assignments of it are not effects of the model. A
 /// read names the version its writer gave rather than the cell, so the version chain is walked
 /// back to the declaration.
-bool isLocalVariable(const GCGraph *g, gc_node_ref_t cell) {
+bool isLocalVariable(const graph::GraphView &g, graph::NodeRef cell) {
     return declaringCellOf(g, cell) != camel::runtime::kInvalidNodeRef;
 }
 
@@ -608,7 +604,7 @@ void refuseEffectsOf(
                 const bool onLocalVariable =
                     body->oper == core::oper::VarNew ||
                     (readsOrAssignsVariable(body->oper) && !g->normInputsOf(ref).empty() &&
-                     isLocalVariable(g, g->normInputsOf(ref).front()));
+                     isLocalVariable(g->view(), g->normInputsOf(ref).front()));
                 // An in-place form handed `:var/take` of a local variable changes only that
                 // variable's own array (design principles 11.3). The read of the variable
                 // translates or refuses that assignment with its own diagnostic
@@ -618,11 +614,11 @@ void refuseEffectsOf(
                         return false;
                     }
                     const auto norm = g->normInputsOf(ref);
-                    if (norm.size() != 1 || operIdOf(g, norm.front()) != core::oper::VarTake) {
+                    if (norm.size() != 1 || operIdOf(g->view(), norm.front()) != core::oper::VarTake) {
                         return false;
                     }
                     const auto cell = g->normInputsOf(norm.front());
-                    return !cell.empty() && isLocalVariable(g, cell.front());
+                    return !cell.empty() && isLocalVariable(g->view(), cell.front());
                 }();
                 const std::string uri(body->uri());
                 // The simplification below expands macros (grad, with_grad, ...) and lowers a
@@ -752,7 +748,7 @@ void Evaluator::recordFates(GCGraph *g, gc_node_ref_t ref) {
     }
     const uint64_t origin      = g->nodeOrigin(ref);
     const std::string location = locationOf(origin);
-    const std::string_view uri = operUriOf(g, ref);
+    const std::string_view uri = operUriOf(g->view(), ref);
     const std::string where =
         uri.empty()
             ? std::format("node {} of '{}'", static_cast<uint64_t>(ref), g->name())
@@ -1331,22 +1327,22 @@ bool carriesAsTensor(const Value &v) {
 /// arrays. The value facts say the same thing whenever the expression can be computed at
 /// export time; this is what answers for one that cannot, because the model has no lowering for an
 /// array whose length a run-time value decides (`:struct/append_arr` on a symbolic array).
-bool growsItsExtent(const GCGraph *g, gc_node_ref_t ref) {
-    std::unordered_set<gc_node_ref_t> seen{ref};
-    std::vector<gc_node_ref_t> work{ref};
+bool growsItsExtent(const graph::GraphView &g, graph::NodeRef ref) {
+    std::unordered_set<graph::NodeRef> seen{ref};
+    std::vector<graph::NodeRef> work{ref};
     while (!work.empty()) {
-        const gc_node_ref_t node = work.back();
+        const graph::NodeRef node = work.back();
         work.pop_back();
         const std::string_view uri = operUriOf(g, node);
         if (uri == ":struct/append_arr" || uri == ":struct/append_arr_owned" ||
             uri == ":struct/concat_arr") {
             return true;
         }
-        for (const auto inputs : {g->normInputsOf(node), g->withInputsOf(node)}) {
-            for (gc_node_ref_t input : inputs) {
-                if (seen.insert(input).second) {
-                    work.push_back(input);
-                }
+        // The two input runs are one edge kind on the view (`predecessors`, Data); the set this
+        // walk reaches is the one the two runs named apart.
+        for (const graph::NodeRef input : g.predecessors(node, graph::EdgeKind::Data)) {
+            if (seen.insert(input).second) {
+                work.push_back(input);
             }
         }
     }
@@ -1995,7 +1991,7 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
                     out.next.push_back(eval(act, argNodes[k]));
                 } catch (const ExportError &) {
                     if (k < loop.ports.size() && k < loop.inputs.size() &&
-                        growsItsExtent(g, argNodes[k])) {
+                        growsItsExtent(g->view(), argNodes[k])) {
                         unsupported(
                             act,
                             std::format(
@@ -3687,7 +3683,7 @@ Value Evaluator::evalVariableRead(Activation &act, gc_node_ref_t ref) {
     // What a read names is the version its last writer produced; the cell that version stores
     // into is what the assignments reaching this read are enumerated from.
     const gc_node_ref_t cell =
-        inputs.empty() ? camel::runtime::kInvalidNodeRef : declaringCellOf(g, inputs.front());
+        inputs.empty() ? camel::runtime::kInvalidNodeRef : declaringCellOf(g->view(), inputs.front());
     if (cell == camel::runtime::kInvalidNodeRef) {
         unsupported(act, kOuterVariable);
     }
@@ -3705,7 +3701,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             if (user == at) {
                 continue;
             }
-            const core::OperId id = operIdOf(g, user);
+            const core::OperId id = operIdOf(g->view(), user);
             if (core::oper::isVariableRead(id) || id == core::oper::VarTake) {
                 // A read, or the handover of the variable's own value to an in-place form,
                 // which changes only what the variable is then assigned.
@@ -3769,7 +3765,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
         if (assigned.size() == 2) {
             const gc_node_ref_t stored = forwards(assigned[1]);
             if (g->node(stored)->kind == GCNodeKind::Oper &&
-                operUriOf(g, stored) == ":struct/append_arr_in_place") {
+                operUriOf(g->view(), stored) == ":struct/append_arr_in_place") {
                 // `acc = acc->append<v>` (design principles 11.3): an array grown in a
                 // variable, which a model has no form for. The compiler writes the in-place
                 // form of `append` over what :var/take handed it.
@@ -3780,7 +3776,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             }
         }
         const Value operand       = eval(act, g->normInputsOf(last)[1]);
-        const AssignmentKind kind = assignmentKindOf(operUriOf(g, last));
+        const AssignmentKind kind = assignmentKindOf(operUriOf(g->view(), last));
         if (kind.binary.empty()) {
             return operand;
         }
@@ -4825,13 +4821,17 @@ const CapabilityTable *capabilitiesFor(const ExportOptions &options) {
     return capabilities;
 }
 
-void checkArity(GCGraph *graph, size_t examples) {
-    if (graph->withPorts().size() != 0 || graph->normPorts().size() != examples) {
+/// The function's own parameters, by group, and its name: the three readings this check makes are
+/// all on the view (`ports` and `name`), so it asks the view and not the representation.
+void checkArity(const graph::GraphView &g, size_t examples) {
+    const size_t with = g.ports(graph::PortGroup::Context).size();
+    const size_t norm = g.ports(graph::PortGroup::Normal).size();
+    if (with != 0 || norm != examples) {
         throw ExportError(
             std::format(
                 "'{}' takes {} arguments but {} examples were given",
-                graph->name(),
-                graph->withPorts().size() + graph->normPorts().size(),
+                g.name(),
+                with + norm,
                 examples));
     }
 }
@@ -4886,12 +4886,12 @@ bool exampleFits(type::Type *want, type::Type *have) {
 /// function is specialized for the examples' types whatever its parameters declare, so without
 /// this a tuple given where a tensor is declared surfaces later, as a failure of whatever
 /// operator first uses the parameter.
-void checkExamples(GCGraph *graph, std::span<type::Type *const> exact) {
-    const auto *funcType = graph->funcType();
+void checkExamples(const graph::GraphView &g, std::span<type::Type *const> exact) {
+    const auto *funcType = g.funcType();
     if (!funcType) {
         return;
     }
-    const std::string fn = graph->name().substr(0, graph->name().find('$'));
+    const std::string fn(g.name().substr(0, g.name().find('$')));
     for (size_t i = 0; i < exact.size() && i < funcType->normTypesCount(); ++i) {
         type::Type *declared = funcType->normTypeAt(i);
         if (exampleFits(declared, exact[i])) {
@@ -5114,14 +5114,14 @@ Model exportBound(
         throw ExportError("expected a function value");
     }
     auto *graph = fn->graph();
-    checkArity(graph, examples.size());
+    checkArity(graph->view(), examples.size());
 
     Emitter emitter(options.opset, capabilitiesFor(options), options.target);
     emitter.graph().name                        = options.graphName;
     const BoundInputs bound                     = bindInputs(emitter, options, examples);
     const std::vector<Value> &inputs            = bound.values;
     const std::vector<type::Type *> &inputTypes = bound.types;
-    checkExamples(graph, inputTypes);
+    checkExamples(graph->view(), inputTypes);
 
     // The function applied to inputs of the examples' types, with its captures bound, is a
     // program of its own: simplification specializes it for the input shapes, inlines its
