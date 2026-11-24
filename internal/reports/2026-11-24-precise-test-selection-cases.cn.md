@@ -79,8 +79,12 @@ hash2=C848C73CDCC43A9901138E4E897DF0154ED7F5A03C1346DCD6FD36CF60113411
 
 ## 五、闸门
 
-`pwsh -File internal/tools/camel-remote.ps1 -Path <worktree> -Jobs 8 -NoGpuWatch`：exit 0，build 34 s，
-`RUN_EXIT=0`，`TREE_STATE=clean`（跑前跑后）；这次改动自身的选择是 36 个用例。
+`pwsh -File internal/tools/camel-remote.ps1 -Path <worktree> -Jobs 8 -NoGpuWatch` 在 `94e3e0f3f9`
+上：exit 0，build 34 s，`RUN_EXIT=0`，`TREE_STATE=clean`（跑前跑后）。这次改动自身的选择：
+`plan-cases: 49 / cases: 36`，`case-digest: sha256:ff061cebdc7099826420d21c357d7f218715d0b2cb19bc125dc61366c6636b06`
+——计划级 49 个用例里 13 个在慢层，fast 闸门只起 36 个。最终提交 `1f58cb2b3d` 的构建同样通过
+（`BUILD_EXIT=0`，stamp `1f58cb2b3d (clean)`），它的测试阶段在主机排队 1,800 s 内没拿到测试槽
+（`exit 4` 是那道闸门的调度拒绝，不是红）。
 
 ## 六、这一步没做的
 
