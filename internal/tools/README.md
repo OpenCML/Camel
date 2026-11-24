@@ -27,7 +27,9 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `camel-cleanup.sh` | The cleanup door: a run's temporaries live under `~/camel-work/tmp/<lane>-<time>/` and are judged by the manifest the run wrote when it created them. `rm` accepts a path only when it is under that root **and** in a manifest. |
 | `camel-cleanup.test.ps1` | Its test: the six readings against a fake home (never the real one). `pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <alias>`. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
-| `red-table.mjs` | Regenerates `internal/reports/<date>-develop-reds.cn.md`, the table of what is red on `develop`, from the recorded readings alone — it starts no build and no test, and takes about 6 seconds. `red-table.md` says what each of its seven columns may and may not claim. |
+| `red-table.mjs` | Regenerates `internal/reports/<date>-develop-reds.cn.md`, the table of what is red on `develop`, from the recorded readings alone — it starts no build and no test, and takes about 6 seconds. `--tsv <file>` writes the same rows with a header stating the `tip`, `jobs`, `load` and `tier` it was taken at; `--diff <a.tsv> <b.tsv>` compares two such tables and **refuses (exit 2, "not directly comparable")** when their `jobs`/`load`/`tier` differ instead of listing every row as `new`. `red-table.md` says what each of its seven columns may and may not claim. |
+| `red-table-context.mjs` | The header, the row reader and the comparison behind `--tsv`/`--diff`: a row's case name is the whole tab-separated field, and unknown `jobs`/`load` refuses a comparison rather than passing silently. |
+| `red-table-context.test.mjs` | Its test: `node internal/tools/red-table-context.test.mjs` prints `16/16 checks passed` and exits 1 on a failure. Covers the header round trip, the changed-not-removed case for a name with spaces, and the two refusals (different `jobs`, quiet-vs-loaded host), including the CLI wiring. |
 
 ## The machine-local settings file
 
