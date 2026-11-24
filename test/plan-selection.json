@@ -593,6 +593,11 @@
             "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {
+            "comment": "The records the merge seats see land while a merge runs: the backlog row file, the dated plans, the reports and the questions. They are pages, and the only plan that reads them is docs_links -- its `--citations` walk reads every tracked `.md` (a page that cites a path is a promise the file exists, and one that cites `path#Symbol` a promise the symbol is there), `--questions-index` reads internal/questions/ page by page against the table its generator writes, and `scripts/conflict-markers.mjs` walks the same files for the leftovers of an unfinished merge. Naming it is also what lets a merge whose push was refused be re-landed and re-read instead of re-run: `merge-lane.ps1` re-runs exactly the plans the landed files select, and a rule-less class does not select a plan, it widens to the whole fast layer, which is a full run under the name of a partial one. Nothing else reads these pages: no plan runs a backlog row, and smoke is a compiler layer, so it is not named here (unlike the reader-facing docs rule above, which names it because that rule is written for the report gate).",
+            "paths": ["internal/backlog.md", "internal/plans/", "internal/reports/", "internal/questions/"],
+            "plans": ["feat/docs_links.plan.toml"]
+        },
+        {
             "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct, and the source package's REPRODUCE.md, whose commands and paths docs_links reads like any other page); agents/ is the development guide. llms.txt is the root index of the reference for AI readers, so a change to it is a documentation change. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
             "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "internal/ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "internal/REPRODUCE.md", "llms.txt"],
             "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]

@@ -317,6 +317,374 @@ function Sync-BaselineWorktree {
     return $null
 }
 
+# --- the push, and the one recovery a refused push may make -------------------
+#
+# A merge takes minutes -- the baseline seed alone was 480 s of one 11-minute run -- and documentation
+# is pushed to the target branch while it runs, by the lane that writes pages and by no merge seat.
+# The push is then refused as a non-fast-forward, and until this existed the whole run was repeated:
+# three times in one night, eleven minutes each, for commits that touch no code.
+#
+# The recovery re-lands the merge on the tip that landed and re-reads ONLY the plans those commits
+# select. What decides that is the FILE PATH and nothing else: every path the new commits touch is
+# either one of the four places a page is written, or it is not. There is no flag that says "this
+# looks harmless", and there is no judgement about impact anywhere in the branch below -- the one
+# thing a tool is bad at is deciding that a change cannot matter.
+#
+# The four are the documentation the merge seats actually see land: the backlog, the dated plans,
+# the reports and the questions. `internal/` is NOT the boundary: `internal/tools/merge-lane.ps1` is
+# under it and two plans read it (feat/docs_links.plan.toml by the walkers, and the file is code by
+# any reading), so a prefix rule on `internal/` would call a code change documentation and re-use
+# readings across it while every line of the output looked right. That is the mistake the comment
+# inside the function exists to keep out; it was made once already, on the lane that tried this
+# before this one.
+#
+# Which of the changed paths are documentation, and which are not. Both halves are returned: the
+# refusal has to name the paths that are code, because "touches code" with no names sends the reader
+# to `git diff` to find out which, and the next run is a careful merge that has to know.
+function Split-ChangeByPath {
+    param([string[]] $Paths = @())
+
+    # Inside the function, not at script scope: the test reads this function out of this file's syntax
+    # tree and runs it, and a definition that depends on a variable the caller happened to set is a
+    # definition the test would measure half of.
+    $docsRoots = @('internal/plans/', 'internal/reports/', 'internal/questions/')
+    $docsFiles = @('internal/backlog.md')
+
+    $docs = @()
+    $code = @()
+    foreach ($raw in @($Paths)) {
+        # One separator, so a path written with the other one is the same path: git answers with `/`
+        # on every platform, and a list assembled by hand on Windows would not.
+        $path = "$raw".Trim().Replace('\', '/')
+        if (-not $path) { continue }
+        $isDoc = ($docsFiles -contains $path) -or (@($docsRoots | Where-Object { $path.StartsWith($_) }).Count -gt 0)
+        if ($isDoc) { $docs += $path } else { $code += $path }
+    }
+    return @{
+        Documentation = $docs
+        Code          = $code
+        # A change of nothing is not documentation: an empty diff is a rejection with nothing to
+        # re-land, and reading it as "docs-only" would claim a recovery that moved no file.
+        DocsOnly      = ($code.Count -eq 0 -and $docs.Count -gt 0)
+    }
+}
+
+# The one line every rejection prints, whether or not this run recovers. One shape, so a reader (or a
+# script) can grep `^rebase:` and get both ends of the move and what was done about it on one line.
+function Format-RebaseLine {
+    param([string] $OldRemote, [string] $NewRemote, [int] $Files, [bool] $DocsOnly, [int] $ReRan)
+
+    # Nine characters, the width every other line in this script prints a sha at: one width for one
+    # reading, so two lines about the same commit cannot look like two commits.
+    $short = {
+        param($s)
+        $t = "$s".Trim()
+        if ($t.Length -gt 9) { $t.Substring(0, 9) } else { $t }
+    }
+    return ('rebase: {0} -> {1}, {2} file(s), {3}, re-ran {4} plan(s)' -f `
+            (& $short $OldRemote), (& $short $NewRemote), $Files,
+        $(if ($DocsOnly) { 'docs-only' } else { 'touches code' }), $ReRan)
+}
+
+# The plans a list of changed paths selects -- the same selection the merge stage above uses for the
+# change it brings, asked for by FILE LIST rather than by a base branch. The list is the difference
+# between two commits the checkout has already fetched, so `--changed-files` is what answers it and
+# `git diff` is not needed twice: a base ref would name a tree this checkout may not have.
+function Get-PlansForChangedFiles {
+    param([string] $Checkout, [string] $ListFile)
+
+    $out = @(& node (Join-Path $Checkout 'scripts\test.js') --changed --changed-files $ListFile --list 2>&1)
+    $exit = $LASTEXITCODE
+    $prefix = $Checkout.TrimEnd('\') + '\'
+    $targets = @($out | ForEach-Object { "$_".Trim() } | Where-Object { $_ -and $_.StartsWith($prefix) } |
+        ForEach-Object { $_.Substring($prefix.Length) -replace '\\', '/' })
+    return @{
+        Exit    = $exit
+        Targets = $targets
+        # The selection widens when no rule matches a changed file. That is not "no plan": it is "the
+        # rules do not know what reads this", and the widened set is the whole fast layer -- a full
+        # run wearing the name of a partial one.
+        Widened = (@($out | Where-Object { "$_" -match '^\(the whole fast layer' }).Count -gt 0)
+        Text    = (@($out | ForEach-Object { "$_" }) -join "`n")
+    }
+}
+
+# One run of a named plan set on the tree that is about to be pushed, read the way the merge stage
+# reads its own: exit code, rows, and the rows whose verdict is fail. No case-by-case comparison
+# against a baseline here, and the difference is deliberate: the baseline is keyed by the tree the
+# merge lands on and covers the plans THAT merge selected, and the point of a partial re-run is that
+# these are different plans. What this answers is the question the recovery can answer -- do the
+# plans that read the files that landed still pass on the tree we are about to push -- and the
+# conclusion line says exactly that much and no more.
+function Invoke-PlansOnTree {
+    param([string] $Checkout, [string[]] $PlanTargets)
+
+    $started = Get-Date
+    $out = @(& pwsh -NoProfile -File (Join-Path $Checkout 'internal\tools\camel-remote.ps1') `
+        -Path $Checkout -Plan $PlanTargets -ListKnown -NoGpuWatch 2>&1)
+    $exit = $LASTEXITCODE
+    return @{
+        Exit    = $exit
+        Rows    = @($out | Where-Object { "$_".TrimStart().StartsWith('{') }).Count
+        Reds    = @($out | Where-Object { "$_".TrimStart().StartsWith('{') -and "$_" -match '"verdict"\s*:\s*"fail"' }).Count
+        Seconds = ((Get-Date) - $started).TotalSeconds
+        Text    = (@($out | ForEach-Object { "$_" }) -join "`n")
+    }
+}
+
+# Whether a push failure is the tip moving under us. `[remote rejected]` is not this: that is a hook
+# or a policy refusing the commit, and re-landing it on a newer tip would be repeating a refused
+# action with extra steps. The three phrasings below are git's own for a ref that is not a
+# fast-forward, whichever side noticed.
+function Test-PushRejection {
+    param([string] $Text)
+    return ("$Text" -match 'non-fast-forward|fetch first|\[rejected\]|stale info')
+}
+
+# Push, and if the branch moved, make the one recovery this run is allowed. Returns a result instead
+# of stopping: the caller prints `.Lines` and turns `.Kind` into the sentence that belongs to it, so
+# every stop still reads the same state (and so this can be run against a throwaway repository).
+#
+#   Ok          pushed, with or without the recovery
+#   Kind        'pushed' | 'recovered' | 'touches code' | 'no plan' | 'red' | 'conflict'
+#               | 'second rejection' | 'tip did not move' | 'fetch failed' | 'failed'
+#   Sha         the commit that is on origin after this (the merge commit, or the re-landed one)
+#   Shas        old, new (the two ends of the refusal)
+#   Targets     the plans the recovery re-ran; Rows and Reds are their readings
+#   Lines       already indented where indentation belongs; the caller prints them verbatim
+function Invoke-PushWithRecovery {
+    param(
+        [Parameter(Mandatory)][string] $Tree,
+        [Parameter(Mandatory)][string] $Target,
+        # The plans the changed files select, run on the re-landed tree. Throws nothing: returns
+        # `.Targets` (empty when nothing could be named), `.Exit`, `.Rows`, `.Reds`.
+        [Parameter(Mandatory)][scriptblock] $ReRun
+    )
+
+    $pushOnce = {
+        $out = @(& git -C $Tree push origin "HEAD:$Target" 2>&1)
+        return @{ Exit = $LASTEXITCODE; Text = (@($out | ForEach-Object { "$_" }) -join "`n") }
+    }
+    $head = { "$(& git -C $Tree rev-parse --verify 'HEAD^{commit}' 2>$null)".Trim() }
+    # The commit this push expects origin to be on: the merge commit's first parent at entry (the
+    # tree the merge lands on, which the start point asserted origin held), and after a re-land the
+    # tip that was merged in. Read once and moved once, instead of read as `HEAD^1` twice -- after the
+    # re-land `HEAD^1` is the merge commit, so the second reading would diff a lane's whole change
+    # against the tip and call it code.
+    $headAtEntry = (& $head)
+    $basedOn = "$(& git -C $Tree rev-parse 'HEAD^1' 2>$null)".Trim()
+
+    # A rejection is read, never retried blind. A failure that is not a rejection is the old shape --
+    # a network or a lock -- and keeps the old three attempts with four seconds between them.
+    $attempt = & $pushOnce
+    $tries = 1
+    while ($attempt.Exit -ne 0 -and -not (Test-PushRejection -Text $attempt.Text) -and $tries -lt 3) {
+        Start-Sleep -Seconds 4
+        $tries++
+        $attempt = & $pushOnce
+    }
+    if ($attempt.Exit -eq 0) {
+        return @{
+            Ok = $true; Kind = 'pushed'; Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @()
+            Lines = @("pushed HEAD:$Target ($(& $head))")
+        }
+    }
+    if (-not (Test-PushRejection -Text $attempt.Text)) {
+        return @{
+            Ok = $false; Kind = 'failed'; Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @(); Tries = $tries
+            Lines = @("git push failed after $tries attempt(s)", ($attempt.Text -split "`n" | Where-Object { $_ }))
+        }
+    }
+
+    # --- the branch moved: what landed, and is it documentation -----------------
+    $fetch = @(& git -C $Tree fetch origin --prune 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        return @{
+            Ok = $false; Kind = 'fetch failed'; Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @()
+            Lines = @('git fetch failed after the push was refused: what landed cannot be read, so nothing was re-landed and nothing was pushed.',
+                ($fetch | ForEach-Object { "$_" }))
+        }
+    }
+    # The tip this push is based on and the new tip origin holds. Two shas of two commits this
+    # checkout holds -- the difference between them is the work that arrived.
+    $old = $basedOn
+    $new = "$(& git -C $Tree rev-parse --verify "refs/remotes/origin/$Target^{commit}" 2>$null)".Trim()
+    if (-not $old -or -not $new) {
+        return @{
+            Ok = $false; Kind = 'tip did not move'; Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Lines = @("the two ends of the refusal could not be read (the commit this push is based on reads '$old', origin/$Target reads '$new'), so what landed is unknown.", ($attempt.Text -split "`n" | Where-Object { $_ }))
+        }
+    }
+    if ($old -eq $new) {
+        # Nothing arrived, so there is no newer tip to re-land on and this is not the race this
+        # recovery exists for. Said plainly instead of printing a `rebase:` line with nothing in it.
+        return @{
+            Ok = $false; Kind = 'tip did not move'; Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Lines = @("the push was refused but origin/$Target is still $($old.Substring(0,9)), the commit this merge lands on: nothing arrived to re-land, so the refusal is not a non-fast-forward and this run does not recover from it.",
+                ($attempt.Text -split "`n" | Where-Object { $_ }))
+        }
+    }
+
+    $changed = @(& git -C $Tree diff --name-only "$old..$new" 2>$null) |
+        ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+    $split = Split-ChangeByPath -Paths $changed
+
+    if (-not $split.DocsOnly) {
+        # Code, or a mix: a partial re-run of this tree is not a reading about it, and re-running the
+        # whole layer is exactly what this recovery exists to avoid. So it stops here and leaves the
+        # decision where it belongs -- a full run is the caller's, taken deliberately.
+        return @{
+            Ok = $false; Kind = 'touches code'; Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Files = $changed
+            Code = $split.Code
+            Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $false -ReRan 0),
+                "  the commits that landed while this merge was read touch $($split.Code.Count) file(s) that are not documentation: $(($split.Code | Select-Object -First 8) -join ', ')$(if ($split.Code.Count -gt 8) { " and $($split.Code.Count - 8) more" } else { '' })")
+        }
+    }
+
+    # --- documentation only: re-land it and re-read what reads it ---------------
+    # A merge commit, not a reset: the merge this run made is already a reading (its rows, its clang
+    # result), and re-landing it on the new tip keeps that history instead of pretending the merge
+    # was made against the newer tree.
+    $landedSubjects = @(& git -C $Tree log --oneline "$old..$new" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+    $body = @()
+    $body += "Landed on origin/$Target while this merge was read, documentation only, so they are merged here instead of being read again:"
+    foreach ($line in $landedSubjects) { $body += "  $line" }
+    $body += 'Files:'
+    foreach ($file in $split.Documentation) { $body += "  $file" }
+    $mergeMessage = "merge origin/$Target at $($new.Substring(0, 9)) into the merge commit`n`n" + ($body -join "`n")
+    $merge = @(& git -C $Tree merge --no-ff -m $mergeMessage "origin/$Target" 2>&1)
+    $mergeExit = $LASTEXITCODE
+    if ($mergeExit -ne 0) {
+        $conflicted = @(& git -C $Tree diff --name-only --diff-filter=U 2>$null)
+        # An unfinished merge left in the checkout is the state that made `merge-lane` refuse the next
+        # run, so it is aborted here -- and the abort is not a repair of the conflict, it is leaving
+        # the tree as this run found it.
+        if ("$(& git -C $Tree rev-parse -q --verify MERGE_HEAD 2>$null)".Trim()) {
+            & git -C $Tree merge --abort 2>&1 | Out-Null
+        }
+        return @{
+            Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Files = $changed
+            Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
+                "  re-landing origin/$Target on the merge conflicted in $($conflicted.Count) file(s): $($conflicted -join ', '). The merge was aborted; nothing was pushed.")
+        }
+    }
+    $reLanded = (& $head)
+    # A merge of the new tip INTO the merge commit: its first parent is the merge this run made (the
+    # history of what was read stays), its second is the tip that landed, so the push is a
+    # fast-forward of that tip and the landed commits are in what goes to origin.
+    $parents = @("$(& git -C $Tree rev-list --parents -n 1 HEAD 2>$null)".Trim() -split '\s+' | Where-Object { $_ })
+    if ($parents.Count -lt 3 -or $parents[1] -ne $headAtEntry -or $parents[2] -ne $new) {
+        return @{
+            Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = $reLanded
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
+                "  the re-landed commit $($reLanded.Substring(0,9)) is not a merge of origin/$Target ($($new.Substring(0,9))) into the merge commit $($headAtEntry.Substring(0,9)) -- its parents are $($parents -join ', ') -- so it is not the tree the recovery describes and nothing was pushed.")
+        }
+    }
+
+    $reRunReading = & $ReRun $changed
+    $targets = @($reRunReading.Targets | Where-Object { $_ })
+    # From here the push is based on the tip that was just merged in, and the second refusal's two
+    # ends are measured from it (not from `HEAD^1`, which is now the merge commit this run made).
+    $basedOn = $new
+    $rebaseLine = Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan $targets.Count
+    if ($targets.Count -eq 0) {
+        # No plan could be named: either the selection widened (then it is the whole fast layer and
+        # not a partial re-run) or it answered nothing. Either way nothing measures the re-landed
+        # tree, and a push now would be a push of a tree no plan read in this run.
+        return @{
+            Ok = $false; Kind = 'no plan'; Recovered = $false; Sha = $reLanded
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Files = $changed
+            Lines = @($rebaseLine,
+                "  the documentation that landed selected no plan this run could re-run, so the re-landed tree $($reLanded.Substring(0,9)) was not read by any plan. Nothing was pushed.",
+                (($reRunReading.Text -split "`n") | Where-Object { $_ } | Select-Object -Last 3))
+        }
+    }
+    if ($reRunReading.Exit -ne 0 -or $reRunReading.Reds -gt 0) {
+        # A red is a red wherever it is found: the plans that read the files that landed cannot go
+        # red on the tree we are about to push and have that push happen.
+        return @{
+            Ok = $false; Kind = 'red'; Recovered = $false; Sha = $reLanded
+            Targets = $targets; Rows = $reRunReading.Rows; Reds = $reRunReading.Reds; Shas = @($old, $new)
+            Files = $changed
+            Lines = @($rebaseLine,
+                "  the plans that read what landed are red on the re-landed tree $($reLanded.Substring(0,9)) -- $($reRunReading.Reds) failing case(s) of $($reRunReading.Rows), camel-remote exit $($reRunReading.Exit). The re-land is on this checkout's HEAD and nothing was pushed.",
+                (($reRunReading.Text -split "`n") | Where-Object { $_ } | Select-Object -Last 6))
+        }
+    }
+
+    # --- push again, once ------------------------------------------------------
+    $second = & $pushOnce
+    if ($second.Exit -eq 0) {
+        return @{
+            Ok = $true; Kind = 'recovered'; Recovered = $true; Sha = (& $head)
+            Targets = $targets; Rows = $reRunReading.Rows; Reds = $reRunReading.Reds; Shas = @($old, $new)
+            Files = $changed
+            Lines = @($rebaseLine,
+                "  re-landed $($changed.Count) documentation file(s) on origin/$Target ($($new.Substring(0,9))) as $($reLanded.Substring(0,9)), re-ran $($targets.Count) plan(s): $($targets -join ', ') ($($reRunReading.Rows) case(s), $($reRunReading.Reds) red)",
+                "pushed HEAD:$Target ($(& $head))")
+        }
+    }
+
+    # A second refusal ends the run. The one recovery has been made; making it again is the same
+    # action a third time, which is not persistence. The shas are the whole report, so the next
+    # reader starts from the two commits rather than from a suggestion.
+    if (-not (Test-PushRejection -Text $second.Text)) {
+        return @{
+            Ok = $false; Kind = 'failed'; Recovered = $false; Sha = (& $head)
+            Targets = $targets; Rows = $reRunReading.Rows; Reds = $reRunReading.Reds; Shas = @($old, $new); Tries = 1
+            Files = $changed
+            Lines = @($rebaseLine, "git push failed after 1 attempt(s)", ($second.Text -split "`n" | Where-Object { $_ }))
+        }
+    }
+    $old2 = $basedOn
+    $null = @(& git -C $Tree fetch origin --prune 2>&1)
+    $new2 = "$(& git -C $Tree rev-parse --verify "refs/remotes/origin/$Target^{commit}" 2>$null)".Trim()
+    $changed2 = if ($old2 -and $new2 -and $old2 -ne $new2) {
+        @(& git -C $Tree diff --name-only "$old2..$new2" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+    } else { @() }
+    $split2 = Split-ChangeByPath -Paths $changed2
+    return @{
+        Ok = $false; Kind = 'second rejection'; Recovered = $false; Sha = (& $head)
+        Targets = $targets; Rows = $reRunReading.Rows; Reds = $reRunReading.Reds; Shas = @($old2, $new2)
+        Files = $changed2
+        # Both lines: the first refusal's (with the recovery that was made) and this one, so what the
+        # run did and what it then met are on one record. The stop the caller prints adds the shas.
+        Lines = @($rebaseLine,
+            (Format-RebaseLine -OldRemote $old2 -NewRemote $new2 -Files $changed2.Count -DocsOnly $split2.DocsOnly -ReRan 0))
+    }
+}
+
+# The green line of a run that recovered. Its job is the one thing a partial re-run can lie about:
+# coverage. So it names the plans that were re-run and the tree the merge's own readings belong to,
+# and it says in as many words that no layer was measured -- a reader of this line must not be able to
+# take it for a full measurement, which is the same defect as the `0 fixed, 0 new, 0 changed` green
+# the row stage exists to make impossible.
+function Format-RecoveryConclusion {
+    param(
+        [string] $Branch, [string] $Head, [string] $Target, [string] $Local,
+        [string[]] $Targets, [int] $Files, [string] $MeasuredTree
+    )
+
+    $short = {
+        param($s)
+        $t = "$s".Trim()
+        if ($t.Length -gt 9) { $t.Substring(0, 9) } else { $t }
+    }
+    return ('merged {0} at {1}; {2} is {3} (partial re-run: {4} plan(s) -- {5} -- selected by the {6} documentation file(s) that landed on origin/{2} while this merge was read; the plans this merge selected were measured on tree {7}, and no layer was measured)' -f `
+            $Branch, $Head, $Target, (& $short $Local), @($Targets).Count, (@($Targets) -join ', '), $Files, (& $short $MeasuredTree))
+}
+
 Push-Location $MainCheckout
 try {
     # The two directories that are not `$MainCheckout\.git` once the merge position is a linked
@@ -1053,12 +1421,88 @@ try {
         exit 0
     }
 
-    for ($i = 1; $i -le 3; $i++) {
-        & git push origin "HEAD:$Target" 2>&1 | Select-Object -Last 1
-        if ($LASTEXITCODE -eq 0) { break }
-        Start-Sleep -Seconds 4
+    # --- the push, and the one recovery a refused push may make ------------------
+    # Everything above measured one tree: the merge commit. The target branch moves while a merge is
+    # being measured -- a documentation commit is pushed by whoever writes pages, and no merge seat
+    # writes them -- and the push then lands on a tip that is not the one this merge was read
+    # against. Until this existed the only answer was to run the whole thing again: eleven minutes,
+    # three times in one night, for commits that touch no code.
+    #
+    # What the recovery may do is decided by the file paths of the commits that landed (see
+    # Split-ChangeByPath): merge them into the merge commit and re-run the plans they select, or stop
+    # and say the push touches code. It is attempted once. Everything else about the push is what it
+    # was: the verdict on whether to push at all is the row comparison above, and `new` and `changed`
+    # empty is still what "the readings allow it" means.
+    Write-Host ''
+    Write-Host "pushing HEAD:$Target ..."
+    # What the plans of a changed-file list are, read into the fresh tree: `--changed` over the landed
+    # file list, then the same run the row stage uses, on the plans that list selects. Both answers
+    # come back as data, so a refusal that names nothing is a refusal and not an empty green.
+    $rerunPlans = {
+        param([string[]] $ChangedFiles)
+        $listFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-rebase-files-$PID.txt")
+        [System.IO.File]::WriteAllText($listFile, (($ChangedFiles -join "`n") + "`n"),
+            (New-Object System.Text.UTF8Encoding($false)))
+        try {
+            $selection = Get-PlansForChangedFiles -Checkout $MainCheckout -ListFile $listFile
+            if ($selection.Exit -ne 0 -or $selection.Widened -or $selection.Targets.Count -eq 0) {
+                return @{ Exit = 2; Targets = @(); Rows = 0; Reds = 0; Text = $selection.Text }
+            }
+            $run = Invoke-PlansOnTree -Checkout $MainCheckout -PlanTargets $selection.Targets
+            return @{ Exit = $run.Exit; Targets = $selection.Targets; Rows = $run.Rows; Reds = $run.Reds; Text = $run.Text }
+        } finally {
+            Remove-Item -LiteralPath $listFile -Force -ErrorAction SilentlyContinue
+        }
     }
-    if ($LASTEXITCODE -ne 0) { Stop-With 'git push failed after 3 attempts' "The merge is committed locally and not on origin/$Target." $mergeCommit }
+    $push = Invoke-PushWithRecovery -Tree $MainCheckout -Target $Target -ReRun $rerunPlans
+    $push.Lines | Where-Object { $_ } | ForEach-Object { Write-Host $_ }
+
+    if (-not $push.Ok) {
+        switch ($push.Kind) {
+            'touches code' {
+                Stop-With "origin/$Target moved while this merge was read, and the commits that landed touch code" `
+                    "$(if ($push.Shas.Count -eq 2) { "$($push.Shas[0].Substring(0,9)) -> $($push.Shas[1].Substring(0,9))" }): a partial re-run of that tree would be a reading about a change this gate never selected, so none was taken. A full run is a decision for whoever started this merge: merge again from origin/$Target and re-take every stage. Nothing was pushed." $mergeCommit
+            }
+            'second rejection' {
+                # The one recovery has been made and the branch moved again. The shas are the whole
+                # report: a third attempt of the same action is not persistence, it is the loop this
+                # stage was written to stop walking.
+                Write-Host ''
+                Write-Host "STOPPED: origin/$Target moved again after the one recovery this run may make; nothing further was attempted" -ForegroundColor Red
+                Write-Host "  $($push.Shas[0]) -> $($push.Shas[1])"
+                Write-Host ''
+                exit 1
+            }
+            'no plan' {
+                Write-Host ''
+                Write-Host 'STOPPED: the documentation that landed selects no plan, so the re-landed tree was not read (exit 2, no reading taken)' -ForegroundColor Yellow
+                Write-Host '  The re-land is on this checkout''s HEAD and nothing was pushed. The selection widened or answered nothing, and a widened selection is the whole fast layer: re-running it here is a full run wearing the name of a partial one.'
+                Write-Host '  What repairs it: `node scripts/test.js --changed --changed-files <list> --list` is the selection and starts nothing; test/plan-selection.json needs a rule for the files that landed.'
+                Write-Host ''
+                Write-GitState -MergeCommit $push.Sha
+                exit 2
+            }
+            'red' {
+                Stop-With "the plans that read what landed are red on the re-landed tree (exit 1: $($push.Reds) failing case(s) of $($push.Rows))" `
+                    "The re-land is on this checkout's HEAD and nothing was pushed: a red is a red wherever it is measured. Fix it, or re-read the merge from origin/$Target." $push.Sha
+            }
+            'conflict' {
+                Stop-With "the documentation that landed could not be merged into the merge commit" `
+                    'The merge was aborted, so this checkout is where it was and nothing was pushed. The lane and the landing wrote the same page: resolve which text is right, then merge again.' $push.Sha
+            }
+            'tip did not move' {
+                Stop-With "the push was refused but origin/$Target did not move" `
+                    'Nothing arrived to re-land, so this refusal is not a non-fast-forward race and this run does not recover from it. The push output is above; the merge is committed locally and not on origin.' $push.Sha
+            }
+            'fetch failed' {
+                Stop-With 'git fetch failed after the push was refused' 'What landed cannot be read, so nothing was re-landed and nothing was pushed.' $push.Sha
+            }
+            default {
+                Stop-With "git push failed after $($push.Tries) attempt(s)" "The merge is committed locally and not on origin/$Target." $push.Sha
+            }
+        }
+    }
+    if ($push.Recovered) { $mergeCommit = $push.Sha }
 
     $remote = ((& git ls-remote origin "refs/heads/$Target") -split "`t") | Select-Object -First 1
     $local = "$(& git rev-parse HEAD)".Trim()
@@ -1073,15 +1517,26 @@ try {
     # The directory is made here because the comparer refuses a cache that is not there (that
     # refusal is what keeps a missing baseline from reading as "every case fixed"): the first merge
     # on a machine has no cache yet, and creating it is this script's job, not the reader's.
+    #
+    # Not after a recovery. The rows in the transcript were read on the merge commit, and the commit
+    # that landed is that merge plus the documentation that arrived -- a different tree. Storing them
+    # under the landed commit's key would make the next merge compare against rows for a tree nobody
+    # measured, which is the one failure the comparer cannot see (`--tree` would name the landed
+    # commit, because that is the commit the cache is keyed by). So the key is left unset and the next
+    # merge measures: slower, and true.
     New-Item -ItemType Directory -Force -Path $compareDir | Out-Null
-    & node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
-        --cache $compareDir --develop $local --plans $planSetFile --tree $local --accept 2>&1 |
-        Select-Object -Last 1 | ForEach-Object { "  $_" }
-    if ($LASTEXITCODE -ne 0) {
-        # Not a refusal: the merge is already on origin, and a merge that did land is not undone by
-        # a baseline that could not be written. The next merge on this commit measures instead of
-        # comparing, which is slower and not wrong.
-        Write-Host "  warning: the baseline for $($local.Substring(0,9)) was not stored; the next merge on that commit will measure instead of comparing"
+    if ($push.Recovered) {
+        Write-Host "  warning: no baseline was stored for $($local.Substring(0,9)): the rows this run read are the rows of $($comparedTree.Substring(0,9)), and the documentation that landed made the pushed tree a different one. The next merge on that commit measures instead of comparing"
+    } else {
+        & node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
+            --cache $compareDir --develop $local --plans $planSetFile --tree $local --accept 2>&1 |
+            Select-Object -Last 1 | ForEach-Object { "  $_" }
+        if ($LASTEXITCODE -ne 0) {
+            # Not a refusal: the merge is already on origin, and a merge that did land is not undone by
+            # a baseline that could not be written. The next merge on this commit measures instead of
+            # comparing, which is slower and not wrong.
+            Write-Host "  warning: the baseline for $($local.Substring(0,9)) was not stored; the next merge on that commit will measure instead of comparing"
+        }
     }
 
     Write-Host ''
@@ -1094,7 +1549,19 @@ try {
     } else {
         Write-Host "  the next merge on $($local.Substring(0,9)) measures a baseline of its own: internal\tools\merge-lane.ps1 -WarmBaseline measures the fast layer once on this commit, when the test slot is free, and every merge after it compares instead"
     }
-    Write-Host "merged $Branch at $head; $Target is $($local.Substring(0,9))" -ForegroundColor Green
+    # After a recovery the green line has to carry its coverage, and the coverage is not the layer the
+    # merge selected: the plans re-run are the ones the landed documentation selects, nothing else was
+    # measured a second time, and the row comparison above still speaks only for the tree it read. A
+    # line that said "merged" alone would let a reader take a partial reading for a full one -- the
+    # same shape as the `0 fixed, 0 new, 0 changed` green this stage was built to make impossible.
+    if ($push.Recovered) {
+        Write-Host (Format-RecoveryConclusion -Branch $Branch -Head $head -Target $Target -Local $local `
+                -Targets $push.Targets -Files $push.Files.Count -MeasuredTree $comparedTree) -ForegroundColor Green
+        Write-Host ("  those {0} plan(s): {1} case(s), {2} red, on the re-landed tree {3}" -f `
+                $push.Targets.Count, $push.Rows, $push.Reds, $local.Substring(0, 9))
+    } else {
+        Write-Host "merged $Branch at $head; $Target is $($local.Substring(0,9))" -ForegroundColor Green
+    }
     # The closing claim read back rather than asserted: after the push both ends are one sha, and the
     # line says which. A push that reported success and a ref that did not move is a reading worth
     # seeing, so the two are compared here instead of being implied by the word "merged".
