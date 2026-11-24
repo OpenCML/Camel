@@ -290,11 +290,34 @@ void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller
 }
 
 std::atomic<operator_t> *NodeVMSchedPass::resolvedOpersOf(const camel::runtime::ExecPlan &plan) {
-    std::unique_ptr<std::atomic<operator_t>[]> &table = resolvedOpers_[&plan];
-    if (!table) {
-        table = std::make_unique<std::atomic<operator_t>[]>(plan.graph->nodeCount());
+    // A plan is a fact of a graph version, and a table is as long as that version's node places.
+    // The graph space frees versions while the program runs, and with a version goes its plan: the
+    // store drops the entry and the next plan may be placed at the same address. An entry found
+    // under that address then holds a table made for the plan that is gone and for *its* graph,
+    // which may have fewer node places than the graph the plan found there now belongs to. Indexed
+    // with a node reference of the running version, that table answers with whatever lies past its
+    // end -- another object's memory, read as an operator and called -- so the plan an entry was
+    // made for is kept weakly and compared, and an entry whose plan is gone is dropped rather than
+    // answered. It is the same rule the bytecode engine applies to its own per-plan state
+    // (fvm/version_state.cpp): an address is not an identity.
+    auto found = resolvedOpers_.find(&plan);
+    if (found != resolvedOpers_.end() && found->second.plan.lock().get() != &plan) {
+        resolvedOpers_.erase(found);
+        found = resolvedOpers_.end();
     }
-    return table.get();
+    if (found == resolvedOpers_.end()) {
+        const std::shared_ptr<const camel::runtime::ExecPlan> owner =
+            plan.graph != nullptr ? camel::runtime::execPlanOf(*plan.graph) : nullptr;
+        found = resolvedOpers_
+                    .emplace(
+                        &plan,
+                        ResolvedOpers{
+                            owner,
+                            std::make_unique<std::atomic<operator_t>[]>(
+                                plan.graph != nullptr ? plan.graph->nodeCount() : 0)})
+                    .first;
+    }
+    return found->second.table.get();
 }
 
 slot_t NodeVMSchedPass::call(
