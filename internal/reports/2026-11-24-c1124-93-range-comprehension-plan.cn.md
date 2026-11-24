@@ -175,3 +175,20 @@ array_large.cml:37 The generic function 'sort_by' cannot be called with argument
 ⇒ 箭头形式把名字解析成 **array 的泛型模板**（`count::<T>(xs: T[])`），在 `instantiateForCall` 里直接判负，**没有去问收集到的那一份**。⇒ 这正是我在第十四节标为「未读」的第三个层次，现在量到了：**箭头形式与名字形式走的不是同一条解析**。
 
 ⇒ 同一批读数里还露出 18 条其实不止三个名字：`take`、`reverse`、`zip`、`flat_map` 也在其中（`take`/`reverse` 同样是「范围上缺声明」；`zip` 是 `array.cml:68` 的 `enumerate` 里 `zip(Range, T[])`；`flat_map` 与 `add` 见上）。
+
+## 十七、第三刀：两向实测否决了它，已回退（这一节是失败记录）
+
+**做了**：`OperatorOverloads` 加 `name` 字段；`mergedOverloadsNamed` 不再因 `set.ops == nullptr` 判 nullopt；`builder_expr.cpp` 在无组时用 graph set 建 DREF；`chooseOperatorOverload` 里 `set.ops` 的四处用法逐处判空（报错读 `name`，内置候选无组即无）。
+
+**实测**：`stream` 计划 **141/159（18 红）**，`composition`、`composition_uses`、`range_count_find`、`range_value_map` 等一起红，报的是
+
+```
+composition.cml:14:13  '..' takes two integers and '<>' takes two functions;
+                       the left operand is 'a value with no type yet' ...
+```
+
+**收窄再试也无效**：把条件改成「只有 prelude 为该名字声明了体时才允许无组」后，同一批仍然红 —— 说明 `..`、`<>` 这些**符号名**也被同一条路接住了，第二个条件当初挡的不只是箭头形式的函数名，**还挡着算子符号**。
+
+**于是回退**（`git checkout --` 三个文件 + 用例），重建后 `stream` **158/159**，唯一红是既有的 `interval_loop_not_materialised`。树回到 `334a3988cc`，未提交任何半成品。
+
+**这一刀的下一个假设（未验证，不写代码）**：需要一个**判别器** —— 「名字是算子符号」时保持原来的组解析，只有**普通标识符**（`count`、`find`）才允许无组集合。判别器可以是名字里是否含非标识符字符，也可以是「该名字有没有 `operator` 声明」，**但这两者都得先读一遍再定，不能再猜**。
