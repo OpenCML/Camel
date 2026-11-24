@@ -152,7 +152,7 @@ desc = "The nest of `grad` in `grad` at its smallest, through the library's tran
 known_fail = ["nvm", "fvm", "jit", "prl"]
 known_fail_owner = "lane-grad-form"
 known_fail_reason = "the nest builds and both layers lift; what refuses today is one step past them -- `transforms: transpose has no transpose for this function`, with the cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. Read as the wall it is: the mark is on the number, so this sentence moving again does not touch this entry"
-known_fail_ends_when = { prints = "nested_grad_min second=2.0" }
+known_fail_ends_when = { passes = "compositions.nested_grad_min" }
 kind = "behavior"
 case = "../../../cases/transforms/compositions/nested_grad_min.cml"
 args = ["${case}", "${backend}"]
@@ -168,7 +168,7 @@ desc = "The same nest written through two bindings (`let inner = grad(cube)`, `l
 known_fail = ["nvm", "fvm", "jit", "prl"]
 known_fail_owner = "lane-grad-form"
 known_fail_reason = "as `compositions.nested_grad_min`: the nest builds and both layers lift, and what refuses today is one step past them -- `transforms: transpose has no transpose for this function`, raised with the cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry` from `modules/transforms/transpose_operator.cpp#refusalSentence`. The mark is on the number, so that sentence moving again does not touch this entry"
-known_fail_ends_when = { prints = "nested_grad_through_a_binding second=12.0" }
+known_fail_ends_when = { passes = "compositions.nested_grad_through_a_binding" }
 kind = "behavior"
 case = "../../../cases/transforms/compositions/nested_grad_through_a_binding.cml"
 args = ["${case}", "${backend}"]
@@ -184,7 +184,7 @@ desc = "A Hessian element by element, through the library's `grad` nested: f(a,b
 known_fail = ["nvm", "fvm", "jit", "prl"]
 known_fail_owner = "lane-grad-form"
 known_fail_reason = "every reading here is a nest of the library's `grad`, so each one dies one step past the lift: `transforms: transpose has no transpose for this function`, with the cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. Nothing in this entry is blocked by the declaration or by the writing: with `grad(square)<2.0>()` first-order readings on the same build are green. The mark is on the five numbers, not on that sentence"
-known_fail_ends_when = { prints = "hessian h_aa=2.0" }
+known_fail_ends_when = { passes = "compositions.hessian_of_a_quadratic" }
 kind = "behavior"
 case = "../../../cases/transforms/compositions/hessian_of_a_quadratic.cml"
 args = ["${case}", "${backend}"]

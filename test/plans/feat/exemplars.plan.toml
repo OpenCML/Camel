@@ -123,4 +123,4 @@ known_fail = true
 known_fail_owner = "the graph node naming (the `__g_N__` ids and the dump that prints them)"
 known_fail_reason = "internal/exemplars/08_structured_control_flow/expected/dump.agir.dot: the recorded golden is stale, `label=\"__g_49__\"` where the compiler now prints `label=\"__g_59__\"` -- the exemplar's dump names graphs by the id the compiler gives them, and a renumbering of those ids moved the names, so the expected file has to be re-recorded with the tool that wrote it"
 known_fail_msg = "stdout differs from expected/dump.agir.dot at line 50"
-known_fail_ends_when = { prints = "exemplars: all checks passed" }
+known_fail_ends_when = { passes = "08_structured_control_flow" }

@@ -55,9 +55,14 @@
    `prints` 必须是该条目自己钉的行（`end-trigger-names-another-reading`）；`passes` 必须点名树里
    存在的用例（新判据 `end-trigger-names-nowhere`）。全树 `findings` 仍是 **317**、`fields=29`、
    上限不变。
-4. **27 处逐条改写**：16 处 `prints`（值取自该条目自己钉的第一行）、9 处 `passes`（"这条自己转绿"
-   与"等另一条"）、2 处由人判（`with_grad_from_the_library`、`vmap_grad_f`——前者要等库改名，后者要等
-   三个数，都写成 `passes = "<自己>"`，即"这条转绿即结束"）。**没有一条硬凑**。
+4. **27 处逐条改写**：`test/plans` 里现在是 **5 处 `prints`、16 处 `passes`**，自测矩阵 8 处全是
+   `passes`。**没有一条硬凑**——而第一次评估就抓出 11 条我写错的：那 11 条的 `prints` 行**今天就已经
+   打印出来了**（`nested` 7 条、`compositions` 3 条、`exemplars` 1 条），用例因为别的原因还红，于是
+   严格 xfail 立刻把它们判成"结局已到"。一个 `prints` 条件只有在"那行不可能在墙移开之前出现"时才
+   是墙的读数；对这 11 条，诚实的读数是"这条用例转绿"，即 `passes = "<自己>"`。改过来之后
+   `compositions` 回到 16 已知/4 红、`nested` 回到 7 已知/0 红、`exemplars` 回到 1 已知/2 红，
+   一条误报也没有。**这正是"每次评估"这一半的价值：一个从没被评估过的归还条件，永远不知道自己
+   是错的。**
 5. **自测**（`test/tools/selftest/knownfail/`）：新增 `ended.mjs`/`anchor.mjs` 与三份计划——
    `ends_arrived`（`prints` 已满足 ⇒ `[FAIL]` + 删标记）、`waits_on`（`passes` 已满足 ⇒ 结算块）、
    `prose_ends`（散文 ⇒ 载入即拒）。`[known_fail gate]` 现在读作
