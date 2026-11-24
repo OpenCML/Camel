@@ -144,9 +144,10 @@ export const RULES = [
             if (!readable(m.backlog)) return null
             const missing = taken.filter((id) => !m.backlog.has(id))
             if (missing.length === 0) return null
+            const shown = missing.slice(0, 5).join('、') + (missing.length > 5 ? ` 等 ${missing.length} 条` : '')
             return {
-                key: missing.join(','),
-                text: `回执了 taken 却不在 internal/backlog.md 里：${missing.join('、')}。接了的活不进 backlog 就等于不存在，补上这几行。`,
+                key: String(Math.ceil(missing.length / 5)),
+                text: `回执了 taken 超过一小时仍不在 backlog 里：${shown}。接了的活要落一行。`,
             }
         },
     },

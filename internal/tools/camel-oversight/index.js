@@ -475,7 +475,7 @@ export function apply(ctx, rawConfig) {
     // Only dispatch-shaped ids are items; an id a session made up for itself can never have a backlog row.
     const takenIds = () =>
         [...acks.values()]
-            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 15 * 60_000)
+            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 60 * 60_000)
             .map((entry) => entry.id)
     const backlogOpen = () =>
         reading && reading.backlog instanceof Map ? [...reading.backlog.values()].filter((row) => !row.done).length : 0
@@ -504,7 +504,10 @@ export function apply(ctx, rawConfig) {
         const LEVELS = hot.rules.module.LEVELS
         const level = due.reduce((top, alert) => (LEVELS[alert.level] > LEVELS[top] ? alert.level : top), 'quiet')
         const text = `[oversight · 提醒]\n${due.map((alert) => `- ${alert.text}`).join('\n')}`
-        const mode = agent ? sendToTarget(agent, level, text) : 'held (no claimed session)'
+        // A quiet reminder is not sent as a message: it stands in the session's system prompt (Open
+        // alerts, refreshed every step) and on the band until its condition clears. Sent as messages, quiet
+        // reminders piled up in the session unread, and the author saw a backlog of them.
+        const mode = !agent ? 'held (no claimed session)' : level === 'quiet' ? 'prompt' : sendToTarget(agent, level, text)
         const entry = { kind: 'reminder', at: now, level, mode, rules: due.map((alert) => alert.id), text }
         record(entry)
         emit(entry)
@@ -985,10 +988,10 @@ export function apply(ctx, rawConfig) {
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +
                     'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit). ' +
                     'Messages prefixed "[oversight · …]" are the plugin\'s own reminders from its measurements; act on them, no acknowledgement needed. oversight_readings gives the measurements on demand.'
-                const open = [...alerts.keys()]
+                const open = [...alerts.values()].map((state) => state.text).filter(Boolean)
                 const parts = rulesText ? [rulesText, head] : [head]
                 if (waiting.length > 0) parts.push(`Not yet acknowledged: ${waiting.join(', ')}.`)
-                if (open.length > 0) parts.push(`Open alerts: ${open.join(', ')}.`)
+                if (open.length > 0) parts.push(`Open alerts (the plugin's measurements; act on them when you can, they clear when their condition does): ${open.map((t) => `- ${t}`).join(' ')}`)
                 return parts.join(' ')
             },
         }),

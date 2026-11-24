@@ -94,7 +94,9 @@ async function mergedOf(git) {
 /// it, like the rules and the hot-reloaded files: the main checkout is the author's workspace and may
 /// stand on another branch, or hold an edit nobody pushed.
 async function backlogOf(git) {
-    const text = await git(['show', 'origin/develop:internal/backlog.md'])
+    // The coordinator records rows on its docs branch and pushes them between merges; until then that
+    // branch is the newer record. Without it, origin/develop.
+    const text = await git(['show', 'docs/coordinator:internal/backlog.md']).catch(() => git(['show', 'origin/develop:internal/backlog.md']))
     const rows = new Map()
     const ownRows = new Set()
     for (const line of text.split('\n')) {
