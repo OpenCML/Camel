@@ -465,7 +465,9 @@ debug 35**。`scripts/plan-inventory.mjs` 用同一个 `loadPlanTests` + `expand
 
 ## ⑦ 没做的事
 
-- **没有改 `test/` 下任何东西**，没有改 `run-tests.mjs`，没有移任何用例出快层，没有加时间预算。
+- **没有改 `test/` 下的计划与用例**，没有移任何用例出快层，没有加时间预算。
+  盘点那一轮 `run-tests.mjs` 也没动；**① 那一轮改了**（只改记录与身份，见 §⑩），
+  改的是跑测工具自己，不是任何一张计划。
 - **没有改任何 `tier`。** §⑨ 的分诊只是表：三档的去向等 ① 的 CPU 仪器到位后由合并位走。
 - **没有跑测试。** 本页的每个秒数都来自记录；没有"现在跑一遍"冒充历史读数。盘点用的解析脚本
   放在 `%TEMP%` 下、只读，用完即弃，没有进仓库。
@@ -580,6 +582,58 @@ debug 35**。`scripts/plan-inventory.mjs` 用同一个 `loadPlanTests` + `expand
 一条 `cpu_ms`（或同一棵树 `--jobs 1` 的单跑墙钟）。
 
 261 条逐条见**附录 B**：计划、用例、子进程墙钟、去向、依据。
+
+## ⑩ 仪器：CPU 读数、计划身份、派生副本的归属
+
+这是 `D-1124-3` 的 ①，本轮唯一的代码改动：`test/tools/run-tests.mjs` 与 `docs/test-plans.md`。
+提交 `49e50162b1`。三件事，每件都要求"缺了要说出来"，而不是默认成 0 或不存在。
+
+**CPU 时间。** 读数本来就有：`test/tools/child-cpu.mjs` 把每条用例的命令行套一层，
+从 `/proc/self/stat` 的 `cutime + cstime`（第 13/14 个字段，单位 1/100 s）读**整棵进程树**
+的 user+sys。这不是 `process.resourceUsage()` —— 那是 `RUSAGE_SELF`，会把子进程与孙进程漏掉；
+`cutime/cstime` 正是 `getrusage(RUSAGE_CHILDREN)` 的数字，所以口径是"这条用例自己干的活"。
+缺的是**缺失的表达**：没有读数时 `cpu_ms: null`，而 `null` 读起来像 0。现在：
+`meta.json` 与 `test_timings[]` 每一行都带 `cpu_reason`（为什么没有这个数），
+`summary.json` 多一个 `cpu_readings` 块（这台主机到底有没有读数、多少条读到了、多少条声明了
+`cpu_budget_ms`、原因按条数降序）——"这台主机没有这个数"从一条控制台 WARN 变成记录的一部分。
+
+**计划身份。** 记录写的是 `plan: entry.plan.id`，而没有 `id` 的计划文件（今天 14 个、名下 369 条）
+让这个键被 `JSON.stringify` 整个丢掉：11-12 那次全快层跑里有 **303 行没有 `plan` 键**，
+日志目录还叫 `undefined/`。现在跟 `loadPlanTests` 用同一个回退——文件名的 basename。
+
+**派生副本的归属。** `expandSweeps` 用 `...test` 把来源计划的 `__planPath` 带进了副本，
+于是副本的 `meta.json` 里 `plan_id` 是 sweep 的、`plan_path` 是来源计划的，**两个身份字段
+说两个计划**。现在副本归跑它的那张计划，`case` / `golden` / `verify_script_path` 在展开时
+就按来源计划解析成绝对路径（`path.resolve` 对绝对路径原样返回，所以其余读法不用改），
+来源留在副本名（`<sweep>:<来源计划 id>:<用例名>`）和 `sweep` / `source_plan` / `source_test` 里。
+在 `feat/mm/gc_poison_sweep` 上数：**4,860 条副本全部归 sweep 计划**，`case` 全部解析成绝对且
+**磁盘上一条不缺**，`__sweepSource` 4,860 条齐全。
+
+**验证（在构建主机上真跑过，不是读代码）。**
+`feat/compile/graph_read`（无 `id` 的计划，1 条）+ `feat/opt/splice_place`（4 条 `cpu_budget_ms`），
+`-Jobs 2`，主机 load 62–66。记录 `test/results/log/20261124_000218_2696127`：
+
+```
+cpu_readings= {"available": true, "platform": "linux", "tests": 46, "with_reading": 46,
+               "without_reading": 0, "cpu_budget_tests": 4, "cpu_budget_with_reading": 4, "reasons": []}
+rows=46  rows_without_plan_key=0  plans_seen=['graph_read', 'opt.splice_place']
+graph_read 的 meta.json: plan_id 'graph_read', cpu_ms 30, cpu_limit_ms 5000, cpu_margin_x 166.667
+```
+
+控制台里能直接读到的一条真实 CPU 读数（声明了 `cpu_budget_ms` 的用例才打这个）：
+
+```
+[FAIL] perf_fib_smoke.opt_twice.nvm 80.00 ms cpu of 5.00 s budget, 294.32 ms wall
+[FAIL] perf_fib_smoke.opt_twice.fvm 70.00 ms cpu of 5.00 s budget, 186.23 ms wall
+```
+
+**没验到的，明说。** ① 那台主机有 `/proc/self/stat`，所以 46 条**全都有读数**，
+`cpu_reason` 的那条路径（无读数主机、或套了壳却没拿到报告）**没有在端到端里走过一次**；
+它在 Windows 上才成立，而 Windows 上拿不到子进程 CPU 是 libuv 的限制
+（`uv_getrusage` 只给自己），不是可以用默认值糊过去的东西。② 这次跑还顺带读出一条与 ① 无关的
+事实：`feat/opt/splice_place` 在这棵树上 **46 条里 29 条红**（`perf.cml:37` `No matching function`
+、`random.cml:114` `Unresolved reference: 'to_array'`），与本次改动无关（我一个字都没碰 `.cml` 与 C++），
+但它说明 `origin/develop` 这个提交上 `feat/opt` 是红的——写在这里，免得下一个人把它算到仪器头上。
 
 ## 附录 A：全表（420 个计划）
 
