@@ -16,8 +16,10 @@ tags = ["feat", "compile", "effects", "hof", "higher_order"]
 # (`sem::ResourceSpec::functionOperand`), *plus* whatever the operator declares for itself.
 # `checkResources` allows the two beside each other -- it refuses only an access bound to the
 # operand that carries the function -- and every reader states the union: the builder's ordering
-# (`Builder::reachOfOper`, `Builder::isEffectNode`), the node-role registry, the effect summary
-# (`EffectWalk::ofNodes`) and the runtime's resource footprint (`Resolver::oper`).
+# (`Builder::reachOfOper`, `Builder::isEffectNode`), the effect summary (`EffectWalk::ofNodes`) and
+# the runtime's resource footprint (`Resolver::oper`). The node-role registry does not state it a
+# fourth time: it reads the footprint fact for the node (`core.resources`,
+# `fact::nodeResourcesOf`), so the role a dump prints is that one answer.
 #   * `map` over a function that writes no clause has no `effect` role; over one that writes
 #     `stdout` it keeps both, and the runtime footprint carries the write. Before `fd1c9838ca` the
 #     declaration said "external, itemizes nothing" and every `map` was an effect, whatever the
@@ -108,5 +110,28 @@ verify_script = """
     assert(map.includes('role="effect"'), `the map node lost its effect role: ${map}`)
     assert(lines.some((line) => line.includes('legend_effect')),
         'no effect legend, so nothing was counted as an effect')
+}
+"""
+
+[[tests]]
+name = "node_role_reads_the_fact"
+desc = "Both directions of the union, read at the node: `state:update` carries the `effect` role because it writes the reference, even though the function its parameter admits is `pure`, and `map` over a function that writes nothing carries no role, because the operator declares nothing for itself either. The role registry reads the fact layer's answer for the node (`core.resources`) rather than a predicate of its own, so a reader that spelled the union out a fourth time would have to disagree with this case to be noticed."
+case = "../../../cases/trans/annotated/effect_union.cml"
+kind = "behavior"
+args = ["${case}", "std::agir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const lines = input.normalized.output.split('\n')
+    const update = lines.find((line) => line.includes('label="state:update"'))
+    assert(update !== undefined, 'no state:update node in the dump')
+    assert(update.includes('role="effect"'),
+        `the update node lost its effect role, though it writes the reference: ${update}`)
+    const map = lines.find((line) => line.includes('label=":mark/map_arr"'))
+    assert(map !== undefined, 'no :mark/map_arr node in the dump')
+    assert(!map.includes('role="'),
+        `the map over a function that writes nothing carries a role: ${map}`)
 }
 """

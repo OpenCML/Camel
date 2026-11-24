@@ -417,8 +417,14 @@ std::string dumpJsonRuntimeGraph(
                         attrValueJson(a.value);
             }
             value["roles"] = json::array();
-            for (const auto &role : NodeRoleRegistry::instance().classify(
-                     camel::graph::FrozenGraphAdapter(*g), ref))
+            // The site names the graph and the store the fact a role reads is answered by: a role
+            // that speaks about a fact asks it there (camel/runtime/node_roles.h). The adapter is a
+            // named local because a site holds a reference to it: a temporary bound to a reference
+            // member of an aggregate dies with the statement that made it.
+            const camel::graph::FrozenGraphAdapter viewAdapter(*g);
+            const camel::runtime::NodeRoleSite roleSite{
+                viewAdapter, g, &program, ctx != nullptr ? &ctx->facts() : nullptr};
+            for (const auto &role : NodeRoleRegistry::instance().classify(roleSite, ref))
                 value["roles"].push_back(role.spec.name);
             graph["nodes"].push_back(std::move(value));
             // Explicit edge classes and indices preserve duplicate inputs and their order. The
