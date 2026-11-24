@@ -957,7 +957,17 @@ export function main(argv = process.argv.slice(2)) {
     // as `--selection-empty` with no target, and the run starts nothing and says which zero it is.
     let runTargets = selection.targets
     let runEmpty = selection.empty === true
-    if (selection.targets.length > 0) {
+    // The record is a *change's* list, so only a change run has one. `--changed` hands over the cases
+    // this change selects, and there the narrowing is the selection: the run is the list a second run
+    // of the same change can be checked against. A layer run (`-Plan all --tier fast`) asks for the
+    // layer and nothing else, and `scripts/selection-cases.mjs` narrows every list it computes to the
+    // files that differ from the base -- so the record written for a layer run names a change's
+    // cases. Handing that over made the layer run start a subset of the layer while printing the
+    // layer's name: on 2026-11-24 `-Plan all --tier fast` read 9279 cases over 355 plans while the
+    // tree's own `scripts/tier-report.mjs` said 9919, and nothing in the output said which it was.
+    // `run-tests.mjs#refuseRecordThatNarrowsLayer` refuses such a record now; a layer run is given
+    // none at all, so `keep` stays null and the run starts the layer it names.
+    if (options.changed && selection.targets.length > 0) {
         const caseFile = path.join(os.tmpdir(), `camel-selection-${process.pid}-${Date.now()}.json`)
         // The targets this run is about to start, in the form the engine narrows its list to. The record
         // is computed for exactly this list, so it names the cases of *this* run and not a case the
