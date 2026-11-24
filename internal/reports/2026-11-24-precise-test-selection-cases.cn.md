@@ -65,12 +65,16 @@
 
 ## 四、可重复性：同一输入，两次同一份名单
 
-`e1433cfe19`，同一 `--base/--head/--files` 跑两次：
+`e1433cfe19`，同一 `--base/--head/--files` 跑两次：两次的 `--print` 输出**逐字节相同**（连
+`selection:` 行里的 `tree=` 也相同，因为跑在同一棵树上）。比字节更耐用的是名单自己的摘要：
 
 ```
-hash1=C848C73CDCC43A9901138E4E897DF0154ED7F5A03C1346DCD6FD36CF60113411
-hash2=C848C73CDCC43A9901138E4E897DF0154ED7F5A03C1346DCD6FD36CF60113411
+cases: 241
+case-digest: sha256:9993ade9abc6b300844feb621483be73594d157420a0e80dc2d709719063606b
 ```
+
+摘要只由排好序的用例名算，所以它不随 HEAD 漂移；两次跑出同一个摘要，就是"同一份名单"的可核对形式。
+记录里存的也是这个摘要，`--verify` 比的就是它加上逐条原因。
 
 `--verify` 对 19 条记录全部报 `selection-cases: identical`（19/19）。另一个方向：本来已有读数的 6 笔
 被重放做交叉核对——`d8c6789e69` 38=38、`e1433cfe19` 4863=4863、`6c56589f63` 31=31、`0fc19d90d6` 31=31
@@ -82,9 +86,10 @@ hash2=C848C73CDCC43A9901138E4E897DF0154ED7F5A03C1346DCD6FD36CF60113411
 `pwsh -File internal/tools/camel-remote.ps1 -Path <worktree> -Jobs 8 -NoGpuWatch` 在 `94e3e0f3f9`
 上：exit 0，build 34 s，`RUN_EXIT=0`，`TREE_STATE=clean`（跑前跑后）。这次改动自身的选择：
 `plan-cases: 49 / cases: 36`，`case-digest: sha256:ff061cebdc7099826420d21c357d7f218715d0b2cb19bc125dc61366c6636b06`
-——计划级 49 个用例里 13 个在慢层，fast 闸门只起 36 个。最终提交 `1f58cb2b3d` 的构建同样通过
-（`BUILD_EXIT=0`，stamp `1f58cb2b3d (clean)`），它的测试阶段在主机排队 1,800 s 内没拿到测试槽
-（`exit 4` 是那道闸门的调度拒绝，不是红）。
+——计划级 49 个用例里 13 个在慢层，fast 闸门只起 36 个。此后再往报告里改过一行哈希（改成上面的
+`case-digest`），代码与记录未动；最终提交的构建同样通过（`BUILD_EXIT=0`，stamp clean），但那次测试阶段
+在主机排队 1,800 s 内没拿到测试槽——`exit 4` 是闸门的调度拒绝（同一台主机上别的车道占着测试槽，
+跑前 load 93），不是红。
 
 ## 六、这一步没做的
 
