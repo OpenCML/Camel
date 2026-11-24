@@ -26,22 +26,22 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/autodiff
 
 ---
 
-## 一、先把计数拆开：152 行里只有 29 行是 A/B/C
+## 一、先把计数拆开：152 行里只有 28 行是 A/B/C
 
 判据数的是**行**，但那 152 行里绝大多数不是「读」，是**身份**：一个图被装进结构体、被返回、被当 map 的键、被 `const_cast` 交出去。视图是**身份之上的门面**，它答不出「这个图是谁」，也不该答。这一轮把 152 行逐行归了类，一张表：
 
 | 类 | `transforms` | `autodiff` | 是什么 |
 | --- | --- | --- | --- |
 | **A** 属性 / 权限 / 区域 tag set | 0 | 0 | 见第二节：这一类在本车道**一行都不占** |
-| **B** 载荷字节 / 原始 kind / `dataIndex`+`staticSlots` / 帧布局 | 20 | 0 | 第三节 |
+| **B** 载荷字节 / 原始 kind / `dataIndex`+`staticSlots` / 帧布局 | 19 | 0 | 第三节 |
 | **C** 控制与顺序边 / 反向 `uses()` / 按边种类全表（含「编号当序」） | 9 | 0 | 第四节 |
 | **P** 程序侧：`Program::graph(GraphId)`、`calleeIdOf`、`ruleGraphs()` | 13 | 4 | 第五节 |
 | **W** 写侧：正在被写的草稿 | 13 | 0 | 第五节（3b） |
 | **I** 图的身份：被存、被返回、被当键、被 `const_cast` | 45 | 36 | 第五节（3c） |
-| 注释：指着一个图级读数（`liftedFrom`、`closureType`、`callTangentArgsOf`…） | 12 | 0 | 第五节 |
+| 注释与图级读数的引用（`liftedFrom`、`closureType`、`callTangentArgsOf`…，其中 1 行是代码） | 13 | 0 | 第五节 |
 | 合计 | **112** | **40** | |
 
-所以判据「往 0 走」在这两个目录里的天花板不是 0。**B 20 + C 9 = 29 行是视图今天能靠补 A/B/C 拿掉的；剩下 83 行（transforms）和 40 行（autodiff）要的是 3b 的写侧入口和 3c 的身份合一。**
+所以判据「往 0 走」在这两个目录里的天花板不是 0。**B 19 + C 9 = 28 行是视图今天能靠补 A/B/C 拿掉的；剩下 84 行（transforms）和 40 行（autodiff）要的是 3b 的写侧入口和 3c 的身份合一。**
 
 按**处**数（一处是一个读者位置，与行数无关）：「32 处」= A 2 + B 22 + C 8。B 的 22 处里只有 14 处占计数里的行，另外 8 处拿着局部引用；C 的 8 处里只有 4 处占行。**所以「行」和「处」在这里是两个数，判据只数行 —— 这也是为什么判据降到 0 不等于读者都上了视图。**
 
@@ -60,9 +60,9 @@ A 是 `onnx`/`tiles` 的主诉（`attrsOf(NodeRef)`、`RegionRecord::attrs`、�
 
 ---
 
-## 三、B 类：20 行，是这里唯一的真缺口大宗
+## 三、B 类：19 行，是这里唯一的真缺口大宗
 
-**① 计数里的 20 行**（下面每一行都会因为 B 补齐而从 112 里消失）：
+**① 计数里的 19 行，14 处位置**（下面每一行都会因为 B 补齐而从 112 里消失）：
 
 | 位置 | 读的是什么 | 为什么视图今天不行 |
 | --- | --- | --- |
@@ -81,7 +81,7 @@ A 是 `onnx`/`tiles` 的主诉（`attrsOf(NodeRef)`、`RegionRecord::attrs`、�
 | `node_operator.h:279` `nodeCaseOf` | 记录的 `kind`/`dataIndex` | 原始 kind |
 | `node_operator.h:19`、`:333`（注释） | 同一个记录 | 同上 |
 
-**② 不在计数里的 9 处 B 位置**（同样读不动，只是它们拿着局部引用，不按名字提类型）：
+**② 不在计数里的 8 处 B 位置**（同样读不动，只是它们拿着局部引用，不按名字提类型）：
 
 - `src/stdlib/transforms/rule_expand.cpp:1170-1179` —— 复制一个静态常量：`dataIndex`、`staticSlots[index]`、`node->dataType()`，再 `draft.materializeStaticValue(...)`。
 - `src/stdlib/transforms/vmap.cpp:594-597` —— 同一个读。
@@ -126,7 +126,7 @@ std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_no
 
 ---
 
-## 五、剩下 119 行：不是 A/B/C，视图也不该答
+## 五、剩下 124 行：不是 A/B/C，视图也不该答
 
 **① 身份 `I`（transforms 45 行 / autodiff 36 行）** —— 一个 `GCGraph *` 被装进结构体、被返回、被当 `unordered_map` 的键、被 `const_cast`，或者被拿去当另一个构造的入参。视图是身份**之上**的门面：它答「图里有什么」，不答「这是哪张图」。这一半要的是 3c（两个表示合一、`GCGraph` 与 `GraphDraft` 一起消失），不是补方法。
 
@@ -140,7 +140,7 @@ std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_no
 
 这是**一个真缺口，而且是一条没人认领的缺口**：`Program` 侧收 `const Graph *`、或者 `view()` 自己带上解析器。补上它，`split.cpp` 的 `calleeGraphOf`/`answersAPairAt`/`tangentArgumentsOf`/`pairTangentReadOf` 四组签名（计数里 13 行）一起松绑 —— **这是本车道最大的一笔可回收，比 A/B/C 任何一类都大。**
 
-**④ 注释 12 行** —— `GCGraph::liftedFrom`（`lift.h:162`、`jvp_operator.cpp:194`、`transpose.h:312`、`transpose_operator.cpp:566`/`:619`：一个图级标志，视图不答）、`GCGraph::closureType`（`jvp.cpp:906`、`split.cpp:1904`：**闭包类型不在视图上**，视图说「captures 的类型就是 `ports(Capture)` 的类型」，但一个「布局只在函数值里」的图（就地写的 lambda）说的就是这个 NULL，视图表达不了那个区别）、`GCGraph::callTangentArgsOf`（`split_internal.h:775`）、`node_operator.h:108`（`nodeCount` 编号）。
+**④ 注释与图级读数的引用 13 行**（12 行注释 + 1 行代码：`split.cpp:1894` 的 `addCapturePorts` 签名）—— `GCGraph::liftedFrom`（5 行：`lift.h:162`、`jvp_operator.cpp:194`、`transpose.h:312`、`transpose_operator.cpp:566`/`:619`：一个图级标志，视图不答）、`GCGraph::closureType`（3 行：`jvp.cpp:906`、`split.cpp:1904` 的注释和 `split.cpp:1894` 的签名 —— **闭包类型不在视图上**：视图说「captures 的类型就是 `ports(Capture)` 的类型」，但一个「布局只在函数值里」的图（就地写的 lambda）说的就是这个 NULL，视图表达不了那个区别，而从 `ports(Capture)` 推出的非空元组会把这段区别抹掉）、`GCGraph::closureNodes`（`split.cpp:1875`）、`GCGraph::callTangentArgsOf`（`split_internal.h:775`）、`nodeCount` 的编号（`node_operator.h:108`）、`GraphDraft::keepsNodeIds`（`node_order.h:26`，已算在 C 里）、`GCGraph` 拒跑一个没有 `with` 入参的转置 CALL（`transpose/walk.cpp:3227`）、一个图的「静态函数图」（`transpose/signature.cpp:295`）。
 
 ---
 
@@ -150,11 +150,11 @@ std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_no
 | --- | --- |
 | `split.cpp:13-16` + `split_internal.h:75-79` `refuseAt` | 参数从 `const rt::GCGraph *source` 变成 `const GraphView &source`；`source->nodeCount()`→`nodeSlotCount()`、`source->nodeOrigin(ref)`→`originOf(ref)`（`FrozenGraphAdapter::originOf` 就是 `graph_.nodeOrigin(ref)`，一字节不差）。26 处调用点改成 `source->view()` / `half.source->view()` / `function->view()` |
 | `split_loop_cut.cpp:54-57` `regionClosure` | 同上：`regionPorts`→`regionParameters`（就是 `graph_.regionPorts(id)`）、`nodeRegion`→`regionOf`（对 JOIN/占位符也答）、`node(input)==nullptr`→`regionOf(input)==kNoRegion`（**条件完全相同**：`regionOf` 在 `ref >= nodeSlotCount() \|\| node(stored)==nullptr` 时答 `kNoRegion`） |
-| `jvp.cpp:870`、`:890`、`:905-908`（注释） | 三处仍指着 `withPorts`/`closureNodes` 的注释；这三个读在同一棵提交里换成了 `ports(Context)`/`ports(Capture)` |
+| `jvp.cpp:870`、`:890`、`:905-908`（注释） | 三行不再提表示：`:870` 指的 `withPorts`、`:890` 指的 `closureNodes`、以及 `:905-908` 那段原本并列写的两个读数里的 `closureNodes` —— 三处指的读在同一棵提交里换成了 `ports(Context)`/`ports(Capture)`。同一段里的 `GCGraph::closureType` **留着**：视图答不了它（第三节 ③、第五节 ④） |
 
 顺带换掉、**不改判据**的读（读者搬走了，数字没动）：
 
-- `jvp.cpp:807`/`:852`/`:909` —— `withPorts()`/`normPorts()`/`closureNodes()` → `view().ports(Context|Normal|Capture)`。
+- `jvp.cpp:807`/`:853`/`:912-913` —— `withPorts()`/`normPorts()`/`closureNodes()` → `view().ports(Context|Normal|Capture)`。
 - `vmap.cpp:276-278` —— `closureNodes()`/`normPorts()` → 同上两个。
 - `pullback.cpp#staticValue` —— 见第三节 ③。
 
@@ -168,6 +168,6 @@ std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_no
 2. **`{节点类型, 数据输入}` 之外的三种边** —— `predecessors(ref, Ctrl)`、`predecessors(ref, Order)`，或一条 `predecessorsByKind`。回收 C 类 4 处读者的写法，不改判据。
 3. **「这个位置是一条记录」** —— 含 JOIN、含占位符、排除 tombstone。回收 C 类那 4 处「编号当序」（计数里 7 行）。
 
-B 类那 20 行**不要**指望视图加方法解决：`graph_view.h` 明说「no payload bytes leave this face」，而这里要的是**复制一段存储**（`rule_expand`/`jvp` 的常量复制、`transpose` 的 JOIN 写回）。那一半的等价物在 3b 的编辑入口。
+B 类那 19 行**不要**指望视图加方法解决：`graph_view.h` 明说「no payload bytes leave this face」，而这里要的是**复制一段存储**（`rule_expand`/`jvp` 的常量复制、`transpose` 的 JOIN 写回）。那一半的等价物在 3b 的编辑入口。
 
 A 类在这个目录里**没有杠杆**（第二节），补它不会让这两个数字动一格。
