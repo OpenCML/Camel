@@ -30,11 +30,6 @@ timeout_ms = 30000
 [[tests]]
 name = "compositions.grad_vmap_f"
 desc = "grad(vmap(f)) with f(x) = x*x at x = [1, 2, 3]: the gradient of sum_j x_j^2 is [2, 4, 6]."
-known_fail = ["nvm", "fvm"]
-known_fail_owner = "unowned (`lane-transforms` wrote this mark and is gone)"
-known_fail_reason = "the pullback pass has no rule for a call of a function value: `modules/autodiff/pullback.cpp` refuses with `cannot differentiate through this call of a function value`, so `grad(vmap(f))` cannot be built"
-known_fail_msg = "cannot differentiate through this call of a function value"
-known_fail_ends_when = "when the pullback pass gets a rule for a call of a function value, this entry prints `2`, `4` and `6`, one number per line at `x = [1, 2, 3]`, and exits 0 -- those three are what its `verify_script` compares against `[2, 4, 6]`, the gradient of `sum_j x_j*x_j`; a refusal of any other shape in their place does not end the mark"
 kind = "behavior"
 case = "../../../cases/transforms/compositions/grad_vmap_f.cml"
 args = ["${case}", "${backend}"]
@@ -55,7 +50,7 @@ timeout_ms = 30000
 name = "compositions.vmap_grad_f"
 desc = "vmap(grad(f)) with the same f and the same batch: [2, 4, 6] again, bit for bit the same as grad(vmap(f)) -- swapping the two axes must not change the answer."
 known_fail = ["nvm", "fvm"]
-known_fail_owner = "unowned (`lane-transforms` wrote this mark and is gone)"
+known_fail_owner = "the batch pass's law for a constant (`modules/transforms/vmap.cpp#liftConstant`)"
 known_fail_reason = "the batch pass has no law for a constant: `modules/transforms/vmap.cpp#liftConstant` refuses with `vmap has no rule for a constant`, so `vmap(grad(f))` cannot be built"
 known_fail_msg = "vmap has no rule for `a constant`"
 known_fail_ends_when = "when the batch pass gets a law for a constant, this entry prints `2`, `4` and `6`, one number per line, and exits 0 -- the same three `compositions.grad_vmap_f` owes, because swapping the two axes must not change the answer"
@@ -102,11 +97,6 @@ timeout_ms = 30000
 [[tests]]
 name = "compositions.grad_vjp_g_zero"
 desc = "grad(vjp(g)) with g(v) = sum(v*v) at v = [1, 2, 3, 4] must be all zeros: the pullback is linear in v, so its derivative is a constant and the gradient of a constant is 0. This is the one check the three combinations cannot make."
-known_fail = ["nvm", "fvm"]
-known_fail_owner = "unowned (`lane-transforms` wrote this mark and is gone)"
-known_fail_reason = "the case's own call text is fixed, and the composition now reaches the transform layer: `grad` refuses a call of the function value `stdlib/vjp.cml#vjp` answers (`cannot differentiate through this call of a function value`), because vjp's body calls `split(jvp(f))`, a function value chosen at run time"
-known_fail_msg = "cannot differentiate through this call of a function value"
-known_fail_ends_when = "when `grad` can differentiate a call of the function value `vjp` answers, this entry prints the four zeros `0`, `0`, `0`, `0`, one per line, and exits 0 -- the expectation stays at the page's zeros and not at the `2.0 2.0 2.0 2.0` its flat twin answers, because a number moved to match a refused composition would let the case pass on nothing"
 kind = "behavior"
 case = "../../../cases/transforms/compositions/grad_vjp_g_zero.cml"
 args = ["${case}", "${backend}"]

@@ -890,11 +890,6 @@ timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
-known_fail = true
-known_fail_owner = "unowned (`lane-shapeext` wrote this mark and is gone)"
-known_fail_msg = "the two tensor operands have different element types ('float' and 'f32')"
-known_fail_ends_when = "the half about the convolution has held since the element rule followed its argument (`export_train_step_conv` is green), and this case is still red in the batch norm's backward at `the two tensor operands have different element types ('float' and 'f32')`, so what is left of the condition is that the backward too answers in its argument's element type: then this entry prints `export_fold.cml: pass: onnx.checker full_check ok`, `export_train_step.cml: pass: onnx.checker full_check ok` and `onnx::export equiv: PASS`, and exits 0 -- the twenty-six programs' two export paths then agree bit for bit on ONNX Runtime"
-known_fail_reason = "stops at `the two tensor operands have different element types ('float' and 'f32')` in `export_train_step_bn.cml`, in the batch norm's backward: the value the backward emits is computed in f32 (from the answer's f32 tangent) while the answer it is declared with is f64 -- a lowering that computes in its input's elements, which the element rule following its argument does not touch. An expiry condition states when the mark disappears; when half of it holds, the other half is the condition."
 # Slow layer: measured 15.9 s in the full serial run.
 tier = "milestone"
 desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
@@ -2200,7 +2195,7 @@ tier = "slow"
 [[tests]]
 name = "ort_loop_values_dynamic"
 known_fail = true
-known_fail_owner = "unowned (`lane-shapeext` wrote this mark and is gone)"
+known_fail_owner = "the shape a loop's dynamic trip count carries through the ONNX export (`modules/onnx`)"
 known_fail_msg = "kind: ExportUnsupported, message: in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next"
 known_fail_ends_when = "when a loop can carry a value whose shape the graph computes -- the reduction target is now that `Shape` -- this entry prints `ort loop values dynamic: worst`, `batches [1, 2, 3, 5, 7]` and `PASS`, and exits 0 -- the exported loop then matches NumPy and the native run with the counter exact"
 known_fail_reason = "the export is refused by `in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next; a loop can only carry values of a fixed dtype and shape` -- the reduction target is now the graph's own `Shape` of the operand, and the loop that carries the batch no longer states a fixed shape for it, so the case exits 1 before any model reaches disk"
@@ -3094,7 +3089,7 @@ timeout_ms = 20000
 [[tests]]
 name = "ort_loop_loaded_weights"
 known_fail = true
-known_fail_owner = "unowned (`lane-shapeext` wrote this mark and is gone)"
+known_fail_owner = "the shape a loop's loaded weights carry through the ONNX export (`modules/onnx`)"
 known_fail_msg = "kind: ExportUnsupported, message: in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next"
 known_fail_ends_when = "with `ort_loop_values_dynamic`: when a loop can carry a value whose shape the graph computes, this entry prints `ort loop loaded weights: worst`, `batches [1, 2, 3, 5, 7]` and `PASS`, and exits 0 -- the model holds a `Loop`, passes onnx.checker's full check, and the weights read from file are captured as the constant their value makes them"
 known_fail_reason = "the export is refused by `in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next; a loop can only carry values of a fixed dtype and shape` -- the reduction target is now the graph's own `Shape` of the operand, and the loop that carries the batch no longer states a fixed shape for it, so the case exits 1 before any model reaches disk"
