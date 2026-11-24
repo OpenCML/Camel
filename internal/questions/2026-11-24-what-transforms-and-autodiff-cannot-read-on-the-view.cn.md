@@ -172,11 +172,11 @@ copied[ref] = draft.materializeStaticValue(
 
 ### （二）本轮的五个读者（判据不动，仍是 112 / 40）
 
-这四个静态常量读 + `exitHalvesOf` 的两处，全部在**局部引用**上，所以它们从来不在判据那 152 行里：换掉之后 `git grep -cE '\bGCGraph\b|\bGraphDraft\b'` 仍是 **112 / 40**。这是判据的已知盲区（第一节末尾），也是这一轮唯一还剩下的「读者没上视图」的部分。
+这四个静态常量读 + `exitHalvesOf` 的两处，全部在**局部引用**上，所以它们从来不在判据那 152 行里：换掉之后 `git grep -cE '\bGCGraph\b|\bGraphDraft\b'` 仍是 **112 / 40**。这是判据的已知盲区（第一节末尾）。**换完之后，这一页里再没有「视图已经答得出、只是还没换」的位置** —— 剩下的每一处都要视图先长出能力（A/B/C），或者要 3b/3c。
 
 | 位置 | 旧读 | 新读 |
 | --- | --- | --- |
-| `rule_expand.cpp` `expandRuleRightSide` | `node->dataIndex`、`staticSlots[index]`、`node->dataType()` | `body->view().constantOf(ref)`、`typeOf(ref)`；局部 `staticSlots` 整个删掉（它成了唯一用途之后的空变量） |
+| `rule_expand.cpp` `expandRuleRightSide` | `node->dataIndex`、`staticSlots[index]`、`node->dataType()` | `body->view().constantOf(ref)`、`typeOf(ref)`；那个 `staticSlots` 局部在换掉之后没有别的用途，一并删掉 |
 | `vmap.cpp` `buildVmapGraph` 的 `Data` 臂 | 同上 | `function->view().constantOf(ref)`、`typeOf(ref)` |
 | `jvp.cpp` `liftGraph` 的 `Data` 臂 | 同上，且每次把整张静态区**拷成 `std::vector<slot_t>`** | `function.view().constantOf(ref)`、`typeOf(ref)` —— 那份拷贝也一起没了 |
 | `transpose/walkmachinery.cpp` `constantValueOf` | 同上 | `ctx.function->view().constantOf(ref)`、`typeOf(ref)` |
