@@ -188,7 +188,10 @@ await withServer(async (ls) => {
     // Rename the local `n` by two range edits in one notification, then ask about the result.
     // The new name is `tally`, not `count`: the prelude declares `count(r: Range)`, and a name in
     // the ambient layer (design principles 10.2, layer 5) is never undefined, so the edit below
-    // would no longer break the program.
+    // would no longer break the program. `tally` is free on every layer today; if a layer ever
+    // declares it, this check must take another name, and the rule for taking one is that no
+    // layer of the prelude declares it -- the check asserts that a name is undefined, and what
+    // makes that true is that nothing declares it.
     const n1 = src.range('n = norm2')
     const n2 = src.find('identity(n)', 1, 9)
     const one = (pos) => ({ start: pos, end: { line: pos.line, character: pos.character + 1 } })
