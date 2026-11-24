@@ -28,12 +28,27 @@ git archive <ref> -- test/tools test/runner.mjs test/plan-selection.json scripts
   ⇒ 解到 <根>/<name>/，git init + 一笔提交，把 origin/develop 指过去
 ```
 
+**这一条在实现时被推翻了，改成下面两条（实测见 §2.1′）。**
+
 **取不到 `ref` 时不许静默退回合成。**退回时必须：
 
-- 第一行打印 `[PROBE] built by synthesis, not by archive: <ref> could not be read`；
+- 第一行打印 `[PROBE] built by synthesis, not by archive: <为什么>`；
 - `--check` 默认**只接受 archive 建的树**，要跑合成树必须显式 `--allow-synthesis`。
 
 理由：「合成树的读数」与「旧真树的读数」在日志里长得一样，而今晚两次错解释就是这个形状。
+
+### 2.1′ 为什么 `--check` 必须是合成树（实现时的更正）
+
+**没有一棵归档树能给出「修好后那句」。** 历史上不存在「会拒绝未知参数、又还不认识 `--list-cases`」的提交：拒绝这条行为是 `lane/runner-unknown-option` 新加的，而 `--list-cases` 在 `94e3e0f3f9` 就有了。于是归档出来的旧树只能给出**事故前**的两个反应（`[FAIL] no Release binary` 或那段栈），永远给不出「this tree's runner does not know …」。
+
+```
+--check              合成建旧半（本树的 runner 去掉 --list-cases 那条分支），第一行如实写原因：
+                     built by synthesis, not by archive: …, because no commit in this history
+                     refuses an unknown option without knowing '--list-cases'
+--build --ref <ref>  保留归档那条，专门看**事故前**那两句
+```
+
+`--allow-synthesis` 因此没有意义，已删除。**两条路各管一段时间，不互相冒充**；关键在于合成那行要把「退而求其次」写成「本来就只有这一个次」——原因写清楚，读者才不会把它当成真树的读数。
 
 ### 2.2 `--check`
 
@@ -77,6 +92,17 @@ git archive <ref> -- test/tools test/runner.mjs test/plan-selection.json scripts
 ② 在**未修**的树上同一命令 exit 1，并打印 `refused this selection` 那句（证明它咬得住）
 ③ `--self` 在正常树上 exit 0，且不出现 `unknown option`
 ④ 合成树不显式 `--allow-synthesis` 时被拒（exit 2），拒绝原文一行
+```
+
+## 4′. 实现时补的两条（都已落地）
+
+```
+⑤ **四种出口各一行原文写进自测**：exit 0（坑在且行为对）／exit 1（坑在但行为不对）／
+   exit 2 树没建成（ref 读不到、未知开关）／exit 2 而 self 先不过 —— 后两个同码不同话，
+   与 `C-1124-142` 同一个形状，至少要让它们的话不同
+⑥ **一个「只读的检查」不许写进被检查的地方**：第一版把 `changed.txt` 写进 `cwd`，而 self 那一半的
+   `cwd` 就是本检出 ⇒ 跑完树里多一个文件、`[TREE]` 守卫报「这次运行留下了东西」。
+   现在清单写在系统临时目录，`[TREE] clean` 为证。
 ```
 
 ## 5. 不做的事
