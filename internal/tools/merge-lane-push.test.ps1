@@ -157,6 +157,13 @@ function Get-OriginTip {
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $laneScript = Join-Path $repoRoot 'internal\tools\merge-lane.ps1'
 
+# The shape a push must have lives in its own file, beside both merge tools (D-1124-78), and the
+# script under test dot-sources it. Loading it here is what lets `Invoke-PushWithRecovery` run at
+# all: a function that calls a name nothing defined would fail in every scenario below for a reason
+# that is not the recovery's.
+. (Join-Path $PSScriptRoot 'merge-push-shape.ps1')
+Check 'merge-push-shape.ps1 defines Test-PushFirstParent' (@(Get-Command Test-PushFirstParent -ErrorAction SilentlyContinue).Count -eq 1)
+
 $tokens = $null
 $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($laneScript, [ref] $tokens, [ref] $parseErrors)
@@ -287,8 +294,12 @@ $headA = Get-GitText $a.Work rev-parse HEAD
 Check 'the push landed: origin is this checkout HEAD' ($originAfterA -eq $headA) "origin=$originAfterA head=$headA"
 Check 'the landed tip is in what was pushed' (Test-Path (Join-Path $a.Work 'internal/reports/2026-11-24-one-page.cn.md')) 'the page is not in the tree'
 $parentsA = @((Get-GitText $a.Work rev-list --parents -n 1 HEAD) -split ' ' | Where-Object { $_ })
-Check 'the re-land is a merge of the new tip into the merge this run made' `
-    ($parentsA.Count -eq 3 -and $parentsA[1] -eq $a.Merge -and $parentsA[2] -eq $landedOne) ($parentsA -join ' ')
+# The shape, not only the content: the re-landed commit is the prepared merge (what this run read)
+# merged INTO the tip that landed, so its first parent is that tip. The other order -- the new tip
+# merged into the merge commit -- is the shape that made a seat's merge read as an arrival on
+# `integration` (D-1124-78), and it is what this check used to accept.
+Check 'the re-land is the prepared merge merged into the new tip' `
+    ($parentsA.Count -eq 3 -and $parentsA[1] -eq $landedOne -and $parentsA[2] -eq $a.Merge) ($parentsA -join ' ')
 Check 'the lane is still in what went to origin' (Test-Path (Join-Path $a.Work 'probe.txt')) 'probe.txt is not in the tree'
 # The green line of a recovered run, which is the one place a partial re-run can claim too much: it
 # names the plans it re-ran, and it says that no layer was measured.

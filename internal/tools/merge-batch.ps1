@@ -124,6 +124,12 @@ $ErrorActionPreference = 'Stop'
 # sets, the plan set with the name `scripts/merge-readings.mjs` gives it, and `Resolve-BatchTarget`.
 . (Join-Path $PSScriptRoot 'merge-batch-sets.ps1')
 
+# The shape a push must have (D-1124-78), from the same file `merge-lane.ps1` reads: the commit a
+# batch pushes is a merge whose first parent is the tip `origin/<target>` holds at that moment, and a
+# chain built by fast-forwarding a seat onto the target is not that shape even when its push is a
+# fast-forward.
+. (Join-Path $PSScriptRoot 'merge-push-shape.ps1')
+
 # `pwsh -File` makes `-Branch a,b` one word, and `-Branch a -Branch b` is a PowerShell binding error
 # (the engine refuses it before this body runs). So the list is split on commas exactly as
 # `-Plan`/`-AstOnly` are elsewhere in this directory (camel-remote-args.ps1), and both spellings
@@ -802,6 +808,26 @@ try {
     }
 
     if (-not $verdict.Ok) { Stop-With "the push was refused before it ran" $verdict.Why 1 }
+
+    # --- the shape the arrival must have (D-1124-78) -------------------------
+    # `$verdict` above answers "is the merge worktree's branch something this batch may push"; this
+    # answers "is the commit that would travel the shape an arrival has". Both are read before the
+    # push and not after it, because a shape checked only where the merge is made is a shape nobody
+    # checks at the moment it is published. The batch builds every merge with the previous tip as its
+    # first parent, so a tip whose first parent is still the base it measured against is the whole
+    # chain's answer: the earlier merges in it were made the same way, one onto the next.
+    $shape = Test-PushFirstParent -Tree $ToolTree -Target $targetInfo.Name -Sha $script:mergeTip
+    if (-not $shape.Ok) {
+        $shape.Message | Where-Object { $_ } | ForEach-Object { "  $_" } | ForEach-Object { Write-Host $_ }
+        $why = if ($shape.Kind -eq 'single parent') {
+            "the commit this batch would push is not a merge commit (exit 2, nothing was pushed)"
+        } else {
+            "the commit this batch would push does not have origin/$($targetInfo.Name) as its first parent (exit 2, nothing was pushed)"
+        }
+        $firstShort = if ($shape.FirstParent) { $shape.FirstParent.Substring(0, 9) } else { 'none' }
+        $tipShort = if ($shape.Tip) { $shape.Tip.Substring(0, 9) } else { 'unreadable' }
+        Stop-With $why "$($script:mergeTip.Substring(0, 9)): first parent $firstShort, origin/$($targetInfo.Name) is $tipShort. The merged tree is kept at $($script:mergeTree)." 2
+    }
 
     $remoteNow = ((& git -C $ToolTree ls-remote origin $($targetInfo.Remote)) -split "`t") | Select-Object -First 1
     if ($remoteNow -ne $base) {

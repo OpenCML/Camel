@@ -151,6 +151,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# The shape a push must have (D-1124-78) lives beside this file, so both merge tools read one
+# implementation: `merge-batch.ps1` dot-sources it too. Read here, called before every push.
+. (Join-Path $PSScriptRoot 'merge-push-shape.ps1')
+
 # --- which checkout a merge lands in -----------------------------------------
 #
 # --- the paths a merge is made in and measured in ------------------------------
@@ -613,27 +617,56 @@ function Invoke-PushWithRecovery {
     $headAtEntry = (& $head)
     $basedOn = "$(& git -C $Tree rev-parse 'HEAD^1' 2>$null)".Trim()
 
-    # A rejection is read, never retried blind. A failure that is not a rejection is the old shape --
-    # a network or a lock -- and keeps the old three attempts with four seconds between them.
-    $attempt = & $pushOnce
-    $tries = 1
-    while ($attempt.Exit -ne 0 -and -not (Test-PushRejection -Text $attempt.Text) -and $tries -lt 3) {
-        Start-Sleep -Seconds 4
-        $tries++
-        $attempt = & $pushOnce
-    }
-    if ($attempt.Exit -eq 0) {
+    # --- what this push would publish, read before it is attempted ---------------
+    # The ruling's shape (D-1124-78): the commit that would travel must be a MERGE whose first parent
+    # is origin/$Target's tip as of this fetch. It is read here and not remembered from the merge
+    # stage, because the reading is about what is published and the merge stage is minutes older.
+    #
+    # A `single parent` is not a race and nothing here recovers it: a lane commit that would enter the
+    # target directly has no lane on a second parent, and the first-parent chain cannot tell it from
+    # an arrival. A `first parent` that is not the tip is the target having moved -- the case this
+    # function exists for -- and it is handed to the documentation-only rule below exactly as a
+    # refused push is. The commit that rule re-lands is made on the new tip, so this check passes on
+    # the second read as well.
+    $shape = Test-PushFirstParent -Tree $Tree -Target $Target -Sha $headAtEntry
+    if ($shape.Kind -eq 'single parent' -or $shape.Kind -eq 'fetch failed' -or $shape.Kind -eq 'no tip') {
         return @{
-            Ok = $true; Kind = 'pushed'; Recovered = $false; Sha = (& $head)
-            Targets = @(); Rows = 0; Reds = 0; Shas = @()
-            Lines = @("pushed HEAD:$Target ($(& $head))")
+            Ok = $false
+            Kind = $(if ($shape.Kind -eq 'single parent') { 'not a merge' } else { 'failed' })
+            Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($shape.FirstParent, $shape.Tip); Tries = 0
+            Lines = @($shape.Message)
         }
     }
-    if (-not (Test-PushRejection -Text $attempt.Text)) {
-        return @{
-            Ok = $false; Kind = 'failed'; Recovered = $false; Sha = (& $head)
-            Targets = @(); Rows = 0; Reds = 0; Shas = @(); Tries = $tries
-            Lines = @("git push failed after $tries attempt(s)", ($attempt.Text -split "`n" | Where-Object { $_ }))
+
+    # A rejection is read, never retried blind. A failure that is not a rejection is the old shape --
+    # a network or a lock -- and keeps the old three attempts with four seconds between them. THOSE
+    # THREE ARE THIS LOOP'S ALONE: the second push below is one attempt with no retry, so the most a
+    # run can send is three attempts when nothing was refused, or one attempt plus one recovery plus
+    # one attempt when a target moved. There is no product of two loops here.
+    $attempt = @{ Exit = 1; Text = '' }
+    $tries = 0
+    if ($shape.Kind -eq 'arrived') {
+        $attempt = & $pushOnce
+        $tries = 1
+        while ($attempt.Exit -ne 0 -and -not (Test-PushRejection -Text $attempt.Text) -and $tries -lt 3) {
+            Start-Sleep -Seconds 4
+            $tries++
+            $attempt = & $pushOnce
+        }
+        if ($attempt.Exit -eq 0) {
+            return @{
+                Ok = $true; Kind = 'pushed'; Recovered = $false; Sha = (& $head)
+                Targets = @(); Rows = 0; Reds = 0; Shas = @()
+                Lines = @("pushed HEAD:$Target ($(& $head))")
+            }
+        }
+        if (-not (Test-PushRejection -Text $attempt.Text)) {
+            return @{
+                Ok = $false; Kind = 'failed'; Recovered = $false; Sha = (& $head)
+                Targets = @(); Rows = 0; Reds = 0; Shas = @(); Tries = $tries
+                Lines = @("git push failed after $tries attempt(s)", ($attempt.Text -split "`n" | Where-Object { $_ }))
+            }
         }
     }
 
@@ -683,50 +716,71 @@ function Invoke-PushWithRecovery {
             Files = $changed
             Code = $split.Code
             Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $false -ReRan 0),
-                "  the commits that landed while this merge was read touch $($split.Code.Count) file(s) that are not documentation: $(($split.Code | Select-Object -First 8) -join ', ')$(if ($split.Code.Count -gt 8) { " and $($split.Code.Count - 8) more" } else { '' })")
+                "  the commits that landed while this merge was read touch $($split.Code.Count) file(s) that are not documentation: $(($split.Code | Select-Object -First 8) -join ', ')$(if ($split.Code.Count -gt 8) { " and $($split.Code.Count - 8) more" } else { '' })") +
+                @(if ($shape.Kind -eq 'first parent') { @($shape.Message | ForEach-Object { "  $_" }) } else { @() })
         }
     }
 
-    # --- documentation only: re-land it and re-read what reads it ---------------
-    # A merge commit, not a reset: the merge this run made is already a reading (its rows, its clang
-    # result), and re-landing it on the new tip keeps that history instead of pretending the merge
-    # was made against the newer tree.
+    # --- documentation only: re-land it in the shape an arrival must have --------
+    # The ruling's recipe (D-1124-78), not "merge the new tip into the merge": the seat's branch is
+    # moved to the new tip and the merge this run made -- the prepared merge, whose rows and clang
+    # result are the reading -- is merged INTO it. The commit that travels then has origin/$Target's
+    # tip as its first parent, which is what makes it an arrival. Merging the tip into the merge
+    # commit would put the merge commit first and reproduce the chain the ruling is about: same tree,
+    # wrong order, and the order is the thing that was wrong.
     $landedSubjects = @(& git -C $Tree log --oneline "$old..$new" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
     $body = @()
     $body += "Landed on origin/$Target while this merge was read, documentation only, so they are merged here instead of being read again:"
     foreach ($line in $landedSubjects) { $body += "  $line" }
     $body += 'Files:'
     foreach ($file in $split.Documentation) { $body += "  $file" }
-    $mergeMessage = "merge origin/$Target at $($new.Substring(0, 9)) into the merge commit`n`n" + ($body -join "`n")
-    $merge = @(& git -C $Tree merge --no-ff -m $mergeMessage "origin/$Target" 2>&1)
+    $mergeMessage = "merge $Branch at $($headAtEntry.Substring(0, 9)) into origin/$Target at $($new.Substring(0, 9)): the documentation that landed while this merge was read`n`n" + ($body -join "`n")
+    # The branch the seat's checkout is on: the re-land moves THAT branch to the new tip, so the
+    # checkout ends on the commit this run pushes. A detached HEAD has no name to move, so this run
+    # gives it one -- the seat's identity matters less than the pushed commit being reachable.
+    $seatBranch = "$(& git -C $Tree symbolic-ref -q --short HEAD 2>$null)".Trim()
+    if (-not $seatBranch) { $seatBranch = 'camel-reland' }
+    $move = @(& git -C $Tree checkout -q -B $seatBranch $new 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        return @{
+            Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = $headAtEntry
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Files = $changed
+            Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
+                "  the seat's branch could not be moved to origin/$Target ($($new.Substring(0,9))) to re-land the merge on it -- $(($move | ForEach-Object { "$_" }) -join ' '). Nothing was pushed.")
+        }
+    }
+    $merge = @(& git -C $Tree merge --no-ff -m $mergeMessage $headAtEntry 2>&1)
     $mergeExit = $LASTEXITCODE
     if ($mergeExit -ne 0) {
         $conflicted = @(& git -C $Tree diff --name-only --diff-filter=U 2>$null)
         # An unfinished merge left in the checkout is the state that made `merge-lane` refuse the next
         # run, so it is aborted here -- and the abort is not a repair of the conflict, it is leaving
-        # the tree as this run found it.
+        # the tree as this run found it. The abort leaves the branch on the new tip, so the branch is
+        # put back on the merge commit: "nothing was pushed" has to mean the checkout is where it was.
         if ("$(& git -C $Tree rev-parse -q --verify MERGE_HEAD 2>$null)".Trim()) {
             & git -C $Tree merge --abort 2>&1 | Out-Null
         }
+        & git -C $Tree checkout -q -B $seatBranch $headAtEntry 2>&1 | Out-Null
         return @{
             Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = (& $head)
             Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
             Files = $changed
             Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
-                "  re-landing origin/$Target on the merge conflicted in $($conflicted.Count) file(s): $($conflicted -join ', '). The merge was aborted; nothing was pushed.")
+                "  re-landing the merge on origin/$Target conflicted in $($conflicted.Count) file(s): $($conflicted -join ', '). The merge was aborted and $seatBranch is back on the merge commit; nothing was pushed.")
         }
     }
     $reLanded = (& $head)
-    # A merge of the new tip INTO the merge commit: its first parent is the merge this run made (the
-    # history of what was read stays), its second is the tip that landed, so the push is a
-    # fast-forward of that tip and the landed commits are in what goes to origin.
+    # A merge OF THE PREPARED MERGE INTO THE NEW TIP: first parent is origin/$Target at $new, second is
+    # the merge this run made. This is the shape the pre-push reading below accepts, and the reason
+    # the recovery is not that reading's exception.
     $parents = @("$(& git -C $Tree rev-list --parents -n 1 HEAD 2>$null)".Trim() -split '\s+' | Where-Object { $_ })
-    if ($parents.Count -lt 3 -or $parents[1] -ne $headAtEntry -or $parents[2] -ne $new) {
+    if ($parents.Count -lt 3 -or $parents[1] -ne $new -or $parents[2] -ne $headAtEntry) {
         return @{
             Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = $reLanded
             Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
             Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
-                "  the re-landed commit $($reLanded.Substring(0,9)) is not a merge of origin/$Target ($($new.Substring(0,9))) into the merge commit $($headAtEntry.Substring(0,9)) -- its parents are $($parents -join ', ') -- so it is not the tree the recovery describes and nothing was pushed.")
+                "  the re-landed commit $($reLanded.Substring(0,9)) is not a merge of the merge this run made ($($headAtEntry.Substring(0,9))) into origin/$Target ($($new.Substring(0,9))) -- its parents are $($parents -join ', ') -- so it is not the tree the recovery describes and nothing was pushed.")
         }
     }
 
@@ -767,7 +821,29 @@ function Invoke-PushWithRecovery {
         }
     }
 
-    # --- push again, once ------------------------------------------------------
+    # --- push again, once, after the same reading ------------------------------
+    # The re-land was made on the tip read above; between that read and this push the tip can move
+    # again, and then the commit about to travel no longer has it as a first parent. The shape is
+    # read here for exactly the reason it is read before the first push -- this is the push that
+    # publishes a commit made after a target moved, and it is where the ruling's chain was broken
+    # tonight. A second move inside one run is a stop, not another recovery: the run gets one.
+    $shape2 = Test-PushFirstParent -Tree $Tree -Target $Target -Sha $reLanded
+    if ($shape2.Kind -ne 'arrived') {
+        $old2 = $new
+        $new2 = $shape2.Tip
+        $changed2 = if ($old2 -and $new2 -and $old2 -ne $new2) {
+            @(& git -C $Tree diff --name-only "$old2..$new2" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+        } else { @() }
+        $split2 = Split-ChangeByPath -Paths $changed2
+        return @{
+            Ok = $false; Kind = 'second rejection'; Recovered = $false; Sha = $reLanded
+            Targets = $targets; Rows = $reRunReading.Rows; Reds = $reRunReading.Reds; Shas = @($old2, $new2)
+            Files = $changed2
+            Lines = @($rebaseLine,
+                (Format-RebaseLine -OldRemote $old2 -NewRemote $new2 -Files $changed2.Count -DocsOnly $split2.DocsOnly -ReRan 0),
+                "  the re-landed commit $($reLanded.Substring(0,9)) was made on origin/$Target at $($new.Substring(0,9)), and the tip is $($new2.Substring(0,9)) now: $(if ($shape2.Kind -eq 'first parent') { 'its first parent is no longer the tip' } else { $shape2.Message[0] }). Nothing was pushed.")
+        }
+    }
     $second = & $pushOnce
     if ($second.Exit -eq 0) {
         return @{
@@ -1697,7 +1773,14 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
         switch ($push.Kind) {
             'touches code' {
                 Stop-With "origin/$Target moved while this merge was read, and the commits that landed touch code" `
-                    "$(if ($push.Shas.Count -eq 2) { "$($push.Shas[0].Substring(0,9)) -> $($push.Shas[1].Substring(0,9))" }): a partial re-run of that tree would be a reading about a change this gate never selected, so none was taken. A full run is a decision for whoever started this merge: merge again from origin/$Target and re-take every stage. Nothing was pushed." $mergeCommit
+                    "$(if ($push.Shas.Count -eq 2) { "$($push.Shas[0].Substring(0,9)) -> $($push.Shas[1].Substring(0,9))" }): a partial re-run of that tree would be a reading about a change this gate never selected, so none was taken. A full run is a decision for whoever started this merge: the command above redoes the merge on the tip, and git config rerere.enabled true reuses the resolutions already made. Nothing was pushed." $mergeCommit
+            }
+            'not a merge' {
+                # A lane commit that would enter the target without a merge: no recovery can make it
+                # an arrival, because the lane it speaks for is not on a second parent at all. The
+                # sentence and the redo command were printed above, by the reading itself.
+                Stop-With "the commit about to be pushed to $Target is not a merge commit" `
+                    "Every arrival must be a merge whose first parent is the tip of $Target; a single-parent commit goes straight in and the first-parent readers cannot tell it from an arrival. The redo command is above, and nothing was pushed." $push.Sha
             }
             'second rejection' {
                 # The one recovery has been made and the branch moved again. The shas are the whole
