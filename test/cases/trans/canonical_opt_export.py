@@ -32,8 +32,13 @@ CASE = ROOT / "test" / "cases" / "trans" / "canonical_opt_static_slot.cml"
 
 
 def main() -> int:
+    # Why the pipeline ends in `std::nop`: the case's subject is the canonical document the export
+    # writes after `std::opt` -- `std::jgir canonical=true` parses as JSON here -- and `std::jgir`
+    # hands the graph on, so the fallback would run `canonical_opt_static_slot.cml` behind the
+    # document and its exit code and bytes would land inside the JSON this case parses. The
+    # document is what is asserted; the program's own run is not.
     done = subprocess.run(
-        [str(EXE), str(CASE), *ARGV, "std::opt", "std::jgir", "canonical=true"],
+        [str(EXE), str(CASE), *ARGV, "std::opt", "std::jgir", "canonical=true", "std::nop"],
         cwd=str(ROOT),
         capture_output=True,
         text=True,

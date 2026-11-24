@@ -5,9 +5,12 @@
  * The case-script pipelines that are decided and not patched, each with the reason.
  *
  * `scripts/camel-pass-scan.mjs` finds the pipelines that end in a translating pass: they hand the
- * graph on, so the default scheduling pass runs the program after the dump. The `std::nop` patch
- * script reaches the plans only -- a pipeline written in a case script is left for a person, because
- * what the script reads is not visible in its pass list. These are those lines.
+ * graph on, so the default scheduling pass runs the program after the dump. These are the lines no
+ * `std::nop` was added to, and why. The patch that added `std::nop` to the other case-script
+ * pipelines (compile/unused_values/repeat_compile.py, trans/canon_order.py, trans/canonical_opt_export.py,
+ * trans/spelling/canonical_pairing.py, trans/jgir_contract.py, tools/roundtrip-compare.mjs) is the
+ * one that made this list short: a pipeline whose case reads the dump stops saying what happens
+ * after it, and a pipeline whose case reads the *run* keeps the run.
  *
  * Every entry says **why it is not patched**, in terms of what that line's stdout carries, and the
  * entries are keyed by `file` and `line` so that an entry which no longer names a pipeline is
@@ -15,87 +18,48 @@
  * list that cannot rot into permission. A bare path would be a decision nobody can read, which is
  * why `why` is a field rather than a comment.
  *
- * The measurements below were taken with `out/latest/bin/camel` of this tree: the same case under
- * the typed pipeline and with a trailing `std::nop`, comparing the exit code and the bytes of
- * stdout. They say what the run contributes to the case's observation; whether the case should stop
- * reading it is the case's own change (each of these scripts builds several pipelines, so a nop on
- * one line does not finish any of them).
+ * A pipeline that is decided on its own line says so there instead
+ * (`# camel-pass-scan: keep -- ...`), which is how `trans/canon_order.py` records the three pass
+ * tuples its `jgir()` helper is called with: those lines are not command lines at all, and the
+ * helper adds `std::nop` where it builds the command.
+ *
+ * The measurements below were taken with `out/latest/bin/camel` of the tree that carries this file:
+ * the same case under the typed pipeline and with a trailing `std::nop`, comparing the exit code and
+ * the bytes of stdout.
  */
 export const KEPT_CASE_SCRIPTS = [
-    {
-        file: 'test/cases/compile/unused_values/repeat_compile.py',
-        line: 30,
-        why:
-            'compiles `train_step.cml`, whose `main` has three open parameters: the run the dump hands the graph to ' +
-            'stops at EntryArgumentMissing (measured `std::gir` exit 1, `std::gir std::nop` exit 0), so the exit code ' +
-            'and stderr this case asserts come from the run, not from the dump',
-    },
-    {
-        file: 'test/cases/trans/canon_order.py',
-        line: 309,
-        why:
-            'the `passes=` default of the dump helper every comparison of this script is built through: the run after ' +
-            'the dump decides the exit code the helper reports (measured: the script fails at "the program did not ' +
-            'compile", which is the run exiting non-zero with an empty stderr)',
-    },
-    {
-        file: 'test/cases/trans/canon_order.py',
-        line: 628,
-        why:
-            'a caller of that helper with its own tuple (`std::jgir canonical=true`): same measurement as the default ' +
-            'above -- the document is compared byte for byte, and the run after it is what the process exit code ' +
-            'reports',
-    },
-    {
-        file: 'test/cases/trans/canon_order.py',
-        line: 631,
-        why:
-            'the right-hand program of the same comparison, through the same helper: the two documents must agree, ' +
-            'and both runs contribute their exit code',
-    },
     {
         file: 'test/cases/trans/print_determinism.py',
         line: 40,
         why:
             'the case hashes the whole stdout of the pipeline over twenty runs and asserts its line count: measured ' +
             '23465 bytes under `std::gir` against 23449 with a trailing `std::nop`, so the program output is inside ' +
-            'what it hashes',
-    },
-    {
-        file: 'test/cases/trans/spelling/canonical_pairing.py',
-        line: 116,
-        why:
-            'the `run()` helper every comparison of this file goes through (`+ ["std::jgir", "canonical=true"]`): ' +
-            'measured "camel exited 42 before the pass ran" -- the exit code that reaches the case is the run after ' +
-            'the dump',
-    },
-    {
-        file: 'test/cases/trans/canonical_opt_export.py',
-        line: 36,
-        why:
-            'the file\'s only pipeline (`std::opt std::jgir canonical=true`): measured the program exit 7 arrives as ' +
-            'the process exit code while the case asserts 0, so what the case reads includes the run',
+            'what it hashes -- the case is green either way, and patching it would narrow what it reads',
     },
     {
         file: 'test/cases/trans/cml_canon_contract.py',
         line: 57,
         why:
-            'the `canonical()` helper (`*passes` then `"std::jgir canonical=true"`): measured `json.loads` fails with ' +
-            '"Extra data" on the program output that follows the document -- the run is inside the stdout it parses',
+            'the `canonical()` helper (`*passes` then `"std::jgir canonical=true"`): the run the fallback hands the ' +
+            'graph to writes behind the document (measured `json.loads` "Extra data"). Not patched with the others ' +
+            'because this plan is red on the baseline for a reason of its own (`var_param` and its printed program ' +
+            'are not equivalent), so a `std::nop` here would only move the reading past that defect; the `std::nop` ' +
+            'belongs with the fix for it',
     },
     {
         file: 'test/cases/trans/cml_canon_contract.py',
         line: 165,
         why:
-            'a direct `invoke(EXE, LOOPS, "std::jgir")`: same measurement as the helper -- "Extra data" where the run ' +
-            'writes after the version 1 document',
+            'a direct `invoke(EXE, LOOPS, "std::jgir")`: the version 1 document, then the run behind it, which is the ' +
+            'same "Extra data"; not patched for the same reason as the helper above -- the plan fails earlier on a ' +
+            'defect that is not the run',
     },
     {
         file: 'test/cases/trans/cml_canon_contract.py',
         line: 369,
         why:
-            '`std::cml` prints the program source and the printed text is written back as a program: the run after ' +
-            'the printed source is what the same "Extra data" measurement picks up',
+            '`std::cml` prints the program source and that text is written back as a program: the run after the ' +
+            'printed source is the same "Extra data"; not patched for the same reason as the helper above',
     },
     {
         file: 'test/cases/trans/cml_contract.py',
@@ -103,42 +67,39 @@ export const KEPT_CASE_SCRIPTS = [
         why:
             'the `canonical()` helper (`"std::jgir canonical=true"`): measured `linear.cml` exits 23 after the ' +
             'document and the program writes `bonus = 24 ...` behind it, so the run is both the exit code and the ' +
-            'trailing text of what the case parses',
+            'trailing text of what the case parses. Not patched with the others because this plan is red on the ' +
+            'baseline for a reason of its own (`arm_write` before and after the print are not equivalent); the ' +
+            '`std::nop` belongs with the fix for it',
     },
     {
         file: 'test/cases/trans/cml_contract.py',
         line: 139,
         why:
-            'the `print_source()` helper (`std::cml`): the printed source is the case\'s subject and the run after it ' +
-            'contributes the exit code the case checks',
+            'the `print_source()` helper (`std::cml`): the printed source is the case\'s subject and the run after ' +
+            'it appends the program\'s own stdout to it, which is what makes the recompiled copy fail; not patched ' +
+            'for the same reason as the helper above',
     },
     {
         file: 'test/cases/trans/cml_contract.py',
         line: 161,
         why:
-            'the version 1 `std::jgir` dump of a source: same measurement as `canonical()` -- the document, then the ' +
-            'run',
+            'the version 1 `std::jgir` dump of a source: the document, then the run, as in `canonical()`; not ' +
+            'patched for the same reason',
     },
     {
         file: 'test/cases/trans/cml_contract.py',
         line: 312,
         why:
-            '`std::cml max_literal_bytes=64`: the parameter belongs to the translating pass, and what follows the ' +
-            'printed source is the run',
+            '`std::cml max_literal_bytes=64` on a program whose constant is over the limit: the pass refuses it ' +
+            '(`CmlBigConstant`), so nothing is handed on and no run follows -- what this line asserts is the ' +
+            'refusal and the limit it names, not a dump and not the program',
     },
     {
         file: 'test/cases/trans/cml_contract.py',
         line: 353,
         why:
-            'a `std::jgir canonical=true` call on a rewritten source: same measurement -- the run after the document ' +
-            'is inside the stdout the case reads',
-    },
-    {
-        file: 'test/cases/trans/jgir_contract.py',
-        line: 67,
-        why:
-            '`jgir_duplicate.cml` under `std::jgir`: measured exit 4 and `json.loads` "Extra data" at line 1979 -- ' +
-            'the run writes behind the document; this script has more `subprocess.run` pipelines of the same shape, ' +
-            'so the decision belongs to the file',
+            '`std::jgir canonical=true` on the printed program with its `type` line removed: the pipeline stops at ' +
+            'the compile (`UnresolvedTypeReference`), so no run follows and a `std::nop` would say nothing -- the ' +
+            'case asserts the refusal',
     },
 ]
