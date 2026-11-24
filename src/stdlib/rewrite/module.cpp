@@ -59,6 +59,7 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/phase_timer.h"
 #include "graph/graph_view.h"
+#include "camel/graph/graph.h"
 #include "src/stdlib/std/nvm/nodevm.h"
 #include "verify/translate.h"
 
@@ -460,9 +461,10 @@ sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &c
 }
 
 /// Whether a graph is one side of a rule: those are the patterns, not part of the program the
-/// rules are applied to.
-bool isRuleSide(const camel::runtime::GCGraph &graph) {
-    const std::string &name = graph.name();
+/// rules are applied to. The only reading is the graph's name, which the view answers, so this
+/// asks the graph by value and not the representation.
+bool isRuleSide(const camel::graph::Graph &graph) {
+    const std::string_view name = graph.view().name();
     return name.ends_with("__lhs") || name.ends_with("__rhs") || name.ends_with("__when");
 }
 
