@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Merge a lane branch into develop, and refuse to commit or push unless the merge actually happened.
+    Merge a lane branch into a target branch (`develop`, the default, or `integration`), and refuse to
+    commit or push unless the merge actually happened.
 
 .DESCRIPTION
     A merge can fail on one line among many, and a writer that looks for the word it expects -- "no
@@ -17,14 +18,16 @@
     against the history rather than against a sentence in it.
 
     None of that helps if the branch is not where the merge thinks it is. So the start point is
-    asserted first: `git fetch`, then local `develop` must be `origin/develop`. When it is not, the
-    commits only local `develop` holds are printed. They are, in the case that made this necessary,
+    asserted first: `git fetch`, then HEAD must be `origin/<Target>` (the branch named by -Target).
+    A seat works on a branch of its own -- two seats cannot check one branch out at once -- so HEAD is
+    what is asserted, not the name of the local branch. When it is not the tip, the
+    commits only HEAD holds are printed. They are, in the case that made this necessary,
     the merge commits a previous run made and could not push -- which is why that merge's first parent
     was not the commit on origin, why the push was refused with a message about something else, and
-    why local `develop` kept drifting one more merge per run. When the commits on its first-parent chain
+    why the branch kept drifting one more merge per run. When the commits on its first-parent chain
     are only such merges (a merge commit, no gate record for it, and a tree that is exactly what a
-    plain merge of its two parents produces), they are kept under a tag and local `develop` is moved
-    back to `origin/develop` before this merge starts. Any other shape stops with nothing merged and
+    plain merge of its two parents produces), they are kept under a tag and the checkout's branch is
+    moved back to `origin/<Target>` before this merge starts. Any other shape stops with nothing merged and
     nothing reset.
 
     Once the merge commit exists, four stages run in order and the push is last: the header check,
@@ -45,13 +48,21 @@
     refuses a baseline whose recorded tree is the tree it is comparing, so the mis-ordering cannot
     pass quietly; and the seeding step can fail, which is exit 2 and an empty baseline is never one.
 
-    Every stop after the merge says what git holds at that moment -- local `develop`, `origin/develop`
-    and the commits only local `develop` holds -- instead of the constant sentence it used to print,
+    Every stop after the merge says what git holds at that moment -- HEAD, `origin/<Target>`
+    and the commits only HEAD holds -- instead of the constant sentence it used to print,
     which claimed nothing had been committed while a merge commit sat on the branch that origin did
     not have.
 
 .PARAMETER Branch
     The lane branch to merge, e.g. lane/range-ri.
+
+.PARAMETER Target
+    The branch this merge lands on and pushes to: `develop` (the default, the release line) or
+    `integration` (the shared branch the parallel merge seats feed). The start point asserts that
+    HEAD is `origin/<Target>`, not that a local branch of the target's name exists: two merge seats
+    run at once, and only one of them can have a given branch checked out, so the second works on a
+    seat branch that tracks the target. The start line prints the target and its tip, and every stop
+    and the closing line read the same branch, so the reading says which branch a merge went to.
 
 .PARAMETER Message
     The merge commit message. The branch head is appended as a trailer.
@@ -87,18 +98,33 @@ param(
     # parameter would make PowerShell prompt for one. A merge without them is refused below, by name.
     [string] $Branch = '',
     [string] $Message = '',
-    [string] $MainCheckout = 'D:\Projects\Camel',
+    # The branch the merge lands on. `develop` is the release line; `integration` is the shared
+    # branch the parallel merge seats feed. The merge asserts HEAD is the target's recorded tip and
+    # pushes to the target, so this is the only thing that decides where a merge goes.
+    [ValidateSet('develop', 'integration')]
+    [string] $Target = 'develop',
+    # The merge seat's own worktree. D:\Projects\Camel is the author's workspace (iron rule 17):
+    # nothing is merged, built or measured there.
+    [string] $MainCheckout = 'D:\Projects\Camel-wt\merge',
     # Where the baseline is measured. It has to be a tree that is NOT the one being compared, and it
     # has to be a real checkout (the gate builds it), so it is a worktree of this repository detached
     # at the first parent. One fixed path and not one per merge: the host keeps the build of that
     # worktree between runs, and a fresh path per merge would mean a cold build per merge.
     [string] $BaselineWorktree = 'D:\Projects\Camel-wt\camel-baseline',
+    # One branch per baseline tree: git will not check one branch out twice, so a second merge
+    # position beside this one gives its own tree its own branch (the batch tool's reason, ported).
+    [string] $BaselineBranch = 'camel-baseline',
     [switch] $WhatIf,
     [switch] $NoPush,
     [switch] $WarmBaseline
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The branch every reading in this script is about: the start point, the state a stop prints, the
+# push, and the line that says the push landed. Read once here so Write-GitState -- which runs from
+# stops all over the script, some before the start point is asserted -- reports the same branch.
+$script:TargetBranch = $Target
 
 # What git holds at the moment this is called, in the sentence that used to be a constant.
 #
@@ -134,10 +160,17 @@ function Test-FastLayerBaseline {
 function Write-GitState {
     param([string] $MergeCommit = '')
 
+    $t = $script:TargetBranch
     $branch = "$(& git symbolic-ref -q --short HEAD 2>$null)".Trim()
     $headHere = "$(& git rev-parse --verify HEAD 2>$null)".Trim()
-    $local = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
-    $origin = "$(& git rev-parse --verify 'refs/remotes/origin/develop^{commit}' 2>$null)".Trim()
+    # A seat's checkout need not carry the target's name -- two seats cannot check one branch out at
+    # once, so the second works on a seat branch that tracks it. A checkout with no local branch of
+    # the target's name is therefore read at HEAD, which is the commit the push sends to origin.
+    $localBranch = "$(& git rev-parse --verify "refs/heads/$t^{commit}" 2>$null)".Trim()
+    $local = if ($localBranch) { $localBranch } else { $headHere }
+    $localWho = if ($localBranch) { "local $t" } else { 'HEAD' }
+    $localWhoCap = if ($localBranch) { "Local $t" } else { 'HEAD' }
+    $origin = "$(& git rev-parse --verify "refs/remotes/origin/$t^{commit}" 2>$null)".Trim()
     $where = if ($branch) { "the branch $branch" } else { 'a detached HEAD' }
 
     if (-not $local -or -not $origin) {
@@ -145,41 +178,41 @@ function Write-GitState {
         # rather than defaulted: a default here would be the same class of mistake as the constant.
         $localText = if ($local) { $local } else { 'unreadable' }
         $originText = if ($origin) { $origin } else { 'unreadable' }
-        Write-Host "  Nothing was pushed. Local develop reads $localText and origin/develop reads $originText; with one end unreadable, whether they are the same commit cannot be stated."
+        Write-Host "  Nothing was pushed. $localWhoCap reads $localText and origin/$t reads $originText; with one end unreadable, whether they are the same commit cannot be stated."
         return
     }
 
     # `@( ... )` around the whole pipeline, not around the git call: one line of output is a string,
     # and a string indexed at [0] is its first character -- this said "the commit is d" once.
-    $only = @(& git rev-list 'origin/develop..develop' 2>$null |
+    $only = @(& git rev-list "origin/$t..HEAD" 2>$null |
         ForEach-Object { "$_".Trim() } | Where-Object { $_ })
     $held = if ($only.Count -eq 0) {
-        'Local develop holds no commit that origin/develop does not have, so it is behind rather than ahead.'
+        "$localWhoCap holds no commit that origin/$t does not have, so it is behind rather than ahead."
     } elseif ($only.Count -eq 1) {
-        "The commit only local develop holds is $($only[0])."
+        "The commit only $localWho holds is $($only[0])."
     } else {
-        "The commits only local develop holds are $($only -join ', ')."
+        "The commits only $localWho holds are $($only -join ', ')."
     }
 
     if (-not $MergeCommit) {
         if ($local -eq $origin) {
-            Write-Host "  Nothing was committed and nothing was pushed: local develop is still $local, which is origin/develop."
+            Write-Host "  Nothing was committed and nothing was pushed: $localWho is still $local, which is origin/$t."
         } else {
-            Write-Host "  Nothing was committed and nothing was pushed by this run: local develop is $local and origin/develop is $origin. $held"
+            Write-Host "  Nothing was committed and nothing was pushed by this run: $localWho is $local and origin/$t is $origin. $held"
         }
         return
     }
     if ($local -eq $origin -and $MergeCommit -ne $local) {
-        # A trial on a scratch branch: the merge commit is real but it is not on develop, so develop
-        # still reads what origin has and the push would publish nothing of it.
-        Write-Host "  The merge was committed locally and not pushed: the merge commit is $MergeCommit on $where, and local develop is still $local, which is origin/develop."
+        # A trial on a scratch branch: the merge commit is real but it is not on the target, so the
+        # target still reads what origin has and the push would publish nothing of it.
+        Write-Host "  The merge was committed locally and not pushed: the merge commit is $MergeCommit on $where, and $localWho is still $local, which is origin/$t."
         return
     }
     if ($local -eq $MergeCommit) {
-        Write-Host "  The merge was committed locally and not pushed: local develop is $local, and origin/develop is $origin. $held Run this again after restoring local develop (see the message above)."
+        Write-Host "  The merge was committed locally and not pushed: $localWho is $local, and origin/$t is $origin. $held Run this again after restoring $localWho (see the message above)."
         return
     }
-    Write-Host "  The merge was committed locally and not pushed: the merge commit is $MergeCommit on $where; local develop is $local, and origin/develop is $origin. $held"
+    Write-Host "  The merge was committed locally and not pushed: the merge commit is $MergeCommit on $where; $localWho is $local, and origin/$t is $origin. $held"
 }
 
 function Stop-With {
@@ -211,10 +244,11 @@ function Sync-BaselineWorktree {
         [Parameter(Mandatory)][string] $Path,
         [Parameter(Mandatory)][string] $Sha,
         [Parameter(Mandatory)][string] $CommonDir,
-        [Parameter(Mandatory)][string] $Repo
+        [Parameter(Mandatory)][string] $Repo,
+        [string] $BranchName = 'camel-baseline'
     )
 
-    $ourBranch = 'camel-baseline'
+    $ourBranch = $BranchName
     $short = $Sha.Substring(0, 9)
     try { $target = [System.IO.Path]::GetFullPath($Path) } catch { return "the baseline worktree path '$Path' is not a path" }
     $repoFull = (Resolve-Path -LiteralPath $Repo -ErrorAction SilentlyContinue).Path
@@ -283,6 +317,31 @@ function Sync-BaselineWorktree {
     return $null
 }
 
+# Three trees and three jobs, kept apart on purpose:
+#   $toolRoot         the checkout this SCRIPT lives in -- the instruments (the gate entry, the
+#                     comparer, the record writer) come from here, because the tree the merge makes
+#                     is under judgement and a judged tree must not carry the instrument that judges
+#                     it. `origin/<target>` does not carry these files at all, which is how the first
+#                     full run failed with "Cannot find module ...merge-record.mjs"; an older comparer
+#                     would have accepted `--accept` and ignored `--tree`, seeding a baseline nothing
+#                     could check, and that run would have read as green.
+#   $MainCheckout     the merge position: the seat checkout whose branch is the target, where the
+#                     merge commit is made, which the gates measure, and from which the push is made
+#                     (the hook names that tree for `develop`).
+#   $BaselineWorktree the throwaway tree the baseline is measured in, held at the first parent on a
+#                     branch of its own.
+# The header check and the plan selection are the other way round on purpose: they are about the
+# tree's own files and its own selection rules, so they run the tree's own copies.
+$toolRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+if (-not (Test-Path -LiteralPath (Join-Path $toolRoot 'scripts\merge-readings.mjs'))) {
+    Write-Host ''
+    Write-Host 'STOPPED: this script is not in a checkout that carries the merge instruments (exit 2, nothing measured)' -ForegroundColor Yellow
+    Write-Host "  $toolRoot has no scripts/merge-readings.mjs. The comparer and the record writer are run from the checkout this script lives in, so run it from the merge position's own checkout after pulling."
+    Write-Host ''
+    Write-Host "Nothing was pushed, and local $Target is where it was."
+    exit 2
+}
+
 Push-Location $MainCheckout
 try {
     # The two directories that are not `$MainCheckout\.git` once the merge position is a linked
@@ -339,13 +398,13 @@ try {
         Write-Host "  cleared an index.lock that was $([int]$ageSeconds) s old with no git process running"
     }
 
-    # --- the start point: local develop has to be origin/develop ------------------
+    # --- the start point: HEAD has to be the target's tip ------------------------
     #
-    # This merges into the local branch and then pushes it. If local `develop` is not `origin/develop`,
+    # This merges in this checkout and then pushes HEAD to `$Target`. If HEAD is not `origin/$Target`,
     # the merge commit's first parent is not the commit that is on origin: the push is refused, and the
     # refusal names something else -- the pre-push hook's records, or a non-fast-forward -- so the reader
     # goes looking in the wrong place. The expensive half is what comes next: the merge commit stays on
-    # local `develop`, so the following run starts one more merge wrong. Six of those were left in one
+    # the checkout's branch, so the following run starts one more merge wrong. Six of those were left in one
     # day (952048856a, fa7d722407, 6d0af87f89, 0be4786c48, 542f52470a, 66041d0581), every one of them
     # under a message that said nothing had been committed.
     #
@@ -361,31 +420,43 @@ try {
         Stop-With 'git fetch failed' 'A merge against a stale origin is a merge against what you think is there.'
     }
 
-    $originDevelop = "$(& git rev-parse --verify 'refs/remotes/origin/develop^{commit}' 2>$null)".Trim()
-    $localDevelop = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
-    if (-not $originDevelop -or -not $localDevelop) {
+    $originTarget = "$(& git rev-parse --verify "refs/remotes/origin/$Target^{commit}" 2>$null)".Trim()
+    $headTip = "$(& git rev-parse --verify 'HEAD^{commit}' 2>$null)".Trim()
+    $startBranch = "$(& git symbolic-ref -q --short HEAD 2>$null)".Trim()
+    $localTarget = "$(& git rev-parse --verify "refs/heads/$Target^{commit}" 2>$null)".Trim()
+    if (-not $originTarget -or -not $headTip) {
         Write-Host ''
         Write-Host 'STOPPED: the start point could not be read (exit 2, no reading taken)' -ForegroundColor Yellow
-        Write-Host "  local develop reads '$(if ($localDevelop) { $localDevelop } else { 'nothing' })' and origin/develop reads '$(if ($originDevelop) { $originDevelop } else { 'nothing' })'."
+        Write-Host "  HEAD reads '$(if ($headTip) { $headTip } else { 'nothing' })' and origin/$Target reads '$(if ($originTarget) { $originTarget } else { 'nothing' })'."
         Write-Host '  This is not a defect in the lane: the assertion this merge begins with cannot be made, so nothing was merged and nothing was pushed.'
-        Write-Host '  What repairs it: `git rev-parse develop` and `git rev-parse origin/develop` in this checkout. origin/develop missing after a successful fetch means the branch lives on another remote, or does not exist.'
+        Write-Host "  What repairs it: git rev-parse HEAD and git rev-parse origin/$Target in this checkout. origin/$Target missing after a successful fetch means the branch lives on another remote, or does not exist."
         Write-Host ''
         exit 2
     }
 
-    if ($localDevelop -ne $originDevelop) {
+    # The assertion: this checkout's HEAD is the target's recorded tip, so the merge commit's first
+    # parent is the commit on origin and the push is a fast-forward. A seat works on a branch of its
+    # own, so the local branch need not be named like the target; HEAD is what is asserted, and the
+    # local branch (when it exists) is read beside it in the messages below.
+    $rangeName = if ($localTarget) { "local $Target" } else { 'HEAD' }
+    $rangeRight = if ($localTarget) { $Target } else { 'HEAD' }
+    if ($headTip -ne $originTarget) {
         # What the branch holds and origin does not: every commit, so the reader sees what a merge
         # brought with it as well. The judgement, though, is about develop's FIRST-PARENT chain only:
         # the commits a merge pulls in from a lane are not on that chain, were never merges this tool
         # made on develop, and print-and-refuse over them would refuse every real case (a lane commit
         # is not a merge commit, so it would always be "a person made it").
-        $onlyLocal = @(& git rev-list --reverse 'origin/develop..develop' 2>$null |
+        $onlyLocal = @(& git rev-list --reverse "origin/$Target..$rangeRight" 2>$null |
             ForEach-Object { "$_".Trim() } | Where-Object { $_ })
-        $chain = @(& git rev-list --reverse --first-parent 'origin/develop..develop' 2>$null |
+        $chain = @(& git rev-list --reverse --first-parent "origin/$Target..$rangeRight" 2>$null |
             ForEach-Object { "$_".Trim() } | Where-Object { $_ })
         Write-Host ''
-        Write-Host "local develop is not origin/develop: local develop is $($localDevelop.Substring(0,9)), origin/develop is $($originDevelop.Substring(0,9))" -ForegroundColor Red
-        Write-Host "  $($onlyLocal.Count) commit(s) exist only on local develop (git log --oneline origin/develop..develop), $($chain.Count) of them on develop's first-parent chain:"
+        if ($localTarget) {
+            Write-Host "local $Target is not origin/$Target`: local $Target is $($localTarget.Substring(0,9)), origin/$Target is $($originTarget.Substring(0,9))" -ForegroundColor Red
+        } else {
+            Write-Host "HEAD is not origin/$Target`: HEAD is $($headTip.Substring(0,9))$(if ($startBranch) { " on $startBranch" }), origin/$Target is $($originTarget.Substring(0,9))" -ForegroundColor Red
+        }
+        Write-Host "  $($onlyLocal.Count) commit(s) exist only on $rangeName (git log --oneline origin/$Target..$rangeRight), $($chain.Count) of them on $Target's first-parent chain:"
         foreach ($sha in $onlyLocal) {
             $fromLane = if ($chain -notcontains $sha) { '   (came in through a merge; not on the first-parent chain)' } else { '' }
             Write-Host "    $(& git log --oneline -n 1 $sha 2>$null)$fromLane"
@@ -437,34 +508,34 @@ try {
 
         if ($strangers.Count -gt 0) {
             Write-Host ''
-            Write-Host 'STOPPED: local develop is not origin/develop, and what it holds on its first-parent chain is not all merges this tool made and did not push (exit 2)' -ForegroundColor Red
+            Write-Host "STOPPED: HEAD is not origin/$Target, and what it holds on the first-parent chain is not all merges this tool made and did not push (exit 2)" -ForegroundColor Red
             foreach ($why in $strangers) { Write-Host "  $why" }
             Write-Host ''
-            Write-Host '  Not restoring local develop: which of those commits to keep is not a decision a merge tool makes.'
-            Write-Host '  Move local develop to origin/develop yourself (after reading the commits above), or merge from a checkout whose develop is origin/develop.'
+            Write-Host "  Not restoring ${rangeName}: which of those commits to keep is not a decision a merge tool makes."
+            Write-Host "  Move $rangeName to origin/$Target yourself (after reading the commits above), or merge from a checkout whose HEAD is origin/$Target."
             Write-Host ''
             Write-GitState
             exit 2
         }
 
-        # The one repair. It needs a checkout that may be moved: this one is on develop, at that
-        # branch's tip, with no uncommitted change. Moving a branch under somebody else's checkout, or
-        # resetting over work that is not committed, would be the repair losing the thing it repairs.
+        # The one repair. It needs a checkout that may be moved: this one is on the target branch, at
+        # that branch's tip, with no uncommitted change. Moving a branch under somebody else's checkout,
+        # or resetting over work that is not committed, would be the repair losing the thing it repairs.
         $onBranch = "$(& git symbolic-ref -q --short HEAD 2>$null)".Trim()
         $headHere = "$(& git rev-parse --verify HEAD 2>$null)".Trim()
         $dirty = @(& git status --porcelain --untracked-files=no 2>$null)
-        if ($onBranch -ne 'develop' -or $headHere -ne $localDevelop -or $dirty.Count -gt 0) {
-            $why = if ($onBranch -ne 'develop') {
-                "this checkout is on $(if ($onBranch) { "the branch $onBranch" } else { 'a detached HEAD' }), not on develop, so moving develop here would leave a checkout that disagrees with its own branch"
-            } elseif ($headHere -ne $localDevelop) {
-                "this checkout's HEAD ($headHere) is not local develop's tip ($localDevelop)"
+        if ($onBranch -ne $Target -or $headHere -ne $headTip -or $dirty.Count -gt 0) {
+            $why = if ($onBranch -ne $Target) {
+                "this checkout is on $(if ($onBranch) { "the branch $onBranch" } else { 'a detached HEAD' }), not on $Target, so moving $Target here would leave a checkout that disagrees with its own branch"
+            } elseif ($headHere -ne $headTip) {
+                "this checkout's HEAD ($headHere) is not the tip being asserted ($headTip)"
             } else {
                 "this checkout has $($dirty.Count) uncommitted change(s), and the repair would discard them"
             }
             Write-Host ''
-            Write-Host 'STOPPED: local develop is not origin/develop, and this checkout is not one the repair may move it in (exit 2)' -ForegroundColor Red
+            Write-Host "STOPPED: HEAD is not origin/$Target, and this checkout is not one the repair may move it in (exit 2)" -ForegroundColor Red
             Write-Host "  $why."
-            Write-Host "  What it holds are merges this tool made and did not push, so the repair would lose nothing: local develop $localDevelop, origin/develop $originDevelop."
+            Write-Host "  What it holds are merges this tool made and did not push, so the repair would lose nothing: HEAD $headTip, origin/$Target $originTarget."
             Write-Host '  Not restoring, and nothing was merged or pushed.'
             Write-Host ''
             Write-GitState
@@ -477,42 +548,43 @@ try {
         # later reader finds both kinds of record in one place. A tag that is already there for this
         # same commit is the record already written -- it is not rewritten, and a tag of that name
         # pointing somewhere else is not overwritten either (that tag is somebody else's record).
-        $strandedRef = "backup/orphan-$($localDevelop.Substring(0,10))"
+        $strandedRef = "backup/orphan-$($headTip.Substring(0,10))"
         $tagRef = "refs/tags/$strandedRef^{commit}"
         $tagged = "$(& git rev-parse --verify $tagRef 2>$null)".Trim()
-        if ($tagged -and $tagged -ne $localDevelop) {
+        if ($tagged -and $tagged -ne $headTip) {
             $strandedRef = "$strandedRef-$([string](Get-Date -Format 'yyyyMMdd-HHmmss'))"
             $tagRef = "refs/tags/$strandedRef^{commit}"
             $tagged = "$(& git rev-parse --verify $tagRef 2>$null)".Trim()
         }
-        if ($tagged -ne $localDevelop) {
-            & git tag $strandedRef $localDevelop 2>&1 | Out-Null
+        if ($tagged -ne $headTip) {
+            & git tag $strandedRef $headTip 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                Stop-With 'the commits local develop holds could not be kept under a tag' "git tag $strandedRef $localDevelop failed. Nothing is dropped without a record of where it went, so local develop was left where it is."
+                Stop-With 'the commits HEAD holds could not be kept under a tag' "git tag $strandedRef $headTip failed. Nothing is dropped without a record of where it went, so HEAD was left where it is."
             }
         }
-        & git reset --hard $originDevelop 2>&1 | Out-Null
+        & git reset --hard $originTarget 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Stop-With 'local develop could not be restored to origin/develop' "git reset --hard $originDevelop failed after those commits were saved under $strandedRef. Local develop is where it was; the ref is the record of what it holds."
+            Stop-With "HEAD could not be restored to origin/$Target" "git reset --hard $originTarget failed after those commits were saved under $strandedRef. HEAD is where it was; the ref is the record of what it holds."
         }
-        $restored = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
-        if ($restored -ne $originDevelop) {
-            Stop-With 'local develop was not restored to origin/develop' "after git reset --hard $originDevelop, local develop reads $restored. The commits it held are under $strandedRef."
+        $restored = "$(& git rev-parse --verify "refs/heads/$Target^{commit}" 2>$null)".Trim()
+        if ($restored -ne $originTarget) {
+            Stop-With "HEAD was not restored to origin/$Target" "after git reset --hard $originTarget, local $Target reads $restored. The commits it held are under $strandedRef."
         }
         Write-Host ''
         # The sentence the author asked for, with the one case that would make it false spelled out
         # instead of glossed: a branch that is behind origin holds no commit origin does not have.
         $heldText = if ($onlyLocal.Count -eq 0) {
-            "it was behind origin/develop rather than ahead, so no commit is lost from it"
+            "it was behind origin/$Target rather than ahead, so no commit is lost from it"
         } else {
             "the commits only it held are under $strandedRef"
         }
-        Write-Host "  restored local develop from $localDevelop to $originDevelop, $heldText" -ForegroundColor Yellow
-        Write-Host "  (nothing was dropped: $strandedRef still points at $localDevelop, and git log --oneline origin/develop..$strandedRef lists what it holds)"
-        $localDevelop = $originDevelop
+        Write-Host "  restored $rangeName from $headTip to $originTarget, $heldText" -ForegroundColor Yellow
+        Write-Host "  (nothing was dropped: $strandedRef still points at $headTip, and git log --oneline origin/$Target..$strandedRef lists what it holds)"
+        $headTip = $originTarget
     }
 
-    Write-Host "start point: local develop is $($localDevelop.Substring(0,9)), which is origin/develop"
+    $startWhere = if ($startBranch) { "on $startBranch" } else { 'on a detached HEAD' }
+    Write-Host "start point: target $Target is $($originTarget.Substring(0,9)) (origin/$Target); HEAD is $($headTip.Substring(0,9)) $startWhere"
 
     # --- -WarmBaseline: the idle-slot run, D-1123-123 --------------------------
     # A merge needs "what the plans it selects read on the commit it lands on". Measured per merge,
@@ -529,11 +601,11 @@ try {
     if ($WarmBaseline) {
         $warmDir = Join-Path $commonDir 'camel-readings'
         $warmStarted = Get-Date
-        $warmProbe = Test-FastLayerBaseline -CacheDir $warmDir -Develop $originDevelop -Checkout $MainCheckout
+        $warmProbe = Test-FastLayerBaseline -CacheDir $warmDir -Develop $originTarget -Checkout $toolRoot
         if ($warmProbe.Hit) {
             $warmProbe.Text -split "`n" | Where-Object { $_ } | ForEach-Object { "  $_" }
             Write-Host ''
-            Write-Host "  a baseline covering the fast layer is already stored for develop $($originDevelop.Substring(0,9)); nothing was measured (exit 0)"
+            Write-Host "  a baseline covering the fast layer is already stored for $Target $($originTarget.Substring(0,9)); nothing was measured (exit 0)"
             exit 0
         }
         if ($warmProbe.Text -notmatch 'cache-miss') {
@@ -545,29 +617,33 @@ try {
             exit 2
         }
         $warmPath = $BaselineWorktree
-        $warmProblem = Sync-BaselineWorktree -Path $warmPath -Sha $originDevelop -CommonDir $commonDir -Repo $MainCheckout
+        $warmProblem = Sync-BaselineWorktree -Path $warmPath -Sha $originTarget -CommonDir $commonDir -Repo $MainCheckout -BranchName $BaselineBranch
         $warmMeasured = ''
         if ($null -eq $warmProblem) {
             $warmMeasured = "$(& git -C $warmPath rev-parse HEAD 2>$null)".Trim()
-            if ($warmMeasured -ne $originDevelop) {
-                $warmProblem = "$warmPath is at $($warmMeasured.Substring(0, [Math]::Min(9, $warmMeasured.Length))), not at develop $($originDevelop.Substring(0,9)), so the baseline would come from another tree"
+            if ($warmMeasured -ne $originTarget) {
+                $warmProblem = "$warmPath is at $($warmMeasured.Substring(0, [Math]::Min(9, $warmMeasured.Length))), not at $Target $($originTarget.Substring(0,9)), so the baseline would come from another tree"
             }
         }
         if ($null -ne $warmProblem) {
             Write-Host ''
             Write-Host 'STOPPED: the fast layer could not be measured, so nothing was stored (exit 2, no reading taken)' -ForegroundColor Yellow
             Write-Host "  $warmProblem"
-            Write-Host "  What repairs it: the baseline is measured in a worktree held at develop ($($originDevelop.Substring(0,9))). Name one with -BaselineWorktree, or let this script create it."
+            Write-Host "  What repairs it: the baseline is measured in a worktree held at $Target ($($originTarget.Substring(0,9))). Name one with -BaselineWorktree, or let this script create it."
             exit 2
         }
         $warmPlans = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-warm-plans-$PID.txt")
         [System.IO.File]::WriteAllText($warmPlans, "test/plans/smoke`ntest/plans/feat`n",
             (New-Object System.Text.UTF8Encoding($false)))
         $warmTranscript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-warm-rows-$PID.txt")
-        Write-Host ("  measuring the fast layer on develop {0} in {1} -- the run every merge after this one would otherwise do for itself ..." -f `
-            $originDevelop.Substring(0,9), $warmPath)
-        $warmRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
-            -Path $warmPath -Plan @('test/plans/smoke', 'test/plans/feat') -ListKnown -NoGpuWatch 2>&1)
+        Write-Host ("  measuring the fast layer on $Target {0} in {1} -- the run every merge after this one would otherwise do for itself ..." -f `
+            $originTarget.Substring(0,9), $warmPath)
+        # Joined, not a bare array: `pwsh -File` passes each element as its own argument, so
+        # `-Plan @('test/plans/smoke', 'test/plans/feat')` arrives as `-Plan test/plans/smoke` plus a
+        # stray positional `test/plans/feat`, and the run stops before measuring anything. The gate's
+        # own `-Plan` reads a comma list; that is the form it is given here.
+        $warmRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
+            -Path $warmPath -Plan 'test/plans/smoke,test/plans/feat' -ListKnown -NoGpuWatch 2>&1)
         $warmExit = $LASTEXITCODE
         $warmSeconds = ((Get-Date) - $warmStarted).TotalSeconds
         [System.IO.File]::WriteAllText($warmTranscript,
@@ -583,8 +659,8 @@ try {
             exit 2
         }
         $env:CAMEL_BASELINE_SECONDS = [string][int]$warmSeconds
-        $warmAccept = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $warmTranscript `
-            --cache $warmDir --develop $originDevelop --plans $warmPlans --tree $warmMeasured --accept 2>&1)
+        $warmAccept = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $warmTranscript `
+            --cache $warmDir --develop $originTarget --plans $warmPlans --tree $warmMeasured --accept 2>&1)
         $warmAcceptExit = $LASTEXITCODE
         Remove-Item Env:\CAMEL_BASELINE_SECONDS -ErrorAction SilentlyContinue
         $warmAccept | ForEach-Object { "  $_" }
@@ -592,13 +668,13 @@ try {
         if ($warmAcceptExit -ne 0) {
             Write-Host ''
             Write-Host 'STOPPED: the fast layer was measured but could not be stored (exit 2, no reading taken)' -ForegroundColor Yellow
-            Write-Host "  $warmRows row(s) came back from develop $($originDevelop.Substring(0,9)) in $([int]$warmSeconds) s and the store refused them."
+            Write-Host "  $warmRows row(s) came back from $Target $($originTarget.Substring(0,9)) in $([int]$warmSeconds) s and the store refused them."
             Write-Host "  What repairs it: the comparer's own refusal is above; it names what about the rows or the cache it could not use."
             exit 2
         }
-        Write-Host ("  measured: {0} case(s) across the fast layer on develop {1}, {2} already red there, {3:N0} s" -f `
-            $warmRows, $originDevelop.Substring(0,9), $warmReds, $warmSeconds)
-        Write-Host "  from now on a merge that lands on $($originDevelop.Substring(0,9)) and selects plans inside test/plans/smoke or test/plans/feat compares against this and measures only its own tree (exit 0)"
+        Write-Host ("  measured: {0} case(s) across the fast layer on $Target {1}, {2} already red there, {3:N0} s" -f `
+            $warmRows, $originTarget.Substring(0,9), $warmReds, $warmSeconds)
+        Write-Host "  from now on a merge that lands on $($originTarget.Substring(0,9)) and selects plans inside test/plans/smoke or test/plans/feat compares against this and measures only its own tree (exit 0)"
         exit 0
     }
 
@@ -669,7 +745,7 @@ try {
     # host holds describes an older tree, and this check does not read it.
     Write-Host ''
     Write-Host 'clang syntax check (CI''s clang 19, this tree''s compile lines) ...'
-    $syntax = & pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+    $syntax = & pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
         -Path $MainCheckout -Check clang-syntax -NoBuild -AllowStale -NoGpuWatch 2>&1
     $syntaxExit = $LASTEXITCODE
     $syntax | Where-Object { $_ -match 'clang-syntax:|check |STOPPED|refused|error:' } | Select-Object -Last 8 |
@@ -826,7 +902,7 @@ try {
     # comparison that followed was the tree against itself: 0/0/0, and a green that measured nothing.
     # So this asks the comparer's own key (it is the only place the key is written) and, on a miss,
     # measures the tree the merge lands on rather than asking anybody to.
-    $probe = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --cache $compareDir `
+    $probe = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --cache $compareDir `
         --develop $developTip --plans $planSetFile --probe 2>&1)
     $probeExit = $LASTEXITCODE
     $probeText = ($probe | ForEach-Object { "$_" }) -join "`n"
@@ -840,7 +916,7 @@ try {
         # warm -- a cold build per merge is what would make people go around this gate.
         $baselinePath = $BaselineWorktree
         $worktreeProblem = Sync-BaselineWorktree -Path $baselinePath -Sha $developTip `
-            -CommonDir $commonDir -Repo $MainCheckout
+            -CommonDir $commonDir -Repo $MainCheckout -BranchName $BaselineBranch
         # The sha this run will really read, taken from the checkout itself. `--tree $developTip`
         # alone would be an assertion about the source, and an assertion is exactly what a seeding
         # pointed at the wrong tree gets right while measuring the wrong one.
@@ -869,7 +945,7 @@ try {
             # own files, because those two trees differ by more than the merge -- measured as
             # `smoke`-plus-`docs.links` (31 cases) where the merge selected `docs.links` (21), and the
             # comparison then refused, correctly, as two runs of different things.
-            $seedRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+            $seedRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
                 -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
             $seedExit = $LASTEXITCODE
             $seedSeconds = ((Get-Date) - $seedStarted).TotalSeconds
@@ -891,17 +967,23 @@ try {
         }
         if ($seedRows -eq 0) {
             Write-Host ''
-            Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
+Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
+            # The run's own last lines are the only place that says why it measured nothing: without
+            # them the refusal says "no rows" and the reader has to guess whether it was the plan
+            # set, the slot, the host or the tree. The transcript is removed on the way out, so this
+            # is the one moment they can be read.
+            Write-Host '  the baseline run returned no rows; its last lines:' -ForegroundColor Yellow
+            $seedRun | Select-Object -Last 6 | ForEach-Object { "    $_" }
             Write-Host "  This is not a defect in your tree: the baseline run on develop $($developTip.Substring(0, 9)) recorded no row, so nothing was learned about this change and nothing was pushed."
             Write-Host "  What repairs it: the row block must arrive with rows inside it. Re-run internal/tools/camel-remote.ps1 -Path $baselinePath -Changed -ChangedBase $head -ListKnown -NoGpuWatch and read what it prints; a build that failed or a plan set that starts no case writes no block. An empty baseline is never stored -- it would call every case fixed."
             Write-Host ''
             Write-GitState -MergeCommit $mergeCommit
             exit 2
         }
-        # The seconds and the case count are the reading this step owes: "it measured" is only worth
+# The seconds and the case count are the reading this step owes: "it measured" is only worth
         # something if it says how much. They travel into the entry's `.where` beside the shas.
         $env:CAMEL_BASELINE_SECONDS = [string][int]$seedSeconds
-        $accept = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $seedTranscript `
+        $accept = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $seedTranscript `
             --cache $compareDir --develop $developTip --plans $planSetFile --tree $measuredTree --accept 2>&1)
         $acceptExit = $LASTEXITCODE
         Remove-Item Env:\CAMEL_BASELINE_SECONDS -ErrorAction SilentlyContinue
@@ -936,8 +1018,8 @@ try {
     # One measurement, one transcript. The rows are read out of it twice -- once for the comparison
     # and once, after the push, to store this commit's own reading as the baseline for the next
     # merge -- so the plan runs once and both readers read the same run.
-    $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
-    $rowsRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+$transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
+    $rowsRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
         -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
     $rowsExit = $LASTEXITCODE
     # Byte for byte, without a BOM and with LF: the comparer splits on `\n` and matches the markers
@@ -949,9 +1031,15 @@ try {
     Write-Host ("  {0} row(s) from the run, camel-remote exit {1}, {2} plan target(s){3}" -f `
         $rowsCount, $rowsExit, $planTargets.Count, $(if ($widened) { ' (the whole fast layer)' } else { '' }))
 
-    $compare = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
+    # The pass record is built from the comparer's own file -- the sets it judged, the plan set and
+    # its hash, the baseline it compared against -- so `--out` is asked for here. Reassembling that
+    # from the transcript would read a second time what was already read once, and the second reading
+    # is where the two would disagree.
+    $diffDir = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-diff-$PID")
+    New-Item -ItemType Directory -Force -Path $diffDir | Out-Null
+    $compare = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $transcript `
         --cache $compareDir --develop $developTip --plans $planSetFile --tree $comparedTree `
-        --changed-files $changedFilesFile --message-file $messageFile 2>&1)
+        --changed-files $changedFilesFile --message-file $messageFile --out $diffDir 2>&1)
     $compareExit = $LASTEXITCODE
 
     # The same three-way convention as the clang step. 1 is a reading -- the cases that moved are
@@ -1006,17 +1094,42 @@ try {
         exit 0
     }
 
+    # --- the record the pre-push hook reads -------------------------------------
+    # A merge commit may reach the target only when a gate wrote down that it passed. The hook
+    # (`scripts/hooks/pre-push`) walks the first-parent range of the push and refuses a merge commit
+    # with no record, so the record is written before the push and removed if the push does not land:
+    # a claim about a commit nobody can fetch has no reader, and one left behind would let a later
+    # push of this commit pass on a reading taken now. That is the same mistake as a merge made on
+    # local `develop` -- a judgement outliving the tree it was about.
+    $passedDir = Join-Path $commonDir 'camel-passed'
+    New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+    $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
+        --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
+        --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `
+        --baseline-source $(if ($seededFrom) { "measured now on $($developTip.Substring(0, 9))" } else { "cached from an earlier measurement of $($developTip.Substring(0, 9))" }) `
+        --gate headers --gate clang-syntax --gate rows 2>&1)
+    $recordExit = $LASTEXITCODE
+    $recordOut | ForEach-Object { "  $_" }
+    if ($recordExit -ne 0) {
+        Stop-With "the pass record for $($mergeCommit.Substring(0, 9)) could not be written (exit $recordExit)" 'The pre-push hook refuses a merge commit without one, so the push is not attempted.' $mergeCommit
+    }
+    $recordFile = Join-Path $passedDir "$mergeCommit.json"
+
     for ($i = 1; $i -le 3; $i++) {
-        & git push origin develop 2>&1 | Select-Object -Last 1
+        & git push origin "HEAD:$Target" 2>&1 | Select-Object -Last 1
         if ($LASTEXITCODE -eq 0) { break }
         Start-Sleep -Seconds 4
     }
-    if ($LASTEXITCODE -ne 0) { Stop-With 'git push failed after 3 attempts' 'The merge is committed locally and not on origin.' $mergeCommit }
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
+        Stop-With 'git push failed after 3 attempts' "The merge is committed locally and not on origin/$Target, and the pass record was removed with the push's claim." $mergeCommit
+    }
 
-    $remote = ((& git ls-remote origin refs/heads/develop) -split "`t") | Select-Object -First 1
+    $remote = ((& git ls-remote origin "refs/heads/$Target") -split "`t") | Select-Object -First 1
     $local = "$(& git rev-parse HEAD)".Trim()
     if ($remote -ne $local) {
-        Stop-With 'origin/develop is not the commit just made' "local $local, remote $remote" $mergeCommit
+        Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
+        Stop-With "origin/$Target is not the commit just made" "local $local, remote $remote" $mergeCommit
     }
 
     # The commit this merge just created is the tree those rows were measured on, so they are that
@@ -1027,7 +1140,7 @@ try {
     # refusal is what keeps a missing baseline from reading as "every case fixed"): the first merge
     # on a machine has no cache yet, and creating it is this script's job, not the reader's.
     New-Item -ItemType Directory -Force -Path $compareDir | Out-Null
-    & node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
+    & node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $transcript `
         --cache $compareDir --develop $local --plans $planSetFile --tree $local --accept 2>&1 |
         Select-Object -Last 1 | ForEach-Object { "  $_" }
     if ($LASTEXITCODE -ne 0) {
@@ -1041,22 +1154,22 @@ try {
     # Which of the two the next merge will do, read rather than left to be discovered as a slow
     # merge: a baseline for this commit covers the plans this run selected, and the fast layer covers
     # every merge whose selection stays inside it.
-    $tipProbe = Test-FastLayerBaseline -CacheDir $compareDir -Develop $local -Checkout $MainCheckout
+    $tipProbe = Test-FastLayerBaseline -CacheDir $compareDir -Develop $local -Checkout $toolRoot
     if ($tipProbe.Hit) {
         Write-Host "  the next merge on $($local.Substring(0,9)) compares against that fast-layer baseline and measures only its own tree"
     } else {
         Write-Host "  the next merge on $($local.Substring(0,9)) measures a baseline of its own: internal\tools\merge-lane.ps1 -WarmBaseline measures the fast layer once on this commit, when the test slot is free, and every merge after it compares instead"
     }
-    Write-Host "merged $Branch at $head; develop is $($local.Substring(0,9))" -ForegroundColor Green
+    Write-Host "merged $Branch at $head; $Target is $($local.Substring(0,9))" -ForegroundColor Green
     # The closing claim read back rather than asserted: after the push both ends are one sha, and the
     # line says which. A push that reported success and a ref that did not move is a reading worth
     # seeing, so the two are compared here instead of being implied by the word "merged".
-    $localNow = "$(& git rev-parse --verify 'refs/heads/develop^{commit}' 2>$null)".Trim()
-    $originNow = "$(& git rev-parse --verify 'refs/remotes/origin/develop^{commit}' 2>$null)".Trim()
-    if ($localNow -and $localNow -eq $originNow -and $localNow -eq $local) {
-        Write-Host "  local develop is $localNow, which is origin/develop."
+    $headNow = "$(& git rev-parse --verify 'HEAD^{commit}' 2>$null)".Trim()
+    $originNow = "$(& git rev-parse --verify "refs/remotes/origin/$Target^{commit}" 2>$null)".Trim()
+    if ($headNow -and $headNow -eq $originNow -and $headNow -eq $local) {
+        Write-Host "  origin/$Target is $originNow, which is this checkout's HEAD: the merge is on origin."
     } else {
-        Write-Host "  local develop is $localNow and origin/develop is $originNow; this push reported success, so these should be the one commit $local and are not -- read them before trusting this merge." -ForegroundColor Yellow
+        Write-Host "  HEAD is $headNow and origin/$Target is $originNow; this push reported success, so these should be the one commit $local and are not -- read them before trusting this merge." -ForegroundColor Yellow
     }
 }
 finally {
@@ -1065,6 +1178,7 @@ finally {
     if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
     if ($changedFilesFile) { Remove-Item -LiteralPath $changedFilesFile -Force -ErrorAction SilentlyContinue }
     if ($messageFile) { Remove-Item -LiteralPath $messageFile -Force -ErrorAction SilentlyContinue }
+    if ($diffDir) { Remove-Item -LiteralPath $diffDir -Recurse -Force -ErrorAction SilentlyContinue }
     # (the changed-file list is not a temp file: both sides read it from git)
     Pop-Location
 }

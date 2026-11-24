@@ -56,6 +56,7 @@ const ROWS_END = '__CAMEL_REMOTE_ROWS_END__'
 /** The rows and the rule set they were taken under, from the text that held them. */
 function readRows(label, text) {
     const rows = new Map()
+    const unparsed = []
     let version = null
     for (const line of text.split('\n')) {
         if (!line.trim()) continue
@@ -63,10 +64,16 @@ function readRows(label, text) {
         try {
             row = JSON.parse(line)
         } catch {
-            die(`${label} holds a line that is not a reading: ${line.slice(0, 120)}`)
+            unparsed.push(line)
+            continue
         }
+        // A row is `{name, verdict}` and nothing else is. A failing test's own message may start with
+        // `{` -- `Error: reason missing: [{...}]` on its own line does -- and that line parsed as JSON
+        // once, which is how a failed case turned a red into "not measured": the reader took the
+        // message for a row, found no verdict, and refused the whole reading.
         if (typeof row.name !== 'string' || typeof row.verdict !== 'string') {
-            die(`${label} holds a reading with no name or no verdict: ${line.slice(0, 120)}`)
+            unparsed.push(line)
+            continue
         }
         if (row.reading_version !== undefined) {
             if (version === null) version = row.reading_version
@@ -74,8 +81,23 @@ function readRows(label, text) {
         }
         rows.set(row.name, { verdict: row.verdict, reading: row.reading ?? null })
     }
-    if (rows.size === 0) die(`${label} holds no readings: an empty baseline would compare nothing and call it agreement`)
-    return { rows, version, text }
+    // Said out loud, on stderr, and then the reading goes on: a measurement that failed and a
+    // measurement that could not be read are two different things, and only the second is exit 2.
+    // Dropping these silently would be the other lie -- the output did contain lines nobody read.
+    if (unparsed.length > 0) {
+        process.stderr.write(
+            `merge-readings: ${label}: unparsed line(s): ${unparsed.length} -- a line is a row only when it ` +
+                `is JSON with a name and a verdict; the conclusion below uses the ${rows.size} row(s) that are\n`,
+        )
+    }
+    if (rows.size === 0) {
+        die(
+            unparsed.length > 0
+                ? `${label} holds no readings: ${unparsed.length} line(s) were not rows (first: ${unparsed[0].slice(0, 120)})`
+                : `${label} holds no readings: an empty baseline would compare nothing and call it agreement`,
+        )
+    }
+    return { rows, version, text, unparsed: unparsed.length }
 }
 
 function readRowsFile(file) {
@@ -86,14 +108,16 @@ function readRowsFile(file) {
 /**
  * The rows out of one run's transcript, or the reading that says why there are none.
  *
- * A line is a row when it starts with `{`: the channel prints the runner's `{name, verdict, reading}`
- * lines and nothing else between its markers, and the run's own narration around them does not.
- * The markers are matched after trimming, because the console carries them beside whatever
- * indentation a wrapper gave them; the payload is matched as JSON, not as a shape this file
- * invents -- a row that does not parse is `readRows`' refusal, which names it.
+ * A line is a row when it is JSON with a name and a verdict, and nothing else is one. The channel
+ * prints the runner's `{name, verdict, reading}` lines between its markers; the run's own narration
+ * around them does not, but a failing case's message can still begin with `{` -- `Error: reason
+ * missing: [{...}]` does -- and taking that for a row is what turned a red into "not measured". Such
+ * a line is now counted as `unparsed` and said on stderr, and the conclusion is drawn from the rows
+ * that are rows. The markers are matched after trimming, because the console carries them beside
+ * whatever indentation a wrapper gave them.
  *
- * Both refusals are exit 2 and neither says anything about the tree: a green transcript with no
- * block is a merge position that never installed this channel, and a block with no row is a plan
+ * The two refusals that remain are exit 2 and neither says anything about the tree: a transcript with
+ * no block is a merge position that never installed this channel, and a block with no row is a plan
  * set that started no case or a channel that recorded none. Both are "not measured" -- the one
  * reading a merge must never round down to "no reds".
  */
@@ -420,8 +444,24 @@ if (probeOnly) {
         )
         process.exit(2)
     }
-    const meta = readWhere(found.key)
-    const where = meta ? `, ${meta.cases} case(s), tree ${(meta.tree || 'not recorded').slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}` : ''
+const meta = readWhere(found.key)
+    if (!meta || typeof meta.tree !== 'string' || !meta.tree) {
+        // An entry with no recorded tree is not a baseline this program can use: every comparison
+        // against it would be refused later, after a full run -- and that refusal is right, because
+        // nothing proves the reading is not of the tree being compared. The probe answers the
+        // question its caller has ("can I compare against this?"), so a stale entry is a miss here
+        // and the caller measures instead of spending a run to discover the refusal.
+        //
+        // This is about the entry the superset search settled on, not about `cacheKey`: an exact
+        // entry with no tree is no better than a superset entry with none, and the caller cannot
+        // tell the two apart from an exit code.
+        console.log(
+            `merge-readings: cache-miss: ${path.basename(found.key)} was stored without the tree it was measured on ` +
+                '(it predates --tree), so nothing proves it is not the tree being compared; measure it again'
+        )
+        process.exit(2)
+    }
+    const where = `, ${meta.cases} case(s), tree ${meta.tree.slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}`
     const how = found.exact
         ? ''
         : ` (a superset: measured across ${found.plans.length} target(s), covers the ${requestedTargets().length} this selection names)`
@@ -679,7 +719,22 @@ if (changed.length > 0) {
 const out = arg('--out')
 if (out) {
     fs.mkdirSync(out, { recursive: true })
-    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({ fixed, new: regressed, changed, added: addedGreen, addedRed, removed }, null, 2))
+// The three sets are the judgement; the plan set and the baseline are what makes the judgement
+    // checkable by a reader who was not here. A pass record built from this file carries all of it,
+    // because "passed" on its own is indistinguishable from no record at all.
+    //
+    // `--plans` is optional here and required for a record: a comparison between two row files
+    // (`--baseline` plus `--current`) can be made without naming a plan set at all, and the plan set
+    // is then reported as absent rather than filled in from nothing.
+    const planNames = planSet
+        ? (fs.existsSync(planSet) ? fs.readFileSync(planSet, 'utf8').split('\n') : planSet.split(',')).filter(Boolean)
+        : []
+    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({
+        planSet: planNames.length ? { names: planNames, hash: planSetHash(planNames) } : null,
+        baseline: { sha: develop, file: baseFile, cases: base.rows.size, normal: base.version },
+        fixed, new: regressed, changed,
+        added: addedGreen, addedRed, removed,
+    }, null, 2))
 }
 
 console.log(

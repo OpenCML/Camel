@@ -1493,3 +1493,21 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+# The prelude is one layer for the whole program, not a layer of the entry module (design
+# principles 10.2). A program's other modules are built as libraries, which is what every module of
+# the standard library is, and `stdlib/random.cml` and `stdlib/str.cml` write `to_array` in them
+# without an import. This case pins that reading for both a plain body and a generic one: the
+# generic body's names are checked at its declaration (`resolveGenericTemplateNames` ->
+# `valueNameExists`), before any instance exists, so it is the stricter of the two.
+[[tests]]
+name = "stream.prelude_in_module"
+desc = "A module that is not the program's entry -- the shape every module of the standard library has -- calls `to_array`, a function the prelude declares with a body and exports under its own name, and neither file imports `prelude`: the module's body resolves it as the entry's body does (design principles 10.2, the last layer). The second function is generic, so its body is also checked where it is declared, before any instance exists: `count::<float>` is built from a body whose `to_array` was in scope already. The program prints the integers of `0 .. 3` and the length of the interval `0 .. 3` counted inside the module."
+kind = "behavior"
+case = "../../../cases/compile/stream/prelude_in_module.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[0, 1, 2]\n3\n"
+expect_output_not_contains = ["[Error]", "Unresolved reference"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

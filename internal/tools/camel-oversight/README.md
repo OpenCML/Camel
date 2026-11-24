@@ -48,7 +48,7 @@ acknowledgement and coordinator message; an urgent reminder stays until clicked.
    (key-based ssh) adds the build host's load. Optional: `logFile`, `stateDir`, `watchSeconds`, `limits`.
 3. Keep the web server on loopback and publish it on the tailnet with `tailscale serve --bg <port>`. The
    routes are outside the GUI's login; the tailnet is the gate.
-4. After a code change, reload the DSH process; a session sees new tools only once it starts afresh.
+4. What needs a DSH restart and what does not: `rules.js` (the rules, their texts and default limits) and `measure.js` (the readings) are reloaded at the next beat after they change on `origin/integration` (or `origin/develop` where there is no integration branch: the pushed, gated content -- never the working tree, which holds a merge in progress), and a file that fails to load leaves the version in use in place (reported as a `hot-reload` event and under `hotLoaded` in `/oversee/state`); the limits in `~/.camel-oversight/config.json` and `internal/collab/rules.md` (also read from that line) are read afresh too. `index.js` (routes, tools, the session wiring) and `client.js` (the band) still need a restart, and a session sees new tools only once it starts afresh.
 
 DSH conventions this plugin depends on: a tool's `render(args, value)` returns content blocks
 (`[{ type: 'text', text }]`); `agent.inject` / `followup` / `steer` take a user message

@@ -120,6 +120,10 @@ window.__ModuleLoader__.load({
             const worst = alerts.some((a) => a.level === 'urgent') ? 'urgent' : alerts.some((a) => a.level === 'wake') ? 'wake' : alerts.length ? 'quiet' : 'ok'
             const lanesTone = lanes.running === undefined ? undefined : lanes.running < 6 ? 'wake' : 'ok'
             const unacked = (s.unacknowledged || []).length
+            // The branch gate: lanes waiting to be merged, and whether that holds new lanes back (the
+            // gate is crossed exactly when its rule is among the open alerts).
+            const branches = r.branches && r.branches.unmerged !== undefined ? r.branches : null
+            const gateShut = alerts.some((a) => a.id === 'branch-gate')
             return h('div', {
                     style: {
                         // Aligned with the composer card the way DSH's own docks are (QueueDock): the
@@ -138,6 +142,7 @@ window.__ModuleLoader__.load({
                     h('b', { style: { marginRight: 14 } }, 'Camel 协作'),
                     chip('协调者', s.target.status === 'running' ? '在跑' : '空闲', s.target.status === 'running' ? 'ok' : 'wake'),
                     chip('车道', lanes.running === undefined ? '—' : `${lanes.running}/${lanes.total}`, lanesTone),
+                    chip('待合', branches ? `${branches.unmerged} 条${gateShut ? ' · 闸门关' : ''}` : '—', gateShut ? 'urgent' : 'ok'),
                     chip('develop', develop),
                     chip('未回执', String(unacked), unacked ? 'wake' : 'ok'),
                     chip('主机', host),

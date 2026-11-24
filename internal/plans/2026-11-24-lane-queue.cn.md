@@ -7,27 +7,29 @@
 
 | # | 车道 | 工作树 | 判据（可核的那一个） |
 |---|---|---|---|
-| 1 | `lane/view-gaps` | `Camel-wt\viewgaps` | 补 A（`attrsOf` + `RegionRecord` tag set + 节点权限）、B（载荷/原始 kind/`dataIndex`+`staticSlots`/帧布局）、C（控制与顺序边、反向 `uses()`、按边种类全表），**D、E 后放**；硬判据：`src/stdlib/std/tiles` 的 `GCGraph`/`GraphDraft` 数必须实际下降（A 单独解释了它 74→74） |
-| 2 | `lane/kinds-to-oper` | `Camel-wt\kindsoper` | `git grep -cE '(NodeKind|GCNodeKind|Kind)::(Cast|Copy|Fill|Accs|CAST|COPY|FILL|ACCS)\b' -- src` = 0（现 180）**且** `git grep -cE 'add(Cast|Copy|Fill|Accs)Node\b' -- src` = 0（现 129），外加枚举删四项、视图不再两步读法 |
-| 3 | `lane/3a-onnx-tiles` | 既有树 | `src/stdlib/std/onnx`（84）与 `src/stdlib/std/tiles`（74）两个数往 0 走；读不了视图的部分写缺口页并给页名 |
-| 4 | `lane/3a-transforms-autodiff` | 既有树 | `src/stdlib/transforms`（124）与 `src/stdlib/autodiff`（41）两个数往 0 走；**这条没有缺口页，须新写一页** |
-| 5 | `lane/names-layer` | `Camel-wt\nameslayer` | 五层的次序在 `git grep` 里**只出现一处**；一条值名、一条类型名的「本模块遮住 prelude」用例各过；类型名那一半等 `op-overload-merge` 落地再接 |
-| 6 | `lane/op-overload-merge` | 既有树 | 已量到 `values` 9 红→0、推导路径 `compilerNamedOperator` 0 处代码；**卡在第四次合并（选择集因改名不一致），正在把改名拆出这一笔** |
+| 1 | `lane/view-gaps` | `Camel-wt\viewgaps` | **A→B→C 按序，D 接在 C 后进同一车道**（作者 `D-1123-137`）：A（`attrsOf` + `RegionRecord` tag set + 节点权限）、B（=B-2，载荷字节/原始 kind/帧布局不交给视图）、C（控制与顺序边、反向 `uses()`、按边种类全表）。**D = 视图 `typeOf` 对「类型在静态区」的节点答 nullptr，那是答错不是缺答**，修在 `typeOf` 里，**先量这种节点有多少**。**G 并入 C**；**F 随 3b**；**H 等 `kinds-to-oper` 清零**。判据用脚本 `node scripts/count-graph-readers.mjs src/stdlib/tiles`（不再手抄 `git grep`） |
+| 2 | `lane/kinds-to-oper` | `Camel-wt\kindsoper` | `node scripts/count-graph-readers.mjs src` 的两个 kind 数到 0，外加枚举删四项、视图不再两步读法。**现 A 125 / B 96**（起点 180/129）；CAST/COPY 已清零，余下 FILL/ACCS 删了会改行为（稀疏 slots、`mayFault=false`），**属语言侧决定，须停下报** |
+| 3 | `lane/3a-onnx-tiles` | 已合 `9f9c316d3` | `node scripts/count-graph-readers.mjs src/stdlib/onnx src/stdlib/tiles` → **84→70 / 74→71**；缺口页 `internal/questions/2026-11-24-what-the-graph-view-does-not-answer.cn.md` |
+| 4 | `lane/3a-transforms-autodiff` | 已交回 `df5a1cc3c1`，未合 | `transforms` **118→112**、`autodiff` **40→40**（40 处全是图身份，**不是缺口**，已单列）；缺口页已成；**未合原因：`internal/questions/README.md` 生成表冲突** |
+| 5 | `lane/names-layer` | 已交回 `16532a2f6c`，未合 | 层次序收进 `src/compile/src/name_layers.h` 一张表；`ns.p36_own_value_before_prelude`、`ns.p37_own_type_before_prelude` 各绿；类型名那一半等 `op-overload-merge` 落地再接 |
+| 6 | `lane/op-overload-merge` | 既有树 `Camel-wt\op61` | **第五次读数：`fixed=309 new=0 changed=103 added=363 removed=3`**。改名已拆出（`e8447de7d6`，`--name-status` 0 个 `R`）。**卡在 `changed=103`：每条要么把期望带上，要么说明为什么换的是失败方式而不是红绿** |
 
 ## 排在后面的
 
 | # | 车道 | 为什么排后面 |
 |---|---|---|
 | 7 | `:op/` URI 统一 | 排在 `kinds-to-oper` 清零之后（作者 `D-1123-131`） |
-| 8 | `feat/compile` 归零的 B 组 | 等 `op-overload-merge` 落地（它改写约 369 条红）；落地后在那时的 develop 上跑 feat/compile，剩下的红按 `D-1123-93` red-bisect 的口径归组：B 组 = 不属 61 链、每条指名一条带进它的车道；那张名单就是判据，每合一笔报红数（作者 `D-1123-133`） |
-| 9 | 61 链收尾 | 接在 `op-overload-merge` 之后：四处 `to_array(0 .. n)` 换回 `0 .. n`，`random.cml:114` 一并；报 feat/compile 红数下降多少 |
-| 10 | 合并前补测那三笔 | `D-1123-102`：d2c3f10d6、973868aec、4b528b928 在各自第一父上补测，有新红或换红就修或回退 |
-| 11 | 3a 重写车道的余量 | `src/stdlib/std/cxx/opt` 与 `src/kernel/rewrite`；写图经编辑会话的入口；判据同 3a |
-| 12 | rewrite 分类里 N=1 那一处 | 行为有差异而没有测试：补一条能区分两种行为的用例，再定改法 |
-| 13 | GPU 补测（`C-1123-65`） | 只在构建机空闲（无车道运行、负载低）时跑那 4 处按 NaN 比的 GPU 用例，不和车道抢 |
+| 8 | `lane/view-edges`（E：程序侧收图句柄） | 排在 `view-gaps` 之后（作者 `D-1123-137`）：`Program` / `Context` / 事实层三个入口改成收图句柄；**判据就是这三个入口改收图句柄**。视图侧无解（视图不答「谁持有我」），而它是 `transforms` 里最大一块可回收（13 行） |
+| 9 | `feat/compile` 归零的 B 组 | 等 `op-overload-merge` 落地（它改写约 369 条红，实为 `fixed=309`）；落地后在那时的 develop 上跑 feat/compile，剩下的红按 `D-1123-93` red-bisect 的口径归组：B 组 = 不属 61 链、每条指名一条带进它的车道；那张名单就是判据，每合一笔报红数（作者 `D-1123-133`） |
+| 10 | 61 链收尾 | 接在 `op-overload-merge` 之后：四处 `to_array(0 .. n)` 换回 `0 .. n`，`random.cml:114` 一并；报 feat/compile 红数下降多少 |
+| 11 | 合并前补测那三笔 | `D-1123-102`：d2c3f10d6、973868aec、4b528b928 在各自第一父上补测，有新红或换红就修或回退（**在跑**） |
+| 12 | 3a 重写车道的余量 | `src/stdlib/rewrite` 与 `src/stdlib/std/cxx/opt`（**2026-11-24 11:17 核过：`src/kernel/rewrite` 不存在，`src/stdlib/std/cxx/opt` 存在**）；`node scripts/count-graph-readers.mjs src/stdlib/rewrite src/stdlib/std/cxx/opt` → **24 / 88**；写图经编辑会话的入口；判据同 3a（**在跑**） |
+| 13 | rewrite 分类里 N=1 那一处 | 行为有差异而没有测试：补一条能区分两种行为的用例，再定改法 |
+| 14 | GPU 补测（`C-1123-65`） | 只在构建机空闲（无车道运行、负载低）时跑那 4 处按 NaN 比的 GPU 用例，不和车道抢 |
+| 15 | `lane/count-script` | 把 3a 与 kinds 的计数做成 `scripts/count-graph-readers.mjs`：路径不存在 ⇒ **exit 2 并点名**，合法的零照常读成 0（**在跑**） |
 
 ## 三条对所有车道都成立的
 
-1. **交回 = 已提交且已推车道分支**（铁律 13）。「完成、未提交、等点名」不算交回。
+1. **交回 = 已提交在车道分支上**（铁律 13；车道分支不推 GitHub）。「完成、未提交、等点名」不算交回。
 2. **读不了视图就写缺口页，按能力归类，交回时给页名**（作者 `D-1123-130`）。
-3. **3a 类车道交回必须报本目录的单一前后数；数没降就说明为什么，缺口页就是那个为什么**（作者 `D-1123-127`）。
+3. **3a 类车道交回必须报本目录的单一前后数；数没降就说明为什么，缺口页就是那个为什么**（作者 `D-1123-127`）。3a 与 kinds-to-oper 的数一律用 `node scripts/count-graph-readers.mjs [--rev <rev>] <目录>...` 量，不再手抄 `git grep`：路径不存在或目录里没有源文件时它 **exit 2 并点名那个路径**，而手抄的 `git grep` 对这两件事都只给「0 行、exit 1」——读起来像一个最好的零。`--self-test` 就是这两件事本身的用例。

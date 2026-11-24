@@ -218,3 +218,12 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/tiles
 - 第 1 版 `feat/modules/onnx` 的红里有 1 例超时（`resnetbn_train_step_export`，300 s 上限），本轮没有追它是否与 `develop` 的记录一致——它在改前改后两次里都红且都超时，判决没动，超时的**原因**没查。
 - D 类「记录里没有类型、类型只在静态区的 DATA 节点今天有没有」没测（§5）。
 - E 类没有逐行归属，只给位置清单（§6）。
+## 决策者答（2026-11-24）
+
+默认同意：`lane/view-gaps` 按 A → B → C 做（已派），D 接在 C 之后进同一条车道。其余各类的去处：
+
+- **D 是视图的正确性缺口，不只是少一个入口**：一个节点的类型只有一个答案，视图的 `typeOf` 对"类型在静态区"的节点答 `nullptr` 就是答错了。修法是 `typeOf` 自己把静态区那一支收进来（读者不再各写一支 `staticDataType()->typeAt(-dataIndex)`），先补上本页没取的那个读数：这种节点今天有多少（为 0 也要写出来，那时这两支是死代码，删掉）。
+- **G 就是 C 的一部分**（反向 `uses`、按边种类的全表），归 `lane/view-gaps`，不另开。
+- **F 是 3b**（写图经编辑会话的入口），不进视图车道；等 3b 的 `GraphTransaction::edit()` 落地后，这 12 行随 3b 迁。
+- **E 不是视图的缺口，是 `Program`/`Context` 的接口按表示作答**：`calleeOf`、`programOfRuntimeGraph`、`collectReachableRuntimeGraphs` 收 `const GCGraph *`。它们该按图的身份作答（视图已有的 `CalleeRef::graph` 那种句柄），读者给句柄、不给表示指针。这是一条单独的车道，排在 `view-gaps` 之后，判据是这三个入口不再收 `GCGraph *`、本页 E 节列的位置改成传句柄。
+- **H**（原始 kind 与 `flags`）随 `kinds-to-oper` 走：四种 kind 删掉后再看还剩哪些读原始 kind 的地方。

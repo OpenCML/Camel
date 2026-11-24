@@ -809,9 +809,23 @@ if (-not (Test-Path (Join-Path $Path 'package.json'))) {
 }
 $name = Split-Path -Leaf $Path
 $branch = (git -C $Path rev-parse --abbrev-ref HEAD).Trim()
+# A detached HEAD is a real position to measure from, and the place it matters is the merge: the
+# merge is made in a throwaway checkout of the commit it lands on, and no branch may be created
+# there for the reader to mistake for the one being merged. So the identity of the tree is the
+# commit, not a name a branch gave it: the staging ref is derived from the commit, which also makes
+# two checkouts of different commits unable to collide under one ref name. `$commit` travels in the
+# run record for the same reason -- a registry that says only the worktree leaf name cannot tell two
+# runs on the same path apart.
+$commit = "$(git -C $Path rev-parse HEAD 2>$null)".Trim()
+$detached = $false
 if ($branch -eq 'HEAD') {
-    Write-Host "[camel-remote] detached HEAD in $name; check out a branch first"
-    exit 2
+    if ($commit -notmatch '^[0-9a-f]{40}$') {
+        Write-Host "[camel-remote] $name is not on a branch and HEAD does not resolve to a commit, so there is nothing to name this run by"
+        exit 2
+    }
+    $branch = "camel-sha-$($commit.Substring(0, 12))"
+    $detached = $true
+    Write-Host "[camel-remote] $name is a detached HEAD at $($commit.Substring(0, 12)); the run is recorded by that commit and staged as refs/heads/$branch"
 }
 # `-AstOnly` selects which lines a recording rewrites; with no recording there is no stage that could
 # read it, and a request nobody carries out must not look like one that ran.
@@ -1162,6 +1176,8 @@ $run = @{
     pid             = $PID
     worktree        = $name
     path            = $Path
+    commit          = $commit
+    detached        = $detached
     remote          = $remoteName
     startedAt       = $startedAt.ToString('o')
     updatedAt       = $startedAt.ToString('o')
@@ -1302,7 +1318,11 @@ try {
     # non-fast-forward to the same ref name, and the run stopped before it reached the host;
     # without the delete, one ref per worktree name outlived every run and went stale the moment
     # that name was reused -- which is where the staging repository's pile of lane-* refs came from.
-    $pushOutput = @(git -C $Path push --quiet --force "$sshHost`:$bare" $branch 2>&1)
+    # A detached HEAD has no local branch to push, so the refspec names the commit and the ref it
+    # becomes on the far side in one word: `HEAD:refs/heads/<the name derived from the commit>`. The
+    # rest of the run -- the host checkout, the delete in the finally -- then reads that one name.
+    $pushSource = if ($detached) { "HEAD:refs/heads/$branch" } else { $branch }
+    $pushOutput = @(git -C $Path push --quiet --force "$sshHost`:$bare" $pushSource 2>&1)
     if ($LASTEXITCODE -ne 0) {
         $pushExit = $LASTEXITCODE
         Write-Host "[camel-remote] could not push $branch to $sshHost`:$bare (git exit $pushExit)."
@@ -1315,7 +1335,7 @@ try {
         # it: the forced push above and the delete in the finally are what removed this cause. The
         # block below now reports a push that fails for some other reason.
         $remoteRef = @(git -C $Path ls-remote "$sshHost`:$bare" "refs/heads/$branch" 2>$null)
-        $localSha = (git -C $Path rev-parse $branch).Trim()
+        $localSha = if ($detached) { $commit } else { (git -C $Path rev-parse $branch).Trim() }
         if ($remoteRef.Count -gt 0 -and $remoteRef[0]) {
             $remoteSha = ($remoteRef[0] -split '\s+')[0]
             git -C $Path cat-file -e "$remoteSha^{commit}" 2>$null
