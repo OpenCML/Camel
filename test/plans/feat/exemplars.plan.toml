@@ -102,21 +102,25 @@ expect_exit = 0
 expect_stdout_contains = ["exemplars: all checks passed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
-# The expected dump is one renumbering behind the recording, not a behaviour that was refused:
-# on 2026-11-24 the build host printed
+# The expected dump is one renumbering behind the recording, not a behaviour that was refused: the
+# build host printed
 #   FAIL 08_structured_control_flow/dump
 #        stdout differs from expected/dump.agir.dot at line 50:
 #          expected: "            label=\"__g_49__\";"
 #          got:      "            label=\"__g_59__\";"
-# so the exemplar's graph names shifted and `expected/dump.agir.dot` still holds the old ones.
-# The mark pins that one line deliberately: a different break in the same golden (a missing node,
-# a changed edge) prints a different line and stays red, because `known_fail_msg` is a substring
-# and this one names the graph the re-record moves. What ends it is the re-record, not a change to
-# the case: `node internal/exemplars/check.mjs --update 08_structured_control_flow` writes the
-# expected files from the current binary, and with the names caught up the entry passes and this
-# mark must be deleted (the runner reports a `known_fail` that passes).
+# so the exemplar's graph names shifted and `expected/dump.agir.dot` still holds the old ones. The
+# mark pins that one line deliberately: a different break in the same golden (a missing node, a
+# changed edge) prints a different line and stays red, because `known_fail_msg` is a substring and
+# this one names the graph the re-record moves. What ends it is the re-record, not a change to the
+# case: `node internal/exemplars/check.mjs --update 08_structured_control_flow` writes the expected
+# files from the current binary, and with the names caught up the entry passes and this mark must be
+# deleted (the runner reports a `known_fail` that passes).
+#
+# The owner is a role and not a coordinate: the mark outlives whichever change moved the ids, and a
+# date or a commit written here would point at a thing that has already moved on by the time anyone
+# reads it.
 known_fail = true
-known_fail_owner = "the graph renumbering of 2026-11-24 (`14f77c0739`, the extraction refactor)"
-known_fail_reason = "internal/exemplars/08_structured_control_flow/expected/dump.agir.dot: the recorded golden is stale, `label=\"__g_49__\"` where the compiler now prints `label=\"__g_59__\"` -- the exemplar's dump names graphs by the id the compiler gives them, and the extraction refactor of 2026-11-24 moved those ids, so the expected file has to be re-recorded with the tool that wrote it"
+known_fail_owner = "the graph node naming (the `__g_N__` ids and the dump that prints them)"
+known_fail_reason = "internal/exemplars/08_structured_control_flow/expected/dump.agir.dot: the recorded golden is stale, `label=\"__g_49__\"` where the compiler now prints `label=\"__g_59__\"` -- the exemplar's dump names graphs by the id the compiler gives them, and a renumbering of those ids moved the names, so the expected file has to be re-recorded with the tool that wrote it"
 known_fail_msg = "stdout differs from expected/dump.agir.dot at line 50"
 known_fail_ends_when = "re-recorded with `node internal/exemplars/check.mjs --update 08_structured_control_flow`: the expected dump then holds the ids the compiler prints, the entry prints `exemplars: all checks passed`, and this mark is deleted"
