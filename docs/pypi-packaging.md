@@ -8,7 +8,7 @@
 
 | 路径 / 脚本 | 作用 |
 |-------------|------|
-| `pypi/camel-lang/` | setuptools 包根目录：`pyproject.toml`、`src/camel/`（打包时把 `out/<tag>/` 整树拷成 `src/camel/.cmlenv/`，打完删掉） |
+| `packaging/pypi/camel-lang/` | setuptools 包根目录：`pyproject.toml`、`src/camel/`（打包时把 `out/<tag>/` 整树拷成 `src/camel/.cmlenv/`，打完删掉） |
 | `scripts/pypi-rollup.js` | 编排：默认按**当前 `python`** 匹配一个 SDK 构建；可选 `CAMEL_PYPI_ALL_SDKS=1` 按目录循环；收集 `out/<tag>/`、打 wheel、写入 `dist/pypi/` |
 | `scripts/build.js` | 被 rollup 以「单 SDK 模式」调用；被 `npm run build` 以「普通模式」调用 |
 | `scripts/sync-python-sdks.js` | 将官方 Python 目录树同步到 `modules/python/sdks/python3xx/`（gitignored） |
@@ -94,10 +94,10 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
    - `collect-out` 在 `build.js` 末尾以 `Release` 执行，更新 **`out/latest/`**（或 `CAMEL_PYPI_TAG` 指定 tag）。
 
 2. **组装 wheel 内容**（`packageWheelBundle`）  
-   - 将 `out/<tag>/` **整树**复制到 `pypi/camel-lang/src/camel/.cmlenv/`（打完再删）。  
+   - 将 `out/<tag>/` **整树**复制到 `packaging/pypi/camel-lang/src/camel/.cmlenv/`（打完再删）。  
    - 删掉 `bin/` 里测试专用工具（`camel-parsecheck`）与 `.o/.a/.obj/.d/.pdb`：它们不是发布物。  
    - 检查 `[project.scripts]` 声明的每条命令都在 `.cmlenv/bin/` 里有对应可执行文件——**没有 wrapper-dist，也不改
-     `pyproject.toml`**：入口是 `pypi/camel-lang/src/camel_cli.py` 里的函数，它 `exec` 自带的那只二进制。
+     `pyproject.toml`**：入口是 `packaging/pypi/camel-lang/src/camel_cli.py` 里的函数，它 `exec` 自带的那只二进制。
 
 3. **构建与改标签**（同一份 packaging 打两遍，内容差一个 `.cmlenv/python/`）  
    - 使用该 SDK 的 **`python`**（或回退时的 `python`）执行：  
@@ -111,7 +111,7 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
    - 将两只 `*.whl` **复制到** `dist/pypi/`。  
    - 末尾跑 `scripts/check_wheel_tags.py --ruling dist/pypi/*.whl`：确认两只形态齐全、名字与内容一致（0.2.31 那种错误的标签在
      出 wheel 的这一步就失败，而不是等到索引拒收）。
-   - 删除 `pypi/camel-lang` 下临时 `dist/`、`build/`、`.cmlenv`、`*.egg-info`（这三条路径都在 `.gitignore` 里：
+   - 删除 `packaging/pypi/camel-lang` 下临时 `dist/`、`build/`、`.cmlenv`、`*.egg-info`（这三条路径都在 `.gitignore` 里：
      一次失败的 rollup 会把 `out/` 的副本留在 `src/camel/.cmlenv/`，它不许进历史）。
 
 **整次 rollup 开始前**：会删除 `dist/pypi/` 下所有已有 `*.whl`，保证本次产物集合干净、可预期。
