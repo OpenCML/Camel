@@ -1825,10 +1825,43 @@ for (const { entry, pending, line, problems: failed } of exempted) {
             `is exempted: ${pending.reason} -- ${failed[0]}`,
     )
 }
+// The roster says, for every entry of the list, whether it is doing anything in this scope. Without
+// the word at the end, an entry that waits and an entry whose snippet has caught up print the same
+// line, and a reader takes the list for a set of exemptions that is in force when part of it is only
+// a debt already paid: exactly one thing has to be done about the second kind, and nothing about the
+// first.
+const caughtUpKeys = new Set(pendingCaughtUp.map(({ pending }) => pending))
 for (const pending of PENDING) {
     const used = pendingUsed.get(pending)
     const where = used ? `${used.entry.rel}:${used.entry.snippet.open + 1}` : 'unused in this scope'
-    console.log(`pending list: ${pending.file} ${pending.key} (${where}): ${pending.reason}`)
+    const state = pendingBehind.has(pending)
+        ? 'waiting: its snippet does not compile yet in this scope'
+        : caughtUpKeys.has(pending)
+            ? 'STALE: every snippet of its key compiles now, so this entry must be deleted'
+            : 'unused: no snippet of this scope is its text'
+    console.log(`pending list: ${pending.file} ${pending.key} (${where}): ${pending.reason} -- ${state}`)
+}
+
+// One line that answers "how much is still waiting on a ruled construct, and on which one". The
+// number and the reason are both read from the list on every run, so a snippet that catches up, or
+// an entry whose reason is rewritten, changes this line without anybody remembering to change it --
+// the pending list is a debt with a shrinking balance, not an exemption that stays in force.
+const waiting = new Map()
+for (const pending of PENDING) {
+    if (!pendingBehind.has(pending)) continue
+    const count = pendingUsed.get(pending) ? 1 : 0
+    if (count === 0) continue
+    waiting.set(pending.reason, (waiting.get(pending.reason) || 0) + 1)
+}
+if (waiting.size === 0) {
+    console.log(
+        `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds ${PENDING.length} ` +
+            `entr${PENDING.length === 1 ? 'y' : 'ies'} and none of them is behind in this scope`,
+    )
+} else {
+    for (const [reason, count] of waiting) {
+        console.log(`[PENDING] ${count} snippet(s) wait for ${reason}`)
+    }
 }
 
 const seconds = ((Date.now() - started) / 1000).toFixed(1)
