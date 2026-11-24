@@ -254,6 +254,19 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   that disagrees with `jobsRequested` is the mechanism working. A convention ("load is high, lower
   `-Jobs` by hand") is not a mechanism: it is forgotten exactly when it matters.
 - all three are advisory: a locked or unwritable file never fails a build or a plan.
+- a run's line carries the token pool as the run read it on the host: `tokens` (how many tokens that
+  run held), `tokensPeak` (the highest share seen while it ran — a sampled peak, resolution one
+  heartbeat), and `pool` (`{ size, inUse }`, what the pool itself said at that reading). The host
+  reports the pool every 10 s whether or not the work prints anything, and a row written for that
+  report also carries `stageSeconds`, the time the current stage has been running: a heartbeat whose
+  only new value is `updatedAt` says the writer is alive, not that the run is doing anything. A row
+  from before the pool, or from a local run that draws nothing from it, has **no** `tokens` key at
+  all — absent means "not reported", and is never written as `0`, because zero reads as an empty
+  pool and would invite a run that the pool cannot support.
+- `queuedAt` is the moment the run started waiting for admission, and `queuedAtKind` names the gate
+  it waited on (`slot` for a host build/test slot, `local` for a local helper's machine-wide mutex).
+  Rows written before that field existed have no `queuedAtKind` and were slot waits; one field is not
+  asked to mean two things across one file.
 ## The two DSH plugins
 
 Two directories here are loaded as plugins by the agent runtime rather than run as scripts. Their
