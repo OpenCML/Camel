@@ -160,7 +160,7 @@ async function buildPanelOf(repo, stateDir) {
     const touched = (row) => Date.parse(row.updatedAt || row.startedAt || '') || 0
     const open = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) < 20 * 60_000)
     const abandoned = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) >= 20 * 60_000).length
-    // The two queues the build-queue panel draws, read from the same files it reads: who holds the
+    // The two queues the desk panel (panel-deck) draws, read from the same files it reads: who holds the
     // build or test slot on this machine and who is waiting, with how long.
     const queue = async (name) => {
         const file = path.join(dir, name)

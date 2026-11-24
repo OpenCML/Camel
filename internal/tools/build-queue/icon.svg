@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Build queue">
-  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1f6feb"/>
-  <rect x="14" y="16" width="36" height="7" rx="3.5" fill="#ffffff" opacity="0.95"/>
-  <rect x="14" y="29" width="24" height="7" rx="3.5" fill="#ffffff" opacity="0.7"/>
-  <rect x="14" y="42" width="16" height="7" rx="3.5" fill="#ffffff" opacity="0.45"/>
-  <path d="M40 45.5l5 5 9-10" fill="none" stroke="#cdffd8" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
