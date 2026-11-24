@@ -20,9 +20,14 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `camel-gate-config.ps1` | The loader the four scripts above use for their machine-local settings. |
 | `camel-remote-args.ps1` | The argument rules `camel-remote.ps1` applies before it pushes anything: comma-split lists (`-Plan`, `-AstOnly`, `-AstDrop`), the `--only`/`--drop` words built from them, and the refusal for a glob that names no `.cml` of this tree. Separated out because those rules are the part that used to fail silently on the host. |
 | `camel-remote-args.test.ps1` | Their test, run without a host: `pwsh -NoProfile -File internal/tools/camel-remote-args.test.ps1` prints `N checks, M failed` and exits 1 on a failure. |
+| `merge-lane.ps1` | The merge position for ONE lane: merge, header check, clang syntax, row readings against the tree the merge lands on, then the push. |
+| `merge-batch.ps1` | The merge position for a BATCH: three or four lanes that touch no file in common, merged into one temporary worktree, measured once over the union of their plans, with the baseline taken on a separate checkout of the merge's first parent. `-Target` names the branch it lands on and pushes to, `develop` (the default) or `integration`, with the same parameter and validation as `merge-lane.ps1`. `-ScratchRoot` is where its two trees and every transcript live, from the settings file's `scratchRoot` like `mergeWorktree`, with no built-in path and exit 2 when the seat names none. See "Batching the merge position" below. |
+| `merge-batch-sets.ps1` | The two readings a batch is composed by: the pairwise intersection of the lanes' changed-file sets, and the plan-set union with the name `scripts/plan-set.mjs` gives it; plus `Resolve-BatchTarget`, which spells every ref from the target and refuses a target it does not know, and `Resolve-BatchScratchRoot`, which takes the seat's `scratchRoot` and refuses a seat that names none. Separated out because all of it fails quietly, and so it can be checked without a host. |
+| `merge-batch-sets.test.ps1` | Their test: `pwsh -NoProfile -File internal/tools/merge-batch-sets.test.ps1` prints `29 checks, 0 failed` and exits 1 on a failure. The plan-set hash check runs `scripts/plan-set.mjs#planSetHash` through node and requires the same string; the target checks include the tool's own refusal of an unknown `-Target`, which needs no host because parameter binding stops before the body runs; the scratch-root checks run the tool against a throwaway git repository to require the exit 2 a seat with no `scratchRoot` gets. |
 | `camel-cleanup.sh` | The cleanup door: a run's temporaries live under `~/camel-work/tmp/<lane>-<time>/` and are judged by the manifest the run wrote when it created them. `rm` accepts a path only when it is under that root **and** in a manifest. |
 | `camel-cleanup.test.ps1` | Its test: the six readings against a fake home (never the real one). `pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <alias>`. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
+| `red-table.mjs` | Regenerates `internal/reports/<date>-develop-reds.cn.md`, the table of what is red on `develop`, from the recorded readings alone — it starts no build and no test, and takes about 6 seconds. `red-table.md` says what each of its seven columns may and may not claim. |
 
 ## The machine-local settings file
 
@@ -107,9 +112,20 @@ stops with PowerShell's "no positional parameter accepts 'smoke'" instead of qui
 `-LocalConfig smoke` -- a run that looks right and reads another settings file.
 
 Exit codes: the build's or the plan's own; `5` when the gpu observation read a case red that its
-baseline does not record; `4` when the `-NoBuild` guard refused or a host lock was not obtained; `3`
-when the host is short of disk; `2` when the worktree, the push, the transfer or a `-Check` name was
-wrong.
+baseline does not record, and also when the host script could not get a shared hold on the old test
+lock within its wait (`internal/tools/host/camel-run.sh`, which uses `4` for "no test slot in time"):
+both are runs that measured nothing, and a run that measured nothing is not a red; `4` when the
+`-NoBuild` guard refused or a host lock was not obtained; `3` when the host is short of disk; `2` when
+the worktree, the push, the transfer or a `-Check` name was wrong.
+
+Reading the host's lock files: `fuser -v /tmp/camel-host-test*.lock` lists the processes that have each
+file **open**, which is not the same as holding the lock. A run that opened the descriptor and never
+took the lock still appears; a descriptor inherited by a child appears under the child's pid; a process
+that has released the lock can still have the file open. So a `fuser` listing answers "who could be
+holding this" and nothing else -- the authority is `flock`, and the tool that takes it prints what it
+holds on its own lines (`HOST_TEST_SLOT=`, `lockFrom=`, `oldLockWaitSeconds=`). Read a slot number
+there and not off a `fuser` listing: on 2026-11-24 an open descriptor on the old single lock was read as
+"the old lock is held", and those are two different code paths.
 
 The gpu plans are in no other gate: the fast layer is `test/plans/smoke` plus `test/plans/feat`, and
 `test/plans/gpu` is under neither, so a red case there was read by nothing. Every run that takes a
@@ -187,6 +203,40 @@ The host sweep applies the same idea to the persistent checkouts: it removes one
 per-checkout lock, no process inside, nothing written in ten minutes). A checkout with no record is
 named and left, and `-Clean` is the explicit way to reclaim it.
 
+## The token pool: one process, one token
+
+`host-tokens.sh` hands out the build host's budget per **process** rather than per run. A token is a
+`flock` on one of `$CAMEL_TOKEN_DIR/token-NN.lock` (default `/tmp/camel-tokens`, `$CAMEL_TOKENS` files,
+default 24), held on an inherited descriptor and returned by the kernel when the holder exits -- so a
+killed run cannot carry one away and there is no reclamation pass. `take N`, `take-all`, `run N -- CMD`,
+`show` and `self-test` are the whole interface.
+
+Who takes one:
+
+| caller | how | what it holds |
+| --- | --- | --- |
+| each test case | `internal/tools/host-case.sh`, the one line of shell in front of every case on the host | one token for the case's whole process tree, returned when it exits |
+| a build | `camel-run build` -> `host-tokens.sh run N -- ninja` | `N` tokens (default 8) |
+| the clang syntax sweep | `scripts/check-clang-syntax.mjs` -> `host-tokens.sh run N -- docker ...` | `min(--jobs, pool)` for the container's life, which is also its `-P` |
+
+Queuing is not failing. A taker that finds the pool empty waits, printing who holds what; when the wait
+runs out (`CAMEL_TOKEN_WAIT_S`, default 1800) it exits **6** -- nothing was measured -- which is
+neither `2` (this tool was asked something it cannot do) nor `1` (a reading came back red). A test case
+never pays that price for a full pool: the runner reports it as `tokenWaitSeconds` and moves on.
+
+The readings are the pool's own, and this is the same rule as the lock files below: `fuser` cannot tell
+an open descriptor from a held lock, so "held" comes from `/proc/locks` matched against the inodes the
+pool cached in `$CAMEL_TOKEN_DIR/inodes`, and the high-water mark comes from the `peak-<n>` markers the
+pool writes as it hands tokens out (`show` prints `free=`, `held=`, `peak=`). The runner prints the
+same thing as one line per plan run:
+
+```
+[TOKEN] pool /tmp/camel-tokens peak=24, cases with a token 1187, queued 3, tokenWaitSeconds=4.2
+```
+
+`peak` is the number to check against "two test runs and a build must stay under the pool size": it is
+the largest number of tokens held at once, recorded by the pool rather than guessed by the caller.
+
 ## `camel-build.ps1`
 
 One build at a time on this workstation, under a machine-wide lock, because several worktrees building
@@ -256,13 +306,14 @@ rather than holding copies:
 | Directory | What it computes | Who reads it |
 |---|---|---|
 | `camel-lanes/` | the lane table's gates, plus `GET /camel/state` and `POST /camel/say` | every step of a coordinating session |
-| `build-queue/` | the build and test panel: build slots, waiters, the recent timeline, CPU and memory | the Web GUI panel |
+| `camel-oversight/` | the decision-maker channel, the watch over the coordinator, and the band above its composer | the coordinator session and the owner |
 
 ```powershell
 $base = "$env:USERPROFILE\.dsh\profiles\web\node_modules\@local"
-New-Item -ItemType Junction -Path "$base\camel-lanes"     -Target "<repo>\internal\tools\camel-lanes"
-New-Item -ItemType Junction -Path "$base\dsh-build-queue" -Target "<repo>\internal\tools\build-queue"
+New-Item -ItemType Junction -Path "$base\camel-lanes" -Target "<repo>\internal\tools\camel-lanes"
 ```
+
+`camel-oversight` is linked to a checkout of its own that tracks `origin/develop`, not to a lane's working tree; [its README](camel-oversight/README.md) says how, and how it reloads.
 
 `camel-lanes` reads the same three files this document describes, and takes their directory from
 `camel-gate.local.json`'s `stateDir` rather than holding a second copy of that decision -- two

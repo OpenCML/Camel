@@ -33,9 +33,13 @@ target_ref='refs/heads/develop'
 
 refs=$(cat)
 develop_push=''
+develop_local=''
+develop_remote=''
 while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
     if [ "$remote_ref" = "$target_ref" ]; then
         develop_push="$target_ref"
+        develop_local="$local_sha"
+        develop_remote="$remote_sha"
     fi
 done <<EOF
 $refs
@@ -110,6 +114,33 @@ if [ -z "$match" ]; then
     echo "pre-push:   $config, key 'mergeWorktree', names the tree that may write develop." >&2
     echo "pre-push: push your own branch and hand it to the merge lane; develop is merged there." >&2
     exit 1
+fi
+
+# The tree rule above says *who* may write develop. This says *what* may be written: every merge
+# commit this push would publish has to carry a record that a gate read it and passed it.
+#
+# It exists because a gate refuses a push and not a commit. A merge made in the checkout that had
+# develop checked out survived a refusal on the local branch, and the next push of anything --
+# one backlog row -- carried it, so the merge became public having passed nothing. That is not a
+# mistake a person makes once; it is what the mechanism does whenever somebody pushes after a
+# refusal. The record (`scripts/merge-record.mjs`) is written by the merge tool before it pushes,
+# so a merge that went through the gate is in this hook's set and a merge that was refused is not.
+#
+# The range is the one the push sends, walked by first parent: a commit reachable only through a
+# side branch is part of a merge that already had its reading.
+if [ -n "$develop_local" ]; then
+    node "$top/scripts/merge-record.mjs" verify "$develop_remote" "$develop_local" >&2
+    state=$?
+    if [ "$state" -eq 1 ]; then
+        echo "pre-push: refusing to push $develop_push: the merge commits named above have no reading that holds." >&2
+        echo "pre-push: a gate refuses a push, not a commit -- so a merge it refused is still on this branch" >&2
+        echo "pre-push: and this push would publish it. Merge those lanes again through the merge tool." >&2
+        exit 1
+    elif [ "$state" -ne 0 ]; then
+        echo "pre-push: refusing to push $develop_push: the merge records could not be read (node exit $state)." >&2
+        echo "pre-push: an unreadable record set is not an empty one." >&2
+        exit 1
+    fi
 fi
 
 echo "pre-push: $develop_push from the merge worktree ($top): allowed"

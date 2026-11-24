@@ -15,7 +15,7 @@
 # bought nothing.
 #
 # The holder and everyone waiting are published to build-state.json, in the directory the local
-# settings file names (`stateDir`; see camel-gate.example.json), so a reader (the build-queue panel)
+# settings file names (`stateDir`; see camel-gate.example.json), so a reader (the desk panel, panel-deck)
 # can show who is compiling and who is waiting:
 #
 #   { "updatedAt": iso,

@@ -50,7 +50,6 @@
 
 using namespace camel::passes::generic;
 using camel::runtime::DraftBrchPayload;
-using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::isWrittenInPlace;
@@ -1995,7 +1994,7 @@ const camel::runtime::Program *simplifyGraph(
     const auto graphContentsOf = [&](const camel::runtime::Program *p) {
         std::map<std::string, std::vector<uint64_t>> contents;
         camel::runtime::RuntimeGraphDraftSession session(context, p);
-        for (camel::runtime::GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+        for (auto *graph : session.collectReachableRuntimeGraphs()) {
             contents[graph->name()].push_back(graphContentHash(*graph));
         }
         for (auto &entry : contents) {

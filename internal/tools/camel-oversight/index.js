@@ -23,6 +23,8 @@
 //                        sent of its own accord;
 //   GET  /oversee/events a server-sent event stream that pushes each acknowledgement, each message
 //                        the model sends, and the claimed session ending, as they happen;
+//   POST /oversee/reload put the pushed plugin into the live directory, reload this one plugin, and
+//                        answer with the commit it came from (the band's button);
 //   tools oversight_claim, oversight_ack, oversight_tell, oversight_readings  the model's side.
 //
 // The routes are raw web-server routes, outside the GUI's launch-token login. The gate is the network:
@@ -39,18 +41,26 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as bootMeasure from './measure.js'
 import * as bootRules from './rules.js'
 
 // The parts that change most often -- the rules, their limits and texts, and what is measured --
 // are reloaded when they change, at the next beat, without restarting the host: a restart stops
-// every agent that is working. They are read from origin/develop, the content that has passed the
-// merge gate and been pushed, never from the checkout's working tree: a merge in progress there
-// holds content that has not been measured yet, and a lane's half-done edit may sit there too. A
+// every agent that is working. They are read from the line merges land on -- origin/integration, or
+// origin/develop where there is no integration branch -- the content that has passed the merge gate
+// and been pushed, never from the checkout's working tree: a merge in progress there holds content
+// that has not been measured yet, and a lane's half-done edit may sit there too. Develop moves only
+// when integration is promoted, hours apart, and a fix to these files should not wait for that. A
 // file that fails to load leaves the version in use in place and is reported. The routes, the tools
 // and the session wiring in this file still need a restart.
-const HOT_REF = 'origin/develop'
+const HOT_REFS = ['origin/integration', 'origin/develop']
+async function hotRef(repo) {
+    for (const ref of HOT_REFS) {
+        if (await gitIn(repo, ['rev-parse', '--verify', '--quiet', ref]).then(() => true, () => false)) return ref
+    }
+    return HOT_REFS[HOT_REFS.length - 1]
+}
 const HOT_DIR = path.join(os.homedir(), '.camel-oversight', 'hot')
 const hot = {
     rules: { module: bootRules, blob: null, error: null },
@@ -60,12 +70,14 @@ const gitIn = (repo, args) =>
     new Promise((resolve, reject) =>
         execFile('git', ['-C', repo, ...args], { env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, maxBuffer: 16 << 20 },
             (error, stdout) => (error ? reject(error) : resolve(stdout))))
-// The text of a file as origin/develop has it, or null when it cannot be read.
+// The text of a file as the merged line has it (hotRef), or null when it cannot be read.
 async function pushedText(repo, file) {
-    return gitIn(repo, ['show', `${HOT_REF}:${file}`]).catch(() => null)
+    const ref = await hotRef(repo)
+    return gitIn(repo, ['show', `${ref}:${file}`]).catch(() => null)
 }
 async function reloadHot(repo, onChange) {
     if (!repo) return
+    const HOT_REF = await hotRef(repo)
     for (const [name, file] of [['rules', 'rules.js'], ['measure', 'measure.js']]) {
         const slot = hot[name]
         const spec = `internal/tools/camel-oversight/${file}`
@@ -100,6 +112,11 @@ async function reloadHot(repo, onChange) {
 export const name = 'camel-oversight'
 export const inject = ['agents', 'webServer', 'tools', 'systemPrompt', 'timer']
 
+// The directory this file was imported from, as the process sees it. It is the loading path, and the
+// reload route reads it rather than assuming: the profile decides where the plugin comes from, and a
+// sync into a directory nothing loads from would replace files no one runs.
+const LOADED_FROM = path.dirname(fileURLToPath(import.meta.url))
+
 const DEFAULTS = {
     logFile: path.join(os.homedir(), '.camel-oversight', 'log.jsonl'),
     sender: 'decision-maker',
@@ -121,6 +138,14 @@ const DEFAULTS = {
     blockCancelMinutes: 30,
     blockExempt: [],
     limits: {},
+    // Where the pushed plugin is put and loaded from. The script that puts it there and the line it is
+    // taken from are not paths of a checkout: a checkout's working tree may stand on another branch or
+    // hold an unpushed edit (the main one is the author's workspace). Left null, the script is taken
+    // from the same pushed line as the plugin (hotRef), and so is the commit; set them only to test a
+    // change to the script itself.
+    liveDir: 'D:\\Projects\\camel-oversight-live',
+    syncScript: null,
+    syncRef: null,
 }
 
 const clip = (text, n) => {
@@ -475,7 +500,7 @@ export function apply(ctx, rawConfig) {
     // Only dispatch-shaped ids are items; an id a session made up for itself can never have a backlog row.
     const takenIds = () =>
         [...acks.values()]
-            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 15 * 60_000)
+            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 60 * 60_000)
             .map((entry) => entry.id)
     const backlogOpen = () =>
         reading && reading.backlog instanceof Map ? [...reading.backlog.values()].filter((row) => !row.done).length : 0
@@ -494,8 +519,12 @@ export function apply(ctx, rawConfig) {
         const previous = lastOfKind.get(kind)
         if (previous && stillQueued(agent, previous)) agent.inbox.remove(previous)
         lastOfKind.set(kind, message.id)
+        // DSH has three ways in. inject adds to the running turn's context and starts nothing; steer goes
+        // in at the running turn's next step and, with no turn running, waits for one; followup is a new
+        // message after the current turn and starts one when the session is idle. So only followup wakes
+        // an idle session: urgent and wake reminders use it then, steer and inject only while a turn runs.
+        if (agent.status !== 'running' && (level === 'urgent' || level === 'wake')) return agent.followup(message), 'followup'
         if (level === 'urgent') return agent.steer(message), 'steer'
-        if (level === 'wake' && agent.status !== 'running') return agent.followup(message), 'followup'
         return agent.inject(message), 'inject'
     }
 
@@ -530,7 +559,7 @@ export function apply(ctx, rawConfig) {
     let rulesText = ''
     const loadRules = async () => {
         if (!config.repo) return
-        // As pushed, not as the checkout's working tree has it mid-merge (see HOT_REF).
+        // As pushed, not as the checkout's working tree has it mid-merge (see hotRef).
         const pushed = await pushedText(config.repo, config.rulesFile)
         const text = pushed !== null ? pushed : await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
         if (text.trim()) rulesText = text.trim()
@@ -564,12 +593,13 @@ export function apply(ctx, rawConfig) {
 
     // A turn that ends by asking the owner: the last assistant text ends in a question mark, or asks for
     // a decision in so many words. The owner is not there to answer; the rule is to go on with the default.
-    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|Should I|Would you like|Let me know|shall I)/i
+    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|你说一声|不说我就|你点头|你同意的话|你若同意|由你定|你定|你否决|Should I|Would you like|Let me know|shall I)/i
     const asksOwner = (text) => {
         const tailText = String(text || '').trim().slice(-400)
         return tailText !== '' && (/[?？]\s*$/.test(tailText) || ASKS.test(tailText))
     }
     let lastAskNudge = 0
+    let lastTurn = null
     const QUESTION_TOOLS = new Set(['ask_user_question', 'ask_user'])
     onTargetEvent = (event) => {
         const d = event.data || {}
@@ -578,7 +608,7 @@ export function apply(ctx, rawConfig) {
             pendingCalls.set(String(d.callId), { name: d.name, at, warned: false })
             if (QUESTION_TOOLS.has(d.name) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问、不等——按默认建议继续；真是问句就写 internal/questions/ 一页，再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问负责人、不等——按默认做法继续；真有问题就用 oversight_tell 直接问决策者（问句、读数、默认做法）。')
             }
         } else if (event.type === 'tool/result') {
             const callId = d.message && d.message.source ? d.message.source.callId : d.callId
@@ -590,9 +620,12 @@ export function apply(ctx, rawConfig) {
         } else if (event.type === 'turn/end') {
             pendingCalls.clear()
             const aborted = d.reason && d.reason.kind === 'aborted'
+            // What the turn ended on, for the rules: a turn that ends on a promise ("I will ... after ...")
+            // leaves the work to a message that may never come.
+            lastTurn = { at, text: String(lastAssistantText || ''), aborted: Boolean(aborted) }
             if (!aborted && asksOwner(lastAssistantText) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问、不等——按默认建议继续干；真是问句就写 internal/questions/ 一页（问句、读数、两三条路各带代价、默认建议），再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问负责人、不等——按默认做法继续干；真有问题就用 oversight_tell 直接问决策者（问句、读数、两三条路各带代价、默认做法）。')
             }
         }
     }
@@ -615,7 +648,7 @@ export function apply(ctx, rawConfig) {
             if ((config.blockExempt || []).includes(call.name)) continue
             if (held.length && (config.waitTools || ['job_output']).includes(call.name)) {
                 pendingCalls.delete(callId)
-                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律 5）。`
+                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律：你只做判断，不在会话里久等）。`
                 nudge('wait-ended', 'urgent', text, (a) => {
                     a.cancel({ kind: 'user' }, { keepInbox: true })
                     a.followup(Object.freeze({
@@ -630,12 +663,12 @@ export function apply(ctx, rawConfig) {
             if (minutes >= config.blockCancelMinutes) {
                 pendingCalls.delete(callId)
                 nudge('blocked-cancelled', 'urgent',
-                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
+                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
                     (a) => {
                         a.cancel({ kind: 'user' }, { keepInbox: true })
                         a.followup(Object.freeze({
                             id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
-                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
+                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
                         }))
                         return 'cancel+followup'
                     })
@@ -682,6 +715,7 @@ export function apply(ctx, rawConfig) {
                 backlogOpen: backlogOpen(),
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
                 dmLastSeen,
+                lastTurn,
             }
             const due = []
             for (const rule of hot.rules.module.RULES) {
@@ -776,6 +810,7 @@ export function apply(ctx, rawConfig) {
             blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
             watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
             hotLoaded: Object.fromEntries(Object.entries(hot).map(([name, slot]) => [name, { blob: slot.blob && slot.blob.slice(0, 12), error: slot.error }])),
+            plugin: pluginState(),
         })
     })
 
@@ -868,6 +903,155 @@ export function apply(ctx, rawConfig) {
         delivered.set(id, entry)
         record(entry)
         answer(res, 202, { id, mode, session: String(agent.id), status: agent.status, withdrawn, alreadyRead, queued: queued.length + 1 })
+    })
+
+    // ---- reloading the plugin itself ---------------------------------------------------------------
+    //
+    // The owner's rule (2026-11-24): restarting DSH to change this plugin stops every agent at work, so
+    // the change is a button, and what it buys is this plugin reloading alone. Three steps, in this
+    // order, and the third one is what makes the first two safe to ship:
+    //
+    //   1. sync -- `sync-oversight-live.mjs` copies the plugin directory out of origin/develop into the
+    //      live directory, refuses a tree whose `.js` fails `node --check` or whose `index.js` or
+    //      `client.js` fails to import, and leaves the live directory untouched when it refuses. The
+    //      refusal is returned with the file and the line; nothing here decides what "broken" means.
+    //   2. reload -- DSH's own profile reconciliation (`ctx.hmr.reconcileProfile`), which replaces the
+    //      running plugins whose loaded files changed on disk and restarts their Loader entries. It is
+    //      the only interface that means "re-read this plugin's modules" (see README: the Plugin
+    //      Manager has no such method; its `reload` is private and does exactly this call).
+    //   3. report -- the commit the plugin directory came from, so the band writes down which version
+    //      is live instead of which version somebody believed.
+    //
+    // The one thing the route cannot undo: DSH's replacement is stop-then-start. A module that passes
+    // the checks above and still fails to start leaves nothing running -- its previous code is gone --
+    // and this route is inside the plugin that stopped. That is why the sync gate imports both halves
+    // before the live directory moves, and why the answer is written before the restart: a reload that
+    // goes wrong has at least said on the wire which commit it was trying.
+    const repoRoot = () => config.repo || 'D:\\Projects\\Camel'
+    const syncRecord = () => {
+        try {
+            return JSON.parse(readFileSync(`${config.liveDir}.sync.json`, 'utf8'))
+        } catch {
+            return null
+        }
+    }
+    // The version this process is running, read once: after a reload the new instance reads it again.
+    const loadedSha = (syncRecord() || {}).sha || null
+    const pluginState = () => {
+        const record = syncRecord()
+        return {
+            loaded: loadedSha,
+            synced: record ? record.sha || null : null,
+            target: config.liveDir,
+            loading: LOADED_FROM,
+            fromLive: path.resolve(LOADED_FROM).toLowerCase() === path.resolve(config.liveDir).toLowerCase(),
+            at: record ? record.at || null : null,
+        }
+    }
+
+    // The sync script as the pushed line has it, written next to the hot-reloaded copies.
+    const syncScriptPath = async (ref) => {
+        if (config.syncScript) return config.syncScript
+        const spec = 'internal/tools/sync-oversight-live.mjs'
+        const blob = (await gitIn(repoRoot(), ['rev-parse', `${ref}:${spec}`])).trim()
+        mkdirSync(HOT_DIR, { recursive: true })
+        const copy = path.join(HOT_DIR, `sync-oversight-live-${blob.slice(0, 12)}.mjs`)
+        if (!existsSync(copy)) writeFileSync(copy, await gitIn(repoRoot(), ['show', `${ref}:${spec}`]))
+        return copy
+    }
+
+    const runSync = async () => {
+        const ref = config.syncRef || (await hotRef(repoRoot()))
+        let script
+        try {
+            script = await syncScriptPath(ref)
+        } catch (error) {
+            return { ok: false, stage: 'spawn', message: clip(`the sync script at ${ref}: ${error.message}`, 300) }
+        }
+        return new Promise((resolve) => {
+            execFile(
+                process.execPath,
+                [
+                    script,
+                    '--repo', repoRoot(),
+                    '--ref', ref,
+                    '--target', config.liveDir,
+                    '--json',
+                ],
+                { timeout: 180_000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+                (error, stdout, stderr) => {
+                    // The script's last line is its JSON outcome; anything before it is progress.
+                    const line = String(stdout || '').trim().split(/\r?\n/).pop()
+                    try {
+                        resolve(JSON.parse(line))
+                    } catch {
+                        resolve({
+                            ok: false,
+                            stage: 'spawn',
+                            message: clip((error && error.message) || stderr || 'the sync script printed no outcome', 300),
+                        })
+                    }
+                },
+            )
+        })
+    }
+
+    route('/oversee/reload', 'POST', async (req, res) => {
+        const outcome = await runSync()
+        if (!outcome.ok) {
+            record({ kind: 'reload-refused', stage: outcome.stage, file: outcome.file || null, line: outcome.line || null, message: outcome.message, at: Date.now() })
+            return answer(res, 409, {
+                ok: false,
+                stage: outcome.stage,
+                file: outcome.file || null,
+                line: outcome.line || null,
+                message: outcome.message,
+                liveUnchanged: outcome.liveUnchanged === true,
+                sha: outcome.sha || null,
+            })
+        }
+        const payload = {
+            ok: true,
+            changed: outcome.changed === true,
+            sha: outcome.sha,
+            ref: outcome.ref,
+            target: outcome.target,
+            files: outcome.files || [],
+            loadedFrom: LOADED_FROM,
+            reload: 'not-needed',
+        }
+        if (!payload.changed) {
+            // The live directory already holds this commit: nothing to reload, and a reload here would
+            // be a hiccup bought for nothing on every push that leaves the plugin alone.
+            return answer(res, 200, payload)
+        }
+        if (path.resolve(LOADED_FROM).toLowerCase() !== path.resolve(config.liveDir).toLowerCase()) {
+            payload.ok = false
+            payload.reload = 'refused'
+            payload.reason =
+                `this plugin runs from ${LOADED_FROM}, not from ${config.liveDir}: the profile's camel-oversight ` +
+                'dependency still points at the repository, so reloading would re-import the old files. Point it at ' +
+                'the live directory and restart DSH once; from then on the button works.'
+            return answer(res, 409, payload)
+        }
+        const hmr = ctx.get('hmr')
+        if (!hmr || typeof hmr.reconcileProfile !== 'function') {
+            payload.ok = false
+            payload.reload = 'unavailable'
+            payload.reason = 'this process has no hmr service (started without a profile), so the new files wait for the next DSH start'
+            return answer(res, 409, payload)
+        }
+        payload.reload = 'scheduled'
+        record({ kind: 'reload', sha: outcome.sha, at: Date.now(), from: LOADED_FROM })
+        answer(res, 200, payload)
+        // The answer first, the restart second: reconciliation stops this plugin's own Loader entry,
+        // and a response written after that would come from a module the process has let go of.
+        setTimeout(() => {
+            hmr.runExclusive(() => hmr.reconcileProfile(['camel-oversight'])).then(
+                (result) => record({ kind: 'reloaded', sha: outcome.sha, at: Date.now(), warnings: result.warnings.length, pending: result.pending.length }),
+                (error) => record({ kind: 'reload-failed', sha: outcome.sha, at: Date.now(), message: clip((error && error.message) || error, 300) }),
+            )
+        }, 250)
     })
 
     // ---- the model's side ------------------------------------------------------------------------
@@ -980,16 +1164,16 @@ export function apply(ctx, rawConfig) {
                         : ''
                 }
                 if (initiator !== aimed) return ''
-                const waiting = pending()
+                // Only stable text goes here: the rules (they change when rules.md does) and how the
+                // channel works. This is assembled into every request ahead of the conversation, so text
+                // that changed with each measurement -- unanswered ids, open alerts -- broke the prompt
+                // cache for the whole conversation behind it. Those reach the session as messages (a
+                // newer one of the same kind replaces an unread older one) and on the band.
                 const head =
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +
                     'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit). ' +
                     'Messages prefixed "[oversight · …]" are the plugin\'s own reminders from its measurements; act on them, no acknowledgement needed. oversight_readings gives the measurements on demand.'
-                const open = [...alerts.keys()]
-                const parts = rulesText ? [rulesText, head] : [head]
-                if (waiting.length > 0) parts.push(`Not yet acknowledged: ${waiting.join(', ')}.`)
-                if (open.length > 0) parts.push(`Open alerts: ${open.join(', ')}.`)
-                return parts.join(' ')
+                return (rulesText ? [rulesText, head] : [head]).join(' ')
             },
         }),
     )
