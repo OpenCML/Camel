@@ -21,6 +21,10 @@ expect_exit = 0
 expect_stdout_exact = "18\n20\n80\n26\n10\n12\n12\n4\n3\n3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+# Slow layer: over the 2 s the fast layer allows -- 2.00 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "with_defaults.not_constant"

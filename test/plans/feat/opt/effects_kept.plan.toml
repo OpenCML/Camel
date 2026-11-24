@@ -162,6 +162,10 @@ timeout_ms = 120000
 # sync edge (src/runtime/graph_edges.cpp, `canEndSyncEdge`), so `keepThroughValue` cannot build one
 # and the code that took the branch's place waits on the division itself. That wait is the control
 # edge the residue of a pruned branch leaves, which is also why the control edge is still there.
+# Slow layer: over the 2 s the fast layer allows -- 2.61 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 [[tests]]
 name = "fold_keeps_inner_fault.reference"
 desc = "No pass: the division runs and the program stops with the fault, not with the arm's value."
@@ -252,6 +256,10 @@ timeout_ms = 300000
 # happens (the empty tuple and the field access of a static expansion), `std::nvm` runs it, and the
 # two dumps have to say the same thing about it -- `null` in the document, a comment over the EXIT
 # node in the drawing, no invented edge in either.
+# Slow layer: over the 2 s the fast layer allows -- 2.79 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 [[tests]]
 name = "no_exit.dot"
 desc = "A graph that names no exit at all: `std::gir` draws it, says so over the EXIT node, and draws no EXIT edge."

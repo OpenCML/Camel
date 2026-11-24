@@ -228,6 +228,10 @@ verify_script = """
   assert(diff <= bound, `library GEMM difference ${diff} leaves the licence bound ${bound}`)
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.37 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "library_gemm.tolerance.safe"
@@ -245,6 +249,10 @@ verify_script = """
   assert(Number(m[3]) === 0, `safe mode must be bit-identical, got diff ${m[3]}`)
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.30 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "grad_library"

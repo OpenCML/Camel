@@ -142,6 +142,10 @@ backends_agree = ["stdout_normalized"]
 verify_script = '''
 ({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.46 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "execution.safe"
@@ -152,6 +156,10 @@ backends_agree = ["stdout_normalized"]
 verify_script = '''
 ({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.29 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "execution.opt"
@@ -162,6 +170,10 @@ backends_agree = ["stdout_normalized"]
 verify_script = '''
 ({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.08 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "execution.opt_safe"
@@ -172,6 +184,10 @@ backends_agree = ["stdout_normalized"]
 verify_script = '''
 ({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.63 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "execution.twice"
@@ -196,6 +212,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.43 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.5e-324.algebra"
@@ -294,6 +314,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.12 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.2.5e-323.safe"
@@ -308,6 +332,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.47 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.-0.reference"
@@ -336,6 +364,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.59 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.-0.safe"
@@ -364,6 +396,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.40 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.1e308.algebra"
@@ -392,6 +428,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.32 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.inf.reference"
@@ -420,6 +460,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.42 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.inf.safe"
@@ -434,6 +478,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.64 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.nan.reference"
@@ -462,6 +510,10 @@ verify_script = '''
  assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.33 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary64.nan.safe"
@@ -506,6 +558,10 @@ verify_script = '''
  assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.21 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary32.7.006492321624085e-45.false"
@@ -521,6 +577,10 @@ verify_script = '''
  assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.22 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary32.7.006492321624085e-45.true"
@@ -536,6 +596,10 @@ verify_script = '''
  assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.13 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary32.-0.false"
@@ -551,6 +615,10 @@ verify_script = '''
  assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.09 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary32.-0.true"
@@ -566,6 +634,10 @@ verify_script = '''
  assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary32.3e38.false"
@@ -581,6 +653,10 @@ verify_script = '''
  assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.20 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "boundary32.3e38.true"
@@ -596,6 +672,10 @@ verify_script = '''
  assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.29 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "wrapping.7"
@@ -648,6 +728,10 @@ verify_script = '''
  for(const label of ['2.0','6.0','rand:next_key','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.72 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "gradient.true"
@@ -661,6 +745,10 @@ verify_script = '''
  for(const label of ['2.0','6.0','rand:next_key','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.48 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "invalid.std::opt safe_fp=typo"
@@ -725,6 +813,10 @@ verify_script = '''
  assert(f.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===1,'the default policy did not combine the coefficients');
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "integrated.graph.true"
@@ -739,6 +831,10 @@ verify_script = '''
  assert(f.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===3,'the strict policy regrouped the coefficients');
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.15 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "order.graph"

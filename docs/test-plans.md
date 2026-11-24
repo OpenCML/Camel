@@ -90,8 +90,11 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 - `slow` is the release gate's layer: the plan files `scripts/release-gate.mjs` names in
   `SLOW_PLANS`, run one by one. It is everything whose result is still worth having but whose cost
   does not belong in the developer loop, and that a shared host can still carry: the large
-  front-end and debugger suites, single entries of otherwise-fast plans that take about five
-  seconds or more, and the GPU tile plans.
+  front-end and debugger suites, every case that costs more than **2 s** of its own time (measured,
+  never guessed -- see below), and the GPU tile plans. 2 s is the line because below it the case is
+  cheaper than the bookkeeping around it, and above it a case that runs in every developer loop
+  spends the loop's own budget: the fast layer's whole run is about 220 s for about 9,500 cases, so
+  one case over 2 s is already a percent of it.
 - **The slow layer's only whole plan is `gpu/tiles` (103 entries, and it needs devices): it cannot
   move into the fast layer.** Its entries skip when the cards are busy (`tiles:available()`), so
   the number that runs swings with what else is on the host -- a fast-layer green there would mean
@@ -123,9 +126,25 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   count is read beside the card report and never as "the GPU suite passed".
   `feat/modules/random.plan.toml`'s `keyed_random.std_cpp_agrees` is the same shape -- it compiles
   C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
-  left alone on purpose, one move at a time. Some individual entries are still `tier = "slow"` inside fast plans
-  (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
-  `lib/random/`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
+  left alone on purpose, one move at a time.
+  **The layer stopped being "a few single entries" on 2026-11-24**: the first full-record inventory
+  measured every case of the 2026-11-12 fast-layer run and found **261 cases over 2 s**
+  (`internal/reports/2026-11-24-test-suite-inventory.cn.md`, appendix B: child wall clock, because
+  no record of that batch carried CPU time). **257 of them moved**, and they took the layer from
+  164 declared entries to 559: 218 whole entries (396 started cases, because an entry with
+  `backends` moves its back ends with it) and 17 plan files whose every case is over the line,
+  which say `tier = "slow"` on the plan instead of on each entry. Four did not move, each for a
+  reason written where it applies: `agree_with_fvm` (81.3 s, the slowest case in the tree) says
+  `tier = "fast"` and argues it in its own comment -- it is the only test that catches a generated
+  C++ program that builds and runs but prints what the interpreter does not, so it runs with the
+  plan; two belong to `feat/mm/gc_root_window`, a milestone plan that had already left the fast
+  layer; and `var_capture.macro_fold` no longer exists (the entry is `var_capture.default` today).
+  **A moved case is still selectable, and `--tier all` is the reading that says so**: the whole
+  tree at `--tier all` selects every layer but `debug`, so `node scripts/test.js test/plans/feat/gate
+  --tier all` starts the slow-tier gate entries (`13/13` on 2026-11-24) and `--tier slow` starts the
+  same cases alone. Those 63 files are named in `SLOW_PLANS` because naming the file is what makes
+  the gate run its slow tests, so a plan that is fast in part appears in both phases and its fast
+  tests run twice -- the price of not running the slow ones nowhere.
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
   `agents/test.md` holds back (the full suite, the GC poison sweep and stress plans, progen, the
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
@@ -357,6 +376,25 @@ with all of those intervals and its `at` marks relative to the start of the run,
 it (`plan`, the name every record uses, and `plan_path`), and its own CPU figure -- `cpu_ms`, with
 `cpu_reason` where the host read none, so the per-test cost is in the record the timing questions
 are already asked of. The run prints one `[SLOT]` line with the ratio and the totals.
+
+Each of those records also carries the case's own cost in the currency the case spends: `cpu_ms`
+is the CPU time (user + system) the kernel charged this case's process tree, read by the wrapper
+the runner already starts for it (`test/tools/child-cpu.mjs`, fd 3), so no extra process exists to
+measure it. `cpu_reading` is the sentence that goes with the number: where it was read, or why this
+platform has none. Three readings, kept apart on purpose, because "cheap", "nobody measured it" and
+"this case did not run" are three different answers to "which cases are expensive":
+
+- the figure, with `CPU_READING_WRAPPED` saying how it was read;
+- `absent: this platform reports no per-process CPU time (there is no /proc/self/stat), and the
+  runner starts no process to invent one` -- a Windows or macOS developer machine. The record never
+  carries `0` here, which a reader would take as "this case is free";
+- `not run: the case was skipped, so this run charged it no CPU`, for a case a `skip_unless`
+  precondition held back.
+
+The run prints one `[CPU]` line with how many cases carry a figure and what the rest say, and
+`summary.json`'s `slot_timing.cpu` holds the count, the total, the distribution, the top cases by
+CPU and the distinct absence sentences. The wall clock in the same record is provenance, not a
+cheap stand-in for this figure: on a shared host it measures what the neighbours were doing.
 
 Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (a 32-core host shared with
 other gates), eight runs before and eight after:
@@ -1057,16 +1095,36 @@ everywhere is written once:
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 - `known_fail_ends_when`
-  The reading that removes the mark: the refusal that has to go, and the line this entry has to
-  print, both in backticks. A mark records a red; `known_fail_owner` says who ends it and
+  The reading that removes the mark, in one of exactly two shapes -- both of which a run evaluates:
+
+  ```toml
+  known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }
+  known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
+  ```
+
+  `prints` is looked for in the entry's own output on every run; `passes` is read off another case's
+  verdict once every case has settled. A mark records a red; `known_fail_owner` says who ends it and
   `known_fail_reason` where the case is stuck, and neither says *what* would end it -- so a mark can
-  outlive its wall and read as permanent debt. The runner already decides the two moments it can see
-  (the case starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure
-  changed its mind`), and this field states the condition those two readings are the evidence of, in
-  the terms the run compares. `test/tools/check-plan-fields.mjs` counts the marks that carry none
-  (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a trigger that quotes no reading
-  (`end-trigger-names-nothing`) and one that does not name the entry's own pinned line
-  (`end-trigger-names-another-reading`). The field is not required at load -- a mark written before it
+  outlive its wall and read as permanent debt. The runner decides the two moments it can see (the case
+  starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure changed its
+  mind`), and this field states the condition those two readings are the evidence of, in the terms the
+  run compares.
+
+  **Strict xfail**: when the stated reading has arrived, the mark has ended, and the run says so and
+  records a failure -- `known failure has ended: this entry already prints "<line>" -- delete the
+  mark`, or, for the `passes` shape, the same block after the results. A mark that keeps excusing a
+  case whose ending has arrived is a green nobody ever has to read again; that is the debt the STALE
+  snippet entries carried, and the reading exists to make somebody delete the entry.
+
+  Prose is refused: a sentence is not something a run can disagree with, so it would be a promise
+  nobody re-reads. The ruling of 2026-11-24 (`internal/questions/
+  2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md`) is why the field is
+  structured rather than deleted: eleven marks carry it *instead of* `known_fail_msg`, so removing
+  the field would make two plan files refuse to load. `test/tools/check-plan-fields.mjs` counts the
+  marks that carry none (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a value
+  that is neither shape (`mark-without-end-trigger`), a `prints` that is not one of the entry's own
+  pinned lines (`end-trigger-names-another-reading`) and a `passes` that names no case in the tree
+  (`end-trigger-names-nowhere`). The field is not required at load -- a mark written before it
   existed keeps working -- but a new mark is expected to carry it.
 - `known_fail_msg`
   A fragment of the reason a marked test fails with, so the reason is pinned and not only the
@@ -1083,13 +1141,14 @@ everywhere is written once:
   ruling of 2026-11-21 02:20 chose the second shape for a case whose target is a number and whose
   wall is being built: a sentence quoted from a refused run follows the implementation, so a pin on
   it has to be re-typed every time the wall moves, which records the wall's progress as the case's
-  debt. `known_fail_ends_when` states the line the entry has to print instead, and no wall moves
-  that. `known_fail` needs one of the two -- the plan is refused at load when it has neither, with
-  the same `checkKnownFailMark` (`test/tools/run-tests.mjs`) -- and the trade is worth stating where
-  a reader weighs it: the sentence is the only field the run *compares*, so a mark that states its
-  ending reading accepts any failure as the expected one until the numbers arrive, and a different
-  defect can wear that mark's name in the meantime. The owner and the reason are required either
-  way, and the reason keeps naming the wall as it stands today.
+  debt. `known_fail_ends_when` states the line the entry has to print instead (`prints`) or a case
+  whose passing ends this one (`passes`), and no wall moves either. `known_fail` needs one of the two
+  -- the plan is refused at load when it has neither, with the same `checkKnownFailMark`
+  (`test/tools/run-tests.mjs`) -- and the trade is worth stating where a reader weighs it: the
+  sentence is the only field the run *compares*, so a mark that states its ending reading accepts any
+  failure as the expected one until the reading arrives, and a different defect can wear that mark's
+  name in the meantime. The owner and the reason are required either way, and the reason keeps naming
+  the wall as it stands today.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a

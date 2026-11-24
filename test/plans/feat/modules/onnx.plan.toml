@@ -705,6 +705,10 @@ expect_exit = 0
 expect_stdout_contains = ["then arm: shape [4]", "else arm: shape [4]", "ort run: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 6.08 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_train_step_adam"
@@ -777,6 +781,10 @@ expect_exit = 0
 expect_stdout_contains = ["input dims ['batch', 2]", "batch 1: shape [3]", "batch 7: shape [21]", "ort run: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 4.79 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_train_step_dynamic"
@@ -790,6 +798,10 @@ expect_exit = 0
 expect_stdout_contains = ["input dims ['batch', 2]", "ort train dynamic: worst", "PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 4.76 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "pass_export_fold"
@@ -878,11 +890,6 @@ timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
-known_fail = true
-known_fail_owner = "unowned (`lane-shapeext` wrote this mark and is gone)"
-known_fail_msg = "the two tensor operands have different element types ('float' and 'f32')"
-known_fail_ends_when = "the half about the convolution has held since the element rule followed its argument (`export_train_step_conv` is green), and this case is still red in the batch norm's backward at `the two tensor operands have different element types ('float' and 'f32')`, so what is left of the condition is that the backward too answers in its argument's element type: then this entry prints `export_fold.cml: pass: onnx.checker full_check ok`, `export_train_step.cml: pass: onnx.checker full_check ok` and `onnx::export equiv: PASS`, and exits 0 -- the twenty-six programs' two export paths then agree bit for bit on ONNX Runtime"
-known_fail_reason = "stops at `the two tensor operands have different element types ('float' and 'f32')` in `export_train_step_bn.cml`, in the batch norm's backward: the value the backward emits is computed in f32 (from the answer's f32 tangent) while the answer it is declared with is f64 -- a lowering that computes in its input's elements, which the element rule following its argument does not touch. An expiry condition states when the mark disappears; when half of it holds, the other half is the condition."
 # Slow layer: measured 15.9 s in the full serial run.
 tier = "milestone"
 desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
@@ -1851,6 +1858,10 @@ expect_stdout_contains = ["ort dynamic params: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 4.92 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_time_axis"
@@ -1865,6 +1876,10 @@ expect_stdout_contains = ["ort time axis: 14 models, 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 14.36 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_core_slice"
@@ -1904,6 +1919,10 @@ expect_stdout_contains = ["ort core slice: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 150000
+# Slow layer: over the 2 s the fast layer allows -- 12.66 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_core_slice_grad"
@@ -1988,6 +2007,10 @@ expect_stdout_contains = ["ort slice grad stride: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 2.27 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_slice_bounds"
@@ -2002,6 +2025,10 @@ expect_stdout_contains = ["ort slice bounds: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 5.39 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_argmax"
@@ -2016,6 +2043,10 @@ expect_stdout_contains = ["ort argmax: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 2.33 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_slice_start"
@@ -2030,6 +2061,10 @@ expect_stdout_contains = ["ort slice start: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.43 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_linear_recursion"
@@ -2044,6 +2079,10 @@ expect_stdout_contains = ["ort linear recursion: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 4.46 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_grad_loop"
@@ -2058,6 +2097,10 @@ expect_stdout_contains = ["ort grad loop: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 6.55 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_loop_values"
@@ -2072,6 +2115,10 @@ expect_stdout_contains = ["ort loop values: worst", "steps [0, 1, 2, 3, 5, 6]", 
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 10.06 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_loop_for"
@@ -2086,6 +2133,10 @@ expect_stdout_contains = ["onnx::loop node for: PASS"]
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 5.57 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_loop_cond"
@@ -2100,6 +2151,10 @@ expect_stdout_contains = ["onnx::loop node cond: PASS"]
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 6.65 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_struct_loop"
@@ -2114,6 +2169,10 @@ expect_stdout_contains = ["ort struct loop: worst", "steps [0, 1, 2, 3, 5, 6]", 
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 9.69 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_grad_loop_values"
@@ -2128,13 +2187,17 @@ expect_stdout_contains = ["ort grad loop values: worst", "steps [0, 1, 2, 3, 5, 
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 8.80 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_loop_values_dynamic"
 known_fail = true
-known_fail_owner = "unowned (`lane-shapeext` wrote this mark and is gone)"
+known_fail_owner = "the shape a loop's dynamic trip count carries through the ONNX export (`modules/onnx`)"
 known_fail_msg = "kind: ExportUnsupported, message: in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next"
-known_fail_ends_when = "when a loop can carry a value whose shape the graph computes -- the reduction target is now that `Shape` -- this entry prints `ort loop values dynamic: worst`, `batches [1, 2, 3, 5, 7]` and `PASS`, and exits 0 -- the exported loop then matches NumPy and the native run with the counter exact"
+known_fail_ends_when = { prints = "ort loop values dynamic: worst" }
 known_fail_reason = "the export is refused by `in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next; a loop can only carry values of a fixed dtype and shape` -- the reduction target is now the graph's own `Shape` of the operand, and the loop that carries the batch no longer states a fixed shape for it, so the case exits 1 before any model reaches disk"
 desc = "A loop that returns its state with a counter, and the gradient of a loss over it with respect to captured weights, export with a dynamic batch axis: one model, on ONNX Runtime for batches of 1, 2, 3, 5 and 7 rows and loops of 0, some and the maximum number of steps, matches NumPy and the native run (counter exactly). On the path without a step the gradient is a struct of constants in a branch arm, which the exporter used to refuse as 'a tuple, struct or array of constants was not folded'."
 kind = "behavior"
@@ -2624,6 +2687,10 @@ expect_stdout_contains = ["ort entry export: worst", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
+# Slow layer: over the 2 s the fast layer allows -- 14.55 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_var_parameter"
@@ -2638,6 +2705,10 @@ expect_stdout_contains = ["operator: max abs error", "pass: max abs error", "var
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 2.34 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "pass_export_refusal_located.growth_budget"
@@ -2822,6 +2893,10 @@ expect_stdout_contains = ["operator affine: worst", "operator checked: worst", "
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.65 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_duplicate_outputs"
@@ -2836,6 +2911,10 @@ expect_stdout_contains = ["operator twice: worst", "operator repeated: worst", "
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.39 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "ort_struct_casts"
@@ -2850,6 +2929,10 @@ expect_stdout_contains = ["operator identity: worst", "operator walk: worst", "p
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 4.29 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "as_refusal.unproven.pass"
@@ -3006,9 +3089,9 @@ timeout_ms = 20000
 [[tests]]
 name = "ort_loop_loaded_weights"
 known_fail = true
-known_fail_owner = "unowned (`lane-shapeext` wrote this mark and is gone)"
+known_fail_owner = "the shape a loop's loaded weights carry through the ONNX export (`modules/onnx`)"
 known_fail_msg = "kind: ExportUnsupported, message: in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next"
-known_fail_ends_when = "with `ort_loop_values_dynamic`: when a loop can carry a value whose shape the graph computes, this entry prints `ort loop loaded weights: worst`, `batches [1, 2, 3, 5, 7]` and `PASS`, and exits 0 -- the model holds a `Loop`, passes onnx.checker's full check, and the weights read from file are captured as the constant their value makes them"
+known_fail_ends_when = { prints = "ort loop loaded weights: worst" }
 known_fail_reason = "the export is refused by `in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next; a loop can only carry values of a fixed dtype and shape` -- the reduction target is now the graph's own `Shape` of the operand, and the loop that carries the batch no longer states a fixed shape for it, so the case exits 1 before any model reaches disk"
 desc = "A data-dependent loop and the gradient of a loss over it, with weights read from a file (load_npy) into a struct the exported function captures, exported with a dynamic batch axis: the declared type of the weights says neither element type nor shape, and the export gives the captured constant the type its value has. The model passes onnx.checker's full check, holds a Loop, and on ONNX Runtime matches the native run for batches of 1, 2, 3, 5 and 7 rows and loops of 0, some and the maximum number of steps (counter exactly). The export used to end with 'Runtime draft encoding failed to allocate ... bytes'."
 kind = "behavior"
@@ -3021,6 +3104,10 @@ expect_stdout_contains = ["ort loop loaded weights: worst", "batches [1, 2, 3, 5
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 5.06 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "typed_constant_ends_unrolling.pass"
@@ -3156,6 +3243,10 @@ expect_stdout_contains = ["ort grad matmul batched: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 2.93 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "export_index_axis"

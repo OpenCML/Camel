@@ -1,6 +1,10 @@
 id = "gate.conformance"
 order = 923
-tier = "fast"
+# Slow layer: every case of this plan costs more than the 2 s the fast layer allows
+# (2026-11-12 fast-layer record, child wall clock; the list is appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md). The plan is slow as a whole,
+# so the line goes on the plan and not on each entry.
+tier = "slow"
 tags = ["feat", "gate", "conformance"]
 desc = "The conformance matrix: every recorded reading holds on the unoptimized pipeline, is the same after optimization, and holds on the optimized pipeline, on all four back ends"
 

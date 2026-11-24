@@ -1159,11 +1159,6 @@ assert(targets.filter((t) => norm.includes(t)).length === 1, `answer=per-target:
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
-known_fail = ["nvm"]
-known_fail_owner = "unowned (`lane-valports` wrote this mark and is gone)"
-known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose/walk.cpp#buildTransposeMember`), so the walk stops at the scalar product's law (`uri=:op/mul_d`) and not at its own parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`), which prints the same sentence"
-known_fail_msg = "skip=law-reads-a-value uri=:op/mul_d position=0"
-known_fail_ends_when = "when the transposed member gets a port for the value of a parameter a rule reads, the walk stops printing `skip=law-reads-a-value uri=:op/mul_d position=0` and this entry prints `29.0` with each of its three trace lines pinned exactly once -- `TRANSPOSE function=read_outer carried=2 ... answer=per-target` and both `ESCAPE` lines with `kindOfTarget` 1 and 11; 15 or 22 in place of 29 says the cotangent was summed across two values that are not the same value"
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
@@ -2108,9 +2103,9 @@ expect_output_not_contains = ["Warning", "[Error]", "library=(0.0", "library=(9.
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 known_fail = true
-known_fail_owner = "unowned (`lane-deleth` wrote this mark and is gone)"
+known_fail_owner = "`with_grad` as the composition of `FirstOf`/`WithOf` in `stdlib/vjp.cml` (the library's leg of a differentiation)"
 known_fail_msg = "Reference 'with_grad' is declared as imported but is not exported by its module."
-known_fail_ends_when = "when `stdlib/vjp.cml` exports `with_grad` again as the composition design principles 9.9 asks for -- the pair body with the `FirstOf<WithOf<F>>` declaration beside it in `stdlib/types.cml` -- so that the four `library=` fields of this entry's pinned line above carry tuples instead of `RuntimeError`; that pinned line is where the end shows, and the case and the mark turn over in the same commit"
+known_fail_ends_when = { passes = "transforms.with_grad_from_the_library" }
 known_fail_reason = "库层 `with_grad` 按裁定 `080778522` 删除，等它作为组合写出来：`stdlib/vjp.cml` 不再导出这个名字，所以用例停在 `import { with_grad } from vjp`，不是停在组合的某道墙上。"
 known_fail_note = "The mark is the removal, not a wall: the placeholder was deleted with its `fail` sentence and its doc, so there is no name for the case to call and nothing to rewrite the library's leg onto. The four groups, the engine's four answers and the pin stay as the object the composition will answer; `grad_first_with_parameter.cml`'s two entries already pin the engine's numbers, which is why this entry is not duplicated as an engine-only case. Waits on `stdlib/vjp.cml` gaining `with_grad` as the composition (`vjp` of the signature reinterpretation `first_with_as_param`, which moves the weight onto an ordinary parameter, with the seed 1 read off the pullback) with the declaration `FirstOf<WithOf<F>>` beside it."
 
