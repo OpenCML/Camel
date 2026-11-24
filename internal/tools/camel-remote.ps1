@@ -433,6 +433,12 @@ param(
 # Pair this with a path `.gitignore` covers (e.g. `out/trace-golden/...`), so a fetched record can
 # never be committed by accident.
 [string]$FetchFile = '',
+    # Read the fetched suffix against the **newest** run's log directory instead of the live checkout:
+    # `-FetchFile fail/<case>.<backend>/stdout.txt -Latest` brings that file back from the run this
+    # invocation just made, whose directory is named after a clock the caller cannot know in advance.
+    # The console keeps one truncated line of a failing case's output, so without this a reader who was
+    # just told what the case printed cannot ask for the rest of the sentence.
+    [switch]$Latest,
     # How long a run waits for the slot(s) it needs before it says `state=noslot` and stops, in
     # seconds. 1800 s is the shape every wait here has had: a queue behind other lanes' builds is
     # waiting, not a failure, and a reading that was never taken is not a red. It is a parameter
@@ -455,6 +461,25 @@ $ErrorActionPreference = 'Stop'
 # The command-line lists and what a badly-given one means. Also its own file, for the same reason:
 # `camel-remote-args.test.ps1` measures the binding rule without a host.
 . (Join-Path $PSScriptRoot 'camel-remote-args.ps1')
+# `-FetchFile -Latest`: which run is newest, what a suffix may name, and where the file lands. Also
+# its own file: `camel-remote-fetch.test.ps1` decides all three without a host.
+. (Join-Path $PSScriptRoot 'camel-remote-fetch.ps1')
+# Where a `-Latest` fetch lands in this tree: under the fetched directory, keeping the run's relative
+# path as its tail, so two cases of one run cannot overwrite each other and the path says where the
+# file came from. `.gitignore` covers `test/results/`, so a fetched log can never be committed.
+if ($Latest) {
+    if ([string]::IsNullOrWhiteSpace($FetchFile)) {
+        Write-Host $script:CamelFetchUsage
+        exit 2
+    }
+    $fetchSuffix = Resolve-CamelFetchSuffix -Suffix $FetchFile
+    $fetchLocalRel = "test/results/fetched/$fetchSuffix"
+    $fetchDisplay = "test/results/log/<newest run>/$fetchSuffix"
+} else {
+    $fetchSuffix = ''
+    $fetchLocalRel = $FetchFile
+    $fetchDisplay = ''
+}
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{
     stateDir         = $StateDir
     hostLibStdCxxDir = $LibStdCxxDir
@@ -1274,9 +1299,9 @@ try {
     # it out of the tar -- the next run would compare against nothing. Naming it adds it to the tar
     # and nothing else: it is never staged, and a run without `-FetchFile` does not mention it.
     if ($FetchFile -ne '') {
-        $fetchLocal = Join-Path $Path $FetchFile
+        $fetchLocal = Join-Path $Path $fetchLocalRel
         if (Test-Path -LiteralPath $fetchLocal) {
-            $untracked = @($untracked | Where-Object { $_ -ne $FetchFile }) + @($FetchFile)
+            $untracked = @($untracked | Where-Object { $_ -ne $fetchLocalRel }) + @($fetchLocalRel)
         }
     }
     $changedListFile = Join-Path $scratch 'changed.txt'
@@ -1655,7 +1680,15 @@ echo "HOST_JOBS=$CAMEL_JOBS"
 # names the path when the host has nothing there -- a fetch that silently sends nothing would look
 # exactly like a run whose comparison passed.
 $fetchRel = ($FetchFile -replace '\\', '/')
-$fetchStage = if ($FetchFile -ne '') {
+# `-Latest` names the file by its place inside a run, not by the run's name: the suffix is resolved
+# against the newest run directory under `test/results/log`, which is the run this invocation just
+# made. The `find` is the command `camel-remote-fetch.ps1#New-CamelLatestRunCommand` writes and
+# `camel-remote-fetch.test.ps1` pins, so the two cannot drift; everything else about the fetch -- the
+# markers, the base64, the "the host has no ..." line -- is the same as for a named path.
+# `-Latest` does not travel with the plan. The run directory it names exists only once the plan has
+# run, so the fetch is a second, small connection after it (the block beside the AST record, further
+# down); the stage here is the named path's, unchanged.
+$fetchStage = if ($FetchFile -ne '' -and -not $Latest) {
 @'
 if [ -f "$R/FETCHREL" ]; then
 echo '__CAMEL_REMOTE_FETCH_BEGIN__'
@@ -3126,7 +3159,7 @@ exit `$code
 # nothing is written, and a directory the path needs is created first.
 if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     $fetchPayload = ($fetchPayloadText -replace '\s', '')
-    $fetchTarget = Join-Path $Path $FetchFile
+    $fetchTarget = Join-Path $Path $fetchLocalRel
     if ($fetchPayload.Length -eq 0 -or $fetchPayload.Length % 4 -ne 0 -or
         $fetchPayload -notmatch '^[A-Za-z0-9+/]*={0,2}$') {
         Write-Host ("[camel-remote] -FetchFile: the file did not arrive intact ({0} chars); nothing was written" -f $fetchPayload.Length)
@@ -3140,6 +3173,60 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
             [System.Convert]::FromBase64String($fetchPayload)) -replace "`r`n", "`n"
         [System.IO.File]::WriteAllText($fetchTarget, $fetchText, (New-Object System.Text.UTF8Encoding($false)))
         Write-Host ("[camel-remote] -FetchFile: {0} bytes written to {1}" -f $fetchText.Length, $fetchTarget)
+    }
+}
+
+# The file `-FetchFile <suffix> -Latest` asked for: the newest run's copy of it, brought back by two
+# small commands after the plan. It runs after the plan because the run directory it names is the one
+# this run just made -- a directory named after a clock the caller cannot know when the command line
+# is typed, which is the whole reason this mode exists (the console keeps one truncated line of a
+# failing case's output). Nothing is guessed when the answer is missing: a run directory that is not
+# there, and a file that is not in it, each say so and name the run the tool resolved.
+if ($Latest -and $FetchFile -ne '') {
+    $remoteLogRoot = '$HOME/camel-work/{0}/test/results/log' -f $name
+    $runName = ''
+    $runPath = ''
+    try {
+        # Both halves of the answer in one line: the run's absolute path (what `scp` needs: it hands
+        # the path to the remote side as it is, so a `$HOME` in it would arrive unexpanded) and its
+        # name (what a message needs).
+        $found = ((& $sshExe -o ConnectTimeout=20 $sshHost `
+                        "find `"$remoteLogRoot`" -mindepth 1 -maxdepth 1 -type d -printf '%p`t%f\n' 2>/dev/null | sort | tail -n 1") 2>&1 |
+                    Out-String).Trim()
+        $parts = $found -split "`t"
+        if ($parts.Count -eq 2) {
+            $runPath = $parts[0]
+            $runName = $parts[1]
+        }
+    } catch {
+        $runName = ''
+    }
+    $runName = Select-CamelLatestRun -Runs @($runName)
+    if ($runName -eq '' -or $runPath -eq '') {
+        Write-Host "[camel-remote] -FetchFile -Latest: the host has no run directory under camel-work/$name/test/results/log; nothing was fetched"
+        $code = 2
+    } else {
+        $fetchTarget = Join-Path (Join-Path $Path 'test/results/fetched') ($fetchSuffix -replace '/', '\')
+        $runRoot = $runPath.Substring(0, $runPath.Length - $runName.Length - 1)
+        $fetched = Get-CamelFetchPaths -LogRootOnHost $runRoot -Run $runName `
+            -Suffix $fetchSuffix -LocalRoot (Join-Path $Path 'test/results/fetched')
+        $fetchTarget = $fetched.LocalPath
+        $fetchDir = Split-Path -Parent $fetchTarget
+        if ($fetchDir -and -not (Test-Path -LiteralPath $fetchDir)) {
+            New-Item -ItemType Directory -Path $fetchDir -Force | Out-Null
+        }
+        if (Test-Path -LiteralPath $fetchTarget) {
+            Remove-Item -LiteralPath $fetchTarget -Force
+        }
+        $scpOutput = & $scpExe -q "${sshHost}:$($fetched.HostPath)" $fetchTarget 2>&1
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $fetchTarget)) {
+            Write-Host ("[camel-remote] -FetchFile -Latest: the newest run {0} has no {1}; nothing was written ({2})" -f
+                $runName, $fetchSuffix, ($scpOutput | Out-String).Trim())
+            $code = 2
+        } else {
+            $bytes = (Get-Item -LiteralPath $fetchTarget).Length
+            Write-Host ("[camel-remote] -FetchFile -Latest: {0} bytes of run {1} written to {2}" -f $bytes, $runName, $fetchTarget)
+        }
     }
 }
 
