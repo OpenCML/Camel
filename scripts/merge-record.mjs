@@ -38,6 +38,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { planSetHash } from './plan-set.mjs'
 
 const ZERO = '0'.repeat(40)
 const SHA = /^[0-9a-f]{40}$/
@@ -112,6 +113,20 @@ function doWrite() {
     if (!fixed || !regressed || !changed) refuse(2, `${diffFile} does not hold the three sets (fixed, new, changed)`)
     if (!diff.planSet || !Array.isArray(diff.planSet.names) || !diff.planSet.hash) {
         refuse(2, `${diffFile} does not name the plan set: a record that cannot say which plans were read is not checkable`)
+    }
+    // The hash is recomputed from the names rather than copied through. A field this file only
+    // carries is a field nobody checks: the document would say "these 5 plans" beside a hash of some
+    // other set, both from the same writer, and the record would look checkable while not being so.
+    // The algorithm is `plan-set.mjs`, the one `merge-readings.mjs` keys a baseline by -- shared, so
+    // the two cannot answer this question differently. A disagreement is exit 2 and not 1: the
+    // reading is not refuted here, it is unreadable as a claim about a plan set.
+    const planHash = planSetHash(diff.planSet.names)
+    if (planHash !== diff.planSet.hash) {
+        refuse(
+            2,
+            `${diffFile} names ${diff.planSet.names.length} plan(s) that hash to ${planHash}, but it says ${diff.planSet.hash}: ` +
+                'the plan set and its hash have to be the same set, and only the writer that produced both can repair it',
+        )
     }
 
     // The commit this claim is about, read from git and not from the caller: the parents are what a
@@ -256,6 +271,34 @@ function doVerify() {
             )
             continue
         }
+        // The plan set the record claims, checked against itself. `write` already refused a document
+        // whose hash did not describe its names, so a record that reached the disk through this
+        // program holds a coherent pair -- which means a disagreeing pair was not written by it. That
+        // is exactly why the check belongs here as well as there: the record is a file on disk, and a
+        // file on disk is what the hook reads, not the code path that meant to write it. A hand-made
+        // record can still state a coherent set; it cannot any longer state an incoherent one and be
+        // waved through, which is the difference between a checkable field and a field with a name.
+        const plan = record.planSet
+        if (!plan || !Array.isArray(plan.names) || !plan.hash) {
+            problems.push(
+                `${sha.slice(0, 9)}  ${subject}  -- the record does not name the plan set, so it cannot say which plans were read`,
+            )
+            continue
+        }
+        const recomputed = planSetHash(plan.names)
+        if (recomputed !== plan.hash) {
+            problems.push(
+                `${sha.slice(0, 9)}  ${subject}  -- the record's ${plan.names.length} plan name(s) hash to ${recomputed}, ` +
+                    `but it says ${plan.hash}: the set and its hash are not the same set`,
+            )
+            continue
+        }
+        if (plan.count !== plan.names.length) {
+            problems.push(
+                `${sha.slice(0, 9)}  ${subject}  -- the record says ${String(plan.count)} plan(s) and names ${plan.names.length}`,
+            )
+            continue
+        }
         const read = record.readings || {}
         if (Number(read.new) > 0 || Number(read.changed) > 0) {
             problems.push(
@@ -265,7 +308,7 @@ function doVerify() {
     }
 
     if (problems.length > 0) {
-        say(`merge-record: ${problems.length} merge commit(s) in this push have no reading (${merges} merge(s) in range)`)
+        say(`merge-record: ${problems.length} merge commit(s) in this push have no reading that holds (${merges} merge(s) in range)`)
         for (const problem of problems) say(`  ${problem}`)
         say('')
         say('A gate refuses a push and not a commit, so a merge that was refused is still on the branch and the')
