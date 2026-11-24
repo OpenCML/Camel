@@ -239,14 +239,40 @@ function describeEndCondition(condition) {
 }
 
 /**
- * Whether a `prints` condition has arrived: the line the mark says this entry prints when the wall
- * moves is in this run's output. Read from the whole of what the case produced (its failures, its
- * stdout, its stderr), because a line that arrived can arrive on any of the three.
+ * What a `prints` condition is read against: the bytes the case's own process wrote, normalized the
+ * way the case's own assertions read them, and nothing the runner wrote *about* the case.
+ *
+ * It was read from `failures + stdout + stderr` until 2026-11-25, which made every condition that
+ * also appears in an `expect_output_contains` true by construction: a failure line quotes the line
+ * it did not find (`output does not contain 'stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]'`),
+ * so the condition was satisfied by the sentence saying it was not, and three legitimate marks read
+ * as `known failure has ended` in the merge rehearsal (`modules.onnx/ort_loop_values_dynamic` and the
+ * two `stated_mean_axis_*` gradients). A condition that can be matched by the sentence explaining
+ * that it is unmet is not a condition, it is decoration -- the same family as an assertion that stays
+ * green when nothing can match it.
+ *
+ * The other shape, `passes`, is a reading of another case's verdict and is taken from `completed`
+ * (`settlePassesConditions`), a field of its own. No condition states a thing about the text of a
+ * verdict, so nothing here needs one; `verdictText` below is where the runner's own failure lines
+ * live, and it is never the haystack for a condition.
  */
-function endConditionHasArrived(test, seen) {
+function observedOutput(result) {
+    // The normalized text, and not the raw streams: the condition usually mirrors an
+    // `expect_output_contains`, which is read against `normalized.output`, so both have to compare
+    // with one run through the same normalizers (CRLF, ANSI) or a normalizer would move one and not
+    // the other.
+    return `${result.normalized.stdout}\n${result.normalized.stderr}`
+}
+
+/**
+ * Whether a `prints` condition has arrived: the line the mark says this entry prints when the wall
+ * moves is in `output` -- the case's own output, from `observedOutput`, which is the only thing a
+ * condition may be read against.
+ */
+function endConditionHasArrived(test, output) {
     const condition = test.__knownFailEndsWhen
     if (!condition || condition.kind !== 'prints') return false
-    return seen.includes(condition.text)
+    return output.includes(condition.text)
 }
 
 /**
@@ -4348,15 +4374,22 @@ async function executePlans(plans, options, sharedVars, logDir) {
                         // longer appears turns the run red, the same way a mark that starts
                         // passing does. Unset is legal and pins nothing.
                         const pinned = entry.test.__knownFailMsg
-                        const seen = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
-                        if (pinned !== null && !seen.includes(pinned)) {
+                        // This column IS the verdict and NOT the output: the failure lines the runner
+                        // assembled about the case, then what the case printed. Only `known_fail_msg`
+                        // reads it -- that field pins the *reason* a marked case fails with, which may
+                        // be a line the runner wrote (`stdout differs from ... in the golden`) -- and a
+                        // `prints` condition must never be matched against it: a failure line quotes
+                        // the line a run did not find, so the condition would be satisfied by the
+                        // sentence saying it was not (see `observedOutput`).
+                        const verdictText = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
+                        if (pinned !== null && !verdictText.includes(pinned)) {
                             const first = `${(result.failures || [])[0] || result.stderr || result.stdout || '(no output)'}`
                                 .split('\n')[0]
                             result.status = 'fail'
                             result.failures.push(
                                 `known failure changed its mind: expected "${pinned}", got "${first.trim()}"`,
                             )
-                        } else if (endConditionHasArrived(entry.test, seen)) {
+                        } else if (endConditionHasArrived(entry.test, observedOutput(result))) {
                             // Strict xfail: a mark whose ending has arrived stops being an excuse the
                             // moment the run reads it. Left as an XFAIL it would be a green nobody has
                             // to look at again -- the debt the STALE snippet entries carried, where

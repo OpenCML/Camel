@@ -939,8 +939,13 @@ everywhere is written once:
   known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
   ```
 
-  `prints` is looked for in the entry's own output on every run; `passes` is read off another case's
-  verdict once every case has settled. A mark records a red; `known_fail_owner` says who ends it and
+  `prints` is looked for in the entry's own output -- what its process wrote, normalized as the
+  entry's assertions read it -- and in nothing else on every run; `passes` is read off another case's
+  verdict once every case has settled. The "nothing else" is the whole of the rule and not a
+  preference: an entry that also pins the line with `expect_output_contains` gets a failure message
+  that *quotes* it (`output does not contain '<line>'`), so a condition searched for in the runner's
+  own text would be satisfied by the sentence saying it is unmet, and a legitimate mark would read as
+  ended. A mark records a red; `known_fail_owner` says who ends it and
   `known_fail_reason` where the case is stuck, and neither says *what* would end it -- so a mark can
   outlive its wall and read as permanent debt. The runner decides the two moments it can see (the case
   starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure changed its
