@@ -45,12 +45,20 @@ import * as bootRules from './rules.js'
 
 // The parts that change most often -- the rules, their limits and texts, and what is measured --
 // are reloaded when they change, at the next beat, without restarting the host: a restart stops
-// every agent that is working. They are read from origin/develop, the content that has passed the
-// merge gate and been pushed, never from the checkout's working tree: a merge in progress there
-// holds content that has not been measured yet, and a lane's half-done edit may sit there too. A
+// every agent that is working. They are read from the line merges land on -- origin/integration, or
+// origin/develop where there is no integration branch -- the content that has passed the merge gate
+// and been pushed, never from the checkout's working tree: a merge in progress there holds content
+// that has not been measured yet, and a lane's half-done edit may sit there too. Develop moves only
+// when integration is promoted, hours apart, and a fix to these files should not wait for that. A
 // file that fails to load leaves the version in use in place and is reported. The routes, the tools
 // and the session wiring in this file still need a restart.
-const HOT_REF = 'origin/develop'
+const HOT_REFS = ['origin/integration', 'origin/develop']
+async function hotRef(repo) {
+    for (const ref of HOT_REFS) {
+        if (await gitIn(repo, ['rev-parse', '--verify', '--quiet', ref]).then(() => true, () => false)) return ref
+    }
+    return HOT_REFS[HOT_REFS.length - 1]
+}
 const HOT_DIR = path.join(os.homedir(), '.camel-oversight', 'hot')
 const hot = {
     rules: { module: bootRules, blob: null, error: null },
@@ -60,12 +68,14 @@ const gitIn = (repo, args) =>
     new Promise((resolve, reject) =>
         execFile('git', ['-C', repo, ...args], { env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, maxBuffer: 16 << 20 },
             (error, stdout) => (error ? reject(error) : resolve(stdout))))
-// The text of a file as origin/develop has it, or null when it cannot be read.
+// The text of a file as the merged line has it (hotRef), or null when it cannot be read.
 async function pushedText(repo, file) {
-    return gitIn(repo, ['show', `${HOT_REF}:${file}`]).catch(() => null)
+    const ref = await hotRef(repo)
+    return gitIn(repo, ['show', `${ref}:${file}`]).catch(() => null)
 }
 async function reloadHot(repo, onChange) {
     if (!repo) return
+    const HOT_REF = await hotRef(repo)
     for (const [name, file] of [['rules', 'rules.js'], ['measure', 'measure.js']]) {
         const slot = hot[name]
         const spec = `internal/tools/camel-oversight/${file}`
@@ -534,7 +544,7 @@ export function apply(ctx, rawConfig) {
     let rulesText = ''
     const loadRules = async () => {
         if (!config.repo) return
-        // As pushed, not as the checkout's working tree has it mid-merge (see HOT_REF).
+        // As pushed, not as the checkout's working tree has it mid-merge (see hotRef).
         const pushed = await pushedText(config.repo, config.rulesFile)
         const text = pushed !== null ? pushed : await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
         if (text.trim()) rulesText = text.trim()

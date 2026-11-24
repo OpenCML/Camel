@@ -96,13 +96,15 @@ async function mergedOf(git) {
     return { mergedLocal, mergedRemote }
 }
 
-/// The backlog's rows, by id: status and the stamp of the last update. Read as origin/develop has
-/// it, like the rules and the hot-reloaded files: the main checkout is the author's workspace and may
-/// stand on another branch, or hold an edit nobody pushed.
+/// The backlog's rows, by id: status and the stamp of the last update. Read as pushed, like the rules
+/// and the hot-reloaded files: the main checkout is the author's workspace and may stand on another
+/// branch, or hold an edit nobody pushed.
 async function backlogOf(git) {
     // The coordinator records rows on its docs branch and pushes them between merges; until then that
-    // branch is the newer record. Without it, origin/develop.
-    const text = await git(['show', 'docs/coordinator:internal/backlog.md']).catch(() => git(['show', 'origin/develop:internal/backlog.md']))
+    // branch is the newer record. Without it, the line documents are pushed to: integration, then develop.
+    const text = await git(['show', 'docs/coordinator:internal/backlog.md'])
+        .catch(() => git(['show', 'origin/integration:internal/backlog.md']))
+        .catch(() => git(['show', 'origin/develop:internal/backlog.md']))
     const rows = new Map()
     const ownRows = new Set()
     for (const line of text.split('\n')) {
@@ -245,10 +247,15 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
                 developBehind: Number(await git(['rev-list', '--count', 'origin/develop..origin/integration'])),
             }
         }),
-        fshDev: await attempt(async () => ({
-            head: await git(['rev-parse', '--short=9', 'origin/fsh-dev']),
-            notOnDevelop: Number(await git(['rev-list', '--count', '--no-merges', 'origin/develop..origin/fsh-dev'])),
-        })),
+        // What the decision-maker pushed that has landed on neither shared line.
+        fshDev: await attempt(async () => {
+            const hasIntegration = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
+            const exclude = hasIntegration ? ['^origin/develop', '^origin/integration'] : ['^origin/develop']
+            return {
+                head: await git(['rev-parse', '--short=9', 'origin/fsh-dev']),
+                notLanded: Number(await git(['rev-list', '--count', '--no-merges', 'origin/fsh-dev', ...exclude])),
+            }
+        }),
         checkout: await attempt(async () => {
             const porcelain = await git(['status', '--porcelain'])
             return {

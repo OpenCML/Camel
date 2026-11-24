@@ -150,10 +150,10 @@ export const RULES = [
         cooldown: 60,
         check: ({ m }) => {
             const f = readable(m.fshDev) && m.fshDev
-            if (!f || f.notOnDevelop === 0) return null
+            if (!f || !f.notLanded) return null
             return {
                 key: f.head,
-                text: `fsh-dev 有 ${f.notOnDevelop} 笔不在 develop 上（${f.head}）：决策者的原则、计划或答复还没进施工树。整枝合 fsh-dev。`,
+                text: `fsh-dev 有 ${f.notLanded} 笔还没合进 integration 或 develop（${f.head}）：决策者的原则、计划或答复还没进施工树。整枝合 fsh-dev。`,
             }
         },
     },
