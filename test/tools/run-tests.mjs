@@ -25,6 +25,7 @@ import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mj
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
 import { normalizeReading, READING_NORMAL_VERSION } from './reading-normal.mjs'
 import { describeRefusals, formatRefusalSpec, matchesRefusal, parseRefusalSpec, refusals } from './reading-refusal.mjs'
+import { judgeTranscript, openTranscript, transcriptRefusal } from './transcript.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -1348,6 +1349,12 @@ function printPlanHeader(plan) {
     console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}${staleAllowedMark()}`)
 }
 
+/**
+ * One verdict, printed, and handed back as the exact text that was printed. The return value is
+ * what the transcript records (`test/tools/transcript.mjs`), so the console line and the recorded
+ * line are one string and cannot drift; it comes back with the colours stripped, because a
+ * transcript that carries escape sequences is a file only a terminal can count.
+ */
 function printStatusLine(status, name, metric = '') {
     const label = status === 'pass'
         ? `${COLORS.green}[PASS]${COLORS.reset}`
@@ -1359,11 +1366,18 @@ function printStatusLine(status, name, metric = '') {
     const left = `${label} ${name}`
     if (!metric) {
         console.log(left)
-        return
+        return plainStatusLine(left)
     }
     const width = 78
     const spaces = ' '.repeat(Math.max(1, width - left.length - metric.length))
-    console.log(`${left}${spaces}${metric}`)
+    const line = `${left}${spaces}${metric}`
+    console.log(line)
+    return plainStatusLine(line)
+}
+
+/** The console text without its colour, which is all a transcript holds. */
+function plainStatusLine(line) {
+    return line.replace(/\x1b\[[0-9;]*m/g, '')
 }
 
 function printDetailLines(lines) {
@@ -1619,8 +1633,42 @@ function listedName(plan, test) {
     return `${planId}/${test.name}`
 }
 
-function printRunSummary(summary) {
-    const total = summary.pass + summary.fail + summary.skip + summary.xfail
+/**
+ * The four verdicts, added: the number `[SUMMARY] total:` prints, and the number the transcript
+ * has to hold. One function so the line a reader reads and the number the check compares cannot be
+ * two different sums.
+ */
+function summaryTotal(summary) {
+    return summary.pass + summary.fail + summary.skip + summary.xfail
+}
+
+/**
+ * Wait until everything already written to `stream` has left the process.
+ *
+ * `process.stdout` is a pipe on a host run, and there the write is asynchronous: `process.exit`
+ * ends the process with whatever is still queued, and the tail of the run's own output goes with
+ * it. Measured 2026-11-24, three runs of one base: every one of them printed `total: 9159` and
+ * every one of them printed its 9159 case lines over the minutes it ran, while the `--list-known`
+ * block -- the only thing printed in one tight loop, immediately before the exit -- arrived with
+ * 9159 rows, 5265 rows and 1239 rows, the fewest from the slowest run. One empty write whose
+ * callback fires when the queue is empty is the whole fix; it costs a tick and no output.
+ */
+function flushStream(stream) {
+    return new Promise((resolve) => {
+        try {
+            stream.write('', () => resolve())
+        } catch {
+            resolve()
+        }
+    })
+}
+
+async function flushOutput() {
+    await Promise.all([flushStream(process.stdout), flushStream(process.stderr)])
+}
+
+function printRunSummary(summary, transcript) {
+    const total = summaryTotal(summary)
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
     const known = summary.xfail > 0 ? `, known failures: ${summary.xfail}` : ''
     // The two ways a failing run ends without an exit code, counted apart. They are printed only
@@ -1629,10 +1677,15 @@ function printRunSummary(summary) {
     const timedOut = summary.timedOut > 0 ? `, timed out: ${summary.timedOut}` : ''
     const crashed = summary.crashed > 0 ? `, killed by a signal: ${summary.crashed}` : ''
     console.log('')
-    console.log(
+    const line =
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-            `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`,
-    )
+        `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`
+    console.log(line)
+    // The same line, without its colour, closes the transcript: the file then states the total its
+    // own lines were counted under, so a reader of the file alone -- `transcript.mjs --check` -- can
+    // check it without being told the number by whoever fetched it, and a file cut before this line
+    // is refused for saying no total rather than read as a run of whatever it still holds.
+    if (transcript) transcript.summaryLine(plainStatusLine(line))
 }
 
 /**
@@ -4384,6 +4437,12 @@ async function executePlans(plans, options, sharedVars, logDir) {
     const stopLoopMonitor = startLoopMonitor()
     let printed = 0
     let printedPlan = null
+    // The record of the case lines this run prints, written beside the printer that prints them
+    // (test/tools/transcript.mjs). `main` reads it back at the end and refuses the run when the
+    // file does not hold what the summary counted: a line printed and a line counted are one act
+    // here, so a transcript that is short is output that did not arrive, and a run whose record is
+    // short measured nothing a gate can use.
+    const transcript = openTranscript(logDir)
 
     const printResult = (entry) => {
         const { plan, test, outcome } = entry
@@ -4416,7 +4475,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
         }
         if (outcome.status === 'skip') {
             summary.skip++
-            printStatusLine('skip', test.name)
+            transcript.caseLine(printStatusLine('skip', test.name))
             printDetailLines([outcome.reason])
             return
         }
@@ -4434,7 +4493,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
             if (outcome.result.timedOut) summary.timedOut++
             else if (outcome.result.signal) summary.crashed++
         }
-        printStatusLine(outcome.status, test.name, outcome.metric)
+        transcript.caseLine(printStatusLine(outcome.status, test.name, outcome.metric))
         // Who ends this red, printed beside the red. An owner that exists only in the plan file is a
         // promise the person reading the gate never sees, and the field would then be read by
         // nothing but the load-time check -- which is the shape this project already called worse
@@ -4694,7 +4753,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
         entry.timing.log_write_ms = roundMs(entry.logWriteMs || 0)
         timings.push(entry.timing)
     }
-    return { summary, wallMs: performance.now() - startedAt, timings, stalls, logWindows, startedAt }
+    return { summary, wallMs: performance.now() - startedAt, timings, stalls, logWindows, startedAt, transcript }
 }
 
 async function main() {
@@ -5073,7 +5132,7 @@ async function main() {
         )
     }
     printProvenance(options)
-    printRunSummary(outcome.summary)
+    printRunSummary(outcome.summary, outcome.transcript)
     // After the numbers, and not between them and the line that states what they belong to: a
     // `[provenance]` line sits immediately before `[SUMMARY]` by its own rule
     // (test/cases/tools/provenance.mjs pins it), and this is the one line that says whether the
@@ -5149,7 +5208,28 @@ async function main() {
     // `[provenance]` line unable to name the tree the reading belongs to, and what the wrapper
     // carries to the host on the next run. A tree that could not be read at all counts as the
     // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
-    const exitCode = nothingStarted ? 2 : outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    // `nothingStarted` keeps the 2 it always had, and the transcript verdict below can only raise
+    // this to 2: neither is 1, because neither is a measurement that came out wrong.
+    let exitCode = nothingStarted ? 2 : outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    // A third answer, and not a variant of the two above: whether this run's record holds the
+    // cases it counted. The count is the summary's own total and is not adjusted; the transcript is
+    // the file the run wrote, read back from disk (test/tools/transcript.mjs). A run whose record
+    // and count disagree did not measure a set of cases, so it is refused with exit 2 -- the code
+    // this runner already gives a run that could not be read (`preflightBuild`, the `--changed`
+    // refusal, `merge-readings.mjs`): 1 means "measured, and not right", and this is neither.
+    const transcriptVerdict = judgeTranscript(outcome.transcript, summaryTotal(outcome.summary))
+    if (!transcriptVerdict.ok) {
+        console.log('')
+        console.log(`${COLORS.red}[PLAN ERROR]${COLORS.reset} ${transcriptRefusal(transcriptVerdict)}`)
+        console.log(
+            `    ${relPath(transcriptVerdict.file)} is the record this run wrote: ${transcriptVerdict.lines} ` +
+                `case line(s) read back from it, ${transcriptVerdict.total} counted by the summary above. ` +
+                'The count was not changed to match the transcript, and the truncation was not switched ' +
+                'off: a run whose record is short of its count is not a red reading, it is one that cannot ' +
+                'be read at all (exit 2).'
+        )
+        exitCode = 2
+    }
     // The whole of `--list-known`'s output, emitted last: one `{name, verdict, reading}` per test.
     // Last because the reader is a program that takes the lines after this point, and every line
     // before it is the run a person reads -- the summary, the tree verdict, the roster, the
@@ -5158,6 +5238,9 @@ async function main() {
     if (options.listKnown) {
         for (const row of options.listKnownRows) console.log(JSON.stringify(row))
     }
+    // This block is the reason the flush exists: it is the one output printed as one burst at the
+    // very end, and on a host run the exit used to end the process with part of it still queued.
+    await flushOutput()
     process.exit(exitCode)
 }
 

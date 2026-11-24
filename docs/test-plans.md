@@ -391,16 +391,60 @@ the numbers this section reports.
 ## Runner Output
 
 A run writes two trees inside the checkout, and neither is part of it. `test/results/log/<timestamp>_<pid>/`
-is the run's record: `run.json` (what the run was), `summary.json`, and one directory per test holding
+is the run's record: `run.json` (what the run was), `summary.json`, `transcript.txt`, and one directory per test holding
 the captured `stdout.txt`, `stderr.txt`, `output.txt`, `meta.json` and any verification output.
 `tmp/test/run-<pid>` is the run's scratch root. Both are gitignored, so `git clean` does not remove
 them, and both grow per run rather than per test.
 
+`transcript.txt` is one line per verdict, plain text with no colour, in the order the run printed
+them: the record that does not pass through a pipe. It closes with the run's `[SUMMARY]` line, the
+text the console got minus the colour, so the file states the total its own lines were counted
+under and can be checked by whoever fetches it without also being told the number. The run counts a
+verdict and prints its line in one act (`printResult`), and at the end it reads the file back. When
+the transcript does not hold one case line per counted verdict, the run prints
+
+```
+[PLAN ERROR] the transcript holds N case lines but the summary counted M: this run cannot be read
+```
+
+and exits **2**: `[SUMMARY] total:` is never adjusted to make the two agree, and the line printing is
+never switched off. 1 is "measured, and not right"; 2 is "this run cannot be read", the code a run
+already gets when its install or its selection could not be read. The reading exists because a count
+and the lines it counted are two facts about one run, and on 2026-11-24 three runs of one base
+printed `total: 9159` and all 9159 of their case lines while the `--list-known` block, printed in the
+last loop immediately before `process.exit`, arrived with 9159, 5265 and 1239 rows. The block that
+was cut is the only one printed in a single burst immediately before the exit, the run that lost the
+most was the slowest, and the loss moved between two runs of one base: that is the shape of output
+still queued in a process that ends before its stream drains, so the runner now flushes standard
+output before it exits.
+
+The same rule is applied to a capture that has already left the runner, where a whole block can be
+lost and not only its tail: `node test/tools/transcript.mjs --check <capture.txt|->` counts the case
+lines in a captured text -- a console capture, or a run's own `transcript.txt` fetched on its own --
+and compares them with the `[SUMMARY] total:` line the text states,
+exiting 2 when they disagree and also when the capture states no total at all -- a capture with no
+summary is not a run of zero cases. The colours are stripped before counting, which is the whole
+difference between 6 rows and 0 rows on a complete capture. A run that was asked for
+`--list-known` carries a second per-case channel, its `{"name":...}` rows, and that channel is
+counted and reported on its own, because the two fail separately: the three runs of 2026-11-24 kept
+every case line and lost rows, so a single number would have said only that something disagreed.
+
+```
+$ node test/tools/transcript.mjs --check capture.txt
+[PLAN ERROR] the transcript holds 1239 case rows but the summary counted 9159: this run cannot be read (its case lines are whole, so the row block was cut)
+transcript: case lines: 9159 of 9159, rows: 1239 of 9159
+```
+
+The reading line is printed on success too (`-- readable`), and `rows: none in this capture` says the
+run was not asked for the channel rather than that the block was cut. Exit 0 means both channels
+agree with the total the capture states.
+
 The runner bounds the record itself, at the start of every run: **`test/results/log` keeps the newest
 20 run directories** (`RUN_DIRS_KEPT`, next to the policy it belongs to, in
 `test/tools/runner-output.mjs`). A failing run's log is read while the run is happening and just after
-it -- nothing in the repository reads an older run back, and no tool reads a run directory at all -- so
-what ages out is the record of a run nobody is looking at. Three directories are never removed,
+it -- nothing in the repository reads an older run back, and the only reader of a run directory is the
+run itself, which reads its own `transcript.txt` back before it exits -- so what ages out is the
+record of a run nobody is looking at. Three directories are never removed,
 whatever their age or their place in the order:
 
 - the directory of the run doing the pruning;
