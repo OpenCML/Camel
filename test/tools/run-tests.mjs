@@ -887,6 +887,42 @@ function positiveInteger(value, what) {
     return parsed
 }
 
+/**
+ * Every option this parser accepts, in one list, because the refusal for an unknown one names it.
+ *
+ * The parser below is the truth and this is its index: a word added there belongs here in the same
+ * commit. The list exists because "I do not know that word" is only half an answer -- the reader
+ * still has to open this file to learn what the tree *does* know, and the gap between those two
+ * readings is exactly "the caller is newer than the checkout it was pointed at", which is the one
+ * thing the run cannot guess. `targets` is listed because it is the argv position that is not an
+ * option: a plan file, a plan directory, or a short name (`smoke`, `feat`, `para`), and it is the
+ * only word that may omit the leading dashes (see the refusal below).
+ */
+const KNOWN_ARGV = [
+    'targets (a plan file, a plan directory, or a short name such as smoke)',
+    '--tier fast|slow|milestone|all|debug',
+    '--build release|debug|profile',
+    '--camel <install>',
+    '--jobs <n>',
+    '--update-golden',
+    '--compile-only',
+    '--list-known',
+    '--list-cases',
+    '--selection-cases[=<file>]',
+    '--selection-layer <plans>',
+    '--selection-empty',
+]
+
+/**
+ * A refusal about argv rather than about a run, marked so `main` prints it as the one line it is.
+ *
+ * An argv error is the caller's sentence, not a crash: it arrives before anything is measured, it
+ * has one cause, and a stack trace buries the only fact worth reading.
+ */
+function argvRefusal(message) {
+    return Object.assign(new Error(message), { argvRefusal: true })
+}
+
 function parseArgs(argv) {
     const envBuild = process.env.CAMEL_TEST_BUILD
     if (envBuild !== undefined && !Object.hasOwn(BUILDS, envBuild)) {
@@ -994,6 +1030,19 @@ function parseArgs(argv) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
             options.jobs = positiveInteger(arg.slice('--jobs='.length), '--jobs')
+        } else if (arg.startsWith('-')) {
+            // A word that starts with `-` is never a target. Reaching this point means the caller
+            // named an option this checkout does not have -- normally because the caller is newer
+            // than the tree it was pointed at -- and pushing it as a target made `walkPlans` stat
+            // `.../--list-cases` and throw ENOENT, which every consumer reads as "this selection
+            // could not be read". Measured 2026-11-24: a lane cut at 0beeecb9fb, before this tree
+            // had `--list-cases`, answered the host's `[RUNNER, ...targets, '--list-cases',
+            // '--tier', fast]` with a stack trace and exit 1, and `scripts/selection-cases.mjs`
+            // reported `the plan loader refused this selection (exit 1)` -- a version mismatch
+            // wearing the words of an empty selection.
+            throw argvRefusal(
+                `unknown option '${arg}': this runner does not know it (the caller is newer than this tree)`,
+            )
         } else {
             options.targets.push(path.resolve(process.cwd(), arg))
         }
@@ -4757,7 +4806,21 @@ async function executePlans(plans, options, sharedVars, logDir) {
 }
 
 async function main() {
-    const options = parseArgs(process.argv.slice(2))
+    let options
+    try {
+        options = parseArgs(process.argv.slice(2))
+    } catch (error) {
+        if (!error || !error.argvRefusal) throw error
+        // One line for the cause, then this tree's own argv and commit: those two are what a caller
+        // comparing versions needs, and they are printed here because the run never starts -- there
+        // is no summary, no provenance line and no log directory to look in.
+        console.error(`${COLORS.red}[ERROR]${COLORS.reset} ${error.message}`)
+        console.error(`[ARGV] this runner knows: ${KNOWN_ARGV.join('  ')}`)
+        const sha = gitOutput(['rev-parse', 'HEAD']) || 'unknown'
+        const when = gitOutput(['log', '-1', '--format=%cI']) || 'unknown'
+        console.error(`[ARGV] this tree is ${sha} (committed ${when}); a word this list lacks is newer than it`)
+        process.exit(1)
+    }
     if (options.listCases) {
         // A question about the plan tree, not a run: nothing executes, so no install is consulted.
         const status = listSelectedCases(options)

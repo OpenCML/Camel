@@ -198,7 +198,22 @@ function listCases(targets, layered, tier) {
     })
     if (run.error) die(`cannot start the plan loader (${run.error.message})`)
     if (run.status !== 0) {
-        const why = `${run.stdout || ''}${run.stderr || ''}`.trim().split(/\r?\n/).slice(-4).join(' / ')
+        const text = `${run.stdout || ''}${run.stderr || ''}`
+        // An unknown option is not a selection. The runner refuses one in a single line naming the
+        // word, and wrapping that in "refused this selection" turns a version mismatch into a
+        // statement about this change -- which is how a caller newer than the tree reads as "this
+        // change selects no plan". Measured 2026-11-24: a lane cut before `--list-cases` existed in
+        // the tree answered the host's listing with a stack trace, and this script reported it as a
+        // selection that could not be read.
+        const unknown = /^\[ERROR\] unknown option '([^']+)'/m.exec(text)
+        if (unknown) {
+            const tree = /^\[ARGV\] this tree is [^\n]*/m.exec(text)
+            die(
+                `this tree's runner does not know ${unknown[1]}: the tree is older than the caller, ` +
+                    `so nothing was selected -- this is not an empty selection${tree ? `\n${tree[0]}` : ''}`,
+            )
+        }
+        const why = text.trim().split(/\r?\n/).slice(-4).join(' / ')
         die(`the plan loader refused this selection (exit ${run.status}): ${why}`)
     }
     const rows = []

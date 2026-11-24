@@ -1,0 +1,55 @@
+id = "tools.argv"
+order = 918
+tier = "fast"
+tags = ["feat", "tools", "argv"]
+desc = "An option this tree does not know, a missing install and an empty selection are three different refusals: each prints its own sentence, and none of the three prints another's"
+
+# On 2026-11-24 the host called `test/tools/run-tests.mjs --list-cases` on a lane cut before that
+# option existed. The parser had no word for it, pushed it into `targets`, and `walkPlans` stat'ed
+# `.../--list-cases`: a stack trace and exit 1, which `scripts/selection-cases.mjs` reported as
+# `the plan loader refused this selection (exit 1)` and the gate as a selection that could not be
+# computed. The words were about a selection; the cause was a caller newer than the tree.
+#
+# The runner now refuses a word that starts with `-` instead of treating it as a target, prints the
+# argv it does know and the commit it is, and the consumer passes that through. These three cases
+# pin the three sentences against each other: each case asserts its own words and the absence of the
+# other two, so the check fails both when one goes missing and when two causes share one sentence
+# again. Exit codes are asserted as they already are (`1`, `2`, `2`): this lane moves no code the
+# gate reads.
+
+[[tests]]
+name = "argv.unknown"
+desc = "An option no tree has (`--list-cases-v0`, where a caller newer than the tree is the only way to send one) is refused by name, with the argv the tree does know and the commit it is, and the output carries neither the missing-install sentence nor the empty-selection one, nor 'refused this selection'."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/argv/argv.mjs"
+args = ["${case}", "--unknown"]
+expect_exit = 0
+expect_stdout_contains = ["PASS argv.unknown"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+# Three subprocesses at most, each exiting before it reads a plan.
+timeout_ms = 120000
+
+[[tests]]
+name = "argv.preflight"
+desc = "A valid argv and an install that is not there still says 'no Release binary at ...', and never 'unknown option': a missing build is not a caller from the future."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/argv/argv.mjs"
+args = ["${case}", "--preflight"]
+expect_exit = 0
+expect_stdout_contains = ["PASS argv.preflight"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "argv.empty"
+desc = "A deliberately empty selection still says that nothing was started and nothing was measured, and that the plan tree was not widened to fill it -- not 'unknown option', not 'no Release binary'."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/argv/argv.mjs"
+args = ["${case}", "--empty"]
+expect_exit = 0
+expect_stdout_contains = ["PASS argv.empty"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
