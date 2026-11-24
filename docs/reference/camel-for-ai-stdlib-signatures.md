@@ -818,17 +818,16 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 5 name(s)
+**`autodiff`** — import { ... } from autodiff — 4 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
 grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
 with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F>
-stop_gradient: (x: T) => T pure
 ```
 
-**`laws`** — import { ... } from laws — 14 name(s)
+**`laws`** — import { ... } from laws — 15 name(s)
 
 ```text
 add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
@@ -845,6 +844,7 @@ add_cotangent_c: (ct: T) => T when is_float::<T>()
 sub_cotangent_c: (ct: T) => T when is_float::<T>()
 mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+stop_gradient: (x: T) => T pure
 ```
 
 **`rulesets.jvp`** — import { ... } from rulesets.jvp — 14 name(s)

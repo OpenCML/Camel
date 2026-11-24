@@ -16,9 +16,15 @@
  *
  * The rules that attach these statements to a primitive live in the ruleset modules --
  * `rulesets.jvp` for the forward rules and `rulesets.transpose` for the transposes -- because a
- * transform reads those. What is here is arithmetic alone: every function below is a Camel body
- * over `is_float` types with no operator of its own, so a rule written anywhere in the tree can
- * name it, and the module outlives any one engine that uses it.
+ * transform reads those. What is here is arithmetic alone: every function but one below is a
+ * Camel body over `is_float` types with no operator of its own, so a rule written anywhere in the
+ * tree can name it, and the module outlives any one engine that uses it.
+ *
+ * The exception is `stop_gradient`, at the end of the file: a value no derivative flows through
+ * cannot be written as an arithmetic expression, so its body is a kernel (`stdlib/laws/`, module
+ * `laws`, operator `laws:stop_gradient`) and only its declaration is here. It is here rather than
+ * in the engine that used to hold it because a program calls it by name, and a name a program
+ * calls must not leave with the engine.
  */
 
 import { is_float } from types
@@ -142,3 +148,11 @@ export func mul_cotangent_c::<T>(x: T, ct: T) => T when is_float::<T>() {
 export func div_cotangent_c::<T>(x: T, c: T, ct: T) => T when is_float::<T>() {
     return -(ct * x / (c * c))
 }
+
+// ---- the one name a program calls through this module ----
+
+/// Gives its argument unchanged and cuts the gradient at this point: a value passed through
+/// `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
+/// argument's own type.
+/// @example stop_gradient(3.0)    // 3.0
+export func stop_gradient::<T>(x: T) => T pure

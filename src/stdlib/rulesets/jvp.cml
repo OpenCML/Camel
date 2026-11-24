@@ -19,8 +19,7 @@
  *
  */
 
-import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from laws
-import { stop_gradient } from autodiff
+import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_tangent } from laws
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the

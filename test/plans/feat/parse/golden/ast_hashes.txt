@@ -330,7 +330,7 @@ fca92e00131216c7 ok benchmarks/common/camel_bench.cml
 f2569e5864dd4e70 ok benchmarks/e13/l2x3_scalar_downstream_probe.cml
 58038f5eb266c5de ok benchmarks/e13/l2x_step_predicate_probe.cml
 fcd2b2c36e30a76c ok benchmarks/e14dyn/dyn_train_step.cml
-496ae6da505788b3 ok benchmarks/e15continual/lora_ce_step_lr.cml
+0d4ae65dd8a5a225 ok benchmarks/e15continual/lora_ce_step_lr.cml
 9a9ec8535eb0bc40 ok benchmarks/e17attr/micro.cml
 073ae8933493e4d3 ok benchmarks/finetune/native_train_mlp.cml
 76f5fd1f5dc35df4 ok benchmarks/finetune/native_train_transformer.cml
@@ -340,7 +340,7 @@ fcd2b2c36e30a76c ok benchmarks/e14dyn/dyn_train_step.cml
 7885914a74046f7b ok benchmarks/lenet_big/model.cml
 6ce7becc3316986a ok benchmarks/lora/e9_branch_probe.cml
 c7af815322531c80 ok benchmarks/lora/e9_branch_step.cml
-269ba151f2f656d0 ok benchmarks/lora/lora_mlp.cml
+bb566f8178eae63d ok benchmarks/lora/lora_mlp.cml
 0e73dc0ce1fc52da ok benchmarks/mlp/model.cml
 0e73dc0ce1fc52da ok benchmarks/mlp_big/model.cml
 0c1bd05739f972af ok benchmarks/parallel/cases/asian_mc.cml
@@ -510,7 +510,7 @@ f79ea67592f74be6 ok showcase/d4-mcts/search.cml
 efe0812d084c8e33 ok showcase/i2-diffusion-step/step_gpu.cml
 dd2ea83e194df789 ok showcase/s1-stream-fib/fib.cml
 fc2aed0ec1598cbd ok src/stdlib/array.cml
-efb4e7bb7fa978eb ok src/stdlib/autodiff.cml
+5a5825a1965452d6 ok src/stdlib/autodiff.cml
 ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 7962d89c131ca828 ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
@@ -519,7 +519,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 f915d61cc7f06dc8 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
-11cabe451e457a39 ok src/stdlib/laws.cml
+781c6adf9b64b7fe ok src/stdlib/laws.cml
 d07e8f7a68b8a5c8 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 4d51c5b1e4dba299 ok src/stdlib/onnx.cml
@@ -551,13 +551,13 @@ facd1562ced5e6f9 ok src/stdlib/time.cml
 5e59e8fe079b43b0 ok src/stdlib/tree.cml
 4488f00069fabe0f ok src/stdlib/types.cml
 0fa32807f11422c0 ok src/stdlib/vjp.cml
-874f1d031643224d ok src/stdlib/autodiff/signatures/autodiff.cml
+a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 483b0496470b41ad no src/stdlib/nn/signatures/nn.cml
-d5f23f6acf4a996f ok src/stdlib/rulesets/jvp.cml
+59278111055f43ed ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
-20be905531bb036b ok src/stdlib/rulesets/transpose.cml
+ed5922cc9e8909a1 ok src/stdlib/rulesets/transpose.cml
 a338d98395d2f704 ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 6f34daec70d7b4c4 ok src/stdlib/tiles/signatures/tiles.cml
@@ -1275,9 +1275,9 @@ faefb712f99a8197 ok test/cases/compile/native/array_sort_kernel_overlap.cml
 bb952b4ce14ecdc7 ok test/cases/compile/native/array_sort_type.cml
 72402b2cb5ccd4e4 ok test/cases/compile/native/array_sum_kernel_overlap.cml
 f05305489c29650e ok test/cases/compile/native/array_type.cml
-343cf0be567f8277 ok test/cases/compile/native/autodiff_arity.cml
-9d981b9578d2ea91 ok test/cases/compile/native/autodiff_declaration_import.cml
-a343ad447a945a2e ok test/cases/compile/native/autodiff_result_type.cml
+c7682e3ecb7f0d65 ok test/cases/compile/native/autodiff_arity.cml
+88dbb172a02d9872 ok test/cases/compile/native/autodiff_declaration_import.cml
+b2db4e9ebc68f61e ok test/cases/compile/native/autodiff_result_type.cml
 93c94163fea45f89 ok test/cases/compile/native/bytes_arity.cml
 2f2e5f08fda9f685 ok test/cases/compile/native/bytes_tag.cml
 c2182d6a73601266 ok test/cases/compile/native/bytes_type.cml
@@ -2038,8 +2038,8 @@ f7adbe386a83113e ok test/cases/compile/transforms/stated_mean_gradient.cml
 c01c715fe53339e4 ok test/cases/compile/transforms/stated_take_answered_by_the_engine.cml
 a14e514e3b5685e1 ok test/cases/compile/transforms/stated_take_extents_refused.cml
 cdef67204245a262 ok test/cases/compile/transforms/stated_take_gradient.cml
-d1f79a56d079e68f ok test/cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml
-ec90450c2d475695 ok test/cases/compile/transforms/stop_gradient_gradient_through_the_library.cml
+5f666751adacbba0 ok test/cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml
+367850f907283df4 ok test/cases/compile/transforms/stop_gradient_gradient_through_the_library.cml
 a925f1af87cc2ae7 ok test/cases/compile/transforms/struct_member_by_index.cml
 65da683a71952204 ok test/cases/compile/transforms/sum_axis_in_a_training_step.cml
 7099c6946aa99cdd ok test/cases/compile/transforms/sum_axis_lane_derivative.cml
@@ -3027,7 +3027,7 @@ a32f587fd1ca6e04 ok test/cases/modules/autodiff/has_aux_library.cml
 5e9637b49df11f1b ok test/cases/modules/autodiff/has_aux_vjp_named.cml
 3b38f94c5c8c4831 ok test/cases/modules/autodiff/has_aux_vjp_pair.cml
 d04c77a91fd10741 ok test/cases/modules/autodiff/jax_batching.cml
-ce651b43f714be6e ok test/cases/modules/autodiff/jax_derivatives.cml
+d43a6dc42e0cabb6 ok test/cases/modules/autodiff/jax_derivatives.cml
 04956a79ff30199d ok test/cases/modules/autodiff/jax_has_aux.cml
 1da6ada14aecbb69 ok test/cases/modules/autodiff/jax_vmap.cml
 692c1073d9c8873c ok test/cases/modules/autodiff/jax_vmap_tensor.cml
@@ -3068,7 +3068,7 @@ ce459148c098749a ok test/cases/modules/autodiff/reshape_adjoint_shape.cml
 aa92031fffe59587 ok test/cases/modules/autodiff/rules_angle_args_mean_transpose.cml
 172cf771be327f21 ok test/cases/modules/autodiff/rules_angle_args_reshape.cml
 a4d49e8d9031d855 ok test/cases/modules/autodiff/rules_angle_args_softmax.cml
-d8fb6698021ccc1b ok test/cases/modules/autodiff/scalar_grad.cml
+81ee21892e657852 ok test/cases/modules/autodiff/scalar_grad.cml
 89ce60cf82bc9b42 ok test/cases/modules/autodiff/second_order.cml
 5b8debc411953715 ok test/cases/modules/autodiff/second_order_array_add.cml
 653e47dab6fc2ed6 ok test/cases/modules/autodiff/second_order_array_append_init_blocked.cml
@@ -3294,7 +3294,7 @@ b6b3616d52b325e1 ok test/cases/modules/onnx/export_train_step_branch_scalar.cml
 ca18cc1121618ae2 ok test/cases/modules/onnx/export_train_step_conv.cml
 f3cc906c853646ad ok test/cases/modules/onnx/export_train_step_dynamic.cml
 7b0fa15e0cda3aff ok test/cases/modules/onnx/export_train_step_dynamic_mean.cml
-56eade17064f32f6 ok test/cases/modules/onnx/export_train_step_frozen.cml
+fb979532342617f0 ok test/cases/modules/onnx/export_train_step_frozen.cml
 80bcae8cae23cb3f ok test/cases/modules/onnx/export_train_step_vjp.cml
 ef14ff4c74269f5c ok test/cases/modules/onnx/export_tree_recursion.cml
 577f404b27129672 ok test/cases/modules/onnx/export_unclassified.cml

@@ -7809,18 +7809,15 @@ its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
 `lib/ckpt/ckpt.cml` and stays that, so the transform takes the other word and there is no second
 name for a reader to disambiguate.
 
-`stop_gradient` marks a value as a constant. The mathematics of the local rules -- the tangent
-and the cotangent of each primitive -- is not part of this module: it is `src/stdlib/laws.cml`
-(`laws`), where the library keeps one statement of it, because the rulesets read it and the
-rulesets outlive the engine that differentiates. What stays here is the declaration of
-`stop_gradient` itself: the kernel behind it is this module's (`autodiff:stop_gradient`), so
-the name belongs to the module a running program calls, and it leaves with that kernel, not
-with the tables that compile a rule. The rules themselves -- the declarations that attach a
-statement to a primitive -- live in the ruleset modules: `rulesets.jvp` for the forward rules
-and `rulesets.transpose` for the transposes. A tag gives a function's own rules
-(`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
-is read back by structure (`graph::rule_of`); a primitive's rules are the ruleset's, by the
-operator of their left side.
+What is left here is the engine: this module's four transforms are C++ (`src/stdlib/autodiff/`),
+and the derivative rules are the C++ compiler's. Everything a program can *write* has moved out
+of it -- `stop_gradient` with the mathematics of the rules, to `src/stdlib/laws.cml` (`laws`) --
+because a name a program calls must not leave with the engine that builds the graph. The rules
+themselves -- the declarations that attach a statement to a primitive -- live in the ruleset
+modules: `rulesets.jvp` for the forward rules and `rulesets.transpose` for the transposes. A tag
+gives a function's own rules (`#jvp(rule)` forward, `#transpose(rule)` for a linear function,
+`#vjp(rule)` the pullback) and is read back by structure (`graph::rule_of`); a primitive's rules
+are the ruleset's, by the operator of their left side.
 
 #### `grad`
 
@@ -7873,18 +7870,6 @@ the pair the function gives is returned whole, followed by the gradient --
 - Example (a fragment, not compiled): `let step = with_grad(loss, has_aux: true)`
 - Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 
-#### `stop_gradient`
-
-```camel
-stop_gradient: (x: T) => T pure
-```
-
-Gives its argument unchanged and cuts the gradient at this point: a value passed through
-`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
-argument's own type.
-
-- Example: `stop_gradient(3.0)` gives `3.0`
-
 <a id="laws"></a>
 
 ## `laws`: the mathematics a derivative rule is written from
@@ -7903,9 +7888,15 @@ the cotangent of `c` in `x - c` is `-ct`.
 
 The rules that attach these statements to a primitive live in the ruleset modules --
 `rulesets.jvp` for the forward rules and `rulesets.transpose` for the transposes -- because a
-transform reads those. What is here is arithmetic alone: every function below is a Camel body
-over `is_float` types with no operator of its own, so a rule written anywhere in the tree can
-name it, and the module outlives any one engine that uses it.
+transform reads those. What is here is arithmetic alone: every function but one below is a
+Camel body over `is_float` types with no operator of its own, so a rule written anywhere in the
+tree can name it, and the module outlives any one engine that uses it.
+
+The exception is `stop_gradient`, at the end of the file: a value no derivative flows through
+cannot be written as an arithmetic expression, so its body is a kernel (`stdlib/laws/`, module
+`laws`, operator `laws:stop_gradient`) and only its declaration is here. It is here rather than
+in the engine that used to hold it because a program calls it by name, and a name a program
+calls must not leave with the engine.
 
 ### The local rules of the scalar arithmetic
 
@@ -8097,6 +8088,21 @@ The cotangent of `c` in `x / c`: `-(ct * x / (c * c))`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_cotangent_c(6.0, 4.0, 2.0)` gives `-0.75`
+
+### The one name a program calls through this module
+
+#### `stop_gradient`
+
+```camel
+stop_gradient: (x: T) => T pure
+```
+
+Gives its argument unchanged and cuts the gradient at this point: a value passed through
+`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
+argument's own type.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `stop_gradient(3.0)` gives `3.0`
 
 <a id="rulesets.jvp"></a>
 

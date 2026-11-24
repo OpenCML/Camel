@@ -1,11 +1,11 @@
 /**
- * The result type of `autodiff:stop_gradient` is the declaration's type variable instantiated
+ * The result type of `laws:stop_gradient` is the declaration's type variable instantiated
  * with the argument's type, not a type the C++ resolver decides per call: binding a `float`
  * result to an `int` is refused with the value's type taken from the declaration (
  * step 10). With a type-variable parameter this is the type case the declaration can have.
  */
 
-import { stop_gradient } from autodiff
+import { stop_gradient } from laws
 
 func main() => int sync {
     let count: int = stop_gradient(1.0)
