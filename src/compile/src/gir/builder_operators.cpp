@@ -60,10 +60,11 @@ namespace camel::compile::gir {
 // take the first layer having it (visitDRefNode, "local > this module > imported > using >
 // built-in"); operatorOverloadsOf gathers every layer instead. The layers it reads are the
 // graph scopes of this module (local functions and the module's own), the module's generic
-// operator templates, and ProgramExports::importedOperatorOverloads (every import of a
-// module brings its operator overloads, as for a C++ module's operators). Nothing else of the
-// name lookup is involved, so the lookup can change around it as long as those three stay
-// reachable.
+// operator templates, ProgramExports::importedOperatorOverloads (every import of a module
+// brings its operator overloads, as for a C++ module's operators), and the prelude's own
+// declarations of the name (`preludeOperatorOverloadsOf`: the ambient layer, which no import
+// names and which is not a module of this program). Nothing else of the name lookup is
+// involved, so the lookup can change around it as long as those four stay reachable.
 
 Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group) {
     OperatorOverloads set;
@@ -104,6 +105,22 @@ Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group
         if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
             set.templates.push_back(tmpl);
             set.moduleOf[tmpl.get()] = imported.moduleOf.at(tmpl.get());
+        }
+    }
+    // The prelude's own bodies of the name are overloads of the same set: the ambient layer is
+    // the one a name needs no import for (design principles 10.2, layer 5), so a body it declares
+    // under the name is a candidate of the call like one this module declares or an import
+    // brings. Without this the set is the group's rules and this program's functions, and a call
+    // only the prelude's body takes -- `(0 .. n)->map<f>`, the prelude's `map` over a range --
+    // is an ordinary no-match even though the body is in the program.
+    const OperatorOverloads &prelude = preludeOperatorOverloadsOf(group);
+    for (const auto &graph : prelude.graphs) {
+        addGraph(graph, prelude.moduleOf.at(graph.get()));
+    }
+    for (const auto &tmpl : prelude.templates) {
+        if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+            set.templates.push_back(tmpl);
+            set.moduleOf[tmpl.get()] = prelude.moduleOf.at(tmpl.get());
         }
     }
     set.ops = imported.ops;
@@ -241,6 +258,54 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
     }
     set.ops = OperatorGroup::merged(group, std::move(resolvers));
     return importedOperators_.emplace(key, std::move(set)).first->second;
+}
+
+const Builder::OperatorOverloads &Builder::preludeOperatorOverloadsOf(const std::string &group) {
+    // The prelude is the ambient layer: what it exports is reachable without an import (design
+    // principles 10.2, layer 5), and it is not a module of this program, so the import sets do not
+    // bring it. What it declares under `group` with a body is an overload of the name's operator
+    // group like one this module declares or an import brings, and this is the set
+    // `operatorOverloadsOf` merges. A declaration of the name without a body is a rule of a group
+    // and arrives through the group itself, so only the forms with a body are collected here.
+    const auto known = preludeOperators_.find(group);
+    if (known != preludeOperators_.end()) {
+        return known->second;
+    }
+    OperatorOverloads set;
+    const module_ptr_t prelude = context_ != nullptr ? context_->preludeModule() : nullptr;
+    if (prelude != nullptr && module_ != nullptr && exports_ != nullptr &&
+        prelude.get() != module_.get()) {
+        // Inside the prelude its names are its own, layer 2: a call there is resolved by the
+        // module's declarations alone, and the builder of that module does not read this.
+        const std::string name = prelude->name();
+        for (const auto &overload : exports_->exportedOperatorOverloads(*prelude, group)) {
+            const entity &ent = overload.overloads;
+            if (camel::core::module::detail::EntityAccess::isGraphSet(ent)) {
+                for (const auto &graph :
+                     *asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(ent))) {
+                    if (std::ranges::find(set.graphs, graph) == set.graphs.end()) {
+                        set.graphs.push_back(graph);
+                    }
+                    std::string &origin = set.moduleOf[graph.get()];
+                    if (origin.empty()) {
+                        origin = name;
+                    }
+                }
+            }
+            if (camel::core::module::detail::EntityAccess::isGenericTemplate(ent)) {
+                for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(ent)) {
+                    if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+                        set.templates.push_back(tmpl);
+                    }
+                    std::string &origin = set.moduleOf[tmpl.get()];
+                    if (origin.empty()) {
+                        origin = name;
+                    }
+                }
+            }
+        }
+    }
+    return preludeOperators_.emplace(group, std::move(set)).first->second;
 }
 
 // ---- An operator of the module that declares the operand's type (design principles 5.7) ----

@@ -965,8 +965,28 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         GUARD(
             entity.has_value() && entity->isOperGroup(),
             "A built-in operator the compiler names does not exist: " + plain);
+        // The rules of the group are the declarations of the built-in module without a body; the
+        // declarations of it with a body are candidates of the same call. `map` is both: its group
+        // holds the array rules, and the prelude declares `map` over a `Range` with a body, so a
+        // comprehension over a range takes this body. What the name means where the comprehension
+        // is written -- this module's `map`, an import's -- is still not read: the compiler's name
+        // is the built-in module's alone.
+        OperatorOverloads set;
+        set.ops                             = entity->operGroup();
+        const OperatorOverloads &builtinBodies = preludeOperatorOverloadsOf(plain);
+        for (const auto &graph : builtinBodies.graphs) {
+            set.graphs.push_back(graph);
+            set.moduleOf[graph.get()] = builtinBodies.moduleOf.at(graph.get());
+        }
+        for (const auto &tmpl : builtinBodies.templates) {
+            set.templates.push_back(tmpl);
+            set.moduleOf[tmpl.get()] = builtinBodies.moduleOf.at(tmpl.get());
+        }
         node_handle_t drefNode{currGraph_->addDrefNode(
-            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{entity->operGroup()})};
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{set.ops})};
+        if (!set.graphs.empty() || !set.templates.empty()) {
+            operatorOverloads_[drefNode] = std::move(set);
+        }
         registerNodeOrigin(context_, drefNode, gct, "gir.dref");
         LEAVE("DREF");
         return drefNode;

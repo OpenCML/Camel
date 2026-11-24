@@ -3586,6 +3586,12 @@ class Builder {
     /// imported generic function is built).
     const OperatorOverloads &importedOperatorOverloadsOf(const std::string &group);
     std::map<std::pair<const void *, std::string>, OperatorOverloads> importedOperators_;
+    /// The overloads of `group` the prelude declares with a body
+    /// (ProgramExports::exportedOperatorOverloads of the ambient layer): the layer a name needs
+    /// no import for, and the one the import sets do not bring. Computed once per operator: the
+    /// prelude does not change while a program is built.
+    const OperatorOverloads &preludeOperatorOverloadsOf(const std::string &group);
+    std::map<std::string, OperatorOverloads> preludeOperators_;
     /// The DREF for a use of the operator `group` (visitDRefNode).
     node_handle_t operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct);
     /// The program's overload a call of an operator takes (an instance for a generic one), or
