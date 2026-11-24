@@ -1650,6 +1650,52 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "constant_conversion_folds.the_node_is_there_before_the_fold"
+desc = "Before any pass runs, the conversion of a constant in fold_cast.cml is a node the view prints with the label CAST -- the reading that makes the next test's zero mean 'folded' rather than 'the label went away'. It pins what the model says the node is: a call of `:op/cast` whose result type is the type the source wrote."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_cast.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
+assert(count('CAST') > 0, `the conversion of a constant is not a node the view prints: ${count('CAST')} CAST nodes, so the zero after folding would mean nothing`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_conversion_folds.the_node_is_gone_and_the_value_is_kept"
+desc = "A constant conversion the compiler may compute is computed: after std::opt the view prints no CAST node at all and the expression over the converted constants is its value, 31.5. Two readings, because either one alone passes for the wrong reason: the node count alone passes when the program is never folded but nothing is reported, and the value alone passes when the conversion is folded to the wrong number. The node that must stay is the effect, and it does."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_cast.cml"
+args = ["${case}", "std::opt", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
+assert(count('CAST') === 0, `a conversion of a constant was not folded: ${count('CAST')} CAST nodes left`)
+assert(out.includes('label="31.5"'), 'the value the folded constants make is 31.5 and the view prints no such node')
+assert(count(':io/println') >= 1, 'effects must be kept')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_conversion_folds.the_program_prints_that_value"
+desc = "The third reading of the same fact, at the other end: the folded program prints 31.5 when it runs, so the node count and the value the view prints are the value the program has. A fold that removed the conversion and kept a wrong constant would print something else here."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_cast.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["31.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
 name = "fold_struct_cast.in_return_position"
 desc = "A Safe conversion of a constant struct in return position is folded after std::opt: the function graph's returned value is also its exit and output value, and folding it moves those anchors to the constant (design principles 5.1, 5.2: the conversion only names the type the value is used as and moves nothing). Folding used to treat the graph's returned value as a pinned anchor, so `mk` kept a CAST over its folded constant, and every inlining of `mk` copied the unfolded conversion. The final graph must hold no CAST, and the folded constant must keep the declared type P."
 kind = "behavior"
