@@ -214,6 +214,14 @@ try {
     Remove-Item -LiteralPath $refRepo -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# The batch writes the seat's settings file into every tree it measures, and the gate reads it there.
+# The two tools therefore share one schema, and a key the batch writes is a key the gate must know --
+# the first end-to-end run of 2026-11-24 stopped with `has an unknown key 'scratchRoot'` as the only
+# line in its baseline transcript, and an empty transcript reads as "the tree is fine" to anyone in a
+# hurry.
+$gateConfig = Join-Path $PSScriptRoot 'camel-gate-config.ps1'
+Check 'the gate knows the batch''s own settings key' (@(Select-String -LiteralPath $gateConfig -Pattern '^\s+scratchRoot\s+=').Count -eq 1) 'camel-gate-config.ps1 does not list scratchRoot'
+
 Write-Host ''
 Write-Host "$checks checks, $failed failed"
 if ($failed -gt 0) { exit 1 }
