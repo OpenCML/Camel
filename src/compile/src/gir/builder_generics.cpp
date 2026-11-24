@@ -1914,6 +1914,45 @@ compile_graph_ptr_t Builder::instantiateForCallBinding(
     return instantiateGeneric(tmpl, bindings, extents, constas, call);
 }
 
+namespace {
+/// Whether a declaration's written parameter takes an argument of this type, once the arguments
+/// have solved the variables the declaration writes (`bindings`). A parameter that still names a
+/// variable the arguments did not solve says nothing here: it is the call's to say, and it is
+/// taken as fitting. A function position is compared on its parameters -- the declaration states
+/// which function it expects -- and on its result only when both are written, because the result
+/// of an element function is what the call builds, not what it was given.
+bool writtenParameterTakes(Type *written, Type *actual, const type_bindings_t &bindings) {
+    if (written == nullptr || actual == nullptr) {
+        return false;
+    }
+    Type *solved = substituteTypeVars(written, bindings);
+    if (containsTypeVar(solved)) {
+        return true;
+    }
+    if (solved->code() == TypeCode::Function && actual->code() == TypeCode::Function) {
+        auto *want = static_cast<FunctionType *>(solved);
+        auto *have = static_cast<FunctionType *>(actual);
+        if (want->withTypesCount() != have->withTypesCount() ||
+            want->normTypesCount() != have->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->withTypesCount(); ++i) {
+            if (!writtenParameterTakes(want->withTypeAt(i), have->withTypeAt(i), bindings)) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < want->normTypesCount(); ++i) {
+            if (!writtenParameterTakes(want->normTypeAt(i), have->normTypeAt(i), bindings)) {
+                return false;
+            }
+        }
+        return !want->hasExitType() || !have->hasExitType() ||
+               writtenParameterTakes(want->exitType(), have->exitType(), bindings);
+    }
+    return solved->assignableFrom(actual);
+}
+} // namespace
+
 void Builder::settleGenericOperatorArguments(
     const oper_group_ptr_t &ops, const OperatorOverloads *overloads,
     std::vector<Argument> &withInputs, std::vector<Argument> &normInputs, type_vec_t &withTypes,
@@ -2010,6 +2049,12 @@ void Builder::settleGenericOperatorArguments(
                 signature->normTypesCount() != normTypes.size()) {
                 return false;
             }
+            // The variables a declaration writes are solved by the arguments, and what it writes
+            // without one must be the argument's own type. Unifying alone answers only the first
+            // half: `unifyTypeVars` has nothing to walk into once a parameter names no variable,
+            // so it reports no disagreement for a `Range` parameter asked about an `int[]` (and
+            // for a function parameter whose written parameter is not the argument's), and every
+            // declaration of the name would then "take" every call.
             type_bindings_t bindings;
             for (size_t i = 0; i < withTypes.size(); ++i) {
                 if (!unifyTypeVars(signature->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
@@ -2018,6 +2063,18 @@ void Builder::settleGenericOperatorArguments(
             }
             for (size_t i = 0; i < normTypes.size(); ++i) {
                 if (!unifyTypeVars(signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < withTypes.size(); ++i) {
+                if (!writtenParameterTakes(
+                        signature->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < normTypes.size(); ++i) {
+                if (!writtenParameterTakes(
+                        signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
                     return false;
                 }
             }

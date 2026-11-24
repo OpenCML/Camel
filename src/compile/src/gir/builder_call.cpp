@@ -978,10 +978,16 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
     // the operand's type, so a module can offer its type and its operators together. The types
     // of the instance are concrete now, and the set is built from them, so an overload found
     // both there and through an import of this module stays one candidate.
+    oper_group_ptr_t calleeGroup;
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             const auto &ops = std::get<oper_group_ptr_t>(drefTarget);
+            // The rules of that group are half of the name's overload set below (design
+            // principles 6.4), so the set is asked with them: the same question the group's own
+            // path asks, asked once, and a name gathered as a set beside a group is never judged
+            // by its bodies alone.
+            calleeGroup = ops;
             addDeclaringModuleOverloads(
                 targetNode,
                 ops->name(),
@@ -1050,7 +1056,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         // set first would judge the call on a type that does not exist yet. An argument that
         // was settled already is not waiting, so this settles each one once.
         settleGenericOperatorArguments(
-            nullptr,
+            calleeGroup,
             &overloads->second,
             withInputs,
             normInputs,
@@ -1522,18 +1528,6 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 withInputTypes,
                 normInputTypes,
                 gct);
-            // A name the operator did not settle has no value.
-            for (auto *inputs : {&withInputs, &normInputs}) {
-                for (Argument &input : *inputs) {
-                    if (nodeIsKind(input.node, runtime::GCNodeKind::Dref)) {
-                        rejectNameWithoutValue(
-                            input.node,
-                            input.expr->type() == GCT::NodeKind::DREF ? input.expr->name()
-                                                                      : std::string("the name"),
-                            input.expr);
-                    }
-                }
-            }
             // Design principles 5.1: a literal operand takes the type of the other operand
             // (`x * 2 + 1` with `x: f32`). Done before the resolvers see the arguments,
             // because a resolver matches types exactly. Only a binary arithmetic or
@@ -1627,6 +1621,22 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 }
             }
             if (!res.has_value()) {
+                // A name the call did not settle has no value: `reduce<add, 0>` over an array is a
+                // name the operator turns into the function its parameter names, and a name whose
+                // parameter does not name a function is refused here, at the use. Asking before
+                // the rules run would refuse a name the rules are about to settle (`add` keeps its
+                // signature in the operator table, not in the name's own set).
+                for (auto *inputs : {&withInputs, &normInputs}) {
+                    for (Argument &input : *inputs) {
+                        if (nodeIsKind(input.node, runtime::GCNodeKind::Dref)) {
+                            rejectNameWithoutValue(
+                                input.node,
+                                input.expr->type() == GCT::NodeKind::DREF ? input.expr->name()
+                                                                          : std::string("the name"),
+                                input.expr);
+                        }
+                    }
+                }
                 // A literal operand takes the other operand's type in a named operator call too:
                 // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is
                 // (design principles 5.1). Tried only where the first resolution failed, so an
