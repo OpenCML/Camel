@@ -48,7 +48,7 @@ message; an urgent reminder stays until clicked.
 2. Machine-local values in `%USERPROFILE%\.camel-oversight\config.json`:
    `{"repo": "D:\\Projects\\Camel", "buildHost": "<ssh target>"}`; `repo` turns the watch on, `buildHost`
    (key-based ssh) adds the build host's load. Optional: `logFile`, `stateDir`, `watchSeconds`, `limits`,
-   `liveDir`, `syncScript`, `syncRef`.
+   `liveDir`; `syncScript` and `syncRef` only to test a change to the sync script (left unset, both come from the pushed line the plugin reads, never from a checkout's working tree).
 3. Keep the web server on loopback and publish it on the tailnet with `tailscale serve --bg <port>`. The
    routes are outside the GUI's login; the tailnet is the gate.
 4. What needs a DSH restart and what does not: `rules.js` (the rules, their texts and default limits) and `measure.js` (the readings) are reloaded at the next beat after they change on `origin/integration` (or `origin/develop` where there is no integration branch: the pushed, gated content -- never the working tree, which holds a merge in progress), and a file that fails to load leaves the version in use in place (reported as a `hot-reload` event and under `hotLoaded` in `/oversee/state`); the limits in `~/.camel-oversight/config.json` and `internal/collab/rules.md` (also read from that line) are read afresh too. `client.js` (the band) is a browser module and needs a page refresh, and a session sees new tools only once it starts afresh; `index.js` (routes, tools, the session wiring) is replaced by the reload route below.
