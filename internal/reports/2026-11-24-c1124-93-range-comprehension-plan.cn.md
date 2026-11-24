@@ -187,7 +187,11 @@ composition.cml:14:13  '..' takes two integers and '<>' takes two functions;
                        the left operand is 'a value with no type yet' ...
 ```
 
-**收窄再试也无效**：把条件改成「只有 prelude 为该名字声明了体时才允许无组」后，同一批仍然红 —— 说明 `..`、`<>` 这些**符号名**也被同一条路接住了，第二个条件当初挡的不只是箭头形式的函数名，**还挡着算子符号**。
+**收窄再试也无效**：把条件改成「只有 prelude 为该名字声明了体时才允许无组」后，同一批仍然红。
+
+**当时的解释是错的，这里改正**：不是「`..`、`<>` 这些符号名被同一条路接住」——`src/stdlib` 里**没有** `func operator ..` / `func operator <>`，它们是内建算子，根本不走 `mergedOverloadsNamed`。真正的受害者是 `composition.cml:14` 的 **`inc <> dbl`** 里的 `inc`：**本模块自己声明的普通函数**，它有 `graphs` 而 `ops == nullptr`，于是被我的改动变成了一份「没有组的集合」，一个**还没有类型的值**；`..` 与 `<>` 只是把这份无类型的值当操作数时报出来的名字。
+
+⇒ 所以 `set.ops == nullptr` 今天保护的是**每一个普通函数名**，不是符号名。⇒ 一条诊断里出现的名字，不一定是被判错的那个名字。
 
 **于是回退**（`git checkout --` 三个文件 + 用例），重建后 `stream` **158/159**，唯一红是既有的 `interval_loop_not_materialised`。树回到 `334a3988cc`，未提交任何半成品。
 
