@@ -993,8 +993,8 @@ The directory `snap` then contains `00_input.rgir.dot`, `01_std.opt.inline.rgir.
 
 A few rules:
 
-- Passes run in the order they are written. The passes that execute the graph (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`) and the passes that transpile it (`std::rgir`, `onnx::export`) consume the graph, and passes written after them do not run.
-- If you write no pass at all, or none of the passes you write consumes the graph, the default `std::nvm` runs at the end.
+- Passes run in the order they are written. The passes that execute the program (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`) answer with the residual graph or an empty one, and passes written after one that answered with an empty graph do not run. The passes that print or export the graph (`std::rgir`, `onnx::export`) hand it on, so what follows them still runs; `std::nop` ends a pipeline without executing.
+- If you write no pass at all, or the graph is still there after the passes you write, the default `std::nvm` runs at the end. Write `std::nop` when you want the graph printed and the program not run.
 - The language does not restrict the order of passes, and the order can affect the result: passes change the graph and can have side effects. The optimisation passes of the standard library aim not to change the result of the program; this is ensured by tests, and is not a guarantee at the level of the language.
 
 ## 15. Tensors and exporting a model

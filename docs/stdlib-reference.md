@@ -738,9 +738,10 @@ three numbers that name it down, `to_array` is the one conversion from it to the
 names, and `to_range` is the constructor the interval `a..b` itself is built with (with a step
 of 1).
 
-These names are written by a program only after `import { ... } from prelude`: the prelude's
-types and its functions that are not operators are not brought along unasked. `to_range` is an
-operator, so it is ambient like the rest of them, and the compiler writes its name for `a..b`.
+These names are written without an `import`: the prelude is the built-in module's declaration
+file, and what it exports comes along with the built-in rules it declares (design principles
+10.2, the last layer) -- the types with the functions. `to_range` is an operator as well, so the
+compiler writes its name for `a..b` like any other operator's.
 
 #### `to_range`
 
