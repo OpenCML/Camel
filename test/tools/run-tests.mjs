@@ -1635,7 +1635,7 @@ async function flushOutput() {
     await Promise.all([flushStream(process.stdout), flushStream(process.stderr)])
 }
 
-function printRunSummary(summary) {
+function printRunSummary(summary, transcript) {
     const total = summaryTotal(summary)
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
     const known = summary.xfail > 0 ? `, known failures: ${summary.xfail}` : ''
@@ -1645,10 +1645,15 @@ function printRunSummary(summary) {
     const timedOut = summary.timedOut > 0 ? `, timed out: ${summary.timedOut}` : ''
     const crashed = summary.crashed > 0 ? `, killed by a signal: ${summary.crashed}` : ''
     console.log('')
-    console.log(
+    const line =
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-            `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`,
-    )
+        `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`
+    console.log(line)
+    // The same line, without its colour, closes the transcript: the file then states the total its
+    // own lines were counted under, so a reader of the file alone -- `transcript.mjs --check` -- can
+    // check it without being told the number by whoever fetched it, and a file cut before this line
+    // is refused for saying no total rather than read as a run of whatever it still holds.
+    if (transcript) transcript.summaryLine(plainStatusLine(line))
 }
 
 /**
@@ -4724,7 +4729,7 @@ async function main() {
     )
 
     printProvenance(options)
-    printRunSummary(outcome.summary)
+    printRunSummary(outcome.summary, outcome.transcript)
     // After the numbers, and not between them and the line that states what they belong to: a
     // `[provenance]` line sits immediately before `[SUMMARY]` by its own rule
     // (test/cases/tools/provenance.mjs pins it), and this is the one line that says whether the

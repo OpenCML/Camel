@@ -397,9 +397,11 @@ the captured `stdout.txt`, `stderr.txt`, `output.txt`, `meta.json` and any verif
 them, and both grow per run rather than per test.
 
 `transcript.txt` is one line per verdict, plain text with no colour, in the order the run printed
-them: the record that does not pass through a pipe. The run counts a verdict and prints its line in
-one act (`printResult`), and at the end it reads the file back. When the transcript does not hold one
-case line per counted verdict, the run prints
+them: the record that does not pass through a pipe. It closes with the run's `[SUMMARY]` line, the
+text the console got minus the colour, so the file states the total its own lines were counted
+under and can be checked by whoever fetches it without also being told the number. The run counts a
+verdict and prints its line in one act (`printResult`), and at the end it reads the file back. When
+the transcript does not hold one case line per counted verdict, the run prints
 
 ```
 [PLAN ERROR] the transcript holds N case lines but the summary counted M: this run cannot be read
@@ -418,7 +420,8 @@ output before it exits.
 
 The same rule is applied to a capture that has already left the runner, where a whole block can be
 lost and not only its tail: `node test/tools/transcript.mjs --check <capture.txt|->` counts the case
-lines in a captured text and compares them with the `[SUMMARY] total:` line the capture states,
+lines in a captured text -- a console capture, or a run's own `transcript.txt` fetched on its own --
+and compares them with the `[SUMMARY] total:` line the text states,
 exiting 2 when they disagree and also when the capture states no total at all -- a capture with no
 summary is not a run of zero cases. The colours are stripped before counting, which is the whole
 difference between 6 rows and 0 rows on a complete capture. A run that was asked for

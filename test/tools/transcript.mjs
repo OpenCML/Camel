@@ -15,14 +15,15 @@
  * a tail still queued in the process when the process ends.
  *
  * Two readings, one rule. The runner records every case line here as it prints it, so a run leaves
- * a record that does not pass through a pipe; at the end of the run it reads that record back and
- * refuses to be read when the file does not hold what the summary counted. The same rule then
- * applies to text that was *retrieved* -- a capture, a redirection, a pipeline -- because the loss
- * can happen after the process has decided it was fine: `--check` reads such a text and refuses a
- * capture whose case lines and `[SUMMARY]` line disagree. A count is never adjusted to agree with
- * the record, and the record is never written from the count: the two are taken from two different
- * places on purpose, because a check that compares a number with itself reports agreement whatever
- * happened.
+ * a record that does not pass through a pipe, and closes it with the `[SUMMARY]` line it printed --
+ * the file states the total its own lines were counted under. At the end of the run the runner reads
+ * that record back and refuses to be read when the file does not hold what the summary counted. The
+ * same rule then applies to text that was *retrieved* -- a capture, a redirection, a pipeline --
+ * because the loss can happen after the process has decided it was fine: `--check` reads such a
+ * text, including a `transcript.txt` fetched on its own, and refuses a capture whose case lines and
+ * `[SUMMARY]` line disagree. A count is never adjusted to agree with the record, and the record is
+ * never written from the count: the two are taken from two different places on purpose, because a
+ * check that compares a number with itself reports agreement whatever happened.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -87,6 +88,21 @@ export function openTranscript(dir) {
                 fs.closeSync(fd)
             } catch {
                 /* a descriptor already gone is not a reading of the record */
+            }
+        },
+        /**
+         * The run's summary line, as printed, closing the record: the file then states the total its
+         * own lines were counted under, so `--check` can read the artifact the run wrote without
+         * being told the number by whoever fetched it. Not a case line, so it does not change what
+         * the judge counts.
+         */
+        summaryLine(text) {
+            try {
+                fs.writeSync(fd, text.endsWith('\n') ? text : `${text}\n`)
+            } catch (error) {
+                if (failure === null) {
+                    failure = `${(error && (error.code || error.message)) || String(error)}`
+                }
             }
         },
         recorded: () => recorded,
