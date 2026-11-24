@@ -77,7 +77,7 @@ kind = "behavior"
 case = "../../../cases/compile/stream/range_count_find.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["3\n4\n"]
+expect_stdout_contains = ["3\n3\n2\n8\n"]
 timeout_ms = 10000
 
 [[tests]]

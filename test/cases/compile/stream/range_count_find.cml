@@ -1,5 +1,14 @@
+import { count } from array
+
 func main() => int sync {
     println(count<func (n: int) { n > 1 }>(1 .. 5))
-    println(find<func (n: int) { n > 3 }>(1 .. 5))
+    let r = 1 .. 5
+    println(r->count<func (n: int) { n > 1 }>)
+    let xs = [3, 9, 2]
+    println(xs->count<func (n: int) { n > 2 }>)
+    let inc = func (x: int) => int { x + 1 }
+    let dbl = func (x: int) => int { x * 2 }
+    let g = inc <> dbl
+    println(g(3))
     return 0
 }

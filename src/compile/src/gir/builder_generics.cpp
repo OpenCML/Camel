@@ -1435,6 +1435,41 @@ compile_graph_ptr_t Builder::instantiateForCall(
     const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call, Type *expectedResult) {
+    try {
+        return instantiateForCallBinding(
+            tmpl, withInputs, normInputs, withTypes, normTypes, call, expectedResult);
+    } catch (const GenericCallRejected &rejected) {
+        // The name's own declaration is one candidate, and the call is not an instance of it: a
+        // name of a module is declared over the one type its module writes (`count` over an
+        // array), and a call over another type is no instance of that text even when the name has
+        // a body the call fits (the prelude's, over a range). The retry asks the name's gathered
+        // bodies once -- the same set every other form of the name asks -- and reports the
+        // refusal only when none of them accepts the call.
+        OperatorOverloads collected = preludeOperatorOverloadsOf(rejected.name);
+        if (!collected.graphs.empty() || !collected.templates.empty()) {
+            if (compile_graph_ptr_t chosen = chooseOperatorOverload(
+                    collected, withInputs, normInputs, withTypes, normTypes, call,
+                    [](FunctionType *, bool) { return true; })) {
+                CAMEL_LOG_DEBUG_S(
+                    "GIR Builder",
+                    "The declaration of '{}' does not take this call; the name's collected body "
+                    "was used",
+                    rejected.name);
+                return chosen;
+            }
+        }
+        diags_->of(SemanticDiag::GenericArgumentsMismatch)
+            .atOrigin(rejected.call->origin())
+            .commit(
+                rejected.name, rejected.arguments, rejected.why, rejected.signature);
+        throw BuildAbortException();
+    }
+}
+
+compile_graph_ptr_t Builder::instantiateForCallBinding(
+    const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
+    const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
     // A `constas n: T` parameter is bound by an argument written at its position, in the angle
     // brackets or the parentheses: a compile-time constant, not a runtime one. It selects the
@@ -1484,10 +1519,8 @@ compile_graph_ptr_t Builder::instantiateForCall(
                                        typesText(normTypes, withCount));
     };
     const auto reject = [&](const std::string &why) {
-        diags_->of(SemanticDiag::GenericArgumentsMismatch)
-            .atOrigin(call->origin())
-            .commit(tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString());
-        throw BuildAbortException();
+        throw GenericCallRejected{
+            call, tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString()};
     };
     if (declaredWithCount != withTypes.size()) {
         // Every argument written in the parentheses (`take(xs, 2)`): say which parameters

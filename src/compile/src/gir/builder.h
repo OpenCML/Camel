@@ -1623,6 +1623,24 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
+    /// A generic call the name's own declaration does not take: the call, the name, the arguments
+    /// as a report writes them, why the declaration refused them, and the signature it refused
+    /// them by. `instantiateForCall` retries with the name's other bodies before it reports this,
+    /// and reports it only when none of them accepts the call.
+    struct GenericCallRejected {
+        GCT::node_ptr_t call;
+        std::string name;
+        std::string arguments;
+        std::string why;
+        std::string signature;
+    };
+    /// The binding itself: the one declaration of the name against the arguments of the call,
+    /// throwing `GenericCallRejected` where it does not hold.
+    compile_graph_ptr_t instantiateForCallBinding(
+        const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
+        Type *expectedResult = nullptr);
     /// The instance of one chosen template; `resolveGenericCall` is this for the single template
     /// a name holds, and the call site is this for each candidate of a name with several.
     compile_graph_ptr_t instantiateForCall(
@@ -3535,6 +3553,10 @@ class Builder {
         oper_group_ptr_t ops;
         /// The module each imported overload comes from, for diagnostics (absent: this one).
         std::unordered_map<const void *, std::string> moduleOf;
+        /// The name the set is of: what the reports call it. A set gathered for a name can have
+        /// no operator group (`count` is a function of a module and not an operator), and the
+        /// name is then the only thing the set is known by.
+        std::string name;
     };
     /// The DREF of an operator (`__add__`) whose set has overloads of the program, with that
     /// set. A DREF of an operator without any is an ordinary DREF to the operator group.

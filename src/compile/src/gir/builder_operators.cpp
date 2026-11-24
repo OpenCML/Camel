@@ -68,6 +68,7 @@ namespace camel::compile::gir {
 
 Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group) {
     OperatorOverloads set;
+    set.name = group;
     const auto addGraph = [&](const compile_graph_ptr_t &graph, const std::string &module) {
         if (graph && std::ranges::find(set.graphs, graph) == set.graphs.end()) {
             set.graphs.push_back(graph);
@@ -563,7 +564,9 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
     registerNodeOrigin(context_, drefNode, gct, "gir.dref");
     if (recorder_) {
         std::vector<std::string> signatures;
-        for (const auto &[uri, resolver] : set.ops->resolvers()) {
+        for (const auto &[uri, resolver] : set.ops != nullptr
+                                             ? set.ops->resolvers()
+                                             : std::vector<std::pair<std::string, resolver_ptr_t>>()) {
             signatures.push_back(resolver->signature());
         }
         for (const auto &graph : set.graphs) {
@@ -587,12 +590,17 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     // The name the reports use: `operator +` for a symbol, the name itself for a name a call
     // reaches without a symbol (`map` is an operator group the prelude declares, and a call of
     // it is written like any other call).
-    const std::string display = camel::core::displayNameOf(set.ops->name());
+    // The set's own name: a set gathered for a name can have no operator group.
+    const std::string display = camel::core::displayNameOf(
+        set.ops != nullptr ? set.ops->name() : set.name);
     std::vector<StaticArg> statics;
     for (const Argument &input : normInputs) {
         statics.push_back(staticArgOf(input.node));
     }
-    const bool builtinAccepts = set.ops->resolve(withTypes, normTypes, statics).has_value();
+    // No group, no built-in candidate: the built-ins are the group's, so a set without one is
+    // asked of its own functions alone.
+    const bool builtinAccepts =
+        set.ops != nullptr && set.ops->resolve(withTypes, normTypes, statics).has_value();
     // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
@@ -613,11 +621,14 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         }
         return true;
     };
-    const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+    const bool builtinExact =
+        set.ops != nullptr && std::ranges::any_of(
+                                  set.ops->resolvers(),
+                                  [&](const auto &entry) {
         FunctionType *fixed = entry.second->fixedSignature();
         return fixed != nullptr && exactFor(fixed) &&
                entry.second->resolve(withTypes, normTypes).has_value();
-    });
+                                  });
     const auto where        = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
         return it == set.moduleOf.end() ? std::string(" (this module)")
@@ -689,7 +700,9 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                         where(tmpl.get())));
             }
             if (builtinAccepts && !entering) {
-                for (const auto &[uri, resolver] : set.ops->resolvers()) {
+                for (const auto &[uri, resolver] : set.ops != nullptr
+                                             ? set.ops->resolvers()
+                                             : std::vector<std::pair<std::string, resolver_ptr_t>>()) {
                     if (resolver->resolve(withTypes, normTypes).has_value()) {
                         overloads.push_back(
                             std::format(
@@ -771,7 +784,7 @@ void Builder::rejectOperatorConflict(
     // specific as this one: the two cannot both be meant. One that takes them as members of a
     // family of types (by content, a type rule over several types) is less specific, and this
     // one is preferred where both apply (design principles 4.3; chooseOperatorOverload).
-    const bool sameAsBuiltin = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+    const bool sameAsBuiltin = set.ops != nullptr && std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
         const FunctionType *fixed = entry.second->fixedSignature();
         if (fixed == nullptr || fixed->withTypesCount() != 0 ||
             fixed->normTypesCount() != params.size()) {
