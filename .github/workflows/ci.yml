@@ -85,8 +85,10 @@ jobs:
           # Apple Silicon, and the only leg that builds for arm64. The JIT has a code generator for
           # x86-64 only (cmake/Options.cmake turns ENABLE_FASTVM_JIT off on every other processor),
           # so this leg is JIT-less by platform rather than by an option: std::jit runs the
-          # bytecode interpreter there and says so. build-pypi.yml builds no macOS wheel yet (5.37
-          # item 6), so this leg is the only macOS signal there is.
+          # bytecode interpreter there and says so. build-pypi.yml builds the macOS arm64 wheel from
+          # the same tree since 2026-11-24 (5.37 item 6): its macos-arm64 cell bundles the dylibs
+          # with delocate-wheel and checks the result, so this leg is the build signal and that one
+          # is the packaging signal.
           - runner: macos-latest
             slug: macos-arm64
             arch: baseline # the x86-64 levels do not apply to arm64

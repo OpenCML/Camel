@@ -197,6 +197,37 @@ build job 内用 `setup-python` 的 3.10 做第一格（互操作）。
 
 workflow 的发布 job 已声明 `id-token: write`。Trusted Publisher 的配置必须与工作流身份匹配；只有成功执行 OIDC 上传，才能验证整条发布链路。
 
+### 7.3 macOS arm64（2026-11-24 起）
+
+Mac mini 上 `pip install camel-lang` 找不到版本，原因是 `build-pypi.yml` 从来没有打过 macOS 的 wheel：`ci.yml` 的
+macos-arm64 腿只证明能编译、能跑，与"打得出一个装得上、跑得起来的包"是两件事。补上的是最后那一步打包（5.37 第 6 项），
+随下一版发布，不进 0.2.46。
+
+- 矩阵多一格 `macos-latest` / `macosx_13_0_arm64`（`MACOSX_DEPLOYMENT_TARGET=13.0`）。标签不是难点：
+  `scripts/pypi-rollup.js` 用 `sysconfig.get_platform()` 本来就会给出这个标签。只发 Apple Silicon，Intel Mac 不发布。
+- `delocate-wheel` 把在包外解析得到的动态库拷进 `camel/.dylibs/`、把加载路径改成包内相对路径，并重算 `RECORD`
+  （delocate 的 `rewrite_record`），让 pip 安装时的哈希与真正落地的字节一致。在 Apple 上这一步不只是"搬家"：
+  `CMakeLists.txt` 关掉了 `CMAKE_MACOSX_RPATH`，libcamel 的 install name 因此是构建树里的**绝对路径**，工具、`.cmo`
+  （`cmake/camel_module.cmake` 把它们编成 Mach-O bundle）与 `_camel.abi3.so` 记的都是它——在构建机上有，在用户机器上没有。
+  分界不是"包内有没有同名文件"，而是**记录下来的那个名字在哪里解析得到**：解析在包内（`.cmo` 链兄弟 `.cmo` 的
+  `@loader_path/...` 就是这种情况）就只把引用改成相对路径；解析在包外（libcamel 的构建树路径、Conan 缓存）就把那个文件
+  拷进 `.dylibs/` 再指过去。所以 libcamel 会被拷一份：`camel/.cmlenv/libs/libcamel.dylib` 不是任何引用的名字，真正被
+  加载的是 `.dylibs/` 里那份；包内这份仍会被 delocate 处理（它自己的依赖被改写、被重签），但没有东西引用它，随包发出去
+  是白占体积。`scripts/check_macos_wheel.py` 把它当 NOTE 指名报出来，这一条就是重复的度量。
+- 也就是说，macOS 包目前带两份 libcamel。收成一份有两条路，都还没做：给 libcamel 一个 `@rpath` 的 install name
+  （`CMakeLists.txt` 的 `APPLE` 分支，改的是构建而不只是打包），或者打包后删掉没被引用的那份、再 `wheel pack` 重算
+  `RECORD`。Linux 那边等价的重复是 `auditwheel repair --exclude libcamel.so` 修的：那边 NEEDED 是裸名，排除后由已加载的
+  那份按 SONAME 满足；macOS 的 install name 是绝对路径，照抄排除只会留下一条用户机器上不存在的路径。
+- 改写会让链接器给的 ad-hoc 签名失效，而 arm64 上签名对不上的 Mach-O 会被 loader 直接杀掉。delocate 0.13.0 在
+  `set_install_name` / `set_install_id` 里自己跑 `codesign --force --sign -`（`replace_signature(filename, "-")`），
+  `_delete_rpaths` 删 rpath 时同样补签（`--sanitize-rpaths` 是 CLI 默认，构建树与 Conan 缓存的绝对 `LC_RPATH` 在这里被删掉，
+  而 `strip_build_rpath.py` 只能在 Linux 上改 ELF），所以工作流不再单独签一次；签没签由 `scripts/check_macos_wheel.py`
+  在**产物**上验证（逐个 Mach-O `codesign --verify --strict`），同一支脚本还要求每个 Mach-O 的 `otool -L` 只出现系统库
+  （`/usr/lib`、`/System`）或包内文件。
+- arm64 上 JIT 没有代码生成（`cmake/Options.cmake` 在其他处理器上关掉 `ENABLE_FASTVM_JIT`），所以不涉及 JIT 的签名授权。
+- 冒烟与 Windows 同一步（`setup-python` 3.10 的干净 venv）：`camel --version`、跑一个 import 了 stdlib 模块的程序
+  （`std::nvm` 与 `std::jit` 各一次，后者在 arm64 上走字节码解释器）、`import camel`。
+
 ---
 
 ## 8. 相关命令速查

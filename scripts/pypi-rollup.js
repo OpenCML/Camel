@@ -411,9 +411,10 @@ function packageWheelBundle({
     // system's -- and the build tree's entry is what `auditwheel repair` follows to find
     // libcamel.so, which is how the wheel ended up carrying a second copy of it. Dropped
     // from the copy the wheel is packed from, so the build tree itself is untouched and stays
-    // runnable: on Linux only, because this edits the ELF dynamic string table, and the other
-    // platforms have no such entry (Windows has no RUNPATH; a macOS Mach-O is rewritten by
-    // delocate, which 5.37 item 6 has not written yet).
+    // runnable: on Linux only, because this edits the ELF dynamic string table. Windows has no
+    // RUNPATH. A macOS Mach-O keeps its `LC_RPATH` entries until `delocate-wheel` sanitizes them
+    // (build-pypi.yml, "Bundle the dylibs into the macOS wheels": `--sanitize-rpaths` is that
+    // command's default and removes the absolute ones, re-signing the file it edited).
     if (process.platform === 'linux') {
         runCommand(`${py} "${path.join(BASEDIR, 'scripts', 'strip_build_rpath.py')}" "${CMLENV}"`)
         runCommand(
