@@ -19,7 +19,7 @@ window.__ModuleLoader__.load({
         const h = React.createElement
 
         // ---- one store, shared by every component ------------------------------------------------
-        const store = { state: null, toasts: [], error: null, version: 0 }
+        const store = { state: null, toasts: [], error: null, version: 0, reloading: false, reload: null }
         const listeners = new Set()
         const changed = () => {
             store.version += 1
@@ -44,7 +44,7 @@ window.__ModuleLoader__.load({
 
         let toastSeq = 0
         const toast = (event) => {
-            const sticky = event.kind === 'reminder' && event.level === 'urgent'
+            const sticky = (event.kind === 'reminder' && event.level === 'urgent') || (event.kind === 'reload' && event.ok === false)
             const entry = { seq: ++toastSeq, event, sticky }
             store.toasts = [...store.toasts.slice(-4), entry]
             changed()
@@ -53,6 +53,30 @@ window.__ModuleLoader__.load({
         const dismiss = (seq) => {
             store.toasts = store.toasts.filter((entry) => entry.seq !== seq)
             changed()
+        }
+
+        // The reload button's one call. It is the only place that writes to the live directory, and it
+        // is the host route that decides -- this half only reports what came back, including the file
+        // and line of a refusal and the commit sha of a success.
+        const reloadPlugin = async () => {
+            if (store.reloading) return
+            store.reloading = true
+            changed()
+            let value
+            try {
+                const response = await fetch('/oversee/reload', { method: 'POST', cache: 'no-store' })
+                value = await response.json()
+                value.ok = value.ok !== false && response.ok
+            } catch (error) {
+                value = { ok: false, stage: 'request', message: String(error && error.message ? error.message : error) }
+            }
+            store.reloading = false
+            store.reload = { ...value, at: Date.now() }
+            toast({ kind: 'reload', ...value, at: Date.now() })
+            changed()
+            // The plugin's own restart closes the event stream and answers nothing for a moment; one
+            // poll a second later reads the new state instead of the gap.
+            setTimeout(refresh, 1500)
         }
 
         let source = null
@@ -96,6 +120,24 @@ window.__ModuleLoader__.load({
                     return { title: event.urgent ? '协调者（急）' : '协调者', body: event.text, level: event.urgent ? 'urgent' : 'quiet' }
                 case 'session-ended':
                     return { title: '协调者会话结束', body: '新会话要重新认领（oversight_claim）。', level: 'urgent' }
+                case 'reload': {
+                    if (event.ok === false) {
+                        const where = event.file ? `${event.file}${event.line ? `:${event.line}` : ''}` : ''
+                        const why = event.message || event.reason || '未知原因'
+                        return {
+                            title: '重载插件失败',
+                            body: `${event.stage ? `${event.stage}：` : ''}${where ? `${where} ` : ''}${why}${event.liveUnchanged ? '（live 目录未变）' : ''}（点击关闭）`,
+                            level: 'urgent',
+                        }
+                    }
+                    return {
+                        title: '重载插件',
+                        body: event.changed
+                            ? `已从 ${event.ref || 'origin/develop'} 同步并重载，版本 ${event.sha ? event.sha.slice(0, 9) : '?'}`
+                            : `内容未变（${event.sha ? event.sha.slice(0, 9) : ''}），没有重载`,
+                        level: 'ok',
+                    }
+                }
                 default:
                     return { title: event.kind, body: '', level: 'quiet' }
             }
@@ -120,6 +162,12 @@ window.__ModuleLoader__.load({
             const worst = alerts.some((a) => a.level === 'urgent') ? 'urgent' : alerts.some((a) => a.level === 'wake') ? 'wake' : alerts.length ? 'quiet' : 'ok'
             const lanesTone = lanes.running === undefined ? undefined : lanes.running < 6 ? 'wake' : 'ok'
             const unacked = (s.unacknowledged || []).length
+            // Which version of the plugin is running, and whether the live directory holds a newer one
+            // than this process loaded: `synced` is what the last sync published, `loaded` is what was
+            // read at start, so the two differ exactly between a sync and the reload that follows it.
+            const plugin = s.plugin || {}
+            const syncedSha = plugin.synced ? String(plugin.synced).slice(0, 7) : null
+            const pending = Boolean(plugin.synced && plugin.loaded && plugin.synced !== plugin.loaded)
             return h('div', {
                     style: {
                         // Aligned with the composer card the way DSH's own docks are (QueueDock): the
@@ -142,7 +190,25 @@ window.__ModuleLoader__.load({
                     chip('未回执', String(unacked), unacked ? 'wake' : 'ok'),
                     chip('主机', host),
                     chip('提醒', alerts.length ? `${alerts.length} 条` : '无', worst === 'ok' ? 'ok' : worst),
-                    store.error ? chip('读取', '失败', 'urgent') : null),
+                    chip('插件', syncedSha ? `${syncedSha}${pending ? '（待重载）' : ''}` : '未同步', pending ? 'wake' : undefined),
+                    store.error ? chip('读取', '失败', 'urgent') : null,
+                    // The band is the button's home because the person who decides to reload is looking
+                    // at it: the click asks the host to sync and reload, and the answer lands in a toast
+                    // and in this row's version chip. Clicking it must not also open the details.
+                    h('button', {
+                            onClick: (event) => {
+                                event.stopPropagation()
+                                void reloadPlugin()
+                            },
+                            disabled: store.reloading,
+                            title: '从 origin/develop 取插件目录到 live 目录，只重载 camel-oversight；坏文件会带着文件名和行号被拒绝，live 目录不变',
+                            style: {
+                                marginLeft: 'auto', fontSize: 12, padding: '2px 10px', borderRadius: 6, color: 'inherit',
+                                border: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.35))',
+                                background: 'var(--dsw-alias-bg-layer-1, transparent)',
+                                cursor: store.reloading ? 'default' : 'pointer',
+                            },
+                        }, store.reloading ? '重载中…' : '重载插件')),
                 open ? h(Details, { s }) : null)
         }
 
@@ -150,6 +216,16 @@ window.__ModuleLoader__.load({
             const alerts = s.alerts || []
             const reminders = (s.reminders || []).slice().reverse()
             return h('div', { style: { marginTop: 8, lineHeight: 1.6 } },
+                h('div', { style: { fontWeight: 600 } }, '插件版本'),
+                h('div', { style: { opacity: 0.85 } },
+                    `${s.plugin && s.plugin.loaded ? s.plugin.loaded.slice(0, 9) : '未知'}（加载自 ${(s.plugin && s.plugin.loading) || '?'}；` +
+                    `live 目录 ${(s.plugin && s.plugin.target) || '?'}${s.plugin && s.plugin.fromLive === false ? '，两者不同，重载会被拒绝' : ''}）`),
+                store.reload
+                    ? h('div', { style: { color: store.reload.ok ? color.ok : color.urgent } },
+                          `上次重载：${store.reload.ok
+                              ? `${store.reload.changed ? '已同步并重载' : '内容未变，未重载'} ${store.reload.sha ? store.reload.sha.slice(0, 9) : ''}`
+                              : `${store.reload.stage || ''} ${store.reload.message || ''}`}`)
+                    : null,
                 h('div', { style: { fontWeight: 600 } }, '当前提醒'),
                 alerts.length === 0
                     ? h('div', { style: { opacity: 0.7 } }, '无：读数都在线内。')

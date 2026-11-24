@@ -15,6 +15,7 @@ speaks back, and both are pushed as they happen.
 | `/oversee/say` | POST | `{"id": "D-1123-43", "text": "...", "mode": "queue"}` queues a dispatch prefixed `[decision-maker · D-1123-43]`; `mode: "steer"` delivers at the nearest step; a repeated id is dropped |
 | `/oversee/acks` | GET | acknowledgements and the coordinator's own messages |
 | `/oversee/events` | GET | server-sent events: acknowledgements, `oversight_tell`, reminders, the claimed session ending, and a `beat` after each measurement |
+| `/oversee/reload` | POST | sync the plugin directory out of `origin/develop` into the live directory, reload this one plugin, and answer with the commit it came from; a tree that fails a check is refused with `file:line` and the live directory is left alone |
 
 Model tools: `oversight_claim`, `oversight_ack`, `oversight_tell`, `oversight_readings`.
 
@@ -36,19 +37,58 @@ Once an hour, while the coordinator is at work, the watch also re-states the sta
 replaces the coordinator's scheduled prompts; the thresholds live in `rules.js` and nowhere else.
 
 **The panel** (`client.js`). Above the composer of the claimed session, a band: the coordinator idle or
-running, lanes running/total, develop's age, unacknowledged dispatches, the build host's load, open alerts;
-click it for each alert, the recent reminders and the lanes. Toasts at the top right for every reminder,
-acknowledgement and coordinator message; an urgent reminder stays until clicked.
+running, lanes running/total, develop's age, unacknowledged dispatches, the build host's load, open alerts,
+the plugin's version, and a **reload button** (see below). Click the band for each alert, the recent
+reminders and the lanes. Toasts at the top right for every reminder, acknowledgement and coordinator
+message; an urgent reminder stays until clicked.
 
 ## Setup on the machine that runs DSH
 
 1. Install as a bundle (the profile's `bundles` list and a `link:` dependency), mounted in one place.
 2. Machine-local values in `%USERPROFILE%\.camel-oversight\config.json`:
    `{"repo": "D:\\Projects\\Camel", "buildHost": "<ssh target>"}`; `repo` turns the watch on, `buildHost`
-   (key-based ssh) adds the build host's load. Optional: `logFile`, `stateDir`, `watchSeconds`, `limits`.
+   (key-based ssh) adds the build host's load. Optional: `logFile`, `stateDir`, `watchSeconds`, `limits`,
+   `liveDir`, `syncScript`, `syncRef`.
 3. Keep the web server on loopback and publish it on the tailnet with `tailscale serve --bg <port>`. The
    routes are outside the GUI's login; the tailnet is the gate.
-4. After a code change, reload the DSH process; a session sees new tools only once it starts afresh.
+4. Point the plugin's `link:` dependency at the live directory, not at the repository (next section). That
+   is the one change that needs a DSH restart, and the only one.
+
+## Reloading it without restarting DSH
+
+Restarting DSH to change a plugin stops every agent at work, so the owner chose a button (2026-11-24,
+`internal/plans/2026-11-24-oversight-live-reload.cn.md`). The plugin is loaded from a directory that holds
+only pushed content -- `D:\Projects\camel-oversight-live\` by default -- because the main checkout holds
+merges in flight and lane half-work, and DSH's replacement does not fall back to the code it replaced.
+
+**The button.** The band's `重载插件` calls `POST /oversee/reload`, which:
+
+1. runs `internal/tools/sync-oversight-live.mjs`: it reads the plugin directory out of `origin/develop`
+   (`git ls-tree` + `git cat-file`, no worktree, no `stash`), writes it to a temporary directory beside the
+   live one, and gates every `.js` with `node --check`, then imports the staged `index.js` and `client.js` in
+   a child process. A file that fails stops everything: the temporary directory is removed, the live
+   directory is not touched, and the answer carries `file` and `line`;
+2. reloads this one plugin through DSH's profile reconciliation (`ctx.hmr.reconcileProfile`, which is what
+   the Plugin Manager's own private `reload` calls -- it has no public method for this);
+3. answers with the commit sha the directory came from, which the band shows.
+
+Content decides, not timestamps: when the live directory already holds that commit's bytes, the route
+answers `changed: false` and reloads nothing, so a merge that does not touch the plugin never hiccups a
+running coordinator.
+
+**What it cannot promise.** DSH's replacement is stop-then-start, and a plugin whose replacement fails to
+start does not keep running: its previous code is gone and the route that would report the failure is
+inside it. Both gates exist to make that unreachable rather than to report it -- a tree that does not
+parse, or whose `index.js` throws while it is evaluated, is refused before the live directory moves. What
+is left is `apply()` itself throwing against a real context; when that happens the plugin is down until
+DSH restarts, the log line `reload-failed` records why, and `D:\Projects\camel-oversight-live.previous\`
+holds the tree that was running before, for a manual restore. The answer is written before the restart
+starts, so the wire always carries the commit that was being tried.
+
+**`client.js` still needs a page refresh.** It is a browser module, built and served separately from the
+host half: reloading the plugin replaces `index.js` and its routes, not the module the page already holds.
+A change to the band -- including this button -- appears after the owner refreshes the page, and a session
+sees changed model tools only once it starts afresh.
 
 DSH conventions this plugin depends on: a tool's `render(args, value)` returns content blocks
 (`[{ type: 'text', text }]`); `agent.inject` / `followup` / `steer` take a user message
