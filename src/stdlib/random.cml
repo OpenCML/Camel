@@ -23,6 +23,7 @@
 
 import { argsort } from array
 import { cos, log, sqrt } from math
+import { to_array } from prelude
 import { reshape } from tensor
 import { is_float, is_same } from types
 

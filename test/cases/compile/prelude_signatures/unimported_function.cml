@@ -1,0 +1,17 @@
+/**
+ * A function of the prelude that is not an operator is not in scope until the module says so:
+ * `to_array` (the one conversion from a `Range` to the integers it names) has a body and no
+ * `#op` declaration, so it is a name of the module `prelude` like any other function's, and a
+ * module that writes it writes `import { to_array } from prelude`. The prelude states the rule
+ * beside the declarations ("---- ranges ----": the prelude's types and its functions that are not
+ * operators are not brought along unasked). Only an operator joins the built-in layer every module
+ * holds; `to_range`, beside `to_array` in the same file, is one, and needs no import.
+ *
+ * This is the shape `stdlib/random.cml:114` and `stdlib/str.cml:123` were written in, and the
+ * reason both modules failed to compile (`SemanticDiag::UnresolvedReference: 'to_array'`).
+ */
+func main() => int sync {
+    let xs: int[] = to_array(0 .. 3)
+    println(xs)
+    return 0
+}

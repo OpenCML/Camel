@@ -16,6 +16,12 @@
  *   written here; `index_of` and `split` carry a native kernel under `#impl` for speed, with the same result as their bodies.
  */
 
+// `to_array` (the one conversion from a `Range` to the integers it names) is a function of the
+// prelude, not one of its operators: a module that writes it says where it comes from, as for any
+// name that is not an operator (`prelude.cml`, "---- ranges ----"). Without this line `split`
+// below does not compile.
+import { to_array } from prelude
+
 // ---- native primitives ----
 
 /// The code points of s, as numbers.

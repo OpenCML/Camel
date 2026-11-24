@@ -1,0 +1,15 @@
+/**
+ * The same call with the import: a prelude function is reached through `import { ... } from
+ * prelude`, and beside it `to_range` — an operator of the same file — is reached unasked, because
+ * the prelude's `#op` declarations are the built-in layer. The two halves of the rule in one
+ * program.
+ */
+import { to_array } from prelude
+
+func main() => int sync {
+    let r = to_range(0, 3, 1)
+    let xs = to_array(r)
+    println(xs)
+    println(len(xs))
+    return 0
+}
