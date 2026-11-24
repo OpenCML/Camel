@@ -198,7 +198,27 @@ function listCases(targets, layered, tier) {
     })
     if (run.error) die(`cannot start the plan loader (${run.error.message})`)
     if (run.status !== 0) {
-        const why = `${run.stdout || ''}${run.stderr || ''}`.trim().split(/\r?\n/).slice(-4).join(' / ')
+        const text = `${run.stdout || ''}${run.stderr || ''}`
+        // The runner paints `[ERROR]` in red, so the line that carries the refusal starts with an
+        // escape sequence and a plain `^\[ERROR\]` match sees nothing. Stripping is not tidiness:
+        // without it this branch never fires and the mismatch falls back to the sentence below --
+        // measured 2026-11-25 on an assembled old tree, where the first version of this branch did
+        // exactly that and called a run that had said `unknown option '--list-cases'` a refusal of
+        // this selection.
+        const plain = text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+        // An unknown option is not a selection. The runner refuses one in a single line naming the
+        // word, and wrapping that in "refused this selection" turns a version mismatch into a
+        // statement about this change -- which is how a caller newer than the tree reads as "this
+        // change selects no plan".
+        const unknown = /^\[ERROR\] unknown option '([^']+)'/m.exec(plain)
+        if (unknown) {
+            const tree = /^\[ARGV\] this tree is [^\n]*/m.exec(plain)
+            die(
+                `this tree's runner does not know ${unknown[1]}: the tree is older than the caller, ` +
+                    `so nothing was selected -- this is not an empty selection${tree ? `\n${tree[0]}` : ''}`,
+            )
+        }
+        const why = text.trim().split(/\r?\n/).slice(-4).join(' / ')
         die(`the plan loader refused this selection (exit ${run.status}): ${why}`)
     }
     const rows = []
