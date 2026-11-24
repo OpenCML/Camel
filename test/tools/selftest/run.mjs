@@ -319,12 +319,15 @@ const mustContain = [
     "stdout contains '42'",
     'expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)',
     // One summary for the run, so the arithmetic is read once, over all four fixtures: 36 matrix
-    // entries + 4 strict + 10 known_fail (six refused plans and four entries that load) + 1
+    // entries + 4 strict + 11 known_fail (six refused plans and five entries that load) + 1
     // benchmark. The three entries this change adds are `anchor` (passes) and the two whose marks
     // have ended (`ends_arrived`, `waits_on`, both reported as failures), which is why the totals
     // are +3 entries, +1 pass, +2 fail over the previous line -- and why the known count did not
-    // move: `waits_on`'s row leaves the roster when its reading is taken.
-    '[SUMMARY] total: 51, pass: 30, fail: 13, known failures: 8',
+    // move: `waits_on`'s row leaves the roster when its reading is taken. `quoted_only` is the fifth
+    // entry that loads, and it is a fifth known failure: its condition is quoted by its own failure
+    // message and has not arrived, so the +1 entry is +0 fail and +1 known failure, which is the
+    // arithmetic that says the mark was excused and not reported as ended.
+    '[SUMMARY] total: 52, pass: 30, fail: 13, known failures: 9',
 ]
 for (const text of mustContain) {
     if (!output.includes(text)) problems.push(`output lacks: ${text}`)
@@ -369,13 +372,15 @@ for (const text of [
 // prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
 // are fields now, and a plan that omits either is refused where it is loaded. A fourth field, the
 // sentence the case prints today, is refused the same way: without it the runner takes any failure
-// as the expected one, and another defect can wear the mark's name. Nine plan files share one
+// as the expected one, and another defect can wear the mark's name. Ten plan files share one
 // directory -- six ways to be refused (five incomplete, one whose `known_fail_ends_when` is a
-// sentence instead of a reading) and three entries that load: the complete mark, and the two shapes
-// of an ending that has already arrived. The six must fail with the file, the case and the missing
-// (or unusable) field named; the complete one must load, run, and report `[XFAIL]` with its owner
-// printed beside the mark; the two arrived ones must be reported as failures and told to delete the
-// mark. A default owner or a default reason would make the six pass and this block red, which is the
+// sentence instead of a reading) and four entries that load: the complete mark, the two shapes of an
+// ending that has already arrived, and one whose ending is quoted by its own failure message and has
+// NOT arrived. The six must fail with the file, the case and the missing (or unusable) field named;
+// the complete one must load, run, and report `[XFAIL]` with its owner printed beside the mark; the
+// two arrived ones must be reported as failures and told to delete the mark; the quoted one must stay
+// `[XFAIL]`, because a condition matched against the runner's own sentence would always be true. A
+// default owner or a default reason would make the six pass and this block red, which is the
 // direction that matters.
 const knownfail = failures
 // The five readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
@@ -474,7 +479,37 @@ const endsPasses = knownfail.output.includes(
 if (!endsPasses) {
     problems.push(`known_fail gate: a satisfied \`passes\` condition was not reported as a failure:\n${knownfail.output}`)
 }
-knownfailVerdict.push(`strict-xfail=${endsPrints && endsPasses ? 'prints+passes' : 'MISSING'}`)
+// The third reading of the same mechanism, and the one that says a condition cannot satisfy itself:
+// `quoted_only` never prints the line its `prints` condition waits for, and its
+// `expect_output_contains` names that same line -- so the runner's own message about the missing line
+// contains it verbatim (`output does not contain 'ARRIVED fixture=knownfail quoted-only ...'`). A
+// condition read against the runner's message would be satisfied by the sentence explaining that it
+// is unmet, and a legitimate mark would be reported as ended; that is the shape the merge rehearsal
+// of 2026-11-25 measured as three reds (`modules.onnx/ort_loop_values_dynamic` and the two
+// `stated_mean_axis_*` gradients). The entry stays `[XFAIL]`, the ending block is not printed for it,
+// and its end condition still reaches the roster. Read off the output, and off this fixture's own
+// line rather than the run's, so a neighbour that prints the same words cannot answer for it.
+const quotedOnlyEnds = 'known failure has ended: this entry already prints '
+    + '"ARRIVED fixture=knownfail quoted-only the numbers are 2, 4 and 6"'
+const quotedOnlyStaysMarked = /^\[XFAIL\] quoted_only\b/m.test(knownfail.output)
+const quotedOnlyNotEnded = !knownfail.output.includes(quotedOnlyEnds)
+const quotedOnlyRostered = rosterRows.some(
+    ([, name, ends]) => name === 'selftest.knownfail.quoted_only/quoted_only'
+        && ends.trim() === 'prints "ARRIVED fixture=knownfail quoted-only the numbers are 2, 4 and 6"'
+)
+if (!quotedOnlyStaysMarked || !quotedOnlyNotEnded) {
+    problems.push(
+        'known_fail gate: a `prints` condition was satisfied by the failure message that quotes it, '
+            + 'so a legitimate mark was reported as ended:\n' + knownfail.output
+    )
+}
+if (!quotedOnlyRostered) {
+    problems.push(`known_fail gate: the roster did not name the quoted-only end condition:\n${knownfail.output}`)
+}
+knownfailVerdict.push(
+    `strict-xfail=${endsPrints && endsPasses ? 'prints+passes' : 'MISSING'}`,
+    `quoted-only=${quotedOnlyStaysMarked && quotedOnlyNotEnded && quotedOnlyRostered ? 'marked' : 'MISSING'}`
+)
 console.log(`[known_fail gate] ${knownfailVerdict.join('; ')}`)
 // The two directories' refusals are counted where their plans are read, which is the one thing the
 // single summary cannot say: it counts the run. Each refusal names its own plan file, so the count

@@ -1105,8 +1105,13 @@ everywhere is written once:
   known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
   ```
 
-  `prints` is looked for in the entry's own output on every run; `passes` is read off another case's
-  verdict once every case has settled. A mark records a red; `known_fail_owner` says who ends it and
+  `prints` is looked for in the entry's own output -- what its process wrote, normalized as the
+  entry's assertions read it -- and in nothing else on every run; `passes` is read off another case's
+  verdict once every case has settled. The "nothing else" is the whole of the rule and not a
+  preference: an entry that also pins the line with `expect_output_contains` gets a failure message
+  that *quotes* it (`output does not contain '<line>'`), so a condition searched for in the runner's
+  own text would be satisfied by the sentence saying it is unmet, and a legitimate mark would read as
+  ended. A mark records a red; `known_fail_owner` says who ends it and
   `known_fail_reason` where the case is stuck, and neither says *what* would end it -- so a mark can
   outlive its wall and read as permanent debt. The runner decides the two moments it can see (the case
   starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure changed its
@@ -1131,10 +1136,19 @@ everywhere is written once:
   existed keeps working -- but a new mark is expected to carry it.
 - `known_fail_msg`
   A fragment of the reason a marked test fails with, so the reason is pinned and not only the
-  failure. When a marked test fails and the fragment does not appear in its output, the case stays
-  `fail` and the runner prints
+  failure. When a marked test fails and the fragment does not appear in what it failed with, the case
+  stays `fail` and the runner prints
   `known failure changed its mind: expected "<pinned>", got "<first line>"` (`test/tools/run-tests.mjs`,
-  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. A
+  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. What it
+  is matched against is the run's *verdict* about the entry -- the failure lines the runner assembled,
+  then what the case printed -- and not the case's output alone: an entry with a verification script is
+  judged by two programs, and the verifier's words reach the pin through
+  `verification output: ...` (`verifyFailureLines`). Measured on the gate host at `1e01eaa0a9` by
+  narrowing that column to the case's own output and running every plan that carries a pin: the two
+  pins of `feat.linear.effects_model_edges` stopped matching and every other pin still matched. This
+  is exactly the column a `known_fail_ends_when = { prints }` condition must never be read against --
+  a failure line quotes the line a run did not find, so a condition that matched here would be
+  satisfied by the sentence saying it is unmet. A
   fragment identifies the reason -- the words the refusal uses, not a whole message. Absent is legal
   and pins nothing: `expandBackends` reads the field as `null`, so every mark written before it
   existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
