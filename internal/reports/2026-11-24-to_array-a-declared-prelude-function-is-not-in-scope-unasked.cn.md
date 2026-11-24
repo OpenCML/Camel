@@ -38,6 +38,24 @@ built-in layer, visible without an import」把原则定下来了：**prelude �
 本页第 6 节里"prelude 的非算子名字要不要进第 5 层"这个问句**已经作废**（原则已定），只剩
 "`len`/`map` 的 Range 重载要不要进算子组"仍由作者裁。
 
+### 0b 补在 `valueNameExists`，不补在 `resolveGenericTemplateNames`
+
+> `valueNameExists` 问的是"有没有哪一层有这个名"——它就是那张层表的枚举，而 prelude 是第 5 层；
+> 它末尾那一问（`hasImportedRef(..., Ambient)`）是 `bc90856729` 之前的表，所以缺的是**表里的一行**。
+> `resolveGenericTemplateNames` 是**问这句话的人**，它的职责是在声明处报"哪一层都没有这个名字"。
+> 补在表里：声明处的报告照样报（`to_arrya` 仍然写在哪儿错在哪儿），而且"泛型体里能用的名字"与
+> "普通体里能用的名字"给出同一个答案。补在问的人身上：等于让它对"任何层都没有的名字"一律闭嘴，
+> `::<T>` 里的一个拼写错误就从声明期错误变成实例期错误——没有被实例化就**永远不报**。
+
+改动就是这一问（`Builder::valueNameExists`，`gir/builder_expr.cpp` 末尾）：
+
+```cpp
+return preludeEntity(name).has_value();
+```
+
+`preludeEntity` 自己在 prelude 内部返回 nullopt（`names.cpp`），所以 `prelude.cml` 的正文不受影响：
+它在自己那层（第 2 层）就找到了。
+
 ---
 
 **以下为旧基点的读数，保留原样（它是"为什么当时看错了"的证据）。**
