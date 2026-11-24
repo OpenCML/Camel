@@ -15,9 +15,8 @@
 // selects that contribute at least one milestone entry -- and names the two ways that answer can
 // be blind, so a reader gets a reading rather than an empty list:
 //
-//   * a changed file no rule in `test/plan-selection.json` matches (`--changed` refuses such a
-//     change as an empty selection, so it starts nothing at all -- it used to widen to the whole
-//     fast layer, which started no milestone entry either);
+//   * a changed file no rule in `test/plan-selection.json` matches (`--changed` falls back to the
+//     whole fast layer, which starts no milestone entry);
 //   * a changed plan file whose own entries are milestone but which the selection deliberately
 //     drops (the `except` list of the self rule: perf, GC stress, progen, tiles_regions). That is
 //     the policy's ruling -- an ordinary change does not start those -- and it is exactly why the
@@ -149,10 +148,7 @@ function main(argv) {
         if (!selected.has(key)) holes.push(`${key} (${row.milestone} milestone entries, not selected by the rules)`)
     }
     if (!plans && files.length > 0) {
-        holes.push(
-            `no rule matches any of the ${files.length} changed file(s): --changed refuses this change ` +
-                'as an empty selection, so no plan is selected and no milestone entry starts'
-        )
+        holes.push(`no rule matches any of the ${files.length} changed file(s): --changed would run the whole fast layer`)
     }
     if (hits.length === 0) {
         console.log('[ms] no milestone plan is selected: this change runs no milestone entry')

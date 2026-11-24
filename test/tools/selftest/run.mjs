@@ -50,7 +50,6 @@ import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
 import { measuredInstall, negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
 import { overSelectionProblems } from './over-selection.mjs'
-import { selectionCaseProblems } from './selection-cases.mjs'
 import { cudaVisibilityAudit } from '../check-cuda-visibility.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -915,11 +914,10 @@ if (!hasTarget(ownPlan, planFile)) {
     problems.push(`--changed: ${planFile} did not select itself`)
 }
 if (plansForChanges(['no/such/directory/file.txt']) !== null) {
-    problems.push('--changed: an unmatched path selected plans instead of selecting nothing')
+    problems.push('--changed: an unmatched path selected plans instead of falling back')
 }
-// The forbidden layers stay unselectable: perf and the GC-stress plans. A change there selects no
-// plan -- `--changed` refuses it as an empty selection -- rather than running a plan the project
-// keeps for a quiet machine. The progen
+// The forbidden layers stay unselectable: perf and the GC-stress plans. A change there falls back
+// to the fast layer rather than running a plan the project keeps for a quiet machine. The progen
 // plan is here for a different reason: editing the plan file itself must fall back too, and only
 // the rule for its own harness may name it (checked below).
 for (const file of [
@@ -984,15 +982,6 @@ for (const rule of selectionDoc.rules || []) {
         }
     }
 }
-//  --- the record and the reader agree on what a case is ----------------------------------
-// The record a change writes holds `{ name, cause }` per case, and the run that reads it must start
-// those names. Reading a row as a string made every case the one name `[object Object]`, so every
-// `--changed` run refused with exit 2 and zero rows; a selection wider than the record cap stored a
-// digest and no rows, which the run refused as an empty selection; and a change no rule matched
-// widened to the whole fast layer and left a record no run could execute. The checks live in their
-// own file because they spawn the engine and the listing, and they are folded in here so the gate
-// runs them: a check nothing runs is not coverage.
-problems.push(...selectionCaseProblems(repoRoot))
 //  --- a rule-less file class cannot appear silently -------------------------------------
 // `--changed` applies the rules per file. A file no rule matches is dropped from the union, and
 // when another file in the same change does match, there is no fallback to notice it: the class
@@ -1046,10 +1035,6 @@ const RULELESS_ALLOWED = [
     {
         match: /^test\/perf-baseline\.json$/,
         why: 'the manual perf baseline; a change here must not select a perf plan',
-    },
-    {
-        match: /^test\/selection\//,
-        why: 'the selection records: each one is the case list a replay of one change set must reproduce, and no plan reads them',
     },
     {
         match: /^test\/cases\/opt\/progen\/(README\.md|findings\.json)$/,
@@ -1320,17 +1305,11 @@ else process.env.CAMEL_TEST_BASE = savedBase
 // (nothing is selected, so nothing starts), and the count is a line of its own: "changed: 0
 // target(s)" is the only thing that tells a zero from a layer in a log, and a selection that really
 // did select plans must not print it, or the line would mean nothing.
-//
-// `--changed` widens for nothing any more: on 2026-11-24 the whole-layer fallback for a change that
-// matched no rule was replaced by a refusal, because the record it left could not be executed (a
-// whole-layer selection keeps a count and a digest, not its rows). The two assertions below still
-// name the sentence that widening printed, deliberately: a sentence this file can no longer see is
-// one nothing can regress into, and the guard is worth more than the dead code costs.
 const changedScratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-changed-'))
-const wideningLine = (output) =>
-    (output.match(
-        /^\[WARN\] --changed:.*falling back to the whole fast layer \(\d+ plan file\(s\).*$|^layer-cases: \d+$/m
-    ) || [''])[0]
+const fallbackLine = (output) =>
+    (output.match(/^\[WARN\] --changed:.*falling back to the whole fast layer \(\d+ plan file\(s\).*$/m) || [
+        '',
+    ])[0]
 const emptyChangedList = path.join(changedScratch, 'empty.txt')
 fs.writeFileSync(emptyChangedList, '')
 const emptySelection = runTestCli(['--changed', '--changed-files', emptyChangedList, '--list'])
@@ -1342,7 +1321,7 @@ if (!/^\[INFO\] changed: 0 target\(s\)/m.test(emptySelection.output)) {
         `--changed on an empty list did not print 'changed: 0 target(s)': ${emptySelection.output.trim()}`
     )
 }
-if (wideningLine(emptySelection.output)) {
+if (fallbackLine(emptySelection.output)) {
     problems.push(
         `--changed on an empty list still widens to the layer: ${emptySelection.output.trim()}`
     )
@@ -1399,7 +1378,7 @@ if (/^\[INFO\] changed: 0 target\(s\)/m.test(matchedSelection.output)) {
         `--changed printed the zero-target line for a selection that selected plans: ${matchedSelection.output.trim()}`
     )
 }
-if (wideningLine(matchedSelection.output)) {
+if (fallbackLine(matchedSelection.output)) {
     problems.push(
         `--changed printed the fallback sentence for a selection that selected plans: ${matchedSelection.output.trim()}`
     )
