@@ -30,6 +30,12 @@
 //     layer (`--changed --list` and the engine both);
 //   * a record computed for a named target list (`--targets`) lists only the cases of those targets,
 //     and the run over them accepts it -- narrowing at computation, not a refusal at the runner;
+//   * a layer and the run of it are one number: `scripts/tier-report.mjs` and
+//     `run-tests.mjs --list-cases` must count the same cases, because both call themselves the layer
+//     (a record that narrowed the listing and a plan that wrote two cases with one name each made
+//     them disagree before this check);
+//   * a change record handed to a whole-layer run is refused, and the refusal's denominator is the
+//     layer's own count -- a layer run may not sign for the layer while starting a change's cases;
 //   * no gate surface (plans, `scripts`, `test/tools`, `internal/tools`, CI, `package.json`) names a
 //     stored reading under `test/selection/`: the record a gate runs on is computed on the spot, and
 //     a checked-in record would be a gate whose answer the next case-adding commit moves;
@@ -64,7 +70,15 @@ const CASE_INPUT = 'test/cases/compile/enum/err_duplicate_field.cml'
 const WIDE_CANDIDATES = ['src/stdlib/std/fvm/', 'src/kernel/graph.cpp', 'src/']
 
 function sh(args, cwd) {
-    const run = spawnSync(process.execPath, args, { cwd, encoding: 'utf8', windowsHide: true })
+    // A whole-layer listing is ~9,900 JSON rows: the default 1 MiB buffer turns it into ENOBUFS,
+    // which reads as "the loader printed no count" and would make the layer check report a
+    // disagreement that is only a truncated pipe.
+    const run = spawnSync(process.execPath, args, {
+        cwd,
+        encoding: 'utf8',
+        windowsHide: true,
+        maxBuffer: 128 * 1024 * 1024,
+    })
     return {
         status: run.status,
         stdout: `${run.stdout || ''}`,
@@ -294,7 +308,7 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
 
         // ---- 6. a change no rule matches selects nothing, and does not widen ---------------------
         // The candidate list holds only rule-less *classes* whose files a plan does not read. It
-        // deliberately does not hold the directory of stored records under `test/selection/`: check 8
+        // deliberately does not hold the directory of stored records under `test/selection/`: check 10
         // below asserts that nothing a gate runs names it, and a probe that listed it here would be
         // the one reading the check would then have to except.
         let unruled = null
@@ -416,7 +430,83 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
             }
         }
 
-        // ---- 8. no gate step reads a stored selection record -------------------------------------
+        // ---- 8. a layer's own count and the run of it are one number ------------------------------
+        // Both tools call themselves the layer: `scripts/tier-report.mjs` counts the plan files by
+        // their declared and derived entries, and `run-tests.mjs --list-cases` prints the cases a
+        // run of them would start. A record that narrowed the listing is what made them disagree on
+        // the tree this check was written for, and a plan that writes two cases with one name makes
+        // the listing keep one of the two. Either way one of the numbers is not the layer, and a
+        // gate that quotes the smaller one signs for a layer it did not run.
+        const report = sh(
+            [path.join(repoRoot, 'scripts', 'tier-report.mjs'), '--tier', 'fast', '--quiet'],
+            repoRoot
+        )
+        const reportLine =
+            `${report.stdout}`.split(/\r?\n/).find((line) => /^\[tier-report\] fast: /.test(line)) || ''
+        const reportTotal = Number((reportLine.match(/= (\d+) total/) || [])[1])
+        const layerListRun = listCases(['test/plans'])
+        const layerList = listed(layerListRun)
+        if (report.status !== 0) {
+            problems.push(`layer: tier-report read exit ${report.status} for the fast layer: ${head(report)}`)
+        } else if (!Number.isInteger(reportTotal)) {
+            problems.push(`layer: tier-report printed no fast total: ${head(report)}`)
+        } else if (reportTotal < 2) {
+            problems.push(
+                `layer: tier-report counted ${reportTotal} case(s) in the fast layer, too few to be a reading`
+            )
+        } else if (layerList.claimed === null) {
+            problems.push(`layer: --list-cases printed no 'cases:' line: ${head(layerListRun)}`)
+        } else if (layerList.claimed !== reportTotal) {
+            problems.push(
+                `layer: tier-report says ${reportTotal} case(s) in the fast layer and --list-cases printed ` +
+                    `${layerList.claimed}; one of the two is not the layer`
+            )
+        }
+
+        // ---- 9. a change record cannot narrow a layer run -----------------------------------------
+        // The record computed in check 1 names two plans; the whole fast layer is not those plans.
+        // Handing it to the layer run must refuse -- exit 2, one `[PLAN ERROR]` -- and the numbers
+        // in the refusal are the layer's own: what the record covers, and the count tier-report
+        // gives for this tree. A run that started the record's cases and printed `tier: fast` would
+        // be the reading this check exists to make impossible.
+        if (record !== null && Array.isArray(record.cases)) {
+            const layerRun = listCases(['test/plans'], ['--selection-cases', caseRecord])
+            const refusal = `${layerRun.output}`.match(
+                /covers (\d+) of (\d+) cases in this layer; a layer run cannot sign/
+            )
+            if (layerRun.status !== 2) {
+                problems.push(
+                    `layer: a change record handed to the whole fast layer read exit ` +
+                        `${layerRun.status}, expected 2: ${head(layerRun)}`
+                )
+            } else if (refusal === null) {
+                problems.push(`layer: the refusal did not name the cases the record covers: ${head(layerRun)}`)
+            } else {
+                if (!/\[PLAN ERROR\]/.test(layerRun.output)) {
+                    problems.push(`layer: the narrowing was refused without a [PLAN ERROR] line: ${head(layerRun)}`)
+                }
+                if (Number(refusal[1]) !== record.case_count) {
+                    problems.push(
+                        `layer: the refusal says the record covers ${refusal[1]} case(s) and the record names ` +
+                            `${record.case_count}; the two must be one count`
+                    )
+                }
+                if (!(Number(refusal[1]) < Number(refusal[2]))) {
+                    problems.push(
+                        `layer: the refusal covers ${refusal[1]} of ${refusal[2]}, which is not a narrowing; ` +
+                            'a record that keeps the whole layer is not the defect this check is about'
+                    )
+                }
+                if (Number.isInteger(reportTotal) && Number(refusal[2]) !== reportTotal) {
+                    problems.push(
+                        `layer: the refusal's denominator is ${refusal[2]}, tier-report says ${reportTotal}; ` +
+                            'a layer run must count the layer'
+                    )
+                }
+            }
+        }
+
+        // ---- 10. no gate step reads a stored selection record -------------------------------------
         // The record a gate runs on is computed on the spot, always. The records kept in the tree under
         // `test/selection/` are readings of past changes, kept so a replay can be compared with them;
         // a gate that read one would answer with the last commit that wrote it, and any commit adding
@@ -473,7 +563,7 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
             problems.push(`selection: the stored-record scan read ${scanned.length} file(s), too few to be a reading`)
         }
 
-        // ---- 9. a run that starts nothing exits 2, and says so -----------------------------------
+        // ---- 11. a run that starts nothing exits 2, and says so ----------------------------------
         // The code, not the wording: `--selection-empty` is a real run of the run machinery that
         // starts no test, and it needs no install, so this is the one zero-row run that can be
         // measured anywhere. It exited 0 before this ruling (measured on 2b141ad836: exit 0 with
@@ -508,6 +598,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     }
     console.log(
         'selection-cases self-test ok: a recorded case is read by its name, a record lists the run\'s ' +
-            'own targets, a zero-row run exits 2, and a rule-less change selects nothing'
+            'own targets, a layer and the run of it count the same cases, a change record cannot ' +
+            'narrow a layer run, a zero-row run exits 2, and a rule-less change selects nothing'
     )
 }

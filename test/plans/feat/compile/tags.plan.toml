@@ -587,7 +587,7 @@ expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'vjp' cannot take 'vjp' as an argument: it names a tag, and a tag is not a value."]
 
 [[tests]]
-name = "argument_type"
+name = "argument_type_name"
 desc = "A tag argument that names a type: a type is a declaration, not a value, so the same located refusal names it, and no declared-type-against-argument message is written."
 kind = "negative"
 case = "../../../cases/compile/tags/err_type_argument.cml"
