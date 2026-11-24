@@ -2183,6 +2183,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "math_scalar_gradient_through_the_library"
+desc = "`sqrt`, `erf` and `erfc` differentiated through `vjp`: the scalar `math` kernels are `math:sqrt_d`, `math:erf_d` and `math:erfc_d`, and the laws are filed under those names (`stdlib/rulesets/jvp.cml`, `…/transpose.cml`). Three readings: `sqrt(9.0) = 3.0` with `d/dx = 0.16666666666666666` (`(ct * 0.5) / sqrt(x)`, the grouping `sqrtVjp` builds); `erf(1.0) = 0.8427007929497149` with the derivative compared inside the program against `2/sqrt(pi) * exp(-1)`, which is `matches=true` bit for bit because the law keeps the definition's grouping; and `erfc(1.0) = 0.15729920705028513`, whose derivative is that product negated. Before these five laws the same program stopped in the forward half with `skip=rule uri=math:erf_d reason=the operator has no forward rule bound at all`, which is the red `vjp-parity` carried for these keys. The single-width pair (`erf_f`/`erfc_f`) runs the same walk with the `f32` constant and is held by `vjp-parity` rather than by this case, whose functions are `float`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/math_scalar_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sqrt value=3.0 d/dx=0.16666666666666666", "erf value=0.8427007929497149 d/dx=", "matches=true", "erfc value=0.15729920705028513 d/dx=", "erf at zero value=0.0 d/dx=1.1283791670955126"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "jvp_of_a_pow_call"
 desc = "The forward rule of `math:pow_d`: `pow` (`stdlib/math.cml#pow`) is the same arithmetic as `^` under a declared function's spelling, so it is a different operator with a key of its own, and it had no forward rule -- a lifted program that called it stopped with `skip=rule uri=math:pow_d reason=no forward rule bound at all`, which is what `rulesets_probe_missing` pinned before this law existed. Three readings: `8.0`/`12.0` for `pow(2.0, 3.0)`, `5.656854249492381`/`7.0710678118654755` for `pow(2.0, 2.5)`, and `8.0`/`5.545177444479562` for the exponent lifted on its own (`d/dn 2^n` at `n = 3`). The last one is the branch `^`'s helper guards on a tangent's value and therefore cannot be transposed; here it is written out, so it reads as a number."
 kind = "behavior"

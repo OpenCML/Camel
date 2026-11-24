@@ -115,14 +115,9 @@ int	engine-autodiff	the conversion's destination is `int`, a discrete type with 
 # `concat@2` and `unsqueeze@1`. Those rows were not recording a decision about the forward half;
 # they were recording a file no line of the comparison opened.
 
-erf_d	lane-rulesets	`math:erf_d` has no `jvp_erf_d`, and `math:` is a module the rulesets do not file for
-erf_f	lane-rulesets	`math:erf_f` has no `jvp_erf_f`, and `math:` is a module the rulesets do not file for
-erfc_d	lane-rulesets	`math:erfc_d` has no `jvp_erfc_d`, and `math:` is a module the rulesets do not file for
-erfc_f	lane-rulesets	`math:erfc_f` has no `jvp_erfc_f`, and `math:` is a module the rulesets do not file for
 
 pow	lane-rulesets	the law is filed under `^` for `:op/pow_d`; `tensor:pow` has no `jvp_` of its own
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
-sqrt_d	lane-rulesets	`math:sqrt_d` has no `jvp_sqrt_d`, and `math:` is a module the rulesets do not file for
 idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the two-word form; the slab form has no `jvp_*`
 
 # ---- 丙: the model operators (`modules/nn`), none of which the rulesets file for ---------------
