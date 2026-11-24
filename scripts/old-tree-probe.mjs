@@ -39,11 +39,15 @@
  *      selection -- and it does **not** say `refused this selection` or `the cases this change
  *      selects could not be computed`, the two sentences that misnamed this failure for a night.
  *
- * Exit codes
- *   0  the chain behaves as it must (green: the pit is there and the words are right)
- *   1  the chain misbehaves (red: the pit is there and a sentence is wrong or missing)
- *   2  the tree was not built or could not be read -- never 0, because "could not measure" and
- *      "measured green" are the two readings this project keeps separating
+ * Exit codes -- four exits, and the two that share 2 say different things
+ *   0  the pit is there and the chain behaves: `PASS probe.old-tree`
+ *   1  the pit is there and the chain misbehaves: `FAIL probe.old-tree` (red)
+ *   2  nothing was measured, in one of two ways, each with its own sentence:
+ *      `[PROBE] the old tree was not built: ...` (the ref could not be read, or the word is unknown)
+ *      `[PROBE] self refused: this tree is not a green starting point, so nothing about an old tree
+ *      was measured` (this checkout itself fails first)
+ *   Never 0 for either 2: "could not measure" and "measured green" are the two readings this
+ *   project keeps separating, and the two 2s share a code only because a refusal is a refusal.
  *
  * Output carries the three things the two wrong explanations lacked: this checkout's commit, the
  * old tree's commit, and the word itself.
@@ -250,18 +254,28 @@ function main() {
         return 0
     }
 
-    // 1. This tree first. A probe that only goes red in the pit cannot be told from a broken one.
+    // 1. This tree first. A probe that only goes red in the pit cannot be told from a broken one, and
+    //    a probe whose own starting point is broken measures nothing about an old tree: this half
+    //    has its own exit (2, "self refused") so it cannot arrive wearing the red of a real finding.
     const self = listCasesIn(REPO_ROOT, PLAN_PATH)
+    const selfProblems = []
     if (self.status !== 0) {
-        problems.push(`this tree: the consumer exited ${self.status} on its own cases (expected 0)`)
+        selfProblems.push(`this tree: the consumer exited ${self.status} on its own cases (expected 0)`)
     }
     if (self.text.includes('unknown option')) {
-        problems.push(`this tree: the consumer says 'unknown option' about its own argv, so this checkout is the old half`)
+        selfProblems.push(`this tree: the consumer says 'unknown option' about its own argv, so this checkout is the old half`)
     }
     if (!/^\{"name":/m.test(self.text)) {
-        problems.push('this tree: the consumer listed no case row')
+        selfProblems.push('this tree: the consumer listed no case row')
     }
-    console.log(`[PROBE] self: exit ${self.status}, ${(self.text.match(/^\{"name":/gm) || []).length} case row(s), no 'unknown option'`)
+    const selfRows = (self.text.match(/^\{"name":/gm) || []).length
+    console.log(`[PROBE] self: exit ${self.status}, ${selfRows} case row(s), no 'unknown option'`)
+    if (selfProblems.length > 0) {
+        for (const line of self.text.split(/\r?\n/)) if (line.trim() !== '') console.log(`    ${line.trim()}`)
+        for (const problem of selfProblems) console.log(`FAIL ${problem}`)
+        console.log('[PROBE] self refused: this tree is not a green starting point, so nothing about an old tree was measured')
+        return 2
+    }
 
     // 2. The old tree.
     //    By synthesis, not by archive, and the reason is a finding this tool recorded on its first

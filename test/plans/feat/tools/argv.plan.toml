@@ -71,3 +71,18 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 # Copies `test/tools` (2 MB) and makes one commit, twice (this tree and the old half): seconds.
 timeout_ms = 180000
 
+
+# The tool's four exits, one reading each. They are numbers, and only the sentences tell `1` from
+# one `2` and both `2`s from each other; the two that share a code are required to say different
+# things, because a refusal and a red finding that read alike are the defect this plan is about.
+[[tests]]
+name = "argv.exits"
+desc = "scripts/old-tree-probe.mjs answers four ways: 0 PASS (the pit is there and the chain behaves), 1 FAIL (the pit is there and the chain misbehaves), 2 for a ref that cannot be read, and 2 for a checkout that is not a green starting point -- and the two 2s say different things."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/argv/argv.mjs"
+args = ["${case}", "--exits"]
+expect_exit = 0
+expect_stdout_contains = ["PASS argv.exits", "[EXITS] self refused: exit 2", "[EXITS] red: exit 1"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 180000
