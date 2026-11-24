@@ -17,10 +17,13 @@
 #      action a third time is not persistence.
 #   5. every refusal prints the one `rebase:` line, and the line says what was re-run -- a reader of
 #      the conclusion must not be able to take a partial re-run for a measurement of a layer.
+#   6. documentation that selects no plan stops and NAMES the paths. "No plan is affected" and "no
+#      rule was written" are different facts with the same shape, and only the second is repaired by
+#      writing a rule; the selection widening to the fast layer would otherwise read as a green.
 #
 # The functions are read out of `merge-lane.ps1` itself (by name, from its syntax tree) rather than
 # copied here, so this measures the file that ships: a function renamed or deleted there fails here
-# instead of quietly going untested. The three push scenarios run against throwaway repositories with
+# instead of quietly going untested. The four push scenarios run against throwaway repositories with
 # a bare origin beside them; the plan re-run is the one step that is handed in, because it starts the
 # build host and this file must not.
 #
@@ -335,6 +338,29 @@ Check 'and it reads from the first tip that landed to the second' `
 Check 'the stop reports the two shas' (($pushC.Shas -join ',') -eq "$landedC1,$landedC2") ($pushC.Shas -join ',')
 Check 'nothing of this run reached origin' ((Get-OriginTip -Origin $c.Origin) -eq $landedC2) (Get-OriginTip -Origin $c.Origin)
 Check 'and the re-landed commit is still on this checkout' ((Get-GitText $c.Work rev-parse HEAD) -ne $pushC.Shas[1]) (Get-GitText $c.Work rev-parse HEAD)
+
+# --- 7. documentation landed but the selection names no plan -------------------
+# "Which files does this select?" has two answers that must not look alike: no plan is affected, and
+# no rule was written for these paths. The second one is the shape the four documentation paths had
+# before test/plan-selection.json gained its rule, and it arrives as a widening -- the whole fast
+# layer -- which is a full run wearing the name of a partial one. So the stop names the paths.
+$d = New-Scenario -Name 'no-plan'
+$landedD = Add-LandingCommit -Origin $d.Origin -Dir $d.Writer -Path 'internal/reports/2026-11-24-no-rule.cn.md' -Text 'a page' -Subject 'reports: a page no rule reads'
+$script:rerunCalls = 0
+$widenedRerun = {
+    param([string[]] $ChangedFiles)
+    $script:rerunCalls++
+    return @{ Exit = 2; Targets = @(); Rows = 0; Reds = 0; Text = 'no rule matched; the selection is the whole fast layer' }
+}
+$pushD = Invoke-PushWithRecovery -Tree $d.Work -Target develop -ReRun $widenedRerun
+$linesD = @($pushD.Lines | Where-Object { $_ })
+$rebaseD = @($linesD | Where-Object { "$_".StartsWith('rebase:') })
+
+Check 'a selection that names no plan does not push' ((-not $pushD.Ok) -and $pushD.Kind -eq 'no plan') "kind=$($pushD.Kind)"
+Check 'it still prints its rebase line' ($rebaseD.Count -eq 1 -and $rebaseD[0] -match ', 1 file\(s\), docs-only, re-ran 0 plan\(s\)$') ($rebaseD -join ' / ')
+Check 'and the stop names the paths that landed' (($linesD -join "`n") -match 'internal/reports/2026-11-24-no-rule\.cn\.md') ($linesD -join "`n")
+Check 'and says no rule names them' (($linesD -join "`n") -match 'none of them is named by a rule') ($linesD -join "`n")
+Check 'nothing was pushed' ((Get-OriginTip -Origin $d.Origin) -eq $landedD) (Get-OriginTip -Origin $d.Origin)
 
 # --- result ------------------------------------------------------------------
 Write-Host ''

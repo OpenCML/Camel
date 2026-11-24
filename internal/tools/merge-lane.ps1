@@ -746,6 +746,11 @@ function Invoke-PushWithRecovery {
             Files = $changed
             Lines = @($rebaseLine,
                 "  the documentation that landed selected no plan this run could re-run, so the re-landed tree $($reLanded.Substring(0,9)) was not read by any plan. Nothing was pushed.",
+                # Named, not summarised: "no plan" has two causes -- nothing was affected, and no rule
+                # was written -- and they are told apart by looking at these paths, not by trusting the
+                # sentence. Only the second is repaired by writing a rule, and a widened selection
+                # looks like a measurement in every line but this one.
+                ("  the files that landed: " + $(if ($changed.Count -le 8) { $changed -join ', ' } else { (($changed | Select-Object -First 8) -join ', ') + ", and $($changed.Count - 8) more" }) + " -- none of them is named by a rule in test/plan-selection.json"),
                 (($reRunReading.Text -split "`n") | Where-Object { $_ } | Select-Object -Last 3))
         }
     }
