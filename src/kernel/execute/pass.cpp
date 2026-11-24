@@ -2368,10 +2368,15 @@ bool passListEndsWithoutExecuting(const std::vector<std::string> &passes, const 
     if (passes.empty()) {
         return false; // the fallback scheduling pass runs the program
     }
-    // std::nop is the scheduling pass that produces no effect, so a list that ends in it
-    // executes nothing. Every other scheduling pass runs the program, and a translation pass
-    // hands the graph on to whatever follows -- the fallback when nothing does.
-    return resolveAlias(specName(passes.back())) == "std::nop";
+    // A scheduling pass that produces no effect executes nothing, so a list that ends in it
+    // executes nothing. Every other scheduling pass runs the program, and a translation pass hands
+    // the graph on to whatever follows -- the fallback when nothing does.
+    //
+    // Which pass that is comes from the pass itself (`NopPass::kName`, `executesTheProgram`), not
+    // from a spelling written here: this question is asked before the program is compiled and so
+    // before any pass can be built, and it must not be the one place that answers "does this pass
+    // execute" a second time.
+    return resolveAlias(specName(passes.back())) == NopPass::kName;
 }
 
 std::optional<Diagnostic>
@@ -2591,22 +2596,32 @@ PassApplyResult applyPassesDetailed(
             if (!pass) {
                 return {nullptr, PassApplyStatus::Failed};
             }
-            // The debugger's observer is told which pass runs: only a scheduling pass runs the
-            // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
-            const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
+            // The debugger's observer is told which pass runs: a scheduling pass that executes the
+            // program it debugs does, and a rewrite or translation pass may evaluate graphs of its
+            // own. `std::nop` is a scheduling pass that does not execute, and the observer is told
+            // what happens rather than what kind of pass it is.
+            const auto *scheduling = dynamic_cast<GraphSchedulePass *>(pass.get());
+            // The one criterion: does *this* pass execute the program. It is asked here once and
+            // read below for both consequences -- the observer above and the entry's arguments.
+            const bool executes = scheduling != nullptr && scheduling->executesTheProgram();
             if (auto *observer = camel::execute::executionObserver()) {
-                observer->passStarting(schedules, program->root());
+                observer->passStarting(executes, program->root());
             }
-            // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
-            // pass (the program executes), "pass:<name>" for rewrite and translation passes.
+            // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling pass
+            // (the program executes there), "pass:<name>" for rewrite and translation passes. The
+            // stage keeps naming the kind, not the run: a scheduling pass's diagnostics belong to
+            // the run it is about even when it ends the pipeline without one.
             struct StageScope {
                 explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
                 ~StageScope() { setPipelineStage(""); }
-            } stageScope(schedules ? std::string("run") : "pass:" + specName(p));
+            } stageScope(scheduling != nullptr ? std::string("run") : "pass:" + specName(p));
             // A program runs only when every parameter of `main` has a value. Parameters
             // left open are fine for rewriting and translation (they are the inputs of what
-            // is translated); nothing may execute with a slot nobody filled.
-            if (schedules) {
+            // is translated); nothing may execute with a slot nobody filled. The question is
+            // whether *this* pass executes the program, and a scheduling pass that ends the
+            // pipeline without a run (`std::nop`) does not: it is not an entry, so its arguments
+            // are not asked of it.
+            if (executes) {
                 const auto open = camel::execute::unboundEntryParameters(program->root());
                 if (!open.empty()) {
                     std::string names;

@@ -1,0 +1,12 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The parameters of `main` are the inputs of a run (design principles 3.9/9.3): a program whose
+// entry has an open parameter cannot be executed, and the driver says so before any scheduling pass
+// that executes. `std::nop` is not one of those -- it ends the pipeline without a run -- so a
+// pipeline that ends in it must not ask for `x`. The plan beside this file pins both directions:
+// `std::nop` alone is quiet, `std::nvm` reports the missing argument.
+func main(x: int) => int sync {
+    println(x)
+    return x
+}

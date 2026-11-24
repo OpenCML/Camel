@@ -59,3 +59,23 @@ args = ["${case}", "std::nop", "std::gir"]  # camel-pass-scan: keep -- gir is af
 expect_exit = 0
 expect_stdout_not_contains = "digraph"
 expect_stderr_contains = "will not run"
+
+# A pass that does not execute the program is not an entry, so the parameters of `main` are not
+# asked of it. One criterion (`GraphSchedulePass::executesTheProgram`), and these two cases are its
+# two answers on a program whose entry has an open parameter.
+[[tests]]
+name = "nop_does_not_ask_for_arguments"
+desc = "`std::nop` does not run the program, so an open parameter of `main` is not a missing argument: exit 0 and no output."
+case = "../../../cases/trans/hand_on/nop_params.cml"
+args = ["${case}", "std::nop"]
+expect_exit = 0
+expect_stdout_exact = ""
+expect_output_not_contains = ["No value was given"]
+
+[[tests]]
+name = "a_run_still_asks_for_arguments"
+desc = "The other answer from the same criterion: `std::nvm` executes, so the same program reports the open parameter instead of running."
+case = "../../../cases/trans/hand_on/nop_params.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["No value was given for the parameter 'x' of 'main'"]
