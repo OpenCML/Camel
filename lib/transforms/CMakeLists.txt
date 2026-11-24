@@ -1,0 +1,27 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+include(${PROJECT_SOURCE_DIR}/cmake/camel_module.cmake)
+add_camel_module(
+  NAME transforms
+  SOURCES
+    module.cpp
+    first_with_as_param_operator.cpp
+    jvp.cpp
+    jvp_operator.cpp
+    lift.cpp
+    node_order.cpp
+    remat_operator.cpp
+    rule_expand.cpp
+    split.cpp
+    split_loop_cut.cpp
+    split_operator.cpp
+    transpose/walk.cpp
+    transpose/cotangent.cpp
+    transpose/entry.cpp
+    transpose/rules.cpp
+    transpose/signature.cpp
+    transpose/walkmachinery.cpp
+    transpose_operator.cpp
+    vmap.cpp
+    vmap_operator.cpp
+)

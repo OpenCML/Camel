@@ -14,9 +14,9 @@
 
 所以现在把位置系统独立成了 `SourceContext`，核心组件在：
 
-- `include/camel/core/source/ids.h`
-- `include/camel/core/source/manager.h`
-- `src/core/source/manager.cpp`
+- `kernel/include/camel/core/source/ids.h`
+- `kernel/include/camel/core/source/manager.h`
+- `kernel/core/source/manager.cpp`
 
 ## 2. 当前实现的核心对象
 
@@ -93,8 +93,8 @@
 
 入口在：
 
-- `include/camel/parse/parse.h`
-- `src/parse/ast/builder.cpp`
+- `parse/include/camel/parse/parse.h`
+- `parse/src/ast/builder.cpp`
 
 当前流程是：
 
@@ -111,8 +111,8 @@
 
 入口在：
 
-- `include/camel/compile/gct/node.h`
-- `src/compile/gct/builder.cpp`
+- `compile/include/camel/compile/gct/node.h`
+- `compile/src/gct/builder.cpp`
 
 当前实现不再把 `tokenStart_/tokenEnd_` 传播到 GCT，而是直接传播 `OriginId`：
 
@@ -130,7 +130,7 @@
 
 入口在：
 
-- `src/compile/gir/builder.cpp`
+- `compile/src/gir/builder.cpp`
 
 当前实现里：
 
@@ -144,9 +144,9 @@
 
 入口在：
 
-- `src/passes/sched/fastvm/compile.cpp`
-- `src/passes/sched/fastvm/gotovm.cpp`
-- `src/passes/sched/nodevm/nodevm.cpp`
+- `lib/std/fvm/compile.cpp`
+- `lib/std/fvm/gotovm.cpp`
+- `lib/std/nvm/nodevm.cpp`
 
 当前做法是：
 
@@ -219,15 +219,15 @@
 
 如果想直接看实现，建议从这些文件开始：
 
-- `include/camel/core/source/manager.h`
-- `src/core/source/manager.cpp`
-- `include/camel/parse/parse.h`
-- `include/camel/parse/ast/base.h`
-- `src/parse/ast/builder.cpp`
-- `include/camel/compile/gct/node.h`
-- `src/compile/gct/builder.cpp`
-- `src/compile/gir/builder.cpp`
-- `src/passes/sched/fastvm/compile.cpp`
+- `kernel/include/camel/core/source/manager.h`
+- `kernel/core/source/manager.cpp`
+- `parse/include/camel/parse/parse.h`
+- `parse/include/camel/parse/ast/base.h`
+- `parse/src/ast/builder.cpp`
+- `compile/include/camel/compile/gct/node.h`
+- `compile/src/gct/builder.cpp`
+- `compile/src/gir/builder.cpp`
+- `lib/std/fvm/compile.cpp`
 - `tools/debugger/src/gir_json.cpp`
 
 ## 6. 当前实现的结论

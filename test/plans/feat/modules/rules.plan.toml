@@ -187,12 +187,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.a_reassociate_rule_is_compared_in_the_higher_precision"
-desc = "A rule that asks for `reassociate` or `contract` is compared where the real value is: both sides evaluated in the reference's precision, never one element-type result against another (which corrected the method the library's `array_combine_mixed` was refused by). `x*48 + x*(-47) => x*1` at the sample the check draws (`x = 1e+30`) has two element-type results 27 ulps of the result apart -- `1.0000041e+30` against `1e+30`, far outside the 11 the reassociate contract allows -- and one real value, so the rule is right and the verdict is `sampled`. The rules around it pin the half of the proposition that still refuses and the licences that narrow it, each licence one rule apart from the verdict it changes: two sides whose real values agree but whose special values differ bit for bit (a NaN against a zero at `x = 1e+30`) are `refuted`, and the same law with `no_infs` (`overflow_licensed`) or with `no_nans` (`nan_licensed`) is `sampled`, because each licence assumes no value is an infinity or a NaN, the two overflowing products and the NaN they make included, so the point where `x * 1e30` leaves `f32`'s range is outside the domain the law claims; two zeros of different sign are refused and the same zero law with `no_signed_zeros` is `sampled`, because that licence makes the sign of a zero unobservable -- as `zero_sign_exact` shows on a rule with no numeric grant at all, where the comparison is bit for bit and the sign of a zero is part of those bits; and `real_difference`, whose two sides are `2x` and `3x`, is `refuted` with the real values named as what differs, so a rounding the licence allows is never read as any difference being allowed."
+desc = "A rule that asks for `reassociate` or `contract` is compared where the real value is: both sides evaluated in the reference's precision, never one element-type result against another (which corrected the method the library's `array_combine_mixed` was refused by). `x*48 + x*(-47) => x*1` at the sample the check draws (`x = 1e+30`) has two element-type results 27 ulps of the result apart -- `1.0000041e+30` against `1e+30`, far outside the 11 the reassociate contract allows -- and one real value, so the rule is right and the verdict is `sampled`. The rules around it pin the half of the proposition that still refuses and the licences that narrow it, each licence one rule apart from the verdict it changes: two sides whose real values agree but whose special values differ bit for bit (a NaN against a zero at `x = 1e+30`) are `refuted`, and the NaN is written `nan`, without a sign -- the sign bit of the NaN that `inf + (-inf)` makes is whatever the hardware's default NaN carries, which x86 sets and arm64 does not, so the reading that pinned `-nan` pinned the host; a NaN's text never carries a sign (`docs/design-principles.cn.md:602`), and `sampleText` now formats through the same `withoutNaNSign` every other printed value already used -- and the same law with `no_infs` (`overflow_licensed`) or with `no_nans` (`nan_licensed`) is `sampled`, because each licence assumes no value is an infinity or a NaN, the two overflowing products and the NaN they make included, so the point where `x * 1e30` leaves `f32`'s range is outside the domain the law claims; two zeros of different sign are refused and the same zero law with `no_signed_zeros` is `sampled`, because that licence makes the sign of a zero unobservable -- as `zero_sign_exact` shows on a rule with no numeric grant at all, where the comparison is bit for bit and the sign of a zero is part of those bits; and `real_difference`, whose two sides are `2x` and `3x`, is `refuted` with the real values named as what differs, so a rounding the licence allows is never read as any difference being allowed."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_real_equality.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["at x = 1e+30 1.0000041e+30 1e+30", "sampled real_cancel: proposition real equality + IEEE on special values, evidence samples 200, fired 8 of 8", "refuted overflow_to_nan: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (1.0000000150474662e+30): -nan and 0 (a special value is not the same bit for bit)", "sampled overflow_licensed: proposition real equality + IEEE on special values, evidence samples 200", "sampled nan_licensed: proposition real equality + IEEE on special values, evidence samples 200", "refuted real_difference: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (", "the real values differ by more than the permission's rounding", "refuted zero_sign: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (1.0000000031710769e-30): -0 and 0 (a zero of the other sign is a different bit pattern)", "sampled zero_sign_licensed: proposition real equality + IEEE on special values, evidence samples 200, fired 8 of 8", "sampled zero_sign_exact: proposition equality, evidence samples 200, fired 8 of 8"]
+expect_stdout_contains = ["at x = 1e+30 1.0000041e+30 1e+30", "sampled real_cancel: proposition real equality + IEEE on special values, evidence samples 200, fired 8 of 8", "refuted overflow_to_nan: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (1.0000000150474662e+30): nan and 0 (a special value is not the same bit for bit)", "sampled overflow_licensed: proposition real equality + IEEE on special values, evidence samples 200", "sampled nan_licensed: proposition real equality + IEEE on special values, evidence samples 200", "refuted real_difference: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (", "the real values differ by more than the permission's rounding", "refuted zero_sign: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (1.0000000031710769e-30): -0 and 0 (a zero of the other sign is a different bit pattern)", "sampled zero_sign_licensed: proposition real equality + IEEE on special values, evidence samples 200, fired 8 of 8", "sampled zero_sign_exact: proposition equality, evidence samples 200, fired 8 of 8"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 40000
 
@@ -1313,12 +1313,54 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.accuracy_check_compares_error"
-desc = "A rule that asks for `refine_accuracy` is checked by error, not by bits (rewrite design 2 (second version) 8.10): `log(1 + x) => log1p(x)` passes, the same law written the other way is worse near zero and fails with the sample printed, and the softmax rule is checked on a rank-1 tensor, a matrix and a rank-3 tensor with axis 2, each sampled from the axis operand rather than a fixed rank-1 shape."
+desc = "A rule that asks for `refine_accuracy` is checked by error, not by bits (rewrite design 2 (second version) 8.10). What this entry pins is the verdict word, the number of samples and the shape each row was drawn from; the ratio's digits are not pinned, because a ratio is one sample's worst point measured against the reference, and 7.1 promises the same bits on one device, not the same reading of a rounding on every device. `log(1 + x) => log1p(x)` samples 100 draws and stays inside the allowance with room to spare -- its worst sample spends under a quarter of the slack the contract allows, so the declared bound on `worst error ratio` is 0.25 -- where the same law written the other way is `refuted` with the sample printed: at `1e-300` the rewritten side answers 0 where the value is 1e-300 -- an error of 1 -- against an original the reference agrees with to its own last bits, so the ratio reads 2.2518e+15. The softmax rule is checked on a rank-1 tensor, a matrix and a rank-3 tensor with axis 2, each sampled from the axis operand rather than a fixed rank-1 shape, and a `sampled` row there cannot read above 1: the criterion is `right <= left + 2 ulp` and the ratio divides the same error by that same floor, so 1 is the edge the criterion draws and the three rows stop at it."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_accuracy.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["sampled accurate_log1p: proposition error bound, evidence samples 100, worst error ratio 0.193", "refuted worse_log1p: proposition error bound, evidence counterexample, the right side is worse at (", "sampled softmax_vector: proposition error bound, evidence samples 100, worst error ratio 1", "shapes [3]", "sampled softmax_matrix: proposition error bound, evidence samples 100, worst error ratio 1", "shapes [2, 3]", "sampled softmax_axis2: proposition error bound, evidence samples 100, worst error ratio 0", "shapes [2, 2, 2]", "axes -1 0 1 2"]
+verify_script = """
+const rows = new Map()
+for (const line of input.normalized.stdout.split('\n')) {
+    const match = /^(proved|refuted|sampled) ([^:]+): (.*)$/.exec(line)
+    if (match) rows.set(match[2], { verdict: match[1], tail: match[3] })
+}
+const check = (name, verdict, samples, bound) => {
+    const row = rows.get(name)
+    assert(row, 'the report has no row named ' + name)
+    assert(
+        row.verdict === verdict,
+        name + ' reads `' + row.verdict + '`, declared `' + verdict + '`: ' + row.tail
+    )
+    if (samples !== null) {
+        const count = /evidence samples (\d+)/.exec(row.tail)
+        assert(
+            count && Number(count[1]) === samples,
+            name + ': declared ' + samples + ' samples, the row says `' + row.tail + '`'
+        )
+    }
+    if (bound !== null) {
+        const ratio = /worst error ratio ([0-9.eE+-]+)/.exec(row.tail)
+        assert(ratio, name + ': no `worst error ratio` in `' + row.tail + '`')
+        assert(
+            Number(ratio[1]) <= bound,
+            name + ': worst error ratio ' + ratio[1] + ' is outside the declared bound ' + bound
+        )
+    }
+}
+check('accurate_log1p', 'sampled', 100, 0.25)
+check('worse_log1p', 'refuted', null, null)
+check('softmax_vector', 'sampled', 100, 1)
+check('softmax_matrix', 'sampled', 100, 1)
+check('softmax_axis2', 'sampled', 100, 1)
+const flat = input.normalized.stdout
+for (const evidence of ['shapes [3]', 'shapes [2, 3]', 'shapes [2, 2, 2]', 'axes -1 0 1 2']) {
+    assert(flat.includes(evidence), 'the report no longer names `' + evidence + '`')
+}
+assert(
+    /refuted worse_log1p: [^\n]*the right side is worse at \(/.test(flat),
+    'worse_log1p is refuted without naming the sample it is worse at'
+)
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -1335,12 +1377,36 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rules.accuracy_library_passes_the_check"
-desc = "The rules of `rules::accuracy`, checked in two calls: the log-of-softmax rule passes the error check over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log), and the folded scalar laws are checked by instance, `float_log1p<float>`, `float_log1p<f32>`, `float_expm1<float>` and `float_expm1<f32>`, each with its own worst-case error ratio. Neither law has a `bf16`/`f16` instance to report: `math:log1p` and `math:expm1` are registered for `f32`/`f64`, and a failed instantiation is quiet. The log-of-softmax rule's verdict is sample-dependent: it fails on draws with `inf` and `3.4e+38` in them, which is why it is measured in a call of its own, over the seed this case has always used."
+desc = "The rules of `rules::accuracy`, checked in two calls: the log-of-softmax rule passes the error check over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log), and the folded scalar laws are checked by instance, `float_log1p<float>`, `float_log1p<f32>`, `float_expm1<float>` and `float_expm1<f32>`, each with its own worst-case error ratio. The verdict word and the 100 samples are pinned; the ratio's digits are not, and the bound those rows are held to is a third (0.35) of the slack the contract allows, which is the margin the four instances support -- they measure 0.20 to 0.27 over 100 draws each, so a rewrite that doubled its own error would break the bound while a re-reading of the last digit would not. Neither law has a `bf16`/`f16` instance to report: `math:log1p` and `math:expm1` are registered for `f32`/`f64`, and a failed instantiation is quiet. The log-of-softmax rule's verdict is sample-dependent: it fails on draws with `inf` and `3.4e+38` in them, which is why it is measured in a call of its own, over the seed this case has always used; over that seed it samples all 100 and stops at the edge the criterion draws, so its bound is 1."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_accuracy_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["sampled float_log1p<float>: proposition error bound, evidence samples 100, worst error ratio 0.269","sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio 0.201","sampled float_expm1<float>: proposition error bound, evidence samples 100, worst error ratio 0.233","sampled float_expm1<f32>: proposition error bound, evidence samples 100, worst error ratio 0.201","sampled array_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio 1, fired 8 of 8"]
+verify_script = """
+const rows = new Map()
+for (const line of input.normalized.stdout.split('\n')) {
+    const match = /^(proved|refuted|sampled) ([^:]+): (.*)$/.exec(line)
+    if (match) rows.set(match[2], { verdict: match[1], tail: match[3] })
+}
+const check = (name, bound) => {
+    const row = rows.get(name)
+    assert(row, 'the report has no row named ' + name)
+    assert(row.verdict === 'sampled', name + ' reads `' + row.verdict + '`, declared `sampled`: ' + row.tail)
+    const count = /evidence samples (\d+)/.exec(row.tail)
+    assert(count && Number(count[1]) === 100, name + ': declared 100 samples, the row says `' + row.tail + '`')
+    const ratio = /worst error ratio ([0-9.eE+-]+)/.exec(row.tail)
+    assert(ratio, name + ': no `worst error ratio` in `' + row.tail + '`')
+    assert(
+        Number(ratio[1]) <= bound,
+        name + ': worst error ratio ' + ratio[1] + ' is outside the declared bound ' + bound
+    )
+}
+check('float_log1p<float>', 0.35)
+check('float_log1p<f32>', 0.35)
+check('float_expm1<float>', 0.35)
+check('float_expm1<f32>', 0.35)
+check('array_log_softmax_of_softmax', 1)
+"""
 expect_output_not_contains = ["refuted", "ok ", "a generic rule, whose instances are not checked here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -1353,7 +1419,7 @@ case = "../../../cases/modules/rules/check_every_rule.cml"
 args = ["${case}", "std::nvm"]
 verify_script_path = "./verify/check_covers_every_rule.mjs"
 expect_exit = 0
-expect_stdout_contains = ["sampled array_sigmoid_chain: proposition equality, evidence samples 200, fired 8 of 8","sampled int_add_zero<int>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio","sampled array_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio 1, fired 8 of 8"]
+expect_stdout_contains = ["sampled array_sigmoid_chain: proposition equality, evidence samples 200, fired 8 of 8","sampled int_add_zero<int>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio","sampled array_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio "]
 expect_output_not_contains = ["ok ", "FAIL ", "refuted", "a generic rule, whose instances are not checked here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000

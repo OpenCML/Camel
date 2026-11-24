@@ -1,0 +1,30 @@
+/**
+ * Two laws of one key whose parameter types are **written the same way and are not the same type**.
+ *
+ * The module declares `type T = float`. The first rule's head declares a type parameter `T` of its
+ * own, and a name declared at the head wins inside its declaration (design principles 5.5,
+ * `test/cases/compile/generics/type_param_collision.cml`), so its parameters are the variable `T`
+ * and `T`. The second rule declares no type parameter, so its `T` is the module's, and its
+ * parameters are `float` and `float`.
+ *
+ * Both parameter lists are written `T, T`. Compared as text -- which is what the rule index used to
+ * compare -- the two laws could not be told apart, and the second was refused as a duplicate of the
+ * first. Compared as the types the compiler made of them they are two laws of two shapes: `(T, T)`
+ * at the head's variable and `(float, float)`. Both are filed, and `std::rulesets` reads the table
+ * back: two lines under `+/2`, in the order they are written.
+ */
+
+type T = float
+
+rule plus_any::<T>(x: T, w: T) {
+    x + w => (dx: T, dw: T) => dx
+}
+
+rule plus_float(x: T, w: T) {
+    x + w => (dx: T, dw: T) => dw
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

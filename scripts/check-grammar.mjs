@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The grammar of Camel is written once, as the production above each function of the parser
-// (src/parse/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
+// (parse/src/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
 // in step with it:
 //
 //   node scripts/check-grammar.mjs --write    regenerate the grammar blocks of the language
@@ -12,8 +12,10 @@
 //                                             section 2.4.1, both languages)
 //   node scripts/check-grammar.mjs --check    exit 1 unless
 //       - those blocks are what --write would produce,
+//       - every file at the top of parse/src/syntax was read, and a file under that directory
+//         which writes a production and is not read is a failure, named by path,
 //       - every name used on a right-hand side is a production (or a token class),
-//       - every quoted literal is a token of include/camel/parse/syntax/token_kinds.def, or a
+//       - every quoted literal is a token of parse/include/camel/parse/syntax/token_kinds.def, or a
 //         contextual keyword of scripts/context-keywords.mjs,
 //       - every production has a `parse` function or is listed as folded into another one,
 //       - every node kind of node_kinds.def names a production in its comment,
@@ -27,11 +29,63 @@ import { fileURLToPath } from 'node:url'
 import { CONTEXT_KEYWORDS, renderContextKeywordTable } from './context-keywords.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const PARSER_FILES = ['parser.cpp', 'parser_expr.cpp', 'parser_type.cpp', 'parser_rule.cpp'].map((f) =>
-    path.join(ROOT, 'src', 'parse', 'syntax', f)
-)
-const TOKENS = path.join(ROOT, 'include', 'camel', 'parse', 'syntax', 'token_kinds.def')
-const NODES = path.join(ROOT, 'include', 'camel', 'parse', 'syntax', 'node_kinds.def')
+// Where the parse block keeps its sources and its headers is a layout, not a path: the layout map
+// (docs/design/architecture/layout-map.cn.md, table B) moved `src/parse/` to `parse/src/` and
+// `include/camel/parse/` to `parse/include/camel/parse/`, and the two-install comparison runs this
+// script in both trees, so both spellings are resolved here and everywhere else in this file asks
+// them for a directory. Which one the tree has decides; no rule below spells either.
+const firstOf = (candidates) =>
+    candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+const PARSE_SOURCES = firstOf([
+    path.join(ROOT, 'parse', 'src'),
+    path.join(ROOT, 'src', 'parse'),
+])
+const PARSE_HEADERS = firstOf([
+    path.join(ROOT, 'parse', 'include', 'camel', 'parse'),
+    path.join(ROOT, 'include', 'camel', 'parse'),
+])
+// The grammar is read from the directory and not from a list of file names. A list is a decision
+// that nothing records: a new `parser_*.cpp` beside the old ones, or a parser source that moves
+// into a subdirectory, is read by nothing -- its productions are compared with nothing while every
+// check below stays green, which is the defect this script exists for (the shape that
+// `scripts/vjp-parity.mjs`'s ruleset directory and `test/tools/reading_refusal/check.py`'s walk of
+// `lib/transforms` were fixed for). So every file at the top of the directory is read, with no
+// name and no extension filter: a filter is the same silent decision, one level down.
+const PARSER_DIRECTORY = path.join(PARSE_SOURCES, 'syntax')
+// The directory as the reports name it, so a message reads the tree it was run in.
+const PARSER_DIRECTORY_NAME = path.relative(ROOT, PARSER_DIRECTORY).split(path.sep).join('/')
+// The order the productions are written in is the reading order of the reference (08), not an
+// alphabetical one (`parser_type.cpp` comes before `parser_rule.cpp` there). This list decides the
+// order and not the membership: a file it does not name is read too, after the named ones, so a
+// new parser source appends its productions to the block instead of dropping out of it.
+const GRAMMAR_ORDER = ['parser.cpp', 'parser_expr.cpp', 'parser_type.cpp', 'parser_rule.cpp']
+let parserEntries
+try {
+    parserEntries = fs.readdirSync(PARSER_DIRECTORY, { withFileTypes: true })
+} catch {
+    console.error(`error: ${PARSER_DIRECTORY_NAME} is not in the tree; the grammar is read from it`)
+    process.exit(1)
+}
+const PARSER_FILES = parserEntries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .sort((a, b) => {
+        const rank = (name) => {
+            const at = GRAMMAR_ORDER.indexOf(name)
+            return at < 0 ? GRAMMAR_ORDER.length : at
+        }
+        return rank(a) - rank(b) || a.localeCompare(b)
+    })
+    .map((name) => path.join(PARSER_DIRECTORY, name))
+// An empty read set makes every check below true of nothing.
+if (PARSER_FILES.length === 0) {
+    console.error(
+        `error: ${PARSER_DIRECTORY_NAME} holds no file; the grammar is read from it and there is nothing to compare`
+    )
+    process.exit(1)
+}
+const TOKENS = path.join(PARSE_HEADERS, 'syntax', 'token_kinds.def')
+const NODES = path.join(PARSE_HEADERS, 'syntax', 'node_kinds.def')
 const DOCS = [
     path.join(ROOT, 'docs', 'language', '08_top_level_and_grammar.md'),
     path.join(ROOT, 'docs', 'language', 'en', '08_top_level_and_grammar.md'),
@@ -116,6 +170,13 @@ function readText(file) {
     return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 }
 
+// The marker of a production: `/// name : ...` at the start of a line. The coverage check below
+// reads this same marker, and deliberately not a bare `///`: `parser_impl.h`, `lexer.cpp` and
+// `report.cpp` carry more than a hundred prose `///` lines between them and no production, so a
+// check keyed on `///` would be red on the day it was written and would say nothing about a parser
+// source that was really missed.
+const PRODUCTION = /^\/\/\/ ([a-z][A-Za-z]*)\s*: (.*)$/
+
 /** The productions of the parser sources, in order: [{name, lines, file}]. */
 function readProductions() {
     const productions = []
@@ -123,7 +184,7 @@ function readProductions() {
         const lines = readText(file).split('\n')
         let current = null
         for (const line of lines) {
-            const start = /^\/\/\/ ([a-z][A-Za-z]*)\s*: (.*)$/.exec(line)
+            const start = PRODUCTION.exec(line)
             const more = /^\/\/\/ {2,}(\S.*)$/.exec(line)
             if (start) {
                 current = { name: start[1], lines: [start[2].trim()], file }
@@ -136,6 +197,42 @@ function readProductions() {
         }
     }
     return productions
+}
+
+/// The files under `parse/src/syntax` that write a production and are not in the read set.
+///
+/// The read set is the top of the directory, so a parser source that moves into a subdirectory
+/// stops being read while every check stays green -- the same defect, one level down, and the one
+/// this check was fixed for. A file is recognised by what it says (the `PRODUCTION` marker, and not
+/// a bare `///`: three files of that directory hold prose doc comments and no production), and
+/// every stray is named: a red that says only how many places were missed leaves the reader to work
+/// out which, which is the work this check exists to do.
+function unreadSources() {
+    const readSet = new Set(PARSER_FILES)
+    const stray = []
+    const walk = (directory) => {
+        let entries
+        try {
+            entries = fs.readdirSync(directory, { withFileTypes: true })
+        } catch {
+            return
+        }
+        for (const entry of entries) {
+            const full = path.join(directory, entry.name)
+            if (entry.isDirectory()) {
+                walk(full)
+                continue
+            }
+            if (readSet.has(full)) {
+                continue
+            }
+            if (readText(full).split('\n').some((line) => PRODUCTION.test(line))) {
+                stray.push(path.relative(ROOT, full).split(path.sep).join('/'))
+            }
+        }
+    }
+    walk(PARSER_DIRECTORY)
+    return [...new Set(stray)].sort()
 }
 
 function render(productions) {
@@ -161,6 +258,15 @@ const names = new Set()
 for (const p of productions) {
     if (names.has(p.name)) errors.push(`production '${p.name}' is written twice`)
     names.add(p.name)
+}
+
+// A file under the directory that writes a production and is not read is a place this check
+// stopped looking at, whoever moved it there. Named one per line, because the fix is to read it.
+for (const unread of unreadSources()) {
+    errors.push(
+        `${unread} writes a \`/// name : \` production and is not read, so its productions are ` +
+            `compared with nothing: the grammar is read from the top of ${PARSER_DIRECTORY_NAME}`
+    )
 }
 
 const tokenText = readText(TOKENS)
@@ -241,8 +347,10 @@ for (const doc of DOCS.map((d) => d.replace('08_top_level_and_grammar.md', '02_l
 function flat(text) {
     return text.replace(/\s+/g, ' ').trim()
 }
-const BUILDER = path.join(ROOT, 'src', 'parse', 'ast', 'builder.cpp')
-if (!fs.existsSync(BUILDER)) errors.push('src/parse/ast/builder.cpp does not exist')
+const BUILDER = path.join(PARSE_SOURCES, 'ast', 'builder.cpp')
+if (!fs.existsSync(BUILDER)) {
+    errors.push(`${path.relative(ROOT, BUILDER).split(path.sep).join('/')} does not exist`)
+}
 const evidenceFlat = flat(parserText + '\n' + (fs.existsSync(BUILDER) ? readText(BUILDER) : ''))
 for (const entry of CONTEXT_KEYWORDS) {
     for (const line of entry.evidence) {

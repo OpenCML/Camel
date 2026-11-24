@@ -11,9 +11,9 @@ language author. Each is implemented the way section 9 recommends and marked in 
 in the tests with `DESIGN-QUESTION(<label>)`, so that a rule can be applied in one place.
 
 The name `attempt` is settled (design principles 3.9). In the C++ sources it is written in exactly one place,
-`camel::execute::kFaultIsolationName` (`include/camel/execute/fault_isolation.h`); everything
+`camel::execute::kFaultIsolationName` (`lib/std/exec/include/camel/execute/fault_isolation.h`); everything
 else refers to the operator by its URI `:mark/isolate`, which does not contain the name.
-Outside C++ the name is in the signature entry (`stdlib/prelude.cml`), the
+Outside C++ the name is in the signature entry (`lib/std/prelude.cml`), the
 generated `docs/stdlib-reference.md`, this note, and the test programs.
 
 ## 1. Surface form and graph mapping
@@ -406,7 +406,7 @@ fault, would make an isolated fault cost a full collection).
 - **`std::cpp`.** It translates the value as it translates any closure: the closure becomes an
   `rt::Fn` whose lambda calls the generated function of the synthesized graph, and that
   function's body is the one marked call, `rt::attempt<T>(depth, site, captured, args...)` (a
-  C++ try around the call, `include/camel/standalone/hof.h`). That the translated program
+  C++ try around the call, `lib/std/cpp/include/camel/standalone/hof.h`). That the translated program
   prints what `std::fvm` prints is checked by `trans.cpp.agree_with_fvm`.
 - **Safepoint.** The node is one: both entering the callee and leaving it (normally or
   through a fault) are graph boundaries, where every live value is in a frame.

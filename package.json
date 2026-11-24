@@ -13,6 +13,7 @@
         "cnt": "node ./scripts/cnt.js",
         "init": "node ./scripts/install.js",
         "check": "node ./scripts/check.js",
+        "gates": "node ./scripts/gates.mjs",
         "check:invariant-owner": "node ./scripts/check-invariant-owner.mjs",
         "test": "node ./scripts/test.js --tier fast",
         "test:milestone": "node ./scripts/test.js test/plans --tier milestone",

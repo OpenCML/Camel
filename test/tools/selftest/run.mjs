@@ -420,6 +420,30 @@ if (!/\[INFO\] known_fail_owner\s+the runner self-test\b/.test(knownfail.output)
     problems.push('known_fail gate: the owner was not printed on the [XFAIL] line')
 }
 knownfailVerdict.push(`all-three=${/^\[XFAIL\] complete\b/m.test(knownfail.output) ? 'accepted' : 'MISSING'}`)
+// What would end the red, printed beside the name of every known failure the run accepted. The
+// complete fixture carries the other three fields and no `known_fail_ends_when`, so its row is the
+// reading the roster exists to expose -- `(no end condition)` in red, which is a red nobody has said
+// how to end. Two readings, both off the output: the row for this fixture, and the closing count
+// agreeing with the rows above it. The count is the metric a mark cannot hide inside -- before this,
+// a red with no stated end was one number among `known failures: N` and nothing said which -- so the
+// assertion is its arithmetic and not a literal, since this run's other fixtures are marked too.
+const rosterRows = [...knownfail.output.matchAll(/^\[KNOWN\] (\S+): (.*)$/gm)]
+const rosterCount = knownfail.output.match(
+    /^\[KNOWN\] (\d+) of (\d+) known failure\(s\) carry no known_fail_ends_when$/m
+)
+const rosterFixture = rosterRows.some(
+    ([, name, ends]) => name === 'selftest.knownfail.complete/complete' && ends.trim() === '(no end condition)'
+)
+if (!rosterFixture) {
+    problems.push(`known_fail gate: the roster did not name the missing end condition:\n${knownfail.output}`)
+}
+const rosterArithmetic = rosterCount !== null
+    && Number(rosterCount[2]) === rosterRows.length
+    && Number(rosterCount[1]) === rosterRows.filter(([, , ends]) => ends.trim() === '(no end condition)').length
+if (!rosterArithmetic) {
+    problems.push('known_fail gate: the roster count does not agree with the rows it prints')
+}
+knownfailVerdict.push(`roster=${rosterFixture && rosterArithmetic ? 'named' : 'MISSING'}`)
 console.log(`[known_fail gate] ${knownfailVerdict.join('; ')}`)
 // The two directories' refusals are counted where their plans are read, which is the one thing the
 // single summary cannot say: it counts the run. Each refusal names its own plan file, so the count
@@ -803,9 +827,9 @@ const hasPlan = (selection, name) => selection !== null && selection.names.inclu
 const hasLayered = (selection, name) => selection !== null && selection.layered.includes(name)
 const hasTarget = (selection, relative) =>
     selection !== null && selection.targets.some((target) => path.resolve(target) === path.join(repoRoot, relative))
-const scheduler = plansForChanges(['src/passes/sched/fastvm/dispatch.cpp'])
+const scheduler = plansForChanges(['lib/std/fvm/fastvm.cpp'])
 if (!hasPlan(scheduler, 'smoke') || !hasPlan(scheduler, 'feat/linear')) {
-    problems.push(`--changed: src/passes/sched/ selected ${scheduler ? scheduler.names.join(', ') : 'nothing'}`)
+    problems.push(`--changed: lib/std/fvm/ selected ${scheduler ? scheduler.names.join(', ') : 'nothing'}`)
 }
 const docs = plansForChanges(['docs/test-plans.md'])
 if (!hasPlan(docs, 'feat/docs_links.plan.toml')) {
@@ -814,50 +838,50 @@ if (!hasPlan(docs, 'feat/docs_links.plan.toml')) {
 // A directory rule names the plan that mirrors the path, and the file rule adds the plans
 // outside that tree that the same change can break: tensor keeps its own plans and adds
 // the autodiff plan, which is layered so its slow PyTorch comparisons stay out of --tier fast.
-const tensor = plansForChanges(['modules/tensor/ops/matmul.cpp'])
+const tensor = plansForChanges(['lib/tensor/ops/binary_ops.cpp'])
 if (!hasTarget(tensor, 'test/plans/feat/modules/tensor')) {
     problems.push(
-        `--changed: modules/tensor/ selected ${tensor ? tensor.targets.join(', ') || tensor.names.join(', ') : 'nothing'}`
+        `--changed: lib/tensor/ selected ${tensor ? tensor.targets.join(', ') || tensor.names.join(', ') : 'nothing'}`
     )
 }
 if (!hasPlan(tensor, 'feat/modules/index_semantics.plan.toml')) {
-    problems.push('--changed: modules/tensor/ did not add the operator/index semantics plans')
+    problems.push('--changed: lib/tensor/ did not add the operator/index semantics plans')
 }
 if (!hasLayered(tensor, 'feat/modules/autodiff.plan.toml')) {
-    problems.push('--changed: modules/tensor/ did not layer the autodiff plan')
+    problems.push('--changed: lib/tensor/ did not layer the autodiff plan')
 }
 // A layered plan is a plan to run, just one that follows the tier: it must also be selected, or
 // the runner would never see it at all.
 if (!hasPlan(tensor, 'feat/modules/autodiff.plan.toml')) {
     problems.push('--changed: the layered autodiff plan is not among the selected plans')
 }
-const nn = plansForChanges(['modules/nn/ops.cpp'])
+const nn = plansForChanges(['lib/nn/layers.cpp'])
 if (!hasTarget(nn, 'test/plans/feat/modules/nn.plan.toml')) {
-    problems.push(`--changed: modules/nn/ did not select its plan file`)
+    problems.push(`--changed: lib/nn/ did not select its plan file`)
 }
 // The plans no directory rule can reach: a tiles change selects the CPU plan and the GPU plans.
-const tiles = plansForChanges(['modules/tiles/src/foo.cpp'])
+const tiles = plansForChanges(['lib/tiles/src/region_extract.cpp'])
 for (const plan of [
     'feat/modules/tiles.plan.toml',
     'gpu/tiles.plan.toml',
     'gpu/tiles_rows.plan.toml',
     'gpu/tiles_transfer.plan.toml',
 ]) {
-    if (!hasPlan(tiles, plan)) problems.push(`--changed: modules/tiles/ did not select ${plan}`)
+    if (!hasPlan(tiles, plan)) problems.push(`--changed: lib/tiles/ did not select ${plan}`)
 }
 // `layer: true` keeps the slow PyTorch comparisons out of an ordinary change while the fast
 // cases of the same plan still run.
-const onnx = plansForChanges(['modules/onnx/exporter.cpp'])
+const onnx = plansForChanges(['lib/onnx/exporter.cpp'])
 if (!hasLayered(onnx, 'feat/modules/onnx.plan.toml') || !hasPlan(onnx, 'feat/trans')) {
-    problems.push('--changed: modules/onnx/ did not select its layered plans')
+    problems.push('--changed: lib/onnx/ did not select its layered plans')
 }
-const autodiff = plansForChanges(['modules/autodiff/pullback.cpp'])
+const autodiff = plansForChanges(['lib/autodiff/pullback.cpp'])
 if (!hasLayered(autodiff, 'feat/modules/autodiff.plan.toml')) {
-    problems.push('--changed: modules/autodiff/ did not layer its plan')
+    problems.push('--changed: lib/autodiff/ did not layer its plan')
 }
 // The optimizer, and the rule library it runs, select the opt plans (a directory, so the slow
 // progen plan is filtered by --tier fast).
-for (const file of ['src/passes/opt/generic/algebra.cpp', 'stdlib/rules.cml']) {
+for (const file of ['lib/std/cxx/opt/generic/algebra.cpp', 'lib/rules/rules.cml']) {
     const selection = plansForChanges([file])
     if (!hasPlan(selection, 'feat/opt') || !hasPlan(selection, 'feat/modules/rules.plan.toml')) {
         problems.push(

@@ -18,7 +18,8 @@
 // Exit status 2 when a target does not exist, the scan holds no source file, or no file uses a
 // name in the table: a check of nothing is refused, never reported as a pass.
 //
-// What is checked: every .h / .cpp under src/, include/, modules/ and tools/. For each file the
+// What is checked: every .h / .cpp under the four source roots (kernel/, parse/, compile/, lib/)
+// and tools/. For each file the
 // standard headers it reaches are collected: its own `#include <...>` lines and those of the
 // project headers it includes with `#include "..."`, transitively. Headers of third-party
 // libraries count for nothing (what they include is theirs to change), and neither does an
@@ -36,11 +37,48 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const SCAN_DIRS = ['src', 'include', 'modules', 'tools']
-// Where `#include "a/b.h"` is looked up after the directory of the including file.
-const INCLUDE_ROOTS = ['include', 'src', '.', 'third_party', 'modules', 'tools', 'tools/debugger']
+// The blocks the layout map files the sources under (`docs/design/architecture/layout-map.cn.md`,
+// tables A and B): the four source roots and `tools/`. The flat `src/`, `include/`, `modules/` and
+// `stdlib/` of the tree before the move are gone, and naming them here would be a scan of nothing.
+//
+// A root that is not there is **not** left out. This list used to filter itself with `existsSync`,
+// which reads "the root is gone" as "there is nothing wrong under the root": with `tools/` moved
+// away on 2026-11-22 the run printed `std includes: 1188 files, every standard header used is
+// reached through its includes` and exited 0 -- 95 files dropped out of the scan and out of the
+// sentence, and the line claimed the tree had been checked. So the five are spelled here, and
+// `main` refuses (exit 2) when one of them is not in the tree, naming the root and the directory it
+// expected. A check that quietly scans a smaller tree reports on a tree it did not read.
+const SCAN_DIRS = ['kernel', 'parse', 'compile', 'lib', 'tools']
+// Where `#include "a/b.h"` is looked up after the directory of the including file: every block
+// carries its own `include/` (`kernel/include`, `parse/include`, `compile/include`, and one per
+// module directory under `lib/`), and a tool names a header of another tool from the tree root.
+// The list is read off the tree and not written down, so a block that gains or loses its
+// `include/` changes the lookup instead of silently leaving an include unresolved.
+function includeRoots() {
+    const roots = ['.', 'third_party', 'tools', 'tools/debugger']
+    const walk = (dir, depth) => {
+        if (depth < 0) return
+        let entries
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true })
+        } catch {
+            return
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue
+            const full = path.join(dir, entry.name)
+            if (entry.name === 'include') roots.push(rel(full))
+            else if (entry.name !== 'third_party' && entry.name !== 'node_modules') walk(full, depth - 1)
+        }
+    }
+    for (const block of ['kernel', 'parse', 'compile', 'lib']) {
+        walk(path.join(ROOT, block), 2)
+    }
+    return roots
+}
+const INCLUDE_ROOTS = includeRoots()
 // Sources that are not the project's own.
-const SKIP = [/^third_party\//, /^modules\/python\/sdks\//, /\/third_party\//, /(^|\/)ui\//]
+const SKIP = [/^third_party\//, /^lib\/python\/(sdks|dlls)\//, /\/third_party\//, /(^|\/)ui\//]
 const SOURCE = /\.(h|hpp|cpp|cc)$/
 
 const PLATFORM_MACRO =
@@ -297,8 +335,9 @@ function read(file) {
 function resolveInclude(from, name) {
     const candidates = [path.resolve(path.dirname(from), name)]
     for (const root of INCLUDE_ROOTS) candidates.push(path.resolve(ROOT, root, name))
-    // A module names its own headers from its directory (modules/<name>/...).
-    const module = /^(modules\/[^/]+|tools\/[^/]+)\//.exec(rel(from))
+    // A module names its own headers from its directory (`lib/<name>/...`; `modules/<name>/...`
+    // before the layout move, which put a module's C++ and its declaration in one directory).
+    const module = /^(lib\/[^/]+|tools\/[^/]+)\//.exec(rel(from))
     if (module) candidates.push(path.resolve(ROOT, module[1], name))
     for (const candidate of candidates) {
         if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
@@ -392,23 +431,44 @@ function addIncludes(file, headers) {
     fs.writeFileSync(file, lines.join(eol))
 }
 
+// The code is *set*, never `process.exit`ed: this check's reading is a few thousand bytes of
+// findings and then the two lines that say what they amount to, and the gate reads stdout through a
+// pipe. `process.exit` leaves with the queue still full (test/tools/check-plan-fields.mjs carries the
+// full note for the same reason), so the last line would be the one that never arrives.
 function main() {
     const args = process.argv.slice(2)
     const fix = args.includes('--fix')
     const direct = args.includes('--direct')
     const targets = args.filter((a) => !a.startsWith('--'))
-    const files = []
-    for (const target of targets.length > 0 ? targets : SCAN_DIRS) {
+    const roots = targets.length > 0 ? targets : SCAN_DIRS
+    // Every root is resolved before anything is walked, and every missing one is named: a run that
+    // cannot read a root never reports on the roots it could.
+    const missing = []
+    for (const target of roots) {
         const entry = path.resolve(ROOT, target)
-        if (!fs.existsSync(entry)) {
-            console.error(`no such file or directory: ${target}`)
-            process.exit(2)
-        }
-        walk(entry, files)
+        if (!fs.existsSync(entry)) missing.push({ target, entry })
     }
+    if (missing.length > 0) {
+        for (const { target, entry } of missing) {
+            console.error(`no such file or directory: ${target} (expected at ${entry})`)
+        }
+        console.error(
+            `std includes: ${missing.length} of the ${roots.length} root(s) this check scans ` +
+                `${missing.length === 1 ? 'is' : 'are'} not in the tree: nothing was checked`,
+        )
+        return 2
+    }
+    const files = []
+    for (const target of roots) {
+        walk(path.resolve(ROOT, target), files)
+    }
+    // How much of the tree this run read, printed on every verdict. It is the number a reader
+    // compares across runs: a root that drops out of the list moves it, and a sentence that claims
+    // the whole tree was checked no longer stands beside a count that says otherwise.
+    console.log(`std includes: read ${files.length} source file(s) under ${roots.join(', ')}`)
     if (files.length === 0) {
         console.error('std includes: no .h/.cpp under the given targets: nothing was checked')
-        process.exit(2)
+        return 2
     }
     let findings = 0
     let filesWithFindings = 0
@@ -434,7 +494,7 @@ function main() {
     }
     if (filesWithUses === 0) {
         console.error(`std includes: none of the ${files.length} file(s) names a standard-library name: nothing was checked`)
-        process.exit(2)
+        return 2
     }
     const mode = direct ? 'named by the file itself' : 'reached through its includes'
     if (findings > 0) {
@@ -442,9 +502,10 @@ function main() {
             `std includes: ${findings} missing header(s) in ${filesWithFindings} of ${files.length} files (${mode})` +
                 (fix ? '; added' : '; run with --fix to add them'),
         )
-        process.exit(fix ? 0 : 1)
+        return fix ? 0 : 1
     }
     console.log(`std includes: ${files.length} files, every standard header used is ${mode}`)
+    return 0
 }
 
-main()
+process.exitCode = main()

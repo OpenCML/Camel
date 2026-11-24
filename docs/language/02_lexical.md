@@ -2,7 +2,7 @@
 
 [English](en/02_lexical.md) | 中文
 
-本章描述源码的词法结构。记号表在 `include/camel/parse/syntax/token_kinds.def`，词法分析器在 `src/parse/syntax/lexer.cpp`。
+本章描述源码的词法结构。记号表在 `parse/include/camel/parse/syntax/token_kinds.def`，词法分析器在 `parse/src/syntax/lexer.cpp`。
 
 ---
 
@@ -57,7 +57,7 @@ let c = a + b
 
 ### 2.4.1 上下文关键字
 
-下面这些词**只在列出的位置是关键字，别处是普通的名字**：`let when = 1` 里的 `when` 是一个名字，`func f(x: T): T when is_integer::<T>()` 里的 `when` 是适用条件的开头。它们不是保留字，也不是 `token_kinds.def` 里的记号：读它们的是按位置判断的解析代码（`src/parse/syntax/parser*.cpp` 里的 `atWord` 与同类的判断）。词表只有一份，在 `scripts/context-keywords.mjs`，每条都带着读它的那行代码；下面这张表由 `scripts/check-grammar.mjs --write` 写出，插件的文法与它逐个对得上（`editors/vscode/` 的 `contextual-keywords` 规则里就是这些词，快照用例在 `test/cases/tools/grammar/context_keywords.cml`）。
+下面这些词**只在列出的位置是关键字，别处是普通的名字**：`let when = 1` 里的 `when` 是一个名字，`func f(x: T): T when is_integer::<T>()` 里的 `when` 是适用条件的开头。它们不是保留字，也不是 `token_kinds.def` 里的记号：读它们的是按位置判断的解析代码（`parse/src/syntax/parser*.cpp` 里的 `atWord` 与同类的判断）。词表只有一份，在 `scripts/context-keywords.mjs`，每条都带着读它的那行代码；下面这张表由 `scripts/check-grammar.mjs --write` 写出，插件的文法与它逐个对得上（`editors/vscode/` 的 `contextual-keywords` 规则里就是这些词，快照用例在 `test/cases/tools/grammar/context_keywords.cml`）。
 
 反过来，位置名里的 `func` 与 `type` 是保留字，列在 2.4 的表里，只有跟在 `on` 之后时才读作位置名；`match type` 的 `case` 里紧跟 `case` 的 `func` 也一样，命名的是函数类型这种形状。
 
@@ -75,6 +75,7 @@ let c = a + b
 | 声明里的子句 | `uses` | 资源子句：函数签名或函数类型里声明效应集合的 `uses`（`uses s` 读、`uses var fs` 写，与 `var` 形参同一种写法） |
 | 声明里的子句 | `spelling` | 资源子句的前置词：声明这段正文可以读程序的写法（图或函数的名字、节点的源位置、创建顺序与创建号、节点显示成的文字）。它与效应同一套机制，写在同一个子句里、`pure`/`uses` 之前（设计原则 9.5） |
 | 声明里的子句 | `pure` | 资源子句：承诺不使用任何资源的 `pure`（与 `uses` 同一位置） |
+| 声明里的子句 | `panic` | 资源子句里的 `panic`：声明这个算子的一次调用可能故障（不带种类列表，种类由实现抛出什么决定）；声明不写它，即承诺它的调用不会故障（设计原则 3.9）。它与 `pure` 同一位置，写在 `uses` 那一串之前；`uses panic` 是名字叫 `panic` 的一个资源 |
 | 声明里的子句 | `join` | 事实声明的尾子句：两条事实怎样合并（事实体之后，一行一个） |
 | 声明里的子句 | `meet` | 事实声明的尾子句：等价的写法怎样相遇 |
 | 声明里的子句 | `widen` | 事实声明的尾子句：循环加速的写法 |

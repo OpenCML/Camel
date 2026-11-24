@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/compile/module_source.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
@@ -34,12 +35,12 @@
 #include "config.h"
 #include "diag_limit.h"
 #include "module_failures.h"
-#include "passes/trans/dot/graphviz.h"
-#include "passes/trans/stats/stats.h"
-#include "passes/trans/tns/topo_node_seq.h"
-#include "service/codegen/source/generator.h"
-#include "service/profiler/advanced/advanced_tracer.h"
-#include "service/profiler/core/trace.h"
+#include "lib/std/gir/dot/graphviz.h"
+#include "lib/std/stats/stats.h"
+#include "lib/std/tns/topo_node_seq.h"
+#include "tools/codegen/source/generator.h"
+#include "tools/profiler/advanced/advanced_tracer.h"
+#include "tools/profiler/core/trace.h"
 #include "timeit.h"
 
 #include <array>
@@ -451,8 +452,8 @@ int runCommand(int argc, char *argv[]) {
         }
 
         if (selectedCommand == Command::Inspect) {
-            if (Inspect::dumpGCT && mainModule->gct()) {
-                mainModule->gct()->print(os);
+            if (Inspect::dumpGCT && camel::compile::treeOf(*mainModule)) {
+                camel::compile::treeOf(*mainModule)->print(os);
             }
             if (Inspect::dumpGIR) {
                 GraphVizDumpPass pass(ctx);

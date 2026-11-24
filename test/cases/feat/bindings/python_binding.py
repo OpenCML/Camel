@@ -382,9 +382,29 @@ def main():
         )
 
     smallest, largest = sizes[0], sizes[-1]
+    # "No copy" is a claim about this run's own two columns, and it is asserted as such: 64x the
+    # bytes must cost the call almost nothing and the copy a great deal. Both sides are measured
+    # here, on the same buffers and with the same sample count, so a slow host or a fast memmove
+    # moves both together and a correct binding stays green wherever it runs.
+    #
+    # This replaced comparing one call with twice a 1 MiB memmove, which put a fixed cost against a
+    # cost the host sets. That yardstick read 12.4 us against 309.4 us on the Linux build host (a
+    # 25x margin) but compares the same two quantities to 70.4 against 62.6 on the win-x64 runner,
+    # whose memmove is five times faster and whose call four times dearer, and it red a binding that
+    # moved nothing: the addresses above were equal and 64 MiB was copied there in 3158.2 us, 45x
+    # the call. macOS arm64 red the same line at 46.0 against 41.2 for the same reason. Two hosts
+    # red on their own numbers is a yardstick that reads the host, not the binding.
+    #
+    # 8 is a little under half of the smallest factor a correct binding has shown (44.8 on the
+    # runner, 241 on the build host), and a binding that copies the bytes reads a factor of 1.
     check(
-        pass_through[largest] < 2 * copying[smallest],
-        "handing over 64 MiB must cost less than copying 1 MiB, or the binding moves the bytes",
+        pass_through[largest] * 8 < copying[largest],
+        "handing over 64 MiB must cost less than an eighth of copying those same bytes, or the "
+        "binding moves them",
+    )
+    check(
+        pass_through[largest] < 8 * pass_through[smallest],
+        "64x the bytes must not cost 8x the call, or the call's cost follows the bytes it is handed",
     )
     # The two numbers are the fastest single call each, so this ratio no longer carries the host's
     # scheduling delay in its denominator, while the sizes themselves stay 64x apart. Measured on

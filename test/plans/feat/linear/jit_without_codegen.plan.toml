@@ -16,7 +16,7 @@ tags = ["feat", "linear", "jit", "diagnostics"]
 # The first case is also the one place where this code is asserted by name: the warning is a
 # command-line warning with no source position, and the short rendering of a diagnostic ends with
 # `(name=..., code=...)`, so `expect_diagnostic_name` reads it out of the same line the message
-# needle reads. There is no other reachable shape: `src/execute/pass.cpp#jitWithoutCodeGeneratorWarning`
+# needle reads. There is no other reachable shape: `kernel/execute/pass.cpp#jitWithoutCodeGeneratorWarning`
 # returns nullopt at compile time when ENABLE_FASTVM_JIT is on, so a build with a code generator has
 # no program, flag or environment that reaches this code.
 

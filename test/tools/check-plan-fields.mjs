@@ -81,6 +81,25 @@
  *                        no reading that ends it
  *   end-trigger-names-nothing        a trigger that quotes no reading
  *   end-trigger-names-another-reading  a trigger that does not name this entry's own pinned line
+ *   path-without-a-tree  a rule of `test/plan-selection.json` names a path prefix that is not in
+ *                        the tree (`path-exception-stale`: recorded in `SELECTION_PATH_EXCEPTIONS`
+ *                        and no longer needed). This one is not ratcheted: see below.
+ *
+ * The last row is the same defect one file over. `test/plan-selection.json` decides which plans a
+ * change runs, and a rule is a list of path prefixes; a prefix that is not in the tree matches no
+ * file, so the rule selects nothing -- and nothing says so, because `--changed` widens a file no
+ * rule matched to the whole fast layer and the run is green. `include/camel/parse/` sat in that
+ * state from the layout move (2026-11-22) until this reading existed: its twin,
+ * `parse/include/camel/parse/`, was already there under the new layout, so one rule of the file
+ * matched no file at all and every file under `include/` -- a directory the tree no longer has --
+ * was read as "no plan needed". A counting ratchet is the wrong shape for it: a rule that names
+ * nothing is a defect to remove, not a debt to spend down, so a finding here fails the run whatever
+ * the baseline says.
+ *
+ * `SELECTION_PATH_EXCEPTIONS` exists for a prefix the tree cannot carry yet, with the reason it
+ * will, and an entry that is no longer needed is a finding. It holds nothing today. **An exception
+ * table that can hold a broken rule is a table that makes the check stop speaking**: the rule above
+ * is that a rule naming nothing is fixed or deleted, never recorded here.
  *
  * It is **ratcheted**: it prints the line `plan-fields fields=<n> findings=<n> mode=report`, then
  * compares the count with `test/tools/plan-fields-baseline.json`. Findings that grow past that file
@@ -143,6 +162,14 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 // nothing for is a hole in `--changed` (test/tools/selftest/run.mjs). Read by the ratchet below,
 // written only by `--update-baseline`.
 const BASELINE_PATH = path.join(HERE, 'plan-fields-baseline.json')
+
+// The selection rules' own exceptions, and the rule for this list: **an exception table that can
+// hold a broken rule is a table that makes the check stop speaking.** A rule whose prefix is not in
+// the tree is a defect -- the plans it was written for are selected by no change, and `--changed`
+// widens instead of failing -- so it is fixed or deleted, never recorded here. An entry is for a
+// prefix the tree cannot carry yet, with the reason it will; an entry whose path has arrived, or
+// whose prefix no rule names any more, is reported so the list cannot outlive what it waited for.
+const SELECTION_PATH_EXCEPTIONS = []
 
 // Every field `validateTest` evaluates whatever the kind is. `expect_stdout` is the legacy name of
 // `expect_stdout_exact` and the two are read in one loop; `verify_js` is the legacy name of
@@ -418,6 +445,108 @@ function scanTree(rootDir) {
     return { findings, plansRead, entriesRead, fields: fieldsRead.size }
 }
 
+/**
+ * Every `paths` entry of `test/plan-selection.json` against the tree it selects in.
+ *
+ * A rule is a list of prefixes, and `--changed` looks a changed file up under one: a prefix that is
+ * not in the tree matches no file, and a file no rule matched is dropped from the union or widens
+ * the run to the whole fast layer -- a green run either way. So the rule reads as coverage and is
+ * none, which is why this asks the tree instead of trusting the rule's own text.
+ */
+function scanSelection(rootDir) {
+    const relative = 'test/plan-selection.json'
+    const file = path.join(rootDir, 'test', 'plan-selection.json')
+    const unreadable = (note) => ({
+        findings: [
+            {
+                category: 'selection-unreadable',
+                file: relative,
+                line: 0,
+                name: relative,
+                kind: 'selection',
+                field: 'paths',
+                note: `${note}: the selection rules were not checked`,
+            },
+        ],
+        rules: 0,
+        paths: 0,
+        exceptions: SELECTION_PATH_EXCEPTIONS.length,
+    })
+    let text
+    try {
+        text = fs.readFileSync(file, 'utf8')
+    } catch (error) {
+        return unreadable(`cannot be read (${error.code || error.message})`)
+    }
+    let doc
+    try {
+        doc = JSON.parse(text)
+    } catch (error) {
+        return unreadable(`is not JSON (${error.message})`)
+    }
+    const lines = text.split('\n')
+    // Where a reader starts: the first line naming the prefix, quoted as JSON quotes it. A shorter
+    // prefix does not match inside a longer one (`include/camel/parse/` is not found inside
+    // `parse/include/camel/parse/`, because the quote in front of it belongs to `parse/`).
+    const lineOf = (prefix) => {
+        const needle = JSON.stringify(prefix)
+        const at = lines.findIndex((line) => line.includes(needle))
+        return at < 0 ? 0 : at + 1
+    }
+    const add = (category, prefix, note) =>
+        findings.push({
+            category,
+            file: relative,
+            line: lineOf(prefix),
+            name: prefix,
+            kind: 'selection',
+            field: 'paths',
+            note,
+        })
+    const findings = []
+    const exceptions = new Map(SELECTION_PATH_EXCEPTIONS.map((entry) => [entry.path, entry]))
+    const named = new Set()
+    let rules = 0
+    let paths = 0
+    for (const list of [doc.directoryRules || [], doc.rules || []]) {
+        for (const rule of list) {
+            if (!Array.isArray(rule.paths) || rule.paths.length === 0) continue
+            rules += 1
+            for (const prefix of rule.paths) {
+                if (typeof prefix !== 'string' || prefix === '') continue
+                paths += 1
+                named.add(prefix)
+                const present = fs.existsSync(path.join(rootDir, prefix))
+                const exception = exceptions.get(prefix)
+                if (present && exception) {
+                    add(
+                        'path-exception-stale',
+                        prefix,
+                        `recorded as "${exception.why}", and the tree has the path now: remove the entry`,
+                    )
+                } else if (!present && !exception) {
+                    add(
+                        'path-without-a-tree',
+                        prefix,
+                        `the rule selects ${JSON.stringify(rule.plans)} and the prefix is not in the tree: ` +
+                            'it matches no file, so a change under it runs the widened fast layer and not these plans',
+                    )
+                }
+            }
+        }
+    }
+    for (const [prefix, exception] of exceptions) {
+        if (!named.has(prefix)) {
+            add(
+                'path-exception-stale',
+                prefix,
+                `recorded as "${exception.why}", and no rule names the prefix any more: remove the entry`,
+            )
+        }
+    }
+    return { findings, rules, paths, exceptions: SELECTION_PATH_EXCEPTIONS.length }
+}
+
 // The per-entry list, and only the per-entry list: who calls it decides whether it is the report
 // (a broken ratchet, `--enforce`, `--report-only`) or noise (a baseline that is merely stale).
 function printFindings(findings) {
@@ -440,20 +569,38 @@ function printReading(result) {
     )
 }
 
-function report(result) {
+function report(result, selection) {
+    // The selection reading first, and on every verdict: `exceptions=0` is the line that says the
+    // rules were counted and nothing was let through an exception.
+    console.log(
+        `plan-fields selection paths=${selection.paths} rules=${selection.rules} exceptions=${selection.exceptions}`,
+    )
     if (ENFORCE) {
-        printFindings(result.findings)
+        printFindings([...result.findings, ...selection.findings])
         printReading(result)
-        return result.findings.length > 0 ? 1 : 0
+        return result.findings.length + selection.findings.length > 0 ? 1 : 0
     }
     if (REPORT_ONLY) {
         // The posture this check had before it became a wall: the same lines, no exit code.
         printFindings(result.findings)
+        printFindings(selection.findings)
         printReading(result)
         console.log('plan-fields report only: the count is not compared with the baseline')
         return 0
     }
-    return ratchet(result, BASELINE_PATH)
+    const code = ratchet(result, BASELINE_PATH)
+    // A rule that names nothing is a defect and not a debt: the ratchet above may come down and this
+    // still fails, which is the difference between a count and a wall.
+    if (selection.findings.length > 0) {
+        printFindings(selection.findings)
+        console.log(
+            `FAIL plan-fields ${selection.findings.length} path(s) of test/plan-selection.json name no file in ` +
+                'the tree: a rule that matches no file selects nothing, and the change that should have ' +
+                'run its plans runs the widened fast layer instead',
+        )
+        return 1
+    }
+    return code
 }
 
 /**
@@ -802,7 +949,8 @@ function main(argv) {
         return verifyRunner(path.join(HERE, 'run-tests.mjs'))
     }
     const result = scanTree(root)
-    return UPDATE_BASELINE ? updateBaseline(result, BASELINE_PATH) : report(result)
+    const selection = scanSelection(root)
+    return UPDATE_BASELINE ? updateBaseline(result, BASELINE_PATH) : report(result, selection)
 }
 
 process.exitCode = main(process.argv.slice(2))

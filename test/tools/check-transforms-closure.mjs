@@ -4,8 +4,8 @@
 
 // The closure of the forward half over the backward half, and the reading that says it bites.
 //
-// `stdlib/rulesets/transpose.cml` files a law for every operator a transposed walk can meet, and
-// `stdlib/rulesets/jvp.cml` has to answer each of them: the library is
+// `lib/rulesets/transpose.cml` files a law for every operator a transposed walk can meet, and
+// `lib/rulesets/jvp.cml` has to answer each of them: the library is
 // `transpose(split(reinterp<jvp>(f)))`, so one half writes the operators the other half walks. A key
 // with a backward law and no forward law is a step the composition takes in one direction only, and
 // the refusal a user meets names nothing -- `transforms: jvp has no forward transform for this
@@ -77,17 +77,17 @@ report(
 // ---- a backward law with no forward twin -------------------------------------------------------
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'transforms-closure-copy-'))
-fs.mkdirSync(path.join(scratch, 'stdlib', 'rulesets'), { recursive: true })
+fs.mkdirSync(path.join(scratch, 'lib', 'rulesets'), { recursive: true })
 for (const name of ['transpose.cml', 'jvp.cml']) {
     fs.copyFileSync(
-        path.join(ROOT, 'stdlib', 'rulesets', name),
-        path.join(scratch, 'stdlib', 'rulesets', name)
+        path.join(ROOT, 'lib', 'rulesets', name),
+        path.join(scratch, 'lib', 'rulesets', name)
     )
 }
 
 // One backward law, filed under a head neither file has, and no forward law beside it: the shape of
 // the day an operator is added to the transposed walk alone.
-const copied = path.join(scratch, 'stdlib', 'rulesets', 'transpose.cml')
+const copied = path.join(scratch, 'lib', 'rulesets', 'transpose.cml')
 fs.appendFileSync(
     copied,
     `\n// written by test/tools/check-transforms-closure.mjs: a backward law with no forward twin.\n` +

@@ -73,13 +73,23 @@ import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const SIGNATURE_DIR = path.join(REPO_ROOT, 'stdlib', 'signatures')
+// The library, in either layout. After the layout move it is one declaration per `lib/<name>/`:
+// `<name>.cml` beside the module's C++, the computed half in `<name>/signatures/`, and the two
+// declarations that have no module of their own (`std.cml`, `prelude.cml`) in `lib/std/`. A tree
+// that has not been moved keeps the same files flat in `stdlib/`. A reader that knew one layout
+// only would answer "not in the library" for every module of the other, so both are read, in that
+// order, and the first spelling that exists is the file a module reads.
+const MOVED_LIBRARY = path.join(REPO_ROOT, 'lib')
+const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
+const firstThere = (candidates) => candidates.find((one) => fs.existsSync(one)) ?? candidates[0]
 
 // The install a run measures: `--camel <path>` (parsed in the main section below), else this tree's
 // `out/latest`. Every install a run measures passes the build stamp of `scripts/install-stamp.mjs`,
 // named there or not.
 let camelPath = null
-const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
+/// The directory the library is walked from: `lib/` after the move, `stdlib/` before it. Walking
+/// either finds the same `.cml` files, which is what the match-type table reads.
+const STDLIB_DIR = [MOVED_LIBRARY, FLAT_LIBRARY].find((dir) => fs.existsSync(dir)) ?? FLAT_LIBRARY
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'stdlib-reference.md')
 const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
 
@@ -383,7 +393,7 @@ const MODULES = [
         title: '`rulesets.jvp`: how a forward transform lifts a value',
         kind: 'camel',
         // A ruleset is a module of the library, found under its dotted name: a dotted module name
-        // is a subdirectory of the library, so `rulesets.jvp` is `stdlib/rulesets/jvp.cml`. Its
+        // is a subdirectory of the library, so `rulesets.jvp` is `lib/rulesets/jvp.cml`. Its
         // declarations are Camel, and `--verify-docs` compiles their examples like any other
         // module's.
         source: 'rulesets/jvp.cml',
@@ -393,7 +403,7 @@ const MODULES = [
         title: '`rulesets.vmap`: how a batched transform lifts a value',
         kind: 'camel',
         // `Lift<T> = RowsOf<T>`: a batched value is the value with one dimension in front, so the
-        // elementwise tier's rule for a primitive is the primitive itself (`stdlib/rulesets/vmap.cml`).
+        // elementwise tier's rule for a primitive is the primitive itself (`lib/rulesets/vmap.cml`).
         source: 'rulesets/vmap.cml',
     },
     {
@@ -443,13 +453,83 @@ function announcePending() {
     }
 }
 
+// `source` is the file's name inside the library: `rewrite.cml` (the module's own directory),
+// `rulesets/jvp.cml` (a dotted prefix, which the moved layout keeps as `lib/rulesets/jvp.cml`),
+// `prelude.cml` (the one declaration in `lib/std/`). Every candidate is tried in the moved layout
+// first and the flat one second, so one reader serves a moved tree and an unmoved one.
 function sourceOf(module) {
     if (module.source) {
-        return path.join(STDLIB_DIR, module.source)
+        const name = module.source
+        return firstThere([
+            path.join(MOVED_LIBRARY, name),
+            path.join(MOVED_LIBRARY, module.name, name),
+            path.join(MOVED_LIBRARY, 'std', name),
+            path.join(FLAT_LIBRARY, name),
+            path.join(FLAT_LIBRARY, module.name, name),
+            path.join(FLAT_LIBRARY, 'std', name),
+        ])
     }
     return module.kind === 'camel'
-        ? path.join(STDLIB_DIR, `${module.name}.cml`)
-        : path.join(SIGNATURE_DIR, `${module.name}.cml`)
+        ? firstThere([
+            path.join(MOVED_LIBRARY, module.name, `${module.name}.cml`),
+            path.join(FLAT_LIBRARY, `${module.name}.cml`),
+        ])
+        : computedOf(module)
+}
+
+/// The computed half of a module's declarations: `signatures/<name>.cml` beside the module after
+/// the move, in the one flat directory before it.
+/// A module with no computed half has no file, and `path.join` refuses `undefined`: the callers
+/// push the answer into a list they filter, so `null` is the shape they expect.
+function computedOf(module) {
+    if (!module.computed) return null
+    return firstThere([
+        path.join(MOVED_LIBRARY, module.name, module.computed),
+        path.join(FLAT_LIBRARY, module.computed),
+    ])
+}
+
+/// Every signature file on disk, in either layout. A file the module table does not name still has
+/// to be read, or a body written in it would go unchecked.
+function signatureFiles() {
+    const out = new Set()
+    const flat = path.join(FLAT_LIBRARY, 'signatures')
+    if (fs.existsSync(flat)) for (const name of fs.readdirSync(flat)) if (name.endsWith('.cml')) out.add(path.join(flat, name))
+    if (fs.existsSync(MOVED_LIBRARY)) {
+        for (const entry of fs.readdirSync(MOVED_LIBRARY, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue
+            const dir = path.join(MOVED_LIBRARY, entry.name, 'signatures')
+            if (!fs.existsSync(dir)) continue
+            for (const name of fs.readdirSync(dir)) if (name.endsWith('.cml')) out.add(path.join(dir, name))
+        }
+    }
+    return [...out].sort()
+}
+
+/// The declaration files of the library, the way `scripts/collect-out.js` assembles the install:
+/// every `lib/<name>/<name>.cml`, the ones in `lib/std/`, the dotted `lib/rulesets/` and the
+/// signature files beside their modules -- or, in a tree that has not been moved, the same set in
+/// `stdlib/`, `lib/rulesets/` and `stdlib/signatures/`. The audit's "no module of the table
+/// reads this file" half is only worth reading if it walks the library the install is built from.
+function libraryFiles() {
+    const out = new Set()
+    const push = (dir) => {
+        if (!fs.existsSync(dir)) return
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isFile() && entry.name.endsWith('.cml')) out.add(path.join(dir, entry.name))
+        }
+    }
+    for (const dir of [FLAT_LIBRARY, path.join(FLAT_LIBRARY, 'rulesets'), path.join(FLAT_LIBRARY, 'signatures')]) push(dir)
+    if (fs.existsSync(MOVED_LIBRARY)) {
+        push(path.join(MOVED_LIBRARY, 'std'))
+        push(path.join(MOVED_LIBRARY, 'rulesets'))
+        for (const entry of fs.readdirSync(MOVED_LIBRARY, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue
+            push(path.join(MOVED_LIBRARY, entry.name))
+            push(path.join(MOVED_LIBRARY, entry.name, 'signatures'))
+        }
+    }
+    return [...out].sort()
 }
 
 // ---- reading declarations ------------------------------------------------------------------
@@ -515,20 +595,39 @@ function braceDepth(text) {
     return depth
 }
 
+// The `panic` a declaration writes beside its result type, taken out of the type: the type, and
+// whether the clause was stated. `panic` says a call of the operator can fail (design principles
+// 3.9); it is a statement about the operator's faults, written where the `uses` and `when` clauses
+// are (`export func save_tree::<T>(tree: T): void! panic uses var fs when has_ckpt_form::<T>()`),
+// and it is not part of the type. Read as part of the type it poisoned both halves of the
+// comparison: `T panic when ...` left the conditions cut off one word late, so every declaration
+// that states it disagreed with a registered signature that has no place for the clause, and a
+// `T panic` with no clause behind it did not read as a type at all -- `fail`'s `never panic` and
+// seven more entered the exception list as `an exception with no label`. The clause is read out
+// here, where the declaration's result is parsed, and printed back by `signatureText`, so the page
+// still states it where the declaration wrote it.
+function takePanicClause(text) {
+    const at = topLevelIndex(text, 'panic')
+    if (at < 0) return { text, panic: false }
+    const rest = text.slice(at + 'panic'.length)
+    return { text: `${text.slice(0, at).trimEnd()} ${rest.trimStart()}`.trim(), panic: true }
+}
+
 // The result type a declaration states, read from the line the declaration is on. A `match type`
 // result is written over several lines -- its case list is the part that looks like a body -- so
 // the brace group is followed to its close and the whole text is the result. Any other result is
-// the text after the colon, with a body opening (when the declaration has a body) cut off.
+// the text after the colon, with a body opening (when the declaration has a body) cut off. The
+// `panic` clause is not part of the type and is returned beside it (see `takePanicClause`).
 function readResultType(after, lines, lineIndex) {
     const text = after.replace(/^\s*:\s*/, '').trim()
-    if (!/^match\s+type\b/.test(text)) return text.replace(/\s*(sync\s*)?\{\s*$/, '').trim()
+    if (!/^match\s+type\b/.test(text)) return takePanicClause(text.replace(/\s*(sync\s*)?\{\s*$/, '').trim())
     let joined = text
     let depth = braceDepth(joined)
     for (let j = lineIndex + 1; depth > 0 && j < lines.length; j++) {
         joined += ` ${lines[j].trim()}`
         depth = braceDepth(joined)
     }
-    return joined.trim()
+    return takePanicClause(joined.trim())
 }
 
 // The index of the bracket that closes the one at `open`, or -1 when the line ends first.
@@ -614,9 +713,7 @@ function declarationBody(rest, lines, lineIndex) {
 // page would still agree with the registered operators.
 function signatureBodyProblems() {
     const problems = []
-    for (const name of fs.readdirSync(SIGNATURE_DIR).sort()) {
-        if (!name.endsWith('.cml')) continue
-        const file = path.join(SIGNATURE_DIR, name)
+    for (const file of signatureFiles()) {
         const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
         const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
         for (let i = 0; i < lines.length; i++) {
@@ -758,7 +855,7 @@ function readDeclarations(file, module, options = {}) {
         // above the declaration - above the tag, or between the tag and the declaration - is its
         // description. The line therefore does not end the pending comment, which is what the AST
         // builder does too (it reads the comment above the declaration's first token, and the tag
-        // is that token: src/parse/ast/builder.cpp, docOf). A `#op('module:function')` names the
+        // is that token: parse/src/ast/builder.cpp, docOf). A `#op('module:function')` names the
         // operator a C++ declaration implements when it does not follow the convention (design
         // principles 6.4, step 1). This used to end the comment for a module written
         // in Camel, which lost the description of every such declaration from the page.
@@ -842,8 +939,8 @@ function readDeclarations(file, module, options = {}) {
             // not part of the type, so the result every comparison reads is the type alone and the
             // clause is printed back where the declaration wrote it (signatureText).
             const stated = readResultType(after, lines, i)
-            const spelling = /\bspelling\s*$/.test(stated)
-            const result = spelling ? stated.replace(/\s+spelling\s*$/, '').trim() : stated
+            const spelling = /\bspelling\s*$/.test(stated.text)
+            const result = spelling ? stated.text.replace(/\s+spelling\s*$/, '').trim() : stated.text
             const entry = {
                 module: module.name,
                 name,
@@ -853,6 +950,10 @@ function readDeclarations(file, module, options = {}) {
                 with: splitParams(withText),
                 norm: splitParams(args.inner),
                 result,
+                // The `panic` clause the declaration writes beside its result: state that a call
+                // can fail. It is not part of `result` -- no comparison reads it -- and the page
+                // prints it back where the declaration wrote it (`signatureText`).
+                panics: stated.panic,
                 spelling,
                 inferred: result === '' && module.kind === 'camel',
                 // A body-less `export func` in a library module written in Camel declares one of
@@ -910,7 +1011,7 @@ native: !declarationBody(after, lines, i),
 function parseDeclarations(module) {
     const files = [sourceOf(module)]
     if (module.computed) {
-        files.unshift(path.join(STDLIB_DIR, module.computed))
+        files.unshift(computedOf(module))
     }
     const entries = []
     const sectionNotes = new Map()
@@ -969,13 +1070,18 @@ function parseHeader(module) {
 // ---- the document -------------------------------------------------------------------------
 
 function signatureText(entry) {
-    // The clause a declaration writes after its result type (`... => string spelling`) states the
-    // capability the body takes, not part of the type: the page prints it where the declaration
-    // writes it, after the result, and every comparison reads `entry.result` without it.
+    // The clauses a declaration writes after its result type are not part of it, and the page prints
+    // them where the declaration writes them: `panic` first (it is written beside the type,
+    // `: T panic when ...`), then the conditions, then the capability the body takes
+    // (`... => string spelling`). Every comparison reads `entry.result`, which holds the type and
+    // the conditions alone.
+    const { text: type, conditions } = splitConditions(entry.result)
+    const panic = entry.panics ? ' panic' : ''
+    const stated = `${type}${panic}${conditions === '' ? '' : ` ${conditions}`}`
     const clause = entry.spelling ? ' spelling' : ''
-    if (entry.value) return `${entry.name}: ${entry.result}${clause}`
+    if (entry.value) return `${entry.name}: ${stated}${clause}`
     const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
-    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}${clause}`
+    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${stated || (entry.inferred ? '?' : 'void')}${clause}`
 }
 
 function renderDoc() {
@@ -983,7 +1089,7 @@ function renderDoc() {
     out.push('# Standard Library Reference')
     out.push('')
     out.push('<!-- Generated by scripts/stdlib-reference.mjs --write. Do not edit: change the declarations')
-    out.push('     (stdlib/*.cml and stdlib/signatures/*.cml) or the comments of the library and')
+    out.push('     (lib/**/*.cml) or the comments of the library and')
     out.push('     regenerate. -->')
     out.push('')
     out.push('The functions of the core standard library, by module. The boundary is the one the design')
@@ -1235,7 +1341,7 @@ function typeWithoutDefault(type) {
 
 // The positions a declaration writes, in the order the operator registers them: the ordinary
 // parameters, then the `<>` ones (`OpDef::params`, written `withAfterNorm`; the protocol
-// `modules/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
+// `lib/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
 // axis form (design principles 7.3) is exactly this: `sum` declares one ordinary parameter and two
 // `with` ones, `sum<axis, keepdims>(t)`, and the operator registers three ports -- so the two lists
 // are one list when the counts add up. When they do not (a declaration may write a `with` parameter
@@ -1322,11 +1428,11 @@ const moduleSources = new Map()
 function moduleSource(module) {
     if (!moduleSources.has(module.name)) {
         const files = [sourceOf(module)]
-        if (module.computed) files.push(path.join(STDLIB_DIR, module.computed))
+        if (module.computed) files.push(computedOf(module))
         moduleSources.set(
             module.name,
             files
-                .filter((file) => fs.existsSync(file))
+                .filter((file) => file && fs.existsSync(file))
                 .map((file) => fs.readFileSync(file, 'utf8'))
                 .join('\n'),
         )
@@ -2031,7 +2137,7 @@ function namesOfDeclaration(entry) {
 // every test returned `float32` rows, and nothing read the two statements against each other.
 //
 // The comparison is on the type, not on the spelling. The authority for which spellings name one
-// type is the compiler's own table (`initInnerTypes`, src/compile/gct/builder.cpp): `int` and
+// type is the compiler's own table (`initInnerTypes`, compile/src/gct/builder.cpp): `int` and
 // `i64` are Int64, `float` and `f64` are Float64, and `f32`, `i32`, `bf16`, `f16`, `c64`, `c128`,
 // `bool`, `string`, `Bytes`, `void` and `never` are their own. Two types are the same only when
 // their codes are, so `f32[...]` and `float[...]` stay two types here (design principles 5.1: no
@@ -2042,10 +2148,10 @@ function namesOfDeclaration(entry) {
 
 // A result written as one of these names is read; every other name makes the entry unreadable.
 // The middle column is the type the compiler holds for that spelling. The spellings are the
-// program's own names (src/compile/gct/builder.cpp, `initInnerTypes`), the explicit names of the
+// program's own names (compile/src/gct/builder.cpp, `initInnerTypes`), the explicit names of the
 // same types (`i64` for Int64, which the declaration files write as `int64`; `float64` for
 // Float64), and the names the tensor module writes an element type with (`dtypeName`,
-// modules/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
+// lib/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
 // those are what a kernel's own `resultDoc` says, so a claim of `float32[...]` and a declaration of
 // `f32[...]` are the same type here.
 const RESULT_SCALARS = new Map([
@@ -2080,9 +2186,9 @@ const FLOAT_ELEMENTS = new Set(['float', 'f32', 'bf16', 'f16'])
 // How many names an exception list shows in one line before it counts the rest.
 const EXCEPTIONS_SHOWN = 12
 
-// The type a signature states, with the conditions a declaration may add after it removed: a
-// `when ...` or `uses ...` clause is about the operator, not about its result.
-function withoutConditions(text) {
+// The type a signature states, and the conditions written after it: a `when ...` or `uses ...`
+// clause is about the operator, not about its result.
+function splitConditions(text) {
     const source = (text || '').trim()
     let depth = 0
     for (let i = 0; i < source.length; i++) {
@@ -2094,10 +2200,15 @@ function withoutConditions(text) {
         if ('([{<'.includes(c)) depth++
         else if (')]}>'.includes(c)) depth--
         else if (depth === 0 && /\s/.test(c) && /^(?:when|uses)\b/.test(source.slice(i + 1))) {
-            return source.slice(0, i).trimEnd()
+            return { text: source.slice(0, i).trimEnd(), conditions: source.slice(i + 1).trim() }
         }
     }
-    return source
+    return { text: source, conditions: '' }
+}
+
+// The type a signature states, with the conditions a declaration may add after it removed.
+function withoutConditions(text) {
+    return splitConditions(text).text
 }
 
 // The commas of `text` that are not inside a group, or null when the text does not balance.
@@ -2198,7 +2309,7 @@ function canonicalResult(text) {
     }
     // `float` alone is the word the tensor module writes where an operator gives back a tensor of
     // its argument's element type: `softmax`, `layer_norm`, `linear` and `softmax_grad` return
-    // `dtypeOf<T>()` of the input (modules/tensor/kernels/reduce.cpp) and their `resultDoc` says
+    // `dtypeOf<T>()` of the input (lib/tensor/kernels/reduce.cpp) and their `resultDoc` says
     // `float[...]`, while an operator that returns f64 says `float64[...]` (`from_bytes_f64`,
     // `to_bytes_f64`). So a bare `float` in a claim is the element family, not one element type.
     return { text: `${known}${dimensions}`, opaque: false, family: base === 'float' }
@@ -2540,7 +2651,7 @@ function matchTypeVerdict(declaredText, operatorText) {
     }
 }
 
-// What a registered parameter says it takes (`modules/tensor/ops/op_def.cpp`, `kindText`). These
+// What a registered parameter says it takes (`lib/tensor/ops/op_def.cpp`, `kindText`). These
 // are not types but sets of them, and `float[...]` in one is the operator's spelling for "a tensor",
 // not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
 // it takes. A signature a resolver builds instead writes real types; those are compared as types.
@@ -2806,80 +2917,80 @@ const EXAMPLE_STOPS = {
     // is missing, so a member that enters this list says which example stopped and why, and one that
     // leaves says which example the marker no longer excuses.
     'a semantic error': {
-        'stdlib/fs.cml#append_bytes#1':
+        'lib/fs/fs.cml#append_bytes#1':
             'the example hands `encode(\'abc\')` to an operator that takes `Bytes`, and `encode` is `bytes`\'s name, which this page does not import',
-        'stdlib/fs.cml#read_bytes#1':
+        'lib/fs/fs.cml#read_bytes#1':
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'stdlib/fs.cml#read_chunk#1':
+        'lib/fs/fs.cml#read_chunk#1':
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'stdlib/fs.cml#write_bytes#1':
+        'lib/fs/fs.cml#write_bytes#1':
             'the example builds its `Bytes` with `encode(\'abc\')`, which is `bytes`\'s name',
-        'stdlib/state.cml#set#1':
+        'lib/state/state.cml#set#1':
             'the example writes through `r`, a handle the surrounding program holds: an example program has no box to write',
-        'stdlib/state.cml#update#1':
+        'lib/state/state.cml#update#1':
             'the example updates through `r`, a handle the surrounding program holds: an example program has no box to update',
-        'stdlib/graph.cml#constant#1':
+        'lib/graph/graph.cml#constant#1':
             '`n` is a node of the surrounding pass, and no example program has one',
-        'stdlib/graph.cml#erase#1':
+        'lib/graph/graph.cml#erase#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/graph.cml#eval#1':
+        'lib/graph/graph.cml#eval#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/graph.cml#replace#1':
+        'lib/graph/graph.cml#replace#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/graph.cml#name#1':
+        'lib/graph/graph.cml#name#1':
             'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
-        'stdlib/graph.cml#origin#1':
+        'lib/graph/graph.cml#origin#1':
             'the example reads the origin of `n`, which is a node of the surrounding pass, and the reading needs the `spelling` capability no example program can declare (design principles 9.5)',
-        'stdlib/graph.cml#show#1':
+        'lib/graph/graph.cml#show#1':
             'the example prints a node, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
-        'stdlib/graph.cml#creation_id#1':
+        'lib/graph/graph.cml#creation_id#1':
             'the example reads the creation number of a handle, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
-        'stdlib/graph.cml#outline#1':
+        'lib/graph/graph.cml#outline#1':
             '`t` is an open transaction and `ns` a group of its graph\'s nodes: a doc example has neither',
-        'stdlib/graph.cml#order#1':
+        'lib/graph/graph.cml#order#1':
             '`t` is an open transaction and `a`, `b` are nodes of its graph: a doc example has neither',
-        'stdlib/graph.cml#inline#1':
+        'lib/graph/graph.cml#inline#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'stdlib/hash.cml#sha256#1':
+        'lib/hash/hash.cml#sha256#1':
             'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
-        'stdlib/prelude.cml#len#3':
+        'lib/std/prelude.cml#len#3':
             'the `Bytes` overload\'s example builds its value with `encode(\'h€\')`, which is `bytes`\'s name',
-        'stdlib/prelude.cml#slice#3':
+        'lib/std/prelude.cml#slice#3':
             'the `Bytes` overload\'s example names `encode`, which is `bytes`\'s, and a doc example is compiled with this module\'s names only',
-        'stdlib/prelude.cml#tee_note#1':
+        'lib/std/prelude.cml#tee_note#1':
             'the last operand is the stream a tee reads, and no example program has one',
-        'stdlib/python.cml#call#1':
+        'lib/python/python.cml#call#1':
             'the callable is a Python object from `attr`, and `sqrt` is a name the surrounding program binds',
-        'stdlib/rewrite.cml#explain#1':
+        'lib/rewrite/rewrite.cml#explain#1':
             'a run and two of its values come from the caller, and `a` is one of those values',
-        'stdlib/rewrite.cml#explain_all#1':
+        'lib/rewrite/rewrite.cml#explain_all#1':
             'a run comes from the caller, and `r` is it',
-        'stdlib/rewrite.cml#extract#1':
+        'lib/rewrite/rewrite.cml#extract#1':
             'the cost function comes from `rules`, and `rules::nodes` is not a name the page binds',
-        'stdlib/rewrite.cml#rewrite#1':
+        'lib/rewrite/rewrite.cml#rewrite#1':
             'a rule set comes from the caller, and `rules` is it',
-        'stdlib/rewrite.cml#run#1':
+        'lib/rewrite/rewrite.cml#run#1':
             'a rule set comes from the caller, and `rules` is it',
-        'stdlib/rewrite.cml#saturate#1':
+        'lib/rewrite/rewrite.cml#saturate#1':
             'a rule set comes from the caller, and `rules` is it',
-        'stdlib/rewrite.cml#why_not#1':
+        'lib/rewrite/rewrite.cml#why_not#1':
             'a run, a rule and a value come from the caller, and `target` is one of them',
-        'stdlib/vjp.cml#grad#1':
+        'lib/vjp/vjp.cml#grad#1':
             '`grad` is generic in the function it takes (`F`), so the checker can write no value for the parameter: the function whose first `with` parameter is differentiated is a declaration in the surrounding program',
-        'stdlib/signatures/autodiff.cml#grad#1':
+        'lib/autodiff/signatures/autodiff.cml#grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
-        'stdlib/signatures/autodiff.cml#grad#2':
+        'lib/autodiff/signatures/autodiff.cml#grad#2':
             'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
-        'stdlib/signatures/autodiff.cml#with_grad#1':
+        'lib/autodiff/signatures/autodiff.cml#with_grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
-        'stdlib/signatures/autodiff.cml#with_grad#2':
+        'lib/autodiff/signatures/autodiff.cml#with_grad#2':
             'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
-        'stdlib/signatures/transforms.cml#first_with_as_param#1':
+        'lib/transforms/signatures/transforms.cml#first_with_as_param#1':
             'the example reinterprets a function that has a `with` parameter, and a `with` list is written on a declaration: no lambda this page can write inline has one'
     },
     // `an internal error` is gone (2026-11-03). The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
-    // live dereference node, and then, while the split ABI moved, `stdlib/vjp.cml`'s example and the
+    // live dereference node, and then, while the split ABI moved, `lib/vjp/vjp.cml`'s example and the
     // two fragments beside it, which still destructured the pair `split(f)` no longer answers. The
     // step that lane recorded as pending has landed: every one of those examples compiles, so a run
     // that finds nothing in this class is the run this table asks for, and the class is removed
@@ -3550,10 +3661,11 @@ function verifyOps() {
         }
     }
     // A signature file without a module of the reference would never be checked.
-    for (const file of fs.readdirSync(SIGNATURE_DIR)) {
-        const name = file.replace(/\.cml$/, '')
+    for (const file of signatureFiles()) {
+        const name = path.basename(file).replace(/\.cml$/, '')
         if (!MODULES.some((m) => m.kind === 'cpp' && m.name === name)) {
-            problems.push(`stdlib/signatures/${file}: not a module of the reference (see MODULES in scripts/stdlib-reference.mjs)`)
+            const shown = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+            problems.push(`${shown}: not a module of the reference (see MODULES in scripts/stdlib-reference.mjs)`)
         }
     }
     for (const module of MODULES.filter((m) => m.kind === 'camel')) {
@@ -3732,7 +3844,7 @@ if (mode === '--write' || mode === '--verify-doc') {
     for (const module of MODULES) {
         const pending = pendingReason(module)
         const files = [sourceOf(module)]
-        if (module.computed) files.push(path.join(STDLIB_DIR, module.computed))
+        if (module.computed) files.push(computedOf(module))
         const absent = files.filter((file) => !fs.existsSync(file))
         for (const file of absent) {
             problems.push(`${shown(file)}: what the module '${module.name}' reads is not in the library`)
@@ -3775,16 +3887,11 @@ if (mode === '--write' || mode === '--verify-doc') {
     const readBy = new Set()
     for (const module of MODULES) {
         readBy.add(path.resolve(sourceOf(module)))
-        if (module.computed) readBy.add(path.resolve(path.join(STDLIB_DIR, module.computed)))
+        if (module.computed) readBy.add(path.resolve(computedOf(module)))
     }
     const unread = []
-    for (const dir of [STDLIB_DIR, path.join(STDLIB_DIR, 'rulesets')]) {
-        if (!fs.existsSync(dir)) continue
-        for (const file of fs.readdirSync(dir)) {
-            if (!file.endsWith('.cml')) continue
-            const full = path.resolve(path.join(dir, file))
-            if (!readBy.has(full)) unread.push(shown(full))
-        }
+    for (const full of libraryFiles()) {
+        if (!readBy.has(path.resolve(full))) unread.push(shown(path.resolve(full)))
     }
     // A module the page leaves out is announced with its reason in every mode, and this one is a
     // mode too: a `pending` column says *that* it is out, and only this line says why.

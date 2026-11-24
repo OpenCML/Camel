@@ -29,6 +29,11 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["case files, every one of them is read by code or recorded with a reason"]
 normalizers = ["normalize_newlines"]
-# 45 s, not 30: the same walk as gate.plan_inventory, and the CI runner measured 9330 ms of CPU for
-# it -- 3.2x the bound, under the 4x the margin rule asks for. 45 s is 4.8x that figure.
-timeout_ms = 45000
+# The same walk as gate.plan_inventory, judged the same way: four times the CPU time it reads, never
+# the wall clock (that plan's comment quotes both numbers of one log). Its own printed reading is
+# `used 11480 ms of CPU against a 45000 ms timeout` beside `The wall clock read 24171 ms` on the
+# `linux-x64-nojit` leg of 45003684718: 4 x 11480 = 45920, rounded up to 48 s, 4.18x. The same walk
+# reads 11290-11750 ms of CPU on the other legs, which 48 s covers at 4.09-4.25x; the wall clock on
+# those legs is 12-25.6 s for that same CPU, and a host reading is never the figure a bound is set
+# from.
+timeout_ms = 48000

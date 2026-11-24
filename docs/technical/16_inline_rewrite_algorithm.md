@@ -1,6 +1,6 @@
 # `std::cxx::inline` 重写算法与 GIR API 协作详解
 
-本文针对当前实现（`src/passes/opt/inline/inline.cpp`、`src/passes/opt/inline/engine.cpp` + `src/runtime/draft_inline.cpp`）进行工程化拆解，重点说明：
+本文针对当前实现（`lib/std/cxx/opt/inline/inline.cpp`、`lib/std/cxx/opt/inline/engine.cpp` + `kernel/runtime/draft_inline.cpp`）进行工程化拆解，重点说明：
 
 - `InlineRewritePass` 的真实执行顺序；
 - 它依赖的运行时图重写 API 如何分层协作；
@@ -23,10 +23,10 @@
 
 | 层次 | 含义 |
 |------|------|
-| **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GraphDraft::calleeGraphOf`）克隆进调用方并返回 `DraftInlineResult`。 |
-| **`InlineRewritePass`（`std::cxx::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
+| **`inlineCallableInDraft`**（`kernel/include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GraphDraft::calleeGraphOf`）克隆进调用方并返回 `DraftInlineResult`。 |
+| **`InlineRewritePass`（`std::cxx::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`lib/std/cxx/opt/include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
 
-当前 pass 入口命名与含义（注册表见 `src/execute/pass.cpp`）：
+当前 pass 入口命名与含义（注册表见 `kernel/execute/pass.cpp`）：
 
 - `std::cxx::inline`：默认综合策略（等价 `std::cxx::hybrid`）；
 - `std::cxx::small`：只内联“小”被调图上的调用，且该调用**不是**分支臂首；
@@ -86,7 +86,7 @@ GATE/臂访问预算，不递归展开嵌套 JOIN。已知结果不等于可删�
 ## 2. Pass 入口与事务边界
 
 `InlineRewritePass::apply` 以“仅开启内联”的 `OptimizeRewriteConfig` 调用 `applyOptimizeRewritePass`
-（`src/passes/opt/inline/engine.cpp`）；`std::opt` 由 `simplifyGraph` 驱动，每轮调用该引擎完成
+（`lib/std/cxx/opt/inline/engine.cpp`）；`std::opt` 由 `simplifyGraph` 驱动，每轮调用该引擎完成
 去虚化、特化与内联，再执行 fold、cse 与 dce。下面描述的是引擎内的重写会话。
 每一轮重写会话的动作：
 
@@ -282,7 +282,7 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 它晚于其全部实参的来源运行，它的使用者晚于它运行。函数体未必读取每个实参，所以这些次序必须在拼接
 前后显式化：
 
-1. 用 `orderedSources`（`src/passes/opt/generic/rewrite.h`）求出调用各实参的**有序来源**：沿值输入
+1. 用 `orderedSources`（`lib/std/cxx/opt/generic/rewrite.h`）求出调用各实参的**有序来源**：沿值输入
    （以及途中纯节点的控制输入）向上，遇到的第一批携带次序的节点——调用、分支、有副作用的算子、
    带控制输入的 `GATE` 等；
 2. 被调图可能有副作用时（图中、其子图或其直接调用可达的图中含 `CALL` 节点或未登记为纯的算子），给调用节点
@@ -399,7 +399,7 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 
 ### 8.1 增长与次数上限
 
-内联受以下上限约束（`include/camel/passes/opt/config.h`、`src/passes/opt/inline/engine.cpp`）：
+内联受以下上限约束（`lib/std/cxx/opt/include/camel/passes/opt/config.h`、`lib/std/cxx/opt/inline/engine.cpp`）：
 
 - `OptimizeRewriteConfig::growthBudget`（`nodes` 默认 `kDefaultGrowthBudgetNodes`，由遍的参数
   `growth_budget` 设置；`written`、`passName` 供后续遍解释预算）：特化与内联在整个程序上可复制的
@@ -413,13 +413,15 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 前两项在 §6.1 的判定中最后检查，所以被它们拦下的调用是引擎原本会内联的调用。
 
 触及上限时不报错：相应调用保持为调用，程序语义不变，只是展开得更少。引擎最后一轮检查过而未内联的
-直接调用及其原因（`InlineDecline`）记录在 `InlineReport` 中，作为 pass fact `kInlineReportFactKey`
-挂在 `Context` 上，供后续遍解释某个调用为何仍是调用。
+直接调用及其原因（`InlineDecline`）记录在一份 `InlineReport` 里，这份记录有两个读者（**同一个对象**，
+不是同一个答案的两份拷贝）：运行引擎的那一次调用经 `applyOptimizeRewritePass` 的返回值拿到它，
+`std::opt` 用它说明「这一轮什么都没改，是因为预算用完了」，而不是「到了不动点」；同一份记录又以 pass
+fact `kInlineReportFactKey` 挂在 `Context` 上，供运行结束之后再问的读者（`onnx::export`）解释某个调用
+为何仍是调用。
 
-运行引擎的那一次调用不从这里回读：`applyOptimizeRewritePass` 把这一轮因预算触顶而留下的调用经
-`growthBudgetLeft` 直接交回给调用者（`std::opt` 用它说明「这一轮什么都没改，是因为预算用完了」，
-而不是「到了不动点」）。答案属于这一次运行，所以它不依赖 `Context`：没有 `Context` 也就没有 pass
-fact，而预算触顶这件事照样成立。`InlineReport` 留给运行结束之后再问的读者（`onnx::export`）。
+答案属于这一次运行，所以它不依赖 `Context`：没有 `Context` 就没有 pass fact，而预算触顶这件事照样
+成立。「因预算触顶而留下的那条调用」只有一种取法——`InlineReport::firstLeftFor(InlineDecline::
+GrowthBudget)`——运行本身的读者和事后的读者都从这一条读。
 
 ### 8.2 提交时的收口与结构检查
 
@@ -448,7 +450,7 @@ fact，而预算触顶这件事照样成立。`InlineReport` 留给运行结束�
 
 ### 9.2 Session 层（`RuntimeGraphDraftSession`）
 
-- 事务包装（`include/camel/runtime/draft_session.h`）：
+- 事务包装（`kernel/include/camel/runtime/draft_session.h`）：
   - `edit / rootDraft / tryDraft`：按需取得某张运行时图的 draft
   - `collectReachableRuntimeGraphs`：枚举从根图可达的运行时图
   - `findSpecialization / rememberSpecialization`：会话内的特化缓存
@@ -456,7 +458,7 @@ fact，而预算触顶这件事照样成立。`InlineReport` 留给运行结束�
 
 ### 9.3 Draft 层（`GraphDraft`）
 
-- 一张运行时图的可编辑形式（`include/camel/runtime/draft.h`）：
+- 一张运行时图的可编辑形式（`kernel/include/camel/runtime/draft.h`）：
   - `decode` / `encode`：与不可变的 `GCGraph` 互相转换；
   - 节点 id 在 draft 生命周期内稳定，删除节点不影响其他节点的 id；
   - 节点与边的编辑：`addNode`、`eraseNode`、`setCtrlInputs`、`appendInput`、`replaceInput`、
@@ -466,12 +468,12 @@ fact，而预算触顶这件事照样成立。`InlineReport` 留给运行结束�
 
 ### 9.4 克隆与拼接层
 
-- `cloneRuntimeGraphIntoDraft` / `cloneDraftGraphIntoDraft`（`include/camel/runtime/draft_clone.h`）：
+- `cloneRuntimeGraphIntoDraft` / `cloneDraftGraphIntoDraft`（`kernel/include/camel/runtime/draft_clone.h`）：
   把一张图的全部节点追加进调用方 draft，返回 `DraftGraphCloneResult`（源节点到克隆节点的映射，
   以及克隆后的端口与锚点）。
-- `inlineCallableInDraft`（`include/camel/runtime/draft_inline.h`）：在克隆之上完成端口绑定、
+- `inlineCallableInDraft`（`kernel/include/camel/runtime/draft_inline.h`）：在克隆之上完成端口绑定、
   入口/出口解析、使用者重定向与删除调用节点。
-- `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）：在拼接之上保持调用原有的次序。
+- `inlineCallInOrder`（`lib/std/cxx/opt/include/camel/passes/opt/inline.h`）：在拼接之上保持调用原有的次序。
   需要把被调函数体带进某张图的变换都应经由它，而不是直接调用拼接原语。
 
 各层的调用契约见 [`17_graph_rewrite_api_contracts.md`](17_graph_rewrite_api_contracts.md)。

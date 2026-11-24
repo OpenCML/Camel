@@ -1,7 +1,7 @@
 /**
  * The pullback read at a cotangent, in `f32` and in `float`, in one program.
  *
- * The surface is the one `stdlib/vjp.cml#vjp` declares: `vjp(f)(x)` answers `(value, pullback)` and
+ * The surface is the one `lib/vjp/vjp.cml#vjp` declares: `vjp(f)(x)` answers `(value, pullback)` and
  * the *pullback* takes the cotangent -- `vjp(f)(x).1(ct).0`. This is the reading the two `f32`
  * entries beside this file could not reach while `transpose` refused a function whose result was an
  * `f32` (it required `float`); the call text they still wear -- `vjp(f)(x, ct)`, the cotangent handed

@@ -1,0 +1,938 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#include "compile.h"
+#include "camel/compile/gir/types.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/core/trace.h"
+#include "camel/execute/executor.h"
+#include "camel/execute/fault_isolation.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/shaped_operators.h"
+#include "camel/profile/operators.h"
+#include "camel/runtime/exec_plan.h"
+#include "camel/runtime/reachable.h"
+#include "runtime/graph_build.h"
+#include <algorithm>
+#include <iostream>
+
+#include <algorithm>
+#include <cstddef>
+#include <optional>
+#include <stdexcept>
+#include <string_view>
+#include <unordered_map>
+
+using namespace std;
+using namespace camel::core::error;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using data_idx_t = camel::runtime::gc_data_idx_t;
+
+static data_idx_t
+runtimeDataIndexOf(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    GUARD(node != nullptr, "FastVM runtime node lookup resolved to null.");
+    return node->dataIndex;
+}
+
+static std::vector<data_idx_t> directCallDstSlotsOf(camel::runtime::GCGraph *targetRuntimeGraph) {
+    GUARD(targetRuntimeGraph != nullptr, "FastVM direct-call target graph is null.");
+    std::vector<data_idx_t> dstSlots;
+    const auto normPorts = targetRuntimeGraph->normPorts();
+    const auto withPorts = targetRuntimeGraph->withPorts();
+    dstSlots.reserve(normPorts.size() + withPorts.size());
+    for (auto portRef : normPorts) {
+        dstSlots.push_back(runtimeDataIndexOf(targetRuntimeGraph, portRef));
+    }
+    for (auto portRef : withPorts) {
+        dstSlots.push_back(runtimeDataIndexOf(targetRuntimeGraph, portRef));
+    }
+    return dstSlots;
+}
+
+/// The instruction that runs a marked operator (camel/core/operator_table.h), by the way its
+/// declaration says it calls its function (OperatorSemantics::elementCalls).
+static std::optional<MarkOpCode> markOpCodeOf(camel::core::OperId id) {
+    using camel::core::sem::ElementShape;
+    const auto *calls = camel::core::OperatorTable::instance().elementCalls(id);
+    if (calls == nullptr) {
+        return std::nullopt;
+    }
+    switch (calls->shape) {
+    case ElementShape::Map: // `apply` returns a new array like `map` (design principles 11.3)
+        return MarkOpCode::MapArr;
+    case ElementShape::Fold:
+        return MarkOpCode::ReduceArr;
+    case ElementShape::Filter:
+        return MarkOpCode::FilterArr;
+    case ElementShape::Foreach:
+        return MarkOpCode::ForeachArr;
+    case ElementShape::Isolate:
+        return MarkOpCode::Isolate;
+    }
+    return std::nullopt;
+}
+
+/// The operators the bytecode runs as one instruction, by OperId (the table is built once, from
+/// the URIs, when the first graph is compiled).
+const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperatorsMap() {
+    static const std::unordered_map<std::string_view, OpCode> byUri = {
+        {":op/add_i", OpCode::IADD}, {":op/add_l", OpCode::LADD},
+        {":op/add_f", OpCode::FADD}, {":op/add_d", OpCode::DADD},
+
+        {":op/sub_i", OpCode::ISUB}, {":op/sub_l", OpCode::LSUB},
+        {":op/sub_f", OpCode::FSUB}, {":op/sub_d", OpCode::DSUB},
+
+        {":op/mul_i", OpCode::IMUL}, {":op/mul_l", OpCode::LMUL},
+        {":op/mul_f", OpCode::FMUL}, {":op/mul_d", OpCode::DMUL},
+
+        {":op/div_i", OpCode::IDIV}, {":op/div_l", OpCode::LDIV},
+        {":op/div_f", OpCode::FDIV}, {":op/div_d", OpCode::DDIV},
+
+        {":op/mod_i", OpCode::IMOD}, {":op/mod_l", OpCode::LMOD},
+
+        {":op/lt_i", OpCode::ILT},   {":op/lt_l", OpCode::LLT},
+        {":op/lt_f", OpCode::FLT},   {":op/lt_d", OpCode::DLT},
+
+        {":op/gt_i", OpCode::IGT},   {":op/gt_l", OpCode::LGT},
+        {":op/gt_f", OpCode::FGT},   {":op/gt_d", OpCode::DGT},
+
+        {":op/eq_i", OpCode::IEQ},   {":op/eq_l", OpCode::LEQ},
+        {":op/eq_f", OpCode::FEQ},   {":op/eq_d", OpCode::DEQ},
+
+        {":op/le_i", OpCode::ILE},   {":op/le_l", OpCode::LLE},
+        {":op/le_f", OpCode::FLE},   {":op/le_d", OpCode::DLE},
+
+        {":op/ge_i", OpCode::IGE},   {":op/ge_l", OpCode::LGE},
+        {":op/ge_f", OpCode::FGE},   {":op/ge_d", OpCode::DGE},
+    };
+    static const std::unordered_map<camel::core::OperId, OpCode> supportedInlineOperators = [] {
+        std::unordered_map<camel::core::OperId, OpCode> byId;
+        for (const auto &[uri, code] : byUri) {
+            byId.emplace(camel::core::OperatorTable::instance().intern(uri), code);
+        }
+        return byId;
+    }();
+    return supportedInlineOperators;
+}
+
+static bytecode_vec_t compileRuntimeGraph(
+    const context_ptr_t &ctx, const camel::runtime::Program &program,
+    camel::runtime::GCGraph *graph, const CompileStrategy &opt,
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
+    GUARD(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
+    GUARD(
+        graph->hasNodePayload(),
+        std::format("Runtime graph '{}' has no node payload.", graph->name()));
+
+    const auto &plan = graph->execPlan();
+    // The position-to-node side table: while --gc-check asks for the counted blocks, one row per
+    // instruction that belongs to a node is written here, with what the plan says that node does to
+    // the count, and the table is kept with the plan it describes -- the run reads it after this
+    // compile is over, at the moment a box is made, and a local table would be gone by then. A
+    // compile that is not asked for it writes nothing and allocates nothing for it.
+    const bool anchorSitesWanted = camel::core::mm::allocatorChecks().printForeignResources;
+    if (anchorSitesWanted) {
+        localPcNodes = &plan.countedSites.nodeAtPc;
+    }
+    const auto &topoSortedIndices = plan.topo;
+    const auto returnNodeRef      = graph->returnNodeRef();
+    const auto *returnNode        = graph->returnNode();
+    const bool expectsValueReturn = graph->funcType() && graph->funcType()->hasExitType() &&
+                                    graph->funcType()->exitType() != Type::Void();
+    const bool hasValueReturn     = returnNodeRef != camel::runtime::kInvalidNodeRef &&
+                                    returnNode != nullptr && returnNode->dataIndex != 0;
+    if (expectsValueReturn && !hasValueReturn) {
+        throw std::runtime_error(
+            std::format(
+                "FastVM runtime compile requires a value return node in graph '{}'.",
+                graph->name()));
+    }
+    if (!expectsValueReturn && returnNodeRef != camel::runtime::kInvalidNodeRef && returnNode &&
+        returnNode->dataIndex != 0) {
+        // Void-return graphs may still keep a non-observable value anchor as
+        // output/exit plumbing. The VM ignores it and returns NullSlot.
+    } else if (
+        returnNodeRef != camel::runtime::kInvalidNodeRef && returnNode != nullptr &&
+        returnNode->dataIndex == 0 && expectsValueReturn) {
+        throw std::runtime_error(
+            std::format(
+                "FastVM runtime compile resolved return slot 0 in graph '{}' (ref={}, kind={}).",
+                graph->name(),
+                returnNodeRef,
+                static_cast<int>(returnNode->kind)));
+    }
+
+    auto requireInputCount = [&](std::string_view nodeKind,
+                                 camel::runtime::gc_node_ref_t nodeRef,
+                                 std::string_view inputKind,
+                                 size_t actual,
+                                 size_t expectedAtLeast) {
+        if (actual < expectedAtLeast) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM runtime compile requires at least {} {} inputs for {} node ref {} "
+                    "in graph '{}', but got {}.",
+                    expectedAtLeast,
+                    inputKind,
+                    nodeKind,
+                    nodeRef,
+                    graph->name(),
+                    actual));
+        }
+    };
+
+    EXEC_WHEN_DEBUG({
+        CAMEL_LOG_DEBUG_S("Topo", "Topologically sorted nodes for graph {}:", graph->name());
+        for (auto nodeRef : topoSortedIndices) {
+            const auto *node = graph->node(nodeRef);
+            CAMEL_LOG_DEBUG_S(
+                "Topo",
+                "  ref={} kind={} slot={}",
+                nodeRef,
+                static_cast<int>(node ? node->kind : camel::runtime::GCNodeKind::Data),
+                node ? node->dataIndex : 0);
+        }
+    });
+
+    auto bytecodes = bytecode_vec_t();
+    bytecodes.reserve(topoSortedIndices.size() * 3);
+    std::unordered_set<camel::runtime::gc_node_ref_t> topoNodeSet(
+        topoSortedIndices.begin(),
+        topoSortedIndices.end());
+    // JOINs in tail position, and the calls in tail position (the plan's rule): a call ending an
+    // arm of a tail JOIN is a tail call.
+    const std::unordered_set<camel::runtime::gc_node_ref_t> tailJoins(
+        plan.tailJoins.begin(),
+        plan.tailJoins.end());
+
+    unordered_map<camel::runtime::gc_node_ref_t, vector<size_t>> brchTargetMap;
+    unordered_map<camel::runtime::gc_node_ref_t, vector<pair<size_t, size_t>>> joinTargetMap;
+    unordered_map<camel::runtime::gc_node_ref_t, size_t> valueProducerMap;
+    // By loop of the plan: the pc after its LBEG (where a round starts) and the pc of its LTST.
+    unordered_map<uint32_t, size_t> loopRoundStart, loopTestPc;
+
+    // An arm runs from its entry to its tail and then must leave for the JOIN rather than fall
+    // into the next arm: every arm tail laid out between its BRCH and JOIN gets a JUMP to the
+    // JOIN after it (the one before the JOIN itself is folded away by the optimizer). An arm with
+    // nothing to run has the JOIN for its tail.
+    unordered_map<camel::runtime::gc_node_ref_t, vector<camel::runtime::gc_node_ref_t>>
+        armExitJoins;
+    {
+        unordered_map<camel::runtime::gc_node_ref_t, size_t> position;
+        for (size_t i = 0; i < topoSortedIndices.size(); ++i) {
+            position[topoSortedIndices[i]] = i;
+        }
+        for (const auto brch : topoSortedIndices) {
+            const auto *node = graph->node(brch);
+            if (!node || node->kind != camel::runtime::GCNodeKind::Brch) {
+                continue;
+            }
+            const auto join = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brch)->join;
+            auto joinPos    = position.find(join);
+            if (joinPos == position.end()) {
+                continue;
+            }
+            for (const auto tail : plan.branchArmTailsOfNode(brch)) {
+                auto tailPos = position.find(tail);
+                if (tailPos == position.end() || tailPos->second <= position.at(brch) ||
+                    tailPos->second >= joinPos->second) {
+                    continue;
+                }
+                auto &joins = armExitJoins[tail];
+                if (std::find(joins.begin(), joins.end(), join) == joins.end()) {
+                    joins.push_back(join);
+                }
+            }
+        }
+    }
+
+    for (size_t i = 0; i < topoSortedIndices.size(); ++i) {
+        const auto runtimeNodeIndex = topoSortedIndices[i];
+        const auto *record          = graph->node(runtimeNodeIndex);
+        GUARD(record != nullptr, "Runtime topo node is missing runtime metadata.");
+
+        size_t currIdx             = bytecodes.size();
+        const size_t bytecodeStart = bytecodes.size();
+        const auto nodeOrigin      = graph->nodeOrigin(runtimeNodeIndex);
+
+        if (auto it = brchTargetMap.find(runtimeNodeIndex); it != brchTargetMap.end()) {
+            for (size_t jumpIndex : it->second) {
+                auto &header     = bytecodes[jumpIndex];
+                header.fastop[0] = as_index(bytecodes.size());
+            }
+            brchTargetMap.erase(it);
+        }
+
+        // The loops of the graph that start, test a round or end one here (ExecLoop). Their
+        // instructions come before the node's own, in the order of the plan.
+        if (!plan.loops.empty()) {
+            for (const uint32_t code : plan.loopEventsAt(i)) {
+                const auto &loop      = plan.loops[code / 3];
+                const auto loopOrigin = graph->nodeOrigin(plan.topo[loop.position]);
+                const size_t eventPc  = bytecodes.size();
+                switch (static_cast<camel::runtime::ExecLoopEvent>(code % 3)) {
+                case camel::runtime::ExecLoopEvent::Begin:
+                    appendBytecode(bytecodes, OpCode::LBEG, 0, {}, {}, {}, true, {.loop = &loop});
+                    loopRoundStart[code / 3] = bytecodes.size();
+                    break;
+                case camel::runtime::ExecLoopEvent::Test:
+                    appendBytecode(bytecodes, OpCode::LTST, 0, {0}, {}, {}, true, {.loop = &loop});
+                    loopTestPc[code / 3] = eventPc;
+                    break;
+                case camel::runtime::ExecLoopEvent::End:
+                    bytecodes[loopTestPc.at(code / 3)].fastop[0] = as_index(eventPc);
+                    appendBytecode(
+                        bytecodes,
+                        OpCode::LEND,
+                        0,
+                        {as_index(loopRoundStart.at(code / 3))},
+                        {},
+                        {},
+                        true,
+                        {.loop = &loop});
+                    break;
+                }
+                if (localPcOrigins && loopOrigin != camel::source::kInvalidOriginId) {
+                    (*localPcOrigins)[eventPc] = loopOrigin;
+                }
+            }
+        }
+
+        // The body's tuple FILL of a loop whose state is kept as its components is not run:
+        // the loop reads the components themselves and nothing else reads the tuple
+        // (ExecLoop::stateComponents, ExecPlan::elidedAt).
+        if (!plan.elidedAt.empty() && plan.elidedAt[i]) {
+            continue;
+        }
+
+        vector<data_idx_t> normOps, withOps;
+        for (auto inputRef : graph->normInputsOf(runtimeNodeIndex)) {
+            normOps.push_back(runtimeDataIndexOf(graph, inputRef));
+        }
+        for (auto inputRef : graph->withInputsOf(runtimeNodeIndex)) {
+            withOps.push_back(runtimeDataIndexOf(graph, inputRef));
+        }
+
+        // The four shaped operators emit from the shape their operator gives -- a conversion, a
+        // clone, a construction, an access (camel/execute/shaped_operators.h, plan 2.3). This
+        // compiler reads no node kind for them; the instruction each one becomes is this back
+        // end's own, which is why the emission stays here and the operator supplies the shape.
+        const auto emitShaped = [&](camel::execute::OperShape shape) {
+            switch (shape) {
+            case camel::execute::OperShape::Conversion: {
+                requireInputCount("CAST", runtimeNodeIndex, "norm", normOps.size(), 1);
+                Type *targetType = record->dataType();
+                BytecodeExtra extra;
+                extra.pType = targetType;
+                appendBytecode(
+                    bytecodes,
+                    OpCode::CAST,
+                    record->dataIndex,
+                    {normOps.front()},
+                    {},
+                    {},
+                    true,
+                    extra);
+                return;
+            }
+
+            case camel::execute::OperShape::Clone:
+                requireInputCount("COPY", runtimeNodeIndex, "norm", normOps.size(), 1);
+                appendBytecode(bytecodes, OpCode::COPY, record->dataIndex, {normOps.front()});
+                return;
+
+            case camel::execute::OperShape::Construction: {
+                auto *bc = appendBytecode(
+                    bytecodes,
+                    OpCode::FILL,
+                    record->dataIndex,
+                    {},
+                    normOps,
+                    withOps,
+                    true,
+                    {.pType = record->dataType()},
+                    2);
+                *reinterpret_cast<const camel::runtime::GCFillBody **>(bc->extra2()) =
+                    graph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex);
+                return;
+            }
+
+            case camel::execute::OperShape::Access: {
+                requireInputCount("ACCS", runtimeNodeIndex, "norm", normOps.size(), 1);
+                const auto sourceRef  = graph->normInputsOf(runtimeNodeIndex).front();
+                const auto *srcRecord = graph->node(sourceRef);
+                const auto *accBody =
+                    graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
+                GUARD(
+                    srcRecord != nullptr && srcRecord->dataType() != nullptr,
+                    "ACCS source node must exist.");
+                GUARD(srcRecord->dataType()->isComposite(), "ACCS source node must be composite.");
+
+                size_t index = 0;
+
+                switch (srcRecord->dataType()->code()) {
+                case TypeCode::Tuple: {
+                    GUARD(
+                        accBody->accsKind == camel::runtime::GCAccsKind::TupleIndex,
+                        "ACCS tuple access must be numeric.");
+                    index                 = accBody->value;
+                    const auto &tupleType = tt::as_ptr<TupleType>(srcRecord->dataType());
+                    if (index >= tupleType->size()) {
+                        ctx->rtmDiags()
+                            ->of(SemanticDiag::InvalidAccessIndex)
+                            .commit(to_string(index));
+                        index = 0;
+                    }
+                    break;
+                }
+                case TypeCode::Struct: {
+                    GUARD(
+                        accBody->accsKind == camel::runtime::GCAccsKind::StructKey,
+                        "ACCS struct access must be keyed.");
+                    const std::string_view keyView = accBody->key();
+                    const std::string key(keyView.data(), keyView.size());
+                    const auto *structType =
+                        tt::as_ptr<camel::core::type::StructType>(srcRecord->dataType());
+                    const auto &optIndex = structType->findField(key);
+                    if (!optIndex.has_value()) {
+                        ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(key);
+                        index = 0;
+                    } else {
+                        index = optIndex.value();
+                    }
+                    break;
+                }
+                default:
+                    throw std::runtime_error(
+                        "Unsupported ACCS source node type.: the dispatch reached a case no handler "
+                        "covers");
+                }
+
+                appendBytecode(
+                    bytecodes,
+                    OpCode::ACCS,
+                    record->dataIndex,
+                    {
+                        normOps.front(),
+                        as_index(index),
+                    });
+                return;
+            }
+
+            case camel::execute::OperShape::None:
+                return;
+            }
+        };
+
+        if (const camel::execute::OperShape shape =
+                camel::execute::shapeOfNode(*graph, runtimeNodeIndex);
+            shape != camel::execute::OperShape::None) {
+            emitShaped(shape);
+        } else
+        switch (record->kind) {
+        case camel::runtime::GCNodeKind::Brch: {
+            appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
+            for (size_t armIndex = 0; armIndex < graph->armCountOf(runtimeNodeIndex); ++armIndex) {
+                const auto armEntry = plan.branchArmEntriesOf(i)[armIndex];
+                GUARD(
+                    armEntry != camel::runtime::kInvalidNodeRef,
+                    std::format(
+                        "FastVM runtime compile cannot resolve BRCH arm {} entry in graph '{}'.",
+                        armIndex,
+                        graph->name()));
+                brchTargetMap[armEntry].push_back(bytecodes.size());
+                appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
+            }
+            if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
+                (*localPcOrigins)[currIdx] = nodeOrigin;
+            }
+            if (localPcNodes) {
+                (*localPcNodes)[currIdx] = runtimeNodeIndex;
+            }
+
+            continue;
+        }
+
+        case camel::runtime::GCNodeKind::Join: {
+            const bool isTail = tailJoins.contains(runtimeNodeIndex);
+
+            if (joinTargetMap.find(runtimeNodeIndex) != joinTargetMap.end()) {
+                for (const auto &[jumpIdx, fromIdx] : joinTargetMap[runtimeNodeIndex]) {
+                    auto &jump     = bytecodes[jumpIdx];
+                    auto &from     = bytecodes[fromIdx];
+                    jump.fastop[0] = as_index(bytecodes.size());
+                    if (opt.enableTailCallDetection && isTail && from.opcode == OpCode::FUNC) {
+                        from.opcode = OpCode::TAIL;
+                    }
+                }
+                joinTargetMap.erase(runtimeNodeIndex);
+            }
+
+            appendBytecode(
+                bytecodes,
+                OpCode::JOIN,
+                record->dataIndex,
+                {},
+                normOps,
+                withOps,
+                true,
+                {.pType = record->dataType()});
+
+            break;
+        }
+
+        case camel::runtime::GCNodeKind::Call:
+            appendBytecode(bytecodes, OpCode::CALL, record->dataIndex, {}, normOps, withOps);
+            break;
+
+        case camel::runtime::GCNodeKind::Func: {
+            bool isTail              = plan.directCallTailEligible[i] != 0;
+            auto *targetRuntimeGraph = program.calleeOf(*graph, runtimeNodeIndex);
+            GUARD(
+                targetRuntimeGraph != nullptr,
+                std::format(
+                    "FastVM runtime compile cannot resolve direct runtime callee for node ref {} "
+                    "in graph '{}'.",
+                    runtimeNodeIndex,
+                    graph->name()));
+            normOps.insert(normOps.end(), withOps.begin(), withOps.end());
+            auto dstSlots = directCallDstSlotsOf(targetRuntimeGraph);
+            GUARD(
+                normOps.size() == dstSlots.size(),
+                std::format(
+                    "FastVM direct-call arity mismatch for node ref {} in graph '{}': "
+                    "callerArgs={}, calleePorts={}.",
+                    runtimeNodeIndex,
+                    graph->name(),
+                    normOps.size(),
+                    dstSlots.size()));
+            Bytecode *callBc = appendBytecode(
+                bytecodes,
+                (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
+                record->dataIndex,
+                {},
+                normOps,
+                dstSlots,
+                true,
+                {.runtimeGraph = targetRuntimeGraph},
+                BytecodeHeader::directCallExtraWordCount());
+            // Which captured variables the callee writes, which is what the call hands on the new
+            // version of beside the return value (GCFuncRef::reserved); 0 when none, and then the
+            // call's value is the result alone.
+            setFuncExtraWriteMask(
+                callBc,
+                camel::runtime::funcWriteMaskOf(*graph, runtimeNodeIndex));
+            break;
+        }
+
+        case camel::runtime::GCNodeKind::Oper: {
+            const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex);
+            // The plan names the operator: an update node whose storage must not be reused runs
+            // the plain form of the operator it names, and the copying form of an operator that
+            // has an in-place one runs it where the plan handed over the value it was given
+            // (docs/design/arrays-memory/README.cn.md 4.3.1).
+            const std::string uri = plan.operatorUriFor(runtimeNodeIndex);
+
+            if (opt.enableInlineOperators) {
+                const auto &inlineOpMap = getSupportedInlineOperatorsMap();
+                auto it                 = inlineOpMap.find(operBody->oper);
+                if (it != inlineOpMap.end()) {
+                    requireInputCount("OPER", runtimeNodeIndex, "norm", normOps.size(), 2);
+                    appendBytecode(
+                        bytecodes,
+                        it->second,
+                        record->dataIndex,
+                        {
+                            normOps.front(),
+                            normOps.back(),
+                        });
+                    break;
+                }
+            }
+
+            if (camel::core::OperatorTable::instance().isMarked(operBody->oper)) {
+                const std::optional<MarkOpCode> markOp = markOpCodeOf(operBody->oper);
+                if (!markOp) {
+                    // A marked operator the bytecode set cannot express: a compiler defect.
+                    ctx->rtmDiags()
+                        ->of(RuntimeDiag::PassInternalError)
+                        .commit(
+                            "std::fvm",
+                            "the marked operator '" + uri + "' has no bytecode of its own");
+                    break;
+                }
+
+                appendBytecode(
+                    bytecodes,
+                    OpCode::SCHD,
+                    record->dataIndex,
+                    {},
+                    normOps,
+                    withOps,
+                    true,
+                    {
+                        .mark = *markOp,
+                    });
+                break;
+            }
+
+            const auto opFunc = ctx->execMgr().find(uri);
+
+            if (!opFunc) {
+                // The graph names an operator no loaded module implements: a compiler defect,
+                // and the node can get no bytecode.
+                ctx->rtmDiags()
+                    ->of(RuntimeDiag::PassInternalError)
+                    .commit("std::fvm", "the operator '" + uri + "' has no implementation");
+                break;
+            }
+
+            auto *native = appendBytecode(
+                bytecodes,
+                OpCode::OPER,
+                record->dataIndex,
+                {},
+                normOps,
+                withOps,
+                true,
+                {
+                    .func = camel::profile::profiledOperator(uri, *opFunc),
+                },
+                3);
+            *native->extra2() =
+                graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex)->oper;
+            // What a pass recorded about this node (design principles 9.6); native_call hands it
+            // to the operator through its ArgsView.
+            *native->operAttrs() = graph->nodeAttrs(runtimeNodeIndex);
+            break;
+        }
+
+        case camel::runtime::GCNodeKind::Loop:
+            // The rounds are the instructions of the events of the plan (LBEG, LTST, LEND), which
+            // were emitted before the node; the LOOP node has no instruction of its own.
+            break;
+
+        case camel::runtime::GCNodeKind::Data:
+            [[fallthrough]];
+        case camel::runtime::GCNodeKind::Gate: {
+            const auto normInputs = graph->normInputsOf(runtimeNodeIndex);
+            if (!normInputs.empty()) {
+                // The value a GATE hands on is its first normal input (design principles 3.1);
+                // the inputs after it are the reads of the region's
+                // writes and are not what it produces.
+                const auto valueInput = normInputs.front();
+                if (auto it = valueProducerMap.find(valueInput); it != valueProducerMap.end()) {
+                    valueProducerMap[runtimeNodeIndex] = it->second;
+                }
+            }
+            break;
+        }
+
+        case camel::runtime::GCNodeKind::Port:
+            continue;
+
+        default:
+            GUARD(
+                false,
+                std::format(
+                    "Unsupported node type encountered in runtime bytecode generation: {}",
+                    static_cast<int>(record->kind)));
+        }
+
+        if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
+            (*localPcOrigins)[currIdx] = nodeOrigin;
+        }
+        if (localPcNodes) {
+            (*localPcNodes)[currIdx] = runtimeNodeIndex;
+        }
+
+        if (bytecodes.size() > bytecodeStart) {
+            valueProducerMap[runtimeNodeIndex] = currIdx;
+        }
+
+        if (auto exits = armExitJoins.find(runtimeNodeIndex); exits != armExitJoins.end()) {
+            size_t fromIdx = currIdx;
+            if (auto it = valueProducerMap.find(runtimeNodeIndex); it != valueProducerMap.end()) {
+                fromIdx = it->second;
+            }
+            // The producer is a tail-call candidate (see the JOIN case) only when the arm does
+            // nothing after it: a GATE on the way to the tail may wait on an effect that runs
+            // after the call (`let r = f(x); println(..); return r` inlined into the arm).
+            // Otherwise the JUMP stands in as "from", which is never a FUNC.
+            const auto armValue =
+                camel::execute::resolveRuntimeForwardedValueRef(graph, runtimeNodeIndex);
+            const bool armEndsWithValue =
+                armValue != camel::runtime::kInvalidNodeRef &&
+                camel::execute::runtimeArmEndsWithValue(graph, runtimeNodeIndex, armValue);
+            for (const auto joinNode : exits->second) {
+                joinTargetMap[joinNode].push_back({
+                    bytecodes.size(),
+                    armEndsWithValue ? fromIdx : bytecodes.size(),
+                });
+                appendBytecode(bytecodes, OpCode::JUMP, 0, {0});
+            }
+        }
+    }
+
+    appendBytecode(
+        bytecodes,
+        OpCode::RETN,
+        0,
+        {static_cast<data_idx_t>(hasValueReturn ? runtimeDataIndexOf(graph, returnNodeRef) : 0)});
+
+    GUARD(
+        brchTargetMap.empty(),
+        "Some BRCH nodes have unmatched control outputs without corresponding JOIN nodes.");
+    GUARD(
+        joinTargetMap.empty(),
+        "Some JOIN nodes have unmatched JUMP instructions without corresponding targets.");
+
+    BytecodeOptimizer optimizer(opt.optimizationStrategies);
+    optimizer.optimize(bytecodes, 0, localPcOrigins);
+
+    if (anchorSitesWanted) {
+        // Read back out of the table the run will read: what is printed here and what the anchor
+        // asks about later are one table, not a copy of one.
+        std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(
+            plan.countedSites.nodeAtPc.begin(),
+            plan.countedSites.nodeAtPc.end());
+        std::sort(sites.begin(), sites.end());
+        for (const auto &[pc, ref] : sites) {
+            const size_t position =
+                ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
+            // The holds are refHoldsAt, the plan's only column of them: a second column at the value's own
+            // position would disagree for a value a CALL or a FILL makes.
+            const uint32_t taken =
+                position < plan.refHoldsAt.size() ? plan.refHoldsAt[position] : 0;
+            const uint32_t given =
+                position < plan.refGiveBackAt.size() ? plan.refGiveBackAt[position] : 0;
+            const bool produces =
+                position < plan.refProducedAt.size() && plan.refProducedAt[position] != 0;
+            if (taken == 0 && given == 0 && !produces) {
+                continue;
+            }
+            // A diagnostic and not the program's output: the log's RefSites scope, written to
+            // stderr with every other log line and off unless a threshold or --log-include asks
+            // for it, so a program's stdout is the program's own: the compiler's dump never lands among the
+            // program's lines, which every plan that reads a program's output would otherwise have to skip.
+            // A reading of the plan's reference sites, on the run's tracing channel
+            // (`--trace plan`, `include/camel/core/trace.h`) and not on a log scope: one kind of reading has one
+            // way to ask for it, not a log threshold, a log scope and an environment variable.
+            camel::core::trace(camel::core::TraceArea::Plan)
+                << std::format(
+                       "PLAN_REF_SITES {} at {} node {} +{} -{} {}\n",
+                   graph->name(),
+                   pc,
+                   ref,
+                   taken,
+                   given,
+                   produces ? "produces" : "no-row");
+        }
+    }
+
+    return bytecodes;
+}
+
+bytecode_vec_t compile(
+    const context_ptr_t &ctx, const camel::runtime::Program &program,
+    camel::runtime::GCGraph *graph, const CompileStrategy &opt,
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
+    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins, localPcNodes);
+}
+
+LinkedBytecodeResult compileAndLink(
+    context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
+    const CompileStrategy &opt) {
+    return compileAndLinkFrom(
+        std::move(ctx),
+        program,
+        entry,
+        opt,
+        [](camel::runtime::GCGraph *) { return std::optional<size_t>{}; },
+        0);
+}
+
+LinkedBytecodeResult compileAndLinkFrom(
+    context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset,
+    bool registerOrigins) {
+    std::vector<camel::runtime::GCGraph *> uniqueGraphs =
+        camel::runtime::collectReachableGraphs(program, entry);
+    reverse(uniqueGraphs.begin(), uniqueGraphs.end());
+    return compileAndLinkGraphs(
+        std::move(ctx),
+        program,
+        uniqueGraphs,
+        opt,
+        known,
+        baseOffset,
+        registerOrigins);
+}
+
+LinkedBytecodeResult compileAndLinkGraphs(
+    context_ptr_t ctx, const camel::runtime::Program &program,
+    std::span<camel::runtime::GCGraph *const> uniqueGraphs, const CompileStrategy &opt,
+    const KnownEntryPc &known, size_t baseOffset, bool registerOrigins) {
+    bytecode_vec_t linked;
+    std::vector<BytecodeIndex> graphs;
+    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
+
+    for (auto *runtimeGraph : uniqueGraphs) {
+        GUARD(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");
+        if (known(runtimeGraph)) {
+            continue;
+        }
+        // A generic declaration leaves a placeholder graph behind while its instances are the
+        // graphs that are built. When a call site folds the call to a constant, nothing else
+        // builds the placeholder, and it reaches this pass with no node at all: it has no
+        // bytecode and no call it can serve, so it is skipped rather than reported as an
+        // internal error.
+        if (runtimeGraph->nodeCount() == 0) {
+            continue;
+        }
+        camel::runtime::validateRuntimeGraphPayload(program, runtimeGraph);
+        size_t start = baseOffset + linked.size();
+        std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;
+        bytecode_vec_t codes;
+        try {
+            codes = compile(ctx, program, runtimeGraph, opt, &localPcOrigins);
+        } catch (const std::bad_alloc &) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM compile ran out of memory while compiling graph '{}'.",
+                    runtimeGraph->name()));
+        }
+
+        offsetMap[runtimeGraph] = start;
+        graphs.push_back({start, codes.size(), runtimeGraph});
+
+        // Where the table's own pc numbering starts in the image this run executes. Set from the
+        // table rather than from the flag, so the two cannot describe different things: a graph
+        // the compile was not asked to lay out keeps an empty table and no entry pc at all.
+        auto &countedSites = runtimeGraph->execPlan().countedSites;
+        if (!countedSites.nodeAtPc.empty()) {
+            countedSites.entryPc = start;
+        }
+
+        linked.insert(linked.end(), codes.begin(), codes.end());
+        if (auto sourceContext = registerOrigins && ctx ? ctx->sourceContext() : nullptr) {
+            for (const auto &[localPc, origin] : localPcOrigins) {
+                sourceContext->debugMap().registerPcOrigin(start + localPc, origin);
+            }
+        }
+    }
+
+    size_t scanIndex    = 0;
+    size_t currGraphIdx = 0;
+    size_t currGraphEnd = graphs.empty() ? 0 : graphs[0].length;
+
+    while (scanIndex < linked.size()) {
+        if (scanIndex >= currGraphEnd && currGraphIdx + 1 < graphs.size()) {
+            currGraphIdx++;
+            currGraphEnd += graphs[currGraphIdx].length;
+        }
+
+        Bytecode &bc              = linked[scanIndex];
+        const BytecodeIndex &info = graphs[currGraphIdx];
+
+        switch (bc.opcode) {
+        case OpCode::TAIL:
+        case OpCode::FUNC: {
+            auto *target = getFuncExtraRuntimeGraph(&bc);
+            GUARD(
+                target != nullptr,
+                std::format(
+                    "FastVM linker cannot resolve runtime graph for bytecode at pc {}.",
+                    baseOffset + scanIndex));
+            auto it = offsetMap.find(target);
+            setFuncExtraTargetPc(&bc, it != offsetMap.end() ? it->second : *known(target));
+        } break;
+        case OpCode::LTST:
+        case OpCode::LEND:
+        case OpCode::JUMP: {
+            // Graph-relative before, absolute from here on .
+            setJumpTargetPc(&bc, getJumpTargetPc(&bc) + offsetMap.at(info.runtimeGraph));
+        } break;
+        default:
+            break;
+        }
+
+        scanIndex += bc.opsize;
+    }
+
+    return {
+        .codes     = std::move(linked),
+        .graphs    = std::move(graphs),
+        .offsetMap = std::move(offsetMap),
+    };
+}
+
+std::string opCodeToString(const Bytecode &bc, const context_ptr_t &context) {
+    if (hasDynamicOperands(bc.opcode)) {
+        std::string operandStr;
+
+        if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
+            const auto srcArgs  = bc.directCallSrcArgs();
+            const auto dstSlots = bc.directCallDstSlots();
+            operandStr          = "(";
+
+            for (size_t j = 0; j < srcArgs.size(); j++) {
+                operandStr += std::to_string(srcArgs[j]);
+                if (j + 1 < srcArgs.size())
+                    operandStr += ", ";
+            }
+
+            operandStr += ") => (";
+
+            for (size_t j = 0; j < dstSlots.size(); ++j) {
+                operandStr += std::to_string(dstSlots[j]);
+                if (j + 1 < dstSlots.size()) {
+                    operandStr += ", ";
+                }
+            }
+
+            operandStr += ")";
+            operandStr += " -> ";
+            operandStr += std::to_string(getFuncExtraTargetPc(&bc));
+        } else {
+            size_t normCnt = bc.fastop[0];
+            size_t withCnt = bc.fastop[1];
+            operandStr     = "(";
+
+            for (size_t j = 0; j < normCnt; j++) {
+                operandStr += std::to_string(bc.operands()[j]);
+                if (j + 1 < normCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ") <";
+
+            for (size_t j = 0; j < withCnt; j++) {
+                operandStr += std::to_string(bc.operands()[normCnt + j]);
+                if (j + 1 < withCnt)
+                    operandStr += ", ";
+            }
+
+            operandStr += ">";
+        }
+
+        const std::string extraInfo =
+            bc.hasExtraWord() ? (bc.opcode == OpCode::OPER
+                                     ? context->execMgr().getNameOfAnOperator(bc.extra()->func)
+                                     : bc.extra()->toString(bc.opcode))
+                              : "";
+        return std::format("{} | {} | {}", bc.toString(), operandStr, extraInfo);
+    } else {
+        return std::format(
+            "{} | {}",
+            bc.toString(),
+            bc.hasExtraWord() ? bc.extra()->toString(bc.opcode) : "");
+    }
+}

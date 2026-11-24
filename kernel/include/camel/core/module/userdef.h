@@ -1,0 +1,207 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#include "module.h"
+
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace camel::core::error {
+class TokenPositions;
+}
+
+namespace camel::core::type {
+class FunctionType;
+}
+
+namespace camel::core::module {
+
+class UserDefinedModule;
+
+namespace detail {
+class UserDefinedModuleAccess;
+} // namespace detail
+
+/// How far a module written in Camel is compiled. `Declared`: the program's graph builder
+/// knows its declarations and its exports are readable (the first of the three steps of
+/// loading, docs/design/graph-model/README.cn.md 3.9.4); `Done`: the program it belongs to is
+/// built and linked. A module other than the entry module reaches `Done` when the entry
+/// module's program is built.
+enum class CompileStage { None, AST, GCT, Declared, Done };
+
+/// A module read from source. What reading that source and compiling it means -- the parse tree,
+/// the construction tree, the graph a program built -- is the compiler's business, and the
+/// compiler is a layer above the kernel. The kernel therefore keeps none of it: the front end's
+/// state is the opaque handle `frontEnd_` below, made and interpreted by the loader registered in
+/// `camel/core/module/source_loader.h`, and every step of loading goes through that loader. What
+/// the kernel keeps of its own is the stage the loading reached, the diagnostics, and the graph
+/// it hands out -- itself opaque (design principles 9: a pass sees graphs, not source).
+class UserDefinedModule : public Module {
+    friend class detail::UserDefinedModuleAccess;
+
+    /// The front end's state of this module: made by the loader, interpreted only by it. Null in
+    /// a build that registered no loader, before anything was read, and for a module in memory.
+    std::shared_ptr<void> frontEnd_;
+
+    /// The root graph of the program this module is the entry of, as the loader handed it over
+    /// (setProgramGraph). Opaque: the kernel names no compile graph.
+    std::shared_ptr<void> programGraph_;
+
+    camel::core::error::diagnostics_ptr_t diagnostics_;
+    CompileStage stage_ = CompileStage::None;
+    // Set while compile() runs: a module imported back by a module it imports is not compiled
+    // again from inside its own compilation.
+    bool compiling_ = false;
+    /// Set while compileAsProgram() builds a program of its own from this module: the graph of
+    /// that program is not the graph the module was loaded as part of, so setProgramGraph must
+    /// not replace it. Written only by the loader.
+    bool buildingAProgramOfItsOwn_ = false;
+    // A `.cml` found beside a `.cmo` of its name declares that C++ module's operators
+    // (design principles 6.4, step 1): its top-level functions have no body and
+    // `implementation_` is the C++ module, kept alive for its executors and operator traits.
+    bool declarationModule_ = false;
+    module_ptr_t implementation_;
+
+    /// Reports the one diagnostic a build with no compiler can give for this module: the source
+    /// cannot be read here. Written once.
+    void reportWithoutLoader();
+
+  public:
+    /// `source` is the reader the caller made for this file, handed over opaquely: a tool that
+    /// reads the source itself (`camel inspect`, the language server, `--timeit`) makes the
+    /// reader once and wants the module to report into it, and the kernel neither knows nor names
+    /// what a reader is. Null means "the loader makes the one this module needs".
+    UserDefinedModule(
+        const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx,
+        const std::shared_ptr<void> &source = nullptr);
+    ~UserDefinedModule() override;
+
+    /// A function the module exports: the name it has and the type it was declared with.
+    struct ExportedFunction {
+        std::string name;
+        const camel::core::type::FunctionType *type = nullptr;
+    };
+    /// The functions the module exports, in declaration order: its export list read against its
+    /// declarations, so that a caller can name what the module offers (: the passes a
+    /// `module::pass` could have named). Only the construction tree is read -- no graph is built
+    /// -- so this answers for a module that is parsed even when it does not compile; empty
+    /// before the tree exists and in a build that registered no loader.
+    std::vector<ExportedFunction> exportedFunctions() const;
+    /// Whether the module declares a top-level function `name`, exported or not. A name that is
+    /// declared but not exported is a different mistake from a name that is not there, and the
+    /// difference is what the user has to change.
+    bool declaresFunction(const std::string &name) const;
+    camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
+    /// Where the tokens of the module's source are, for a diagnostic written as a token range
+    /// (the construction tree's are): null before the source was read, and for a module that has
+    /// no source. Read without naming the parser: the positions are the kernel's own type.
+    const camel::core::error::TokenPositions *tokenPositions() const;
+    virtual bool loaded() const override { return stage_ == CompileStage::Done; }
+    CompileStage stage() const { return stage_; }
+
+    /// Whether this module is the declaration module of a C++ module (a `.cml` beside the
+    /// `.cmo`): its top-level functions carry no body.
+    bool declarationModule() const { return declarationModule_; }
+    void setDeclarationModule(bool on) { declarationModule_ = on; }
+    /// The C++ module whose operators the declarations stand for, when it has one.
+    const module_ptr_t &implementation() const { return implementation_; }
+    void setImplementation(const module_ptr_t &implementation) {
+        implementation_ = implementation;
+    }
+
+    /// Compiles the module to `till`: the stage machine is the kernel's, the steps are the
+    /// loader's (read the source, build the construction tree, declare it into its program, build
+    /// that program). False when a step is refused; the diagnostics say which.
+    bool compile(CompileStage till = CompileStage::Done);
+    /// Whether compile() is running for this module.
+    bool compiling() const { return compiling_; }
+    /// How building a library as a program of its own ended (compileAsProgram).
+    enum class ProgramStatus {
+        Built,          ///< Its root graph is returned.
+        NoSuchFunction, ///< The module exports no function of that name.
+        NotAFunction,   ///< The name is not one non-generic function.
+        Failed          ///< The module does not compile; its diagnostics say why.
+    };
+    /**
+     * Compiles the module as a library (docs/design/op-semantics, section 9): parsed, declared
+     * and built without a call of an entry function, so that it can be compiled after the
+     * program that uses it was built (the definition libraries of operators, and the functions
+     * the graph module calls). It is built by the graph builder of its program: the modules
+     * written in Camel it imports were declared there when its construction tree was built, and
+     * building it there keeps the graphs those modules export the ones this one names (so a
+     * pass module may import `array`, or any other library written in Camel). Done at once when
+     * the module is done already (the program imported and built it). False when it is in
+     * error; its diagnostics say why.
+     */
+    bool compileAsLibrary();
+    /**
+     * Compiles the module as a program of its own whose entry is the exported function
+     * `entryFunction` (a pass written in Camel: src/execute/camel_pass.cpp), by a graph builder
+     * of its own. `Built` with `root` set to its root graph -- opaque, since the kernel names no
+     * compile graph -- `NoSuchFunction` or `NotAFunction` when the export table has no such
+     * function, `Failed` when the module does not compile (its diagnostics say why).
+     *
+     * The program is the module, not the function: its root graph holds the top-level values of
+     * the module and calls the function, so a module-level `let` -- a literal, an expression, or
+     * the result of a function call -- is computed before the call, as a program computes its
+     * top-level values before `main` (design principles 10.1). Encoding the function's graph
+     * alone, as a definition library does, leaves its capture ports unbound: nothing computes
+     * the values they stand for.
+     *
+     * The build is a program of its own and does not replace the graph the module was loaded as
+     * part of; its builder is kept with the module, like the one of compileAsLibrary. The modules
+     * written in Camel that this one imports are declared to that builder, in import order, and
+     * built before it, so the pass may name what a Camel library exports.
+     */
+    ProgramStatus compileAsProgram(
+        const std::string &entryFunction, std::string &problem, std::shared_ptr<void> &root,
+        camel::core::type::FunctionType *expected = nullptr);
+    /// Called by the program's graph builder once the program is built: `root` is its root
+    /// graph (opaque), and the module is done. A program the module is the entry of only: while
+    /// compileAsProgram() builds a program of its own, the graph the module was loaded as part
+    /// of stays as it was.
+    void setProgramGraph(const std::shared_ptr<void> &root);
+
+    void declareTypes() override;
+    void declareEntities() override;
+    // A module written in Camel brings no names along with an import of it.
+    void declareDefaultRefs() override {}
+    /// A declaration module answers for the operators of the C++ module it declares: its `rand:`
+    /// is the protocol of `random`'s operators, not a name of its own.
+    std::vector<std::string> operatorProtocols() const override;
+
+    /// A module read from `path` under `name`: what the kernel asks for when a file it found is
+    /// written in Camel.
+    static module_ptr_t fromFile(
+        const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx);
+
+    bool load() override {
+        bool success = compile();
+        loaded_      = success;
+        return success;
+    }
+};
+
+/// Compile `module` to `till` for a caller that is not the import site: a pipeline stage, a tool
+/// that loads a module by path, the program of a pass. Anything that is not a module written in
+/// Camel answers false.
+///
+/// `compile` throws the diagnostic of a module whose file cannot be read or does not parse,
+/// because an `import` is what decides where that diagnostic is located (the import that named
+/// the module, `Builder::compileImportedModules`). A load that is not an import has no such
+/// site, and an exception leaving it ends the process instead of telling the writer what is
+/// wrong with the module. The answer here is the other one: false, with the diagnostic on the
+/// module. A module that already says why it failed keeps exactly the diagnostics it wrote while
+/// giving up -- the same ones the entry file's own compile leaves behind -- and the throw is
+/// recorded on the module only when it is the whole of the failure (a file that is not there, or
+/// not readable).
+///
+/// Every programmatic load goes through this function, so that "a module does not parse" is one
+/// diagnostic against that module wherever the module was loaded from, and the report a command
+/// prints is the one `tools/camel-cli/module_failures.h` asks for.
+bool compileForLoad(const std::shared_ptr<Module> &module, CompileStage till);
+
+} // namespace camel::core::module

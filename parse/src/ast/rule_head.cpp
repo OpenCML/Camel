@@ -1,0 +1,257 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#include "camel/parse/ast/rule_head.h"
+
+#include "camel/parse/syntax/cst.h"
+
+#include <algorithm>
+#include <cctype>
+#include <string>
+#include <vector>
+
+namespace camel::parse::ast {
+
+namespace {
+
+/// The arguments a call was given: the nodes of its argument list, without the commas. `(a, b)` is a
+/// `ParentArgues` holding an `ArgumentList` holding an `IndexValues`, and the commas are tokens at
+/// the level that holds the arguments -- so counting the children of the list counts the commas too
+/// and `f(a, b)` comes out as three operands. Descend to the level that holds the arguments and count
+/// its nodes.
+uint32_t argumentCountOf(syntax::Node argues) {
+    syntax::Node list = argues;
+    for (;;) {
+        syntax::Node inner;
+        for (size_t index = 0; index < list->childCount() && !inner; ++index) {
+            const syntax::Child child = list->child(index);
+            if (!child->isNode()) {
+                continue;
+            }
+            const std::string_view kind = syntax::nodeKindName(child->node()->kind());
+            if (kind == "ArgumentList" || kind == "IndexValues") {
+                inner = child->node();
+            }
+        }
+        if (!inner) {
+            break;
+        }
+        list = inner;
+    }
+    uint32_t count = 0;
+    for (size_t index = 0; index < list->childCount(); ++index) {
+        if (list->child(index)->isNode()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+} // namespace
+
+std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
+    shape.clear();
+    arity = 0;
+    if (!left) {
+        shape = "nothing";
+        return {};
+    }
+    // Down through the layers that hold one expression: the expression grammar has a level per
+    // precedence, so `x + w` reaches the operator only after the single-child layers above it
+    // (assign, logical or, ...) are stepped through.
+    syntax::Node current = left;
+    while (current && current->childCount() == 1) {
+        const syntax::Child only = current->child(0);
+        if (!only->isNode()) {
+            break;
+        }
+        current = only->node();
+    }
+    if (!current) {
+        shape = "nothing";
+        return {};
+    }
+    // The operator: the one token among the children of a binary or prefix node (`a + b` has
+    // three children, `-a` two), and the callee's name for a call, whose children are the
+    // callee and the argument list and no operator token at all.
+    size_t tokenCount = 0;
+    size_t nodeCount  = 0;
+    syntax::TokenRef operatorToken;
+    syntax::Node firstNode;
+    syntax::Node secondNode;
+    syntax::Node argues;
+    for (size_t index = 0; index < current->childCount(); ++index) {
+        const syntax::Child child = current->child(index);
+        if (child->isToken()) {
+            ++tokenCount;
+            operatorToken = child->token();
+        } else if (child->isNode()) {
+            if (nodeCount == 0) {
+                firstNode = child->node();
+            } else if (nodeCount == 1) {
+                secondNode = child->node();
+            }
+            if (std::string_view(syntax::nodeKindName(child->node()->kind())) == "ParentArgues") {
+                argues = child->node();
+            }
+            ++nodeCount;
+        }
+    }
+    if (tokenCount == 1 && nodeCount >= 1) {
+        // How many operands the operator was given, not how it is spelled: `-a` has one and
+        // `a - b` has two, and they are `__neg__` and `__sub__` to the compiler.
+        arity = static_cast<uint32_t>(nodeCount);
+        return operatorToken.text();
+    }
+    if (tokenCount == 0 && firstNode && argues) {
+        // `f(a, b)` is filed under `f` with one operand per argument: the argument list is the
+        // `ParentArgues` child, and its arguments are what it holds, not the commas between them. The
+        // head is the callee written before it, whether or not it also names its own types
+        // (`f::<T>(a, b)`: the `TypeArguments` child sits between the callee and the arguments).
+        arity = argumentCountOf(argues);
+        return firstNode->text();
+    }
+    if (tokenCount == 0 && nodeCount >= 2 && firstNode) {
+        // No `ParentArgues` was found: a two-node node with no operator token. Nothing in the tree is
+        // filed this way today; the count descends into an argument list the way a call's does, so a
+        // shape that reaches here is filed by its arguments rather than by its apostrophes.
+        arity = argumentCountOf(secondNode);
+        return firstNode->text();
+    }
+    shape = std::string(syntax::nodeKindName(current->kind()));
+    return {};
+}
+
+namespace {
+
+/// The first call inside `node`, as the name it calls: a node with no operator token of its own
+/// and at least two children, the callee and its argument list (`f(a, b)`). The right side of a
+/// rule is `(dx, dw) => add_tangent(x, w, dx, dw)`, so this finds `add_tangent`. A call may also
+/// name its own type arguments -- `(bx: Lift<T>) => mul_batch::<T>(bx)` -- and then the arguments are
+/// the third child, behind the `TypeArguments` the callee carries: the name to call is still the
+/// callee, and a rule whose right side needs an explicit type argument is a rule like any other.
+std::string firstCallIn(syntax::Node node) {
+    if (!node) {
+        return {};
+    }
+    size_t nodes = 0;
+    syntax::Node first;
+    syntax::Node second;
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (!child->isNode()) {
+            continue;
+        }
+        if (nodes == 0) {
+            first = child->node();
+        } else if (nodes == 1) {
+            second = child->node();
+        }
+        ++nodes;
+    }
+    if (nodes >= 2 && first && second) {
+        // The callee is the first child and the arguments (or the type arguments the callee carries
+        // before them, `f::<T>(a)`) the second. No token requirement: a callee that names its own
+        // types writes its `::` `<` and `>` among the children of the same node, so requiring none
+        // would read exactly the calls this case is here for as "calls nothing".
+        const std::string_view kind = syntax::nodeKindName(second->kind());
+        if (kind == "ParentArgues" || kind == "TypeArguments") {
+            return first->text();
+        }
+    }
+    // The layers above an expression hold one child each for the precedence levels; a lambda
+    // holds its parameters and its body. Descend into every child and take the first answer.
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (!child->isNode()) {
+            continue;
+        }
+        std::string found = firstCallIn(child->node());
+        if (!found.empty()) {
+            return found;
+        }
+    }
+    return {};
+}
+
+/// The names the left side binds, collected in order: a leaf that is written as an identifier.
+/// The layers above an expression hold one child each (the precedence levels), so they are stepped
+/// through; an operator node is stepped into for its operands; a leaf is where a name is written.
+void collectNames(syntax::Node node, std::vector<std::string> &names) {
+    if (!node) {
+        return;
+    }
+    size_t tokens = 0;
+    std::vector<syntax::Node> children;
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (child->isToken()) {
+            ++tokens;
+        } else if (child->isNode()) {
+            children.push_back(child->node());
+        }
+    }
+    if (tokens == 0 && children.size() == 1) {
+        collectNames(children.front(), names);
+        return;
+    }
+    if (children.empty()) {
+        const std::string text = node->text();
+        if (!text.empty() &&
+            (std::isalpha(static_cast<unsigned char>(text.front())) || text.front() == '_')) {
+            if (std::find(names.begin(), names.end(), text) == names.end()) {
+                names.push_back(text);
+            }
+        }
+        return;
+    }
+    for (const syntax::Node &child : children) {
+        collectNames(child, names);
+    }
+}
+
+} // namespace
+
+std::string rightCalleeOf(syntax::Node right) {
+    return firstCallIn(right);
+}
+
+std::string variableNamesOf(syntax::Node left) {
+    std::vector<std::string> names;
+    collectNames(left, names);
+    std::string joined;
+    for (const std::string &name : names) {
+        if (!joined.empty()) {
+            joined += ',';
+        }
+        joined += name;
+    }
+    return joined;
+}
+
+std::string outerNamesUsedInRight(syntax::Node left, syntax::Node right) {
+    // The same leaf walk on both sides: the left answers which names the pattern binds, the right
+    // which names it writes, and what both answer is the dependency the refusal is about. The right
+    // side's own parameters (`bx`, `bw`), its type names and the functions it calls are not the
+    // left's names, so they do not appear in the answer.
+    std::vector<std::string> bound;
+    collectNames(left, bound);
+    if (bound.empty()) {
+        return {};
+    }
+    std::vector<std::string> written;
+    collectNames(right, written);
+    std::string used;
+    for (const std::string &name : written) {
+        if (std::find(bound.begin(), bound.end(), name) == bound.end()) {
+            continue;
+        }
+        if (!used.empty()) {
+            used += ',';
+        }
+        used += name;
+    }
+    return used;
+}
+
+} // namespace camel::parse::ast

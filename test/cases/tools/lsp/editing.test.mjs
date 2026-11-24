@@ -45,12 +45,14 @@ await withServer(async (ls) => {
     let items = await complete(m, 'c')
     let names = labels(items)
     for (const expected of ['p', 'q', 'total', 'sum', 'double', 'identity', 'add', 'bump',
-        'norm2', 'scale', 'now', 'Pair', 'println', 'format', 'let', 'var', 'sync', 'return',
+        'norm2', 'scale', 'now', 'Pair', 'println', 'format', 'copy', 'let', 'var', 'sync', 'return',
         'int', 'string']) {
         check(names.includes(expected), `completion offers '${expected}'`)
     }
-    check(!names.includes('copy') && !names.includes('counter'),
-        'names of other functions are not offered')
+    // `copy` is a declaration of `lib/std/prelude.cml` (plan 2.3, step 1: the COPY node kind written
+    // as an ordinary operator), so it is a name in scope like `println` and is expected above. A name
+    // of another function is still not offered: `counter` is a parameter of `bump`, not of `main`.
+    check(!names.includes('counter'), 'names of other functions are not offered')
     check(!names.includes('__add__'), 'operator groups are not offered')
     checkEq(names.filter((n) => n === 'add').length, 1, 'overloads are one entry')
     const item = (label) => items.find((i) => i.label === label)

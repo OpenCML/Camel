@@ -1,0 +1,52 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+import { now } from time
+import { sqrt } from math
+import { mean } from array
+import { stdev } from statistics
+
+// One repetition: how long `fn` took, printed in this repetition's line.
+func measure(fn: () => void, label: int): float sync {
+    let start = now()
+    fn()
+    let duration = now() - start
+    '[{:>3}] {:.6f} s'->format<label, duration>->println
+    return duration
+}
+
+// The durations, one per repetition, the first repetition first. The repetitions are one
+// expression over the interval `(0..repeat)`, folded with the answer as the accumulator: a
+// repetition reads nothing the repetition before it wrote, so no name outside a repetition is
+// assigned (design principles 3.5), and the answer is not assembled by concatenating the result of
+// a recursion -- that shape is a chain of graphs, one per repetition, and it is what the optimizer
+// paid seconds for (`test/plans/feat/opt/opt_second_pass` pins the number). A `map` over the
+// interval would read better and is the shape this was written in first; it is not usable here
+// because `map` leaves the order of its element calls open, which `std::prl` takes as leave to
+// overlap them: a clock then measures overlapping repetitions (the twenty rounds of
+// `perf_fib_smoke` read 121.6 ms instead of 0.043 ms on `std::prl`) and their lines come out in any
+// order. A fold's accumulator orders them.
+with <repeat: int>
+export func timeit(fn: () => void): float[] sync {
+    if repeat <= 0 then {
+        return []
+    } else sync {
+        let accumulate = (acc: float[], i: int): float[] => acc->append<measure(fn, repeat - i)>
+        return (0..repeat)->reduce<accumulate, []>
+    }
+}
+
+with <repeat: int>
+export func perfms(fn: () => void): (float, float) sync {
+    let results = timeit<repeat>(fn)
+
+    // 计算均值和标准差
+    let average = mean(results) * 1000.0
+    let std_dev = stdev(results) * 1000.0
+
+    // 95% 置信区间（Z 值 1.96）
+    let z_value = 1.96
+    let margin_error = z_value * (std_dev / sqrt(float(repeat)))
+
+    return (average, margin_error)
+}

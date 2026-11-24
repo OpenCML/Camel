@@ -66,8 +66,8 @@ const ROOTS = [
     // message a pack is always quoted (`'...e'`), which the left context `'` used to cover; a
     // quote is no longer a left context on its own (see the path rule below), so the message
     // roots are listed here and their sentences were migrated by the first run.
-    'src/core/error/diagnostics/messages',
-    'src/parse',
+    'kernel/core/error/diagnostics/messages',
+    'parse/src',
 ];
 const EXTENSIONS = new Set(['.cml', '.md', '.toml', '.cpp', '.h', '.mjs', '.js', '.py', '.tsv']);
 // The characters a pack can follow. A quote is deliberately absent: `'a'..'b'` is the interval

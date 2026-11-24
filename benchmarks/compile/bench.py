@@ -105,13 +105,18 @@ SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated
 
 # A library module is not a list of names kept here. It is a module the run compiled because a
 # pass loaded it as its tool program, and it is a file of the standard library
-# (`stdlib/<name>.cml`). The compiler marks the first fact with a `library`
+# (`lib/<name>/<name>.cml`; `stdlib/<name>.cml` in the flat library before the layout move).
+# The compiler marks the first fact with a `library`
 # phase; see pass_loaded_modules. The second is the file; see
 # stdlib_declaration. A tuple pinned two names, then `graph` and `tensor` were added, so
 # the tuple went stale twice in one day. Neither number may disappear: the benchmark reports the
 # set and what each module costs, and the check derives the set from these two facts instead of
 # carrying a third copy of it.
-STDLIB = REPO / "stdlib"
+#
+# Where the library is is a layout, not a path: the layout map
+# (`docs/design/architecture/layout-map.cn.md`, table B) put the core's files in `lib/std/` and
+# each module's declaration beside its C++, and the flat `stdlib/` is gone. `stdlib_declaration`
+# asks the tree which layout it has, so the benchmark reads the library it is run in.
 
 # The order of the rows of the phase tables; phases not listed follow alphabetically.
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
@@ -289,14 +294,26 @@ def stdlib_declaration(name: str) -> Optional[Path]:
     name is that module's declaration module, and it is read by its name.
 
     This is what "library module" means here: a module is a file, and its name is its file's
-    (design principles 10.2), so the library's modules are the files under `stdlib/` and no tuple
+    (design principles 10.2), so the library's modules are the files the library has and no tuple
     in this file names them. A migration that adds a declaration module (`graph` or `tensor`, for
     instance) changes the set with the source, and the benchmark reports the new module and its
     cost instead of failing on a list that was true last week.
+
+    Where those files are depends on the layout the tree has: `lib/<name>/<name>.cml` (each
+    module's declaration beside its C++, the core's own files in `lib/std/`) after the layout
+    move, `stdlib/<name>.cml` in the flat library before it. Both are asked, the moved one first.
     """
-    path = STDLIB.joinpath(*name.split(".")).with_suffix(".cml")
-    if path.is_file():
-        return path
+    parts = name.split(".")
+    tail = parts[-1]
+    candidates = [
+        REPO.joinpath("lib", *parts[:-1], f"{tail}.cml"),  # a dotted name, as it was under stdlib/
+        REPO / "lib" / tail / f"{tail}.cml",  # lib/<module>/<module>.cml, beside its C++
+        REPO / "lib" / "std" / f"{tail}.cml",  # the core's own files: lib/std/std.cml, prelude.cml
+        REPO.joinpath("stdlib", *parts[:-1], f"{tail}.cml"),  # the flat library before the move
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
     return None
 
 
@@ -811,7 +828,7 @@ def cmd_check(_args) -> int:
                     if stdlib_declaration(module) is None:
                         problems.append(
                             f"{name}: '{module}' was compiled on demand but is not a standard-library "
-                            f"module: stdlib/{module}.cml is not a file of the library. "
+                            f"module: lib/{module}/{module}.cml is not a file of the library. "
                             f"Library modules are the library's files, not a list in "
                             f"this file, so a module loaded from outside the library is a defect, "
                             f"not a pin to update.")

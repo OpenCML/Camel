@@ -1,0 +1,1233 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#include "nodevm.h"
+#include "camel/core/global_config.h"
+#include "camel/core/module/module.h"
+#include "camel/core/operator.h"
+#include "camel/core/rtdata/foreign.h"
+#include "camel/execute/executor.h"
+#include "camel/execute/fault_isolation.h"
+#include "camel/execute/function_call.h"
+#include "camel/execute/fusion_group.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/loop_driver.h"
+#include "camel/execute/loop_frame.h"
+#include "camel/execute/observer.h"
+#include "camel/execute/operator_call.h"
+#include "camel/execute/pass/registration.h"
+#include "camel/execute/shaped_operators.h"
+#include "execute/graph_caller.h"
+#include "camel/profile/operators.h"
+#include "camel/profile/profile.h"
+#include "camel/runtime/graph.h"
+#include "camel/runtime/loop.h"
+#include "camel/utils/log.h"
+
+#include "camel/core/context/frame.h"
+#include "camel/core/effect_trace.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
+
+#include <algorithm>
+#include <span>
+
+using namespace std;
+using namespace camel::core::context;
+using namespace camel::core::type;
+using namespace camel::core::rtdata;
+using namespace camel::core::error;
+
+namespace {
+
+using camel::runtime::gc_data_idx_t;
+using camel::runtime::gc_node_ref_t;
+using camel::runtime::GCAccsBody;
+using camel::runtime::GCBrchBody;
+using camel::runtime::GCGraph;
+using camel::runtime::GCNode;
+using camel::runtime::GCNodeKind;
+using camel::runtime::GCOperBody;
+using camel::runtime::kInvalidNodeRef;
+
+/// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
+/// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
+/// built, and NodeVM does not execute it.
+bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
+    for (uint32_t r = 0; r < graph.regionCount(); ++r) {
+        const camel::runtime::GCRegion *region = graph.region(r);
+        if (region != nullptr && region->owner == loop &&
+            (region->kind == camel::runtime::GCRegionKind::LoopCond ||
+             region->kind == camel::runtime::GCRegionKind::LoopBody)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void bindMarkedFunctionFrame(
+    Frame *frame, Function *func, std::span<const slot_t> normArgs,
+    std::span<const slot_t> withArgs = {}) {
+    GUARD(
+        frame != nullptr,
+        std::format(
+            "binding the call frame of a marked operator: there is no frame for this call, so its "
+            "{} norm argument(s) have nowhere to go",
+            normArgs.size()));
+    GUARD(
+        func != nullptr && func->graph() != nullptr,
+        std::format(
+            "calling a marked operator with {} norm argument(s): the value being called is null or "
+            "names no graph, so there are no ports to bind them to",
+            normArgs.size()));
+    auto *graph             = func->graph();
+    const auto normPorts    = graph->normPorts();
+    const auto withPorts    = graph->withPorts();
+    const auto closureNodes = graph->closureNodes();
+    GUARD(
+        normArgs.size() == normPorts.size(),
+        std::format(
+            "calling a marked operator with {} norm argument(s), but the callee declares {} norm "
+            "port(s): the graph does not describe the call it makes",
+            normArgs.size(),
+            normPorts.size()));
+    GUARD(
+        withArgs.size() == withPorts.size(),
+        std::format(
+            "calling a marked operator with {} with argument(s), but the callee declares {} with "
+            "port(s): the graph does not describe the call it makes",
+            withArgs.size(),
+            withPorts.size()));
+
+    Tuple *closure = func->tuple();
+    GUARD(
+        closureNodes.empty() || closure != nullptr,
+        std::format(
+            "the callee declares {} closure node(s), but the function value carries no closure "
+            "tuple: the graph does not describe the call it makes",
+            closureNodes.size()));
+    GUARD(
+        closure == nullptr || closure->size() == closureNodes.size(),
+        std::format(
+            "the callee declares {} closure node(s), but the closure tuple holds {}: the graph "
+            "does "
+            "not describe the call it makes",
+            closureNodes.size(),
+            closure == nullptr ? 0 : closure->size()));
+
+    for (size_t i = 0; i < normPorts.size(); ++i) {
+        const auto *port = graph->node(normPorts[i]);
+        GUARD(
+            port != nullptr,
+            std::format(
+                "binding norm argument {} of a marked operator call: the callee names node {} in "
+                "its "
+                "norm port list, but its graph has no node there",
+                i,
+                normPorts[i]));
+        frame->set(port->dataIndex, normArgs[i]);
+    }
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        const auto *port = graph->node(withPorts[i]);
+        GUARD(
+            port != nullptr,
+            std::format(
+                "binding with argument {} of a marked operator call: the callee names node {} in "
+                "its "
+                "with port list, but its graph has no node there",
+                i,
+                withPorts[i]));
+        frame->set(port->dataIndex, withArgs[i]);
+    }
+    if (closure != nullptr) {
+        for (size_t i = 0; i < closureNodes.size(); ++i) {
+            const auto *port = graph->node(closureNodes[i]);
+            GUARD(
+                port != nullptr,
+                std::format(
+                    "binding closure slot {} of a marked operator call: the callee names node {} "
+                    "in "
+                    "its closure node list, but its graph has no node there",
+                    i,
+                    closureNodes[i]));
+            frame->set(port->dataIndex, closure->get<slot_t>(i));
+        }
+    }
+}
+
+inline gc_data_idx_t planDataIndex(const camel::runtime::ExecPlan &plan, gc_node_ref_t nodeRef) {
+    GUARD(nodeRef < plan.dataIndexByRef.size(), "NodeVM cached data-index lookup is out of range.");
+    return plan.dataIndexByRef[nodeRef];
+}
+
+inline gc_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    GUARD(node != nullptr, "NodeVM runtime node lookup resolved to null.");
+    return node->dataIndex;
+}
+
+void bindDirectCallFrameSlots(
+    Frame *sourceFrame, Frame *targetFrame, const camel::runtime::ExecPlan *layout,
+    std::span<const runtime_data_idx_t> argSlots, std::vector<slot_t> &scratch) {
+    GUARD(sourceFrame != nullptr, "NodeVM direct-call source frame is null.");
+    GUARD(targetFrame != nullptr, "NodeVM direct-call target frame is null.");
+    GUARD(layout != nullptr, "NodeVM direct-call execution plan is null.");
+    GUARD(
+        argSlots.size() == layout->calleePortSlots.size(),
+        "NodeVM direct-call cache arity mismatch.");
+
+    if (sourceFrame == targetFrame) {
+        scratch.resize(argSlots.size());
+        for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+            scratch[argIndex] = sourceFrame->get<slot_t>(argSlots[argIndex]);
+        }
+        for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+            targetFrame->set(layout->calleePortSlots[argIndex], scratch[argIndex]);
+        }
+        return;
+    }
+
+    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+        targetFrame->set(
+            layout->calleePortSlots[argIndex],
+            sourceFrame->get<slot_t>(argSlots[argIndex]));
+    }
+}
+
+} // namespace
+
+NodeVMSchedPass::~NodeVMSchedPass() = default;
+
+// =============================================================================
+// Tail-call optimization: frame lifetime
+// =============================================================================
+//
+// FramePool is a stack allocator, so frames must be released in LIFO order and
+// every live frame must stay below the pool top (the GC only scans frames below
+// it). A call keeps its caller-owned rootFrame plus at most two tail-call frames
+// above it, tailLow and tailHigh (tailHigh on top). currFrame is always one of
+// rootFrame, tailLow, tailHigh.
+//
+// A tail call to a different graph T (see tailCallFrame):
+//   - T already owns tailLow or tailHigh (mutual recursion, e.g. branch arms):
+//     bind arguments into that frame and switch to it; nothing is released.
+//   - A free position exists directly above currFrame: acquire T there.
+//   - Otherwise stage the arguments in scratch, release the tail frames that
+//     are not needed (top first), and acquire T in the freed position.
+// Self recursion rebinds the current frame through the same staging path.
+//
+// On exit (normal or exceptional) tailHigh, tailLow, and rootFrame are released
+// in that order.
+// =============================================================================
+
+Frame *NodeVMSchedPass::tailCallFrame(
+    camel::runtime::GCGraph *target, Frame *rootFrame, Frame *source, Frame *&tailLow,
+    Frame *&tailHigh, const camel::runtime::ExecPlan *layout,
+    std::span<const runtime_data_idx_t> argSlots) {
+    // Existing live frame for the target: self recursion or an alternating
+    // partner (branch arms). rootFrame qualifies too; it is reused, never released.
+    for (Frame *candidate : {source, tailHigh, tailLow, rootFrame}) {
+        if (candidate != nullptr && candidate->graph() == target) {
+            bindDirectCallFrameSlots(source, candidate, layout, argSlots, callArgScratch_);
+            return candidate;
+        }
+    }
+    // A free position directly above the source frame.
+    if (source == rootFrame && tailLow == nullptr) {
+        tailLow = framePool_.acquire(target);
+        bindDirectCallFrameSlots(source, tailLow, layout, argSlots, callArgScratch_);
+        return tailLow;
+    }
+    if (source == tailLow && tailHigh == nullptr) {
+        tailHigh = framePool_.acquire(target);
+        bindDirectCallFrameSlots(source, tailHigh, layout, argSlots, callArgScratch_);
+        return tailHigh;
+    }
+    if (source == tailLow) {
+        // Replace the partner above the source; the source itself stays live.
+        framePool_.release(tailHigh);
+        tailHigh = framePool_.acquire(target);
+        bindDirectCallFrameSlots(source, tailHigh, layout, argSlots, callArgScratch_);
+        return tailHigh;
+    }
+    // The source is rootFrame with tail frames above it, or tailHigh: stage the
+    // arguments, drop both tail frames (top first), and start over above root.
+    callArgScratch_.resize(argSlots.size());
+    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+        callArgScratch_[argIndex] = source->get<slot_t>(argSlots[argIndex]);
+    }
+    releaseTailFrames(tailLow, tailHigh);
+    tailLow = framePool_.acquire(target);
+    for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
+        tailLow->set(layout->calleePortSlots[argIndex], callArgScratch_[argIndex]);
+    }
+    return tailLow;
+}
+
+void NodeVMSchedPass::releaseTailFrames(Frame *&tailLow, Frame *&tailHigh) {
+    if (tailHigh != nullptr) {
+        framePool_.release(tailHigh);
+        tailHigh = nullptr;
+    }
+    if (tailLow != nullptr) {
+        framePool_.release(tailLow);
+        tailLow = nullptr;
+    }
+}
+
+// Execute one runtime graph call. Arguments for CALL/FUNC are copied from the
+// source frame into the callee frame's ports and closure slots.
+NodeVMSchedPass::NodeVMSchedPass(const ctx::context_ptr_t &ctx)
+    : RuntimeGraphSchedulePass(ctx),
+      maxRecursionDepth_(camel::execute::recursionLimit(*ctx).frames),
+      framePool_(camel::execute::framePoolBytes(maxRecursionDepth_)) {
+    framePool_.registerGcTracer();
+}
+
+void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller) const {
+    // currRecursionDepth_ includes the activation of the entry graph and its call of main,
+    // which are not calls of the program (camel/execute/limits.h).
+    const size_t openCalls = currRecursionDepth_ - 1;
+    if (openCalls >= maxRecursionDepth_ + camel::execute::kEntryCalls) {
+        camel::execute::throwRecursionLimitReached(caller->name(), maxRecursionDepth_);
+    }
+    if (camel::execute::nativeStackNearlyExhausted()) [[unlikely]] {
+        camel::execute::throwNativeStackExhausted(caller->name(), openCalls);
+    }
+}
+
+slot_t NodeVMSchedPass::call(
+    camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame,
+    const camel::runtime::Program *rootProgram) {
+    // Tells a debugger, when one is attached, that an activation starts and ends here
+    // (camel/execute/observer.h). One load of a pointer otherwise.
+    camel::execute::ActivationScope observedActivation;
+    currRecursionDepth_++;
+    slot_t result = NullSlot;
+    GUARD(
+        rootRuntimeGraph != nullptr,
+        std::format(
+            "running this program: its root graph was never materialized, so node 0 has no "
+            "frame to run in"));
+
+    Frame *currFrame       = rootFrame;
+    Frame *tailLow         = nullptr; // tail-call frames above rootFrame, in stack order
+    Frame *tailHigh        = nullptr;
+    auto *currRuntimeGraph = rootRuntimeGraph;
+    auto gcSafepoint       = [&](std::string_view reason) {
+        // NVM keeps safepoints at graph boundaries only. Each boundary checks the global
+        // slow-path flag (one atomic load), so collections requested during execution, such as
+        // the large-object budget, run at the next graph boundary instead of never.
+        mm::safepoint(reason);
+    };
+    // The node being executed, so a fault points at its source expression.
+    gc_node_ref_t faultNodeRef = kInvalidNodeRef;
+    try {
+        const camel::runtime::ExecPlan *currPlan    = &currRuntimeGraph->execPlan();
+        std::span<const gc_node_ref_t> currNodes    = currPlan->topo;
+        const camel::runtime::ExecNode *currRecords = currPlan->nodes().data();
+        // The program the running graph belongs to: its direct callees are in it. A root graph
+        // runs in the program the back end was given; a graph reached through a function value
+        // runs in the program that value names (every call below passes `->program()` of the
+        // value it came from), which is not the same question as which program holds the
+        // version: a version a closure makes at run time, or a rewrite commits, is held by more
+        // than one program, and only the value says whose table its ids are read in.
+        const camel::runtime::Program *currProgram =
+            rootProgram != nullptr ? rootProgram : &programs_.of(currRuntimeGraph);
+
+        // Branch execution is implemented by skipping until the selected arm's
+        // entry, executing through the arm tail, and then resuming at JOIN.
+        gc_node_ref_t tillNode = kInvalidNodeRef;
+        gc_node_ref_t skipNode = kInvalidNodeRef;
+        gc_node_ref_t joinNode = kInvalidNodeRef;
+        // A BRCH met while an arm is still running (a branch nested in an arm of the same graph,
+        // e.g. after inlining) must not lose that arm's end: the enclosing (tail, join) pairs
+        // wait here and are restored when the nested JOIN is reached.
+        std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
+        // The loops of the graph that are running, the innermost last.
+        uint32_t resumedLoop = camel::execute::kNoLoop;
+        // Members of a fusion group this round defers to the group's tail (see
+        // camel/execute/fusion_group.h). Only a round-local fact: the tail follows the head in
+        // the plan, so the list is dropped when a round starts, a loop goes back, or a tail call
+        // rebinds the graph.
+        std::vector<gc_node_ref_t> groupDeferred;
+
+        // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
+    loop_start: {
+        gcSafepoint("nodevm graph boundary");
+        groupDeferred.clear();
+        const size_t nodesSize = currNodes.size();
+        const bool hasLoops    = !currPlan->loops.empty();
+        resumedLoop            = camel::execute::kNoLoop;
+
+        size_t i = 0;
+        for (; i < nodesSize; ++i) {
+            const camel::runtime::ExecNode &en = currRecords[i];
+            const gc_node_ref_t nodeRef        = en.ref;
+            faultNodeRef                       = nodeRef;
+            const GCNode *n                    = en.node;
+
+            if (tillNode != kInvalidNodeRef) {
+                if (tillNode == nodeRef) {
+                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                        "NodeVM",
+                        "Reached tillNode [{}/{}] graph={}: ref={}",
+                        i + 1,
+                        currNodes.size(),
+                        currRuntimeGraph->name(),
+                        nodeRef));
+                    tillNode = kInvalidNodeRef;
+                } else {
+                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                        "NodeVM",
+                        "Skipping node [{}/{}] graph={}: ref={}",
+                        i + 1,
+                        currNodes.size(),
+                        currRuntimeGraph->name(),
+                        nodeRef));
+                    continue;
+                }
+            }
+            // A loop of the graph starts, tests its round, or ends one here. These come before the
+            // end of an arm is looked for: going back to the start of a round does not pass it.
+            if (hasLoops) [[unlikely]] {
+                const size_t resume = camel::execute::stepLoops(
+                    *currPlan,
+                    i,
+                    *currFrame,
+                    resumedLoop,
+                    camel::execute::loopRoundSafepoint([&] { gcSafepoint("nodevm loop round"); }));
+                if (resume != camel::execute::kNoLoopJump) {
+                    groupDeferred.clear();
+                    i = resume - 1;
+                    continue;
+                }
+            }
+            if (skipNode == kInvalidNodeRef && !enclosingArms.empty() && nodeRef == joinNode) {
+                // The nested branch is over; the enclosing arm continues (its tail may be
+                // this very JOIN, which the next check handles).
+                skipNode = enclosingArms.back().first;
+                joinNode = enclosingArms.back().second;
+                enclosingArms.pop_back();
+            }
+            if (skipNode != kInvalidNodeRef && skipNode == nodeRef) {
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "NodeVM",
+                    "Reached skipNode [{}/{}] graph={}: ref={}",
+                    i + 1,
+                    currNodes.size(),
+                    currRuntimeGraph->name(),
+                    nodeRef));
+                skipNode = kInvalidNodeRef;
+                tillNode = joinNode;
+            }
+            // The body's tuple FILL of a loop whose state is kept as its components: nothing
+            // reads the tuple, and the loop takes the components themselves (ExecPlan::elidedAt).
+            if (hasLoops && !currPlan->elidedAt.empty() && currPlan->elidedAt[i]) [[unlikely]] {
+                continue;
+            }
+
+            // A fusion group a module registered (camel/execute/fusion_group.h): the members
+            // before the group's tail are computed by the tail, so they are skipped, and the
+            // tail runs the group in place of its operator. A node no kernel owns runs as the
+            // program says: that is the fallback of a group a backend cannot run.
+            //
+            // A skipped member is not reported to the observer: it does not run, and a stop at a
+            // node that does not run would claim an execution the profile says never happened
+            // (docs/technical/35_debugger.md, 2). The tail is reported with the group, before
+            // its kernel runs, so a breakpoint or a step still stops where the work happens.
+            if (n->kind == GCNodeKind::Oper &&
+                (currRuntimeGraph->nodeAttrs(nodeRef) != camel::core::attr::kNoAttrs ||
+                 !groupDeferred.empty())) {
+                if (std::find(groupDeferred.begin(), groupDeferred.end(), nodeRef) !=
+                    groupDeferred.end()) {
+                    // Kept until the round ends: the group's tail checks that its earlier
+                    // members were deferred to it.
+                    continue;
+                }
+                std::vector<gc_node_ref_t> groupMembers;
+                camel::execute::FusionGroupRef group;
+                const camel::execute::FusionGroupAction groupAction =
+                    camel::execute::runFusionGroup(
+                        *currRuntimeGraph,
+                        *currFrame,
+                        *currPlan,
+                        nodeRef,
+                        groupDeferred,
+                        groupMembers,
+                        group);
+                if (groupAction == camel::execute::FusionGroupAction::Deferred) {
+                    groupDeferred.insert(
+                        groupDeferred.end(),
+                        groupMembers.begin(),
+                        groupMembers.end());
+                    continue;
+                }
+                if (groupAction == camel::execute::FusionGroupAction::Ran) {
+                    // The tail is the node the group ran at; the members the kernel reported
+                    // precede it in execution order.
+                    groupMembers.push_back(nodeRef);
+                    const camel::execute::FusionGroupSite site{group.name, groupMembers};
+                    if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                        observer->beforeNode(currRuntimeGraph, currFrame, nodeRef, &site);
+                    }
+                    // The group's members are done for this round; a later round defers them
+                    // again from the head.
+                    for (const gc_node_ref_t member : groupMembers) {
+                        if (member != nodeRef) {
+                            std::erase(groupDeferred, member);
+                        }
+                    }
+                    goto node_done;
+                }
+            }
+
+            // Debugger hook: live in release builds, one load of a pointer when no observer
+            // is installed. It fires after branch-skip resolution and before the node
+            // executes, so breakpoints and steps stop at the node that is about to run.
+            if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                observer->beforeNode(currRuntimeGraph, currFrame, nodeRef);
+            }
+
+            EXEC_WHEN_DEBUG({
+                CAMEL_LOG_DEBUG_S(
+                    "NodeVM",
+                    "Executing node [{}/{}] graph={}: ref={} kind={} slot={}",
+                    i + 1,
+                    currNodes.size(),
+                    currRuntimeGraph->name(),
+                    nodeRef,
+                    static_cast<int>(n->kind),
+                    n->dataIndex);
+            });
+            // CAST, COPY, FILL and ACCS are not kinds this back end looks at: each is a shaped
+            // operator whose fast path is its own implementation's
+            // (camel/execute/shaped_operators.h), and it writes the node's slot itself. The four
+            // kinds stay in the graph until the front end builds them as OPER (plan 2.3, steps 1
+            // and 2), so `shapeOfKind` is where the node VM still reads them -- once, here.
+            if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(n->kind);
+                shape != camel::execute::OperShape::None) {
+                camel::execute::runShapedOperator(*currRuntimeGraph, en, *currFrame);
+            } else
+            switch (n->kind) {
+            case GCNodeKind::Brch: {
+                const size_t jumpIdx =
+                    camel::execute::selectRuntimeBranchArm(*currPlan, en, currFrame);
+                currFrame->set(n->dataIndex, fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
+
+                const auto *body = en.bodyAs<GCBrchBody>();
+                GUARD(jumpIdx < en.armCount, "Branch arm index out of range in NodeVM.");
+                // The arm runs from its first executable node in the linear order (not from
+                // its recorded head: after inlining, nodes of the arm can precede the head)
+                // through its tail. An arm with nothing to execute resumes at the JOIN.
+                if (skipNode != kInvalidNodeRef) {
+                    enclosingArms.emplace_back(skipNode, joinNode);
+                }
+                joinNode = body->join;
+                tillNode = currPlan->branchArmEntriesOf(i)[jumpIdx];
+                skipNode =
+                    tillNode == joinNode ? kInvalidNodeRef : currPlan->branchArmTailsOf(i)[jumpIdx];
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "NodeVM",
+                    "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",
+                    nodeRef,
+                    jumpIdx,
+                    en.armCount,
+                    tillNode,
+                    skipNode,
+                    joinNode));
+            } break;
+
+            case GCNodeKind::Join: {
+                const auto nargs = en.normInputs();
+                const auto wargs = en.withInputs();
+                GUARD(!nargs.empty(), "JOIN must have norm input (branch index).");
+                int32_t brIndex = currFrame->get<int32_t>(planDataIndex(*currPlan, nargs.front()));
+                GUARD(
+                    brIndex >= 0 && static_cast<size_t>(brIndex) < wargs.size(),
+                    "JOIN branch index out of range in NodeVM.");
+                if (n->dataIndex == 0) {
+                    break;
+                }
+                if (n->dataType() == Type::Void()) {
+                    currFrame->set(n->dataIndex, NullSlot);
+                    break;
+                }
+                // The selected arm has already executed sequentially. Its tail
+                // slot now holds the branch result consumed by JOIN.
+                slot_t branchResult = currFrame->get<slot_t>(
+                    planDataIndex(*currPlan, wargs[static_cast<size_t>(brIndex)]));
+                currFrame->set(n->dataIndex, branchResult);
+            } break;
+
+            case GCNodeKind::Call: {
+                const auto withInputs = en.withInputs();
+                GUARD(!withInputs.empty(), "CALL node must have exactly one callee input");
+                Function *func =
+                    currFrame->get<Function *>(planDataIndex(*currPlan, withInputs.front()));
+                GUARD(func != nullptr, "NodeVM CALL resolved a null Function callee.");
+                auto *funcRuntimeGraph = programs_.graphOf(func);
+                GUARD(
+                    funcRuntimeGraph != nullptr,
+                    std::format(
+                        "an indirect call reaches a graph whose runtime form was never "
+                        "materialized, so "
+                        "the call has no code to enter"));
+
+                requireRecursionRoom(currRuntimeGraph);
+                Frame *funcFrame = framePool_.acquire(funcRuntimeGraph);
+                camel::execute::fillFrameForIndirectCall(
+                    currFrame,
+                    funcFrame,
+                    currRuntimeGraph,
+                    nodeRef);
+
+                slot_t callResult = call(funcRuntimeGraph, funcFrame, func->program());
+                if (n->dataIndex != 0) {
+                    currFrame->set(n->dataIndex, callResult);
+                }
+            } break;
+
+            case GCNodeKind::Func: {
+                auto *runtimeTarget = currProgram->graph(currPlan->directCallTargetIds[i]);
+                GUARD(
+                    runtimeTarget != nullptr,
+                    std::format(
+                        "a direct call names a function whose graph is not in the program's graph "
+                        "table"));
+                const bool isTailCall = currPlan->directCallTailEligible[i] != 0 ||
+                                        currPlan->directCallFeedsTailJoin[i] != 0;
+                // The entry graph's own activation is not a call of the program, and its call of
+                // `main` is the one call kEntryCalls excuses (camel/execute/limits.h): the room
+                // check below subtracts both by name. A tail call reuses its caller's activation,
+                // so the entry's call of `main` asked whether it may reuse the entry's activation
+                // would leave one activation fewer on the stack and lift the limit by one -- which
+                // is what a graph whose entry call is a direct call (`FUNC main`) rather than a
+                // call through a function value does, after std::cxx::devirtualize. The
+                // count of open calls must not depend on how a call is spelled, so the entry's
+                // callee always gets an activation of its own, the way the value-call spelling
+                // gives it one. Every other tail call reuses its caller's activation as before.
+                if (isTailCall && currRecursionDepth_ > 1) {
+                    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                        "NodeVM",
+                        "Optimizing tail-call for node [{}/{}] graph={}: ref={}",
+                        i + 1,
+                        currNodes.size(),
+                        currRuntimeGraph->name(),
+                        nodeRef));
+                    // Reuse the current C++ stack frame by rebinding graph/frame state.
+                    if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                        observer->tailCall();
+                    }
+                    Frame *lastFrame = currFrame;
+                    tillNode         = kInvalidNodeRef;
+                    skipNode         = kInvalidNodeRef;
+                    enclosingArms.clear();
+
+                    const auto argSlots = currPlan->directCallArgSlotsOf(i);
+                    if (runtimeTarget != currRuntimeGraph) {
+                        // Switch to the callee graph and its topo sequence.
+                        currRuntimeGraph = runtimeTarget;
+                        currPlan         = &currRuntimeGraph->execPlan();
+                        currRecords      = currPlan->nodes().data();
+                        currNodes        = currPlan->topo;
+                    }
+                    const auto *layout = &runtimeTarget->execPlan();
+                    currFrame          = tailCallFrame(
+                        runtimeTarget,
+                        rootFrame,
+                        lastFrame,
+                        tailLow,
+                        tailHigh,
+                        layout,
+                        argSlots);
+                    goto loop_start;
+                }
+
+                requireRecursionRoom(currRuntimeGraph);
+                Frame *funcFrame    = framePool_.acquire(runtimeTarget);
+                const auto argSlots = currPlan->directCallArgSlotsOf(i);
+                const auto *layout  = &runtimeTarget->execPlan();
+                bindDirectCallFrameSlots(currFrame, funcFrame, layout, argSlots, callArgScratch_);
+                slot_t callResult = call(runtimeTarget, funcFrame, currProgram);
+
+                if (n->dataIndex != 0) {
+                    slot_t value = callResult;
+                    const uint32_t written =
+                        camel::runtime::funcWriteMaskOf(*currRuntimeGraph, nodeRef);
+                    if (written != 0) {
+                        // The call hands on the new version of each captured variable it wrote
+                        // beside the return value: its With inputs are the callee's declared
+                        // `with` arguments and then those captures.
+                        std::vector<slot_t> withValues;
+                        const auto withInputs = en.withInputs();
+                        withValues.reserve(withInputs.size());
+                        for (auto input : withInputs) {
+                            withValues.push_back(
+                                currFrame->get<slot_t>(planDataIndex(*currPlan, input)));
+                        }
+                        value = camel::execute::runtimeFuncValue(
+                            n->dataType(),
+                            runtimeTarget,
+                            written,
+                            withValues,
+                            callResult);
+                    }
+                    currFrame->set(n->dataIndex, value);
+                }
+            } break;
+
+            case GCNodeKind::Oper: {
+                const auto *body = en.bodyAs<GCOperBody>();
+                operator_t opFunc =
+                    currPlan->resolvedOpers[nodeRef].load(std::memory_order_relaxed);
+                if (!opFunc) {
+                    // The plan names the operator: an update node whose storage must not be
+                    // reused runs the plain form of the operator it names, and the copying form of
+                    // an operator that has an in-place one runs it where the plan handed over the
+                    // value it was given (4.3.1).
+                    const std::string uri = currPlan->operatorUriFor(nodeRef);
+                    auto found = context_->execMgr().find(uri);
+                    if (found) {
+                        opFunc = camel::profile::profiledOperator(uri, *found);
+                        currPlan->resolvedOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
+                    } else {
+                        if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
+                            // The marked evaluator writes this node's output itself, so the value
+                            // the count's rows get is the slot it left. The rows are the hook's
+                            // (camel/execute/operator_call.h), like every other operator call's.
+                            camel::execute::callOperator({*currPlan, *currFrame, nodeRef}, [&] {
+                                evalMarkedOperator(
+                                    body->oper,
+                                    currRuntimeGraph,
+                                    nodeRef,
+                                    *currFrame);
+                                return n->dataIndex == 0 ? slot_t{0}
+                                                         : currFrame->get<slot_t>(n->dataIndex);
+                            });
+                            break;
+                        }
+                        throwRuntimeFault(
+                            RuntimeDiag::PassInternalError,
+                            "std::nvm",
+                            "the operator '" + uri + "' has no implementation");
+                    }
+                }
+
+                // The anchor's site, in the node form: a `Ref` box made while this operator ran has
+                // to be a value the plan names this very node as producing. Asked only while
+                // --gc-check wants the counted blocks -- the flag that already pays for the
+                // counters, so a program that does not pass it reads nothing here and takes the
+                // same path as before -- and the answer is only reported: it cannot refuse the
+                // value, change the frame, or move this node to another order.
+                const bool anchorWanted = camel::core::mm::allocatorChecks().printForeignResources;
+                camel::runtime::CountedBoxesBracket boxes;
+                if (anchorWanted) {
+                    boxes.begin();
+                }
+                // The count's rows at this position are the hook's (camel/execute/operator_call.h):
+                // the holds this node's output takes and the references that come back once it has
+                // run, run whether or not the anchor above was asked for -- counting is what
+                // releases a box (design principles 10.5) and the flag only says whether the
+                // process reports what it released.
+                const slot_t result =
+                    camel::execute::callOperator({*currPlan, *currFrame, nodeRef}, [&] {
+                        return evalNativeOperator(
+                            currRuntimeGraph,
+                            en,
+                            *currPlan,
+                            *currFrame,
+                            opFunc);
+                    });
+                if (anchorWanted) {
+                    camel::runtime::noteCountedCreationForNode(
+                        currRuntimeGraph,
+                        nodeRef,
+                        boxes.sinceBegin());
+                }
+
+                currFrame->set(n->dataIndex, result);
+            } break;
+
+            case GCNodeKind::Loop:
+                // Every loop the builders make is a region of its graph: its rounds ran at the
+                // events of the plan and the state is its value. A loop of the old graph form (a
+                // condition graph and a body graph, run a call per round) is not executed; the
+                // plans above prove no such loop reaches this point.
+                GUARD(
+                    hasLoopRegions(*currRuntimeGraph, nodeRef),
+                    "NodeVM: a LOOP node is not a region of its graph (the graph form of a loop "
+                    "must not remain): the step that lowers loop regions did not run");
+                break;
+
+            case GCNodeKind::Port:
+                [[fallthrough]];
+            case GCNodeKind::Data:
+                [[fallthrough]];
+            case GCNodeKind::Gate:
+                break;
+
+            default: {
+                GUARD(
+                    false,
+                    std::format(
+                        "Node type {} should not appear in NodeVM execution: it belongs to another "
+                        "scheduler.",
+                        static_cast<int>(n->kind)));
+            } break;
+            }
+
+            // A group's tail computed this node's value in one pass (the switch above is the
+            // operator's own execution, which the group replaced).
+        node_done:;
+            // The rows the plan has at this node's position, for every kind whose rows are its own.
+            // Two kinds keep theirs elsewhere: an operator's run inside `callOperator` above, and a
+            // LOOP node's at its exit (`applyRefEntriesForLoopExit`, reached from `stepLoops`). A
+            // CALL and a FILL are nodes of this loop too, so a value a call made is born with its
+            // count where the call ran -- before every reader, because the edge the plan has from
+            // the call to each reader is also what runs this node first
+            // (camel/execute/operator_call.h, `runNode`).
+            if (n->kind != GCNodeKind::Oper && n->kind != GCNodeKind::Loop) {
+                (void)camel::execute::runNode({*currPlan, *currFrame, nodeRef}, [&] {
+                    return n->dataIndex == 0 ? NullSlot : currFrame->get<slot_t>(n->dataIndex);
+                });
+            }
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "NodeVM",
+                "Executed node [{}/{}]: ref={}",
+                i + 1,
+                currNodes.size(),
+                nodeRef));
+        }
+    }
+
+        currRecursionDepth_--;
+
+        result = camel::execute::readRuntimeGraphReturn(currRuntimeGraph, currFrame);
+
+        releaseTailFrames(tailLow, tailHigh);
+        framePool_.release(rootFrame);
+
+        return result;
+    } catch (const RuntimeFault &fault) {
+        // The loops this activation is still inside give back what they held: the run is unwinding
+        // past `loopEnd`, and the frames are released below, so the slots this can read are gone a
+        // line later (camel/execute/loop_frame.h, `giveBackOpenLoopsOfEveryFrame`).
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
+        // A debugger stops here, while every frame of the stack is still alive.
+        if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+            observer->faultRaised(
+                fault,
+                faultIsolationDepth() != 0 && isIsolatableFault(fault.diag()));
+        }
+        currRecursionDepth_--;
+        releaseTailFrames(tailLow, tailHigh);
+        if (rootFrame) {
+            framePool_.release(rootFrame);
+        }
+        auto sourceContext      = context_ ? context_->sourceContext() : nullptr;
+        auto *faultRuntimeGraph = currFrame ? currFrame->runtimeGraph() : currRuntimeGraph;
+        auto site               = makeGraphExecutionSite(
+            sourceContext,
+            faultRuntimeGraph ? faultRuntimeGraph : static_cast<camel::runtime::GCGraph *>(nullptr),
+            currRecursionDepth_);
+        if (currRuntimeGraph && faultNodeRef != kInvalidNodeRef) {
+            if (const uint64_t origin = currRuntimeGraph->nodeOrigin(faultNodeRef)) {
+                site.cachedOrigin = origin;
+            }
+        }
+        throw reportRuntimeFault(*context_, fault, site);
+    } catch (Diagnostic &) {
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
+        currRecursionDepth_--;
+        releaseTailFrames(tailLow, tailHigh);
+        if (rootFrame) {
+            framePool_.release(rootFrame);
+        }
+        throw;
+    } catch (...) {
+        // Every other exception a native operator throws leaves this device the same way a fault
+        // does, and it has to leave with its frames. `FactQueryNoValue` is the one that reaches
+        // here in practice: a fact query inside a rule's condition that names parts no value has
+        // throws it, and whoever evaluates the condition catches it and answers "this rule does
+        // not apply here" (modules/rewrite/module.cpp, callWhen), so it is an ordinary outcome of
+        // a condition, not a fault. Measured with the pool's own counters on a case whose
+        // condition asks a two-parameter fact: a graph that runs to the end leaves 0 frames
+        // outstanding, and the same graph with one such query left 4 -- one per unwinding
+        // activation, because only the two clauses above released. The pool is a stack allocator
+        // whose top is the next frame's address, so a frame that is not released leaves the top
+        // above a frame that is still in use and the next acquire hands that frame out twice; the
+        // slots of the two activations then overwrite each other.
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
+        currRecursionDepth_--;
+        releaseTailFrames(tailLow, tailHigh);
+        if (rootFrame) {
+            framePool_.release(rootFrame);
+        }
+        throw;
+    }
+}
+
+const camel::runtime::Program *
+NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
+    (void)os;
+    GUARD(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
+    if (camel::profile::enabled()) {
+        camel::profile::setBackend("std::nvm");
+    }
+    camel::execute::RunScope runScope(programs_, *context_, program);
+    Frame *rootFrame = framePool_.acquire(graph);
+    slot_t result    = call(graph, rootFrame);
+    context_->captureProcessExitCode(graph, result);
+    return nullptr;
+}
+
+slot_t NodeVMSchedPass::callFunction(
+    ::Function *function, std::span<const slot_t> arguments,
+    std::span<const slot_t> withArguments) {
+    GUARD(function != nullptr, "callFunction needs a function value.");
+    GUARD(
+        function->program() != nullptr && function->graph() != nullptr,
+        "callFunction needs a function value with a body.");
+    // The captures are read from the value immediately before the call: making the closure vector
+    // allocates, and a collection between reading the tuple and reaching the frame would move what
+    // the slots name. Nothing in between is a safepoint, and the value is the caller's, held where
+    // the caller's roots keep it up to date.
+    ::Tuple *captured = function->tuple();
+    std::vector<slot_t> closure;
+    if (captured != nullptr) {
+        closure.reserve(captured->size());
+        for (size_t i = 0; i < captured->size(); ++i) {
+            closure.push_back(captured->get<slot_t>(i));
+        }
+    }
+    return callGraph(function->program(), function->graph(), arguments, withArguments, closure);
+}
+
+slot_t NodeVMSchedPass::callGraph(
+    const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
+    std::span<const slot_t> arguments, std::span<const slot_t> withArguments,
+    std::span<const slot_t> closure) {
+    camel::execute::RunScope runScope(programs_, *context_, program);
+    Frame *frame     = framePool_.acquire(graph);
+    const auto ports = graph->normPorts();
+    GUARD(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
+    for (size_t i = 0; i < ports.size(); ++i) {
+        frame->set(graph->node(ports[i])->dataIndex, arguments[i]);
+    }
+    const auto withPorts = graph->withPorts();
+    GUARD(
+        withPorts.size() == withArguments.size(),
+        "callGraph needs one argument per with parameter.");
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        frame->set(graph->node(withPorts[i])->dataIndex, withArguments[i]);
+    }
+    // What the body captured where it was written. The frame's closure nodes are the only place
+    // they are read from, and nothing else writes them, so a caller that does not know them (it
+    // has the graph and not the function value) leaves them empty.
+    const auto closureNodes = graph->closureNodes();
+    GUARD(
+        closure.empty() || closureNodes.size() == closure.size(),
+        "callGraph needs one closure value per capture of the graph.");
+    for (size_t i = 0; i < closureNodes.size() && i < closure.size(); ++i) {
+        frame->set(graph->node(closureNodes[i])->dataIndex, closure[i]);
+    }
+    return call(graph, frame, program);
+}
+
+void NodeVMSchedPass::evalMarkedOperator(
+    camel::core::OperId oper, camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef,
+    Frame &currFrame) {
+    // The way the operator calls its function is its declaration's (OperatorSemantics::
+    // elementCalls); NodeVM runs every call in order, whatever the calls leave open.
+    const auto *calls = camel::core::OperatorTable::instance().elementCalls(oper);
+    GUARD(calls != nullptr, "A marked operator declares how it calls its function.");
+    switch (calls->shape) {
+    case camel::core::sem::ElementShape::Map:
+        // `apply` (f from T to T) returns a new array, like `map`: it does not change the
+        // array it is given (design principles 11.3).
+        evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
+        break;
+    case camel::core::sem::ElementShape::Filter:
+        evalMarkedOperator_filter_arr(graph, nodeRef, currFrame);
+        break;
+    case camel::core::sem::ElementShape::Fold:
+        evalMarkedOperator_reduce_arr(graph, nodeRef, currFrame);
+        break;
+    case camel::core::sem::ElementShape::Foreach:
+        evalMarkedOperator_foreach_arr(graph, nodeRef, currFrame);
+        break;
+    case camel::core::sem::ElementShape::Isolate:
+        evalMarkedOperator_isolate(graph, nodeRef, currFrame);
+        break;
+    }
+}
+
+void NodeVMSchedPass::evalMarkedOperator_map_arr(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const auto normInputs = graph->normInputsOf(nodeRef);
+    const auto withInputs = graph->withInputsOf(nodeRef);
+    GUARD(
+        !normInputs.empty() && !withInputs.empty(),
+        "map_arr requires array and function inputs.");
+    const auto arrSlot    = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot   = dataIndexOf(graph, withInputs.front());
+    const auto resultSlot = dataIndexOf(graph, nodeRef);
+    const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
+    auto *resultType      = currFrame.typeAt<ArrayType>(resultSlot);
+    Array *res            = Array::create(mm::autoSpace(), resultType, arrSize);
+    currFrame.set(resultSlot, res);
+
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr     = currFrame.get<Array *>(arrSlot);
+        Function *func = currFrame.get<Function *>(funcSlot);
+        slot_t element = arr->getSlot(i);
+        requireRecursionRoom(graph);
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        slot_t result = call(programs_.graphOf(func), frame, func->program());
+        currFrame.get<Array *>(resultSlot)->set<slot_t>(i, result, resultType);
+    }
+}
+
+void NodeVMSchedPass::evalMarkedOperator_filter_arr(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const auto normInputs = graph->normInputsOf(nodeRef);
+    const auto withInputs = graph->withInputsOf(nodeRef);
+    GUARD(
+        !normInputs.empty() && !withInputs.empty(),
+        "filter_arr requires array and function inputs.");
+    const auto arrSlot    = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot   = dataIndexOf(graph, withInputs.front());
+    const auto resultSlot = dataIndexOf(graph, nodeRef);
+    const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
+    // Starts empty: Array::create(n) makes n null elements, and the kept ones were appended
+    // after them.
+    auto *resultType = currFrame.typeAt<ArrayType>(resultSlot);
+    Array *filtered  = Array::create(mm::autoSpace(), resultType, 0);
+    currFrame.set(resultSlot, filtered);
+
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr     = currFrame.get<Array *>(arrSlot);
+        Function *func = currFrame.get<Function *>(funcSlot);
+        slot_t element = arr->getSlot(i);
+        requireRecursionRoom(graph);
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        slot_t result = call(programs_.graphOf(func), frame, func->program());
+        if (fromSlot<bool>(result)) {
+            Array *target = currFrame.get<Array *>(resultSlot);
+            target->append(currFrame.get<Array *>(arrSlot)->getSlot(i), resultType);
+        }
+    }
+    currFrame.get<Array *>(resultSlot)->shrinkToFit(resultType);
+}
+
+void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const auto normInputs = graph->normInputsOf(nodeRef);
+    const auto withInputs = graph->withInputsOf(nodeRef);
+    GUARD(
+        !normInputs.empty() && withInputs.size() >= 2,
+        "reduce_arr requires array, function, and initial value inputs.");
+    const auto arrSlot    = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot   = dataIndexOf(graph, withInputs[0]);
+    const auto initSlot   = dataIndexOf(graph, withInputs[1]);
+    const auto resultSlot = dataIndexOf(graph, nodeRef);
+    const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
+    slot_t init           = currFrame.get<slot_t>(initSlot);
+
+    if (arrSize == 0) {
+        currFrame.set(resultSlot, init);
+        return;
+    }
+    currFrame.set(resultSlot, init);
+
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr          = currFrame.get<Array *>(arrSlot);
+        Function *func      = currFrame.get<Function *>(funcSlot);
+        const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->getSlot(i)};
+        requireRecursionRoom(graph);
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
+        currFrame.set(resultSlot, call(programs_.graphOf(func), frame, func->program()));
+    }
+}
+
+void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const auto normInputs = graph->normInputsOf(nodeRef);
+    const auto withInputs = graph->withInputsOf(nodeRef);
+    GUARD(
+        !normInputs.empty() && !withInputs.empty(),
+        "foreach_arr requires array and function inputs.");
+    const auto arrSlot   = dataIndexOf(graph, normInputs.front());
+    const auto funcSlot  = dataIndexOf(graph, withInputs.front());
+    const size_t arrSize = currFrame.get<Array *>(arrSlot)->size();
+
+    for (size_t i = 0; i < arrSize; ++i) {
+        Array *arr     = currFrame.get<Array *>(arrSlot);
+        Function *func = currFrame.get<Function *>(funcSlot);
+        slot_t element = arr->getSlot(i);
+        requireRecursionRoom(graph);
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
+        call(programs_.graphOf(func), frame, func->program());
+    }
+    currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
+}
+
+// The fault-isolation node (docs/technical/33_fault_isolation.md): a call of the function value
+// given first, in which a fault of the program becomes the failed form of the node's `T!`.
+void NodeVMSchedPass::evalMarkedOperator_isolate(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const auto normInputs = graph->normInputsOf(nodeRef);
+    GUARD(!normInputs.empty(), "The fault-isolation node requires a function input.");
+    const auto resultSlot = dataIndexOf(graph, nodeRef);
+    Function *func        = currFrame.get<Function *>(dataIndexOf(graph, normInputs.front()));
+    GUARD(func != nullptr && programs_.graphOf(func) != nullptr, "Fault-isolation callee is null.");
+    auto *target = programs_.graphOf(func);
+
+    std::vector<slot_t> args;
+    args.reserve(normInputs.size() - 1);
+    for (size_t i = 1; i < normInputs.size(); ++i) {
+        args.push_back(currFrame.get<slot_t>(dataIndexOf(graph, normInputs[i])));
+    }
+
+    // The room for the call is the caller's: a recursion limit reached here is a fault of the
+    // enclosing graph, outside the boundary.
+    requireRecursionRoom(graph);
+    const size_t depthBefore = currRecursionDepth_;
+    (void)depthBefore;
+    Frame *frame = framePool_.acquire(target);
+    bindMarkedFunctionFrame(frame, func, args);
+    slot_t value = NullSlot;
+    try {
+        camel::core::error::FaultIsolationScope boundary;
+        value = call(target, frame, func->program());
+    } catch (const Diagnostic &fault) {
+        if (!camel::core::error::isIsolatedFault(fault)) {
+            throw;
+        }
+        // Every activation inside the boundary released its frames and its depth count
+        // while the exception passed (see call()); nothing of the boundary is left.
+        GUARD(
+            currRecursionDepth_ == depthBefore,
+            "A fault left the call depth changed at its isolation boundary.");
+        currFrame.set(resultSlot, camel::execute::isolatedFaultToError(fault));
+        return;
+    }
+    const Type *calleeResult = target->funcType() ? target->funcType()->exitType() : nullptr;
+    currFrame.set(
+        resultSlot,
+        camel::execute::wrapIsolatedResult(
+            value,
+            calleeResult,
+            currFrame.typeAt<Type>(resultSlot)));
+}
+
+// Keep callback state out of call()'s recursive native frame, like marked-operator helpers.
+slot_t NodeVMSchedPass::evalNativeOperator(
+    camel::runtime::GCGraph *currRuntimeGraph, const camel::runtime::ExecNode &en,
+    const camel::runtime::ExecPlan &plan, Frame &operatorFrame, operator_t opFunc) {
+    Frame *currFrame = &operatorFrame;
+    operIndices_.clear();
+    for (gc_node_ref_t inputRef : en.normInputs())
+        operIndices_.push_back(plan.dataIndexByRef[inputRef]);
+    size_t normCnt = operIndices_.size();
+    for (gc_node_ref_t inputRef : en.withInputs())
+        operIndices_.push_back(plan.dataIndexByRef[inputRef]);
+
+    const bool callsGraphs =
+        camel::core::OperatorTable::instance().callsGraphs(en.bodyAs<GCOperBody>()->oper);
+    // Nested calls reuse operIndices_. Keep this operator's views alive independently.
+    std::vector<runtime_data_idx_t> ownedIndices;
+    if (callsGraphs)
+        ownedIndices = operIndices_;
+    const auto &indices = callsGraphs ? ownedIndices : operIndices_;
+    data_arr_t nargs{indices.data(), normCnt};
+    data_arr_t wargs{indices.data() + normCnt, indices.size() - normCnt};
+    FrameArgsView withView(*currFrame, wargs);
+    FrameArgsView normView(*currFrame, nargs);
+    withView.setResultType(en.node->dataType());
+    normView.setResultType(withView.resultType());
+    // What a pass recorded about this node (design principles 9.6); the operator's module reads
+    // its own keys, the scheduler knows none.
+    const camel::core::attr::AttrSetId attrs = currRuntimeGraph->nodeAttrs(en.ref);
+    withView.setAttrs(attrs);
+    normView.setAttrs(attrs);
+
+    if (camel::core::effect_trace::enabled()) [[unlikely]] {
+        camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(en.ref));
+    }
+    camel::execute::FunctionInvoker invoker;
+    if (callsGraphs) {
+        invoker = [&](Function *function,
+                      std::span<const slot_t>
+                          withArgs,
+                      std::span<const slot_t>
+                          normalArgs) {
+            requireRecursionRoom(currRuntimeGraph);
+            auto *target = programs_.graphOf(function);
+            Frame *frame = framePool_.acquire(target);
+            bindMarkedFunctionFrame(frame, function, normalArgs, withArgs);
+            return call(target, frame, function->program());
+        };
+    }
+    camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
+    return (*opFunc)(withView, normView, *context_);
+}
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// `std::nvm`: the reference executor a pipeline runs a program on, and the fallback pass of a
+/// pipeline that produced no empty graph (AGENTS.md, "Pass Execution Model").
+const PassKernel nodeVmKernel("std::nvm", makePass<NodeVMSchedPass>());
+
+} // namespace
+
+namespace {
+
+/// The reference executor's answer to `camel::execute::detail::graphCaller()`: a graph of a
+/// program, run here, for a caller that holds no function value (a pass written in Camel).
+slot_t callOnReferenceExecutor(
+    const camel::core::context::context_ptr_t &ctx,
+    const camel::runtime::Program *program,
+    camel::runtime::GCGraph *graph,
+    std::span<const slot_t> arguments,
+    std::span<const slot_t> withArguments,
+    std::span<const slot_t> closure) {
+    NodeVMSchedPass vm(ctx);
+    return vm.callGraph(program, graph, arguments, withArguments, closure);
+}
+
+camel::execute::detail::GraphCaller &installedGraphCaller() {
+    static camel::execute::detail::GraphCaller caller = nullptr;
+    return caller;
+}
+
+/// Installs the caller while the program loads, so the pipeline can run a pass written in Camel
+/// without naming the executor it runs on (src/execute/graph_caller.h).
+struct GraphCallerInstalled {
+    GraphCallerInstalled() { camel::execute::detail::setGraphCaller(&callOnReferenceExecutor); }
+};
+
+const GraphCallerInstalled graphCallerInstalled;
+
+} // namespace
+
+namespace camel::execute::detail {
+
+void setGraphCaller(GraphCaller caller) {
+    installedGraphCaller() = caller;
+}
+
+GraphCaller graphCaller() {
+    return installedGraphCaller();
+}
+
+} // namespace camel::execute::detail

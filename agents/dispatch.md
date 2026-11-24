@@ -46,6 +46,7 @@
 **★ 任何 `stdlib/*.cml`（含 `stdlib/rulesets/`）的改动 ⇒ 必须重生成 `docs/stdlib-reference.md`**，否则 `registry.reference_is_generated` 会红，而**没有任何计划看得见它**。
 **★ 不许放宽判据来变绿** —— 不许改 `test/plans/**` 之外的期望值（`baseline.json`、`*-exceptions.txt`、迁移台账的数），不许给它加 `known_fail` 来消红。
 **★ 不许在本机构建**（会蓝屏）。构建只在 88zjwei 上，用 `internal/tools/camel-remote.ps1`。
+**★ 手工 `ssh` 必须写 `ssh 88zjwei`，不许写 `ssh 88zjwei@10.126.62.88`。** 主机名带 `@` 地址时 rsync/ssh 不走 `~/.ssh/config` 里那个 `Host 88zjwei`（`IdentityFile` 只写在那里），于是卡在口令提示。2026-11-22 一条车道的 `-Clean` 因此没跑成。
 **★ 新工作树缺 `internal/tools/camel-gate.local.json`（git-ignored）⇒ 首跑 exit 2。** 从主检出复制过去，不入库。
 **★ `-AstOnly` 必须传真数组**：`pwsh -File … -AstOnly 'a','b'` 会变成一个含逗号的字符串（`--only selected none`），重复参数则绑定报错。必须在本会话里 `& .\internal\tools\camel-remote.ps1 … -AstOnly @('a','b')`。
 **★ 合并者：先提交后验证。** `git merge --no-commit` 之前不该有自己的脏改动；冲突一律用生成器解。
@@ -79,3 +80,4 @@
 - **不向用户提问。** 有疑问写成一页一问（`docs/handover/questions/`），写死默认建议，并按默认当轮开工。
 - **合并迟到比实现迟到代价大。** 成熟的提交不许因为「想先确认」而压着；判定不确定时改成**事后判 + 可回退**（合完跑，只有合后才红就 `git revert --no-commit` 撤回来）。
   > 出处：2026-11-20，我要求合并位「先证实某条红是既有红再合」，主干因此停了 28 分钟。
+- **同一台构建主机上的远程跑一律串行，不许并行。** 闸门自带的宿主清扫按「最近 10 分钟有没有文件变过」判定，两条并行跑的读数会互相打脸：一条算出「worktree 已消失，删掉检出」，另一条三十秒后算出「十分钟内变过，保留」。2026-11-22 有过一次：A、B 并行，A 的读数删掉了 ~/camel-work/twored（718 MB），B 的读数却是「keeping」。删除由竞态决定，不是判定。**串行跑，或者各自用不同主机的检出目录。**

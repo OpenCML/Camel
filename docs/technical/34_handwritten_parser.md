@@ -17,13 +17,13 @@ text ──Lexer──► TokenBuffer ──Parser──► Tree (CST) ──ast
 
 | Part | Files |
 |---|---|
-| Token kinds, keyword table | `include/camel/parse/syntax/token_kinds.def`, `token.h` |
-| Lexer | `syntax/lexer.h`, `src/parse/syntax/lexer.cpp` |
+| Token kinds, keyword table | `parse/include/camel/parse/syntax/token_kinds.def`, `token.h` |
+| Lexer | `syntax/lexer.h`, `parse/src/syntax/lexer.cpp` |
 | Node kinds, tree, access | `syntax/node_kinds.def`, `syntax/cst.h` |
 | Parser | `syntax/parser.h`, `src/parse/syntax/parser*.cpp`, `parser_impl.h` |
-| Errors to diagnostics | `syntax/report.h`, `src/parse/syntax/report.cpp` |
-| AST builder | `include/camel/parse/ast/builder.h`, `src/parse/ast/builder.cpp` |
-| Driver | `include/camel/parse/parse.h` (`CamelParser`) |
+| Errors to diagnostics | `syntax/report.h`, `parse/src/syntax/report.cpp` |
+| AST builder | `parse/include/camel/parse/ast/builder.h`, `parse/src/ast/builder.cpp` |
+| Driver | `parse/include/camel/parse/parse.h` (`CamelParser`) |
 | Corpus checks (once the differential harness) | `tools/parsecheck/`, `test/tools/parsecheck/` |
 
 ## 1. Lexer
@@ -202,7 +202,7 @@ reports an error instead of exhausting the stack.
 2. `node_kinds.def`: `CAMEL_NODE(WhileStmt, Other) // 'while' logicalOrExpr stmtBlock`.
 3. `parser.cpp`: a `parseWhile()` of six lines (`bump`, `parseLogicalOr`, `parseStmtBlock`,
    `close`), one `case` in `parseStmt`, one in `startsStmt`.
-4. `src/parse/ast/builder.cpp`: `visitWhileStmt` and one `case` in `visitStmt`.
+4. `parse/src/ast/builder.cpp`: `visitWhileStmt` and one `case` in `visitStmt`.
 5. The formatter and the syntax index each get one `case`.
 6. The production in `docs/language/08` (`scripts/check-grammar.mjs` fails until it is there).
 
@@ -241,7 +241,7 @@ loopWhile : 'while' logicalOrExpr
 
 `loop` and `while` are keywords. The CST node `LoopExpr` has the children `loop`, the state
 (`IdentDef` or `ParentIdents`), `=`, the first value, `LoopFor`?, `LoopWhile`?, `StmtBlock`. The AST
-node is `AST::LoopExprLoad` (`include/camel/parse/ast/data.h`), which the next stage is to turn
+node is `AST::LoopExprLoad` (`parse/include/camel/parse/ast/data.h`), which the next stage is to turn
 into the `LOOP` node of the graph:
 
 | | |
@@ -256,7 +256,7 @@ into the `LOOP` node of the graph:
 
 The value of the expression is the last state. With both clauses a round runs while an element
 is left and the condition holds. The GCT builder turns it into the `LOOP` node
-(`src/compile/gct/builder_expr.cpp#Builder::visitLoopExpr`), and [39](39_loops.md) describes the node
+(`compile/src/gct/builder_expr.cpp#Builder::visitLoopExpr`), and [39](39_loops.md) describes the node
 and how each back end runs it; the formatter, the syntax index (scopes and bindings) and the
 editor grammar know the form.
 
@@ -476,7 +476,7 @@ Time per step, microseconds (minimum of 41 rounds; of 5 for the last file):
 
 | File | Lines | Tokens | CST nodes | Lexer | Lexer + parser | To the AST | ANTLR to its tree | ANTLR to the AST |
 |---|---|---|---|---|---|---|---|---|
-| `stdlib/array.cml` | 171 | 1 068 | 972 | 11 | 55 | 658 | 43 033 | 44 940 |
+| `lib/array/array.cml` | 171 | 1 068 | 972 | 11 | 55 | 658 | 43 033 | 44 940 |
 | generated program, size 4 | 377 | 4 155 | 3 868 | 58 | 193 | 4 172 | 20 654 | 25 067 |
 | generated program, size 30 | 2 999 | 34 260 | 31 333 | 597 | 1 631 | 35 010 | 193 536 | 305 220 |
 | 16 000 lines of the corpus in one file | 16 322 | 95 946 | 94 273 | 1 867 | 8 649 | 281 881 | 11 428 450 | 11 760 012 |

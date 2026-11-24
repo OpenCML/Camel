@@ -30,7 +30,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const checker = path.join(here, 'check_covers_every_rule.mjs')
 const repoRoot = path.resolve(here, '..', '..', '..', '..', '..')
 const casePath = path.join(repoRoot, 'test', 'cases', 'modules', 'rules', 'check_every_rule.cml')
-const library = path.join(repoRoot, 'stdlib', 'rules.cml')
+const library = path.join(repoRoot, 'lib', 'rules', 'rules.cml')
 const scratch = process.argv[2]
 
 if (!scratch) {

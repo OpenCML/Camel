@@ -31,6 +31,7 @@ known_fail = ["jit"]
 known_fail_owner = "the runner self-test"
 known_fail_reason = "the fixture's `jit` prints 41 and the other three print 42: this entry exists to prove a per-back-end disagreement is reported (`differs from stdout_differs.nvm: stdout_normalized`)"
 known_fail_msg = "differs from stdout_differs.nvm: stdout_normalized"
+known_fail_ends_when = "when the fixture's `jit` prints 42 like the other three, `differs from stdout_differs.nvm: stdout_normalized` stops being reported, this entry reports PASS, and `jit` leaves `known_fail`"
 known_fail_note = "the fixture's jit prints 41 on purpose"
 
 [[tests]]
@@ -40,6 +41,7 @@ known_fail = ["jit"]
 known_fail_owner = "the runner self-test"
 known_fail_reason = "the fixture's `jit` prints 41 instead of 42, which is exactly the difference this case exists to be marked for"
 known_fail_msg = "differs from stdout_differs_known.nvm: stdout_normalized"
+known_fail_ends_when = "when the fixture's `jit` prints 42 like the other three, this entry reports PASS and the mark on `jit` is removed"
 known_fail_note = "the fixture's jit prints 41"
 
 [[tests]]
@@ -49,6 +51,7 @@ known_fail = ["prl"]
 known_fail_owner = "the runner self-test"
 known_fail_reason = "the case passes and is marked on purpose: it is the fixture for `marked known_fail on 'prl' but passes: remove the mark`"
 known_fail_msg = "marked known_fail on 'prl' but passes: remove the mark"
+known_fail_ends_when = "nothing in the fixture pays this mark -- `prl` prints 42 like the others already -- so it ends when this entry is deleted from the fixture; until then the runner reports `marked known_fail on 'prl' but passes: remove the mark`, which is the reading the entry exists to produce"
 
 [[tests]]
 name = "column_differs"
@@ -59,6 +62,7 @@ known_fail = ["fvm"]
 known_fail_owner = "the runner self-test"
 known_fail_reason = "the fixture's `fvm` puts the division by zero at another column: this entry exists to prove a diagnostic difference is reported (`differs from column_differs.nvm: diagnostics`), which the exit code alone would hide"
 known_fail_msg = "differs from column_differs.nvm: diagnostics"
+known_fail_ends_when = "when the fixture's `fvm` reports `RuntimeDiag::DivisionByZero` at the column `nvm` reports it at, `differs from column_differs.nvm: diagnostics` stops being reported and this entry reports PASS"
 known_fail_note = "the fixture's fvm reports the same diagnostic at another column"
 
 [[tests]]
@@ -68,6 +72,7 @@ known_fail = ["prl"]
 known_fail_owner = "the runner self-test"
 known_fail_reason = "the fixture's `prl` exits differently while printing the same text: this entry exists to prove the exit code is compared (`differs from exit_differs.nvm: exit_code`)"
 known_fail_msg = "differs from exit_differs.nvm: exit_code"
+known_fail_ends_when = "when the fixture's `prl` exits 1 like `nvm`, `differs from exit_differs.nvm: exit_code` stops being reported and this entry reports PASS"
 known_fail_note = "the fixture's prl exits 0 where nvm exits 1"
 
 [[tests]]
@@ -92,6 +97,7 @@ known_fail = true
 known_fail_owner = "the runner self-test"
 known_fail_reason = "this entry exists to prove `expect_stdout_starts_with` is not a substring test: the program prints forty-two and the assertion asks that the output start with a two"
 known_fail_msg = 'stdout does not start with "2\n"'
+known_fail_ends_when = "when the program's output starts with `2` instead of `42`, the assertion this entry exists to fail is satisfied and the entry reports PASS"
 
 [[tests]]
 name = "exact"
@@ -110,6 +116,7 @@ known_fail = true
 known_fail_owner = "the runner self-test"
 known_fail_reason = "this entry exists to prove `expect_stdout_exact` compares the whole output: the program prints `42` and the assertion asks for a trailing space as well"
 known_fail_msg = "expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)"
+known_fail_ends_when = "when the program's stdout is exactly `42 ` with the trailing space the assertion asks for, `expect_stdout_exact differs` stops being reported and this entry reports PASS"
 
 [[tests]]
 name = "exact_legacy"
@@ -142,3 +149,4 @@ known_fail = true
 known_fail_owner = "the runner self-test"
 known_fail_reason = "this entry exists to prove `expect_stdout_not_contains` fails when the text is there: the program prints `42` and the assertion says it must be absent"
 known_fail_msg = "stdout contains '42'"
+known_fail_ends_when = "when the fixture stops printing `42`, `stdout contains '42'` no longer fires and this entry reports PASS"

@@ -13,8 +13,8 @@
 //     sum_axis_stated(t, at)  => (ct: T[...]) => lane_spread(ct, ...)         // a lane per number
 //     mean_axis_stated(t, at) => (ct: T[...]) => mean_axis_cotangent(ct, at)  // the lane's numbers
 //
-// `spread_over` takes one number (`stdlib/rulesets/transpose.cml#spread_over`: `ct: T`, feeding
-// `full(at, ct)` whose `value` is a `number`); `numel` reads an array (`stdlib/tensor.cml#numel`:
+// `spread_over` takes one number (`lib/rulesets/transpose.cml#spread_over`: `ct: T`, feeding
+// `full(at, ct)` whose `value` is a `number`); `numel` reads an array (`lib/tensor/tensor.cml#numel`:
 // `t: T[...]`). Write the port one way and the body the other and the law still parses, still
 // instantiates, still builds a graph -- and the slot the body reads is not the value the port
 // promised. Nothing compared the two sentences, so nothing said so.
@@ -40,7 +40,7 @@
 //     compiler, at the one place a value's type goes from `T` to `T[...]`.
 //   * a port that agrees with its body and disagrees with the value the transform hands over. That is
 //     the half `mean_axis_stated_t` was on, and a law's source has no witness for it: `ruleCotangent`
-//     (`modules/transforms/transpose.cpp`) decides the types at build time. It is recorded as a
+//     (`lib/transforms/transpose.cpp`) decides the types at build time. It is recorded as a
 //     question beside this change
 //     (`docs/handover/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`).
 //
@@ -48,8 +48,8 @@
 // it? Three kinds of witness, and each names where its requirement comes from:
 //
 //   * an exact argument position of a call whose declaration is in the tree -- `numel(ct)` reads an
-//     array because `stdlib/tensor.cml#numel` says `t: T[...]`, `spread_over(ct, at)` takes an element
-//     because `stdlib/rulesets/transpose.cml#spread_over` says `ct: T`;
+//     array because `lib/tensor/tensor.cml#numel` says `t: T[...]`, `spread_over(ct, at)` takes an element
+//     because `lib/rulesets/transpose.cml#spread_over` says `ct: T`;
 //   * an index or an arrow -- `ct[i]`, `ct->reduce<...>` read an array, whatever the callee says;
 //   * a companion of the same shape -- `ct * exp(x)` and `ct - sum<0, true>(ct)` are one array wide
 //     because `exp` and the three-operand `sum` answer arrays.
@@ -97,17 +97,17 @@ const root = path.resolve(import.meta.dirname, '..')
 // The declarations a requirement is read from. The laws import from these modules, so a requirement
 // this check states is the one the compiler will apply -- not a second table that could drift.
 const DECLARATION_FILES = [
-    'stdlib/tensor.cml',
-    'stdlib/signatures/tensor.cml',
-    'stdlib/array.cml',
-    'stdlib/autodiff.cml',
-    'stdlib/signatures/autodiff.cml'
+    'lib/tensor/tensor.cml',
+    'lib/tensor/signatures/tensor.cml',
+    'lib/array/array.cml',
+    'lib/autodiff/autodiff.cml',
+    'lib/autodiff/signatures/autodiff.cml'
 ]
 
-const LAW_DIRECTORY = 'stdlib/rulesets'
+const LAW_DIRECTORY = 'lib/rulesets'
 
-// One family per module: `stdlib/rulesets/jvp.cml` is the forward family, whose ports are the
-// tangents of the operands, and `stdlib/rulesets/transpose.cml` is the reverse one, whose ports are
+// One family per module: `lib/rulesets/jvp.cml` is the forward family, whose ports are the
+// tangents of the operands, and `lib/rulesets/transpose.cml` is the reverse one, whose ports are
 // the cotangents of the answer. A module serves one family (design principles 9.9).
 const FAMILY_OF_FILE = new Map([
     ['jvp.cml', 'forward'],
@@ -295,7 +295,7 @@ function kindOfType(text, declaration = null) {
         // wrapped in an array somewhere (`spread_over::<T>(ct: T, ...): T[...]` is instantiated at `T`
         // = the element type, which is why its `ct` is one number), or the declaration is guarded by
         // `is_float::<T>()` / `is_numeric::<T>()`, and an array is neither a float nor a number
-        // (`stdlib/types.cml#is_float`). Otherwise the variable is a shape donor --
+        // (`lib/types/types.cml#is_float`). Otherwise the variable is a shape donor --
         // `sum_to::<T, S>(t: T[...], like: S): S` -- and says nothing about being an element.
         if (declaration !== null && declarationBindsElement(declaration, type)) return 'element'
         return 'unknown'
@@ -314,7 +314,8 @@ function declarationBindsElement(declaration, variable) {
 }
 
 /// A law's own port type. A bare type variable here is the element type: the transform instantiates
-/// a law at its element type first (`modules/transforms/transpose.cpp#ruleCotangent`: "`T` is the
+/// a law at its element type first
+/// (`lib/transforms/transpose/walkmachinery.cpp#ruleCotangentOf`: "`T` is the
 /// law's *element* type"), so `(ct: T)` promises one number and `(ct: T[...])` promises an array.
 function kindOfPortType(text) {
     const kind = kindOfType(text)
@@ -566,7 +567,7 @@ function requirementAt(declarations, name, index) {
     }
     const unique = new Set(kinds)
     // The source is the declaration and the position in it, so a reader can check the requirement
-    // instead of believing it: `stdlib/tensor.cml#numel, parameter 1 't: T[...]'`.
+    // instead of believing it: `lib/tensor/tensor.cml#numel, parameter 1 't: T[...]'`.
     const parameter = matching[0].params[index]
     const where = `${matching[0].where}, parameter ${index + 1} \`${parameter.name}: ${parameter.type}\``
     // The parameter's own type text travels with the requirement, because whether this use is the
@@ -700,7 +701,7 @@ function witnessOfLaw(law, portIndex, declarations) {
 }
 
 /// The witness the law's own guard gives. `when is_float::<T>()` says `T` is a float, and an array is
-/// neither a float nor a number (`stdlib/types.cml#is_float`); `when is_same::<T, float>()` says the
+/// neither a float nor a number (`lib/types/types.cml#is_float`); `when is_same::<T, float>()` says the
 /// same thing by name.
 function guardWitness(law, port) {
     const type = port.type.trim()
@@ -974,7 +975,15 @@ function selfTest() {
 
 const args = process.argv.slice(2)
 const targets = args.filter((argument) => !argument.startsWith('--'))
+// The code is *set*, not forced. `process.exit()` ends the process before the writes still queued
+// on the pipe have left it, and this check is the one that prints more than a pipe holds:
+// `--explain` is ~72 KB of table. On 2026-11-22 the macOS leg received 37 431 characters of it --
+// the rows stopped at `mul_stated_t`, the summary line never arrived, the exit code was 0 and
+// stderr was empty, so the failure read as "the law is not in the table" when the law was there and
+// the table was cut (`docs.the_stated_lane_means_port_is_its_own_open_rank`). `process.exitCode`
+// and a drained event loop is the same exit code with every byte delivered, on every host.
 if (args.includes('--self-test')) {
-    process.exit(selfTest())
+    process.exitCode = selfTest()
+} else {
+    process.exitCode = run(targets, { explain: args.includes('--explain') })
 }
-process.exit(run(targets, { explain: args.includes('--explain') }))

@@ -132,13 +132,37 @@ function processState(pid) {
         return null
     }
 }
+
+/// The 1-minute load average as text, or an explicit `n/a` where the host reports none. This is
+/// context on the line, never the measurement the run is judged by: `os.loadavg()` answers zeros on
+/// Windows, and a line reading `load1 0.00` beside eight busy children would be exactly the kind of
+/// "measured" quiet this harness exists to refuse.
+function loadText() {
+    if (process.platform === 'win32') return 'load1 n/a (this host does not report one)'
+    const [one] = os.loadavg()
+    return Number.isFinite(one) ? `load1 ${one.toFixed(2)}` : 'load1 n/a (this host does not report one)'
+}
+
 await new Promise((resolve) => setTimeout(resolve, 200))
-if (process.platform === 'linux' && args.load > 0) {
-    const states = load.map((child) => processState(child.pid))
-    const alive = states.filter((state) => state !== null && state !== 'Z').length
-    const running = states.filter((state) => state === 'R').length
+if (args.load > 0) {
+    // Which of the children is load right now. Linux answers from /proc, where the state is the whole
+    // reading: `Z` is a child that exited, `S` one that has not been scheduled yet. No other host
+    // reports it -- /proc is Linux's, and `os.loadavg()` exists only where the kernel has one -- so
+    // elsewhere the parent reports what it does know, that the child has not exited (a pid, no exit
+    // code): the count the assertion reads is `alive`, and the R count is printed only where the host
+    // can answer it. What must not happen is the reading silently disappearing on this machine: that
+    // is a harness that ran no load, and it exits 3 below like any other.
+    const reported = load.map((child) => (process.platform === 'linux' ? processState(child.pid) : null))
+    const measuredHere = reported.some((state) => state !== null)
+    const alive = measuredHere
+        ? reported.filter((state) => state !== null && state !== 'Z').length
+        : load.filter(
+              (child) => child.pid !== undefined && child.exitCode === null && child.signalCode === null,
+          ).length
+    const running = reported.filter((state) => state === 'R').length
     console.log(
-        `[race-harness] load: ${alive}/${args.load} busy loop(s) alive, ${running} in state R`,
+        `[race-harness] load: ${alive}/${args.load} busy loop(s) alive` +
+            (measuredHere ? `, ${running} in state R` : ''),
     )
     if (alive < args.load) {
         for (const child of load) {
@@ -151,7 +175,7 @@ if (process.platform === 'linux' && args.load > 0) {
 
 console.log(
     `[race-harness] ${args.rounds} round(s) x ${args.tests.join(', ')} with ${args.load} busy loop(s); ` +
-        `node ${process.version}, ${os.cpus().length} cpus, load1 ${fs.readFileSync('/proc/loadavg', 'utf8').trim()}`,
+        `node ${process.version}, ${os.cpus().length} cpus, ${loadText()}`,
 )
 
 const stats = Object.fromEntries(args.tests.map((t) => [t, { red: 0, green: 0, firstFail: null, failures: [] }]))
@@ -193,7 +217,7 @@ for (const child of load) {
 }
 
 const seconds = ((Date.now() - startedAll) / 1000).toFixed(1)
-console.log(`[race-harness] done in ${seconds} s; load1 ${fs.readFileSync('/proc/loadavg', 'utf8').trim()}`)
+console.log(`[race-harness] done in ${seconds} s; ${loadText()}`)
 let red = 0
 for (const test of args.tests) {
     const s = stats[test]

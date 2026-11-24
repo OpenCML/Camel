@@ -53,7 +53,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 | 15 | `str` | c | — | clean |
 | 16 | `this` | c | — | clean |
 | 17 | `time` | c | 时钟算子的资源 | clean |
-| 18 | `ckpt` | c | 张量算子目录、4 个 tree 内建、checkpoint 资源（源码在 `modules/ckpt`） | clean |
+| 18 | `ckpt` | c | 张量算子目录、4 个 tree 内建、checkpoint 资源（源码在 `lib/ckpt/`） | clean |
 | 19 | `tensor` | c | 张量属性键、算子目录、fuse pass、`Tensor` 类型、`from_bytes`、入口参数 loader/saver、类型精化器、节点角色 | clean |
 | 20 | `array` | c | Camel 模块：15 个 Camel 函数与 8 个原生算子的声明，没有 `.cmo`；原生内核编在 libcamel，导入时整份编译 | clean |
 | 21 | `nn` | c | 张量算子目录、nn 目录、optimizer 组 | clean |
@@ -91,7 +91,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 
 读什么、什么时候读：
 
-- **进程启动时一次**：`buildModuleSearchPaths`（`include/camel/utils/install_layout.h`）读 `CAMEL_HOME`、
+- **进程启动时一次**：`buildModuleSearchPaths`（`kernel/include/camel/utils/install_layout.h`）读 `CAMEL_HOME`、
   `CAMEL_STD_LIB`、`CAMEL_PACKAGES`（`;` 或 `:` 分隔）与命令行 `-I`，只做字符串展开与绝对化，**不 stat、不列目录**。
 - **每次 `import`**：`Context::importModule` → `getModulePathAndKind` → `findModuleUnder` 按搜索根顺序列举
   `<root>/<name>` 与 `<root>/<name>/` 的目录项，命中即停；列举结果按目录路径缓存在 `Context::directoryListings_`，
@@ -121,7 +121,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 `test/tools/import-audit.mjs`：
 
 - 对 27 个模块各生成一个只导入它的程序，跑 `camel <file> std::nvm`，断言退出 0、stdout/stderr 空、无新文件；
-- 扫描每个模块的 `load()` 与构造函数（`ckpt` 走 `modules/ckpt`），五种形状见 53.1；lambda 体内的工作不算——
+- 扫描每个模块的 `load()` 与构造函数（`ckpt` 走 `lib/ckpt/`），五种形状见 53.1；lambda 体内的工作不算——
   那是注册一个回调，回调在之后才跑（`tensor` 的入口参数 loader 读 `.npy` 就是这种形状）；
 - 一个形状出现在判为 (c) 的行上就失败，并点名模块、行列与原因；class (b) 的形状必须出现在具名表里。
   这就是“工作回到导入期就变红”的守门：它不依赖墙钟，也不依赖日志级别。
@@ -142,8 +142,8 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 - **(a) = 0**：没有可修的违反。(b) = 2（`python`、`pyplot`），价格见 53.3.1。
 - 本任务不改运行时行为。新增的只有审计工具、一个计划、两个 `let` 探针用例、本页与索引行。
 - 读代码时发现两处 `.cmo` 装载期的构造，都不在 `load()` 里，也都没有观测效果，因此既不是 (a)（没有探针能证明
-  “它不存在”）也不是 (b)（没有需要裁定的东西），记录在此：`modules/random/operators.cpp` 的
-  `static rnd::Engine g_rng;`（默认种子，不读系统熵）与 `modules/io/operators.cpp` 在 Windows 上的
+  “它不存在”）也不是 (b)（没有需要裁定的东西），记录在此：`lib/random/operators.cpp` 的
+  `static rnd::Engine g_rng;`（默认种子，不读系统熵）与 `lib/io/operators.cpp` 在 Windows 上的
   `static HANDLE hStdin = GetStdHandle(...)`。
 - 复核：`node test/tools/import-audit.mjs`（全量）或 `--scan-only`（不建编译），然后跑
   `feat/modules/import_cost`；表里每一行的类与理由都在工具顶部的 `IMPORT_TIME_WORK` 里，改一行就等于改账。

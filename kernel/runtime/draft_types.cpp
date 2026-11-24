@@ -1,0 +1,284 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * Type re-inference on a graph draft (see draft_types.h).
+ */
+
+#include "camel/runtime/draft_types.h"
+
+#include "camel/core/mm/alloc/growable.h"
+#include "camel/core/operator_traits.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
+#include "camel/execute/shaped_operators.h"
+#include "camel/runtime/draft_writes.h"
+
+#include <algorithm>
+#include <functional>
+#include <optional>
+#include <vector>
+
+namespace camel::runtime {
+
+namespace type = camel::core::type;
+
+namespace {
+
+/// Alive nodes in dependency order (every node after its inputs).
+std::vector<gc_node_ref_t> dependencyOrder(const GraphDraft &draft) {
+    std::vector<uint8_t> state(draft.nodeSlotCount(), 0);
+    std::vector<gc_node_ref_t> order;
+    order.reserve(draft.nodeCount());
+    std::function<void(gc_node_ref_t)> visit = [&](gc_node_ref_t id) {
+        if (id >= state.size() || state[id] != 0 || !draft.alive(id)) {
+            return;
+        }
+        state[id] = 1;
+        for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+            for (gc_node_ref_t in : inputs) {
+                visit(in);
+            }
+        }
+        state[id] = 2;
+        order.push_back(id);
+    };
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        visit(id);
+    }
+    return order;
+}
+
+type::Type *typeOf(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto *h = draft.header(id);
+    return h ? h->dataType : nullptr;
+}
+
+/// The value of a node that is a constant, for resolvers that take constant arguments.
+std::optional<slot_t> staticSlotOf(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto *h = draft.header(id);
+    if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+        return std::nullopt;
+    }
+    const auto index = static_cast<size_t>(-h->dataIndex);
+    if (index >= draft.staticSlots().size()) {
+        return std::nullopt;
+    }
+    return draft.staticSlots()[index];
+}
+
+std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
+    const auto resolver = camel::core::OperatorTable::instance().resolver(body->oper);
+    if (!resolver) {
+        return std::nullopt;
+    }
+    type::type_vec_t with, norm;
+    std::vector<type::StaticArg> statics;
+    for (gc_node_ref_t in : draft.withInputsOf(id)) {
+        with.push_back(typeOf(draft, in));
+    }
+    for (gc_node_ref_t in : draft.normInputsOf(id)) {
+        norm.push_back(typeOf(draft, in));
+        statics.push_back(staticSlotOf(draft, in));
+    }
+    // The with-arguments' constants follow the ordinary ones (kernel order).
+    for (gc_node_ref_t in : draft.withInputsOf(id)) {
+        statics.push_back(staticSlotOf(draft, in));
+    }
+    // The arguments in kernel order, the statics aligned with them.
+    camel::core::joinKernelArguments(body->uri(), norm, with);
+    for (type::Type *t : with) {
+        if (!t) {
+            return std::nullopt;
+        }
+    }
+    for (type::Type *t : norm) {
+        if (!t) {
+            return std::nullopt;
+        }
+    }
+    // Without a constant argument the answer depends on the argument types alone and is kept
+    // (operatorOverloadType): a rewrite re-infers every node it touches, at every commit.
+    const bool anyStatic = std::any_of(statics.begin(), statics.end(), [](const auto &arg) {
+        return arg.value.has_value() || arg.elements.has_value();
+    });
+    if (!anyStatic) {
+        const type::FunctionType *overload = operatorOverloadType(body->uri(), with, norm);
+        return overload ? std::optional<type::Type *>(overload->exitType()) : std::nullopt;
+    }
+    try {
+        const auto resolved = resolver->resolveWith(with, norm, statics);
+        if (!resolved || !*resolved) {
+            return std::nullopt;
+        }
+        return (*resolved)->exitType();
+    } catch (const camel::core::mm::MemoryExhausted &) {
+        throw; // the permanent space is full: not a reason to keep the node's type
+    } catch (const std::exception &) {
+        return std::nullopt; // the node keeps the type compilation gave it
+    }
+}
+
+std::optional<type::Type *> accsResultType(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto inputs = draft.normInputsOf(id);
+    if (inputs.empty()) {
+        return std::nullopt;
+    }
+    type::Type *source = typeOf(draft, inputs.front());
+    const auto *accs   = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(id).data());
+    if (!source) {
+        return std::nullopt;
+    }
+    if (accs->accsKind == GCAccsKind::TupleIndex && source->code() == type::TypeCode::Tuple) {
+        auto *tuple = static_cast<type::TupleType *>(source);
+        if (accs->value < tuple->size()) {
+            return tuple->typeAt(accs->value);
+        }
+    }
+    if (accs->accsKind == GCAccsKind::StructKey && source->code() == type::TypeCode::Struct) {
+        auto *strct = static_cast<type::StructType *>(source);
+        if (const auto field = strct->findField(accs->key())) {
+            return strct->typeAt(*field);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<type::Type *> nodeResultType(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto *h = draft.header(id);
+    // A copy has the type of the value it copies; asked of its shape rather than its kind
+    // (`camel/execute/shaped_operators.h`, refactor stage 2.3).
+    if (camel::execute::shapeOfKind(h->kind) == camel::execute::OperShape::Clone) {
+        const auto inputs = draft.normInputsOf(id);
+        return inputs.empty() ? std::nullopt : std::optional(typeOf(draft, inputs.front()));
+    }
+    switch (h->kind) {
+    case GCNodeKind::Data: {
+        const auto value = staticSlotOf(draft, id);
+        if (!value || !h->dataType) {
+            return std::nullopt;
+        }
+        return camel::core::ValueTypeRefinerRegistry::instance().refine(*value, h->dataType);
+    }
+    case GCNodeKind::Oper:
+        return operResultType(draft, id);
+    case GCNodeKind::Gate: {
+        // The **first** input is the value a gate forwards (design principles 3.1).
+        // The inputs after it are the reads the gate takes, whose types are not its own --
+        // exactly what a copy (asked above by its shape) does, and what the schedulers and the
+        // C++ backend already read.
+        const auto inputs = draft.normInputsOf(id);
+        return inputs.empty() ? std::nullopt : std::optional(typeOf(draft, inputs.front()));
+    }
+    case GCNodeKind::Accs:
+        return accsResultType(draft, id);
+    case GCNodeKind::Join: {
+        const auto arms = draft.withInputsOf(id);
+        if (arms.empty()) {
+            return std::nullopt;
+        }
+        type::Type *first = typeOf(draft, arms.front());
+        for (gc_node_ref_t arm : arms) {
+            if (typeOf(draft, arm) != first) {
+                return std::nullopt;
+            }
+        }
+        return first;
+    }
+    case GCNodeKind::Func: {
+        const GCGraph *calleeGraph = draft.calleeGraphOf(id);
+        const auto *callee         = calleeGraph ? calleeGraph->funcType() : nullptr;
+        if (!callee || !callee->hasExitType()) {
+            return std::nullopt;
+        }
+        return callee->exitType();
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
+} // namespace
+
+size_t reinferDraftTypes(GraphDraft &draft) {
+    size_t changed = 0;
+    for (gc_node_ref_t id : dependencyOrder(draft)) {
+        const auto *h = draft.header(id);
+        if (!h || h->dataIndex == 0) {
+            continue; // no value (control-only nodes)
+        }
+        const auto result = nodeResultType(draft, id);
+        // Only ever sharpen a type: a resolver may know less than compilation did.
+        if (result && *result && *result != h->dataType &&
+            (!h->dataType || h->dataType->assignableFrom(*result))) {
+            draft.setNodeDataType(id, *result);
+            ++changed;
+        }
+    }
+
+    // The function type follows the ports and the result.
+    type::FunctionType *funcType = draft.funcType();
+    if (!funcType) {
+        return changed;
+    }
+    type::param_vec_t withTypes, normTypes;
+    bool differs = false;
+    // The port of a `var` parameter holds the variable; the parameter is typed by its value.
+    const auto portType = [&](gc_node_ref_t port, type::Type *declared) {
+        type::Type *t = type::valueTypeOf(typeOf(draft, port));
+        differs |= t && t != declared;
+        return t ? t : declared;
+    };
+    if (draft.withPorts().size() != funcType->withTypesCount() ||
+        draft.normPorts().size() != funcType->normTypesCount()) {
+        return changed;
+    }
+    for (size_t i = 0; i < draft.withPorts().size(); ++i) {
+        withTypes.emplace_back(
+            portType(draft.withPorts()[i], funcType->withTypeAt(i)),
+            funcType->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < draft.normPorts().size(); ++i) {
+        normTypes.emplace_back(
+            portType(draft.normPorts()[i], funcType->normTypeAt(i)),
+            funcType->normIsVarAt(i));
+    }
+    type::Type *exitType = funcType->hasExitType() ? funcType->exitType() : nullptr;
+    const gc_node_ref_t result =
+        draft.returnNode() != kInvalidNodeRef ? draft.returnNode() : draft.outputNode();
+    if (result != kInvalidNodeRef) {
+        const gc_node_ref_t value = draft.resolveForwardedValueRef(result);
+        if (type::Type *t = typeOf(draft, value != kInvalidNodeRef ? value : result);
+            t && t != exitType && exitType) {
+            exitType = t;
+            differs  = true;
+        }
+    }
+    if (differs) {
+        // The parameters keep their names: they are how diagnostics, graph dumps and
+        // translations refer to them. The new signature is interned, so re-inferring a graph
+        // at every commit of a rewrite asks the type table for the same object again.
+        type::FunctionTypeFactory factory;
+        factory.setHasCompileInfo(funcType->hasArgNames());
+        factory.setExitType(exitType);
+        factory.setResources(funcType->resources());
+        size_t arg      = 0;
+        const auto name = [&]() {
+            return funcType->hasArgNames() ? std::string(funcType->argNameAt(arg++))
+                                           : std::string();
+        };
+        size_t withAt = 0;
+        for (const auto &[t, isVar] : withTypes) {
+            factory.addWithArg(name(), t, isVar, funcType->withNeedsValueAt(withAt++));
+        }
+        for (const auto &[t, isVar] : normTypes) {
+            factory.addNormArg(name(), t, isVar);
+        }
+        draft.setFuncType(factory.build());
+    }
+    return changed;
+}
+
+} // namespace camel::runtime

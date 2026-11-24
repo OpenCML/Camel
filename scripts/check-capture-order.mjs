@@ -8,7 +8,7 @@
  * are written give one document too.
  *
  * The tables this reads are the compile-time ones keyed by a node handle, `runtime::DraftNodeRef`,
- * whose hash is `std::hash<const void*>(draft) * 31 + id` (`include/camel/runtime/node_ref.h`) -- an
+ * whose hash is `std::hash<const void*>(draft) * 31 + id` (`kernel/include/camel/runtime/node_ref.h`) -- an
  * address. Two of them are walked to decide what a body builds: `Builder::captureOriginOf_` and
  * `Builder::machinePortOrigin_` are unioned to answer "these two handles are one value", and
  * `builder_expr.cpp#collapseNonEscapingVariableReads` / `#dropCarriedVariableUnits` fold and drop
@@ -30,7 +30,7 @@
  *    and no environment variable decides which order it sees. Their documents cannot be the version
  *    1 display document, which records the position of every node, and those positions ARE the
  *    input difference. They are compared through `std::jgir canonical=true` -- version 2 of the
- *    format, the shape `src/passes/trans/json/gir_canonical.cpp` writes and the equivalence checker
+ *    format, the shape `lib/std/gir/json/gir_canonical.cpp` writes and the equivalence checker
  *    reads, which carries no line, column or file name, so two writings of one program can be
  *    compared as bytes at all. `canonical=true` is a parameter of the pass, not a switch of this
  *    reading.
@@ -159,7 +159,7 @@ for (let at = 1; at < runs.length; at++) {
                 `(${sha256(runs[0])} and ${sha256(runs[at])}). One file, one pass, three processes: nothing ` +
                 'in the input separates them, so what did is a compile-time table walked in the order it ' +
                 'was filled -- the address order, which is a different order in every run. The walks are ' +
-                'sorted by `walksBefore` (src/compile/gir/builder_helpers.h): the graph a node belongs to, ' +
+                'sorted by `walksBefore` (compile/src/gir/builder_helpers.h): the graph a node belongs to, ' +
                 'then the id that graph gave it.',
         )
         fs.writeFileSync(path.join(dir, 'capture_order.run1.jgir.json'), runs[0])

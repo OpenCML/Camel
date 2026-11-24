@@ -33,17 +33,28 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 
 /// The repository root: the first ancestor of this tool that holds the standard library. The runner
 /// copies a case into a scratch tree, so neither `process.cwd()` nor `HERE` can be assumed to be it.
+/// The library is `stdlib/std.cml` before the layout move and `lib/std/std.cml` after it, and this
+/// tool runs against both trees, so either marker answers.
+const ROOT_MARKERS = [
+    ['stdlib', 'std.cml'],
+    ['lib', 'std', 'std.cml']
+]
+const holdsLibrary = (dir) =>
+    ROOT_MARKERS.some((parts) => {
+        try {
+            readFileSync(path.join(dir, ...parts), 'utf8')
+            return true
+        } catch {
+            return false
+        }
+    })
 function repositoryRoot(start) {
     let dir = path.resolve(start)
     for (;;) {
-        try {
-            readFileSync(path.join(dir, 'stdlib', 'std.cml'), 'utf8')
-            return dir
-        } catch {
-            const parent = path.dirname(dir)
-            if (parent === dir) throw new Error(`no stdlib/std.cml above ${start}`)
-            dir = parent
-        }
+        if (holdsLibrary(dir)) return dir
+        const parent = path.dirname(dir)
+        if (parent === dir) throw new Error(`no stdlib/std.cml or lib/std/std.cml above ${start}`)
+        dir = parent
     }
 }
 
@@ -117,7 +128,11 @@ function normalize(text) {
     // becomes `:<AT>`: the origin is `test/cases/...`, the printed body is `tmp/print_...` or an
     // absolute scratch path, and all three name the same program at a different line. Nothing else
     // about the line is touched, so a change of message, code or wording still shows.
-    out = out.replace(/[^\s:()'"|]+\.cml/g, '<PATH>')
+    // A drive letter is part of the path. `[^\s:()'"|]` excludes `:`, so a bare run of characters
+    // stopped at the letter and left it outside the match: the origin (`D:\...`) and the printed copy
+    // in `%TEMP%` (`C:\...`, a different drive) normalized to `D:<PATH>` and `C:<PATH>`, and a
+    // difference in where the file lives was reported as a difference in behaviour.
+    out = out.replace(/(?:[A-Za-z]:)?[^\s:()'"|]+\.cml/g, '<PATH>')
     out = out.replace(/<PATH>:\d+:\d+/g, '<PATH>:<AT>')
     out = out
         .split('\n')

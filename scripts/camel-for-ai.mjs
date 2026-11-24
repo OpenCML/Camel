@@ -33,18 +33,23 @@
 //
 // Four regions, each with one source:
 //
-//   lexical             include/camel/parse/syntax/token_kinds.def -- the one keyword and
+//   lexical             parse/include/camel/parse/syntax/token_kinds.def -- the one keyword and
 //                       punctuation table the lexer, the parser and the page share; it stays beside
 //                       the rule it states, in §4 of the page
-//   precedence          src/parse/syntax/parser_expr.cpp -- the `///  name : production` comments
+//   precedence          parse/src/syntax/parser_expr.cpp -- the `///  name : production` comments
 //                       of the expression levels, loosest first, as the parser writes them; in §5
-//   diagnostics         diagnostics/registry.tsv -- every diagnostic, its name and message
+//   diagnostics         kernel/diagnostics/registry.tsv -- every diagnostic, its name and message
 //                       template; the severity is the heading of the block the row is in. Written
 //                       to docs/reference/camel-for-ai-diagnostics.md
 //   stdlib-signatures   docs/stdlib-reference.md -- the signatures of the standard library, which
-//                       scripts/stdlib-reference.mjs generates from stdlib/*.cml and
-//                       stdlib/signatures/*.cml (so the declarations stay the one source). Written
+//                       scripts/stdlib-reference.mjs generates from lib/*.cml and
+//                       lib/*/signatures/*.cml (so the declarations stay the one source). Written
 //                       to docs/reference/camel-for-ai-stdlib-signatures.md
+//
+// The first three spellings are the tree's current layout. The tree was laid out differently before
+// (`src/parse/syntax`, `include/camel/parse/syntax`, `diagnostics/registry.tsv`), and a reduced tree
+// kept in that spelling is read as it stands rather than reported as missing its sources, so every
+// source is resolved against the tree it is read from and the run names the spelling it found.
 //
 // --check refuses to report a pass over nothing: a run that read no diagnostic, no signature, no
 // keyword or no precedence level fails with exit 2. It also holds every document to the rules the
@@ -77,11 +82,29 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const PAGE_REL = 'docs/reference/camel-for-ai.md'
 const DIAGNOSTICS_REL = 'docs/reference/camel-for-ai-diagnostics.md'
 const SIGNATURES_REL = 'docs/reference/camel-for-ai-stdlib-signatures.md'
-const REGISTRY_REL = 'diagnostics/registry.tsv'
-const STDLIB_PAGE_REL = 'docs/stdlib-reference.md'
-const LEXICAL_DOC_REL = 'docs/language/02_lexical.md'
-const PARSER_REL = 'src/parse/syntax/parser_expr.cpp'
-const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
+
+// The sources the regions are read from, each with the spellings the two layouts of the tree give
+// it, current first. A tree is read as the layout it has: the proofs run against reduced trees in
+// the pre-move spelling, and a run that insisted on the current paths would report those trees as
+// missing every source instead of checking them. A tree that has none of the spellings is told it
+// lacks the first one, which is where today's tree keeps it.
+const SOURCES = {
+    tokens: ['parse/include/camel/parse/syntax/token_kinds.def', 'include/camel/parse/syntax/token_kinds.def'],
+    parser: ['parse/src/syntax/parser_expr.cpp', 'src/parse/syntax/parser_expr.cpp'],
+    registry: ['kernel/diagnostics/registry.tsv', 'diagnostics/registry.tsv'],
+    stdlibPage: ['docs/stdlib-reference.md'],
+    lexicalDoc: ['docs/language/02_lexical.md'],
+}
+
+// The spelling each source has in this tree. The resolved paths are what the messages and the
+// generated prose name, so a document says where its table was read from, in that tree's layout.
+function resolveSources(root) {
+    const resolved = {}
+    for (const [name, spellings] of Object.entries(SOURCES)) {
+        resolved[name] = spellings.find((rel) => fs.existsSync(path.join(root, rel))) || spellings[0]
+    }
+    return resolved
+}
 
 // Which regions each document holds, and which one this run reads and writes. The page keeps the
 // two tables that belong to its own prose -- the keyword table beside §4's rule and the precedence
@@ -172,18 +195,18 @@ const KEYWORD_GROUPS = [
     ['字面量', 'Literal'],
 ]
 
-function generateLexical(root) {
-    const tokens = read(root, TOKENS_REL)
-    if (!tokens) return { text: null, count: 0, problem: `${TOKENS_REL} does not exist` }
-    const reference = read(root, LEXICAL_DOC_REL)
-    if (!reference) return { text: null, count: 0, problem: `${LEXICAL_DOC_REL} does not exist` }
+function generateLexical(root, sources) {
+    const tokens = read(root, sources.tokens)
+    if (!tokens) return { text: null, count: 0, problem: `${sources.tokens} does not exist` }
+    const reference = read(root, sources.lexicalDoc)
+    if (!reference) return { text: null, count: 0, problem: `${sources.lexicalDoc} does not exist` }
     const declared = []
     for (const match of tokens.matchAll(/^CAMEL_KEYWORD\((\w+), "([^"]+)", (\w+)\)/gm)) {
         declared.push({ word: match[2], group: match[3] })
     }
     const punctuation = [...tokens.matchAll(/^CAMEL_PUNCT\((\w+), "([^"]+)"\)/gm)].map((m) => m[2])
     if (declared.length === 0 || punctuation.length === 0) {
-        return { text: null, count: 0, problem: `${TOKENS_REL} declares no keyword or no punctuation` }
+        return { text: null, count: 0, problem: `${sources.tokens} declares no keyword or no punctuation` }
     }
 
     // §2.4's table, kept in the reference's order.
@@ -203,7 +226,7 @@ function generateLexical(root) {
         return {
             text: null,
             count: 0,
-            problem: `${LEXICAL_DOC_REL} §2.4 has ${rows.length} of the ${KEYWORD_GROUPS.length} keyword rows`,
+            problem: `${sources.lexicalDoc} §2.4 has ${rows.length} of the ${KEYWORD_GROUPS.length} keyword rows`,
         }
     }
 
@@ -232,7 +255,7 @@ function generateLexical(root) {
             .map((keyword) => `\`${keyword.word}\` (token table: \`${keyword.group}\`; reference: ${groupOfRow.get(keyword.word).label})`)
             .join(', ')
         out.push('')
-        out.push(`The token table \`${TOKENS_REL}\` groups ${written}. This file follows the reference.`)
+        out.push(`The token table \`${sources.tokens}\` groups ${written}. This file follows the reference.`)
     }
     const missing = declared.filter((keyword) => !groupOfRow.has(keyword.word)).map((keyword) => keyword.word)
     if (missing.length > 0) {
@@ -251,9 +274,9 @@ function generateLexical(root) {
 // A production is one comment block; it is continued while the parentheses it opens are still
 // open, so a production written over two lines is read whole and the prose that follows a
 // production is not read as part of it.
-function readProductions(root) {
-    const text = read(root, PARSER_REL)
-    if (!text) return { productions: [], problem: `${PARSER_REL} does not exist` }
+function readProductions(root, sources) {
+    const text = read(root, sources.parser)
+    if (!text) return { productions: [], problem: `${sources.parser} does not exist` }
     const lines = text.split('\n')
     const productions = []
     for (let i = 0; i < lines.length; i++) {
@@ -308,17 +331,17 @@ function operatorsOf(body) {
     return [...after.matchAll(/'([^']+)'/g)].map((m) => m[1])
 }
 
-function generatePrecedence(root) {
-    const { productions, problem } = readProductions(root)
+function generatePrecedence(root, sources) {
+    const { productions, problem } = readProductions(root, sources)
     if (problem) return { text: null, count: 0, problem }
     const first = productions.findIndex((p) => p.name === 'dataExpr')
     const last = productions.findIndex((p) => p.name === 'annoExpr')
     if (first < 0 || last < first) {
-        return { text: null, count: 0, problem: `${PARSER_REL}: the production of dataExpr or annoExpr is missing` }
+        return { text: null, count: 0, problem: `${sources.parser}: the production of dataExpr or annoExpr is missing` }
     }
     const chain = productions.slice(first, last + 1)
     if (chain.length < 10) {
-        return { text: null, count: 0, problem: `${PARSER_REL}: ${chain.length} expression level(s) read; the chain is short` }
+        return { text: null, count: 0, problem: `${sources.parser}: ${chain.length} expression level(s) read; the chain is short` }
     }
     const width = Math.max(...chain.map((p) => p.name.length))
     const out = []
@@ -333,7 +356,7 @@ function generatePrecedence(root) {
     })
     out.push('```')
     out.push('')
-    out.push('The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the')
+    out.push(`The production of each level, as \`${sources.parser}\` writes it above the`)
     out.push('function that parses it:')
     out.push('')
     out.push('```text')
@@ -349,9 +372,9 @@ function normalizeMessage(section, message) {
     return text.replaceAll('|', '\\|')
 }
 
-function generateDiagnostics(root) {
-    const text = read(root, REGISTRY_REL)
-    if (!text) return { text: null, count: 0, problem: `${REGISTRY_REL} does not exist` }
+function generateDiagnostics(root, sources) {
+    const text = read(root, sources.registry)
+    if (!text) return { text: null, count: 0, problem: `${sources.registry} does not exist` }
     const records = []
     const problems = []
     const lines = text.split('\n')
@@ -360,12 +383,12 @@ function generateDiagnostics(root) {
         if (!raw.trim() || raw.startsWith('#')) continue
         const fields = raw.split('\t')
         if (fields.length < 5) {
-            problems.push(`${REGISTRY_REL}:${i + 1}: fewer than five fields`)
+            problems.push(`${sources.registry}:${i + 1}: fewer than five fields`)
             continue
         }
         const section = SECTIONS.find((s) => s.id === fields[0])
         if (!section) {
-            problems.push(`${REGISTRY_REL}:${i + 1}: '${fields[0]}' is not a section`)
+            problems.push(`${sources.registry}:${i + 1}: '${fields[0]}' is not a section`)
             continue
         }
         records.push({
@@ -376,7 +399,7 @@ function generateDiagnostics(root) {
         })
     }
     if (problems.length > 0) return { text: null, count: 0, problem: problems.join('; ') }
-    if (records.length === 0) return { text: null, count: 0, problem: `${REGISTRY_REL} declares no diagnostic` }
+    if (records.length === 0) return { text: null, count: 0, problem: `${sources.registry} declares no diagnostic` }
     // A block is one section of the registry at one severity: the section is the prefix every name in
     // it carries (`SemanticDiag::`), and the severity is written in the heading, so a row is the name
     // and the message only. A reader who needs the severity reads the heading over the row, and the
@@ -407,9 +430,9 @@ function generateDiagnostics(root) {
 // The signatures come from docs/stdlib-reference.md, which scripts/stdlib-reference.mjs generates
 // from the declarations; the declarations therefore stay the one source, and a signature that
 // changes there changes here on the next --write.
-function generateStdlib(root) {
-    const text = read(root, STDLIB_PAGE_REL)
-    if (!text) return { text: null, count: 0, problem: `${STDLIB_PAGE_REL} does not exist` }
+function generateStdlib(root, sources) {
+    const text = read(root, sources.stdlibPage)
+    if (!text) return { text: null, count: 0, problem: `${sources.stdlibPage} does not exist` }
     const lines = text.split('\n')
     const modules = []
     let module = null
@@ -425,13 +448,13 @@ function generateStdlib(root) {
         if (entry && module) {
             name = entry[1]
             if (lines[i + 1] !== '' || !/^```camel$/.test(lines[i + 2])) {
-                return { text: null, count: 0, problem: `${STDLIB_PAGE_REL}:${i + 1}: '${name}' is not followed by a camel fence` }
+                return { text: null, count: 0, problem: `${sources.stdlibPage}:${i + 1}: '${name}' is not followed by a camel fence` }
             }
             const signatures = []
             let j = i + 3
             while (j < lines.length && !/^```$/.test(lines[j])) {
                 if (lines[j].includes('```')) {
-                    return { text: null, count: 0, problem: `${STDLIB_PAGE_REL}:${j + 1}: a signature would close its fence` }
+                    return { text: null, count: 0, problem: `${sources.stdlibPage}:${j + 1}: a signature would close its fence` }
                 }
                 signatures.push(lines[j])
                 j++
@@ -442,7 +465,7 @@ function generateStdlib(root) {
     }
     const withEntries = modules.filter((m) => m.entries.length > 0)
     const count = withEntries.reduce((n, m) => n + m.entries.length, 0)
-    if (count === 0) return { text: null, count: 0, problem: `${STDLIB_PAGE_REL}: no signature was read` }
+    if (count === 0) return { text: null, count: 0, problem: `${sources.stdlibPage}: no signature was read` }
     const out = []
     for (const m of withEntries) {
         const importLine = m.name === 'built-in' || m.name === 'Built-in functions' ? 'no import' : `import { ... } from ${m.name}`
@@ -466,12 +489,12 @@ function regionMarkers(name) {
     }
 }
 
-function generateAll(root) {
+function generateAll(root, sources) {
     return {
-        lexical: generateLexical(root),
-        precedence: generatePrecedence(root),
-        diagnostics: generateDiagnostics(root),
-        'stdlib-signatures': generateStdlib(root),
+        lexical: generateLexical(root, sources),
+        precedence: generatePrecedence(root, sources),
+        diagnostics: generateDiagnostics(root, sources),
+        'stdlib-signatures': generateStdlib(root, sources),
     }
 }
 
@@ -523,7 +546,7 @@ function countRegionChars(document, regions) {
 
 // What the prose promises and the sources decide: a diagnostic named in the document must exist,
 // and a `target` note must say where its subject is designed.
-function promiseProblems(document, diagnostics, documentRel) {
+function promiseProblems(document, diagnostics, documentRel, sources) {
     const problems = []
     const known = new Set(diagnostics.names || [])
     const seen = new Set()
@@ -531,7 +554,7 @@ function promiseProblems(document, diagnostics, documentRel) {
         const full = `${match[1]}Diag::${match[2]}`
         if (seen.has(full)) continue
         seen.add(full)
-        if (!known.has(full)) problems.push(`${documentRel}: the document names ${full}, which ${REGISTRY_REL} does not declare`)
+        if (!known.has(full)) problems.push(`${documentRel}: the document names ${full}, which ${sources.registry} does not declare`)
     }
     // A `target` note is read with the lines that continue it: prose wraps, and the path it names
     // may be on the next line of the same paragraph.
@@ -704,7 +727,11 @@ const documents = documentRel
     : LAYOUT.map((entry) => ({ ...entry, budget: entry.rel === PAGE_REL ? pageTotal : null }))
 const scope = documentRel || 'the AI reference'
 
-const generated = generateAll(root)
+// The tree being read decides where its sources are, so the layout is resolved once, against the
+// root this run was given: a reduced tree in the pre-move spelling is read there, and every message
+// and generated line names the spelling that tree has.
+const sources = resolveSources(root)
+const generated = generateAll(root, sources)
 const loaded = new Map()
 for (const entry of documents) loaded.set(entry.rel, read(root, entry.rel))
 if (documentRel && loaded.get(documentRel) === null) {
@@ -827,7 +854,7 @@ const summaries = []
 for (const { entry, document, entries } of checkedDocuments) {
     let cited = 0
     if (diagnostics.text !== null) {
-        const promise = promiseProblems(document, diagnostics, entry.rel)
+        const promise = promiseProblems(document, diagnostics, entry.rel, sources)
         problems.push(...promise.problems)
         cited = promise.cited
     }

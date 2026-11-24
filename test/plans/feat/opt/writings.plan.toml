@@ -40,9 +40,9 @@
 #
 # Item (c), wall clock of two effects on two resources: the author's ruling on `1b7905cd4` rejected the
 # first reading of this item as one resource written twice (two files are one resource, `fs`: "calls on
-# the file system keep their written order", `stdlib/fs.cml#fs`), so `effect_parallel_clock.py` now
-# runs one 200 ms effect on `clock` (`stdlib/process.cml#sleep`) and one on `rendezvous_point`
-# (`stdlib/test_support.cml#rendezvous_point`, declared `unordered`) in a `main` that is not a
+# the file system keep their written order", `lib/fs/fs.cml#fs`), so `effect_parallel_clock.py` now
+# runs one 200 ms effect on `clock` (`lib/process/process.cml#sleep`) and one on `rendezvous_point`
+# (`lib/test_support/test_support.cml#rendezvous_point`, declared `unordered`) in a `main` that is not a
 # `sync` body, alternating the serial and the parallel back end, and prints the median and the
 # range of its runs, the control (`sync` on against `sync` off on the one unordered resource, whose
 # values say how many calls met), and the parallel back end's own decision (`1 run as task graphs`).
@@ -81,12 +81,12 @@ timeout_ms = 120000
 
 [[tests]]
 name = "opt.writings.two_effects_wall_clock"
-desc = "Item (c): one 200 ms effect on `clock` (`sleep`) and one on `rendezvous_point` (`rendezvous(2, t)`, declared `unordered`), in a `main` that is not a `sync` body, on `std::nvm` and on `std::prl` with four workers, alternating the two back ends: the median and the range of three runs each are printed, with the control (`sync` on against `sync` off on the one unordered resource) and the parallel back end's own decision for the program (`1 run as task graphs`). The entry asserts that the measurement ran, stated a reading, and that the control's values held -- two calls free of `sync` both report 2, two a `sync` body orders report 1 and 1 -- not that a wall clock fell on either side of a bound: a bound in the fast gate is a flake, and the plan asks this item for a number."
+desc = "Item (c): one 200 ms effect on `clock` (`sleep`) and one on `rendezvous_point` (`rendezvous(2, t)`, declared `unordered`), in a `main` that is not a `sync` body, on `std::nvm` and on `std::prl` with four workers, alternating the two back ends: the median and the range of three runs each are printed, with the control (`sync` on against `sync` off on the one unordered resource) and the parallel back end's own decision for the program (`1 run as task graphs`). The entry asserts that the measurement ran, stated a reading, and that the control's values held -- two calls free of `sync` both report 2, two a `sync` body orders report 1 and 1 -- not that a wall clock fell on either side of a bound: a bound in the fast gate is a flake, and the plan asks this item for a number. The `free` pair is read twice, at 200 ms and at 2000 ms: a pair the scheduler ordered reports 1 at every window, a pair a stalled host starved reports 2 at the wide one, so the asserted cell is the wide one and the narrow one is printed as the host reading it is."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/opt/writings/effect_parallel_clock.py"
 args = ["${case}", "--camel", "${camel}", "--runs", "3"]
 expect_exit = 0
-expect_stdout_contains = ["two resources: `clock` (sleep, stdlib/process.cml:15) and `rendezvous_point` (stdlib/test_support.cml:17, unordered)", "wall clock", "serial    n=3", "parallel  n=3", "median serial / median parallel =", "reading: the two effects", "sync  serial 1001   parallel 1001", "free  serial 1001   parallel 2002", "the parallel back end's decision for the program (std::prl diag=true):", "graph 'main': 1 scope(s), 1 run as task graphs"]
+expect_stdout_contains = ["two resources: `clock` (sleep, stdlib/process.cml:15) and `rendezvous_point` (stdlib/test_support.cml:17, unordered)", "wall clock", "serial    n=3", "parallel  n=3", "median serial / median parallel =", "reading: the two effects", "sync  serial 1001   parallel 1001", "free  serial 1001", "the same `free` pair with a 2000 ms window (10x DELAY_MS):", "free  serial 1001   parallel 2002", "two calls free of `sync` met on the parallel back end", "the parallel back end's decision for the program (std::prl diag=true):", "graph 'main': 1 scope(s), 1 run as task graphs"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000

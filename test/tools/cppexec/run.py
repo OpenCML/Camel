@@ -11,8 +11,8 @@
     python3 test/tools/cppexec/run.py --standalone <program.cml>...
 
 For every program: `camel <program> [passes] std::cpp` writes a C++ file; the C++ compiler
-($CXX, else clang++, g++ or c++) builds it with the headers of the repository (include/, where
-camel/standalone/ lives); the executable runs; `camel <program> [passes] std::fvm` runs too
+($CXX, else clang++, g++ or c++) builds it with the headers of the repository (lib/std/cpp/include,
+where camel/standalone/ lives); the executable runs; `camel <program> [passes] std::fvm` runs too
 (after the same passes, so on the same graph). The two agree when their standard output and
 exit code are the same (a fault's report is on standard output in both, design note
 docs/design/cpp-standalone/README.cn.md 7.1).
@@ -75,6 +75,39 @@ CAMEL = os.environ.get("CAMEL", os.path.join(ROOT, "out", "latest", "bin", "came
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # A statement that is only `x->append<...>` or `x->extend<...>`: it relies on the change in place.
 IN_PLACE = re.compile(r"^\s*[\w.\[\]]+->(append|extend)<.*>\s*$", re.M)
+# Where the C++ headers a generated program includes live, newest layout first. The tree was laid
+# out again ("move: the tree is laid out as the map says"): the one include/ root that held every
+# camel/ header was split into one include directory per component, so camel/standalone/ (a header
+# set of the standard library) is under lib/std/cpp/include and camel/utils/, which those headers
+# include, under kernel/include. include/ is the root of the layout before that and is still read.
+CPP_INCLUDE_ROOTS = ("lib/std/cpp/include", "kernel/include", "include")
+
+
+def cpp_include_dirs():
+    """The directories the generated programs are compiled against, found rather than assumed: the
+    roots above that are there. One written-down path is what went stale here -- the tests went on
+    feeding the compiler a directory the move had emptied. All of them are passed, because the
+    headers reach across the split: a program's camel/standalone/runtime.h includes
+    camel/utils/big_stack_thread.h, which no longer sits beside it."""
+    roots = [os.path.join(ROOT, *rel.split("/")) for rel in CPP_INCLUDE_ROOTS]
+    found = [root for root in roots if os.path.isdir(root)]
+    # None of them is there: name the newest anyway, so the compiler's own "file not found" carries
+    # the path that was tried instead of the tool compiling against nothing it can name.
+    return found or roots[:1]
+
+
+def cpp_header_root():
+    """The root the generated programs' own includes are relative to (camel/standalone/)."""
+    for root in cpp_include_dirs():
+        if os.path.isfile(os.path.join(root, "camel", "standalone", "runtime.h")):
+            return root
+    return cpp_include_dirs()[0]
+
+
+def include_flags(msvc=False):
+    """`-I <dir>` for every directory cpp_include_dirs() names (MSVC spells it `/I`)."""
+    flag = "/I" if msvc else "-I"
+    return [x for directory in cpp_include_dirs() for x in (flag, directory)]
 
 
 def find_compiler():
@@ -93,13 +126,12 @@ def build_command(compiler, msvc, source, target, bridged, camel_home, pch=None)
     """A program that uses operators of runtime modules (bridged) links libcamel. `pch` is a
     precompiled camel/standalone/runtime.h (clang only): most of a compilation is spent in
     the standard library's headers it includes."""
-    include = os.path.join(ROOT, "include")
     lib = os.path.join(camel_home, "libs")
     if msvc:
-        cmd = [compiler, "/nologo", "/std:c++20", "/O2", "/EHsc", "/I", include, source,
-               "/Fe" + target]
+        cmd = [compiler, "/nologo", "/std:c++20", "/O2", "/EHsc"] + include_flags(True) + [
+            source, "/Fe" + target]
         return cmd + ([os.path.join(lib, "libcamel.lib")] if bridged else [])
-    cmd = [compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-w", "-I", include] +         (["-include-pch", pch] if pch else []) + [source, "-o", target]
+    cmd = [compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-w"] + include_flags() +         (["-include-pch", pch] if pch else []) + [source, "-o", target]
     if not bridged:
         return cmd
     if os.name == "nt":
@@ -180,10 +212,10 @@ def build_pch(workdir, args):
     if args.no_pch or not compiler or "clang" not in os.path.basename(compiler).lower():
         return None
     pch = os.path.join(workdir, "runtime.pch")
-    header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
-    code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off",
-                         "-I", os.path.join(ROOT, "include"),
-                         "-x", "c++-header", header, "-o", pch], 600)
+    header = os.path.join(cpp_header_root(), "camel", "standalone", "runtime.h")
+    code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off"]
+                         + include_flags()
+                         + ["-x", "c++-header", header, "-o", pch], 600)
     args.pch = pch if code == 0 else None
     return args.pch
 
@@ -915,9 +947,10 @@ def main():
     args.pch = None
     if not args.no_pch and "clang" in os.path.basename(compiler).lower():
         pch = os.path.join(workdir, "runtime.pch")
-        header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
-        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-I", os.path.join(ROOT, "include"),
-                             "-x", "c++-header", header, "-o", pch], 600)
+        header = os.path.join(cpp_header_root(), "camel", "standalone", "runtime.h")
+        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off"]
+                            + include_flags()
+                            + ["-x", "c++-header", header, "-o", pch], 600)
         args.pch = pch if code == 0 else None
     try:
         with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:

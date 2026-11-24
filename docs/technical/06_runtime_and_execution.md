@@ -6,7 +6,7 @@ Camel 的运行时围绕 **Frame**（栈帧）、**Context**（全局/模块上�
 
 ## 2. Frame（栈帧）
 
-- **定义**：`include/camel/core/context/frame.h`，继承自 `Object`。
+- **定义**：`kernel/include/camel/core/context/frame.h`，继承自 `Object`。
 - **职责**：为一次「图执行」保存运行时状态：当前图、静态区、动态区、类型信息等。
 
 ### 2.1 与图的绑定
@@ -238,7 +238,7 @@ under `python.exe`) and 512 KiB on macOS. Taskflow has no hook for the creation 
 tree at configure time, rewrites three lines (the member `std::thread _thread;` and its accessor
 in `taskflow/core/worker.hpp`, and `_workers[id]._thread = std::thread(` in
 `Executor::_spawn`, `taskflow/core/executor.hpp`) to `camel::utils::BigStackThread`
-(`include/camel/utils/big_stack_thread.h`: `pthread_create` / `_beginthreadex` with 8 MiB at
+(`kernel/include/camel/utils/big_stack_thread.h`: `pthread_create` / `_beginthreadex` with 8 MiB at
 least, joinable and movable like the part of `std::thread` Taskflow uses), and puts the copy
 before the package on libcamel's include path. Only libcamel includes Taskflow, so there is one
 definition of `tf::Worker`.
@@ -400,7 +400,7 @@ the macro evaluator.
 
 #### 4.4.2 The recursion limit
 
-One definition for all back ends (`include/camel/execute/limits.h`): the limit is on the calls
+One definition for all back ends (`kernel/include/camel/execute/limits.h`): the limit is on the calls
 open at once that were not tail calls; a call is a `FUNC`, a `CALL` or an element call of a
 higher-order operator; the entry graph's call of `main` is not counted (`kEntryCalls`).
 
@@ -469,7 +469,7 @@ a signal, so the same clean-up runs: C++ streams are flushed (text written with 
 does not flush by itself, is not lost), files written by the `fs` operators are complete (each
 operator opens, writes and closes), and static destructors run. The Python bridge's
 interpreter is never finalized; its standard output is put in line mode when the module loads
-and flushed at process exit (`modules/python/module.cpp`), so Python's `print` output arrives
+and flushed at process exit (`lib/python/module.cpp`), so Python's `print` output arrives
 and stays in order. External resources still held when the run ends (a Python object is one)
 are released by the command line before it returns, newest first
 (`disposeAllForeignResources`, `33_fault_isolation.md` 4.2); before, a wrapper alive at the end
@@ -480,8 +480,8 @@ was never finalized, so a file a Python object held open was not flushed.
 - **operator_t**（`core/operator.h`）：算子索引类型，与 GIR 的 **OperNode** 对应。
 - 运行时根据操作数类型选择具体实现（如整型加法、浮点加法），OPER 字节码或 NodeVM 的 **evalMarkedOperator** 会调用到这些实现。
 - **FunctionType**：函数类型（with 参数、普通参数、形参名、返回类型），与 Graph 的 **funcType_** 一致，用于调用约定与类型检查。驻留在类型表里、不可变；只有前端正在建的函数的签名是 `OpenFunctionType`（不驻留，返回类型由函数体定下后填入）。图捕获了哪些名字记在图上（`GCGraph::captureNames`），不在函数类型里。
-- **原生算子回调 Camel 子图**：`camel::execute::invokeFunction`（`src/execute/function_call.cpp`）是 `camel/execute` 下公开的同步函数值调用服务，签名是 `slot_t invokeFunction(Context &, Function *, std::span<const slot_t> withArguments, std::span<const slot_t> normalArguments)`。它复用当前后端的调用机制——捕获、形参绑定、故障、递归计数、观察事件——不另建解释器，也不重置递归深度。声明了 `callsGraphs` 的算子由后端在进入时装一个 RAII 调用作用域，作用域是线程局部的栈，同时校验当前 `Context`；不在作用域里调用显式失败，作用域不能逃出这次原生调用或被别的线程调用。NodeVM 对会调用函数的算子改用调用自有的实参索引存储（`operIndices_` 会被嵌套调用顶掉），FastVM 的两种派发、JIT 的原生调用跳板、Taskflow 的两条常规算子路径与宏求值器（`MacroEvaluator::callNativeOperator`，`src/execute/macro/eval.cpp`）都接同一个服务。NodeVM、FastVM、JIT 与 Taskflow 都有原生回调的用例（`test/cases/loops/native_callback.cml`、`test/cases/linear/jit/native_calls.cml`，测试算子 `test::native_callback` 在 `src/passes/test/native_call.cpp`）。
-- **高阶算子建立在这项服务上**：`map`、`apply`、`filter`、`reduce`、`foreach` 与 `para` 的 `unordered_reduce`/`unordered_foreach` 是普通原生算子（`src/builtin/operators/higher_order.cpp`），逐个元素调用 `invokeFunction`，这就是它们的定义。它们声明 `elementCalls`（形状 `Map`、`Filter`、`Foreach`、`Fold`、`Isolate`，外加 `independent`），NodeVM、FastVM 的 `SCHD` 标记指令、Taskflow 与 C++ 发射器据此各留一条快路径；没有这项声明的算子走服务本身。见 `docs/technical/09_operator_registration.md`。
+- **原生算子回调 Camel 子图**：`camel::execute::invokeFunction`（`kernel/execute/function_call.cpp`）是 `camel/execute` 下公开的同步函数值调用服务，签名是 `slot_t invokeFunction(Context &, Function *, std::span<const slot_t> withArguments, std::span<const slot_t> normalArguments)`。它复用当前后端的调用机制——捕获、形参绑定、故障、递归计数、观察事件——不另建解释器，也不重置递归深度。声明了 `callsGraphs` 的算子由后端在进入时装一个 RAII 调用作用域，作用域是线程局部的栈，同时校验当前 `Context`；不在作用域里调用显式失败，作用域不能逃出这次原生调用或被别的线程调用。NodeVM 对会调用函数的算子改用调用自有的实参索引存储（`operIndices_` 会被嵌套调用顶掉），FastVM 的两种派发、JIT 的原生调用跳板、Taskflow 的两条常规算子路径与宏求值器（`MacroEvaluator::callNativeOperator`，`lib/std/macro/eval.cpp`）都接同一个服务。NodeVM、FastVM、JIT 与 Taskflow 都有原生回调的用例（`test/cases/loops/native_callback.cml`、`test/cases/linear/jit/native_calls.cml`，测试算子 `test::native_callback` 在 `lib/test/native_call.cpp`）。
+- **高阶算子建立在这项服务上**：`map`、`apply`、`filter`、`reduce`、`foreach` 与 `para` 的 `unordered_reduce`/`unordered_foreach` 是普通原生算子（`lib/std/builtin/operators/higher_order.cpp`），逐个元素调用 `invokeFunction`，这就是它们的定义。它们声明 `elementCalls`（形状 `Map`、`Filter`、`Foreach`、`Fold`、`Isolate`，外加 `independent`），NodeVM、FastVM 的 `SCHD` 标记指令、Taskflow 与 C++ 发射器据此各留一条快路径；没有这项声明的算子走服务本身。见 `docs/technical/09_operator_registration.md`。
 
 ## 6. 数据与类型（Data / Type）
 

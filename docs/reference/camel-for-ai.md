@@ -388,7 +388,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 
 ### Keywords and operators (generated)
 
-<!-- camel-for-ai region: lexical (generated from docs/language/02_lexical.md §2.4 and include/camel/parse/syntax/token_kinds.def; node scripts/camel-for-ai.mjs --write) -->
+<!-- camel-for-ai region: lexical (generated from docs/language/02_lexical.md §2.4 and parse/include/camel/parse/syntax/token_kinds.def; node scripts/camel-for-ai.mjs --write) -->
 | Group | Words |
 |---|---|
 | Declaration | `let` `var` `func` `type` `with` `import` `export` `from` `namespace` `using` |
@@ -401,7 +401,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 
 ### Precedence (generated)
 
-<!-- camel-for-ai region: precedence (generated from src/parse/syntax/parser_expr.cpp; node scripts/camel-for-ai.mjs --write) -->
+<!-- camel-for-ai region: precedence (generated from parse/src/syntax/parser_expr.cpp; node scripts/camel-for-ai.mjs --write) -->
 ```text
  1  dataExpr            -                                  -
  2  ctrlExpr            if then else                       construct
@@ -424,7 +424,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 19  annoExpr            -                                  repeat, left
 ```
 
-The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
+The production of each level, as `parse/src/syntax/parser_expr.cpp` writes it above the
 function that parses it:
 
 ```text

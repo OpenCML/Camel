@@ -2,8 +2,15 @@ id = "feat.tools.exit_reporting"
 tier = "fast"
 desc = "A run that ends without an exit code says which of the three ways it ended -- a signal with the shell's 128 + n, a real timeout, or a process that never started -- instead of `got null`, and the summary counts timeouts and signal kills apart"
 
+# The signal the case plants is POSIX's: `process.kill(pid, 'SIGSEGV')`, reported as
+# `got signal SIGSEGV (rc=139, ...)` with the shell's 128 + 11. On Windows there is no SIGSEGV to
+# raise -- Node throws `kill ENOSYS` -- so the same helper ends as an ordinary nonzero exit, and
+# neither that line nor the summary's `killed by a signal` is a reading of anything there. The entry
+# declares the premise (the mirror of `test/tools/on-windows.mjs`, which asks for Windows) and is
+# skipped there.
 [[tests]]
 name = "runner.exit_reporting_names_the_signal"
+skip_unless = ["node", "test/tools/have-posix-signals.mjs"]
 desc = "`got null` reads as one thing and was diagnosed as a timeout for two rounds while the process was dying of SIGSEGV in 0.03 s. A signal kill prints `got signal SIGSEGV (rc=139, <time>)`, a real timeout prints `got timeout after 100 ms`, neither prints `null`, and `[SUMMARY]` separates them as `killed by a signal: <n>` and `timed out: <n>`."
 kind = "behavior"
 tool = "node"

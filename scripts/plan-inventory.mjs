@@ -140,6 +140,12 @@ export function milestoneLayer() {
 // files that have no layer in one run instead of fixing one per run.
 export function planInventoryProblems() {
     const problems = []
+    // A root that is not there first, and by name: the rest of this function reads a tree that is
+    // not the tree, and every line it would print about the plans of that tree is a line about
+    // nothing. `missingRoots` is what the standalone run turns into exit 2.
+    for (const { root, path: abs } of missingRoots()) {
+        problems.push(`${root} does not exist (expected at ${abs}): a root that is not there is not a tree with no plan in it`)
+    }
     for (const entry of CANNOT_START) {
         if (!fs.existsSync(path.join(ROOT, entry.file))) {
             problems.push(`the plan the gate cannot start, '${entry.file}', does not exist; the list is stale`)
@@ -283,6 +289,10 @@ function readPlan(abs) {
 export const CASE_EXCEPTIONS = []
 
 const CASE_ROOT = 'test/cases'
+// The numbers the standalone run prints, kept from the walk it already takes: reading the tree a
+// second time for the count would cost the fast layer the same eleven seconds the first walk does,
+// and a second walk can also disagree with the first about a tree that changed between them.
+const LAST_READING = { cases: 0, readers: 0 }
 // A case is a file of the repository, and a bytecode cache is not: the interpreter writes
 // `__pycache__` beside a Python module it imports, it is in `.gitignore` (so no commit carries
 // one), and it appears and disappears with whoever last imported the module -- including in a
@@ -305,8 +315,49 @@ const INDEX_FILES = new Set(['test/plan-selection.json'])
 // Where a reference counts: the compiler, the standard library, the modules, the tools, the tests
 // and the scripts -- the paths a gate or a plan reads a case through. A document or a report that
 // *describes* a measurement is not a reader of the workload it measured, and neither is the
-// benchmark pipeline, which is a harness of its own outside the plans.
-const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
+// benchmark pipeline, which is a harness of its own outside the plans. The layout move split `src/`
+// and `include/` into the four blocks (`kernel/`, `parse/`, `compile/`) and the library (`lib/`),
+// which also took `stdlib/` and `modules/`; the old names stay in the list so a checkout of either
+// layout is read the same way.
+const NAMING_ROOTS = ['test/', 'scripts/', 'kernel/', 'parse/', 'compile/', 'lib/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
+
+// The four names of the layout before the move. They stay in the list so a checkout of either layout
+// is read the same way, and they are the only roots whose absence is expected: every root the tree
+// of today has is under `REQUIRED_ROOTS`, and a run that cannot find one refuses (exit 2) instead of
+// walking around it.
+const LEGACY_NAMING_ROOTS = new Set(['src/', 'include/', 'stdlib/', 'modules/'])
+
+// The directories a reading cannot be taken without: the naming roots of the tree this checkout has,
+// and the two the ledger reads by name. This list exists because of the shape `walkTreeFiles` used to
+// have -- `readdir` on a directory that is not there throws `ENOENT`, the catch turned that into an
+// empty list, and an empty list is exactly what a directory holding no matching file returns too.
+// Measured 2026-11-22 with `exemplars/` moved away: `412 plan files, every one of them has a
+// destination` and `4216 case files, every one of them is read by code`, exit 0 -- the same two
+// lines, in the same order, about a tree the run had not read. The walk now separates the two
+// readings (see the catch below), and this list names a root that is not there before any of them.
+const REQUIRED_ROOTS = [
+    'test',
+    'test/plans',
+    'test/cases',
+    'scripts',
+    'kernel',
+    'parse',
+    'compile',
+    'lib',
+    'tools',
+    'examples',
+    'exemplars',
+]
+
+/** The roots this checkout does not have and the check cannot be taken without. */
+export function missingRoots() {
+    const missing = []
+    for (const root of REQUIRED_ROOTS) {
+        const abs = path.join(ROOT, root)
+        if (!fs.existsSync(abs)) missing.push({ root, path: abs })
+    }
+    return missing
+}
 
 // What the runner writes while it runs (a million files after a few weeks of runs) is not part of
 // the tree the ledger judges: the walk would read it all, and the check would grow with the
@@ -316,7 +367,23 @@ const RUN_OUTPUT_DIRS = new Set(['test/results', 'test/tmp', 'node_modules'])
 function walkTreeFiles(dir) {
     const out = []
     const walk = (abs, prefix) => {
-        for (const name of fs.readdirSync(abs).sort()) {
+        let entries
+        try {
+            entries = fs.readdirSync(abs).sort()
+        } catch (error) {
+            // A directory the walk cannot read is not a directory that holds no file. At a root the
+            // two are the whole subject of this check: a name of the layout before the move may be
+            // absent (`LEGACY_NAMING_ROOTS`, which is why this catch exists at all), and every other
+            // root is named by `missingRoots()` before the walk starts. Below a root the walk stops
+            // and says where -- a directory that changed under a running tree is a reading nobody
+            // can take, not a tree with one directory less.
+            if (prefix === dir && error.code === 'ENOENT' && LEGACY_NAMING_ROOTS.has(`${dir}/`)) return
+            throw new Error(
+                `${prefix}: cannot read ${abs} (${error.code || error.message}): the tree cannot be ` +
+                    'read there, and that is not a tree with no file in it',
+            )
+        }
+        for (const name of entries) {
             const child = `${abs}/${name}`
             if (RUN_OUTPUT_DIRS.has(`${prefix}/${name}`) || name === 'node_modules') continue
             if (fs.statSync(child).isDirectory()) walk(child, `${prefix}/${name}`)
@@ -463,10 +530,12 @@ export function caseLedgerProblems() {
     // file and not a reader of one, and a file the tree has and no commit lists yet is a reader the
     // moment it is written (`namingRootFiles`).
     const tracked = namingRootFiles()
+    LAST_READING.readers = tracked.length
 
     const files = caseTreeFiles()
     const caseFiles = files.filter((file) => !file.endsWith('.plan.toml'))
     const treePlans = files.filter((file) => file.endsWith('.plan.toml'))
+    LAST_READING.cases = caseFiles.length
     if (caseFiles.length === 0) {
         return [`${CASE_ROOT} holds no case file: the case ledger examined nothing, which is not a pass`]
     }
@@ -751,24 +820,46 @@ function moduleRoots(from) {
 // The merge gate's fast layer runs this file as a plan entry, and a reader can run it by hand: the
 // same checks the release gate starts with, without an install and without a layer.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    const planProblems = planInventoryProblems()
-    const caseProblems = caseLedgerProblems()
-    const problems = [...planProblems, ...caseProblems]
-    const examined = (walkPlans('test/plans') ?? []).length
-    for (const problem of problems) console.error(`plan-inventory: ${problem}`)
-    if (problems.length > 0) {
+    // The roots are read first and before anything is walked. A run that cannot read a root has no
+    // reading to give, and exit 2 is how it says that: printing the lines of a tree it never read is
+    // the defect this block was changed for (see REQUIRED_ROOTS).
+    const missing = missingRoots()
+    if (missing.length > 0) {
+        console.log('plan-inventory: read 0 plan file(s), 0 case file(s) and 0 file(s) under the naming roots')
+        for (const { root, path: abs } of missing) {
+            console.error(`plan-inventory: no such directory: ${root} (expected at ${abs})`)
+        }
         console.error(
-            `plan-inventory: ${problems.length} problem(s): every plan file must be reached by a fast target, ` +
-                'named in SLOW_PLANS, cannot be started by the gate, or be a debug or milestone plan; and every file ' +
-                'under test/cases must be read by code -- a plan, an import, a harness that opens it -- ' +
-                'or be recorded in CASE_EXCEPTIONS with the reason it is kept',
+            `plan-inventory: ${missing.length} required root(s) missing: the plan layers and the case ` +
+                'ledger examined nothing, which is not a pass',
         )
-        process.exit(1)
+        process.exitCode = 2
+    } else {
+        const planProblems = planInventoryProblems()
+        const caseProblems = caseLedgerProblems()
+        const problems = [...planProblems, ...caseProblems]
+        const examined = (walkPlans('test/plans') ?? []).length
+        // What was read, printed before the verdict and on a failing run too: the number a reader
+        // compares across runs, and the sentence a run has to answer for when it shrinks.
+        console.log(
+            `plan-inventory: read ${examined} plan file(s) under test/plans, ${LAST_READING.cases} case ` +
+                `file(s) under ${CASE_ROOT} and ${LAST_READING.readers} file(s) under the naming roots`,
+        )
+        for (const problem of problems) console.error(`plan-inventory: ${problem}`)
+        if (problems.length > 0) {
+            console.error(
+                `plan-inventory: ${problems.length} problem(s): every plan file must be reached by a fast target, ` +
+                    'named in SLOW_PLANS, cannot be started by the gate, or be a debug or milestone plan; and every file ' +
+                    'under test/cases must be read by code -- a plan, an import, a harness that opens it -- ' +
+                    'or be recorded in CASE_EXCEPTIONS with the reason it is kept',
+            )
+            process.exitCode = 1
+        } else {
+            console.log(`plan-inventory: ${examined} plan files, every one of them has a destination`)
+            console.log(
+                `plan-inventory: ${LAST_READING.cases} case files, every one of them is read by code or recorded with a reason ` +
+                    `(${CASE_EXCEPTIONS.length} recorded)`,
+            )
+        }
     }
-    console.log(`plan-inventory: ${examined} plan files, every one of them has a destination`)
-    const cases = caseTreeFiles().filter((file) => !file.endsWith('.plan.toml')).length
-    console.log(
-        `plan-inventory: ${cases} case files, every one of them is read by code or recorded with a reason ` +
-            `(${CASE_EXCEPTIONS.length} recorded)`,
-    )
 }

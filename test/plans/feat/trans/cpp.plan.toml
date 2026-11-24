@@ -231,9 +231,20 @@ expect_output_not_contains = ["FAIL:", "were written more than one way", "cell(T
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 600000
 
+# The premise of a comparison between four back ends: `std::jit` is a back end of its own only in a
+# build that has a native code generator. With `ENABLE_FASTVM_JIT` off (cmake/Options.cmake -- every
+# arm64 build, and the no-JIT leg of the CI) the pass is accepted and runs the bytecode interpreter
+# of `std::fvm`, and says so once on stderr (`RuntimeDiag::JitWithoutCodeGenerator`) before the
+# program runs. So the fourth cell is the second one over again and differs from it by that notice
+# alone, whatever the program printed: there are three back ends and one repeat, and "the four say
+# the same sentence" is no longer the thing this entry judges. That is a fact about the build and
+# not about the program (docs/cli.md, "std::jit"), so the entry declares it and is skipped there --
+# the same two-line precondition the entries that assert a compiled line carry
+# (feat/linear/jit_native.plan.toml); `--absent` is its opposite.
 [[tests]]
 name = "narrow_reductions_four_backends"
-desc = "A bf16 and an f16 on all four scheduling back ends: std::nvm, std::fvm, std::cpp (the program std::cpp writes, built and run) and std::jit, on the five programs that pin the two types -- the readings of a value of either, and the four faults a conversion or a division can give. What is compared is each back end's own output and exit code, byte for byte: a type is implemented when the four say the same sentence, not when one of them can run it. Nothing is skipped: a back end that could not run a program would say so in its cell, and the cell that differs is named."
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+desc = "A bf16 and an f16 on all four scheduling back ends: std::nvm, std::fvm, std::cpp (the program std::cpp writes, built and run) and std::jit, on the five programs that pin the two types -- the readings of a value of either, and the four faults a conversion or a division can give. What is compared is each back end's own output and exit code, byte for byte: a type is implemented when the four say the same sentence, not when one of them can run it. Nothing is skipped inside the comparison: a back end that could not run a program would say so in its cell, and the cell that differs is named. Where the build has no JIT at all the four are not four (see the comment above), so the entry is skipped there rather than compared."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/cppexec/run.py"

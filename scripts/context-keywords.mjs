@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The contextual keywords of Camel: words the parser reads as a keyword in one position and as an
-// ordinary name everywhere else. A `CAMEL_KEYWORD` of include/camel/parse/syntax/token_kinds.def is
+// ordinary name everywhere else. A `CAMEL_KEYWORD` of parse/include/camel/parse/syntax/token_kinds.def is
 // reserved in every position; these words are not tokens at all, so their one table is kept here and
 // everything that has to agree with it is generated from it or checked against it:
 //
@@ -16,7 +16,7 @@
 //     that its "contextual-keywords" rule names exactly these words, once each.
 //
 // Every entry says where it is a keyword (`zh`, `en`) and carries the verbatim line of
-// `src/parse/syntax/parser*.cpp` that reads it as one. `--check` requires each of those lines to be
+// `parse/src/syntax/parser*.cpp` that reads it as one. `--check` requires each of those lines to be
 // in the parser still, so a reading that disappears takes the word off the page instead of leaving a
 // sentence behind that nothing implements (design principles 6.4).
 //
@@ -91,14 +91,14 @@ export const CONTEXT_KEYWORDS = [
         group: 'clause',
         zh: '资源子句：函数签名或函数类型里声明效应集合的 `uses`（`uses s` 读、`uses var fs` 写，与 `var` 形参同一种写法）',
         en: "the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses s` reads, `uses var fs` writes, written the way a `var` parameter is)",
-        evidence: ['if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {'],
+        evidence: ['if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "panic") || atWord(0, "spelling")) {'],
     },
     {
         word: 'spelling',
         group: 'clause',
         zh: '资源子句的前置词：声明这段正文可以读程序的写法（图或函数的名字、节点的源位置、创建顺序与创建号、节点显示成的文字）。它与效应同一套机制，写在同一个子句里、`pure`/`uses` 之前（设计原则 9.5）',
         en: "the leading word of a resource clause: it declares that the body may read the spelling of the program (a graph's or a function's name, a node's source position, creation order and creation numbers, the text a node shows). It is the mechanism an effect uses, written before `pure`/`uses` in that clause (design principles 9.5)",
-        evidence: ['if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {'],
+        evidence: ['if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "panic") || atWord(0, "spelling")) {'],
     },
     {
         word: 'pure',
@@ -106,6 +106,13 @@ export const CONTEXT_KEYWORDS = [
         zh: '资源子句：承诺不使用任何资源的 `pure`（与 `uses` 同一位置）',
         en: 'the `pure` of a resource clause: a promise to touch no resource at all (the same position as `uses`)',
         evidence: ['while (!panic_ && (atWord(0, "pure") || atWord(0, "uses"))) {'],
+    },
+    {
+        word: 'panic',
+        group: 'clause',
+        zh: '资源子句里的 `panic`：声明这个算子的一次调用可能故障（不带种类列表，种类由实现抛出什么决定）；声明不写它，即承诺它的调用不会故障（设计原则 3.9）。它与 `pure` 同一位置，写在 `uses` 那一串之前；`uses panic` 是名字叫 `panic` 的一个资源',
+        en: 'the `panic` of a resource clause: a call of the operator can fail (no kind list -- the kind is what the call raises), and a declaration that leaves it out promises that no call of it fails (design principles 3.9). It stands where `pure` does, before the `uses` entries; `uses panic` names a resource called `panic`',
+        evidence: ['while (!panic_ && (atWord(0, "pure") || atWord(0, "panic"))) {'],
     },
     {
         word: 'join',

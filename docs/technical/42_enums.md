@@ -19,10 +19,10 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 
 ## 解析与 AST
 
-- `enum` 是关键字（[`parser_type.cpp`](../../src/parse/syntax/parser_type.cpp) 的类型声明入口把它作为 `=` 之后的一种类型体）。`type` 声明仍是 `TypeType` 节点，`enum` 体由 `TypeType::Enum` + `EnumTypeLoad`（变体表）表示，变体形状是 `EnumVariantShape`。
+- `enum` 是关键字（[`parser_type.cpp`](../../parse/src/syntax/parser_type.cpp) 的类型声明入口把它作为 `=` 之后的一种类型体）。`type` 声明仍是 `TypeType` 节点，`enum` 体由 `TypeType::Enum` + `EnumTypeLoad`（变体表）表示，变体形状是 `EnumVariantShape`。
 - 模式是 CST 的 `EnumTuplePattern` / `EnumStructPattern`，AST 里是 `DataType::EnumPattern` + `EnumPatternLoad`；结构体模式的每个字段有名字与绑定名（`{ w }` 绑定同名，`{ w: width }` 改名）。
 - 限定名（`Shape::Circle`）在表达式里仍是 `IdentRef`；AST 区分不了它与模块成员，区分发生在建图时（名字解析之后）。
-- **字段位置只写名字或 `_`**：`case Shape::Circle(0.0)` 在解析时就是普通语法错误（`fieldPattern`，`SyntaxDiag::UnexpectedToken`；[`parser_expr.cpp`](../../src/parse/syntax/parser_expr.cpp)`parsePattern(bool fieldPosition)`），不解成嵌套模式再让后面的层拒绝。
+- **字段位置只写名字或 `_`**：`case Shape::Circle(0.0)` 在解析时就是普通语法错误（`fieldPattern`，`SyntaxDiag::UnexpectedToken`；[`parser_expr.cpp`](../../parse/src/syntax/parser_expr.cpp)`parsePattern(bool fieldPosition)`），不解成嵌套模式再让后面的层拒绝。
 
 ## 类型层
 
@@ -45,14 +45,14 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 ## 运行时
 
 - `camel::core::rtdata::Variant` 是 `Object`：`{ vptr, tag: u32, count: u32, data_[count] }`，`create(tag, count, allocator)` 分配，`get/set` 按槽读写 `slot_t`。它不是新的 GC 类型：`updateRefs` 逐槽追踪字段，与元组、结构体的做法相同；`mark-sweep` 与分代回收器都靠这个钩子，递归的 `Tree` 也能被完整追踪。
-- 打印与相等在运行时的 `Variant::print` / `Variant::equals` 里按内容做（先标签、后字段），与数组、元组、结构体共用 `valuesEqualByContent`（`src/core/rtdata/equality.cpp`），带环检测，所以递归值不会无限递归。`Shape::Rect { w: 2.0, h: 3.0 }` 这种写法来自 `EnumVariant::fieldNames` 与形状，不是运行时拼字符串的特例。
-- 算子执行器在 `src/builtin/operators/enum.cpp`：`__enum_make__` 读第一个参数作标签、其余作字段；`__enum_tag__` 读标签；`__enum_field__` 先断言标签再读槽。三者登记为纯算子（`enum/` 前缀进纯度表），资源与语义声明与其他内建算子相同。
+- 打印与相等在运行时的 `Variant::print` / `Variant::equals` 里按内容做（先标签、后字段），与数组、元组、结构体共用 `valuesEqualByContent`（`kernel/core/rtdata/equality.cpp`），带环检测，所以递归值不会无限递归。`Shape::Rect { w: 2.0, h: 3.0 }` 这种写法来自 `EnumVariant::fieldNames` 与形状，不是运行时拼字符串的特例。
+- 算子执行器在 `lib/std/builtin/operators/enum.cpp`：`__enum_make__` 读第一个参数作标签、其余作字段；`__enum_tag__` 读标签；`__enum_field__` 先断言标签再读槽。三者登记为纯算子（`enum/` 前缀进纯度表），资源与语义声明与其他内建算子相同。
 
 ## 各后端
 
 `std::nvm`、`std::fvm`、`std::jit`、`std::prl` 都只看见普通的构造、`__enum_*__` 调用、`BRCH`/`JOIN`，不需要为枚举加分支。`std::macro` 遇到能求值的部分照常求值，枚举值可以成为宏的结果并物化为常量。
 
-`onnx::export` 与 autodiff 拒绝：ONNX 是翻译目标还没有枚举的表示，autodiff 是"把依赖微分参数的值放进枚举"没有导数规则。两者都给出带位置的 `RuntimeDiag::TranslationRefused` / `MacroEvaluationFailed`，而不是返回 0 或崩溃。`std::cpp` 已经支持枚举：每个枚举生成一个带 `tag` 与 `std::variant` 载荷的 `struct`，构造与读取由声明生成的 `make<Tag>` / `get<Tag, Index>` 完成，打印与解释器逐字一致；实现见 `include/camel/standalone/enum.h`、`cpp_types.cpp` 与 `operator_rules.cpp`，测试见 `trans/cpp.plan.toml` 的 `enum_types` 与 `test/tools/cppexec/expect.txt`。
+`onnx::export` 与 autodiff 拒绝：ONNX 是翻译目标还没有枚举的表示，autodiff 是"把依赖微分参数的值放进枚举"没有导数规则。两者都给出带位置的 `RuntimeDiag::TranslationRefused` / `MacroEvaluationFailed`，而不是返回 0 或崩溃。`std::cpp` 已经支持枚举：每个枚举生成一个带 `tag` 与 `std::variant` 载荷的 `struct`，构造与读取由声明生成的 `make<Tag>` / `get<Tag, Index>` 完成，打印与解释器逐字一致；实现见 `lib/std/cpp/include/camel/standalone/enum.h`、`cpp_types.cpp` 与 `operator_rules.cpp`，测试见 `trans/cpp.plan.toml` 的 `enum_types` 与 `test/tools/cppexec/expect.txt`。
 
 ## 留给语言作者的问题
 

@@ -105,6 +105,22 @@ function run(binary, args, cwd) {
     })
 }
 
+/// Remove a scratch directory, and never let the removal become the sweep's answer. What a case
+/// wrote is not this sweep's evidence, so a directory that will not go is housekeeping left behind,
+/// not a case that failed -- and it must not turn into one: an unhelpful `EBUSY` here rejected the
+/// worker inside `Promise.all`, which took the whole run down with exit 2 and a stack trace about
+/// `rmSync` in place of the balance reading. `force` only suppresses ENOENT, and on Windows a file
+/// the case had just written can still be held for a moment after the child is gone (the scanner
+/// reading it, the last handle not yet released), so retry briefly first and then let an
+/// windows-only "still busy" stay behind.
+function dropTree(dir) {
+    try {
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    } catch (error) {
+        if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(error?.code)) throw error
+    }
+}
+
 /// The tables of one case: its graphs' summary lines, and the ones that do not balance.
 function tablesOf(stdout) {
     const summaries = []
@@ -160,7 +176,7 @@ async function main() {
             const cwd = path.join(RUN_ROOT, path.relative(CASES, file).replace(/[\\/]/g, '__'))
             fs.mkdirSync(cwd, { recursive: true })
             const result = await run(binary, [file, 'test::plan_refs'], cwd)
-            fs.rmSync(cwd, { recursive: true, force: true })
+            dropTree(cwd)
             const { summaries, unbalanced } = tablesOf(result.stdout)
             if (summaries.length === 0) {
                 // No table: either the case does not compile without the arguments its plan gives
@@ -186,7 +202,7 @@ async function main() {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker))
     // The sweep's own root goes too, unless the runner gave it one it owns (`CAMEL_TEST_TMPDIR`,
     // removed with the test) -- a script run by hand leaves nothing behind either.
-    if (!process.env.CAMEL_TEST_TMPDIR) fs.rmSync(RUN_ROOT, { recursive: true, force: true })
+    if (!process.env.CAMEL_TEST_TMPDIR) dropTree(RUN_ROOT)
 
     console.log(
         `PLAN_REFS_SWEEP cases=${files.length} read=${read} graphs=${graphs} ` +

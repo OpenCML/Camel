@@ -1,7 +1,7 @@
 # Which area prints which reading
 
 A reading is printed only when the run asks for its area (`--trace <area>`,
-`include/camel/core/trace.h`). A plan entry that pins a reading therefore has to name that area in
+`kernel/include/camel/core/trace.h`). A plan entry that pins a reading therefore has to name that area in
 its `args`; an entry that does not is red for a reason that has nothing to do with what it measures.
 
 This table is the one place that says which area owns which text. It is **read from the source**, not
@@ -12,15 +12,15 @@ through, so a row can be checked again after any change.
 
 | The assertion names this | Area | Written by | Channel |
 |---|---|---|---|
-| `REINTERP ` | `transforms` | `modules/transforms/vmap_operator.cpp#vmapKernel` -> `modules/transforms/vmap.cpp#buildVmapGraph` | `readings()` |
-| `kinds=`, `asked=`, `found=`, `missing=`, `rules=` | `transforms` | the same line as `REINTERP` (`modules/transforms/vmap.cpp#askedFoundMissing` builds the fields) | `readings()` |
-| `TRANSPOSE ` | `transforms` | `modules/transforms/transpose_operator.cpp#transposeKernel`, `modules/transforms/transpose/walk.cpp` | `readings()` |
-| `SPLIT `, `JVP ` | `transforms` | `modules/transforms/transpose/walk.cpp` (the split/jvp half of the same walk) | `readings()` |
-| `in_recompute=`, `out_recompute=` | `transforms` | `modules/transforms/remat_operator.cpp` | `readings()` |
-| `PLAN_REF_SITES ` | `plan` | `src/passes/sched/fastvm/compile.cpp#compileRuntimeGraph` | `trace(TraceArea::Plan)` |
-| `effect containment: checked` | `effects` | `src/execute/pass.cpp#passBoundaryViolation` | `trace(TraceArea::Effects)` |
-| `[DBG-FOLD] `, `[DBG-W] ` | `fold` | `src/compile/gir/builder_variables.cpp#FoldCountsReport` and the fold's own `[DBG-W]` sites | `trace(TraceArea::Fold)` |
-| `READING_REFUSAL ` | none needed | `modules/transforms/refusal_readings.h#noteRefusal` | `verdicts()` -- **always printed** |
+| `REINTERP ` | `transforms` | `lib/transforms/vmap_operator.cpp#vmapKernel` -> `lib/transforms/vmap.cpp#buildVmapGraph` | `readings()` |
+| `kinds=`, `asked=`, `found=`, `missing=`, `rules=` | `transforms` | the same line as `REINTERP` (`lib/transforms/vmap.cpp#askedFoundMissing` builds the fields) | `readings()` |
+| `TRANSPOSE ` | `transforms` | `lib/transforms/transpose_operator.cpp#transposeKernel`, `lib/transforms/transpose/walk.cpp` | `readings()` |
+| `SPLIT `, `JVP ` | `transforms` | `lib/transforms/transpose/walk.cpp` (the split/jvp half of the same walk) | `readings()` |
+| `in_recompute=`, `out_recompute=` | `transforms` | `lib/transforms/remat_operator.cpp` | `readings()` |
+| `PLAN_REF_SITES ` | `plan` | `lib/std/fvm/compile.cpp#compileRuntimeGraph` | `trace(TraceArea::Plan)` |
+| `effect containment: checked` | `effects` | `kernel/execute/pass.cpp#passBoundaryViolation` | `trace(TraceArea::Effects)` |
+| `[DBG-FOLD] `, `[DBG-W] ` | `fold` | `compile/src/gir/builder_variables.cpp#FoldCountsReport` and the fold's own `[DBG-W]` sites | `trace(TraceArea::Fold)` |
+| `READING_REFUSAL ` | none needed | `lib/transforms/refusal_readings.h#noteRefusal` | `verdicts()` -- **always printed** |
 
 ## Two rules that follow from the table
 

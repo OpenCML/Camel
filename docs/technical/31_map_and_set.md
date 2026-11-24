@@ -57,7 +57,7 @@ take a type variable among its arguments (`T[...]` was rejected where written), 
 C++ classes with a `collections` module across `.cmo` boundaries loaded with `RTLD_LOCAL`.
 
 **Taken: the classes live in the core and use the `OtherType` mechanism.** `MapType` and
-`SetType` (`include/camel/core/type/collection.h`) are `OtherType`s registered by the core
+`SetType` (`kernel/include/camel/core/type/collection.h`) are `OtherType`s registered by the core
 itself and named in the built-in type scope beside `int` and `string`, so:
 
 - the names are global: no `import`;
@@ -161,7 +161,7 @@ operator on a graph wants: equal inputs, indistinguishable outputs.
 
 ### 5.1 The object
 
-One class, `rtdata::Table` (`include/camel/core/rtdata/collection.h`), for both types:
+One class, `rtdata::Table` (`kernel/include/camel/core/rtdata/collection.h`), for both types:
 
 ```
 Table { uint32 size; slot_t data[] }      one allocation
@@ -639,7 +639,7 @@ Each is implemented as recommended here; the tag is in the code.
   constant; arrays alone reproduced it. The cause was in the macro pass, not in the
   collections: a graph draft holds plain copies of slots, and drafts were open while later
   calls of the same round were still being evaluated, across safepoints. The pass now
-  evaluates a whole round before it rewrites (`src/execute/macro/macro.cpp`,
+  evaluates a whole round before it rewrites (`lib/std/macro/macro.cpp`,
   `36_gc_handle_rules.md` section 7, finding 2), and collection constants are verified with
   both collectors (`gc.macro_constants.*`, `gc.collection_constants_*`).
 - **Not verified:** the Windows and macOS builds (the work was built and tested on Linux

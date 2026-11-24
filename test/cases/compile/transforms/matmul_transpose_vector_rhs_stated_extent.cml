@@ -10,11 +10,12 @@
 //     dL/du   = [1 + 3, 2 + 4] = [4, 6]
 //
 // `u`'s extent is written in the declaration and repeated at the call, for the reason the left-hand
-// case states in full: the law reads the *other* operand's shape as `sum_to`'s target, a transposed
-// function is handed the cotangent and no parameter, and the shape therefore comes from the type
-// (`modules/transforms/transpose.cpp#shapeFromTypeOf`) -- which `float[]` does not state. The
-// language's answer for a declaration that leaves it open is `TransposeNeedsParameterShape`: write
-// the shape in the type.
+// case states in full: the law reduces the answer to the answered operand's own shape, the
+// `sum_to(matmul(transpose(a), ct), shape(b))` of `stdlib/rulesets/transpose.cml#ct_of_b`; a
+// transposed function is handed the cotangent and no parameter, and the shape therefore comes from
+// the type (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`) -- which `float[]` does
+// not state. The language's answer for a declaration that leaves it open is
+// `TransposeNeedsParameterShape`: write the shape in the type.
 //
 // **Second of two, and its green is evidence rather than the road**: the rank-one arithmetic and the
 // fact that a stated shape can be answered from the type. The terminal state is the author's

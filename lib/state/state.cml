@@ -1,0 +1,54 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * An explicit mutable reference: one box, and the handles that point at it.
+ *
+ * `ref(v)` makes a box holding `v` and answers a handle to it; `get` reads the content, `set` and
+ * `update` write it. The handle is a value: a closure may capture it, keep it after the call that
+ * made it returned, and two handles to one box see one content. No `var` and no cell of a `var` is
+ * captured by any of them (design principles 3.5, rule two: the exit for state that outlives a
+ * call is a reference).
+ *
+ * A reference is a **handle type** (design principles 3.3): one resource per value. Two handles
+ * made by two `ref` calls name two boxes, so the operations on one are ordered with the operations
+ * on the other only where the program puts them in one `sync` block; two operations on one
+ * reference keep the order they are written in. The type is provided by the module
+ * (`lib/state`, design principles 10.4): `lib/state/state.cml` declares it and its four
+ * operators, and the module keeps the kernels, the resource contract of each operator and the
+ * storage.
+ *
+ * The content is any type that holds no `Ref`. A reference cannot hold a reference because the
+ * boxes are reclaimed by counting the handles that point at them: two boxes holding each other's
+ * handles would keep each other's count above zero for ever, and the program would hold values it
+ * can no longer reach. The compiler refuses such a content where the reference is made, one layer
+ * at a time -- the type itself, a field, an element, a variant's payload, what a function takes or
+ * returns, and what a closure captures.
+ */
+
+/// A handle to one box: two handles made by two `ref` calls name two boxes, and one handle read
+/// twice reads one box. A reference is not compared with another one, and it cannot be copied into
+/// a second box (`Ref<Ref<T>>` is refused at the inner `Ref`).
+export type Ref<T>
+
+/// A new box holding `v`, and a handle to it. The box is a new resource: the value written into it
+/// is the value `v` gives, not the cell of a `var` the program handed in.
+/// @example get(ref(3))    // 3
+export func ref::<T>(v: T): Ref<T>
+
+/// The content of the box `r` points at: a read of the reference, and nothing else.
+/// @example get(ref(3))    // 3
+export func get::<T>(r: Ref<T>): T uses r
+
+/// Writes `v` into the box `r` points at, and answers `v`. A write of the box: the handle itself is
+/// not replaced.
+/// @example-fragment the box is one the surrounding program holds, so the example names it
+/// @example set(r, 7)    // 7
+export func set::<T>(r: Ref<T>, v: T): T uses var r
+
+/// Writes `f` of the content into the box `r` points at, and answers the new content. `f` is
+/// `pure`, so an update touches the one reference and no other resource: what it writes is a
+/// function of what it read.
+/// @example-fragment the box is one the surrounding program holds, so the example names it
+/// @example update(r, (x: int) => x + 1)
+export func update::<T>(r: Ref<T>, f: (x: T) => T pure): T uses var r

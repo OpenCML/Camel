@@ -43,7 +43,7 @@
 
 | 层次 | 技术 |
 |------|------|
-| 语法解析 | 手写词法分析器与解析器（`src/parse/syntax/`） |
+| 语法解析 | 手写词法分析器与解析器（`parse/src/syntax/`） |
 | AST | 自研 AST，结构由 docs/Camel.asdl 描述 |
 | 图构造 | GCT（Graph Construct Tree）→ GIR Builder |
 | 图 IR | GraphIR 命名空间：Graph、Node 及多种节点类型 |

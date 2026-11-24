@@ -53,7 +53,7 @@
  *
  * The type is decided by identity, not by the name: the runtime's Program is `camel::Program` /
  * `camel::runtime::Program` (and the file-local `rt` alias), while `camel::tiles` has a Program of
- * its own (modules/tiles/include/tiles/program.h) that is not the runtime's and that this check
+ * its own (lib/tiles/include/tiles/program.h) that is not the runtime's and that this check
  * does not report. An unqualified `Program` takes the identity of the namespace it is declared in,
  * so a bare `Program *` inside `camel::tiles` is the tiles one. A qualifier this file does not know
  * is reported, not skipped: a holder the check cannot place is a holder to look at.

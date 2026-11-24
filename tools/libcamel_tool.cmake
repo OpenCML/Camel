@@ -71,7 +71,7 @@ set(CAMEL_STACK_SIZE_BYTES 33554432)
 # 3.9: 1000 open calls). At -O0 one open call of std::nvm costs about 5.1 KiB of native stack
 # (measured on Windows x64), and Windows lets a call use only a sixteenth of the stack
 # before the guard keeps the other fifteen sixteenths for SEH fault unwinding
-# (src/execute/limits.cpp): 32 MiB therefore refuses the 400th open call, well before 1000.
+# (kernel/execute/limits.cpp): 32 MiB therefore refuses the 400th open call, well before 1000.
 #
 # The Debug tools reserve 128 MiB instead, of which a sixteenth is about 8 MiB, or about 1605
 # open calls at the measured cost: a margin of about 1.6x over the default limit. Release keeps
@@ -81,7 +81,7 @@ set(CAMEL_STACK_SIZE_BYTES 33554432)
 # size stays the linker default (one page) and pages are committed as the stack is touched: this
 # is address space, not committed memory. The value is also the default of every thread the
 # process creates on Windows, and a std::tf worker takes the executable's reserve when it is
-# larger than 8 MiB (include/camel/utils/big_stack_thread.h), so the workers get it too.
+# larger than 8 MiB (kernel/include/camel/utils/big_stack_thread.h), so the workers get it too.
 set(CAMEL_DEBUG_STACK_SIZE_BYTES 134217728)
 function(target_camel_stack_size target)
   if(WIN32)
@@ -112,11 +112,12 @@ function(target_libcamel_tool_options target)
   # diagnostic only these sources raise). The CPython extension is built by camel_add_tool_objects
   # above and carries the same list.
   target_link_libraries(${target} PRIVATE camel_warnings_tool)
-  target_include_directories(${target} PRIVATE
+  set(_camel_tool_roots
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/third_party
     ${CMAKE_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}
-  )
+    ${CMAKE_CURRENT_SOURCE_DIR})
+  target_include_directories(${target} PRIVATE ${_camel_tool_roots})
+  set_property(GLOBAL APPEND PROPERTY CAMEL_LAYOUT_LATE_CATCHALL_TARGETS ${target})
 endfunction()

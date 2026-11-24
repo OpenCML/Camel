@@ -1,0 +1,16 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The computed signature of the native module ckpt (reference metadata, not compiled): the one
+// operator whose result type follows its argument, so a declaration cannot state it.
+// `save_tree` and `load_tree` are declared in `lib/ckpt/ckpt.cml`.
+//
+// `tree_leaves` is the one tree operation still native: the leaves are one flat tuple whose
+// length is the sum of the leaves of every field, which a Camel function cannot build (a tuple
+// value's elements cannot be spliced into a tuple being built). The other tree operations are in
+// the Camel tree library `lib/tree/tree.cml`.
+
+/// The leaves of a tree, as a tuple.
+/// @pure
+/// @example tree_leaves({ a: 1, b: (2, 3) })    // (1, 2, 3)
+export func tree_leaves(tree: T): L

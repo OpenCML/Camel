@@ -7,7 +7,7 @@ text is `docs/design-principles.cn.md` section 9.8 (the rule with parameters,
 
 ## 1. The entry graph takes the parameters of `main`
 
-The Builder (`src/compile/gir/builder.cpp`, `Builder::build`) wraps the entry function in the
+The Builder (`compile/src/gir/builder.cpp`, `Builder::build`) wraps the entry function in the
 root graph `__root__`, which calls `main` and returns its result. `main` used to be called with
 no arguments whatever its signature, so every pipeline stopped with an internal arity error for
 a `main` with parameters.
@@ -32,7 +32,7 @@ The origin of `main` is also registered apart from the graphs (`DebugMap::regist
 because passes replace the entry graph; `execute::entryFunctionOrigin(ctx)` is where a diagnostic
 about the entry function is located.
 
-## 2. Binding arguments from outside (`include/camel/execute/entry_args.h`)
+## 2. Binding arguments from outside (`kernel/include/camel/execute/entry_args.h`)
 
 `bindEntryArguments(ctx, root, arguments)` is partial application of the entry graph. For each
 `name=text` it finds the parameter, reads the value according to the declared type, and rewrites
@@ -66,7 +66,7 @@ Values are rooted while the others are read (reading allocates and may move obje
 bound object stays rooted for the life of the process. `boundEntryArguments()` lists them with
 the parameter they were given for; a translation uses the list to name what it emits.
 
-The pass driver (`applyPassesDetailed`, `src/execute/pass.cpp`) checks
+The pass driver (`applyPassesDetailed`, `kernel/execute/pass.cpp`) checks
 `unboundEntryParameters(graph)` before a scheduling pass runs and reports
 `RuntimeDiag::EntryArgumentMissing` at `main`, naming them. The check is in the driver, not in
 each scheduler, so it holds for every scheduling pass, present and future.
@@ -89,13 +89,13 @@ argument. On standard output there is no refusal: every value has a `println` fo
 
 ## 3. Passes of modules the program does not import
 
-`requireKnownPasses(passes, ctx)` (`src/execute/pass.cpp`) checks every pass name before
+`requireKnownPasses(passes, ctx)` (`kernel/execute/pass.cpp`) checks every pass name before
 anything runs. For a name `<module>::<pass>` that is not known it first imports `<module>`
 through the context, exactly as an `import` statement would; a module registers its passes
 when it loads. Failure to find the module is not reported by itself: the name stays unknown and
 gets the usual `UnrecognizedGraphPass`.
 
-## 4. `onnx::export` on a program without a request (`modules/onnx/passes/export.cpp`)
+## 4. `onnx::export` on a program without a request (`lib/onnx/passes/export.cpp`)
 
 The pass first looks for `onnx.export_model` requests in the entry graph, as before. When
 there is none:
@@ -103,7 +103,7 @@ there is none:
 - if a request exists in a graph reachable from the entry graph, the program is a driver
   program whose `main` was not inlined: the old refusal naming `std::opt` is kept;
 - otherwise the program makes no request, and the entry graph itself is translated
-  (`translateEntryGraph`, `modules/onnx/exporter.cpp`).
+  (`translateEntryGraph`, `lib/onnx/exporter.cpp`).
 
 `translateEntryGraph`:
 
@@ -149,7 +149,7 @@ the two kinds differently beyond their order.
 - The result of `main` is neither printed nor written under `--timeit`.
 - `std::cpp` translates a `main` with parameters of type int, i32, float, f32, c64, c128, bool or
   string: the generated program reads them from its command line as `--arg name=value`, with the
-  same reports as `camel` (design principles 10.6; `include/camel/standalone/entry.h`). Each
+  same reports as `camel` (design principles 10.6; `lib/std/cpp/include/camel/standalone/entry.h`). Each
   integer and float is read at the width it is declared with (`rt::EntryKind::Int32` for an
   `i32`, `Float32` for an `f32`), and a float and each part of a complex number are one whole
   number token by `camel::utils::parseWholeFloat` at that width; a complex parameter reads the

@@ -17,7 +17,7 @@ let p        = loop p = { x: 0 } for d in ds do { x: p.x + d }
 let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else hit
 ```
 
-Grammar (`src/parse/syntax/parser_expr.cpp`, `parseLoop`; the generated block of
+Grammar (`parse/src/syntax/parser_expr.cpp`, `parseLoop`; the generated block of
 `docs/language/08_top_level_and_grammar.md`):
 
 ```
@@ -34,14 +34,14 @@ the same production as after `then`. A head without `for` and without `while` is
 
 The AST node is `LoopExprLoad` (names of the state and of the element; children: the first
 values, the sequence, the condition, the body as a block). The GCT node is `LOOP`
-(`include/camel/compile/gct/node.h`): tag `camel::core::LoopKind` (`While`, `For`, `ForWhile`,
-`include/camel/core/loop_kind.h`), the names in its payload, children: the k first values, the
+(`compile/include/camel/compile/gct/node.h`): tag `camel::core::LoopKind` (`While`, `For`, `ForWhile`,
+`kernel/include/camel/core/loop_kind.h`), the names in its payload, children: the k first values, the
 sequence (For, ForWhile), an `EXEC` holding the condition (While, ForWhile), the `EXEC` of the
 body. Both `EXEC`s carry the numeric permissions in force where the loop is written.
 
 ## 2. The graph
 
-`Builder::visitLoopNode` (`src/compile/gir/builder.cpp`):
+`Builder::visitLoopNode` (`compile/src/gir/builder.cpp`):
 
 1. The first values and the sequence are built where the loop is; they do not see the names of
    the head. Their types are the state types; `null` and `[]` give none
@@ -70,7 +70,7 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
    chain. A loop whose value nothing uses outside a sync block still runs when it writes: what a region
    writes is a root of that region (the ruling of 2026-11-17), so its body runs and nothing is reported.
 
-Storage (`include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form,
+Storage (`kernel/include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form,
 the iterable form and `collectionCount`, the number of collection slots (section 3.1, zero for a
 loop written in source today). A loop names no graph: the condition and the body are regions of the
 graph it is written in, so there is no second form for a payload to describe (principles 3.10). The regions are
@@ -118,7 +118,7 @@ loop reads it (`loopTest`: a value with no dimension has no first dimension to i
 The result is that the LOOP node's iterable port is always an array, and every consumer sees one
 form: `LoopView::iterable()` is the array of elements (an OPER node when a conversion was made),
 the element port has its element type (I18), `driveLoopRounds`
-(`include/camel/execute/loop_driver.h`) takes one element per round from it. No back end has
+(`lib/std/exec/include/camel/execute/loop_driver.h`) takes one element per round from it. No back end has
 iteration code of its own, and `std::cpp` handles the string conversion (`rt::chars`) while maps
 stay untranslated types there.
 
@@ -164,7 +164,7 @@ the array types and the body's exit to be the state types followed by their elem
 
 ### 3.2 The tape of a differentiated loop
 
-autodiff (`modules/autodiff/pullback.cpp`) uses the collection slots as its tape
+autodiff (`lib/autodiff/pullback.cpp`) uses the collection slots as its tape
 (the second step of the rewrite). The rewrite decodes the loop's body graph and
 differentiates it as a function of the captures and the state, as it differentiates any other
 graph, keeping the values its pullback reads as *residual ports*: the operands of every rule, and
@@ -208,7 +208,7 @@ contribution would be dropped without a sign of it.
 | autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
 | debugger | the condition and the body are regions of the graph of their function: part of its frame, with the names of their ports |
 
-**The range of a loop.** The plan (`ExecPlan`, `src/execute/exec_plan.cpp`) lays a loop out as one
+**The range of a loop.** The plan (`ExecPlan`, `lib/std/exec/exec_plan.cpp`) lays a loop out as one
 piece: what its regions read from outside, the first values of the state, the nodes of the
 condition, those of the body, then the LOOP node (`computeExecutionOrder`). `ExecLoop` records the
 positions, the data slots a round reads and writes and the slot of the round counter; the events

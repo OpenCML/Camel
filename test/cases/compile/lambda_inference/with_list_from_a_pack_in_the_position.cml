@@ -1,5 +1,5 @@
 // The `with` list a lambda stands in can be a pack itself: a declared type writes the function
-// type's `with` prefix as `...WithOf<F>` (stdlib/types.cml#Gradient, and the `has_aux` result the
+// type's `with` prefix as `...WithOf<F>` (lib/types/types.cml#Gradient, and the `has_aux` result the
 // library owes), and instantiating it turns those into the members `F` has -- one parameter
 // named after nothing the source wrote (`<__pack_0_0: float>`). A lambda written `<w, ...rest>`
 // there takes the first `with` parameter by name and the pack takes the ones left over, exactly

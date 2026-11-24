@@ -59,7 +59,7 @@ B 的机器那一半。**
 `:op/assn*`，没有 CALL/FUNC/ACCS/FILL/普通算子接手，也没有 `context` 边进入 FILL（＝没被闭包捕获）；
 ③ 至少一个读者、至少一个写者；④ 没有任何一处的 callee 形参是 `var T`（那归 D）。②③④ 一起就给出了
 「没作 `var` 实参传出、没存进容器」。这套判据与编译器自己判「值有没有观察者」的
-`src/execute/exec_plan.cpp#cellEscapes`（GATE 透明、非 `:var/*`/`:op/assn` 的用户即逃逸）同构，只是把「捕获」单列。
+`lib/std/exec/exec_plan.cpp#cellEscapes`（GATE 透明、非 `:var/*`/`:op/assn` 的用户即逃逸）同构，只是把「捕获」单列。
 
 81 个全部满足（C 里没有逃逸的）。其中 **55 个读写都落在 body 区、连 φ 都不需要**；26 个跨区：
 13 个只在 `arm` 区、7 个 `body+loop_body`、5 个 `arm+body`、1 个 `block+body`——这 26 个在 SSA 里变成汇合处或
@@ -71,17 +71,17 @@ B 的机器那一半。**
 端口变成值端口，不需要共享物。10 个在闭包图里被写的是**模块级 `var`（全在 `__root__`）**，落在 `Ref<T>`
 （句柄是值，闭包捕获句柄），不是图内的 φ。依据：3.5 的「闭包不能给外面的名字赋值，诊断给三种改法：返回新值、
 循环状态/fold、用 Ref」与同节的 `Ref<T>` 段；今天它确实是「被捕获的单元」有据——
-`src/compile/gir/captures.cpp#Builder::captureInto` 里 `const bool isVar = isVariable(origin)` 之后走的就是把
+`compile/src/gir/captures.cpp#Builder::captureInto` 里 `const bool isVar = isVariable(origin)` 之后走的就是把
 单元本身作为捕获值的路；`test/cases/effects/callback_write_through_parameter.cml` 的注释也这么写：
 「The state a closure may write is a handle or a module `var`」。
 
 ## D：作者那句与代码相符
 
-`src/compile/gir/builder_calls.cpp#Builder::requireMutableArgument` 的原话是
+`compile/src/gir/builder_calls.cpp#Builder::requireMutableArgument` 的原话是
 「The argument is handed to the callee as a resource: the cell is shared with it, so it keeps its cell and is
 never made SSA」与「A `var` parameter is the caller's cell, and the callee's write-back is the assignment
 written at the call」；`:var/after` 的签名就是 `(variable: var T, after: any) => var T`
-（`src/builtin/modules/globals.cpp#:var/after`，注释「the cell as it stands after the call that wrote it」）。
+（`lib/std/builtin/modules/globals.cpp#:var/after`，注释「the cell as it stands after the call that wrote it」）。
 所以「`var` 形参照写回、`:var/after`/`take`/`peek` 那套单元式接口随之删除」与代码相符。
 **唯一对不上的一处**：`:var/take` 今天不只服务 `var` 形参，它还围着 `xs = xs->sort` 的原地形式
 （`globals.cpp#:var/take` 注释、`Builder::inPlaceRebindingOf`）；「原地」属 10.5，那句话覆盖不到（见问题页）。
@@ -120,13 +120,13 @@ GIR 里「值没人用」和「读者已被折叠到写出的值上」同形。`
   `effects/value_made_after_a_call_captures_its_version.cml`、`linear/byref/captured_write_graph.cml`、
   `…_order.cml`、`…_value.cml`、`linear/nvm/fib1.cml`、`linear/runtime/partial_application_written_var.cml`、
   `linear/toplevel_var/{argument_order,counter,grad_refused,initial_value,unread_write}.cml`、
-  `modules/autodiff/grad_captured_var_written.cml`、`modules/autodiff/grad_module_var_sync.cml`、
-  `modules/onnx/refusals/var_outer.cml`、`modules/selected_protection/{capture,dead_write_held}.cml`、
+  `test/cases/modules/autodiff/grad_captured_var_written.cml`、`test/cases/modules/autodiff/grad_module_var_sync.cml`、
+  `test/cases/modules/onnx/refusals/var_outer.cml`、`modules/selected_protection/{capture,dead_write_held}.cml`、
   `opt/adb67e081/rc04_seed72_within_call.cml`、`opt/effects/dead_write_aggregate_two_members.cml`、
   `opt/effects/dead_write_held_by_program.cml`、`opt/effects/dead_write_rooted_closure.cml`、
   `opt/generic/effect_order_folded.cml`、`opt/inline_cycle/seed23_fold_inline_within_call.cml`。
 - **C（55）**：`linear/byref/path_assigned.cml`（5）、`consistency/entering/assignment.cml`（4）、
-  `modules/stdlib/array_sort_kernels.cml`（4）、`consistency/entering/arm_cell_void.cml`（3），其余每个 1–2：
+  `test/cases/modules/stdlib/array_sort_kernels.cml`（4）、`consistency/entering/arm_cell_void.cml`（3），其余每个 1–2：
   `consistency/new_values/{peek,append_new,macro_append}.cml`、`trans/cpp/{field_store,complex_scalar,
   recursive_struct_shapes}.cml`、`compile/enum/gc_stress.cml`、`compile/semantic/{recursive_struct_array,
   recursive_struct_array_gc}.cml`、`consistency/operator_overloads/basic.cml`、
@@ -134,10 +134,10 @@ GIR 里「值没人用」和「读者已被折叠到写出的值上」同形。`
   `linear/byref/{captured_write_order,captured_write_graph,element_assigned,element_assigned_append,
   element_assigned_copy,field_assigned,inplace_write_then_read,path_assigned_allocs,var_alias_captured,
   var_alias_two_cells,var_param_slot_array}.cml`、`linear/runtime/{var_read_before_write,
-  var_read_before_region}.cml`、`linear/nvm/nested_array_type.cml`、`modules/nn/{lrit,lr}.cml`、
-  `modules/autodiff/{var_array_append,var_tensor_local}.cml`、`modules/onnx/{export_var_append,export_var_local,
+  var_read_before_region}.cml`、`linear/nvm/nested_array_type.cml`、`lib/nn/{lrit,lr}.cml`、
+  `lib/autodiff/{var_array_append,var_tensor_local}.cml`、`lib/onnx/{export_var_append,export_var_local,
   refusals/var_arm}.cml`、`modules/optim/{agreement,dtype_exact,named_args,native_dtype_exact,training,
-  written_dtype_exact}.cml`、`modules/tensor/static_types.cml`、`modules/tiles/resident_cpu_block.cml`、
+  written_dtype_exact}.cml`、`test/cases/modules/tensor/static_types.cml`、`test/cases/modules/tiles/resident_cpu_block.cml`、
   `opt/generic/written_variable.cml`、`trans/cml/{arm_write,arm_read}.cml`、
   `compile/array_alias/var_widening.cml`、`compile/function_values/value_positions.cml`、
   `compile/lambda_inference/positions.cml`、`compile/operators/{struct_add_assign,tensor_add_assign}.cml`、
@@ -153,27 +153,27 @@ GIR 里「值没人用」和「读者已被折叠到写出的值上」同形。`
   warnings_visible}.cml`、`compile/state_escape/ok_read_escape_{array,field}.cml`、
   `compile/var_closure/ok_update_reads_captured.cml`、`consistency/entering/arm_cell.cml`、
   `consistency/faults/fault_in_sync_call.cml`、`consistency/values/sync_body_order.cml`、
-  `effects/{declared,var_parameter_write_outside_sync}.cml`、`modules/autodiff/{var_tensor_read,
-  var_through_with_grad}.cml`、`modules/nn/{lr,lrit}.cml`、`modules/onnx/{export_var_parameter,
-  refusals/var_param}.cml`、`modules/tensor/{compound_assign,var_tensor_reference}.cml`、
+  `effects/{declared,var_parameter_write_outside_sync}.cml`、`lib/autodiff/{var_tensor_read,
+  var_through_with_grad}.cml`、`lib/nn/{lr,lrit}.cml`、`lib/onnx/{export_var_parameter,
+  refusals/var_param}.cml`、`lib/tensor/{compound_assign,var_tensor_reference}.cml`、
   `modules/tensor/shape_inference/{var_argument_plain,var_argument_with_parameter}.cml`、
   `opt/inline/loop_wait_after_inline.cml`、`opt/progen/findings/{simplify_effect_order,
   simplify_recursion_never_ends}.cml`、`opt/progen/judgement/bare_arm_var_call_warning.cml`、
   `para/core/sync_order_with_tasks.cml`、`trans/cml/var_param.cml`、`trans/cpp/{exec/variables,
   var_argument_cell}.cml`。
 - **E（42）**：`consistency/values/int_compound_wrap.cml`（9）、`linear/operators/compound_assign.cml`（6）、
-  `modules/stdlib/reduced_compound_assign.cml`（6）、`compile/nullable_assign.cml`（4），其余：
+  `test/cases/modules/stdlib/reduced_compound_assign.cml`（6）、`compile/nullable_assign.cml`（4），其余：
   `trans/cpp/exec/{variables,composites}.cml`、`compile/array_shape/{rank_zero_slot_var,
-  rank_zero_var_slot}.cml`、`linear/runtime/var_between_statements.cml`、`modules/onnx/export_var_compound.cml`、
-  `modules/optim/native_dtype_exact.cml`、`trans/canon_order_run.cml`、
+  rank_zero_var_slot}.cml`、`linear/runtime/var_between_statements.cml`、`test/cases/modules/onnx/export_var_compound.cml`、
+  `test/cases/modules/optim/native_dtype_exact.cml`、`trans/canon_order_run.cml`、
   `compile/comprehension_context/annotated.cml`、`compile/literals/comprehension_in_position.cml`、
   `compile/nullable_argument.cml`、`compile/var/unused_assigned_value_both_bodies.cml`、
   `consistency/logical/short_circuit.cml`、`consistency/surface/minus.cml`、
   `consistency/values/{closure_var,ref_takes_the_value}.cml`、`linear/byref/{captured_write_order,
   var_alias_two_cells,var_param_reference,var_rule_subpasses}.cml`、`linear/match/let_multi_binding.cml`、
-  `linear/operators/{mod_assign_by_zero,string_plus_assign}.cml`、`modules/autodiff/{grad_tuple_read,
+  `linear/operators/{mod_assign_by_zero,string_plus_assign}.cml`、`lib/autodiff/{grad_tuple_read,
   var_tensor_read_after_call,var_tensor_read_after_write,var_tensor_read_in_callee}.cml`、
-  `modules/graph_pass/neutral_var_target.cml`、`modules/nn/mnist.cml`、`modules/tensor/static_types.cml`、
+  `test/cases/modules/graph_pass/neutral_var_target.cml`、`test/cases/modules/nn/mnist.cml`、`test/cases/modules/tensor/static_types.cml`、
   `opt/camel_passes/cse_subject.cml`、`opt/generic/{control_chain,written_variable}.cml`、
   `opt/progen/findings/{mod_assign,string_plus_assign}.cml`、`tools/debugger/fixtures/values.cml`、
   `trans/cml/linear.cml`。

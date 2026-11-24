@@ -1,0 +1,240 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#include "topo_node_seq.h"
+
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/registration.h"
+#include "camel/runtime/graph.h"
+#include "camel/runtime/reachable.h"
+#include "camel/utils/type.h"
+
+#include <format>
+#include <iomanip>
+#include <sstream>
+
+using namespace std;
+using namespace camel::core::context;
+using camel::runtime::gc_node_ref_t;
+using camel::runtime::GCAccsBody;
+using camel::runtime::GCGraph;
+using camel::runtime::GCNode;
+using camel::runtime::GCNodeKind;
+using camel::runtime::GCOperBody;
+
+namespace {
+
+const GCNode *requireNode(GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *node = graph ? graph->node(nodeRef) : nullptr;
+    ASSERT(node != nullptr, "Topo dump resolved to a null runtime node.");
+    return node;
+}
+
+} // namespace
+
+TopoNodeSeqDumpPass::TopoNodeSeqDumpPass(const context_ptr_t &ctx) : GraphTranslatePass(ctx) {}
+
+string TopoNodeSeqDumpPass::pointerToIdent(const void *ptr, const char *prefix) {
+    return getPtrRepr(prefix, reinterpret_cast<uintptr_t>(ptr), showRawPtr);
+}
+
+string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, bool showRawPtr) {
+    string prefixStr(prefix);
+    if (!showRawPtr) {
+        auto &mapForPrefix = ptrsMap_[prefixStr];
+        if (mapForPrefix.find(ptrVal) == mapForPrefix.end()) {
+            mapForPrefix[ptrVal] = ptrCnt_[prefixStr]++;
+        }
+        ptrVal = mapForPrefix[ptrVal];
+    }
+
+    int hexDigits  = 1;
+    uintptr_t temp = ptrVal;
+    while (temp >>= 4) {
+        ++hexDigits;
+    }
+
+    int width = ((hexDigits + 1) / 2) * 2;
+
+    stringstream ss;
+    ss << prefix << hex << uppercase << setw(width) << setfill('0') << ptrVal << dec << nouppercase;
+    return ss.str();
+}
+
+const camel::runtime::Program *
+TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
+    ASSERT(graph != nullptr, "Topo dump requires a non-null runtime root graph.");
+
+    auto sortedGraphs = camel::runtime::collectReachableGraphs(*program, graph);
+    ostringstream oss;
+
+    for (auto *runtimeGraph : sortedGraphs) {
+        const auto &sortedNodes = runtimeGraph->execPlan().topo;
+        auto formatNodeIdent = [&](gc_node_ref_t nodeRef) {
+            return pointerToIdent(requireNode(runtimeGraph, nodeRef));
+        };
+        auto formatInputs = [&](std::span<const gc_node_ref_t> inputs) {
+            string text;
+            for (gc_node_ref_t inputRef : inputs) {
+                if (!text.empty()) {
+                    text += ", ";
+                }
+                text += formatNodeIdent(inputRef);
+            }
+            return text;
+        };
+        auto describeRuntimeNode = [&](gc_node_ref_t nodeRef, const GCNode &node) -> string {
+            switch (node.kind) {
+            case GCNodeKind::Func: {
+                auto *callee          = program->calleeOf(*runtimeGraph, nodeRef);
+                string name           = callee ? callee->name() : "<null>";
+                string res            = format("CALL: {} slot={}", name, node.dataIndex);
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Call: {
+                string res            = format("CALL: <indirect> slot={}", node.dataIndex);
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Oper: {
+                const auto *body = runtimeGraph->nodeBodyAs<GCOperBody>(nodeRef);
+                string res = format("CALL: <{}> slot={}", std::string(body->uri()), node.dataIndex);
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Brch: {
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto arms       = runtimeGraph->ctrlOutputsOf(nodeRef);
+                string res            = format(
+                    "BRCH: {} slot={}",
+                    normInputs.empty() ? "<missing-cond>" : formatNodeIdent(normInputs.front()),
+                    node.dataIndex);
+                if (!arms.empty()) {
+                    res += " ? ";
+                    for (size_t i = 0; i < arms.size(); ++i) {
+                        if (i != 0) {
+                            res += ": ";
+                        }
+                        res += formatNodeIdent(arms[i]);
+                    }
+                }
+                return res;
+            }
+            case GCNodeKind::Join: {
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                string res            = format("JOIN: slot={}", node.dataIndex);
+                if (!normInputs.empty()) {
+                    res += format(" brch={}", formatNodeIdent(normInputs.front()));
+                }
+                if (!withInputs.empty()) {
+                    res += format(" arms=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Accs: {
+                const auto *body = runtimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
+                if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
+                    const std::string_view key = body->key();
+                    return format("ACCS: .{}", std::string(key.data(), key.size()));
+                }
+                return format("ACCS: .{}", body->value);
+            }
+            case GCNodeKind::Fill: {
+                string res            = "FILL:";
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(" src={}", formatNodeIdent(normInputs.front()));
+                }
+                if (!withInputs.empty()) {
+                    res += format(" with=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            case GCNodeKind::Loop: {
+                // A loop names no graph: the condition and the body are regions (3.10), so what is
+                // printed is the form and where the node's value goes.
+                string res = format(
+                    "LOOP: {} slot={}",
+                    camel::core::loopKindName(runtimeGraph->loopKindOf(nodeRef)),
+                    node.dataIndex);
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
+            default:
+                return format("NODE: kind={} slot={}", static_cast<int>(node.kind), node.dataIndex);
+            }
+        };
+
+        oss << "FUNC: " << runtimeGraph->name();
+        for (gc_node_ref_t portRef : runtimeGraph->normPorts()) {
+            oss << ", " << pointerToIdent(requireNode(runtimeGraph, portRef));
+        }
+        for (gc_node_ref_t portRef : runtimeGraph->withPorts()) {
+            oss << ", " << pointerToIdent(requireNode(runtimeGraph, portRef));
+        }
+        for (gc_node_ref_t closureRef : runtimeGraph->closureNodes()) {
+            oss << ", " << pointerToIdent(requireNode(runtimeGraph, closureRef));
+        }
+        oss << "\n";
+
+        for (gc_node_ref_t nodeRef : sortedNodes) {
+            const auto *node = requireNode(runtimeGraph, nodeRef);
+            oss << "    [" << pointerToIdent(node) << "] " << describeRuntimeNode(nodeRef, *node)
+                << "\n";
+        }
+
+        const auto *returnNode = runtimeGraph->returnNode();
+        if (returnNode != nullptr) {
+            oss << "RETN: " << pointerToIdent(returnNode) << "\n\n";
+        } else if (const auto *exitNode = runtimeGraph->exitNode(); exitNode != nullptr) {
+            oss << "RETN: " << pointerToIdent(exitNode) << "\n\n";
+        } else {
+            oss << "RETN: <none>\n\n";
+        }
+    }
+
+    oss << format("CALL: {}", graph->name()) << "\n";
+    os << oss.str();
+    return nullptr;
+}
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+const PassKernel topoNodeSeqKernel("std::topo_node_seq", makePass<TopoNodeSeqDumpPass>());
+
+} // namespace

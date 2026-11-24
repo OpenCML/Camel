@@ -1,0 +1,50 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * TEST-ONLY: reads the standard tag `independent` from every graph of the program through the
+ * runtime query a scheduler would use (camel/core/tags.h, declaresIndependentElements), and
+ * prints the graph's portable content hash (`TAGS hash <name> <hex>`) so a test can show that
+ * a difference only in a region's facts is a difference in the hashed content.
+ */
+
+#include "tags.h"
+
+#include "camel/core/tags.h"
+#include "camel/execute/pass/registration.h"
+#include "camel/runtime/fact_persist.h"
+#include "camel/runtime/graph.h"
+
+#include <algorithm>
+#include <format>
+#include <vector>
+
+const camel::runtime::Program *
+TagsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    std::vector<camel::runtime::GCGraph *> graphs = program->graphs();
+    std::sort(graphs.begin(), graphs.end(), [](const auto *a, const auto *b) {
+        return a->name() < b->name();
+    });
+    for (const camel::runtime::GCGraph *graph : graphs) {
+        os << std::format(
+            "TAGS independent {} {}\n",
+            graph->name(),
+            camel::core::tag::declaresIndependentElements(*graph) ? "yes" : "no");
+        os << std::format(
+            "TAGS hash {} {:016x}\n",
+            graph->name(),
+            camel::runtime::fact::portableGraphHash(*program, graph));
+    }
+    return program;
+}
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel tagsKernel(kTagsTestPass, makePass<TagsTestPass>());
+
+} // namespace

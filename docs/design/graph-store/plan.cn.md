@@ -1,6 +1,6 @@
 # 第 7 节第 9 步：`std::cml`（图与源码往返）——实施计划
 
-依据：设计原则 2.5（图与源码的表达能力相同）、3.10（循环是同一张图的两个控制区域）、6.2/6.6（标签的作用域与声明）、10.5（数组与数据块）；图存储设计稿 §3.3（区域）、§4.7（声明标签与 `let` 名字）、§4.8（往返所需的信息）、§7 第 9 步。只读调研，没有改代码；所有测量用基线 `e52ee05a6` 的预编译 `camel.exe` 完成，没有构建。
+依据：设计原则 2.5（图导出为源码，尽力而为）、3.10（循环是同一张图的两个控制区域）、6.2/6.6（标签的作用域与声明）、10.5（数组与数据块）；图存储设计稿 §3.3（区域）、§4.7（声明标签与 `let` 名字）、§4.8（往返所需的信息）、§7 第 9 步。只读调研，没有改代码；所有测量用基线 `e52ee05a6` 的预编译 `camel.exe` 完成，没有构建。
 
 ## 0. 结论摘要
 
@@ -16,7 +16,7 @@
 
 ### 1.1 方法与探针
 
-用预编译的 `D:\Projects\Camel\out\latest\bin\camel.exe`（`CAMEL_HOME` 指向该目录）对下列探针跑 `std::jgir`、`std::gir`、`std::gir_regions`、`std::opt`、`std::cpp`，并读 `include/camel/runtime/graph.h`、`draft.h`、`src/compile/gir/builder*.cpp`、`src/passes/trans/json/gir.cpp` 与 `src/passes/trans/cpp/*`。探针在 `D:\Temp\cmlprobe`，不随仓库提交；关键源码抄在附录 A。任务里提到的 `#resource`/`#gpu`：本树没有 `#resource`；放置只写 `#gpu` 标签（`@gpu` 装饰器与显式运行算子已删除），标签是声明或节点上的编译期事实（6.2），本计划按标签的同一机制处理，GPU 分支本身不在本次范围。
+用预编译的 `D:\Projects\Camel\out\latest\bin\camel.exe`（`CAMEL_HOME` 指向该目录）对下列探针跑 `std::jgir`、`std::gir`、`std::gir_regions`、`std::opt`、`std::cpp`，并读 `kernel/include/camel/runtime/graph.h`、`draft.h`、`src/compile/gir/builder*.cpp`、`lib/std/gir/json/gir.cpp` 与 `src/passes/trans/cpp/*`。探针在 `D:\Temp\cmlprobe`，不随仓库提交；关键源码抄在附录 A。任务里提到的 `#resource`/`#gpu`：本树没有 `#resource`；放置只写 `#gpu` 标签（`@gpu` 装饰器与显式运行算子已删除），标签是声明或节点上的编译期事实（6.2），本计划按标签的同一机制处理，GPU 分支本身不在本次范围。
 
 | 探针 | 覆盖 | dump 里看到的事实 |
 |---|---|---|
@@ -69,7 +69,7 @@
 
 1. **`let` 名字**：§4.7 计划。打印机可以生成名字，因此不阻塞；但调试器/诊断要用。
 2. **声明标签**：函数头、类型声明、字段、参数各一套（§4.7、6.2）。今天 `#kernel` 在函数上、`#shape`/`#width` 在类型/字段上，冻结后**完全丢失**。这是往返的硬缺口，必须补存储。
-3. **`Block` 区域**：`GCRegionKind::Block` 与 `region.attrs` 都已存在（`graph.h#GCRegionKind`），但前端只在测试遍 `src/passes/test/regions.cpp#Block` 建块；真实的 `#tag { }` 不建块，作用域只能从节点集合猜。
+3. **`Block` 区域**：`GCRegionKind::Block` 与 `region.attrs` 都已存在（`graph.h#GCRegionKind`），但前端只在测试遍 `lib/test/regions.cpp#Block` 建块；真实的 `#tag { }` 不建块，作用域只能从节点集合猜。
 4. **泛型声明**：模板不是图（1.6），只有实例；`<int>` 只留在图名里，而图名不计。2.5 说“泛型实例写成具体类型的函数”，所以这是**允许的损失**，不是缺口。
 5. **循环收集槽的源码形式**：`loop.h` 说收集槽属于循环重写设计，源码还没有 `loop ... collect ...` 一类的写法；图里有 `collectionCount`。这是语言缺口。
 6. **大常量的数据文件形式**：2.5 要求“放在旁边的数据文件中由源码引用”，语言还没有这个引用写法。
@@ -130,20 +130,20 @@
 
 ### 3.1 名字、基类、参数、注册
 
-- 名字：`std::cml`。头文件 `include/camel/passes/trans/cml/cml.h`，源文件 `src/passes/trans/cml/`（`cml.cpp`、`module_writer.cpp`、`expr_writer.cpp`、`type_writer.cpp`、`literal.cpp`、`operator_syntax.cpp`），与 `src/passes/trans/json/` 同构。
+- 名字：`std::cml`。头文件 `lib/std/cml/include/camel/passes/trans/cml/cml.h`，源文件 `src/passes/trans/cml/`（`cml.cpp`、`module_writer.cpp`、`expr_writer.cpp`、`type_writer.cpp`、`literal.cpp`、`operator_syntax.cpp`），与 `lib/std/gir/json/` 同构。
 - 类：`CmlDumpPass : public RuntimeGraphTranslatePass`（运行时图，翻译遍）。`apply(const Program *, std::ostream &)` 写源码，返回 `nullptr`（消费程序），与 `JsonGirDumpPass` 一致。
-- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`src/execute/pass.cpp#extractWritings`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
-- 参数（`PassDescriptor`，`include/camel/execute/pass/params.h#PassDescriptor`）：
+- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`kernel/execute/pass.cpp#extractWritings`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
+- 参数（`PassDescriptor`，`kernel/include/camel/execute/pass/params.h#PassDescriptor`）：
   - `out`（String，默认 `""`）：写文件；空 = 写 `os`（stdout）。写文件时 `data_dir` 默认取 `out` 的父目录。
   - `data_dir`（String，默认 `""`）：大常量的 sidecar 目录；为空且需要 sidecar 时拒绝。
   - `comments`（Bool，默认 `true`）：是否写“由哪个流水线打印”的注释；注释不影响图，测试用 `false` 去掉不确定性。
   - `max_literal_bytes`（Int，默认 `65536`）：超过就写 sidecar/拒绝（见 5.10）。
-- 注册：`src/execute/pass.cpp` 的 `trans` 作用域，`{"cml", def(cmlDescriptor())}`，紧挨 `jgir`（当前注册表在 739-755 行）。不加别名；`std::cml` 就是正式名。
+- 注册：`kernel/execute/pass.cpp` 的 `trans` 作用域，`{"cml", def(cmlDescriptor())}`，紧挨 `jgir`（当前注册表在 739-755 行）。不加别名；`std::cml` 就是正式名。
 - 拒绝：`RuntimeDiag::TranslationRefused`，与 `std::cpp` 的 `refuse()` 同型（节点/图/入口的 origin），进程非零退出；测试记录拒绝类别。
 
 ### 3.2 与 `std::jgir` / `std::cpp` 的分工
 
-- 与 `std::jgir` 共享：`src/passes/trans/gir_metadata.cpp` 的 `recordType`、`portInfo`、`nodeStaticSlotType`、`recordLabel`（只用于注释/调试，不用于生成源码）；`Program` 的遍历与 `calleeOf`；`ControlRegions`/`LoopView`；`OperatorTable` 与 `tags.h`。**不共享**格式化：DOT/JSON 是数据转储，CML 是有作用域、优先级、命名与顺序的程序。
+- 与 `std::jgir` 共享：`lib/std/gir/gir_metadata.cpp` 的 `recordType`、`portInfo`、`nodeStaticSlotType`、`recordLabel`（只用于注释/调试，不用于生成源码）；`Program` 的遍历与 `calleeOf`；`ControlRegions`/`LoopView`；`OperatorTable` 与 `tags.h`。**不共享**格式化：DOT/JSON 是数据转储，CML 是有作用域、优先级、命名与顺序的程序。
 - 与 `std::cpp` 共享**算法形状**：`ProgramEmitter::findEntry`（入口：返回值/退出值/输出值里找 `CALL`，再穿过 `FILL` 找函数常量，`program_emitter.cpp#std::cpp`）、`collectFunctions`（函数常量 + `FUNC` 的被调图，232-259 行）、`FunctionEmitter` 的序列/分支/循环/变量/高阶算子的分解（`function_emitter.cpp#FunctionEmitter`、`980-1105`、`1106-1190`、`1571-1660`、`1723+`）。第一版**照抄分解逻辑**，不改 `std::cpp`；等两边都稳定后，再把“读图得到结构”的部分抽成共享的 `ProgramIndex`/`StructuredBody`，避免为了复用而先动导出器。
 - 与 `std::cpp` 不共享输出：C++ 有语句序列和显式类型，Camel 需要 `sync`、`loop`、`match`、标签块、`var`、函数值语法。
 
@@ -276,7 +276,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 ### 5.11 写法表（两张写法）
 
-**决定**：`std::cml` 是翻译遍，驱动在它之前抽取一种写法（`src/execute/pass.cpp#std::cml`），所以它打印的是抽取后的可执行图；写法表本身不可打印（源码没有“一个值两种写法”的语法）。若手工把带 `kGraphFlagHasWritings` 的图送进来，拒绝（`CmlHasWritings`）。
+**决定**：`std::cml` 是翻译遍，驱动在它之前抽取一种写法（`kernel/execute/pass.cpp#std::cml`），所以它打印的是抽取后的可执行图；写法表本身不可打印（源码没有“一个值两种写法”的语法）。若手工把带 `kGraphFlagHasWritings` 的图送进来，拒绝（`CmlHasWritings`）。
 **影响**：2.5 的“任何合法的图”按“可执行状态的图”理解；表是遍之间的内部表示，不是程序。需要作者确认（问题 7）。
 
 ### 5.12 没有 `main` / 库模块
@@ -349,7 +349,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 ## 9. 风险与不做
 
 1. **S0 的工作量**：类型表 + 结构化值 + 图同构判定器，可能和 S1 一样大。它是“证明”的前提；不做它，往返测试就退化成文本比较（任务明确不接受）。
-2. **算子表覆盖**：内置 `:op/*` 约 204 个、`:var/*` 4 个（`src/builtin` 的注册），加上 `:enum/*`、`:struct/*`、`:io/*`。表要按 `OperatorSemantics` 身份而不是 URI 字符串分类；未覆盖的逐一拒绝并计数。第一版可以只覆盖常用子集，但 sweep 报告必须给出“未覆盖 URI 的数量与用例”。
+2. **算子表覆盖**：内置 `:op/*` 约 204 个、`:var/*` 4 个（`lib/std/builtin/` 的注册），加上 `:enum/*`、`:struct/*`、`:io/*`。表要按 `OperatorSemantics` 身份而不是 URI 字符串分类；未覆盖的逐一拒绝并计数。第一版可以只覆盖常用子集，但 sweep 报告必须给出“未覆盖 URI 的数量与用例”。
 3. **优化后的图**：入口内联的提升、部分内联、枚举决策树、共享闭包是四个可能提升不了的点；提升不了时只做执行比较并在报告里写明 `structural=skipped`，不能静默当通过。
 4. **判定器预算**：图同构是指数最坏；用颜色细化 + 回溯 + 预算，超预算的图只做执行比较并报告。
 5. **跨任务依赖**：声明标签（§4.7/问题 2）与 `Block` 区域（问题 3）不在 `std::cml` 内，需要图存储第 5 步/前端配合；没有它们，`std::cml` 只能打印节点标签，声明标签是**测试看不见的损失**。这一点必须让作者知道。

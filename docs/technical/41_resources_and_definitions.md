@@ -2,9 +2,9 @@
 
 This note describes phase 4 of `docs/design/op-semantics` as implemented: the resources an
 operator touches (design section 8) and the definition graphs of operators (design section 9).
-The headers are `include/camel/core/resource_semantics.h` (the declarations),
-`include/camel/runtime/resources.h` (their resolution in a graph and the scheduler's queries) and
-`include/camel/runtime/definitions.h` (building and expanding definitions). Nothing here changes
+The headers are `kernel/include/camel/core/resource_semantics.h` (the declarations),
+`kernel/include/camel/runtime/resources.h` (their resolution in a graph and the scheduler's queries) and
+`kernel/include/camel/runtime/definitions.h` (building and expanding definitions). Nothing here changes
 how any graph is printed, and what a program computes only where a kernel was made to agree with
 its definition (`log_softmax`, section 2.4): the declarations are read only by those who
 ask, and no pass or back end expands a definition by default.
@@ -122,7 +122,7 @@ function exported by a library module written in Camel as the operator's definit
 operator's operands bind its parameters (`DefinitionParam`: an ordinary or with operand, with the
 value an optional operand left out gets: softmax's axis is `-1`). Declaring it adds a fact to the
 operator's semantics: one minor version up. Check 6 refuses a definition without a module or
-function. The tensor module declares, from `stdlib/tensor_definitions.cml`:
+function. The tensor module declares, from `lib/tensor_definitions/tensor_definitions.cml`:
 
 | Operator | Definition |
 |---|---|

@@ -1,0 +1,2426 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#include "camel/core/type/bytes.h"
+#include "camel/core/type/native.h"
+#include "globals.h"
+#include "builtin/executors/builtin.h"
+#include "builtin/operators/array.h"
+#include "builtin/operators/collection.h"
+#include "builtin/operators/derivative.h"
+#include "builtin/operators/enum.h"
+#include "builtin/operators/mem.h"
+#include "builtin/operators/ops.h"
+#include "builtin/operators/array_convert.h"
+#include "builtin/operators/set_value.h"
+#include "builtin/operators/struct.h"
+#include "builtin/operators/tagged.h"
+#include "camel/core/context/context.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/enum.h"
+#include "camel/core/type/resolver.h"
+#include "camel/core/type/text.h"
+#include "camel/core/type/typevar.h"
+
+#include "camel/utils/assert.h"
+#include "camel/utils/log.h"
+
+#include <mutex>
+#include <algorithm>
+#include <format>
+#include <optional>
+#include <string>
+#include <vector>
+
+using namespace std;
+using namespace camel::core::context;
+using namespace camel::core::module;
+using namespace camel::core::rtdata;
+using namespace camel::core::type;
+
+namespace {
+// Both sides of `==` are one type; an unnamed struct value is the named type it has the fields
+// of, read as it is (design principles 5.2), so the two compare by their fields.
+bool sameOrEnteringStruct(Type *a, Type *b) {
+    if (a->equals(b))
+        return true;
+    return a->code() == TypeCode::Struct && b->code() == TypeCode::Struct &&
+           (a->assignableFrom(b) || b->assignableFrom(a));
+}
+
+// An element stands at a callback's parameter: the same type, or an unnamed struct and a named one
+// with its fields, which is the relation the other joins use (design principles 5.2). The
+// callback's parameter takes the element's resources when its own clause is unwritten.
+bool elementEntersParameter(Type *parameter, Type *element) {
+    if (sameTypeWithUnwrittenResources(parameter, element)) {
+        return true;
+    }
+    if (parameter->code() != TypeCode::Struct || element->code() != TypeCode::Struct ||
+        static_cast<const StructType *>(parameter)->named() ==
+            static_cast<const StructType *>(element)->named()) {
+        return false;
+    }
+    return parameter->assignableFrom(element);
+}
+
+/// Whether a value of type `type` exists at run time, so that an operator taking a value of
+/// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
+/// (a type variable, a union, a reference). This is what a parameter typed `any` accepts.
+bool isConcreteValueType(Type *type) {
+    return type != nullptr && type->code() != TypeCode::Void && !isAuxiliary(type->code());
+}
+
+/// A type parameter of a signature: `binder` at its first occurrence, a use at every later one.
+Type *typeParameter(const char *name, bool binder) { return TypeVarType::create(name, binder); }
+
+/// The signature of `map`'s rule as a type: `<f: (item: T) => U> (collect: T[]) => U[]`. The
+/// rule reports that declaration as spelling for reports; this is the same declaration with its
+/// variables as types, so a lambda written in the `with` position takes its parameter type from
+/// it before the call is resolved (design principles 5.9).
+FunctionType *mapRuleSignature() {
+    FunctionTypeFactory callback;
+    callback.addNormArg("item", typeParameter("T", true), false);
+    callback.setExitType(typeParameter("U", true));
+    FunctionTypeFactory signature;
+    signature.addWithArg("f", callback.buildOpen(), false);
+    signature.addNormArg("xs", ArrayType::create(typeParameter("T", false)), false);
+    signature.setExitType(ArrayType::create(typeParameter("U", false)));
+    return signature.buildOpen();
+}
+
+/// The signature of `reduce`'s rule as a type:
+/// `<f: (acc: U, item: T) => U, initial: U> (collect: T[]) => U`.
+FunctionType *reduceRuleSignature() {
+    FunctionTypeFactory callback;
+    callback.addNormArg("acc", typeParameter("U", true), false);
+    callback.addNormArg("item", typeParameter("T", true), false);
+    callback.setExitType(typeParameter("U", false));
+    FunctionTypeFactory signature;
+    signature.addWithArg("f", callback.buildOpen(), false);
+    signature.addWithArg("initial", typeParameter("U", false), false);
+    signature.addNormArg("xs", ArrayType::create(typeParameter("T", false)), false);
+    signature.setExitType(typeParameter("U", false));
+    return signature.buildOpen();
+}
+
+/// The rule with that signature fixed: a rule whose result depends on its arguments can still
+/// declare the parameter types every call is held to, so an argument that needs them (a lambda
+/// with unwritten parameters) can be built before the call is settled.
+resolver_ptr_t withFixedSignature(resolver_ptr_t resolver, FunctionType *signature) {
+    auto *dynamic = dynamic_cast<DynamicFuncTypeResolver *>(resolver.get());
+    ASSERT(dynamic != nullptr, "A fixed signature was given to a rule that is not dynamic.");
+    if (dynamic != nullptr) {
+        dynamic->declareFixedSignature(signature);
+    }
+    return resolver;
+}
+
+/// The rule with a result callback that also reads the call's constants (`withStatics`: the path
+/// for an operator whose result type follows the values the program wrote). The rule's own
+/// callback stays and answers every caller that holds no constants.
+resolver_ptr_t withStaticResult(resolver_ptr_t resolver, ResolverWithStaticsFunc callback) {
+    auto *dynamic = dynamic_cast<DynamicFuncTypeResolver *>(resolver.get());
+    ASSERT(dynamic != nullptr, "Statics were given to a rule that is not dynamic.");
+    if (dynamic != nullptr) {
+        dynamic->withStatics(std::move(callback));
+    }
+    return resolver;
+}
+
+/// A rule of one ordinary parameter whose signature records the parameter's name: the name is
+/// what a named argument binds to (`len(x: xs)`), so a rule and the declaration it is written
+/// beside must give a position the same name (stdlib-conventions, "the same meaning at a position
+/// shares its name"). `StaticFuncTypeResolver::create` takes types only, and a signature built
+/// from types records no names at all, so the name is written here.
+resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
+    FunctionTypeFactory factory;
+    factory.addNormArg(name, param, false);
+    factory.setExitType(exit);
+    return StaticFuncTypeResolver::create(factory.build());
+}
+
+/// The two entries a group adds for the reduced-precision floating types, written where the
+/// group's other entries are (a group is a braced list, and a `std::vector` cannot be one of its
+/// elements, so a function call cannot stand in for the two entries). The URI suffix is `bf` for
+/// bf16 and `f6` for f16 (`b` is already bool).
+///
+/// A binary operator of a group whose result is the operand type; both operands are the type.
+#define CAMEL_HALF_BINARY(STEM)                                                                    \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create(                                                               \
+         {},                                                                                       \
+         {{Type::BFloat16(), false}, {Type::BFloat16(), false}},                                   \
+         Type::BFloat16())},                                                                       \
+    {                                                                                              \
+        ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
+                               {},                                                                 \
+                               {{Type::Float16(), false}, {Type::Float16(), false}},               \
+                               Type::Float16())                                                    \
+    }
+
+/// A comparing operator of a group: the operands are the type, the result is bool.
+#define CAMEL_HALF_COMPARE(STEM)                                                                   \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create(                                                               \
+         {},                                                                                       \
+         {{Type::BFloat16(), false}, {Type::BFloat16(), false}},                                   \
+         Type::Bool())},                                                                           \
+    {                                                                                              \
+        ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
+                               {},                                                                 \
+                               {{Type::Float16(), false}, {Type::Float16(), false}},               \
+                               Type::Bool())                                                       \
+    }
+
+/// A compound assignment of a group: the target is the type and keeps it, the value is the type,
+/// and what the write gives is the version of the variable: the cell itself.
+///
+/// These arms are the group's fallback, and no program reaches them today: `a op= b` is written as
+/// `a = a op b` before an operator is resolved (design principles 4.2,
+/// `Builder::compoundAssignmentByRebinding`), so a narrow `+=` follows `:op/add_bf` and the plain
+/// operator's own arm, and the five `:op/assn_*` arms of each type exist beside the f32 group's for
+/// the same reason that group has them. Removing `:op/assn_pow_bf` leaves
+/// test/plans/feat/modules/stdlib_reduced.plan.toml green, and removing `:op/add_bf` turns its
+/// compound case red, which is the measurement behind that statement. They stay because the group
+/// is structured per operator and the assignment operators of every other type are declared here;
+/// they are not a gap and not an untested path that a program could take.
+#define CAMEL_HALF_ASSIGN(STEM)                                                                    \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create(                                                               \
+         {},                                                                                       \
+         {{Type::BFloat16(), true}, {Type::BFloat16(), false}},                                    \
+         TupleType::cell(Type::BFloat16()))},                                                      \
+    {                                                                                              \
+        ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
+                               {},                                                                 \
+                               {{Type::Float16(), true}, {Type::Float16(), false}},                \
+                               TupleType::cell(Type::Float16()))                                   \
+    }
+
+/// A unary operator of a group (`-x`): the operand is the type and so is the result.
+#define CAMEL_HALF_UNARY(STEM)                                                                     \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::BFloat16())},           \
+    {                                                                                              \
+        ":op/" STEM "_f6",                                                                         \
+            StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float16())        \
+    }
+
+/**
+ * The static checks of a subscript on an array (design principles 3.9 and 5.4; the "越界" rule of
+ * docs/design-principles.cn.md: where the compiler can know the length — a fixed-length type is
+ * the case it names — an index or a slice bound outside it is a compile-time error, not a silent
+ * truncation and not something left to the run). An array whose type states a constant extent for a
+ * dimension has a length the compiler knows, so `t[i]` with a constant `i` outside the extent of
+ * the dimension the call names, and `t[a:b]` with constant bounds outside it, are refused where
+ * they are written. An array whose type states no extent (`int[]`) keeps the run-time fault: its
+ * length is not part of its type, which is the case `feat.consistency.faults`'
+ * `fault.array_index_constant` records.
+ *
+ * The same static extent makes the slice a view sharing the block (5.4), so its first dimension
+ * must be the only one and its step the constant 1: a slice of a rank-2 or deeper array, and a
+ * step other than 1, are views with strides, which need the multidimensional array representation
+ * and are refused at the call rather than lowered to a copy that would not share the
+ * block. Where the extent is not in the type the operator is left to its kernel, which reads a
+ * stepped slice as a copy — the deviation `feat.linear.subscript`'s `subscript.step` records.
+ *
+ * These are the checks `t[i]` and `t[a:b]` need: a `Tensor` is an array, so the built-in
+ * `[]` operators are the ones its subscripts reach, and the rule has to be here or it is nowhere.
+ */
+
+/// The value of an argument the compiler knows — a literal, or a static the graph builder supplies
+/// for one — when it is one at all.
+std::optional<int64_t> constantArg(static_args_t statics, size_t index) {
+    if (statics.size() <= index || !statics[index].value.has_value()) {
+        return std::nullopt;
+    }
+    return static_cast<int64_t>(*statics[index].value);
+}
+
+/// Whether `t` is a tensor the module that owns tensors slices: a numeric array that is
+/// open-rank (`f32[..]`), of rank 2 or more, or rank 1 with a stated extent (`f32[6]`, what a
+/// tensor operator returns). What stays the core's is the program's own array of values: rank 1
+/// with no extent stated (`T[]`) -- the form an array literal has and the form the core's array
+/// operators build and take -- because the programs that subscript one without importing the
+/// tensor module must keep working (design principles 5.4: the same narrowing `t[idx]` already
+/// has on this line, where a rank-2 array is refused by the core).
+
+/// The extent the type states for `axis` of `type`, when it states one: a negative axis counts
+/// from the end and `-1` is the last axis. `std::nullopt` when the type does not state the extent
+/// (an open rank, or an extent only the run knows), which is the kernel's to read.
+std::optional<int64_t> staticAxisExtent(Type *type, int64_t axis) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr || array->anyRank() || array->rank() == 0) {
+        return std::nullopt;
+    }
+    const auto rank = static_cast<int64_t>(array->rank());
+    const int64_t at = axis < 0 ? axis + rank : axis;
+    if (at < 0 || at >= rank) {
+        return std::nullopt;
+    }
+    const ExtentForm &form = array->extents()[static_cast<size_t>(at)];
+    return form.isConstant() ? std::optional<int64_t>(form.constant()) : std::nullopt;
+}
+
+/// The axis an index call names: the word it writes when it writes one, and 0 when it does not.
+/// 0 is the first dimension, which is what `t[i]` names and what a two-word call is (design
+/// principles 5.4). The word is the third one, so a call that writes it says which dimension it
+/// takes the position on; a negative axis counts from the end, as the kernel reads it. Nothing is
+/// answered for a word that is not a constant of the call, and the call's other words are read
+/// whether or not this one is.
+std::optional<int64_t> indexCallAxis(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() <= 2) {
+        return 0;
+    }
+    return constantArg(statics, 2);
+}
+
+/// Why `t[i]` cannot be this call: the index and the extent of the axis the call names are both
+/// constants and the index leaves the extent. The wording is the tensor module's own wording for
+/// `t[i]`, so the report a program gets does not depend on which module declared the array, and it
+/// names the axis the call wrote.
+std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() < 2 || norm.size() > 3 || norm[1] == nullptr ||
+        norm[1]->code() != TypeCode::Int64) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> axis = indexCallAxis(norm, statics);
+    const std::optional<int64_t> extent =
+        axis ? staticAxisExtent(norm[0], *axis) : std::nullopt;
+    const std::optional<int64_t> index = constantArg(statics, 1);
+    if (!extent || !index || (*index >= 0 && *index < *extent)) {
+        return std::nullopt;
+    }
+    return std::format("index {} is outside axis {} of extent {}", *index, *axis, *extent);
+}
+
+/// The type `t[i]` gives (design principles 5.4): the value's type with the dimension the axis
+/// names taken out -- the element type itself for a rank-1 value, and the array of the dimensions
+/// that are left, in the order they had, for a higher rank (ArrayType::elementAlongAxis). A
+/// position names no extent, so the axis contributes none to the result and every other dimension
+/// keeps the length the value's type states. The call's own constants decide the axis; an axis
+/// only the run knows may be any dimension, so the value's rank is one dimension fewer with every
+/// extent unknown. A value whose element type nobody stated (its element is `Void`) has no element
+/// type to name what a subscript reads: declining here leaves the value to the module that owns
+/// numeric arrays, whose own overload of `t[idx]` reads the element at the element type the value
+/// itself carries (design principles 5.2).
+std::optional<Type *> indexPositionResultType(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() < 2 || norm.size() > 3 || norm[0] == nullptr || norm[1] == nullptr) {
+        return std::nullopt;
+    }
+    if (norm[0]->code() != TypeCode::Array || norm[1]->code() != TypeCode::Int64) {
+        return std::nullopt;
+    }
+    if (norm.size() == 3 && (norm[2] == nullptr || norm[2]->code() != TypeCode::Int64)) {
+        return std::nullopt;
+    }
+    auto *const array = tt::as_ptr<ArrayType>(norm[0]);
+    Type *const elem  = array->elemType();
+    if (elem == nullptr || elem->code() == TypeCode::Void) {
+        return std::nullopt;
+    }
+    if (array->anyRank()) {
+        // An open rank states no dimension for a position to take out, so how many are left is not
+        // the type's to say: the first dimension's position reads the numbers the value holds, and
+        // is the element type itself -- what a value spelled `f32[..]` is read at, its element read
+        // (design principles 5.4) -- while a position on a later dimension leaves the open-rank
+        // array of that element type, whose rank only the run knows.
+        const std::optional<int64_t> axis = indexCallAxis(norm, statics);
+        if (!axis) {
+            return ArrayType::openRank(elem);
+        }
+        return *axis == 0 ? elem : ArrayType::openRank(elem);
+    }
+    const auto rank = static_cast<int64_t>(array->rank());
+    const std::optional<int64_t> axis = indexCallAxis(norm, statics);
+    const auto asItIs                 = [&]() {
+        return ArrayType::create(
+            elem, std::vector<ExtentForm>(array->extents().begin(), array->extents().end()));
+    };
+    if (!axis) {
+        return ArrayType::create(
+            elem,
+            std::vector<ExtentForm>(
+                static_cast<size_t>(rank > 0 ? rank - 1 : 0), ExtentForm::unknown()));
+    }
+    const int64_t at = *axis < 0 ? *axis + rank : *axis;
+    if (at < 0 || at >= rank) {
+        // The value has no such dimension: the read faults with the core's own wording, and the
+        // type it would have had is the value's own.
+        return asItIs();
+    }
+    return array->elementAlongAxis(static_cast<size_t>(at));
+}
+
+/// The type `t[idx]` gives (design principles 5.4): the value's type with the dimension the axis
+/// names taken by the indices -- its length is the number of positions the index array names,
+/// which its own type states when it states one (`int[3]` names three, `int[]` a number nobody
+/// fixed) -- and every other dimension at the length the value states, in the order they had. The
+/// value's own rank is kept, so the axis' length is the one that changes. A value whose rank is
+/// open fixes neither, so the positions taken are rows again and the result is that same
+/// open-rank array.
+std::optional<Type *> indexTakeResultType(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() < 2 || norm.size() > 3 || norm[0] == nullptr || norm[1] == nullptr) {
+        return std::nullopt;
+    }
+    if (norm[0]->code() != TypeCode::Array || norm[1]->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    if (norm.size() == 3 && (norm[2] == nullptr || norm[2]->code() != TypeCode::Int64)) {
+        return std::nullopt;
+    }
+    auto *const arr           = tt::as_ptr<ArrayType>(norm[0]);
+    const auto *const indices = tt::as_ptr<ArrayType>(norm[1]);
+    if (indices->elemType() == nullptr || indices->elemType()->code() != TypeCode::Int64) {
+        return std::nullopt;
+    }
+    // The indices are a list of positions: a rank-1 array, or one whose rank the type leaves open.
+    if (!indices->anyRank() && indices->rank() != 1) {
+        return std::nullopt;
+    }
+    if (arr->anyRank()) {
+        return norm[0];
+    }
+    const ExtentForm length =
+        indices->rank() == 1 ? indices->extents().front() : ExtentForm::unknown();
+    const auto rank                   = static_cast<int64_t>(arr->rank());
+    const std::optional<int64_t> axis = indexCallAxis(norm, statics);
+    const auto asItIs                 = [&]() {
+        return ArrayType::create(
+            arr->elemType(),
+            std::vector<ExtentForm>(arr->extents().begin(), arr->extents().end()));
+    };
+    if (!axis) {
+        return ArrayType::create(
+            arr->elemType(),
+            std::vector<ExtentForm>(static_cast<size_t>(rank), ExtentForm::unknown()));
+    }
+    const int64_t at = *axis < 0 ? *axis + rank : *axis;
+    if (at < 0 || at >= rank) {
+        // The value has no such dimension: the read faults with the core's own wording, and the
+        // type it would have had is the value's own.
+        return asItIs();
+    }
+    std::vector<ExtentForm> extents(arr->extents().begin(), arr->extents().end());
+    extents[static_cast<size_t>(at)] = length;
+    return ArrayType::create(arr->elemType(), extents);
+}
+
+/// Why a slice call cannot be this call: the constant 0 as the step, a constant negative bound, or
+/// a constant bound outside the extent the type states for the axis it names. One set of checks
+/// answers both spellings, because both are the same six-word node: the subscript's lowering
+/// writes the mask and the axis itself, and the function form's declaration defaults fill the two
+/// words a short call leaves out, so a call of either spelling meets this check with its six words
+/// and its constants where it wrote them.
+///
+/// A negative bound is a fault rather than a count from the end (design principles 5.4: "不支持
+/// 负数下标（负数是故障），最后一个元素用 last(t)"), and a bound the type does not give an extent
+/// for is read by the kernel, which faults the same way.
+std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() < 4 || norm.size() > 6) {
+        return std::nullopt;
+    }
+    // The constant 0 step is not refused here. The builder's own check refuses it with the named
+    // `SemanticDiag::SliceStepZero`, located at the step the program wrote
+    // (src/compile/gir/builder_operators.cpp), and a named diagnostic of the catalog outranks a
+    // message from this resolver: two answers to one constant would be two reports of one fault.
+    // The bounds as the slice reads them: a bound the program did not write stands for the start
+    // of the axis or its end, which the two-bit mask the lowering writes with the call says, and a
+    // call that left the mask out wrote both bounds (3).
+    const std::optional<int64_t> mask =
+        norm.size() >= 6 ? constantArg(statics, 5) : std::optional<int64_t>(3);
+    if (!mask) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> from =
+        (*mask & 2) != 0 ? constantArg(statics, 2) : std::optional<int64_t>(0);
+    const std::optional<int64_t> to =
+        (*mask & 1) != 0 ? constantArg(statics, 3) : std::optional<int64_t>(0);
+    if (from && *from < 0) {
+        return std::format(
+            "a slice bound must not be negative, and {} is; the last element is 'last(t)'", *from);
+    }
+    if (to && *to < 0) {
+        return std::format(
+            "a slice bound must not be negative, and {} is; the last element is 'last(t)'", *to);
+    }
+    const std::optional<int64_t> axis = constantArg(statics, 1);
+    if (!axis || !from || !to || asArrayType(norm[0]) == nullptr) {
+        return std::nullopt; // a string's length is never in its type
+    }
+    const std::optional<int64_t> extent = staticAxisExtent(norm[0], *axis);
+    if (!extent) {
+        return std::nullopt; // the length is not in the type, and the kernel reads it
+    }
+    if (*from > *extent || *to > *extent) {
+        return std::format(
+            "slice bounds {}..{} are outside axis {} of extent {}", *from, *to, *axis, *extent);
+    }
+    return std::nullopt;
+}
+
+/// An operator's own rule plus the checks above: the call is refused where it is written when the
+/// operator's constants and the argument types say it can never be right. The inner rule is
+/// untouched, so a call whose constants are inside — and every call the compiler knows nothing
+/// about — resolves exactly as it did.
+class StaticCheckedResolver final : public FuncTypeResolver {
+  public:
+    using Check = std::optional<std::string> (*)(const type_vec_t &, static_args_t);
+
+    StaticCheckedResolver(resolver_ptr_t inner, Check check)
+        : inner_(std::move(inner)), check_(check) {}
+
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        return inner_->resolve(with, norm);
+    }
+
+    /// A rejected call is one whose arguments do not fit, so the value-carrying resolution the
+    /// drafts use answers for it exactly as for any other mismatch.
+    std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
+        if (check_(norm, normStatics).has_value()) {
+            return std::nullopt;
+        }
+        return inner_->resolveWith(with, norm, normStatics);
+    }
+
+    /// The reason the call cannot be right, for the report the call gets (`ArgumentsRejected`).
+    std::optional<std::string> explainRejection(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
+        if (auto reason = check_(norm, normStatics)) {
+            return reason;
+        }
+        return inner_->explainRejection(with, norm, normStatics);
+    }
+
+    std::string signature() const override { return inner_->signature(); }
+    FunctionType *fixedSignature() const override { return inner_->fixedSignature(); }
+    FunctionType *graftedSignature() const override { return inner_->graftedSignature(); }
+    void graftDeclaredSignature(FunctionType *signature) override {
+        inner_->graftDeclaredSignature(signature);
+    }
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        return inner_->parameterNames(with, norm);
+    }
+    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
+        return inner_->varParameters(with, norm);
+    }
+    std::optional<camel::core::error::SemanticDiag> rejectionDiag() const override {
+        return inner_->rejectionDiag();
+    }
+
+  private:
+    resolver_ptr_t inner_;
+    Check check_;
+};
+
+/// The length of the axis a slice cuts, when the call's constants and the value's type say it: the
+/// step and both bounds are constants, and the type states the axis' extent, which a bound the
+/// program did not write stands for (the start of the axis, or its end). `std::nullopt` when only
+/// the run knows the length -- a computed bound or step, or an extent the type does not state --
+/// and the type then says `?` for that axis. The arithmetic is the kernel's own
+/// (`src/builtin/operators/struct.cpp`, `sliceRange`): a positive step takes the positions from the
+/// start below the end, a negative one takes them backwards from the start down to the end.
+std::optional<int64_t> staticSliceLength(const type_vec_t &norm, static_args_t statics, int64_t axis) {
+    const std::optional<int64_t> extent = staticAxisExtent(norm[0], axis);
+    if (!extent) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> mask =
+        norm.size() >= 6 ? constantArg(statics, 5) : std::optional<int64_t>(3);
+    if (!mask) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> step =
+        norm.size() >= 5 ? constantArg(statics, 4) : std::optional<int64_t>(1);
+    if (!step || *step == 0) {
+        return std::nullopt;
+    }
+    // A bound the program did not write is not read from its word (the lowering writes a zero
+    // there): the mask says it was not written, and the step's direction says what it stands for.
+    const std::optional<int64_t> from =
+        (*mask & 2) != 0 ? constantArg(statics, 2)
+                         : std::optional<int64_t>(*step > 0 ? 0 : *extent - 1);
+    const std::optional<int64_t> to =
+        (*mask & 1) != 0 ? constantArg(statics, 3)
+                         : std::optional<int64_t>(*step > 0 ? *extent : -1);
+    if (!from || !to) {
+        return std::nullopt;
+    }
+    return *step > 0 ? (*from < *to ? (*to - *from + *step - 1) / *step : 0)
+                     : (*from > *to ? (*from - *to - *step - 1) / (-*step) : 0);
+}
+
+/// The type a slice of `norm[0]` has: the value's element type and rank, every axis the slice does
+/// not cut at the length the value's type states, and the one axis it cuts at the length the
+/// call's constants give it when they give it (staticSliceLength). The subscript's lowering writes
+/// the axis and the mask itself and carries the bounds' constants where the program wrote
+/// constants; the function form names its axis and writes both of its bounds. A length only the
+/// run knows leaves that axis `?` -- the rank and every other axis are still stated -- and a call
+/// whose axis the compiler does not know may cut any axis, so no axis keeps a length of the
+/// value's own. An `f32[6, 3]` sliced along axis 1 from 0 to 2 is therefore an `f32[6, 2]`, and
+/// the rank-1 `T[]` sliced is another `T[]`. Every element type goes through the same rule, which
+/// is what the core's one slice operator does (any rank, any element type;
+/// the module's inference, which the core took over, wrote the same lengths when the bounds were
+/// constants).
+std::optional<Type *> sliceResultType(const type_vec_t &norm, static_args_t statics) {
+    // Four words are the least a slice node can be -- the value, the axis and the two bounds: a
+    // call that stops before the end is a call of the angle-bracket form written in the
+    // parentheses, and it is answered as the mismatch it is (`feat.compile.collections`,
+    // `callform_err_slice`), not as a slice whose end word is read past the call.
+    if (norm.size() < 4 || norm.size() > 6) {
+        return std::nullopt;
+    }
+    if (norm.empty() || norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    const ArrayType *array = tt::as_ptr<ArrayType>(norm[0]);
+    Type *elem             = array->elemType();
+    if (elem == nullptr || elem->code() == TypeCode::Void) {
+        return std::nullopt;
+    }
+    if (array->anyRank()) {
+        // An open rank states no axis, so the cut axis' length is not a length the value's own
+        // spelling keeps: the result is the open-rank array of the same element type.
+        return ArrayType::openRank(elem);
+    }
+    const auto rank = static_cast<int64_t>(array->rank());
+    const auto unknown = [&]() {
+        return ArrayType::create(
+            elem, std::vector<ExtentForm>(static_cast<size_t>(rank), ExtentForm::unknown()));
+    };
+    const std::optional<int64_t> axis = constantArg(statics, 1);
+    if (!axis) {
+        return unknown();
+    }
+    const int64_t at = *axis < 0 ? *axis + rank : *axis;
+    if (at < 0 || at >= rank) {
+        // The axis is not one the value has: the call faults at the axis it wrote (the kernel's
+        // own wording names the range), and the type it would have had is the value's own.
+        return ArrayType::create(elem, std::vector<ExtentForm>(array->extents().begin(),
+                                                              array->extents().end()));
+    }
+    std::vector<ExtentForm> extents(array->extents().begin(), array->extents().end());
+    const std::optional<int64_t> length = staticSliceLength(norm, statics, *axis);
+    extents[static_cast<size_t>(at)] =
+        length ? ExtentForm::constant(*length) : ExtentForm::unknown();
+    return ArrayType::create(elem, extents);
+}
+
+/// The result of the slice node a subscript lowers to: the kinds its six words must have, then the
+/// same type rule as the function form, with the one difference the subscript has. One rule for
+/// both `[]` forms, for every rank and every element type (design principles 5.4: the two
+/// subscripts are answered by the core alone, and the module copy and the dispatch by "whose
+/// array is this" are
+/// the transition types' residue, deleted together with the module's own subscript kernel and type
+/// rule). An array whose element type nobody stated -- the bare `Tensor` spelling, whose element is
+/// `Void` -- has no element type to hand back and keeps the array type it has: a step-1 slice of a
+/// compact array is a view, so the element type the value carries at run time is the one it keeps.
+std::optional<Type *> coreSliceSubscriptResultType(const type_vec_t &norm, static_args_t statics) {
+    if (norm.empty() || norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    for (size_t i = 1; i < norm.size() && i < 6; ++i) {
+        if (norm[i] == nullptr || norm[i]->code() != TypeCode::Int64) {
+            return std::nullopt;
+        }
+    }
+    Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+    if (elem == nullptr || elem->code() == TypeCode::Void) {
+        return norm[0];
+    }
+    return sliceResultType(norm, statics);
+}
+
+/// The slice node's parameter table: the value, the axis, the two bounds, the step and the mask
+/// that says which of the bounds the program wrote (bit 0 the end, bit 1 the start --
+/// `src/builtin/operators/struct.cpp`). The subscript's lowering writes all six, and the function
+/// form writes them too: it names the axis itself and writes both of its bounds, so the mask it
+/// fills is 3, "both bounds written", which is what the lowering gives a subscript that writes
+/// both bounds (`src/compile/gct/builder.cpp`:
+/// `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))` over the start and the end).
+///
+/// The declaration of the function form (`stdlib/prelude.cml`) carries the two words a
+/// short call leaves out as its parameters' defaults -- the step 1, the mask 3 -- and a rule that
+/// fixes its signature is what the compiler looks for when it fills a native operator's defaults
+/// (`src/compile/gir/builder_calls.cpp`, `defaultsOfCallee`; the function form is generic
+/// (`t: T[]`), so its declaration's own signature is not one the compiler can close, and the
+/// fixed table here is the only fixed entry of the group). The table is declared either way; see
+/// the report for the one call the defaults do not reach today.
+FunctionType *sliceParameterTable() {
+    FunctionTypeFactory table;
+    table.addNormArg("t", ArrayType::create(typeParameter("T", true)), false);
+    table.addNormArg("axis", Type::Int64(), false);
+    table.addNormArg("start", Type::Int64(), false);
+    table.addNormArg("end", Type::Int64(), false);
+    table.addNormArg("step", Type::Int64(), false);
+    table.addNormArg("written", Type::Int64(), false);
+    table.setExitType(ArrayType::create(typeParameter("T", false)));
+    return table.buildOpen();
+}
+
+/// `slice(t, axis, start, end, step, written)` -- the function form of the same slice node the
+/// subscript lowers to, for every call (design principles 5.4). The two spellings are one
+/// node with one parameter table, one adjoint rule and one wording for what is out of range; the
+/// function form writes the axis it names and both of its bounds, so it fills the mask "both
+/// written" (3), and a call that leaves the step or the mask out is read as step 1 and mask 3 --
+/// the values the declaration defaults them to (sliceParameterTable).
+///
+/// The axis and the rank are the call's own: the kernel reads the axis, and the value's rank at
+/// run time. The constants the call writes are checked here, where the call is written
+/// (staticSliceRejection): the constant step 0, a constant negative bound, and a constant bound
+/// outside an extent the type states. A bound only the run knows is the kernel's to read, and it
+/// faults with the core's one wording. The result type reads those same constants: the axis this
+/// call names and the length its bounds and step give it, with every other axis at the length the
+/// value's type states (sliceResultType, reached through the rule's statics path).
+/// `s[a:b]` and `slice(s, 0, a, b, s)` on a sequence of rank 1 that is not an array -- a string
+/// (by code point) or a `Bytes` (by byte) -- giving the same kind of value. The words after the
+/// value are the axis, the two bounds, the step and the mask, as for an array
+/// (coreSliceFunctionResolver); a short function-form call is read as step 1, both written.
+resolver_ptr_t sequenceSliceResolver(Type *sequence, std::string signature) {
+    return std::make_shared<StaticCheckedResolver>(DynamicFuncTypeResolver::create(
+        {{0, {}}, {-1, {}}},
+        std::move(signature),
+        [sequence](const type_vec_t &, const type_vec_t &norm)
+            -> optional<Type *> {
+            if (norm.size() < 4 || norm.size() > 6 || !norm[0]->equals(sequence)) {
+                return nullopt;
+            }
+            for (size_t i = 1; i < norm.size(); ++i) {
+                if (norm[i]->code() != TypeCode::Int64) {
+                    return nullopt;
+                }
+            }
+            return sequence;
+        }), staticSliceRejection);
+}
+
+resolver_ptr_t stringSliceResolver() {
+    return sequenceSliceResolver(
+        Type::String(),
+        "(s: string, axis: int, start: int, end: int, step: int, written: int) => string");
+}
+
+resolver_ptr_t bytesSliceResolver() {
+    return sequenceSliceResolver(
+        BytesType::get(),
+        "(b: Bytes, axis: int, start: int, end: int, step: int, written: int) => Bytes");
+}
+
+resolver_ptr_t coreSliceFunctionResolver() {
+    return std::make_shared<StaticCheckedResolver>(
+        withStaticResult(
+            withFixedSignature(
+                DynamicFuncTypeResolver::create(
+                    // The parameter count stays unconstrained here, and the two words a short call
+                    // leaves out are filled by the declaration's defaults and read by the kernel as
+                    // they are when they are absent: the declaration's defaults do not reach a call
+                    // to a native operator today (defaultsOfCallee finds nothing for the group), so
+                    // a call of four or five words is still a call of four or five words. See the
+                    // report: the six-word table waits for that path, not for this rule.
+                    {{0, {}}, {-1, {}}},
+                    "(t: T[], axis: int, start: int, end: int, step: int, written: int) => T[]",
+                    [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
+                        (void)with;
+                        // A caller that holds no constants: the axis and the bounds are then the
+                        // run's, and only the rank and the element type are the call's own.
+                        return sliceResultType(norm, {});
+                    }),
+                sliceParameterTable()),
+            [](const type_vec_t &with, const type_vec_t &norm, static_args_t statics) -> optional<Type *> {
+                (void)with;
+                return sliceResultType(norm, statics);
+            }),
+        staticSliceRejection);
+}
+
+} // namespace
+
+module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
+    return std::make_shared<GlobalsBuiltinModule>(ctx);
+}
+
+const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        // ======= Type conversions =======
+        // The rules of `i32` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("i32", {}),
+        // The rules of `i64` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("i64", {}),
+        // The rules of `int` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("int", {}),
+        // The rules of `f32` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("f32", {}),
+        // The rules of `f64` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("f64", {}),
+        // The rules of `float` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("float", {}),
+        // bf16 and f16 are floating types a program writes and converts like f32 (design
+        // principles 7.3): `bf16(x)` and `f16(x)` take every numeric type and a text, and round
+        // to nearest with ties to even once. Writing the conversion is asking for that
+        // precision, so no numeric permission is involved; `change_precision` governs a
+        // computation the compiler moves to lower precision.
+        // The rules of `bf16` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("bf16", {}),
+        // The rules of `f16` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("f16", {}),
+        // The rules of `c64` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("c64", {}),
+        // The rules of `c128` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("c128", {}),
+        OperatorGroup::create(
+            "string",
+            {
+                {
+                    // Every other type: the text println writes for the value. A type rule,
+                    // not a parameter of type `any` (design principles 5.10): the operator
+                    // reads the argument with the static type it has at the call.
+                    ":op/atos",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(x: T) => string",
+                        [](const type_vec_t &, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (!isConcreteValueType(norm[0])) {
+                                return nullopt;
+                            }
+                            return Type::String();
+                        }),
+                },
+            }),
+
+        // ======= Variables =======
+        // A `var` variable is a cell (TupleType::cell). The compiler emits these two for a
+        // declaration and for a read; assignment is the family below.
+        OperatorGroup::create(
+            "__var_new__",
+            {
+                {
+                    ":var/new",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(value: T) => var T",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> { return TupleType::cell(norm[0]->widened()); }),
+                },
+            }),
+        OperatorGroup::create(
+            "__var_new_empty__",
+            {
+                {
+                    ":var/new/empty",
+                    // A cell of a type, with nothing in it: the compiler writes one for a local
+                    // of a generator body, whose value is written where its statement stands and
+                    // not in the body that creates the stream (design principles 5.4). The type
+                    // is the one `with` argument, so no value is needed to make the cell.
+                    DynamicFuncTypeResolver::create(
+                        {{1, {false}}, {0, {}}},
+                        "<T>() => var T",
+                        [](const type_vec_t &with, const type_vec_t &) -> optional<Type *> {
+                            if (with.empty() || with[0] == nullptr) {
+                                return nullopt;
+                            }
+                            return TupleType::cell(with[0]->widened());
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "__var_get__",
+            {
+                {
+                    ":var/get",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(variable: var T) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (valueTypeOf(norm[0]) == norm[0]) {
+                                return nullopt; // not a variable
+                            }
+                            return valueTypeOf(norm[0]);
+                        }),
+                },
+            }),
+
+        // The cell a call wrote, taken after the call (Builder::valueVersionOf): the version a
+        // read takes when the call that wrote the variable is a call through a function value, whose
+        // captured writes are known at run time and not here. The second argument is that call; it
+        // may be any value, `void` included, because this operator reads nothing of it -- the edge
+        // is the whole of what it asks -- and the result is the cell itself, so the read above it is
+        // a read of the variable as it stands after the call (docs/design-principles.cn.md 3.1, 3.5).
+        OperatorGroup::create(
+            "__var_after__",
+            {
+                {
+                    ":var/after",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(variable: var T, after: any) => var T",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            (void)with;
+                            // The second argument is the call, and this operator reads nothing of
+                            // it: any value it has (a `void` call, or one that returns something
+                            // and wrote the variable on the way) is acceptable here.
+                            if (norm.size() < 2 || norm[1] == nullptr) {
+                                return nullopt;
+                            }
+                            if (valueTypeOf(norm[0]) == norm[0]) {
+                                return nullopt; // not a variable
+                            }
+                            return norm[0];
+                        }),
+                },
+            }),
+        // A read of a variable that leaves its sole-reference mark set; the compiler writes it
+        // in place of a `:var/get` whose value cannot be kept (Builder::markNonRetainingReads).
+        OperatorGroup::create(
+            "__var_peek__",
+            {
+                {
+                    ":var/peek",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(variable: var T) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (valueTypeOf(norm[0]) == norm[0]) {
+                                return nullopt; // not a variable
+                            }
+                            return valueTypeOf(norm[0]);
+                        }),
+                },
+            }),
+
+        // `xs = xs->sort` as a statement: the compiler writes these two groups around the
+        // in-place form of the operator (Builder::inPlaceRebindingOf, __builtin__var_take__);
+        // no program can name them. Arrays only: the mark they rely on is one of arrays.
+        OperatorGroup::create(
+            "__var_take__",
+            {
+                {
+                    ":var/take",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {true}}},
+                        "(var variable: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            return norm[0];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "__assn_owned__",
+            {
+                {
+                    ":op/assn_owned",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {true, false}}},
+                        "(var self: T[], value: T[]) => var T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array || !norm[0]->equals(norm[1]))
+                                return nullopt;
+                            return TupleType::cell(norm[0]);
+                        }),
+                },
+            }),
+
+        // ======= Assignment operators =======
+        // `=` takes any type. A compound assignment takes exactly the types listed for it: a
+        // combination without an implementation is rejected when the program is compiled.
+        OperatorGroup::create(
+            "__assn__",
+            {
+                {
+                    ":op/assn_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Int32())),
+                },
+                {
+                    ":op/assn_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Int64())),
+                },
+                {
+                    ":op/assn_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        TupleType::cell(Type::Float32())),
+                },
+                {
+                    ":op/assn_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        TupleType::cell(Type::Float64())),
+                },
+                {
+                    ":op/assn_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), true}, {Type::String(), false}},
+                        TupleType::cell(Type::String())),
+                },
+                {
+                    ":op/assn_b",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Bool(), true}, {Type::Bool(), false}},
+                        TupleType::cell(Type::Bool())),
+                },
+                {
+                    ":op/assn",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {true, false}}},
+                        "(var self: T, other: T) => var T",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            // The target keeps its declared type; the value only has to fit it.
+                            if (!norm[0]->assignableFrom(norm[1])) {
+                                return nullopt;
+                            }
+                            return TupleType::cell(norm[0]);
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "__assn_add__",
+            {
+                {
+                    ":op/assn_add_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Int32())),
+                },
+                {
+                    ":op/assn_add_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Int64())),
+                },
+                {
+                    ":op/assn_add_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        TupleType::cell(Type::Float32())),
+                },
+                {
+                    ":op/assn_add_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        TupleType::cell(Type::Float64())),
+                },
+                {
+                    ":op/assn_add_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), true}, {Type::String(), false}},
+                        TupleType::cell(Type::String())),
+                },
+                {
+                    ":op/assn_add_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        TupleType::cell(Type::Complex64())),
+                },
+                {
+                    ":op/assn_add_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        TupleType::cell(Type::Complex128())),
+                },
+                // bf16 and f16: `acc += x` on one of them (design principles 7.3).
+                CAMEL_HALF_ASSIGN("assn_add"),
+            }),
+        OperatorGroup::create(
+            "__assn_sub__",
+            {
+                {
+                    ":op/assn_sub_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Int32())),
+                },
+                {
+                    ":op/assn_sub_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Int64())),
+                },
+                {
+                    ":op/assn_sub_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        TupleType::cell(Type::Float32())),
+                },
+                {
+                    ":op/assn_sub_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        TupleType::cell(Type::Float64())),
+                },
+                {
+                    ":op/assn_sub_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        TupleType::cell(Type::Complex64())),
+                },
+                {
+                    ":op/assn_sub_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        TupleType::cell(Type::Complex128())),
+                },
+                CAMEL_HALF_ASSIGN("assn_sub"),
+            }),
+        OperatorGroup::create(
+            "__assn_mul__",
+            {
+                {
+                    ":op/assn_mul_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Int32())),
+                },
+                {
+                    ":op/assn_mul_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Int64())),
+                },
+                {
+                    ":op/assn_mul_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        TupleType::cell(Type::Float32())),
+                },
+                {
+                    ":op/assn_mul_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        TupleType::cell(Type::Float64())),
+                },
+                {
+                    ":op/assn_mul_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        TupleType::cell(Type::Complex64())),
+                },
+                {
+                    ":op/assn_mul_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        TupleType::cell(Type::Complex128())),
+                },
+                CAMEL_HALF_ASSIGN("assn_mul"),
+            }),
+        OperatorGroup::create(
+            "__assn_div__",
+            {
+                {
+                    ":op/assn_div_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Int32())),
+                },
+                {
+                    ":op/assn_div_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Int64())),
+                },
+                {
+                    ":op/assn_div_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        TupleType::cell(Type::Float32())),
+                },
+                {
+                    ":op/assn_div_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        TupleType::cell(Type::Float64())),
+                },
+                {
+                    ":op/assn_div_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        TupleType::cell(Type::Complex64())),
+                },
+                {
+                    ":op/assn_div_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        TupleType::cell(Type::Complex128())),
+                },
+                CAMEL_HALF_ASSIGN("assn_div"),
+            }),
+        OperatorGroup::create(
+            "__assn_mod__",
+            {
+                {
+                    ":op/assn_mod_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Int32())),
+                },
+                {
+                    ":op/assn_mod_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Int64())),
+                },
+            }),
+        // No built-in type has `@`; a module that has it (tensor) provides `@=` or it is rejected.
+        OperatorGroup::create("__assn_mat__", {}),
+        OperatorGroup::create(
+            "__assn_pow__",
+            {
+                {
+                    ":op/assn_pow_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Int32())),
+                },
+                {
+                    ":op/assn_pow_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Int64())),
+                },
+                {
+                    ":op/assn_pow_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        TupleType::cell(Type::Float32())),
+                },
+                {
+                    ":op/assn_pow_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        TupleType::cell(Type::Float64())),
+                },
+                {
+                    ":op/assn_pow_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        TupleType::cell(Type::Complex64())),
+                },
+                {
+                    ":op/assn_pow_c_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Complex64())),
+                },
+                {
+                    ":op/assn_pow_c_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Complex64())),
+                },
+                {
+                    ":op/assn_pow_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        TupleType::cell(Type::Complex128())),
+                },
+                {
+                    ":op/assn_pow_z_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Int32(), false}},
+                        TupleType::cell(Type::Complex128())),
+                },
+                {
+                    ":op/assn_pow_z_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Int64(), false}},
+                        TupleType::cell(Type::Complex128())),
+                },
+                CAMEL_HALF_ASSIGN("assn_pow"),
+            }),
+        OperatorGroup::create(
+            "__assn_and__",
+            {
+                {
+                    ":op/assn_and",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Bool(), true}, {Type::Bool(), false}},
+                        TupleType::cell(Type::Bool())),
+                },
+            }),
+        OperatorGroup::create(
+            "__assn_or__",
+            {
+                {
+                    ":op/assn_or",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Bool(), true}, {Type::Bool(), false}},
+                        TupleType::cell(Type::Bool())),
+                },
+            }),
+        // ======= Logical operators =======
+        OperatorGroup::create(
+            "__and__",
+            {
+                {
+                    ":op/and",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Bool(), false}, {Type::Bool(), false}},
+                        Type::Bool()),
+                },
+            }),
+        OperatorGroup::create(
+            "__or__",
+            {
+                {
+                    ":op/or",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Bool(), false}, {Type::Bool(), false}},
+                        Type::Bool()),
+                },
+            }),
+        // ======= Comparison operators =======
+        OperatorGroup::create(
+            "__eq__",
+            {
+                {
+                    ":op/eq_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_b",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Bool(), false}, {Type::Bool(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), false}, {Type::String(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_bytes",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{BytesType::get(), false}, {BytesType::get(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            // By content (design principles 4.2): both sides of one type,
+                            // an array, a tuple or a struct, every part of which is itself
+                            // comparable (no function value). A primitive has its own entry above,
+                            // so it is not this one's business; anything else has no overload,
+                            // which is a located compile-time error.
+                            const TypeCode code  = norm[0]->code();
+                            const bool composite = code == TypeCode::Array ||
+                                                   code == TypeCode::Struct ||
+                                                   (code == TypeCode::Tuple &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isCell() &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isTagged());
+                            // An enum compares by its variant and then its fields.
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            if (!comparable || !sameOrEnteringStruct(norm[0], norm[1]) ||
+                                !isContentComparable(norm[0])) {
+                                return nullopt;
+                            }
+                            return Type::Bool();
+                        }),
+                },
+                CAMEL_HALF_COMPARE("eq"),
+            }),
+        OperatorGroup::create(
+            "__neq__",
+            {
+                // `!=` is built as the negation of `==` (design principles 4.2), and the operand
+                // type decides which `==` that is: the built-in comparison of a primitive, the
+                // composite entry above for an array, a tuple or a struct compared by content, or
+                // a declared `==` when the program writes one for its own type. A type whose `==`
+                // is declared still needs an entry here: without one, `!=` on that type has no
+                // overload to resolve through and is a located compile-time error (a `==` written
+                // with a tolerance is the case that needs it -- struct_equality.cml).
+                {
+                    ":op/ne",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            // By content (design principles 4.2): both sides of one type,
+                            // an array, a tuple or a struct, every part of which is itself
+                            // comparable (no function value). A primitive has its own entry above,
+                            // so it is not this one's business; anything else has no overload,
+                            // which is a located compile-time error.
+                            const TypeCode code  = norm[0]->code();
+                            const bool composite = code == TypeCode::Array ||
+                                                   code == TypeCode::Struct ||
+                                                   (code == TypeCode::Tuple &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isCell() &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isTagged());
+                            // An enum compares by its variant and then its fields.
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            if (!comparable || !sameOrEnteringStruct(norm[0], norm[1]) ||
+                                !isContentComparable(norm[0])) {
+                                return nullopt;
+                            }
+                            return Type::Bool();
+                        }),
+                },
+            }),
+        // `===` and `!==` are the elementwise comparison (design principles 4.2), so they are
+        // not here: their groups are `__strict_eq__` and `__strict_neq__`, and the tensor module
+        // adds the array entry to them. `==` and `!=` do not name them: the whole comparison is
+        // the reduction of the elementwise one, and a program gets it from this group alone.
+        // `__strict_eq__` still takes its scalar entries from `==`'s group below, because on a
+        // scalar `===` is `==`; `__neq__` keeps none, so `__strict_neq__` comes out empty of
+        // them and `!==` does not name it at all -- it is built as `!(===)` (gct/builder.cpp),
+        // which is why the negation of an elementwise comparison had to exist on `bool[]` too
+        // (`__not__`'s tensor entry).
+        // <、<=、>、>=
+        OperatorGroup::create(
+            "__lt__",
+            {
+                {
+                    ":op/lt_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/lt_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/lt_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/lt_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/lt_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), false}, {Type::String(), false}},
+                        Type::Bool()),
+                },
+                CAMEL_HALF_COMPARE("lt"),
+            }),
+        OperatorGroup::create(
+            "__le__",
+            {
+                {
+                    ":op/le_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/le_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/le_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/le_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/le_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), false}, {Type::String(), false}},
+                        Type::Bool()),
+                },
+                CAMEL_HALF_COMPARE("le"),
+            }),
+        OperatorGroup::create(
+            "__gt__",
+            {
+                {
+                    ":op/gt_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/gt_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/gt_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/gt_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/gt_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), false}, {Type::String(), false}},
+                        Type::Bool()),
+                },
+                CAMEL_HALF_COMPARE("gt"),
+            }),
+        OperatorGroup::create(
+            "__ge__",
+            {
+                {
+                    ":op/ge_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/ge_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/ge_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/ge_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/ge_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), false}, {Type::String(), false}},
+                        Type::Bool()),
+                },
+                CAMEL_HALF_COMPARE("ge"),
+            }),
+        // ======= Arithmetic operators =======
+        OperatorGroup::create(
+            "__add__",
+            {
+                {
+                    ":op/add_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/add_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/add_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/add_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Float64()),
+                },
+                {
+                    ":op/add_s",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::String(), false}, {Type::String(), false}},
+                        Type::String()),
+                },
+                {
+                    ":op/add_bytes",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{BytesType::get(), false}, {BytesType::get(), false}},
+                        BytesType::get()),
+                },
+                {
+                    ":op/add_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/add_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                CAMEL_HALF_BINARY("add"),
+            }),
+        OperatorGroup::create(
+            "__sub__",
+            {
+                {
+                    ":op/sub_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/sub_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/sub_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/sub_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Float64()),
+                },
+                {
+                    ":op/sub_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/sub_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                CAMEL_HALF_BINARY("sub"),
+            }),
+        OperatorGroup::create(
+            "__mul__",
+            {
+                {
+                    ":op/mul_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/mul_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/mul_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/mul_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Float64()),
+                },
+                {
+                    ":op/mul_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/mul_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                CAMEL_HALF_BINARY("mul"),
+            }),
+        OperatorGroup::create(
+            "__div__",
+            {
+                {
+                    ":op/div_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/div_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/div_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/div_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Float64()),
+                },
+                {
+                    ":op/div_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/div_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                CAMEL_HALF_BINARY("div"),
+            }),
+        OperatorGroup::create(
+            "__mod__",
+            {
+                {
+                    ":op/mod_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/mod_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+            }),
+        OperatorGroup::create(
+            "__pow__",
+            {
+                {
+                    ":op/pow_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/pow_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/pow_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}, {Type::Float32(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/pow_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}, {Type::Float64(), false}},
+                        Type::Float64()),
+                },
+                // A complex exponent is a complex number; an integer exponent is the repeated
+                // squaring form (an integer literal exponent becomes a complex literal, and
+                // the two give the same bits — see the runtime's complexPower).
+                {
+                    ":op/pow_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/pow_c_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Int32(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/pow_c_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Int64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/pow_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                {
+                    ":op/pow_z_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Int32(), false}},
+                        Type::Complex128()),
+                },
+                {
+                    ":op/pow_z_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Int64(), false}},
+                        Type::Complex128()),
+                },
+                CAMEL_HALF_BINARY("pow"),
+            }),
+        OperatorGroup::create("__mat__", {}),
+        OperatorGroup::create(
+            "__idx__",
+            {
+                {
+                    ":op/idx_arr",
+// `t[i]` (design principles 5.4): the position the second word names on the
+                    // dimension the third word names, 0 -- the first dimension -- when the call
+                    // writes no third word. A position drops that dimension, so the result is
+                    // the value's type one dimension fewer (indexPositionResultType).
+                    //
+                    // The axis is the trailing word so that a two-word call is exactly the first
+                    // dimension's position: `t[i]` lowers to that node, and the module
+                    // declarations of `__idx__` take that many parameters (the
+                    // `#op(':op/idx_arr')` declarations under test/cases/compile/native among
+                    // them), so a call of two words must stay the call it is -- its third word
+                    // is the declaration's default, filled before this rule sees it.
+                    std::make_shared<StaticCheckedResolver>(
+                        withStaticResult(
+                            DynamicFuncTypeResolver::create(
+                                {{0, {}}, {-1, {}}},
+                                "(arr: T[], index: int, axis: int) => T",
+                                [](const type_vec_t &with, const type_vec_t &norm)
+                                    -> optional<Type *> {
+                                    (void)with;
+                                    // A caller that holds no constants: the axis is the run's,
+                                    // and only the rank and the element type are the call's own.
+                                    return indexPositionResultType(norm, {});
+                                }),
+                            [](const type_vec_t &with, const type_vec_t &norm,
+                               static_args_t statics) -> optional<Type *> {
+                                (void)with;
+                                return indexPositionResultType(norm, statics);
+                            }),
+                        staticIndexRejection),
+                },
+                {
+                    ":op/idx_take",
+// `t[idx]` with an int array takes the positions the indices name, in that
+                    // order, along the dimension the third word names, 0 -- the first dimension
+                    // -- when the call writes no third word (design principles 5.4; the `take`
+                    // its function form names). Its length on that dimension is the length the
+                    // index array's own type states (`int[3]` names three positions, `int[]` a
+                    // number nobody fixed), and every other dimension keeps its own
+                    // (indexTakeResultType). A value whose rank is open fixes neither, so the
+                    // positions taken are rows again and the result is that same open-rank
+                    // array.
+                    withStaticResult(
+                        DynamicFuncTypeResolver::create(
+                            {{0, {}}, {-1, {}}},
+                            "(arr: T[], indices: int[], axis: int) => T[]",
+                            [](const type_vec_t &with, const type_vec_t &norm)
+                                -> optional<Type *> {
+                                (void)with;
+                                // A caller that holds no constants: the axis is the run's, and
+                                // only the rank, the element type and the number of positions
+                                // the index array states are the call's own.
+                                return indexTakeResultType(norm, {});
+                            }),
+                        [](const type_vec_t &with, const type_vec_t &norm, static_args_t statics)
+                            -> optional<Type *> {
+                            (void)with;
+                            return indexTakeResultType(norm, statics);
+                        }),
+                },
+                {
+                    ":op/idx_str",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(str: string, index: int) => string",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::String ||
+                                norm[1]->code() != TypeCode::Int64)
+                                return nullopt;
+                            return Type::String();
+                        }),
+                },
+            }),
+        // ======= Unary operators =======
+        OperatorGroup::create(
+            "__not__",
+            {
+                {
+                    ":op/not",
+                    StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Bool()),
+                },
+            }),
+        OperatorGroup::create(
+            "__neg__",
+            {
+                {
+                    ":op/neg_i",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int32()),
+                },
+                {
+                    ":op/neg_l",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
+                },
+                {
+                    ":op/neg_f",
+                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32()),
+                },
+                {
+                    ":op/neg_d",
+                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
+                },
+                {
+                    ":op/neg_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/neg_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                CAMEL_HALF_UNARY("neg"),
+            }),
+        OperatorGroup::create(
+            "__inv__",
+            {
+                {
+                    ":op/inv_i",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int32()),
+                },
+                {
+                    ":op/inv_l",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
+                },
+            }),
+        // ======= IO (built-in input/print/println/eprintln) ======
+        // The rules of `print` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("print", {}),
+        // The rules of `println` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("println", {}),
+        // `println` on the standard error stream, with the same declaration shape
+        // it is in the prelude, so no import.
+        // The rules of `eprintln` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("eprintln", {}),
+        // ======= string =======
+        // The rule of `format` is the declaration of stdlib/prelude.cml (`with <..args>`).
+        OperatorGroup::create("format", {}),
+        // The rules of `join` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("join", {}),
+        // ======= struct =======
+        // The rules of `len` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("len", {}),
+        // `extent_of::<A>()`: the extents an array type writes down, as an `int[]`
+        // (`float[2, 3]` -> `[2, 3]`). A fact of the type argument and of nothing else, which is why
+        // a type that leaves an extent open is refused where the call is instantiated rather than
+        // answered from a value: `float[]` states one dimension and no length, and `float[..]`
+        // states neither the rank nor a length. The rule is
+        // `src/builtin/operators/struct.cpp#extentOfResolver`, and it asks the same
+        // `camel::core::type::statedExtentsOf` the transposition walk asks, so the language and the
+        // walk cannot disagree about which types have a shape. Its declaration is in
+        // stdlib/prelude.cml.
+        OperatorGroup::create(
+            "extent_of",
+            {
+                {
+                    ":op/extent_of",
+                    extentOfResolver(),
+                },
+            }),
+        // `copy::<T>(x: T): T`, a second name of a mutable value (plan 2.3, step 1). The group is
+        // empty on purpose and its rule is the declaration of `lib/std/prelude.cml`, the way `len`
+        // and `zip` are declared there: the signature is the declaration's own, one overload for
+        // every type, and the operator's kernel is `operators/copy.cpp`. The other three kinds the
+        // same plan turns into operators -- cast, fill, access -- take a compile-time parameter
+        // (a target type, a member position, a fill's kind and field names) that a record keyed by
+        // URI cannot carry yet, so they are not declared here (`docs/handover/plans/
+        // 2026-11-22-refactor-stage2-interfaces.cn.md` 2.3, and the reader inventory beside it).
+        OperatorGroup::create("copy", {}),
+        // The elements a `for` takes from a string (design principles 11.1): its code points,
+        // each a one-character string. The loop builder converts a string to that array once,
+        // before the first round; a program does not write `__iter__` itself. A map adds its
+        // own overload (collection.cpp); the tensor module had one too, and it went with the P4
+        // deletion step -- a numeric array is the core's to iterate (`t[i]` along the first
+        // dimension), so no module takes part in a `for` over a tensor.
+        OperatorGroup::create(
+            "__iter__",
+            {
+                {
+                    ":struct/iter_str",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (s: string) => string[]",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (!with.empty() || norm.size() != 1 ||
+                                norm[0]->code() != TypeCode::String) {
+                                return nullopt;
+                            }
+                            return ArrayType::create(Type::String());
+                        }),
+                },
+            }),
+        // The rules of `zip` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("zip", {}),
+        // The rules of `last` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("last", {}),
+        // The rules of `range` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("range", {}),
+        OperatorGroup::create(
+            "slice",
+            {
+                {
+                    // The function form of the same slice node the subscript lowers to; see
+                    // coreSliceFunctionResolver for the calls each of the two answers.
+                    ":op/slice_sub",
+                    coreSliceFunctionResolver(),
+                },
+                {
+                    // The same slice over a string's code points or a Bytes' bytes: one axis, 0.
+                    ":op/slice_str",
+                    stringSliceResolver(),
+                },
+                {
+                    ":op/slice_bytes",
+                    bytesSliceResolver(),
+                },
+            }),
+        OperatorGroup::create(
+            "__slice__",
+            {
+                {
+                    ":op/slice_sub",
+                    // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first
+                    // dimension a subscript writes (design principles 5.4). The call is the
+                    // slice node itself -- the value, the axis (0: a subscript slices the first
+                    // dimension), the two bounds, the step, and a two-bit mask: bit 0 says
+                    // whether the end was written (`t[a:]` runs to the end), bit 1 whether the
+                    // start was (`xs[:: -1]` starts at the last element). A fixed-shape array's
+                    // subscript is checked here, where its constants are (staticSliceRejection).
+                    std::make_shared<StaticCheckedResolver>(
+                        withStaticResult(
+                            DynamicFuncTypeResolver::create(
+                                {{0, {}}, {6, {false, false, false, false, false, false}}},
+                                "(arr: T[], axis: int, start: int, end: int, step: int, written: "
+                                "int) => T[]",
+                                [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
+                                    // A caller that holds no constants: the axis and the bounds are
+                                    // the run's, and only the rank and the element type are known.
+                                    return coreSliceSubscriptResultType(norm, {});
+                                }),
+                            [](const type_vec_t &, const type_vec_t &norm, static_args_t statics) -> optional<Type *> {
+                                return coreSliceSubscriptResultType(norm, statics);
+                            }),
+                        staticSliceRejection),
+                },
+                {
+                    ":op/slice_str",
+                    stringSliceResolver(),
+                },
+                {
+                    ":op/slice_bytes",
+                    bytesSliceResolver(),
+                },
+            }),
+        // The rules of `concat` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("concat", {}),
+        // The rules of `append` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("append", {}),
+        // A private copy of an array: one of the states of a loop whose body only appends to it
+        // (Builder::markLoopStateInPlace, which decides per state), so the literal the program
+        // wrote stays a constant and the loop appends to its own array. Not a name a program can
+        // reach for on its own.
+        OperatorGroup::create(
+            "__copy_arr__",
+            {
+                {
+                    ":struct/copy_arr",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(arr: T[]) => T[]",
+                        [](const type_vec_t &, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            return norm[0];
+                        }),
+                },
+            }),
+        // `xs->append<v>` where the compiler proved the old array invisible: one state of a
+        // loop body, with that state bound only to this call and its first value a fresh
+        // literal (Builder::markLoopStateInPlace, per state). The append may then write into
+        // the state's own storage (Array::writableInPlace) instead of copying the array; when
+        // the storage is shared or is not this value's, it behaves exactly as `append`. Not a
+        // name a program can reach for on its own.
+        OperatorGroup::create(
+            "__append_owned__",
+            {
+                {
+                    ":struct/append_arr_owned",
+                    DynamicFuncTypeResolver::create(
+                        {{1, {false}}, {1, {false}}},
+                        "<value: T> (xs: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
+                            const auto &eleType = arrType->elemType();
+                            if (eleType != Type::Void() && !eleType->assignableFrom(with[0]))
+                                return nullopt;
+                            return arrType;
+                        }),
+                },
+            }),
+        // The rules of `contains` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("contains", {}),
+        // ======= Marked Operators =======
+        // The rule of `map` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("map", {}),
+        // The rule of `filter` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("filter", {}),
+        // The rule of `reduce` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("reduce", {}),
+        // The rule of `foreach` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("foreach", {}),
+        // ======= Diagnostics =======
+        // `std::mem::blocks()`: the block counters as a struct, readable between two
+        // operations (docs/design-principles 10.5; the allocation-count assertions). Declared
+        // with effects below: the counters are not a function of the arguments.
+        OperatorGroup::create(
+            "std::mem::blocks",
+            {{":op/mem_blocks", StaticFuncTypeResolver::create({}, {}, memBlocksStructType())}}),
+        // ======= Macros =======
+        OperatorGroup::create(
+            "__cmp__",
+            {
+                {
+                    ":macro/cmp",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(lhs: (arg1: T1, arg2: T2, ...) => R, rhs: (arg: R) => U) => U",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Function)
+                                return nullopt;
+                            if (norm[1]->code() != TypeCode::Function)
+                                return nullopt;
+                            const auto &lhsFuncType   = tt::as_ptr<FunctionType>(norm[0]);
+                            const auto &rhsFuncType   = tt::as_ptr<FunctionType>(norm[1]);
+                            const auto &lhsReturnType = lhsFuncType->exitType();
+                            if (rhsFuncType->normTypesCount() != 1)
+                                return nullopt;
+                            // The left rule's result stands at the parameter the right rule
+                            // declares for it, which takes the value's resources when its own
+                            // clause is unwritten.
+                            if (!sameTypeWithUnwrittenResources(
+                                    rhsFuncType->normTypeAt(0), lhsReturnType))
+                                return nullopt;
+                            return rhsFuncType->exitType();
+                        }),
+                },
+            }),
+        // The bookkeeping of `tee` (operators/stream.h, design principles 5.4): the tee written in
+        // Camel hands each pull of its source to it, and the report of the profile session keeps
+        // the numbers. Its operands are the tee's own -- the hint, the cap and the two running
+        // counts -- and the stream it reads, whose value tells the tee from another and whose type
+        // the operator reports.
+        OperatorGroup::create(
+            "tee_note",
+            {
+                {
+                    ":stream/tee_note",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {5, {false, false, false, false, false}}},
+                        "(hint: int, cap: int, elements: int, peak: int, s: T..) => void",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            if (norm.size() != 5) {
+                                return nullopt;
+                            }
+                            if (norm[4] == nullptr || norm[4]->code() != TypeCode::Stream) {
+                                return nullopt;
+                            }
+                            for (size_t i = 0; i < 4; ++i) {
+                                if (norm[i] == nullptr || norm[i]->code() != TypeCode::Int64) {
+                                    return nullopt;
+                                }
+                            }
+                            return Type::Void();
+                        }),
+                },
+            }),
+    };
+    return groups;
+}
+
+GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
+    registerBuiltinOperatorTraits();
+    // The derivative registry is the process's: the rules and the tangent spaces are registered
+    // once, as the tensor module registers its own. Registered again by the next context they
+    // would replace the rules a later module put there and clear the tangent spaces it added.
+    static std::once_flag derivativesRegistered;
+    std::call_once(derivativesRegistered, [] { registerBuiltinDerivatives(); });
+    // The operators over Map and Set (design principles 11.3). Those named like a group of
+    // this module (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`) are further overloads
+    // of it: one group is exported per name, the existing overloads first.
+    std::vector<oper_group_ptr_t> collectionGroups = getCollectionOperatorGroups();
+    for (const auto &group : getGlobalOperatorGroups()) {
+        const auto extra = std::find_if(
+            collectionGroups.begin(),
+            collectionGroups.end(),
+            [&](const oper_group_ptr_t &other) { return other->name() == group->name(); });
+        if (extra == collectionGroups.end()) {
+            exportEntity(group->name(), group);
+            continue;
+        }
+        auto resolvers = group->resolvers();
+        resolvers.insert(
+            resolvers.end(),
+            (*extra)->resolvers().begin(),
+            (*extra)->resolvers().end());
+        exportEntity(group->name(), OperatorGroup::create(group->name(), resolvers));
+        collectionGroups.erase(extra);
+    }
+    for (const auto &group : collectionGroups) {
+        exportEntity(group->name(), group);
+    }
+    // `===` and `!==` (design principles 4.2): on a scalar `===` is `==`, and on an array the
+    // tensor module exports an elementwise entry of its own into these groups. `===`'s scalar
+    // entries are taken from the group that compares as a whole rather than written a second
+    // time, so a scalar type in one is in both; what is left out is the one entry that compares
+    // a composite as a whole, which is `==`'s alone. `__neq__` keeps no scalar entries now, so
+    // `__strict_neq__` comes out empty of them -- and `!==` does not resolve in it: what is left
+    // there is only the tensor module's array entry, and the negation of the comparison is built
+    // by the construction tree (`!(===)`, gct/builder.cpp). The pair stays because the array
+    // entry needs a group of that name to be exported into, and because emptying the copy is
+    // what makes the cut visible rather than implied.
+    for (const auto &[strict, whole] :
+         {std::pair<const char *, const char *>{"__strict_eq__", "__eq__"},
+          std::pair<const char *, const char *>{"__strict_neq__", "__neq__"}}) {
+        const auto &groups = getGlobalOperatorGroups();
+        const auto from    = std::find_if(groups.begin(), groups.end(), [&](const auto &group) {
+            return group->name() == whole;
+        });
+        std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
+        for (const auto &[uri, resolver] : (*from)->resolvers()) {
+            // A scalar entry has one fixed signature; the entry that compares a composite as a
+            // whole resolves per type and is not one of them.
+            if (resolver->fixedSignature() != nullptr) {
+                resolvers.push_back({uri, resolver});
+            }
+        }
+        exportEntity(
+            std::string(strict), OperatorGroup::create(std::string(strict), std::move(resolvers)));
+    }
+    // The operators over T? and T! (design principles 3.8).
+    for (const auto &group : getTaggedOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // The lowering targets of the enum (design principles 5.3).
+    for (const auto &group : getEnumOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // The `set` operators a path assignment lowers to (design principles 3.5).
+    for (const auto &group : getSetValueOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+}
+
+bool GlobalsBuiltinModule::load() {
+    CAMEL_LOG_INFO_S("GlobalsBuiltinModule", "Loading basic built-in module.");
+    if (loaded_) {
+        return true;
+    }
+    context_->registerExecutorFactory("", [ctx = context_]() {
+        return BasicBuiltinExecutor::create(ctx);
+    });
+    // The native operators of `array`, the library written in Camel (`stdlib/array.cml`). A
+    // module that has bodies cannot also be a `.cmo` module of the same name: the compiler
+    // would read `array.cml` as a declaration module and reject the bodies. So the kernels are
+    // built into libcamel (`builtin/operators/array.cpp`), and this module answers them on the
+    // `array` protocol; the body-less declarations in `array.cml` are their signatures.
+    context_->registerExecutorFactory("array", [ctx = context_]() {
+        return std::make_shared<Executor>(ctx, getArrayOpsMap());
+    });
+    declareArrayOperatorFacts();
+    // The type `Error` of the prelude's declaration file (`export type Error`).
+    camel::core::type::registerNativeType("prelude", "Error", camel::core::type::errorType());
+    loaded_ = true;
+    return true;
+}

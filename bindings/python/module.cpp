@@ -70,7 +70,7 @@
 #include "camel/utils/dll_path.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/path.h"
-#include "passes/sched/nodevm/nodevm.h"
+#include "lib/std/nvm/nodevm.h"
 
 #include <array>
 #include <deque>
