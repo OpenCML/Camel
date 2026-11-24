@@ -37,6 +37,7 @@
 #include <functional>
 #include <optional>
 #include <stdexcept>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -478,20 +479,26 @@ MacroOperandGraphs collectMacroOperandGraphs(
     return result;
 }
 
+/// What one analysis of the closure's call graph says: which component each graph is in, which
+/// graphs recurse, which are entry graphs, and from which graphs a recursive graph is reachable. Every table is keyed by a graph, and the key is the graph's *identity*
+/// (`camel::graph::Graph`), not its representation: what a table stores is the pointer, and a
+/// pointer hashes and compares as the pointer it already was (design principles 2.3: a graph's
+/// identity is the value, not a number and not a class of the graph's storage). Nothing here reads
+/// a graph, so nothing here needs a representation type.
 struct RuntimeCallGraphSccInfo {
-    std::unordered_map<const GCGraph *, size_t> componentOf;
-    std::vector<std::vector<const GCGraph *>> components;
-    std::unordered_set<const GCGraph *> recursiveGraphs;
-    std::unordered_set<const GCGraph *> componentEntryGraphs;
-    std::unordered_set<const GCGraph *> externallyCalledGraphs;
+    std::unordered_map<const camel::graph::Graph *, size_t> componentOf;
+    std::vector<std::vector<const camel::graph::Graph *>> components;
+    std::unordered_set<const camel::graph::Graph *> recursiveGraphs;
+    std::unordered_set<const camel::graph::Graph *> componentEntryGraphs;
+    std::unordered_set<const camel::graph::Graph *> externallyCalledGraphs;
     // Graphs from which a recursive graph is reachable (recursive graphs included).
-    std::unordered_set<const GCGraph *> reachesRecursion;
+    std::unordered_set<const camel::graph::Graph *> reachesRecursion;
 };
 
 RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
     const camel::runtime::Program &program, const std::vector<GCGraph *> &closure) {
     RuntimeCallGraphSccInfo info;
-    std::unordered_map<const GCGraph *, size_t> indexOf;
+    std::unordered_map<const camel::graph::Graph *, size_t> indexOf;
     indexOf.reserve(closure.size());
     for (size_t i = 0; i < closure.size(); ++i) {
         indexOf.emplace(closure[i], i);
@@ -592,9 +599,10 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
                 }
             }
         }
-        if (isRecursive && std::ranges::none_of(graphsInComponent, [&](const GCGraph *graph) {
-                return info.componentEntryGraphs.contains(graph);
-            })) {
+        if (isRecursive && std::ranges::none_of(
+                               graphsInComponent, [&](const camel::graph::Graph *graph) {
+                                   return info.componentEntryGraphs.contains(graph);
+                               })) {
             // DCE can remove the last external call while the graph registry still retains
             // this SCC. With no known entry there is no profitable compaction boundary:
             // inlining its members into each other only expands an unused recursive cycle.
@@ -622,9 +630,13 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
     return info;
 }
 
+/// Whether inlining this call would put a recursive graph into its own component's body: the
+/// decision reads no graph content -- two null checks, a set membership and two map lookups on the
+/// analysis above -- so `caller` and `callee` are the graphs' identity and not their
+/// representation.
 bool shouldSkipRecursiveInline(
-    const GCGraph *caller, const GCGraph *callee, const RuntimeCallGraphSccInfo &sccInfo,
-    const InlineRewriteConfig &config) {
+    const camel::graph::Graph *caller, const camel::graph::Graph *callee,
+    const RuntimeCallGraphSccInfo &sccInfo, const InlineRewriteConfig &config) {
     if (!caller || !callee) {
         return true;
     }
@@ -653,10 +665,12 @@ bool shouldSkipRecursiveInline(
     return false;
 }
 
-/// A direct call examined and left, while the graphs are still at hand (see InlineDeclined).
+/// A direct call examined and left, while the graphs are still at hand (see InlineDeclined). The two
+/// graphs are kept as identities: what the record says about them is their names, which the view
+/// answers when the record is made.
 struct DeclinedCall {
-    const GCGraph *caller;
-    const GCGraph *callee;
+    const camel::graph::Graph *caller;
+    const camel::graph::Graph *callee;
     InlineDecline why;
     size_t calleeNodes;
     size_t calleeComputeNodes;
@@ -848,7 +862,8 @@ bool inSplicedRegion(const camel::runtime::GraphDraft &draft, gc_node_ref_t id) 
 const camel::runtime::Program *applyRuntimeOptimizeRewrite(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
-    std::vector<InlineDeclined> &declinedOut, const GCGraph **lastChangedOut = nullptr) {
+    std::vector<InlineDeclined> &declinedOut,
+    const camel::graph::Graph **lastChangedOut = nullptr) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
     // Where a node is written, so that the size of a function counts one source operation once
     // however many nodes the front end built it from (see inlinedComputeNodeCount).
@@ -861,8 +876,10 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
 
     // What the analyses below were computed for: they depend on the closure's members (and on
     // the graphs, which the session does not change) and are computed again only when it grows.
-    camel::utils::PointerSet<GCGraph> closureSet;
-    std::vector<GCGraph *> previousClosure;
+    // The set and the last closure are the graphs' identities: they are counted and compared, and
+    // never read, so `camel::graph::Graph` is what they hold (see RuntimeCallGraphSccInfo).
+    camel::utils::PointerSet<camel::graph::Graph> closureSet;
+    std::vector<const camel::graph::Graph *> previousClosure;
     RuntimeCallGraphSccInfo sccInfo;
     MacroOperandGraphs macroOperands;
     CallBook callBook(session);
@@ -877,9 +894,10 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
 
         const bool closureChanged =
             closureSet.size() != closure.size() ||
-            !std::ranges::all_of(closure, [&](GCGraph *g) { return closureSet.contains(g); });
+            !std::ranges::all_of(
+                closure, [&](const camel::graph::Graph *g) { return closureSet.contains(g); });
         if (closureChanged) {
-            camel::utils::PointerSet<GCGraph> members(closure.size());
+            camel::utils::PointerSet<camel::graph::Graph> members(closure.size());
             for (auto *member : closure) {
                 members.insert(member);
             }
@@ -888,8 +906,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     callBook.forget(left);
                 }
             }
-            previousClosure = closure;
-            closureSet      = std::move(members);
+            previousClosure.assign(closure.begin(), closure.end());
+            closureSet = std::move(members);
             for (auto *runtimeGraph : closure) {
                 if (runtimeGraph && !callBook.counted(runtimeGraph)) {
                     callBook.recount(runtimeGraph);
@@ -1256,8 +1274,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
     declinedOut.reserve(declined.size());
     for (const DeclinedCall &call : declined) {
         declinedOut.push_back(
-            {call.caller->name(),
-             call.callee->name(),
+            {std::string(call.caller->view().name()),
+             std::string(call.callee->view().name()),
              call.why,
              call.calleeNodes,
              call.calleeComputeNodes,
@@ -1462,9 +1480,11 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     const std::string stepName = config.growthBudget.passName.empty()
                                      ? std::string("std::opt")
                                      : config.growthBudget.passName;
-    bool changed                  = false;
+    bool changed                    = false;
     std::vector<InlineDeclined> declined;
-    const GCGraph *lastChangedGraph = nullptr;
+    // The graph the last session changed, by identity: the report that follows names it, which the
+    // view answers.
+    const camel::graph::Graph *lastChangedGraph = nullptr;
     for (size_t i = 0; i < kMaxSessions; ++i) {
         const camel::runtime::Program *rewritten = applyRuntimeOptimizeRewrite(
             context,
@@ -1517,13 +1537,17 @@ const camel::runtime::Program *applyOptimizeRewritePass(
                 "given no state to count them in (OptimizeRewriteConfig::settleStreak): graph '{}' "
                 "changed, so the rewrite cannot settle, and the bound `settle_runs` ({}) that says "
                 "so has nowhere to reach",
-                lastChangedGraph->name(),
+                lastChangedGraph->view().name(),
                 config.settleRuns));
         SettleStreak &streak = *config.settleStreak;
-        if (streak.graph == lastChangedGraph->name()) {
+        // The name is what the view answers (a `std::string_view`); the streak keeps a `std::string`,
+        // so the comparison is made on the view of the stored name rather than by deducing the
+        // comparison's template from a mixed pair of types.
+        const std::string_view changedName = lastChangedGraph->view().name();
+        if (std::string_view(streak.graph) == changedName) {
             ++streak.runs;
         } else {
-            streak.graph = lastChangedGraph->name();
+            streak.graph = changedName;
             streak.runs  = 1;
         }
         if (streak.runs >= config.settleRuns) {
@@ -1535,7 +1559,7 @@ const camel::runtime::Program *applyOptimizeRewritePass(
                         "the rewrite of graph '{}' did not settle: {} consecutive runs each "
                         "changed "
                         "the program",
-                        lastChangedGraph->name(),
+                        lastChangedGraph->view().name(),
                         config.settleRuns));
             return nullptr;
         }

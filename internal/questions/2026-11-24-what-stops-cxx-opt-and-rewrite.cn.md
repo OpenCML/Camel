@@ -22,15 +22,16 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/std/cxx/opt
 git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/rewrite
 ```
 
-| 读数 | `src/stdlib/std/cxx/opt` | `src/stdlib/rewrite` |
-|---|---|---|
-| `origin/develop`（`e3c6e02933`） | **88** | **24** |
-| **本轮改后** | **66** | **23** |
-| 差 | **−22** | **−1** |
+| 读数 | `src/stdlib/std/cxx/opt` | `src/stdlib/rewrite` | 读在哪棵树上 |
+|---|---|---|---|
+| `origin/develop`（`e3c6e02933`） | **88** | **24** | `e3c6e02933` |
+| 第一轮改后（`a03836c6cf`） | **66** | **23** | `a03836c6cf` |
+| **第二轮改后** | **49** | **23** | 本条车道的第二笔提交，见 §6 |
+| 差 | **−39** | **−1** | |
 
 `src/stdlib/rewrite` 的 24 与 2026-11-23 那页记的 31 不是矛盾：`module.cpp` 那 26 已降到 19，是那页之后别的车道做的，本轮开工时的读数就是 24。
 
-逐文件：
+逐文件（第一轮的读数，树是 `a03836c6cf`；第二轮的 −17 全在 `inline/engine.cpp`，见 §6）：
 
 | 文件 | 前 | 后 |
 |---|---|---|
@@ -139,7 +140,9 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/rewrite
 
 `mayMerge`（`screen.cpp:170-174`）是这个差的**活证据**：它的第一趟显式写着 `if ((*it)->kind == GCNodeKind::Join) continue;` —— 只有 JOIN 真在枚举里，这一行才有意义。谁要把这几个 screen 迁到视图，得先回答「JOIN 在不在你要数的集合里」。
 
-## 3. 剩下的 89 行，逐处停在哪
+## 3. 第一轮之后剩下的 89 行，逐处停在哪
+
+**本节读的树是 `a03836c6cf`**（第一轮之后、第二轮之前）：那时的读数是 66 + 23。第二轮的 17 行从 `engine.cpp` 里又移走了 17 行（39 → 22），见 §6；本节列的 39 行里，§6 点名的那 17 行已经不在树上了。
 
 按函数归组（同一函数的形参、声明、调用点算同一处的多条），每条给类。
 
@@ -229,6 +232,20 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/rewrite
 ## 5. 没读到的，明说
 
 - **`src/kernel/rewrite` 从来没有读过**——它不存在。本页所有 `rewrite` 的话都是关于 `src/stdlib/rewrite`。
-- **`shouldSkipRecursiveInline`（`engine.cpp:625`）没有迁**。它的函数体**一处图的内容都不读**：只有两个空指针判断、`sccInfo.recursiveGraphs.contains`、`sccInfo.componentOf.find`、`componentEntryGraphs.contains`。所以它的两个形参本来是纯身份，**能迁**。没迁的唯一原因是 `RuntimeCallGraphSccInfo` 的四张表（`:482`–`:488`）与建表函数（`:492`）也写 `const GCGraph *`，要一起换成 `const camel::graph::Graph *` 才能通过编译；那是 7 处一起动，且 `:483` 的 `components` 与 `:595` 的 lambda 也在其中。**这一处是本目录下一轮最干净的一笔（约 −10）**，本轮没做是因为它要一次性改完才有意义，而我这一轮的门禁只覆盖了改动前的读数。这一条是这一页里唯一「读得出、做得到、但没做」的，所以写在这里而不混进「读不了」。
+- **`shouldSkipRecursiveInline` 第二轮已迁**（第一轮留着没做）。它连同 `RuntimeCallGraphSccInfo` 的六张表、`analyzeRuntimeCallGraphScc` 的 `indexOf`、`:595` 的 lambda 一起换成了 `const camel::graph::Graph *`，一共 9 行，见 §6。它确实是本页说的「最干净的一笔」。
 - `proof.h:53` 那条注释只核了它说的是 `GraphDraft::decode` 的节点 id，没有追 `decode` 本身。
 - 本轮**没有**读 `generic/algebra.cpp` 里 `mayAlgebra` 之外的部分，也没有读 `defunctionalize.cpp` 的 `:652` `writeWrapperGraph` 的函数体（只按返回值判它是写）。
+
+## 6. 第二轮：17 行，全是身份（2026-11-24）
+
+第一轮之后 `cxx/opt` 的 66 行里，`inline/engine.cpp` 独占 39。第二轮从这一个文件里移走 17 行，两个目录的读数变成 **49** 和 **23**（命令与 §0 相同，`--rev` 指本车道的第二笔提交）。
+
+**这 17 行的类**：17 行全是**身份**，没有一行是「读」的内容迁移，也没有「写」和「注释」——`cxx/opt` 剩下的读侧门槛（A/B/C/D/H/K）一条都没动，因为它们不在本车道。三组：
+
+1. **`RuntimeCallGraphSccInfo` 与建表（9 行）**。六张表（`componentOf`、`components`、`recursiveGraphs`、`componentEntryGraphs`、`externallyCalledGraphs`、`reachesRecursion`）、`analyzeRuntimeCallGraphScc` 里的 `indexOf`、`:595` 的 lambda 形参、`shouldSkipRecursiveInline` 的两个形参。它们的每一次使用都只是 `insert`/`contains`/`find`/`size()` 与指针比较，没有一处读图的内容；`GCGraph *` 向上转成 `const Graph *` 之后存放的指针值与 hash 都还是那一个（`GCGraph : public Object, public camel::graph::Graph`，单次派生到基类的地址是确定的）。
+2. **`DeclinedCall::caller`/`callee`（2 行）**。这两个成员在记录做出来时只取**名字**，所以类型换成身份之后，`applyRuntimeOptimizeRewrite` 末尾那两行就从 `call.caller->name()` 变成 `call.caller->view().name()`，名字改由视图答（`graph_view.h` 的映射表：`GCGraph::name() → name()`，答案是 `std::string_view`，进 `InlineDeclined` 的 `std::string` 要显式构造）。
+3. **闭包集合与「最后改过的那张图」（6 行）**。`closureSet`、`members`（`PointerSet`）、`previousClosure`、`:880` 的 lambda 形参、`applyRuntimeOptimizeRewrite` 的 `lastChangedOut` 与 `lastChangedGraph`。前四个只用来 `contains`/`size` 与 `forget`；后两个只在「没收敛」那条报告里被读名字，四处 `->name()` 一并改成 `->view().name()`。`previousClosure = closure` 随之写成 `assign(closure.begin(), closure.end())`，因为两个 `std::vector` 的元素类型不再是同一个。
+
+**为什么不更远**：`rewrite` 的 23 行一行没动，且这一轮核过、确认它们没有一行属于身份类——`fact.cpp` 的 `Source::graph` 与 `module.cpp` 的 `WhenCall::graph` 都既被当身份用（比较、进 `Anchor`）**又**被读内容（`graph->node(...)`、`staticSlots()`、经 `const_cast` 交给 node VM），把成员类型换掉只会在读侧塞进向下转；剩下的是 D/B/H 与 3b 的写入口。
+
+**这一轮的读数是干净的**：`test/plans/feat/opt` 全目录在 `a03836c6cf` 上是 `total: 1636, pass: 1495, fail: 141`。带这一笔改动重跑（`feat/opt` 全目录加 `smoke`）是 `total: 1646, pass: 1505, fail: 141`；`smoke` 那 10 条全过，所以 `feat/opt` 那部分仍是 1636 / 1495 / 141，红的 141 条逐 plan 分布也逐条相同（`gate_value` 60、`splice_place` 29、`camel_passes` 4、`pass_params` 4、`algebra` 2、`writings` 2、`commit_refusal` 1、`effects_kept` 1、`opt_second_pass` 1、`rounds_warning` 1）。这 141 条全部是这棵落后 `origin/develop` 二十一笔的树自己的红：`stdlib/random.cml` 的 `to_array` 未解析、`stdlib/perf.cml` 的 `<:mark/reduce_arr>` 无匹配、`test/cases/opt/writings` 找不到 stdlib、golden 里的节点号差一。没有一条落在这一笔改动能触及的地方。
