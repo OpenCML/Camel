@@ -856,6 +856,21 @@ if ($astProblems.Count -gt 0) {
     exit 2
 }
 
+# What `-Plan` names, said before the push (see `camel-remote-targets.ps1`). The opening lines of a
+# run used to say nothing about the target, so a reader had to wait for the runner's `[tier]` line,
+# after the build, to learn how many plan files the run was about -- and that line never says whether
+# the number is the target's own contents or a layer the target was silently widened to.
+. (Join-Path $PSScriptRoot 'camel-remote-targets.ps1')
+if ($Changed -and $Plan.Count -gt 0) {
+    # `-Changed` selects the plans the change touches and the plan stage runs that selection, not the
+    # `-Plan` list (`$runPlan` below). Saying which of the two is being read is the whole point here.
+    Write-Host ("[camel-remote] plan target: -Changed selects the plans this change touches; the {0} -Plan target(s) named here ({1}) are not read" -f `
+        $Plan.Count, ($Plan -join ', '))
+} elseif (-not $Clean -and $Plan.Count -gt 0) {
+    $planTargets = @(Resolve-CamelPlanTarget -Values $Plan -Root $Path)
+    Write-Host (Format-CamelPlanTargetLine -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
+}
+
 # One checkout per worktree name, kept for its incremental build directory. `-Clean` throws that
 # away when a task is finished; the stale ones are reclaimed at the start of a run, but only those
 # that carry a creation record (`~/camel-work/.records/`) and that no run is inside -- a checkout
