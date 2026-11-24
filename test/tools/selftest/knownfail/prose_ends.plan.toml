@@ -1,0 +1,20 @@
+# Fixture of test/tools/selftest/run.mjs: the third shape -- prose. A sentence is refused where the
+# plan is loaded, because a run cannot disagree with it: the field exists so that a mark is re-read,
+# and only `{ prints = "..." }` and `{ passes = "..." }` name something a run can evaluate.
+id = "selftest.knownfail.prose_ends"
+order = 8
+tier = "fast"
+
+[[tests]]
+name = "prose_ends"
+desc = "A trigger written as a sentence: refused at load."
+tool = "node"
+kind = "behavior"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture stops at `WALL fixture=knownfail`, so the run is red on purpose"
+known_fail_msg = "WALL fixture=knownfail"
+known_fail_ends_when = "when the wall moves, this entry prints the numbers and exits 0"

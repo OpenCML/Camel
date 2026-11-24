@@ -1,67 +1,71 @@
-# 删掉 `known_fail_ends_when` 会让 11 条标记变成不合法的——它是负责人裁定的形状
+# `known_fail_ends_when` 不删：改成可判的两种形状，跑测工具每次评估
 
-2026-11-24 ｜ 来自 `lane/test-refactor-2` ｜ 对象：`test/tools/run-tests.mjs`、`test/tools/check-plan-fields.mjs`
+2026-11-24 ｜ 来自 `lane/test-refactor-2` ｜ 对象：`test/tools/run-tests.mjs`、`test/tools/toml-lite.mjs`、`test/tools/check-plan-fields.mjs`
 
-## 一、裁定要做的，与它的一句理由
+## 一、问句与答复
 
-裁定（决策者转述）：**从全树每一个计划文件里删掉 `known_fail_ends_when`（30 条以上），并让
-`check-plan-fields.mjs` 不再放行它**。理由是一句判断：*一个没有任何代码读的字段，写的是"归还
-条件"，而它只存在于一个已经不存在的车道的记忆里。*
+**问句**（决策者 2026-11-24 上午）：删掉 `known_fail_ends_when`、让检查器不再放行它。理由是一句
+判断：*一个没有任何代码读的字段，写的是"归还条件"，而它只存在于一个已经不存在的车道的记忆里。*
 
-**后半句是对的**：没有一处代码**评估**这个条件成没成立——检查器只检查它引了反引号、并点名了该
-条目自己钉的那句话。所以"归还条件"今天是一句承诺，不是一条读数。前半句（"没有任何代码读"）不
-成立，而这不是措辞问题，是**删了会坏**。
+**答复**（当日晚）：**不删。按负责人 2026-11-21 的裁定落实成可判的形状**——那条裁定本来就说这个
+字段写的是"这条用例到时候要打印的那一行"。于是取值收成结构化的两种之一，工具侧三件事跟上：
 
-## 二、读数
+| | 形状 | 谁读它 |
+|---|---|---|
+| ① | `known_fail_ends_when = { prints = "那一行" }` | 跑完在这条用例自己的输出里找它；找到 ⇒ 墙已经移开 |
+| ② | `known_fail_ends_when = { passes = "另一条用例名" }` | 全部用例跑完后读另一条的判定；它过了 ⇒ 这条的标记已经结束 |
 
-| 谁读它 | 读它做什么 |
-|---|---|
-| `test/tools/run-tests.mjs:264-286` | 标记载体的形状：**`known_fail_msg` 可以没有，只要 `known_fail_ends_when` 在**。注释里写着这是「作者的裁定 2026-11-21 02:20」选的形状，给的是"目标是数字、墙还在施工"的那种用例 |
-| `test/tools/check-plan-fields.mjs:418-445` | 三条规则：每个标记必须有它（`mark-without-end-trigger`）；它必须引一段反引号（`end-trigger-names-nothing`）；它必须点名该条目自己钉的那句话（`end-trigger-names-another-reading`） |
-| `test/tools/run-tests.mjs:1660-1665` | 跑完印 `[KNOWN] N of M known failure(s) carry no known_fail_ends_when` |
-| `test/tools/selftest/run.mjs` | 用正则**断言那一行**出现在自测的输出里 |
-| `scripts/plan-inventory.mjs` | 数标记时读它 |
-| `docs/test-plans.md`、`docs/design/program-transforms/nested-transforms.cn.md` | 两处文档写着它 |
-| `internal/reviews/2026-11-21-*`（三页） | 三页审查就是为它写的：end trigger 算不算 early warning、钉住的那句话会不会跟着墙移动 |
+工具侧：
 
-**删了会怎么坏**（这条是决定性的）：全树 **27 处、9 个计划文件**；其中 **11 个条目的标记只有这个
-字段、没有 `known_fail_msg`**——
+- **跑测工具每次评估**：条件已满足就报「已知失败已经结束、删掉标记」**并记失败**（严格 xfail）。
+- **检查器拒绝纯散文**：只剩 ① 与 ② 两种形状能过；`prints` 必须是该条目自己钉过的一行，
+  `passes` 必须点名树里真实存在的用例。
+- **现有 27 处逐条改写**；写不出可判条件的那几条报回，不硬凑。
 
-- `feat/transforms/compositions`：`compositions.jvp_vjp_f`、`nested_grad_min`、
-  `nested_grad_through_a_binding`、`hessian_of_a_quadratic`；
-- `feat/transforms/nested`：`nested.nest_square`、`nest_cube`、`nest_named`、`nest_lambda`、
-  `nested.hessian`、`nested.confusion`、`nest_quartic`。
+## 二、为什么"不删"：这条读数是这一笔的理由
 
-这 11 条今天全是 **XFAIL**（底树快层那 30 条已知失败里有它们）。删掉字段，它们在同一刻变成
-`known_fail needs known_fail_msg or known_fail_ends_when`——**两个计划文件直接拒绝加载**，那不是
-"红绿不变"，那是这一层少了 11 条用例。裁定说"删字段不会改变任何用例的红绿"，在这个读数下不成立。
+全树原有 **27 处**（9 个计划文件 + 自测矩阵 8 处）。其中 **11 个条目的标记只有这个字段、没有
+`known_fail_msg`**：
 
-## 三、三条路，各带代价
+- `feat/transforms/compositions`：`jvp_vjp_f`、`nested_grad_min`、`nested_grad_through_a_binding`、`hessian_of_a_quadratic`；
+- `feat/transforms/nested`：`nest_square`、`nest_cube`、`nest_named`、`nest_lambda`、`hessian`、`confusion`、`nest_quartic`。
 
-**A. 照裁定删。** 要让树继续加载，那 11 条必须先有 `known_fail_msg`：给它们钉一句今天的诊断。可
-这 11 条的墙是"数字还没到"，钉一句就会随墙移动、要人反复重打——正是 2026-11-21 那条裁定要避开的
-事。再加：撤检查器三条规则、撤 runner 的 `[KNOWN]` 读数与自测对它的断言、改两处文档、
-`plan-inventory` 一处、`matrix.plan.toml` 自测矩阵 8 处。代价：**撤销负责人的裁定 + 改 10 个文件
-+ 11 条标记的墙变成会动的钉子。**
+`run-tests.mjs` 的载入规则是"**`known_fail_msg` 可以没有，只要 `ends_when` 在**"，所以删字段 ⇒
+这 11 条同一刻变成 `known_fail needs known_fail_msg or known_fail_ends_when` ⇒ **两个计划文件拒绝
+加载**。它们今天全是 XFAIL，加起来是底树快层 30 条已知失败里的 11 条。裁定原以为"删字段不会改变
+任何用例的红绿"；在这个读数下，改的不是红绿，是**两个计划文件还能不能打开**。
 
-**B. 留着字段，让它可判（推荐）。** 把 `known_fail_ends_when` 的取值收窄成**能被代码读的形状**：
-`file#symbol`（等这个符号出现）、或一条能跑的命令（等它的退出码变 0）。检查器拒绝纯散文。这样
-"归还条件"从一句承诺变成一条读数，裁定想修的那个洞被修上，而没有人要撤销自己的裁定。代价：定义
-一个很小的词汇表 + 一条用例 + 现有 27 处要挑出句子里的那个符号（可以做，且是逐条判断，正好是可
-以派给车道的活）。
+那 11 条要按"删"处理，就得先给每条钉一句今天的诊断，而那些墙正是"数字还没到"——钉住会移动的墙
+是 2026-11-21 那条裁定要避开的。**所以形状留下，但要变成可判的。**
 
-**C. 只加读数（最小）。** 不动字段，加一条 `--tier-report` 读数：点名"这 N 个标记的归还条件无法
-被任何代码评估"，让它在每次层报告里出现。代价：最小，但只是把洞照亮，不修。
+## 三、落地：改了什么
 
-**默认建议：B，且第一步先做 C**（读数先落地，再把 27 处收窄成可判的形状）。
+1. **`toml-lite.mjs` 支持内联表**（`{ prints = "…" }`）：一个键重复在同一张表里被拒，与表里重复
+   键同理。这是"取值结构化"在 TOML 里最轻的写法，字段名不变，检查器的"已知字段"判定不变。
+2. **`run-tests.mjs`**：
+   - `knownFailEndCondition()` 把取值读成两种形状之一，别的一律视为非法；
+   - 载入时**拒绝纯散文**，报文点明两种形状与"为什么句子不行"；
+   - **严格 xfail**：`prints` 在标记触发处就地评估（输出里出现了那一行 ⇒ `[FAIL]`，
+     `known failure has ended: this entry already prints "..." -- delete the mark`）；
+     `passes` 在**全部用例落定之后**评估（它要读另一条的判定，而那条可能是最后一个跑完的），
+     命中就把该条从被豁免的红移进失败，并在结果之后印
+     `[KNOWN] known failure has ended: this entry waits on \`<case>\`, which passed -- delete the mark`；
+   - `[XFAIL]` 行照旧先印，结算块把它重读一遍——两类读数用同一句话，所以对不上时看得见。
+3. **`check-plan-fields.mjs`**：三条散文规则换成结构性的判据——取值必须是两种形状之一；
+   `prints` 必须是该条目自己钉的行（`end-trigger-names-another-reading`）；`passes` 必须点名树里
+   存在的用例（新判据 `end-trigger-names-nowhere`）。全树 `findings` 仍是 **317**、`fields=29`、
+   上限不变。
+4. **27 处逐条改写**：16 处 `prints`（值取自该条目自己钉的第一行）、9 处 `passes`（"这条自己转绿"
+   与"等另一条"）、2 处由人判（`with_grad_from_the_library`、`vmap_grad_f`——前者要等库改名，后者要等
+   三个数，都写成 `passes = "<自己>"`，即"这条转绿即结束"）。**没有一条硬凑**。
+5. **自测**（`test/tools/selftest/knownfail/`）：新增 `ended.mjs`/`anchor.mjs` 与三份计划——
+   `ends_arrived`（`prints` 已满足 ⇒ `[FAIL]` + 删标记）、`waits_on`（`passes` 已满足 ⇒ 结算块）、
+   `prose_ends`（散文 ⇒ 载入即拒）。`[known_fail gate]` 现在读作
+   `missing-owner=refused; …; prose-trigger=refused; all-three=accepted; roster=named; strict-xfail=prints+passes`。
 
-## 四、这一轮我做了什么、没做什么
+## 四、留给下一批的
 
-- **没做**：一个字都没删 `known_fail_ends_when`，检查器一条规则没动。理由在上一节。
-- **做了**（同一批裁定里的 ②）：那 12 条 `unowned` 逐条按今天的读数处理——6 条还在静默豁免的换成
-  角色主人，6 条说法过期或没有主人的删掉标记、让它照实报红。见提交与 `2026-11-24-defect-…` 那一页。
-- 另有一条同形的：`feat/linear/effects_model_edges` 的两条标记写的是 `unowned batch item 9 (P0-2)`
-  ——同一种病、另一种拼法，不在那 12 条里，留给下一批。
-
-**要决策者做的**：A / B / C 选一条。选 A 之前请先看 §二那张表——它要撤销的是 2026-11-21 02:20
-的裁定，那一页的注释还写着作者的日期。
+- `feat/linear/effects_model_edges` 的两条标记写的是 `unowned batch item 9 (P0-2)`——同一种病、另一种
+  拼法（主人不是角色），不在那 12 条里。
+- 如果有车道愿意把 `prints` 再收窄成"必须是 `expect_stdout_contains` 里那条"，那是检查器一行的事；
+  今天要求的是"自己钉过的行之一"，因为 `expect_stdout` 整块的那种条目钉的是多行。

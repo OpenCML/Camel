@@ -932,16 +932,36 @@ everywhere is written once:
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 - `known_fail_ends_when`
-  The reading that removes the mark: the refusal that has to go, and the line this entry has to
-  print, both in backticks. A mark records a red; `known_fail_owner` says who ends it and
+  The reading that removes the mark, in one of exactly two shapes -- both of which a run evaluates:
+
+  ```toml
+  known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }
+  known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
+  ```
+
+  `prints` is looked for in the entry's own output on every run; `passes` is read off another case's
+  verdict once every case has settled. A mark records a red; `known_fail_owner` says who ends it and
   `known_fail_reason` where the case is stuck, and neither says *what* would end it -- so a mark can
-  outlive its wall and read as permanent debt. The runner already decides the two moments it can see
-  (the case starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure
-  changed its mind`), and this field states the condition those two readings are the evidence of, in
-  the terms the run compares. `test/tools/check-plan-fields.mjs` counts the marks that carry none
-  (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a trigger that quotes no reading
-  (`end-trigger-names-nothing`) and one that does not name the entry's own pinned line
-  (`end-trigger-names-another-reading`). The field is not required at load -- a mark written before it
+  outlive its wall and read as permanent debt. The runner decides the two moments it can see (the case
+  starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure changed its
+  mind`), and this field states the condition those two readings are the evidence of, in the terms the
+  run compares.
+
+  **Strict xfail**: when the stated reading has arrived, the mark has ended, and the run says so and
+  records a failure -- `known failure has ended: this entry already prints "<line>" -- delete the
+  mark`, or, for the `passes` shape, the same block after the results. A mark that keeps excusing a
+  case whose ending has arrived is a green nobody ever has to read again; that is the debt the STALE
+  snippet entries carried, and the reading exists to make somebody delete the entry.
+
+  Prose is refused: a sentence is not something a run can disagree with, so it would be a promise
+  nobody re-reads. The ruling of 2026-11-24 (`internal/questions/
+  2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md`) is why the field is
+  structured rather than deleted: eleven marks carry it *instead of* `known_fail_msg`, so removing
+  the field would make two plan files refuse to load. `test/tools/check-plan-fields.mjs` counts the
+  marks that carry none (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a value
+  that is neither shape (`mark-without-end-trigger`), a `prints` that is not one of the entry's own
+  pinned lines (`end-trigger-names-another-reading`) and a `passes` that names no case in the tree
+  (`end-trigger-names-nowhere`). The field is not required at load -- a mark written before it
   existed keeps working -- but a new mark is expected to carry it.
 - `known_fail_msg`
   A fragment of the reason a marked test fails with, so the reason is pinned and not only the
@@ -958,13 +978,14 @@ everywhere is written once:
   ruling of 2026-11-21 02:20 chose the second shape for a case whose target is a number and whose
   wall is being built: a sentence quoted from a refused run follows the implementation, so a pin on
   it has to be re-typed every time the wall moves, which records the wall's progress as the case's
-  debt. `known_fail_ends_when` states the line the entry has to print instead, and no wall moves
-  that. `known_fail` needs one of the two -- the plan is refused at load when it has neither, with
-  the same `checkKnownFailMark` (`test/tools/run-tests.mjs`) -- and the trade is worth stating where
-  a reader weighs it: the sentence is the only field the run *compares*, so a mark that states its
-  ending reading accepts any failure as the expected one until the numbers arrive, and a different
-  defect can wear that mark's name in the meantime. The owner and the reason are required either
-  way, and the reason keeps naming the wall as it stands today.
+  debt. `known_fail_ends_when` states the line the entry has to print instead (`prints`) or a case
+  whose passing ends this one (`passes`), and no wall moves either. `known_fail` needs one of the two
+  -- the plan is refused at load when it has neither, with the same `checkKnownFailMark`
+  (`test/tools/run-tests.mjs`) -- and the trade is worth stating where a reader weighs it: the
+  sentence is the only field the run *compares*, so a mark that states its ending reading accepts any
+  failure as the expected one until the reading arrives, and a different defect can wear that mark's
+  name in the meantime. The owner and the reason are required either way, and the reason keeps naming
+  the wall as it stands today.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a

@@ -2197,7 +2197,7 @@ name = "ort_loop_values_dynamic"
 known_fail = true
 known_fail_owner = "the shape a loop's dynamic trip count carries through the ONNX export (`modules/onnx`)"
 known_fail_msg = "kind: ExportUnsupported, message: in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next"
-known_fail_ends_when = "when a loop can carry a value whose shape the graph computes -- the reduction target is now that `Shape` -- this entry prints `ort loop values dynamic: worst`, `batches [1, 2, 3, 5, 7]` and `PASS`, and exits 0 -- the exported loop then matches NumPy and the native run with the counter exact"
+known_fail_ends_when = { prints = "ort loop values dynamic: worst" }
 known_fail_reason = "the export is refused by `in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next; a loop can only carry values of a fixed dtype and shape` -- the reduction target is now the graph's own `Shape` of the operand, and the loop that carries the batch no longer states a fixed shape for it, so the case exits 1 before any model reaches disk"
 desc = "A loop that returns its state with a counter, and the gradient of a loss over it with respect to captured weights, export with a dynamic batch axis: one model, on ONNX Runtime for batches of 1, 2, 3, 5 and 7 rows and loops of 0, some and the maximum number of steps, matches NumPy and the native run (counter exactly). On the path without a step the gradient is a struct of constants in a branch arm, which the exporter used to refuse as 'a tuple, struct or array of constants was not folded'."
 kind = "behavior"
@@ -3091,7 +3091,7 @@ name = "ort_loop_loaded_weights"
 known_fail = true
 known_fail_owner = "the shape a loop's loaded weights carry through the ONNX export (`modules/onnx`)"
 known_fail_msg = "kind: ExportUnsupported, message: in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next"
-known_fail_ends_when = "with `ort_loop_values_dynamic`: when a loop can carry a value whose shape the graph computes, this entry prints `ort loop loaded weights: worst`, `batches [1, 2, 3, 5, 7]` and `PASS`, and exits 0 -- the model holds a `Loop`, passes onnx.checker's full check, and the weights read from file are captured as the constant their value makes them"
+known_fail_ends_when = { prints = "ort loop loaded weights: worst" }
 known_fail_reason = "the export is refused by `in 'arm4.1.pb': the dtype or shape of a value changes from one call of a recursion to the next; a loop can only carry values of a fixed dtype and shape` -- the reduction target is now the graph's own `Shape` of the operand, and the loop that carries the batch no longer states a fixed shape for it, so the case exits 1 before any model reaches disk"
 desc = "A data-dependent loop and the gradient of a loss over it, with weights read from a file (load_npy) into a struct the exported function captures, exported with a dynamic batch axis: the declared type of the weights says neither element type nor shape, and the export gives the captured constant the type its value has. The model passes onnx.checker's full check, holds a Loop, and on ONNX Runtime matches the native run for batches of 1, 2, 3, 5 and 7 rows and loops of 0, some and the maximum number of steps (counter exactly). The export used to end with 'Runtime draft encoding failed to allocate ... bytes'."
 kind = "behavior"

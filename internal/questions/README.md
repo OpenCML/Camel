@@ -25,7 +25,7 @@
 | [`2026-11-23-what-a-read-of-a-cell-costs`](2026-11-23-what-a-read-of-a-cell-costs.cn.md) | 「读一个格子」算不算一个效应，以及算子记录的沉默在放置判断里值多少 |
 | [`2026-11-23-who-owns-a-store`](2026-11-23-who-owns-a-store.cn.md) | 「一个 Store」由谁造、由谁结束、由谁证它对 |
 | [`2026-11-23-who-owns-freely-arrangeable`](2026-11-23-who-owns-freely-arrangeable.cn.md) | 「可自由调度」这句判断归谁：事实层给一个 kind，还是各处自己拼 |
-| [`2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks`](2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md) | 删掉 `known_fail_ends_when` 会让 11 条标记变成不合法的——它是负责人裁定的形状 |
+| [`2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks`](2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md) | `known_fail_ends_when` 不删：改成可判的两种形状，跑测工具每次评估 |
 | [`2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two`](2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two.md) | 一个守卫过滤掉的推导，是「一个重载」还是「两个」？ |
 | [`2026-11-24-prelude-functions-with-bodies-and-layer-5`](2026-11-24-prelude-functions-with-bodies-and-layer-5.cn.md) | prelude 内建层对**标准库模块**是否也生效？ |
 | [`2026-11-24-stream-range-value-map-no-instance`](2026-11-24-stream-range-value-map-no-instance.cn.md) | `map(1..5)` 该拒绝还是该编译？ |

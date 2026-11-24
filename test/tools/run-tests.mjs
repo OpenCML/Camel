@@ -212,6 +212,73 @@ function knownFailIsMarked(mark) {
 }
 
 /**
+ * The two shapes `known_fail_ends_when` may hold, read into one comparable thing. `null` means the
+ * value is not one of them -- which the loader refuses and the checker reports, so nothing past the
+ * load has to guess what a third shape would mean.
+ *
+ * `prints` is the line this entry prints when the wall moves, and it is found in the entry's own
+ * output. `passes` names another case: when that case passes in the same run, this mark has ended.
+ * Both are readings of a run, which is the whole point of the ruling -- the field used to hold a
+ * sentence, and a sentence is not something a run can disagree with.
+ */
+function knownFailEndCondition(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const keys = Object.keys(value)
+    if (keys.length !== 1 || (keys[0] !== 'prints' && keys[0] !== 'passes')) return null
+    const text = value[keys[0]]
+    if (typeof text !== 'string' || text.trim().length === 0) return null
+    return { kind: keys[0], text: text.trim() }
+}
+
+/** How a condition reads on a line: the `[KNOWN]` roster and the strict-xfail message share it. */
+function describeEndCondition(condition) {
+    if (!condition) return null
+    return condition.kind === 'prints'
+        ? `prints "${condition.text}"`
+        : `passes "${condition.text}"`
+}
+
+/**
+ * Whether a `prints` condition has arrived: the line the mark says this entry prints when the wall
+ * moves is in this run's output. Read from the whole of what the case produced (its failures, its
+ * stdout, its stderr), because a line that arrived can arrive on any of the three.
+ */
+function endConditionHasArrived(test, seen) {
+    const condition = test.__knownFailEndsWhen
+    if (!condition || condition.kind !== 'prints') return false
+    return seen.includes(condition.text)
+}
+
+/**
+ * The `passes` shape, taken once every case has settled: it is a reading of another case's verdict,
+ * and the case a mark waits on may be the last one to finish, so it cannot be taken where the mark
+ * fires. A mark whose ending has arrived moves out of the excused reds and into the failing ones --
+ * strict xfail -- and the block printed here is what re-reads the `[XFAIL]` line it printed above.
+ */
+function settlePassesConditions(entries, completed, summary) {
+    const ended = []
+    for (const entry of entries) {
+        const condition = entry.test.__knownFailEndsWhen
+        if (!entry.test.__knownFail || !condition || condition.kind !== 'passes') continue
+        if (!entry.outcome || entry.outcome.status !== 'xfail') continue
+        const other = completed.get(condition.text)
+        if (!other || other.status !== 'pass') continue
+        const line =
+            `known failure has ended: this entry waits on \`${condition.text}\`, which passed` +
+            ' -- delete the mark'
+        entry.outcome.status = 'fail'
+        if (entry.outcome.result) entry.outcome.result.status = 'fail'
+        entry.outcome.failures = [...(entry.outcome.failures || []), line]
+        summary.xfail--
+        summary.fail++
+        summary.knownRows = summary.knownRows.filter((row) => row.name !== listedName(entry.plan, entry.test))
+        ended.push(`${COLORS.cyan}[KNOWN]${COLORS.reset} ${line}`)
+    }
+    for (const line of ended) console.log(line)
+    return ended
+}
+
+/**
  * A marked case must say who owns it and where it is stuck. The mark, the owner and the reason may
  * all be inherited from `[defaults]`: a plan whose default marks one back end and names the owner
  * does not have to repeat itself on each entry that changes only which back end fails.
@@ -261,21 +328,36 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
     //
-    // The mark may instead state the reading that ends it, and that is the shape the author's
-    // ruling of 2026-11-21 02:20 chose for a case whose target is a number and whose wall is being
-    // built: a sentence quoted from a refused run follows the implementation, so a pin on it has to
-    // be re-typed every time the wall moves -- which records the wall's progress as the case's debt
-    // and reads, in the plan, as "this case fails for this reason" long after that reason moved.
-    // `known_fail_ends_when` says what has to arrive instead: the line the entry prints when the
-    // computation is right, which no wall moves. The trade is stated where a reader will weigh it --
-    // the sentence is the only field the run *compares*, so a mark that states its ending reading
-    // accepts any failure as the expected one until the numbers arrive, and a different defect can
-    // wear the mark's name in the meantime. That is why the owner and the reason are still required
-    // on it, and why the reason has to keep naming the wall as it stands today.
+    // The mark may instead state the reading that ends it, and the ruling of 2026-11-21 02:20 chose
+    // that shape for a case whose target is a number and whose wall is being built: a sentence
+    // quoted from a refused run follows the implementation, so a pin on it has to be re-typed every
+    // time the wall moves -- which records the wall's progress as the case's debt and reads, in the
+    // plan, as "this case fails for this reason" long after that reason moved.
+    //
+    // What that field may hold is now exactly two things, because a promise nobody evaluates is a
+    // mark nobody re-reads -- the ruling of 2026-11-24 18:xx (see internal/questions/
+    // 2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md):
+    //
+    //   known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }
+    //   known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
+    //
+    // `prints` is read off the entry's own output on every run; `passes` off another case's verdict
+    // in the same run. Either way the run *evaluates* it: a mark whose ending has arrived fails the
+    // run and says to delete the mark (strict xfail). Prose -- a sentence with no key -- is refused
+    // here and by test/tools/check-plan-fields.mjs, because it cannot be evaluated.
     const expected = entry.known_fail_msg
+    const ends = knownFailEndCondition(entry.known_fail_ends_when)
+    if (entry.known_fail_ends_when !== undefined && ends === null) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_ends_when must be exactly one of ` +
+                `{ prints = "..." } or { passes = "..." }: the condition has to be something a run ` +
+                `can evaluate -- the line this entry prints when the wall moves, or a case whose ` +
+                `passing means this one is over -- because a sentence nothing reads is a mark ` +
+                `nobody re-reads`,
+        )
+    }
     if (typeof expected !== 'string' || expected.trim().length === 0) {
-        const ends = entry.known_fail_ends_when
-        if (typeof ends !== 'string' || ends.trim().length === 0) {
+        if (ends === null) {
             throw new PlanSchemaError(
                 `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg or known_fail_ends_when: ` +
                     `quote either the sentence this case prints today, or the reading that ends the mark -- a ` +
@@ -1656,7 +1738,7 @@ function printKnownRoster(summary) {
     if (rows.length === 0) return
     const missing = rows.filter((row) => !row.endsWhen).length
     for (const row of rows) {
-        const ends = row.endsWhen ? row.endsWhen : `${COLORS.red}(no end condition)${COLORS.reset}`
+        const ends = row.endsWhen ? describeEndCondition(row.endsWhen) : `${COLORS.red}(no end condition)${COLORS.reset}`
         console.log(`${COLORS.cyan}[KNOWN]${COLORS.reset} ${row.name}: ${ends}`)
     }
     console.log(
@@ -2960,7 +3042,7 @@ function expandBackends(test) {
             // roster can print it beside the name. Absent unless the plan writes one, like
             // `__knownFailMsg`: the mechanism grew by pinning cases one at a time, and a mark
             // written before the field existed stays legal and reads as `(no end condition)`.
-            __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
+            __knownFailEndsWhen: knownFailEndCondition(test.known_fail_ends_when),
         }]
     }
     if (marked === true) {
@@ -2986,7 +3068,7 @@ function expandBackends(test) {
         // Absent unless the plan pins one, so every mark written before this field existed stays
         // legal: the mechanism grows by pinning cases one at a time, never by a migration.
         __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
-        __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
+        __knownFailEndsWhen: knownFailEndCondition(test.known_fail_ends_when),
     }))
 }
 
@@ -4274,6 +4356,17 @@ async function executePlans(plans, options, sharedVars, logDir) {
                             result.failures.push(
                                 `known failure changed its mind: expected "${pinned}", got "${first.trim()}"`,
                             )
+                        } else if (endConditionHasArrived(entry.test, seen)) {
+                            // Strict xfail: a mark whose ending has arrived stops being an excuse the
+                            // moment the run reads it. Left as an XFAIL it would be a green nobody has
+                            // to look at again -- the debt the STALE snippet entries carried, where
+                            // the thing to do is delete the entry and the reading exists to make
+                            // somebody do it.
+                            result.status = 'fail'
+                            result.failures.push(
+                                `known failure has ended: this entry already ${describeEndCondition(entry.test.__knownFailEndsWhen)}` +
+                                    ' -- delete the mark',
+                            )
                         } else {
                             result.status = 'xfail'
                         }
@@ -4325,6 +4418,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
     await Promise.all(entries.map((entry) => entry.promise))
     drain()
+    settlePassesConditions(entries, completed, summary)
     const stalls = stopLoopMonitor()
     const timings = []
     for (const entry of entries) {

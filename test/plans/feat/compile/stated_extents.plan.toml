@@ -52,7 +52,7 @@ known_fail = ["nvm"]
 known_fail_owner = "`split`'s typing of the rank-zero answer of a stated-axis `mean` (`modules/transforms`, the cut's exit)"
 known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[...]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis` computes the element at rank 0, the lift states the pair as `(float, float)` because that is the value's own type, and the tangent the rule's right side wrote (`mean_axis_stated(dxs, at)`) is typed `T[...]`; `split` then copies that node as the backward half's exit, whose declared type is `Tangent<float>`"
 known_fail_msg = "declares 'float'"
-known_fail_ends_when = "when `split` types the rank-zero answer at the cut's exit instead of copying the rank-zero node into a `Tangent<float>` slot, this entry prints `stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]` and exits 0 -- 1.0 in those slots would be the sum's answer spread over the lane and 0.5 a division by the cotangent's count; what this mark pins is the message `declares 'float'` above -- a changed message turns the run red as `known failure changed its mind` before this reading arrives -- not a refusal behaviour, so when the entry prints that line and exits 0 the run reports `marked known_fail ... but passes` on that reading"
+known_fail_ends_when = { prints = "stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]" }
 timeout_ms = 20000
 
 # The law with the mean's answer an element instead of an array: `keepdims = false` on a rank-one
@@ -79,7 +79,7 @@ known_fail = ["nvm"]
 known_fail_owner = "`split`'s typing of the rank-zero answer of a stated-axis `mean` (`modules/transforms`, the cut's exit)"
 known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[...]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis`'s result is computed now (`cmp:mean_axis` answers the element at rank 0, which is what the declaration `T[...]` used to deny), and the transpose of the jvp graph still hands the rank-zero array where the split signature says `float`"
 known_fail_msg = "declares 'float'"
-known_fail_ends_when = "with `stated_mean_axis_gradient`, on the writing whose answer is the element itself: when the cut's exit types the rank-zero answer, this entry prints `stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]` and exits 0 -- the four quarters are `numel(t) / numel(ct)` read off the stated extents, and a cotangent read as a pointer is the SIGSEGV this case was written to catch"
+known_fail_ends_when = { prints = "stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]" }
 timeout_ms = 20000
 
 # The signature, where it can be stated: `at` written in the call is a compile-time constant, so
