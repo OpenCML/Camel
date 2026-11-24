@@ -92,6 +92,14 @@ function doWrite() {
     const outDir = arg('--out')
     const baselineSource = arg('--baseline-source') || 'unknown'
     const gates = argAll('--gate')
+    // What the measured run's own exit was. Absent means `0`: every record written before this field
+    // existed was written on a path that had a green gate, and rewriting that history is not worth a
+    // migration. `unknown` is refused nowhere -- it is a real state -- but `verify` will not treat it
+    // as a pass (see below).
+    const exit = (arg('--exit') || '0').trim()
+    if (exit !== '0' && exit !== 'unknown') {
+        refuse(2, `--exit takes '0' or 'unknown'; it got '${exit}'`)
+    }
     if (!diffFile || !outDir) refuse(2, 'write needs --diff <diff.json> and --out <dir>')
     for (const [name, value] of [['--merge', merge], ['--first-parent', firstParent], ['--second-parent', secondParent]]) {
         if (!value || !SHA.test(value)) refuse(2, `write needs ${name} <full commit sha>; it was '${value ?? ''}'`)
@@ -178,6 +186,12 @@ function doWrite() {
         readings: { cases: diff.baseline?.cases ?? null, fixed: fixed.length, new: regressed.length, changed: changed.length },
         cases: { fixed, new: regressed, changed },
         gates,
+        // The exit code the measured run ended with, as the gate reported it. `unknown` is the third
+        // state and not a zero in disguise: the gate printed its readings and could not obtain the
+        // run's exit code (its closing session did not return; the gate cuts it and exits 7). A
+        // record that says `unknown` may exist -- the reading is real and worth keeping -- but it is
+        // not a pass: `verify` refuses it exactly like a record that is missing.
+        exit,
         measuredAt: new Date().toISOString(),
         host: os.hostname(),
         // Which merge position wrote this: one lane, or a batch. A reader needs it to know whether the
@@ -192,7 +206,7 @@ function doWrite() {
     say(
         `merge-record: ${merge.slice(0, 9)} first parent ${firstParent.slice(0, 9)}, ${record.planSet.count} plan(s), ` +
             `baseline ${String(record.baseline.sha).slice(0, 12)} (${baselineSource}), ` +
-            `fixed=${fixed.length} new=${regressed.length} changed=${changed.length}`,
+            `fixed=${fixed.length} new=${regressed.length} changed=${changed.length}, exit=${exit}`,
     )
     process.exit(0)
 }
@@ -260,6 +274,16 @@ function doVerify() {
         if (Number(read.new) > 0 || Number(read.changed) > 0) {
             problems.push(
                 `${sha.slice(0, 9)}  ${subject}  -- the record is not a pass: new=${read.new} changed=${read.changed}`,
+            )
+            continue
+        }
+        // The exit code the measured run ended with. `unknown` means the gate printed its readings and
+        // could not say what the run exited with (its closing session did not return). That is not a
+        // pass, and the whole point of keeping such a record is that a reader can tell it apart from
+        // one that is missing -- so it is refused here, in those words, rather than counted as green.
+        if (record.exit !== undefined && String(record.exit) !== '0') {
+            problems.push(
+                `${sha.slice(0, 9)}  ${subject}  -- the record says exit=${record.exit}: the run's exit code was never obtained`,
             )
         }
     }

@@ -53,6 +53,14 @@ skip is a lock in name only. **A push made with `--no-verify` says so in its con
 the chain it wrote is then the thing to repair (the shape is re-read by the next merge, and
 `internal/backlog.md` is where a wrong arrival is recorded).
 
+Beside those two rules the hook runs `scripts/merge-record.mjs verify` over the push's first-parent
+range: every merge commit in it needs a pass record in `.git/camel-passed/<sha>.json`, and the record
+now carries the measured run's own `exit`. **`exit` absent means `"0"`** -- records written before the
+field existed stay valid, no migration -- and any other value is refused in its own words, so a
+record that says `exit=unknown` (the gate's exit 7: readings complete, exit code not obtained, see
+`camel-remote.ps1`) exists for the reader who wants the reading but opens no door. Only merge commits
+are read: a single-parent commit such as a documentation page is not asked for a record at all.
+
 ## The machine-local settings file
 
 None of these scripts names a host, a drive or a user's home. Those values come from one JSON file
@@ -107,6 +115,14 @@ runs what was asked. Every line comes back as it happens, the run's clock is spl
 build and plan, the phases are published to the panel's state files, and the exit code is the build's
 or the plan's own.
 
+One code is not a verdict: **exit 7 means the readings are complete and the exit code was not
+obtained**, which is neither a pass nor a failure. The run reports its code as its own last line
+(`__CAMEL_REMOTE_EXIT__=`) so a session that will not close cannot take the code with it, and
+`-FinishTimeoutSeconds` bounds the close; a close that misses it keeps every reading and prints
+`[camel-remote] <name> exit unknown` (registry: `exit=7 phase=unknown`). Read it as its own state:
+not green (nothing says the run's checkers were green), not a red reading (the readings are all
+there), and the one state in which a record is written with `exit=unknown` and no push follows.
+
 A clean tree whose host checkout is already on that commit and clean skips the checkout and the patch
 altogether, so an unchanged re-run costs one build pass and the plan.
 
@@ -129,6 +145,7 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-AstDrop <path>[,...]` | With `-UpdateAstHashes`: a recorded path whose row this re-record may lose (a case that really is deleted). Each name is printed as it is dropped, and a name that no row was dropped for is printed too. Without it the write-back refuses the drop. |
 | `-Clean` | Delete this worktree's host checkout, build directory included, and stop. Refuses (exit 3) what lives beside the checkouts: a bare repository, and the cleanup root's own bookkeeping (`tmp/`, `.records/`). |
 | `-StackTrace` | Diagnostic build with assertion stack traces. Its readings do not decide green or red. |
+| `-FinishTimeoutSeconds <n>` | How long the *close* of a finished run waits, in seconds. Default 600. It counts silence after the plan's own last line (`[SPLIT]`) and nothing before it, so a quiet plan is never cut; a close that misses it keeps every reading and reports exit 7. |
 | `-StateDir <dir>` | Override the settings file's `stateDir`. |
 | `-LocalConfig <file>` | Use that settings file instead of the one beside the script. |
 | `-LibStdCxxDir <dir>` | Override the settings file's `hostLibStdCxxDir`. |

@@ -1811,6 +1811,40 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
         $developTip.Substring(0, 9), $(if ($seededFrom) { 'seeded now' } else { 'from the cache' }), `
         $comparedTree.Substring(0, 9), ((Get-Date) - $rowsStarted).TotalSeconds)
 
+    # --- the third state: the reading arrived and the exit code did not ---------
+    #
+    # The gate prints every reading and then reports `exit unknown` (exit 7) when its closing session
+    # did not return: the rows all arrived, and nothing says the run's own exit was 0. That is
+    # neither a pass nor a red reading, and both of the things this script used to do with it were
+    # wrong: no exit code meant no record at all (the reading existed on screen and nowhere else),
+    # and a hand-killed ssh meant a merge could go on with no record behind it.
+    #
+    # So: the record is written and says `exit=unknown`, and the push is not attempted. The pre-push
+    # hook reads that record and refuses it in exactly those words, so the answer is the same whether
+    # the refusal happens here or at the hook. What repairs it is one more measurement of the same
+    # merge commit, which now has a gate that cannot hang: the record is then overwritten with exit=0.
+    if ($rowsExit -eq 7) {
+        $passedDir = Join-Path $commonDir 'camel-passed'
+        New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+        $unknownRecord = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
+            --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
+            --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `
+            --baseline-source $(if ($seededFrom) { "measured now on $($developTip.Substring(0, 9))" } else { "cached from an earlier measurement of $($developTip.Substring(0, 9))" }) `
+            --gate headers --gate clang-syntax --gate rows --exit unknown 2>&1)
+        $unknownRecordExit = $LASTEXITCODE
+        $unknownRecord | ForEach-Object { "  $_" }
+        Write-Host ''
+        Write-Host 'STOPPED: the run printed every reading and never returned its exit code (exit unknown, 7)' -ForegroundColor Yellow
+        Write-Host "  The rows above are this merge's reading and the comparison allowed them, so the reading is kept: its record is at $passedDir\$mergeCommit.json and says exit=unknown. It is not a pass -- nothing says the run''s checkers were green -- so nothing was pushed."
+        if ($unknownRecordExit -ne 0) {
+            Write-Host "  The record could not be written either (merge-record exit $unknownRecordExit); the transcript is at $transcript."
+        }
+        Write-Host '  What repairs it: measure this same merge commit again. The gate now cuts a session that stops answering after [SPLIT] and takes the exit code from the run''s own last line, so the re-run either lands a real verdict or says the same thing quicker; a green one overwrites this record with exit=0.'
+        Write-Host ''
+        Write-GitState -MergeCommit $mergeCommit
+        exit 7
+    }
+
     if ($NoPush) {
         Write-Host ''
         Write-Host 'would push: every reading was taken and neither tree refused it. Nothing was pushed (-NoPush).' -ForegroundColor Yellow
@@ -1870,7 +1904,7 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
         --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
         --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `
         --baseline-source $(if ($seededFrom) { "measured now on $($developTip.Substring(0, 9))" } else { "cached from an earlier measurement of $($developTip.Substring(0, 9))" }) `
-        --gate headers --gate clang-syntax --gate rows 2>&1)
+        --gate headers --gate clang-syntax --gate rows --exit 0 2>&1)
     $recordExit = $LASTEXITCODE
     $recordOut | ForEach-Object { "  $_" }
     if ($recordExit -ne 0) {

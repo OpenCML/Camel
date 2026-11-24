@@ -55,6 +55,19 @@
 # short of disk; 2 means the worktree, the push or the transfer failed, or -Check named a checker
 # that does not exist.
 #
+# 7 means **the reading is complete and the exit code was not obtained**, which is neither a pass nor
+# a failure. It is the run that printed every line it had -- [provenance], [SUMMARY], [SPLIT] -- and
+# then did not close: the closing session outlived its own work (`exit` ends the remote shell, not
+# the stdout fd the run's descendants inherited), so for a while the exit code, the registry entry
+# and the merge record all went missing together. The run now carries its code in-band
+# (`__CAMEL_REMOTE_EXIT__=`, its last line) and the finish has a deadline
+# (`-FinishTimeoutSeconds`); a finish that misses the deadline keeps the readings and reports this
+# code. Readers must treat 7 as its own state: not a green (nothing says the run's checkers were
+# green), not a red reading (the readings are all there and can be compared), and exactly the reason
+# a record may be written with `exit=unknown` and no push may follow it. The registry entry says
+# `exit=7 phase=unknown`, and `scripts/merge-record.mjs verify` refuses a record whose `exit` is
+# anything but "0" (absent means "0": records written before the field existed stay valid).
+#
 # --- where the machine-specific values live ---------------------------------
 # Nothing in this file names a host, a drive or a user's home. The ssh alias, the ssh/scp binaries,
 # the directory holding the panel's state files, and the host's own layout (work root, bare
@@ -438,7 +451,24 @@ param(
     # waiting, not a failure, and a reading that was never taken is not a red. It is a parameter
     # because the one case worth measuring on purpose is the refusal -- a lane that wants to see
     # `noslot` should not have to book half an hour of a shared host to read it.
-    [int]$SlotWaitSeconds = 1800
+    [int]$SlotWaitSeconds = 1800,
+    # How long the *closing* of a finished run waits, in seconds.
+    #
+    # After the plan's own last line ([SPLIT], the runner's summary) the run is over; what is left is
+    # the after-plan tree probe, the record stages, the checkers and the scratch removal, and then the
+    # host prints the exit code and closes the session. On 2026-11-25 four runs printed [SPLIT] and
+    # then never returned: the session waited for a channel that remote descendants kept open, the
+    # line after the pipeline (`$code = $LASTEXITCODE`) never ran, and the reading was complete on
+    # screen while the record, the exit code and the merge all said nothing happened.
+    #
+    # So the finish has a deadline, and only the finish: a plan is allowed to be quiet and slow (a
+    # case that prints nothing for ten minutes is a reading, not a hang), and a run is never cut
+    # before [SPLIT]. A finish that misses it keeps every reading it has and reports
+    # `exit unknown` (exit 7), which is neither a pass nor a failure.
+    #
+    # Generous by default because `-Check clang-syntax` beside a plan compiles the tree after the
+    # plan; a caller that only waits for the tree probe and the scratch removal passes 120.
+    [int]$FinishTimeoutSeconds = 600
 )
 
 $ErrorActionPreference = 'Stop'
@@ -776,13 +806,113 @@ function Get-AstDropVerdict {
 # every run states the host's load before and after, and says so when it is high enough that a
 # number measured now should not be compared with a quiet-host number. It is a warning and never a
 # different exit code: judging the number belongs to whoever reads it.
-function Get-HostLoad {
+#
+# That is what the load reading is for; how it is taken, and why it is taken as a process with a
+# deadline, is beside `Get-HostLoad` below.
+#
+# Start a host-side command as a process this script owns.
+#
+# Why not `& $exe ...`: the call operator hands the process to PowerShell, and this script cannot then
+# give its wait an end. A command that never returns then holds the gate forever -- which is exactly
+# what four runs did on 2026-11-25: every reading printed, and the closing ssh never came back. A
+# process this script started can be waited on with a deadline and killed when it misses it.
+#
+# `$Exe` may be a wrapper script (the settings file allows any program for `sshExe`/`scpExe`, and a
+# site that wraps ssh in a .cmd needs one), so a .cmd/.bat is started through the command processor.
+function Start-HostProcess {
+    param([string]$Exe, [string[]]$Arguments, [string]$OutFile, [string]$ErrFile)
+    $file = $Exe
+    $argv = $Arguments
+    if ($Exe -match '\.(cmd|bat)$') {
+        $file = $env:ComSpec
+        $argv = @('/c', "`"$Exe`"") + $Arguments
+    }
+    return Start-Process -FilePath $file -ArgumentList $argv -NoNewWindow -PassThru `
+        -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
+}
+
+# Kill a process and anything it started. Best-effort by design: every caller is on a path that must
+# keep going, and a process that is already gone is not a failure.
+function Stop-HostProcess {
+    param($Process)
+    if ($null -eq $Process) { return }
+    try { if ($Process.HasExited) { return } } catch { }
+    try { & taskkill /PID $Process.Id /T /F 2>&1 | Out-Null } catch { }
+    try { if (-not $Process.HasExited) { $Process.Kill() } } catch { }
+}
+
+# The lines a growing file has gained since the last call.
+#
+# `$State` is a hashtable the caller keeps (path, byte position, the partial line's bytes): reading is
+# a poll, so the position and the carry live across calls. Only bytes up to the last newline are
+# decoded, so a multi-byte character split across two reads is never decoded as two halves -- test
+# names and diagnostics are UTF-8, and a mangled one would be a wrong reading rather than a late one.
+function Read-RemoteStream {
+    param([hashtable]$State, [System.Text.Encoding]$Encoding)
+    if (-not (Test-Path -LiteralPath $State.path)) { return @() }
+    $read = 0
+    $buf = New-Object byte[] 0
+    $fs = $null
     try {
-        $raw = & $sshExe $sshHost 'cat /proc/loadavg' 2>$null
+        $fs = [System.IO.File]::Open($State.path, [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        if ($fs.Length -le $State.pos) { return @() }
+        $fs.Position = $State.pos
+        $count = [int]($fs.Length - $State.pos)
+        $buf = New-Object byte[] $count
+        $read = $fs.Read($buf, 0, $count)
+        $State.pos = $State.pos + $read
+    } finally {
+        if ($null -ne $fs) { $fs.Dispose() }
+    }
+    if ($read -le 0) { return @() }
+    $chunk = New-Object byte[] ($State.carry.Length + $read)
+    [Array]::Copy($State.carry, 0, $chunk, 0, $State.carry.Length)
+    [Array]::Copy($buf, 0, $chunk, $State.carry.Length, $read)
+    $lastNewline = [Array]::LastIndexOf($chunk, [byte]10)
+    if ($lastNewline -lt 0) {
+        # No complete line yet: keep the bytes and decode none of them.
+        $State.carry = $chunk
+        return @()
+    }
+    $text = $Encoding.GetString($chunk, 0, $lastNewline)
+    $rest = New-Object byte[] ($chunk.Length - $lastNewline - 1)
+    [Array]::Copy($chunk, $lastNewline + 1, $rest, 0, $rest.Length)
+    $State.carry = $rest
+    return @($text -split "`n" | ForEach-Object { $_ -replace "`r$", '' })
+}
+
+# The readings of the host's load. One line per run at each end, and never a reason to wait forever:
+# the command is one round trip, so it is given a deadline (`-FinishTimeoutSeconds`) and a miss reads
+# as `unknown`, which every caller already handles by printing no [load] line at all. `$Link` says
+# which program to ask -- the settings' ssh by default, and the tests point it somewhere that answers.
+function Get-HostLoad {
+    param($Link = $null, [int]$TimeoutSeconds = 30)
+    if ($null -eq $Link) { $Link = @{ exe = $sshExe; args = @() } }
+    $stamp = [guid]::NewGuid().ToString('N')
+    $outFile = Join-Path ([System.IO.Path]::GetTempPath()) "camel-load-$PID-$stamp.txt"
+    $errFile = "$outFile.err"
+    $proc = $null
+    try {
+        $proc = Start-HostProcess -Exe $Link.exe -Arguments (@($Link.args) + @($sshHost, 'cat /proc/loadavg')) `
+            -OutFile $outFile -ErrFile $errFile
+        if (-not $proc.WaitForExit([math]::Max(1000, $TimeoutSeconds * 1000))) {
+            Stop-HostProcess $proc
+            # Not a `[load]` line: that prefix is the reading's own shape (three numbers), and a line
+            # with the prefix and no numbers would be a reading a parser has to special-case. The
+            # absence of the reading is said in this script's own voice instead.
+            Write-Host ("[camel-remote] the host did not answer in {0} s, so the load is unknown" -f $TimeoutSeconds)
+            return $null
+        }
+        $raw = if (Test-Path -LiteralPath $outFile) { Get-Content -Raw -LiteralPath $outFile } else { '' }
         if ("$raw" -match '^\s*([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)') {
             return @([double]$Matches[1], [double]$Matches[2], [double]$Matches[3])
         }
-    } catch { }
+    } catch { } finally {
+        foreach ($file in @($outFile, $errFile)) {
+            try { if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force } } catch { }
+        }
+    }
     return $null
 }
 $loadStart = Get-HostLoad
@@ -1114,6 +1244,10 @@ $buildFinishedAt = $null
 $planStartedAt = $null
 $buildExit = $null
 $code = 2
+# The third state: the reading arrived and the exit code did not (`-FinishTimeoutSeconds`). It is set
+# once, where the stream is closed, and every reader below -- the summary, the registry entry, the
+# merge record, the exit code -- asks this instead of inferring it from a zero.
+$exitUnknown = $false
 # Whether the tree probe caught a tracked file written by this run (`__CAMEL_REMOTE_TREE_FAILED__`).
 # It decides the registry entry for a build-only run, whose own exit is the build's 0: without this,
 # a run that failed on the probe would be recorded as a green build.
@@ -2483,6 +2617,15 @@ $gpuBlock
 # `rm -rf` here that removes a directory this run created -- a run that dies before this line
 # leaves its own directory behind, and a later run names it instead of deleting it.
 cd /tmp && rm -rf '$remoteScratch'
+# The exit code travels in-band, on its own line, as the run's last output.
+#
+# Why: the caller reads `$LASTEXITCODE` on the line after the ssh pipeline, so a session that never
+# closes takes the code with it -- and `exit $code` closes the shell, not the fd that every process the
+# run started inherited. On 2026-11-25 four runs printed every reading and hung there, and the record
+# that has to name the run's exit could not be written. This line is written after the scratch
+# directory is removed, so a marker means the run finished; the caller takes the code from it, cuts
+# the session and never waits for an EOF that one leaked writer can withhold forever.
+echo "__CAMEL_REMOTE_EXIT__=`$code"
 exit `$code
 "@
 
@@ -2504,11 +2647,14 @@ exit `$code
     # Each line is streamed to the console *and* folded into the holder. The marker lines switch the
     # phase (sync -> build -> plan); everything else goes to the build parser until the plan starts,
     # then to the test parser, matching which local helper would have shown that line.
-    & $sshExe -o ConnectTimeout=20 $sshHost "bash '$remoteScratch/run.sh'" 2>&1 |
-        ForEach-Object {
-            $line = "$_"
-            # NOT $clean: PowerShell is case-insensitive and the script has a [switch]$Clean.
-            $cleanLine = ($line -replace $ansiPattern, '').Trim()
+    #
+    # The line handler is a scriptblock and not a `ForEach-Object` body, because the loop that feeds it
+    # has to own the process: see `Read-RemoteStream` and the loop below. It is invoked with `.` (dot
+    # source) so its assignments land in this script's scope, exactly as they did inside the pipeline.
+    $processRemoteLine = {
+        param([string]$line)
+        # NOT $clean: PowerShell is case-insensitive and the script has a [switch]$Clean.
+        $cleanLine = ($line -replace $ansiPattern, '').Trim()
             # -UpdateAstHashes sends the recorded file back on this stream, base64 between two markers.
             # It is a file and not a reading, so it is not printed: the lines are collected and the
             # file is written once the run has ended (the markers bracket the payload in order, so a
@@ -2924,12 +3070,95 @@ exit `$code
             }
             Write-Host $line
         }
-    $code = $LASTEXITCODE
+    # --- the stream, with an end -----------------------------------------------
+    #
+    # Why this is not `& $sshExe ... | ForEach-Object { ... }` any more. The exit code was read on the
+    # line after that pipeline, so a channel that did not close took the code with it -- and `exit
+    # $code` closes the remote shell, not the stdout fd that every process the run started inherited.
+    # Measured 2026-11-25: four runs printed [SPLIT] and then returned nothing; the registry entry of
+    # one of them says `phase=plan, exit=null, finishedAt=null`, which is the line after the pipeline
+    # never having run. Killing the ssh by hand was the only way on, and it left the reading with no
+    # exit code and no record.
+    #
+    # Here the process is this script's own: the code arrives as the host's last line
+    # (`__CAMEL_REMOTE_EXIT__=<code>`), the session is cut as soon as that marker is read, and a run
+    # that has printed its [SPLIT] and then goes silent is cut after -FinishTimeoutSeconds. Nothing
+    # before [SPLIT] is ever cut: a quiet plan is a slow plan, not a hang.
+    $streamOut = Join-Path $scratch 'stream.out'
+    $streamErr = Join-Path $scratch 'stream.err'
+    foreach ($streamFile in @($streamOut, $streamErr)) {
+        if (Test-Path -LiteralPath $streamFile) { Remove-Item -LiteralPath $streamFile -Force }
+    }
+    $streamProc = Start-HostProcess -Exe $sshExe `
+        -Arguments @('-o', 'ConnectTimeout=20', $sshHost, "bash '$remoteScratch/run.sh'") `
+        -OutFile $streamOut -ErrFile $streamErr
+    $streamOutState = @{ path = $streamOut; pos = [long]0; carry = (New-Object byte[] 0) }
+    $streamErrState = @{ path = $streamErr; pos = [long]0; carry = (New-Object byte[] 0) }
+    $streamEncoder = New-Object System.Text.UTF8Encoding($false)
+    $streamExit = $null
+    $streamTimedOut = $false
+    $finishArmed = $false
+    $lastStreamData = Get-Date
+    $finishLimit = if ($FinishTimeoutSeconds -gt 0) { $FinishTimeoutSeconds } else { 0 }
+    $draining = $false
+
+    while ($true) {
+        $arrived = $false
+        foreach ($line in (Read-RemoteStream $streamOutState $streamEncoder)) {
+            $arrived = $true
+            # The host's last line, written after the scratch directory is removed: the run finished
+            # and this is its code, whatever the channel does afterwards.
+            if ($line -match '^__CAMEL_REMOTE_EXIT__=(\d+)\s*$') {
+                $streamExit = [int]$Matches[1]
+                continue
+            }
+            if ($line -match '^\[SPLIT\]') { $finishArmed = $true }
+            . $processRemoteLine $line
+        }
+        foreach ($line in (Read-RemoteStream $streamErrState $streamEncoder)) {
+            $arrived = $true
+            Write-Host $line
+        }
+        if ($arrived) { $lastStreamData = Get-Date }
+        if ($null -ne $streamExit) { break }
+        if ($streamProc.HasExited) {
+            # One more pass takes whatever it wrote on its way out; the pass after that finds
+            # nothing, and that is the end of the stream.
+            if ($draining) { break }
+            $draining = $true
+            continue
+        }
+        if ($finishArmed -and $finishLimit -gt 0 -and
+            ((Get-Date) - $lastStreamData).TotalSeconds -ge $finishLimit) {
+            $streamTimedOut = $true
+            break
+        }
+        Start-Sleep -Milliseconds 150
+    }
+
+    if ($null -ne $streamExit) {
+        # The marker is the run's own report of its exit code. It is taken and the session is cut:
+        # waiting for the channel to close is exactly what this cannot do.
+        $code = $streamExit
+        if (-not $streamProc.HasExited) { Stop-HostProcess $streamProc }
+    } elseif ($streamTimedOut) {
+        # The third state. Not a pass: nothing here says the run's checkers were green. Not a red
+        # reading either: every line the run printed is above, and the caller can compare the rows
+        # that did arrive. The code is unknown, and the summary below says so (exit 7).
+        Stop-HostProcess $streamProc
+        $code = 7
+        $exitUnknown = $true
+        Write-Host ("[camel-remote] {0} went silent {1} s after [SPLIT], so the session was cut; the readings above are kept and the exit code was not obtained" -f `
+            $name, $FinishTimeoutSeconds)
+    } else {
+        # ssh's own status is the remote command's when it exits by itself.
+        $code = $streamProc.ExitCode
+    }
     $finishedAt = Get-Date
     # The end load is taken here, not after the summaries below: this is the moment the run stopped
     # being the thing that loaded the host, and a reading taken a minute later is a reading of other
     # people's work. The summary further down reuses this reading instead of taking a second one.
-    if ($null -eq $loadEnd) { $loadEnd = Get-HostLoad }
+    if ($null -eq $loadEnd) { $loadEnd = Get-HostLoad -TimeoutSeconds $FinishTimeoutSeconds }
     if ($null -ne $loadEnd) { $run.loadAtEnd = "$([math]::Round($loadEnd[0], 2))" }
     if ($null -eq $run.loadAtStart -and $null -ne $loadStart) {
         $run.loadAtStart = "$([math]::Round($loadStart[0], 2))"
@@ -2937,7 +3166,9 @@ exit `$code
     if ($null -eq $run.state) { $run.state = 'read' }
     $run.finishedAt = $finishedAt.ToString('o')
     $run.exit = $code
-    $run.phase = if ($code -eq 0) { 'done' } else { 'fail' }
+    # `unknown` is the third state and not a shade of either: a record that says `exit 0` or `exit 1`
+    # is a claim about the run, and this one makes no claim -- the readings are what it has.
+    $run.phase = if ($exitUnknown) { 'unknown' } elseif ($code -eq 0) { 'done' } else { 'fail' }
     Publish-Run
 
     # The goldens a `-UpdateGolden` run rewrote, written as one set. The recording run is green
@@ -3328,7 +3559,7 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     $planEnd = if ($planStartedAt) { $finishedAt } else { $planStartedAt }
     $phases = "transfer {0:N1} s, build {1:N1} s" -f ($transferEnd - $startedAt).TotalSeconds, ($buildEnd - $transferEnd).TotalSeconds
     if ($null -ne $planStartedAt) { $phases += ", plan {0:N1} s" -f ($finishedAt - $planStartedAt).TotalSeconds }
-    $loadEnd = if ($null -ne $loadEnd) { $loadEnd } else { Get-HostLoad }
+    $loadEnd = if ($null -ne $loadEnd) { $loadEnd } else { Get-HostLoad -TimeoutSeconds $FinishTimeoutSeconds }
     if ($null -ne $loadEnd) {
         Write-Host ("[load] {0} {1} {2} (1m/5m/15m) after run" -f $loadEnd[0], $loadEnd[1], $loadEnd[2])
     }
@@ -3358,8 +3589,21 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
         Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the {1} slot and gave up (-SlotWaitSeconds). A time-sensitive plan holds build-1, build-2 and test together, so a missing one is a run that was not started rather than one that failed: nothing above is a reading" -f `
             $SlotWaitSeconds, $run.noslotWaitedFor)
     }
-    Write-Host ("[camel-remote] {0} exit {1} ({2}; total {3} s)" -f `
-        $name, $code, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
+    if ($exitUnknown) {
+        # The third state, stated once and in the place the reader looks for the verdict: the code
+        # was not obtained, the readings above are the run's, and this is neither a pass nor a fail.
+        # Exit 7 is the code for it -- 0/1 are the two verdicts, 2 is "no reading", 3 file system,
+        # 4 a stale or wrong install, 5 a gpu reading, 6 the tree probe.
+        Write-Host ("[camel-remote] {0} exit unknown ({1}; total {2} s)" -f `
+            $name, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
+        $unknownWhy = 'the exit code was not obtained: the run printed its summary and the session did not ' +
+            "close within $FinishTimeoutSeconds s after it. The readings above are complete and are kept; " +
+            'this run is neither green nor red (exit 7), and a merge record may name it only as exit=unknown.'
+        Write-Host "[camel-remote] $unknownWhy"
+    } else {
+        Write-Host ("[camel-remote] {0} exit {1} ({2}; total {3} s)" -f `
+            $name, $code, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
+    }
     exit $code
 } finally {
     # The staging branch was this run's own scratch: the host checkout fetched it and keeps its
@@ -3367,9 +3611,28 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     # alike. Best-effort: a ref left behind means the next run force-pushes over it, never a
     # failed run, and the pile of stale lane-* refs this replaces is exactly what happened when
     # nothing ever deleted them.
+    #
+    # Bounded, because this runs on the way out of a run that has already produced its readings: git
+    # starts its own ssh for it, and a git (or an ssh under it) that does not return would hold the
+    # whole gate open *after* the exit code was decided -- the same shape as the stream hang above,
+    # one layer down. A ref left behind is harmless; the next run force-pushes over it.
     if ($stagingPushed) {
         try {
-            git -C $Path push --quiet "$sshHost`:$bare" --delete "refs/heads/$branch" 2>&1 | Out-Null
+            $deleteOut = Join-Path ([System.IO.Path]::GetTempPath()) "camel-delete-$PID.txt"
+            $deleteErr = "$deleteOut.err"
+            $gitExe = (Get-Command git -ErrorAction SilentlyContinue)
+            $gitExe = if ($null -ne $gitExe) { $gitExe.Source } else { 'git' }
+            $gitProc = Start-HostProcess -Exe $gitExe `
+                -Arguments @('-C', $Path, 'push', '--quiet', "$sshHost`:$bare", '--delete', "refs/heads/$branch") `
+                -OutFile $deleteOut -ErrFile $deleteErr
+            if (-not $gitProc.WaitForExit([math]::Max(1000, $FinishTimeoutSeconds * 1000))) {
+                Stop-HostProcess $gitProc
+                Write-Host ("[camel-remote] the staging ref refs/heads/{0} was not deleted within {1} s; the next run force-pushes over it" -f `
+                    $branch, $FinishTimeoutSeconds)
+            }
+            foreach ($deleteFile in @($deleteOut, $deleteErr)) {
+                try { if (Test-Path -LiteralPath $deleteFile) { Remove-Item -LiteralPath $deleteFile -Force } } catch { }
+            }
         } catch {
         }
     }
