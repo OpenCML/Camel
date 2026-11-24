@@ -1497,8 +1497,13 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 // 7.5; design principles 5.9).
                 settleGenericFactMaker(normInputs, normInputTypes, gct);
             }
+            // The overload set the DREF of this call stands for, when it has one beyond the
+            // rules of its group: a declaration of the name with a body is a candidate of this
+            // call like a rule, and the probe asks both.
+            const auto setOf = operatorOverloads_.find(targetNode);
             settleGenericOperatorArguments(
                 ops,
+                setOf != operatorOverloads_.end() ? &setOf->second : nullptr,
                 withInputs,
                 normInputs,
                 withInputTypes,

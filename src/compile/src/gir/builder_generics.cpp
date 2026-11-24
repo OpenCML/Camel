@@ -1882,9 +1882,9 @@ compile_graph_ptr_t Builder::instantiateForCall(
 }
 
 void Builder::settleGenericOperatorArguments(
-    const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
-    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
-    const GCT::node_ptr_t &call) {
+    const oper_group_ptr_t &ops, const OperatorOverloads *overloads,
+    std::vector<Argument> &withInputs, std::vector<Argument> &normInputs, type_vec_t &withTypes,
+    type_vec_t &normTypes, const GCT::node_ptr_t &call) {
     // A name that still has no function value: a generic function, or a name with several
     // functions (overloads of the program, an operator with several signatures).
     const auto isOverloaded = [&](const Argument &arg) {
@@ -1928,6 +1928,13 @@ void Builder::settleGenericOperatorArguments(
             if (params.size() == 2) {
                 add(TupleType::create(std::vector<Type *>{params[0], params[1]}));
             }
+        } else if (Type *walked = walkedElementTypeOf(type)) {
+            // The element type of a value a `for` walks (a range's integers, a type's own
+            // `operator for`): a function applied to the elements -- a comprehension's element
+            // function, the function in `xs->map<f>` -- takes that type as its parameter, and
+            // the type comes from the one place the walk's element type is taken from, not from
+            // this probe.
+            add(walked);
         }
     };
     for (const auto *list : {&withInputs, &normInputs}) {
@@ -1946,13 +1953,51 @@ void Builder::settleGenericOperatorArguments(
             }
         }
     }
+    // Whether the operator takes this call. The rules of its group and the declarations of the
+    // name that have a body answer together: a call site has no "rule" and "body" to tell apart,
+    // only whether the name takes the call, so this is one question with one answer -- not a set
+    // tried after another.
     const auto accepted = [&] {
         std::vector<StaticArg> statics;
         statics.reserve(normInputs.size());
         for (const Argument &input : normInputs) {
             statics.push_back(isWaiting(input) ? StaticArg{} : staticArgOf(input.node));
         }
-        return ops->resolve(withTypes, normTypes, statics).has_value();
+        if (ops->resolve(withTypes, normTypes, statics).has_value()) {
+            return true;
+        }
+        if (overloads == nullptr) {
+            return false;
+        }
+        const auto takes = [&](FunctionType *signature) {
+            if (signature == nullptr || signature->withTypesCount() != withTypes.size() ||
+                signature->normTypesCount() != normTypes.size()) {
+                return false;
+            }
+            type_bindings_t bindings;
+            for (size_t i = 0; i < withTypes.size(); ++i) {
+                if (!unifyTypeVars(signature->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < normTypes.size(); ++i) {
+                if (!unifyTypeVars(signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (const auto &graph : overloads->graphs) {
+            if (takes(graph->funcType())) {
+                return true;
+            }
+        }
+        for (const auto &tmpl : overloads->templates) {
+            if (takes(tmpl->funcType)) {
+                return true;
+            }
+        }
+        return false;
     };
     // A name with several functions: the one the operator accepts, when it is exactly one
     // (`xs->map<abs>`, `xs->reduce<max, 0>`). The operator is asked about each candidate's

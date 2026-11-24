@@ -1774,15 +1774,19 @@ class Builder {
         const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    /// The overloads of a name: the rules of its operator group and the declarations of it with a
+    /// body (defined below, beside the resolution that gathers them).
+    struct OperatorOverloads;
     /// An argument of a built-in operator that names a generic function. An operator's type
     /// rule is C++ code that needs the argument types, so it cannot say which function it
     /// expects; the instances the types of the other arguments suggest are tried (their
     /// element types first) and the one the operator accepts is taken. Replaces the name in
     /// `inputs` / `types`; an error when no instance is accepted.
     void settleGenericOperatorArguments(
-        const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
-        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
-        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+        const oper_group_ptr_t &ops, const OperatorOverloads *overloads,
+        std::vector<Argument> &withInputs, std::vector<Argument> &normInputs,
+        camel::core::type::type_vec_t &withTypes, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
     //  ---- Build-time tuples. ----
     // A tuple that is known while the graph is built: its type and its element nodes, without a
     // FILL node. A rest parameter's `ts` and a tuple comprehension are the two producers.
@@ -3623,6 +3627,14 @@ class Builder {
     std::vector<std::pair<camel::core::module::Module *, std::string>> declaringModulesOf(
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
+    /// The type of the elements a `for` over a value of `type` reads: an array's element type,
+    /// else the element type of the stream the type's `__iter__` answers. This is the loop's own
+    /// resolution asked for its answer alone (the loop builds the call it reads; this needs the
+    /// type), and it is the one place the element type of a walked value is taken from -- a
+    /// comprehension's element function and a call that applies a function to the elements both
+    /// ask it, so neither says "the element is this" a second time. Null for a type nothing
+    /// walks, and for a type that still has a type variable.
+    camel::core::type::Type *walkedElementTypeOf(camel::core::type::Type *type);
     /// Adds what the declaring modules of the operands export as overloads of `group` to the
     /// set of `dref`, once each: an overload the module also imports (or one found by both
     /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the

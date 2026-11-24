@@ -361,6 +361,55 @@ Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normT
     return found;
 }
 
+Type *Builder::walkedElementTypeOf(Type *type) {
+    type = valueTypeOf(type);
+    if (type == nullptr || containsTypeVar(type)) {
+        return nullptr;
+    }
+    if (type->code() == TypeCode::Array) {
+        return tt::as_ptr<ArrayType>(type)->elemType();
+    }
+    // The answer of an `__iter__` overload for this type: the stream it hands out, and the element
+    // type is what a round of it is.
+    const auto elementsOf = [&](FunctionType *signature) -> Type * {
+        if (signature == nullptr || signature->normTypesCount() != 1) {
+            return nullptr;
+        }
+        Type *parameter = valueTypeOf(signature->normTypeAt(0));
+        if (parameter == nullptr || !parameter->equals(type)) {
+            return nullptr;
+        }
+        Type *answer = valueTypeOf(signature->exitType());
+        if (answer == nullptr || answer->code() != TypeCode::Stream) {
+            return nullptr;
+        }
+        return tt::as_ptr<StreamType>(answer)->elemType();
+    };
+    // The three sources the loop reads, in the loop's order: what this program declares, the
+    // built-in group, and the module the type's declaration records (`builder_control.cpp`, the
+    // loop's own resolution).
+    for (const compile_graph_ptr_t &graph : operatorOverloadsOf("__iter__").graphs) {
+        if (Type *element = elementsOf(graph->funcType())) {
+            return element;
+        }
+    }
+    for (const auto &[module, typeName] : declaringModulesOf({}, {type})) {
+        for (const auto &overload : exports_->exportedOperatorOverloads(*module, "__iter__")) {
+            const entity &exported = overload.overloads;
+            if (!camel::core::module::detail::EntityAccess::isGraphSet(exported)) {
+                continue;
+            }
+            for (const auto &graph : *asCompileGraphSet(
+                     camel::core::module::detail::EntityAccess::graphSet(exported))) {
+                if (Type *element = elementsOf(graph->funcType())) {
+                    return element;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
 bool Builder::addDeclaringModuleOverloads(
     node_handle_t dref, const std::string &group, const type_vec_t &withTypes,
     const type_vec_t &normTypes, const std::string &writtenGroup) {
