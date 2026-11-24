@@ -74,7 +74,7 @@ const pattern = new RegExp(
     '\\bthe ruling\\b',
     // A lane branch name, and a commit named in a comment.
     '\\blane/[a-z0-9][a-z0-9-]*',
-    '\\blane-[a-z0-9][a-z0-9-]*',
+    '\\blane-[a-z0-9]*[a-z][a-z0-9]*(?:-[a-z0-9]+)*\\b',
     '\\bcommit\\s+[0-9a-f]{6,40}\\b',
     '`(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}`',
     // Who decided it, and which work item it was: neither belongs in the code.
