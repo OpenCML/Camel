@@ -1,6 +1,7 @@
 # The two readings a batch's composition rests on, in their own file so they can be checked without
 # a host, a build or a lane: which pairs of lanes touch a file in common, and what the plans they
-# select add up to.
+# select add up to. The branch the batch lands on is here for the same reason: which refs a target
+# spells is decided once, by name, and a value it does not know is refused here rather than defaulted.
 #
 # They are separated out for the reason `camel-remote-args.ps1` is: this is the part that fails
 # quietly. "These lanes look like they touch different things" is an impression, and the pair it gets
@@ -11,6 +12,41 @@
 # `merge-batch-sets.test.ps1` checks both, plus the plan-set hash against the one
 # `scripts/merge-readings.mjs` computes, because a record that names a plan set by a different hash
 # than the baseline cache does is a record nobody can join to a baseline.
+
+# The branch a batch lands on, and every ref the run builds from it: the base it reads
+# (`origin/<target>`), the refspec it pushes (`<target>`), and the remote ref it reads back
+# (`refs/heads/<target>`). One function and one spelling, because the failure this prevents is a
+# second place that says `develop` after the parameter said otherwise.
+#
+# `develop` is the release line and the default; `integration` is the shared branch the parallel
+# merge seats feed. There is deliberately no "unknown target -> develop" here: a value this does not
+# know stops with the value in the message. A refusal that fell back would read exactly like the
+# default being right, which is the mistake this parameter exists to remove.
+#
+# The canonical spelling is returned, not the spelling given. The tool's `-Target` is validated with
+# `[ValidateSet('develop', 'integration')]`, which compares case-insensitively, so `-Target
+# Integration` reaches this function; building `origin/Integration` from the word as typed would ask
+# for a ref that does not exist on a case-sensitive remote.
+function Resolve-BatchTarget {
+    param([string] $Target = 'develop')
+    $known = @('develop', 'integration')
+    $match = @($known | Where-Object { $_ -eq "$Target".Trim() })
+    if ($match.Count -eq 0) {
+        throw "unknown target '$Target': a batch lands on one of $($known -join ', '), and this script neither falls back nor guesses"
+    }
+    $name = $match[0]
+    return [pscustomobject]@{
+        Name      = $name
+        Origin    = "origin/$name"
+        Push      = $name
+        Remote    = "refs/heads/$name"
+        IsDefault = ($name -eq 'develop')
+        # The line the tool prints before it measures anything. It names the target and says whether
+        # it was defaulted: "wrote develop" and "was told develop" are different facts, and only one
+        # of them is visible from the branch alone.
+        Statement = if ($name -eq 'develop') { 'target: develop (the default)' } else { "target: $name (from -Target)" }
+    }
+}
 
 # One entry per pair of lanes, in the order the lanes were given. `Shared` is the intersection of the
 # two file sets -- the one reading that makes "they do not touch the same file" a fact.

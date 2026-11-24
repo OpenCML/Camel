@@ -1,4 +1,5 @@
-# What `merge-batch-sets.ps1` decides, checked without a host, a build or a lane.
+# What `merge-batch-sets.ps1` decides, checked without a host, a build or a lane: the pairwise file
+# sets, the plan-set union and its hash, and the target branch a batch lands on (`Resolve-BatchTarget`).
 #
 #   pwsh -NoProfile -File internal/tools/merge-batch-sets.test.ps1
 #
@@ -102,6 +103,33 @@ try {
 }
 $empty = Get-PlanSetHash -Names @()
 Check 'an empty set still has a name' ($empty.Hash -eq '0-0') $empty.Hash
+
+# --- the target: the branch a batch lands on --------------------------------
+# The same parameter `merge-lane.ps1` carries, checked here without a host: the refs a target spells,
+# the default, and the refusal that names the value instead of falling back to the default.
+$defaultTarget = Resolve-BatchTarget
+Check 'the default target is develop' ($defaultTarget.Name -eq 'develop') $defaultTarget.Name
+Check 'the default is stated in the line the batch prints' ($defaultTarget.Statement -match 'develop' -and $defaultTarget.Statement -match 'default') $defaultTarget.Statement
+
+$integration = Resolve-BatchTarget -Target 'integration'
+Check '-Target integration reads its base from origin/integration' ($integration.Origin -eq 'origin/integration') $integration.Origin
+Check '-Target integration would push the merge commit to integration' ($integration.Push -eq 'integration') $integration.Push
+Check '-Target integration reads the pushed ref back from refs/heads/integration' ($integration.Remote -eq 'refs/heads/integration') $integration.Remote
+Check 'a target named in another case is spelled the way its refs are' ((Resolve-BatchTarget -Target 'Integration').Origin -eq 'origin/integration') (Resolve-BatchTarget -Target 'Integration').Origin
+
+# An unknown target stops and names the value it was given; the default is never the answer to a
+# value the script does not know.
+$refused = ''
+try { Resolve-BatchTarget -Target 'trunk' | Out-Null } catch { $refused = "$_" }
+Check 'an unknown target is refused and named' ($refused -match 'trunk') $refused
+
+# The tool's own -Target, refused by its parameter before the body runs -- so this starts nothing and
+# needs no host, no settings file and no lane.
+$tool = Join-Path $PSScriptRoot 'merge-batch.ps1'
+$said = @(& pwsh -NoProfile -File $tool -Branch 'lane/not-a-batch' -Target 'trunk' 2>&1)
+$saidExit = $LASTEXITCODE
+Check 'the script refuses an unknown -Target (exit 1)' ($saidExit -eq 1) "exit $saidExit"
+Check 'the script''s refusal names the value it was given' ((@($said | ForEach-Object { "$_" }) -join ' ') -match 'trunk') (@($said | ForEach-Object { "$_" }) -join ' ')
 
 Write-Host ''
 Write-Host "$checks checks, $failed failed"
