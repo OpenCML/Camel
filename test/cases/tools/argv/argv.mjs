@@ -43,8 +43,6 @@
  * Usage: node argv.mjs --unknown | --preflight | --empty | --gate
  */
 
-import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import url from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -82,11 +80,15 @@ const FACETS = {
         absent: ['unknown option', SENTENCES.preflight, 'refused this selection'],
     },
     gate: {
-        exit: 2,
+        // `scripts/old-tree-probe.mjs --check` exits 0 when the chain behaves: it has already
+        // asserted the consumer's exit 2 and the words, and it prints what it read.
+        exit: 0,
         contains: [
+            'PASS probe.old-tree',
             "this tree's runner does not know --list-cases",
             'this is not an empty selection',
             '[ARGV] this tree is',
+            'built by synthesis, not by archive',
         ],
         // The two sentences a gate printed before this lane, one about a selection and one about the
         // cases it could not compute: neither may come back for a version mismatch.
@@ -104,19 +106,15 @@ const spec = FACETS[facet]
 let run
 let out
 if (facet === 'gate') {
-    const tree = buildTreeOlderThanTheCaller()
-    try {
-        const list = path.join(tree, 'changed.txt')
-        fs.writeFileSync(list, 'test/plans/smoke/core.plan.toml\n')
-        run = spawnSync(process.execPath, [path.join(tree, 'scripts', 'selection-cases.mjs'), '--files', list], {
-            cwd: tree,
-            encoding: 'utf8',
-            windowsHide: true,
-        })
-        out = `${run.stdout || ''}${run.stderr || ''}`
-    } finally {
-        fs.rmSync(tree, { recursive: true, force: true })
-    }
+    // The chain lives in `scripts/old-tree-probe.mjs`, which builds the old half and asserts the
+    // sentence; this case is what keeps that tool from rotting, and the tool is what a seat runs
+    // when it wants the pit reproduced rather than remembered.
+    run = spawnSync(process.execPath, [path.join(REPO_ROOT, 'scripts', 'old-tree-probe.mjs'), '--check'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        windowsHide: true,
+    })
+    out = `${run.stdout || ''}${run.stderr || ''}`
 } else {
     // `CAMEL_TEST_RESULTS_ROOT` is not set on purpose: a refusal that never starts a run must not
     // need a place to write one, and these facets all refuse before the first test.
@@ -129,37 +127,6 @@ if (facet === 'gate') {
     out = `${run.stdout || ''}${run.stderr || ''}`
 }
 const problems = []
-
-/**
- * A tree that predates `--list-cases`, assembled from this checkout: the same runner with that one
- * branch renamed, so the option falls where it fell on 2026-11-24 -- into the parser's `-`-word
- * refusal. Nothing else is synthesised: the consumer that runs against it is this checkout's own
- * `scripts/selection-cases.mjs`, and the runner's words are this checkout's own refusal.
- *
- * The commit is real (a fresh repository with one commit and `origin/develop` pointing at it),
- * because the consumer reads its `tree` and `base` from git and a tree it cannot read is a third
- * kind of failure this case must not be measuring by accident.
- */
-function buildTreeOlderThanTheCaller() {
-    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-argv-gate-'))
-    for (const rel of ['test/tools', 'test/runner.mjs', 'test/plan-selection.json', 'test/plans/smoke/core.plan.toml', 'scripts/selection-cases.mjs']) {
-        fs.cpSync(path.join(REPO_ROOT, rel), path.join(tree, rel), { recursive: true })
-    }
-    const runner = path.join(tree, 'test', 'tools', 'run-tests.mjs')
-    const text = fs.readFileSync(runner, 'utf8')
-    const older = text.replace("arg === '--list-cases'", "arg === '--list-cases-not-in-this-tree'")
-    if (older === text) {
-        throw new Error('the runner has no --list-cases branch to remove, so no older tree can be built')
-    }
-    fs.writeFileSync(runner, older)
-    const git = (...args) => spawnSync('git', args, { cwd: tree, encoding: 'utf8', windowsHide: true })
-    git('init', '-q', '-b', 'develop')
-    git('config', 'core.autocrlf', 'false')
-    git('add', '-A')
-    git('-c', 'user.email=argv@invalid', '-c', 'user.name=argv', 'commit', '-q', '-m', 'a tree older than the caller')
-    git('update-ref', 'refs/remotes/origin/develop', 'HEAD')
-    return tree
-}
 
 if (run.error) {
     problems.push(`the runner could not be started: ${run.error.message}`)
