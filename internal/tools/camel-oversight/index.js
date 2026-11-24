@@ -35,11 +35,51 @@
 
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { measure } from './measure.js'
-import { DEFAULT_LIMITS, LEVELS, RULES } from './rules.js'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import * as bootMeasure from './measure.js'
+import * as bootRules from './rules.js'
+
+// The parts that change most often -- the rules, their limits and texts, and what is measured --
+// are reloaded from disk when their file changes, at the next beat, without restarting the host:
+// a restart stops every agent that is working. A file that fails to load leaves the version in use
+// in place and is reported. The routes, the tools and the session wiring in this file still need a
+// restart.
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const hot = {
+    rules: { module: bootRules, stamp: null, error: null },
+    measure: { module: bootMeasure, stamp: null, error: null },
+}
+async function reloadHot(onChange) {
+    for (const [name, file] of [['rules', 'rules.js'], ['measure', 'measure.js']]) {
+        const slot = hot[name]
+        const full = path.join(HERE, file)
+        let stamp
+        try {
+            stamp = (await stat(full)).mtimeMs
+        } catch (error) {
+            slot.error = `${file}: ${error.message}`
+            continue
+        }
+        if (slot.stamp === null) {
+            slot.stamp = stamp // the version imported at start is the one on disk now
+            continue
+        }
+        if (stamp === slot.stamp) continue
+        try {
+            slot.module = await import(`${pathToFileURL(full).href}?v=${stamp}`)
+            slot.stamp = stamp
+            slot.error = null
+            onChange && onChange({ file, stamp, ok: true })
+        } catch (error) {
+            slot.stamp = stamp // do not retry the same broken file every beat
+            slot.error = `${file}: ${error.message}`
+            onChange && onChange({ file, stamp, ok: false, error: error.message })
+        }
+    }
+}
 
 export const name = 'camel-oversight'
 export const inject = ['agents', 'webServer', 'tools', 'systemPrompt', 'timer']
@@ -393,7 +433,17 @@ export function apply(ctx, rawConfig) {
     // condition has held for the rule's `hold` and the same alert was not delivered within its
     // `cooldown` (an alert whose reading changed is new). All reminders due in one beat are delivered
     // as one message, at the loudest level among them.
-    const limits = { ...DEFAULT_LIMITS, ...(config.limits || {}) }
+    // Limits are read afresh at each beat: the rules file's defaults, then the plugin config, then
+    // the local config file, so a threshold changes without a restart.
+    const limitsNow = () => {
+        let local = {}
+        try {
+            if (existsSync(LOCAL_CONFIG)) local = JSON.parse(readFileSync(LOCAL_CONFIG, 'utf8')).limits || {}
+        } catch {
+            local = {}
+        }
+        return { ...hot.rules.module.DEFAULT_LIMITS, ...(config.limits || {}), ...local }
+    }
     let reading = null
     let lanesNow = { unreadable: 'not measured yet' }
     const alerts = new Map() // rule id -> {since, key, text, level, lastDelivered, lastKey}
@@ -434,6 +484,7 @@ export function apply(ctx, rawConfig) {
 
     const deliver = (due, now) => {
         const agent = target()
+        const LEVELS = hot.rules.module.LEVELS
         const level = due.reduce((top, alert) => (LEVELS[alert.level] > LEVELS[top] ? alert.level : top), 'quiet')
         const text = `[oversight · 提醒]\n${due.map((alert) => `- ${alert.text}`).join('\n')}`
         const mode = agent ? sendToTarget(agent, level, text) : 'held (no claimed session)'
@@ -582,7 +633,13 @@ export function apply(ctx, rawConfig) {
         beating = true
         try {
             const now = Date.now()
-            reading = await measure({
+            await reloadHot((change) => {
+                const entry = { kind: 'hot-reload', at: now, ...change }
+                record(entry)
+                emit(entry)
+            })
+            const limits = limitsNow()
+            reading = await hot.measure.module.measure({
                 repo: config.repo,
                 fetch: config.fetch !== false,
                 stateDir: config.stateDir,
@@ -608,7 +665,7 @@ export function apply(ctx, rawConfig) {
                 dmLastSeen,
             }
             const due = []
-            for (const rule of RULES) {
+            for (const rule of hot.rules.module.RULES) {
                 let found = null
                 try {
                     found = rule.check(facts)
@@ -699,6 +756,7 @@ export function apply(ctx, rawConfig) {
             promptReach,
             blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
             watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
+            hotLoaded: Object.fromEntries(Object.entries(hot).map(([name, slot]) => [name, { stamp: slot.stamp, error: slot.error }])),
         })
     })
 
