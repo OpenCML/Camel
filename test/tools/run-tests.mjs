@@ -1393,6 +1393,16 @@ function printFailedOutput(result, pointer) {
     if (!SHOW_FAILED_OUTPUT) return
     const maxLines = 12
     const maxWidth = 240
+    // Two `(empty)` lines say the same thing twice, and a reader skimming them sees the shape of a
+    // printer that lost its input rather than a run that said nothing. One sentence names the fact
+    // the two lines only implied, and it keeps the pointer, which is where the uncut text is.
+    if (!result.stdout && !result.stderr) {
+        const where = pointer ? ` -- ${pointer}` : ''
+        console.log(
+            `    ${COLORS.cyan}[output]${COLORS.reset} both empty: the run produced no explanation${where}`,
+        )
+        return
+    }
     for (const [name, text] of [['stdout', result.stdout], ['stderr', result.stderr]]) {
         if (!text) {
             console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} (empty)`)
