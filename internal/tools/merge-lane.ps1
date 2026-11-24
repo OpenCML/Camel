@@ -98,11 +98,23 @@
     pushes nothing and touches no branch; run it when the test slot is free, after a merge.
 
 .PARAMETER BaselineWorktree
-    Where the baseline is measured. It is a worktree of its own, detached at the tree the merge lands
+    Where the baseline is measured. It is a worktree of its own, held at the tree the merge lands
     on, and it is kept between merges so the host's build of it stays warm. Left empty, it is read
     from this machine's settings file (`baselineWorktree`), the same way -MainCheckout is, and a run
     that cannot read it stops with exit 2 instead of measuring a baseline in another seat's tree. The
     path may not exist yet: this script creates the worktree there on the first merge.
+
+    This is the legacy shape: one fixed path per seat, moved to each tip. `-BaselineRoot` is the
+    shape that shares the work (see below), and a machine that sets it does not need this one. When
+    this path IS used, its HEAD is checked against the tip first: a tree holding another commit is
+    said to be stale and moved, not read.
+
+.PARAMETER BaselineRoot
+    The directory the per-tip baseline checkouts live under. Each baseline tree is named by the
+    commit it measures -- `<BaselineRoot>\<sha>` -- so the seats that land on one tip share one
+    checkout, one host build and one reading instead of making three. Read from this machine's
+    settings (`baselineRoot`) when not given. A run with neither this nor -BaselineWorktree stops
+    with exit 2: a baseline measured in "some path" is a reading about somebody else's tree.
 
 .EXAMPLE
     .\merge-lane.ps1 -Branch lane/range-ri -Message "merge range-ri: ..." -WhatIf
@@ -141,6 +153,11 @@ param(
     # screen, they collide in the numbers. The path may not exist yet -- this script creates the
     # worktree there (Sync-BaselineWorktree) -- so "not there" is the first merge, not a refusal.
     [string] $BaselineWorktree = '',
+    # The directory the per-tip baseline checkouts live under: the tree for a commit is
+    # `<BaselineRoot>\<sha>`, so every seat that measures that commit uses the same tree. Empty means
+    # "read `baselineRoot` from this machine's settings", and a machine that sets neither this nor
+    # -BaselineWorktree is refused with exit 2 (the settings file says which to add).
+    [string] $BaselineRoot = '',
     # One branch per baseline tree: git will not check one branch out twice, so a second merge
     # position beside this one gives its own tree its own branch (the batch tool's reason, ported).
     [string] $BaselineBranch = 'camel-baseline',
@@ -160,6 +177,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The shape a push must have (D-1124-78) lives beside this file, so both merge tools read one
+# implementation: `merge-batch.ps1` dot-sources it too. Read here, called before every push.
+. (Join-Path $PSScriptRoot 'merge-push-shape.ps1')
 
 # --- which checkout a merge lands in -----------------------------------------
 #
@@ -205,7 +226,11 @@ function Resolve-SeatPath {
         # Where camel-gate-config.ps1 lives (the settings loader, shared with the other gate tools).
         [string] $ToolsRoot = '',
         # The path may not exist yet: the baseline worktree is created at it by this script.
-        [switch] $MayCreate
+        [switch] $MayCreate,
+        # The key may be absent and that is not a defect: `baselineRoot` is the newer shape, and a
+        # machine still on `baselineWorktree` has no `baselineRoot` and must not be refused for it.
+        # An absent optional key answers with an empty path; a malformed one is still a refusal.
+        [switch] $Optional
     )
 
     # An explicit path is the answer, and the file is not even read: what a seat types on the command
@@ -218,6 +243,7 @@ function Resolve-SeatPath {
     $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $ToolsRoot
 
     if (-not $cfg.localConfigFound) {
+        if ($Optional) { return @{ Path = ''; Problem = '' } }
         return @{
             Path    = ''
             Problem = "there is no settings file at $($cfg.localConfigPath), and -$Parameter was not given. These paths are machine-local, so this run cannot name one: copy internal/tools/camel-gate.example.json to that path and set '$Key', or pass -$Parameter."
@@ -226,6 +252,7 @@ function Resolve-SeatPath {
     $property = $cfg.PSObject.Properties[$Key]
     $value = if ($null -ne $property) { "$($property.Value)".Trim() } else { '' }
     if (-not $value) {
+        if ($Optional) { return @{ Path = ''; Problem = '' } }
         return @{
             Path    = ''
             Problem = "the settings file at $($cfg.localConfigPath) has no '$Key', and -$Parameter was not given. That key is what says which tree this is, and nothing here may guess one: set it in that file, or pass -$Parameter."
@@ -268,6 +295,15 @@ function Resolve-BaselineWorktree {
     param([string] $Given = '', [string] $LocalConfig = '', [string] $ToolsRoot = '')
     return Resolve-SeatPath -Given $Given -Key 'baselineWorktree' -Parameter 'BaselineWorktree' `
         -LocalConfig $LocalConfig -ToolsRoot $ToolsRoot -MayCreate
+}
+
+# The newer shape of the same setting: a directory the per-tip baseline checkouts live under, so a
+# tip is measured once for every seat that lands on it. Optional on purpose -- a machine still on the
+# legacy fixed path has no such key, and must not be refused for having the older arrangement.
+function Resolve-BaselineRoot {
+    param([string] $Given = '', [string] $LocalConfig = '', [string] $ToolsRoot = '')
+    return Resolve-SeatPath -Given $Given -Key 'baselineRoot' -Parameter 'BaselineRoot' `
+        -LocalConfig $LocalConfig -ToolsRoot $ToolsRoot -MayCreate -Optional
 }
 
 # The branch every reading in this script is about: the start point, the state a stop prints, the
@@ -372,6 +408,67 @@ function Stop-With {
     Write-Host ''
     Write-GitState -MergeCommit $MergeCommit
     exit 1
+}
+
+# --- which checkout measures a baseline, and under what name -----------------
+#
+# A baseline is "what the plans read on THIS commit". Its identity is therefore the commit and the
+# plan set, and nothing else -- not the seat that measured it, not the path it happened to be
+# checked out at. On 2026-11-24 three seats merged onto one `integration` tip and each built the
+# same tree: three worktrees, three host builds, three runs, one reading. So the tree is named by
+# the sha and shared: `<Root>\<sha>`, on a branch of the same name, and a seat that finds it ready
+# uses it as it stands.
+#
+# The legacy shape (one fixed path per seat, moved to each tip) is kept, because a machine where it
+# works is not repaired by a rename. It is read only after its HEAD is compared with the tip: a path
+# holding another commit is a baseline for another tree, and it is moved -- out loud -- instead of
+# being read.
+#
+# Returns @{ Path; Branch; Kind ('tip'|'fresh'|'stale'|'none'); Problem; Lines }. `Lines` are what
+# the caller prints; this function decides and says nothing, so a test can call it without noise.
+function Get-BaselineCheckout {
+    param(
+        [Parameter(Mandatory)][string] $Tip,
+        # The directory the per-tip checkouts live under; empty means the legacy path is in use.
+        [string] $Root = '',
+        [string] $LegacyPath = '',
+        [string] $LegacyBranch = 'camel-baseline'
+    )
+
+    if ($Tip.Length -lt 7) {
+        return [pscustomobject]@{ Path = ''; Branch = ''; Kind = 'none'; Lines = @(); Problem = "'$Tip' is not a commit sha, so no baseline tree can be named for it" }
+    }
+
+    if ($Root) {
+        $path = Join-Path $Root $Tip
+        # 12 characters, the same prefix `merge-readings.mjs` uses for the reading's own file name:
+        # one name for one commit, so a person reading a directory sees the same key the cache uses.
+        $branch = "camel-baseline-$($Tip.Substring(0, 12))"
+    } else {
+        if (-not $LegacyPath) {
+            return [pscustomobject]@{ Path = ''; Branch = ''; Kind = 'none'; Lines = @(); Problem = 'neither a baseline root nor a baseline worktree was named' }
+        }
+        $path = $LegacyPath
+        $branch = $LegacyBranch
+    }
+
+    $held = ''
+    if (Test-Path -LiteralPath $path) {
+        $held = "$(& git -C $path rev-parse --verify HEAD 2>$null)".Trim()
+    }
+    if ($held -eq $Tip -and $held) {
+        return [pscustomobject]@{ Path = $path; Branch = $branch; Kind = 'tip'; Lines = @(); Problem = '' }
+    }
+    if ($held) {
+        $heldShort = if ($held.Length -gt 9) { $held.Substring(0, 9) } else { $held }
+        $tipShort = $Tip.Substring(0, 9)
+        $lines = @(
+            'stale baseline beside the tip: rebuilding',
+            "  $path holds $heldShort, and the tip being measured is ${tipShort}: a baseline for another tree is not reused, so it is moved to $tipShort and measured again."
+        )
+        return [pscustomobject]@{ Path = $path; Branch = $branch; Kind = 'stale'; Lines = $lines; Problem = '' }
+    }
+    return [pscustomobject]@{ Path = $path; Branch = $branch; Kind = 'fresh'; Lines = @(); Problem = '' }
 }
 
 # The baseline's own checkout: a worktree of THIS repository, held at the sha it must measure.
@@ -651,27 +748,56 @@ function Invoke-PushWithRecovery {
     $headAtEntry = (& $head)
     $basedOn = "$(& git -C $Tree rev-parse 'HEAD^1' 2>$null)".Trim()
 
-    # A rejection is read, never retried blind. A failure that is not a rejection is the old shape --
-    # a network or a lock -- and keeps the old three attempts with four seconds between them.
-    $attempt = & $pushOnce
-    $tries = 1
-    while ($attempt.Exit -ne 0 -and -not (Test-PushRejection -Text $attempt.Text) -and $tries -lt 3) {
-        Start-Sleep -Seconds 4
-        $tries++
-        $attempt = & $pushOnce
-    }
-    if ($attempt.Exit -eq 0) {
+    # --- what this push would publish, read before it is attempted ---------------
+    # The ruling's shape (D-1124-78): the commit that would travel must be a MERGE whose first parent
+    # is origin/$Target's tip as of this fetch. It is read here and not remembered from the merge
+    # stage, because the reading is about what is published and the merge stage is minutes older.
+    #
+    # A `single parent` is not a race and nothing here recovers it: a lane commit that would enter the
+    # target directly has no lane on a second parent, and the first-parent chain cannot tell it from
+    # an arrival. A `first parent` that is not the tip is the target having moved -- the case this
+    # function exists for -- and it is handed to the documentation-only rule below exactly as a
+    # refused push is. The commit that rule re-lands is made on the new tip, so this check passes on
+    # the second read as well.
+    $shape = Test-PushFirstParent -Tree $Tree -Target $Target -Sha $headAtEntry
+    if ($shape.Kind -eq 'single parent' -or $shape.Kind -eq 'fetch failed' -or $shape.Kind -eq 'no tip') {
         return @{
-            Ok = $true; Kind = 'pushed'; Recovered = $false; Sha = (& $head)
-            Targets = @(); Rows = 0; Reds = 0; Shas = @()
-            Lines = @("pushed HEAD:$Target ($(& $head))")
+            Ok = $false
+            Kind = $(if ($shape.Kind -eq 'single parent') { 'not a merge' } else { 'failed' })
+            Recovered = $false; Sha = (& $head)
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($shape.FirstParent, $shape.Tip); Tries = 0
+            Lines = @($shape.Message)
         }
     }
-    if (-not (Test-PushRejection -Text $attempt.Text)) {
-        return @{
-            Ok = $false; Kind = 'failed'; Recovered = $false; Sha = (& $head)
-            Targets = @(); Rows = 0; Reds = 0; Shas = @(); Tries = $tries
-            Lines = @("git push failed after $tries attempt(s)", ($attempt.Text -split "`n" | Where-Object { $_ }))
+
+    # A rejection is read, never retried blind. A failure that is not a rejection is the old shape --
+    # a network or a lock -- and keeps the old three attempts with four seconds between them. THOSE
+    # THREE ARE THIS LOOP'S ALONE: the second push below is one attempt with no retry, so the most a
+    # run can send is three attempts when nothing was refused, or one attempt plus one recovery plus
+    # one attempt when a target moved. There is no product of two loops here.
+    $attempt = @{ Exit = 1; Text = '' }
+    $tries = 0
+    if ($shape.Kind -eq 'arrived') {
+        $attempt = & $pushOnce
+        $tries = 1
+        while ($attempt.Exit -ne 0 -and -not (Test-PushRejection -Text $attempt.Text) -and $tries -lt 3) {
+            Start-Sleep -Seconds 4
+            $tries++
+            $attempt = & $pushOnce
+        }
+        if ($attempt.Exit -eq 0) {
+            return @{
+                Ok = $true; Kind = 'pushed'; Recovered = $false; Sha = (& $head)
+                Targets = @(); Rows = 0; Reds = 0; Shas = @()
+                Lines = @("pushed HEAD:$Target ($(& $head))")
+            }
+        }
+        if (-not (Test-PushRejection -Text $attempt.Text)) {
+            return @{
+                Ok = $false; Kind = 'failed'; Recovered = $false; Sha = (& $head)
+                Targets = @(); Rows = 0; Reds = 0; Shas = @(); Tries = $tries
+                Lines = @("git push failed after $tries attempt(s)", ($attempt.Text -split "`n" | Where-Object { $_ }))
+            }
         }
     }
 
@@ -721,50 +847,71 @@ function Invoke-PushWithRecovery {
             Files = $changed
             Code = $split.Code
             Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $false -ReRan 0),
-                "  the commits that landed while this merge was read touch $($split.Code.Count) file(s) that are not documentation: $(($split.Code | Select-Object -First 8) -join ', ')$(if ($split.Code.Count -gt 8) { " and $($split.Code.Count - 8) more" } else { '' })")
+                "  the commits that landed while this merge was read touch $($split.Code.Count) file(s) that are not documentation: $(($split.Code | Select-Object -First 8) -join ', ')$(if ($split.Code.Count -gt 8) { " and $($split.Code.Count - 8) more" } else { '' })") +
+                @(if ($shape.Kind -eq 'first parent') { @($shape.Message | ForEach-Object { "  $_" }) } else { @() })
         }
     }
 
-    # --- documentation only: re-land it and re-read what reads it ---------------
-    # A merge commit, not a reset: the merge this run made is already a reading (its rows, its clang
-    # result), and re-landing it on the new tip keeps that history instead of pretending the merge
-    # was made against the newer tree.
+    # --- documentation only: re-land it in the shape an arrival must have --------
+    # The ruling's recipe (D-1124-78), not "merge the new tip into the merge": the seat's branch is
+    # moved to the new tip and the merge this run made -- the prepared merge, whose rows and clang
+    # result are the reading -- is merged INTO it. The commit that travels then has origin/$Target's
+    # tip as its first parent, which is what makes it an arrival. Merging the tip into the merge
+    # commit would put the merge commit first and reproduce the chain the ruling is about: same tree,
+    # wrong order, and the order is the thing that was wrong.
     $landedSubjects = @(& git -C $Tree log --oneline "$old..$new" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
     $body = @()
     $body += "Landed on origin/$Target while this merge was read, documentation only, so they are merged here instead of being read again:"
     foreach ($line in $landedSubjects) { $body += "  $line" }
     $body += 'Files:'
     foreach ($file in $split.Documentation) { $body += "  $file" }
-    $mergeMessage = "merge origin/$Target at $($new.Substring(0, 9)) into the merge commit`n`n" + ($body -join "`n")
-    $merge = @(& git -C $Tree merge --no-ff -m $mergeMessage "origin/$Target" 2>&1)
+    $mergeMessage = "merge $Branch at $($headAtEntry.Substring(0, 9)) into origin/$Target at $($new.Substring(0, 9)): the documentation that landed while this merge was read`n`n" + ($body -join "`n")
+    # The branch the seat's checkout is on: the re-land moves THAT branch to the new tip, so the
+    # checkout ends on the commit this run pushes. A detached HEAD has no name to move, so this run
+    # gives it one -- the seat's identity matters less than the pushed commit being reachable.
+    $seatBranch = "$(& git -C $Tree symbolic-ref -q --short HEAD 2>$null)".Trim()
+    if (-not $seatBranch) { $seatBranch = 'camel-reland' }
+    $move = @(& git -C $Tree checkout -q -B $seatBranch $new 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        return @{
+            Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = $headAtEntry
+            Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
+            Files = $changed
+            Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
+                "  the seat's branch could not be moved to origin/$Target ($($new.Substring(0,9))) to re-land the merge on it -- $(($move | ForEach-Object { "$_" }) -join ' '). Nothing was pushed.")
+        }
+    }
+    $merge = @(& git -C $Tree merge --no-ff -m $mergeMessage $headAtEntry 2>&1)
     $mergeExit = $LASTEXITCODE
     if ($mergeExit -ne 0) {
         $conflicted = @(& git -C $Tree diff --name-only --diff-filter=U 2>$null)
         # An unfinished merge left in the checkout is the state that made `merge-lane` refuse the next
         # run, so it is aborted here -- and the abort is not a repair of the conflict, it is leaving
-        # the tree as this run found it.
+        # the tree as this run found it. The abort leaves the branch on the new tip, so the branch is
+        # put back on the merge commit: "nothing was pushed" has to mean the checkout is where it was.
         if ("$(& git -C $Tree rev-parse -q --verify MERGE_HEAD 2>$null)".Trim()) {
             & git -C $Tree merge --abort 2>&1 | Out-Null
         }
+        & git -C $Tree checkout -q -B $seatBranch $headAtEntry 2>&1 | Out-Null
         return @{
             Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = (& $head)
             Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
             Files = $changed
             Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
-                "  re-landing origin/$Target on the merge conflicted in $($conflicted.Count) file(s): $($conflicted -join ', '). The merge was aborted; nothing was pushed.")
+                "  re-landing the merge on origin/$Target conflicted in $($conflicted.Count) file(s): $($conflicted -join ', '). The merge was aborted and $seatBranch is back on the merge commit; nothing was pushed.")
         }
     }
     $reLanded = (& $head)
-    # A merge of the new tip INTO the merge commit: its first parent is the merge this run made (the
-    # history of what was read stays), its second is the tip that landed, so the push is a
-    # fast-forward of that tip and the landed commits are in what goes to origin.
+    # A merge OF THE PREPARED MERGE INTO THE NEW TIP: first parent is origin/$Target at $new, second is
+    # the merge this run made. This is the shape the pre-push reading below accepts, and the reason
+    # the recovery is not that reading's exception.
     $parents = @("$(& git -C $Tree rev-list --parents -n 1 HEAD 2>$null)".Trim() -split '\s+' | Where-Object { $_ })
-    if ($parents.Count -lt 3 -or $parents[1] -ne $headAtEntry -or $parents[2] -ne $new) {
+    if ($parents.Count -lt 3 -or $parents[1] -ne $new -or $parents[2] -ne $headAtEntry) {
         return @{
             Ok = $false; Kind = 'conflict'; Recovered = $false; Sha = $reLanded
             Targets = @(); Rows = 0; Reds = 0; Shas = @($old, $new)
             Lines = @((Format-RebaseLine -OldRemote $old -NewRemote $new -Files $changed.Count -DocsOnly $true -ReRan 0),
-                "  the re-landed commit $($reLanded.Substring(0,9)) is not a merge of origin/$Target ($($new.Substring(0,9))) into the merge commit $($headAtEntry.Substring(0,9)) -- its parents are $($parents -join ', ') -- so it is not the tree the recovery describes and nothing was pushed.")
+                "  the re-landed commit $($reLanded.Substring(0,9)) is not a merge of the merge this run made ($($headAtEntry.Substring(0,9))) into origin/$Target ($($new.Substring(0,9))) -- its parents are $($parents -join ', ') -- so it is not the tree the recovery describes and nothing was pushed.")
         }
     }
 
@@ -805,7 +952,29 @@ function Invoke-PushWithRecovery {
         }
     }
 
-    # --- push again, once ------------------------------------------------------
+    # --- push again, once, after the same reading ------------------------------
+    # The re-land was made on the tip read above; between that read and this push the tip can move
+    # again, and then the commit about to travel no longer has it as a first parent. The shape is
+    # read here for exactly the reason it is read before the first push -- this is the push that
+    # publishes a commit made after a target moved, and it is where the ruling's chain was broken
+    # tonight. A second move inside one run is a stop, not another recovery: the run gets one.
+    $shape2 = Test-PushFirstParent -Tree $Tree -Target $Target -Sha $reLanded
+    if ($shape2.Kind -ne 'arrived') {
+        $old2 = $new
+        $new2 = $shape2.Tip
+        $changed2 = if ($old2 -and $new2 -and $old2 -ne $new2) {
+            @(& git -C $Tree diff --name-only "$old2..$new2" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+        } else { @() }
+        $split2 = Split-ChangeByPath -Paths $changed2
+        return @{
+            Ok = $false; Kind = 'second rejection'; Recovered = $false; Sha = $reLanded
+            Targets = $targets; Rows = $reRunReading.Rows; Reds = $reRunReading.Reds; Shas = @($old2, $new2)
+            Files = $changed2
+            Lines = @($rebaseLine,
+                (Format-RebaseLine -OldRemote $old2 -NewRemote $new2 -Files $changed2.Count -DocsOnly $split2.DocsOnly -ReRan 0),
+                "  the re-landed commit $($reLanded.Substring(0,9)) was made on origin/$Target at $($new.Substring(0,9)), and the tip is $($new2.Substring(0,9)) now: $(if ($shape2.Kind -eq 'first parent') { 'its first parent is no longer the tip' } else { $shape2.Message[0] }). Nothing was pushed.")
+        }
+    }
     $second = & $pushOnce
     if ($second.Exit -eq 0) {
         return @{
@@ -882,15 +1051,28 @@ $MainCheckout = $mergeCheckout.Path
 # The baseline tree is read here too, and not at the point it is used: a run that cannot name it would
 # otherwise merge, build and measure before finding out, which is the eleven minutes this script
 # exists to stop spending twice. Read the same way, refused the same way, stopped the same way.
-$baselineCheckout = Resolve-BaselineWorktree -Given $BaselineWorktree -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
-if ($baselineCheckout.Problem) {
+$baselineRootCheck = Resolve-BaselineRoot -Given $BaselineRoot -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
+if ($baselineRootCheck.Problem) {
     Write-Host ''
-    Write-Host 'STOPPED: the tree the baseline is measured in is not named (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
-    Write-Host "  $($baselineCheckout.Problem)"
+    Write-Host 'STOPPED: the directory the baseline checkouts live under is not usable (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
+    Write-Host "  $($baselineRootCheck.Problem)"
     Write-Host ''
     exit 2
 }
-$BaselineWorktree = $baselineCheckout.Path
+$BaselineRoot = $baselineRootCheck.Path
+if (-not $BaselineRoot) {
+    # No root: the legacy shape. Its path is still required, and still refused when it cannot be read.
+    $baselineCheckout = Resolve-BaselineWorktree -Given $BaselineWorktree -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
+    if ($baselineCheckout.Problem) {
+        Write-Host ''
+        Write-Host 'STOPPED: the tree the baseline is measured in is not named (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
+        Write-Host "  $($baselineCheckout.Problem)"
+        Write-Host '  Set `baselineRoot` to a directory and each tip is measured once for every seat that lands on it; or set `baselineWorktree` to one fixed tree, the older shape.'
+        Write-Host ''
+        exit 2
+    }
+    $BaselineWorktree = $baselineCheckout.Path
+}
 
 Push-Location $MainCheckout
 try {
@@ -1216,8 +1398,16 @@ try {
             Write-Host '  What repairs it: the comparer''s own line is above; `--probe` reads one key and needs no rows.'
             exit 2
         }
-        $warmPath = $BaselineWorktree
-        $warmProblem = Sync-BaselineWorktree -Path $warmPath -Sha $originTarget -CommonDir $commonDir -Repo $MainCheckout -BranchName $BaselineBranch
+        $warmPlan = Get-BaselineCheckout -Tip $originTarget -Root $BaselineRoot -LegacyPath $BaselineWorktree -LegacyBranch $BaselineBranch
+        foreach ($line in @($warmPlan.Lines)) { if ($line) { Write-Host $line } }
+        if ($warmPlan.Problem) {
+            Write-Host ''
+            Write-Host 'STOPPED: the fast layer could not be measured, so nothing was stored (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host "  $($warmPlan.Problem)"
+            exit 2
+        }
+        $warmPath = $warmPlan.Path
+        $warmProblem = Sync-BaselineWorktree -Path $warmPath -Sha $originTarget -CommonDir $commonDir -Repo $MainCheckout -BranchName $warmPlan.Branch
         $warmMeasured = ''
         if ($null -eq $warmProblem) {
             $warmMeasured = "$(& git -C $warmPath rev-parse HEAD 2>$null)".Trim()
@@ -1614,9 +1804,13 @@ try {
         # move the branch the merge landed on, and measuring the merged tree is the defect this whole
         # step exists to remove. The worktree is kept between merges so the host's build of it stays
         # warm -- a cold build per merge is what would make people go around this gate.
-        $baselinePath = $BaselineWorktree
-        $worktreeProblem = Sync-BaselineWorktree -Path $baselinePath -Sha $developTip `
-            -CommonDir $commonDir -Repo $MainCheckout -BranchName $BaselineBranch
+        $baselinePlan = Get-BaselineCheckout -Tip $developTip -Root $BaselineRoot -LegacyPath $BaselineWorktree -LegacyBranch $BaselineBranch
+        foreach ($line in @($baselinePlan.Lines)) { if ($line) { Write-Host $line } }
+        $baselinePath = $baselinePlan.Path
+        $worktreeProblem = if ($baselinePlan.Problem) { $baselinePlan.Problem } else {
+            Sync-BaselineWorktree -Path $baselinePath -Sha $developTip `
+                -CommonDir $commonDir -Repo $MainCheckout -BranchName $baselinePlan.Branch
+        }
         # The sha this run will really read, taken from the checkout itself. `--tree $developTip`
         # alone would be an assertion about the source, and an assertion is exactly what a seeding
         # pointed at the wrong tree gets right while measuring the wrong one.
@@ -1794,6 +1988,18 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
         exit 0
     }
 
+    # --- the push, and the one recovery a refused push may make ------------------
+    # Everything above measured one tree: the merge commit. The target branch moves while a merge is
+    # being measured -- a documentation commit is pushed by whoever writes pages, and no merge seat
+    # writes them -- and the push then lands on a tip that is not the one this merge was read
+    # against. Until this existed the only answer was to run the whole thing again: eleven minutes,
+    # three times in one night, for commits that touch no code.
+    #
+    # What the recovery may do is decided by the file paths of the commits that landed (see
+    # Split-ChangeByPath): merge them into the merge commit and re-run the plans they select, or stop
+    # and say the push touches code. It is attempted once. Everything else about the push is what it
+    # was: the verdict on whether to push at all is the row comparison above, and `new` and `changed`
+    # empty is still what "the readings allow it" means.
     # What the plans of a changed-file list are, read into the fresh tree: `--changed` over the landed
     # file list, then the same run the row stage uses, on the plans that list selects. Both answers
     # come back as data, so a refusal that names nothing is a refusal and not an empty green.
@@ -1848,7 +2054,14 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
         switch ($push.Kind) {
             'touches code' {
                 Stop-With "origin/$Target moved while this merge was read, and the commits that landed touch code" `
-                    "$(if ($push.Shas.Count -eq 2) { "$($push.Shas[0].Substring(0,9)) -> $($push.Shas[1].Substring(0,9))" }): a partial re-run of that tree would be a reading about a change this gate never selected, so none was taken. A full run is a decision for whoever started this merge: merge again from origin/$Target and re-take every stage. Nothing was pushed." $mergeCommit
+                    "$(if ($push.Shas.Count -eq 2) { "$($push.Shas[0].Substring(0,9)) -> $($push.Shas[1].Substring(0,9))" }): a partial re-run of that tree would be a reading about a change this gate never selected, so none was taken. A full run is a decision for whoever started this merge: the command above redoes the merge on the tip, and git config rerere.enabled true reuses the resolutions already made. Nothing was pushed." $mergeCommit
+            }
+            'not a merge' {
+                # A lane commit that would enter the target without a merge: no recovery can make it
+                # an arrival, because the lane it speaks for is not on a second parent at all. The
+                # sentence and the redo command were printed above, by the reading itself.
+                Stop-With "the commit about to be pushed to $Target is not a merge commit" `
+                    "Every arrival must be a merge whose first parent is the tip of $Target; a single-parent commit goes straight in and the first-parent readers cannot tell it from an arrival. The redo command is above, and nothing was pushed." $push.Sha
             }
             'second rejection' {
                 # The one recovery has been made and the branch moved again. The shas are the whole

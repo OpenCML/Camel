@@ -74,6 +74,13 @@ function Get-CamelGateConfig {
         # "some path" is a reading about somebody else's tree that looks exactly like a reading about
         # this one.
         baselineWorktree = ''
+        # Where the per-tip baseline checkouts live (merge-lane.ps1, merge-batch.ps1): the tree each
+        # baseline is measured in is named by the commit it measures, `<baselineRoot>\<sha>`, so the
+        # three seats that land on one tip share one tree, one host build and one reading instead of
+        # making three. A key and not a default, for the same reason as `baselineWorktree`: the path
+        # is this machine's. When it is set, `baselineWorktree` above is the legacy shape (`Get-
+        # BaselineCheckout` keeps it working and checks it against the tip before reusing it).
+        baselineRoot     = ''
         # The batch driver's own: where `merge-batch.ps1` writes the two worktrees it measures. The
         # gate does not read it and ignores the value, but it must not call it unknown: the batch
         # copies this one file into every tree it reads, so a key the batch writes and the gate
