@@ -1,0 +1,12 @@
+// A type name this module declares and the prelude also exports (`export type Range`): the module's
+// own is the type the name means (design principles 10.2; `src/compile/src/name_layers.h` is the one
+// list of the rows). The two shapes differ, so a lookup that took the prelude's answer would not
+// typecheck this program at all.
+
+type Range = { first: int, last: int }
+
+func main() => int sync {
+    let r: Range = { first: 3, last: 9 }
+    println(r.last - r.first)
+    return 0
+}

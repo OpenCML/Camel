@@ -1203,61 +1203,22 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
             }
         }
     }
-    // Layers 3 to 5 (design principles 10.2): imported by name (or through a module or
-    // namespace prefix), then through a `using namespace`, then what comes along unasked.
-    // Operators take their overloads from every layer.
-    std::optional<camel::core::module::entity> opt;
-    bool importedName = false;
-    // A layer has the name when it brings something of it: an import by name of a name the
-    // module does not export leaves the name to the next layers (and is reported only when
-    // none has it).
-    //
-    // A name brought by name is the name the program means, whatever it is: the reference
-    // written here with an import of it in force has that import's entity and no other layer's
-    // (`import { range } from tensor` is tensor's `range`; the built-in of the same spelling is
-    // the prelude, layer 5, and a name of layer 3 keeps the first layer having it -- design
-    // principles 6.x, "local > this module > imported by name > using > built-in").
-    std::optional<camel::core::module::entity> named;
-    if (module_->hasImportedRef(written, ImportLayer::Named)) {
-        named = importedEntity(written, ImportLayer::Named);
-    }
-    if (named.has_value()) {
-        importedName = true;
-        opt          = named;
-    } else if (auto match = throughUsing(written, gct)) {
-        // A `using namespace` is layer 4: it is above the prelude (layer 5) and below a name
-        // imported by name (layer 3), so it is reached before the merged layer that the name's
-        // built-in takes part in. Without this order a name the prelude has -- every built-in --
-        // would answer through the merge and a `using namespace` could never supply it.
-        if (!match->ownName.empty()) {
-            // A name of this module, opened by a `using namespace` of one of its namespaces.
-            GCT::node_ptr_t resolved = tree_->makeDRef(match->ownName);
-            resolved->setOrigin(gct->origin());
-            LEAVE("DREF");
-            return visitDRefNode(resolved);
-        }
-        importedName = true;
-        opt          = match->entity;
-    } else if (isOperatorName(written) || module_->hasImportedRef(written)) {
-        // Operator groups for a spelling an import did not bring by name (`+`, and the operators
-        // a module of operators brings) take their overloads from every layer (design
-        // principles 10.2; the graph model, N3); a name the prelude has and no layer above it
-        // does is the built-in itself.
-        importedName = true;
-        opt          = importedEntity(written);
-    } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
-        importedName = true;
-        opt          = importedEntity(written, ImportLayer::Ambient);
-    } else if (auto fromPrelude = preludeEntity(name); fromPrelude.has_value()) {
-        // The prelude is what the built-in module brings, and what it exports comes along unasked
-        // (design principles 10.2, layer 5): a name of it needs no import. The tool is the export
-        // table's own reading of a name (`ProgramExports::exportedEntity`: what this program
-        // declared for the module, merged with the module's own entity), so the prelude's
-        // declarations reach a name without a second mechanism beside that one. A name the layer
-        // above already answers under -- a spelling the built-in module has an operator group of,
-        // `map` -- is that layer's answer and is not read here.
-        importedName = true;
-        opt          = fromPrelude;
+    // The name as the rows below the scopes see it (`name_layers.h` has them in one list): imported
+    // by name, the read of every binding at once (an operator's overloads and a name a prefix
+    // reaches), a `using namespace`, what the imports bring unasked, and the prelude. Which row
+    // answers is the table's order and not this file's, so a layer is added or moved in one place.
+    const RowAnswer<ValueName> answer = valueNameByRow(written, name, gct);
+    // A row that has the name stops the walk there, and an import of a name does not imply that
+    // the imported module exported it (reported below).
+    const bool importedName = answer.holds;
+    const std::optional<camel::core::module::entity> opt =
+        answer.holds && answer.found.has_value() ? answer.found->entity : std::nullopt;
+    if (importedName && answer.found.has_value() && !answer.found->openedName.empty()) {
+        // A name of this module, opened by a `using namespace` of one of its namespaces.
+        GCT::node_ptr_t resolved = tree_->makeDRef(answer.found->openedName);
+        resolved->setOrigin(gct->origin());
+        LEAVE("DREF");
+        return visitDRefNode(resolved);
     }
     if (importedName) {
         // An import of this name does not imply that the imported module exported it.
