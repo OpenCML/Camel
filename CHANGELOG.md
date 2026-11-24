@@ -1,3 +1,5 @@
+[0.2.47]
+
 [0.2.46]
 Changes:
 - **标准库整体搬进 `lib/`**：`std`、`tensor`、`test`、`tiles`、`transforms`、`onnx` 各自成目录，构建里 graph view、算子记录与 fact store 各成一个块、各带自己的 root；kernel 拥有 user-module 类，编译器只注册一个 loader；pass driver 从注册表取 pass，一个 Camel 函数名一个入口。
