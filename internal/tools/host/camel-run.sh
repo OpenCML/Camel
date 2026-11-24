@@ -163,11 +163,14 @@ pool_report() {
         [ "$n" -gt "$peak" ] && peak=$n
     done
     # `mine` is what this process is holding, read from its own descriptors, not from an environment
-    # variable that nothing sets: the pool hands out fds 20+ by token index.
+    # variable that nothing sets: the pool hands out fds 20+ by token index. The descriptor has to
+    # point at a token file -- an open fd in that range is not a token, and counting one reported
+    # `mine=1` for a process that held nothing.
     n=1
     while [ "$n" -le "$POOL_SIZE" ]; do
-        [ -e "/proc/$$/fd/$((20 + n))" ] && mine=$((mine + 1))
         n=$((n + 1))
+        target=$(readlink "/proc/$$/fd/$((19 + n))" 2>/dev/null || true)
+        case "$target" in */token-*.lock) mine=$((mine + 1)) ;; esac
     done
     POOL_PEAK=$peak
     echo "tokens: mine=$mine peak=$peak"
