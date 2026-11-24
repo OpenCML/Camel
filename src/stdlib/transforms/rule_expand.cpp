@@ -1046,7 +1046,6 @@ gc_node_ref_t expandRuleRightSide(
 
     auto &draft = transaction.edit();
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> copied;
-    const std::span<const slot_t> staticSlots = body->staticSlots();
     // A rule's right side is copied in one pass because a node's inputs are written before it, and
     // that order is what makes the right side a straight line. An instance built at types the law
     // was written for is usually in that order; one built at other types is not always -- a
@@ -1167,15 +1166,17 @@ gc_node_ref_t expandRuleRightSide(
                     why = "the rule's right side answers with a function value";
                     return rt::kInvalidNodeRef;
                 }
-                const std::ptrdiff_t index = -static_cast<std::ptrdiff_t>(node->dataIndex);
-                if (node->dataIndex >= 0 || index < 0 ||
-                    static_cast<size_t>(index) >= staticSlots.size()) {
+                // The value and its type are the two questions the face answers; the eligibility
+                // test is the face's own condition (a DATA node whose slot is in the static area),
+                // so a ref that is not one of the graph's constants answers `nullopt` here.
+                const std::optional<slot_t> constant = body->view().constantOf(ref);
+                if (!constant.has_value()) {
                     why = "the rule's right side reads a value that is not a constant of its graph";
                     return rt::kInvalidNodeRef;
                 }
                 copied[ref] = draft.materializeStaticValue(
-                    staticSlots[static_cast<size_t>(index)],
-                    node->dataType(),
+                    *constant,
+                    const_cast<camel::core::type::Type *>(body->view().typeOf(ref)),
                     rt::kGCNodeFlagConstant);
                 break;
             }

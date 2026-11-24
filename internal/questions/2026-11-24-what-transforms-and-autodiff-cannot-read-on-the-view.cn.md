@@ -1,4 +1,4 @@
-# 视图答不出什么：`transforms` 与 `autodiff` 停下来的 32 处
+# 视图答不出什么：`transforms` 与 `autodiff` 停下来的 28 处
 
 2026-11-24 ｜ 来自 `lane/3a-transforms-autodiff`（阶段 3a，目录 `src/stdlib/transforms`、`src/stdlib/autodiff`）｜ 对象：`kernel/graph/graph_view.h`
 
@@ -43,7 +43,7 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/autodiff
 
 所以判据「往 0 走」在这两个目录里的天花板不是 0。**B 19 + C 9 = 28 行是视图今天能靠补 A/B/C 拿掉的；剩下 84 行（transforms）和 40 行（autodiff）要的是 3b 的写侧入口和 3c 的身份合一。**
 
-按**处**数（一处是一个读者位置，与行数无关）：「32 处」= A 2 + B 22 + C 8。B 的 22 处里只有 14 处占计数里的行，另外 8 处拿着局部引用；C 的 8 处里只有 4 处占行。**所以「行」和「处」在这里是两个数，判据只数行 —— 这也是为什么判据降到 0 不等于读者都上了视图。**
+按**处**数（一处是一个读者位置，与行数无关）：「28 处」= A 2 + B 18 + C 8。B 的 18 处里只有 14 处占计数里的行，另外 4 处拿着局部引用（上一轮这一格是 22 处 / 8 处，少掉的 4 处是静态常量那一家，见第六节（二））；C 的 8 处里只有 4 处占行。**所以「行」和「处」在这里是两个数，判据只数行 —— 这也是为什么判据降到 0 不等于读者都上了视图。**
 
 ---
 
@@ -70,7 +70,7 @@ A 是 `onnx`/`tiles` 的主诉（`attrsOf(NodeRef)`、`RegionRecord::attrs`、�
 | `jvp.cpp:80` `nodeBodyOrNull` | 返回 `const Body *` | 同上 |
 | `split.cpp:27` / `:31` / `:45` | `GCBrchBody::join`：哪条分支的 Join 是这个 | JOIN 在视图里不存在（`graph_view.h` 文件头第五条），两个配对的载荷一起被删 |
 | `split.cpp:118` `ungated` | 把一条 GATE 链走到底 | `camel/runtime/graph.h#valueBehindGates` 是**模板**，约束要求 reader 交出 `const GCNode *` 才读得到 `kind`。视图够不上这个约束 |
-| `split.cpp:299` `exitHalvesOf` | `withInputsOf`（视图有）+ `node()->dataType()`（视图有）+ `ungated`（没有） | 被 `ungated` 连坐；它自己那两次读已经可以换 |
+| `split.cpp:299` `exitHalvesOf` | `withInputsOf`（已换：`inputs(ref, Context)`，两处）+ `node()->dataType()`（已换：`typeOf`）+ `ungated`（没有） | 只剩 `ungated` 一处：它被 `graph.h#valueBehindGates` 的模板约束连坐，不是这个函数自己的读 |
 | `split.cpp:432` `pairTangentReadOf` | `nodeOperatorOf`、`memberReadOf` | 载荷 |
 | `split.cpp:479` `residualsOf` | `ungated` + `memberReadOf` | 载荷 |
 | `split.cpp:1660` `loopBehindExit` | `memberReadOf`、原始 `kind == Loop` | 载荷 |
@@ -81,16 +81,14 @@ A 是 `onnx`/`tiles` 的主诉（`attrsOf(NodeRef)`、`RegionRecord::attrs`、�
 | `node_operator.h:279` `nodeCaseOf` | 记录的 `kind`/`dataIndex` | 原始 kind |
 | `node_operator.h:19`、`:333`（注释） | 同一个记录 | 同上 |
 
-**② 不在计数里的 8 处 B 位置**（同样读不动，只是它们拿着局部引用，不按名字提类型）：
+**② 不在计数里的 4 处 B 位置**（同样读不动，只是它们拿着局部引用，不按名字提类型）：
 
-- `src/stdlib/transforms/rule_expand.cpp:1170-1179` —— 复制一个静态常量：`dataIndex`、`staticSlots[index]`、`node->dataType()`，再 `draft.materializeStaticValue(...)`。
-- `src/stdlib/transforms/vmap.cpp:594-597` —— 同一个读。
-- `src/stdlib/transforms/jvp.cpp:1562-1568` —— 同一个读。
-- `src/stdlib/transforms/transpose/walkmachinery.cpp:317-330` `constantValueOf` —— 同一个读。
 - `src/stdlib/autodiff/pullback.cpp:925-949` `operAccessPlaceOf` —— `payloadOf(node)` 再按 `GCOperBody` 解出 URI，然后才 `dataIndex`。
 - `src/stdlib/transforms/split.cpp:1372`、`src/stdlib/transforms/jvp.cpp:2676-2678`、`src/stdlib/transforms/transpose/walk.cpp:2226` —— 把一个 JOIN 的 header 原样搬进新草稿（`init.dataIndex = header->dataIndex; init.kind = GCNodeKind::Join; …`）。三处都是**写侧**，且要 `Join` 这个 kind。
 
-**③ 这 5 处现在可以换，本轮换了一处。** 静态常量那一族（`rule_expand.cpp:1170`、`vmap.cpp:594`、`jvp.cpp:1562`、`walkmachinery.cpp:317`、`pullback.cpp:264`）要的是「这个节点是不是常量、值是什么、类型是什么」，而 `C-1123-59` 落进 `origin/develop` 的 `staticIndexOf`/`staticSlotCount`/`constantOf` 正好答这三问。本轮把 `pullback.cpp#staticValue` 换掉了：
+同一个静态常量读，上一轮还是这里的四条（`rule_expand.cpp:1170-1179`、`vmap.cpp:594-597`、`jvp.cpp:1562-1568`、`transpose/walkmachinery.cpp:317-330`），本轮四个都换上了视图，所以这一格从 8 处降到 4 处 —— 经过见第六节（二）。
+
+**③ 静态常量那一族：五处，全部换完了。** 这五处（`rule_expand.cpp:1170`、`vmap.cpp:594`、`jvp.cpp:1562`、`walkmachinery.cpp:317`、`pullback.cpp:264`）问的是「这个节点是不是常量、值是什么、类型是什么」，而 `C-1123-59` 落进 `origin/develop` 的 `staticIndexOf`/`staticSlotCount`/`constantOf` 正好答这三问。`pullback.cpp#staticValue` 在上一轮换掉：
 
 ```cpp
 std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
@@ -98,7 +96,20 @@ std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_no
 }
 ```
 
-剩下四处是同一个形状，**没人认领**；换它们不改判据（它们不按名字提类型），所以本轮没做 —— 它们改的是「读者在不在视图上」，不是那个数字。
+其余四处本轮换掉，形状相同，都是「先问 `constantOf`，再 `typeOf`」，于是 `dataIndex`、`staticSlots()`、`node->dataType()` 三个读一起消失：
+
+```cpp
+// rule_expand.cpp（同一个交换，返回条件是「不是这张图的常量」）
+const std::optional<slot_t> constant = body->view().constantOf(ref);
+if (!constant.has_value()) { /* 同一句 refusal */ }
+copied[ref] = draft.materializeStaticValue(
+    *constant, const_cast<camel::core::type::Type *>(body->view().typeOf(ref)),
+    rt::kGCNodeFlagConstant);
+```
+
+`const_cast` 不是这里放宽了什么：`materializeStaticValue` 的参数是 `Type *`，而 `typeOf` 答 `const Type *` —— 类型是 interned 的，`dataType()` 交出来的也是同一个对象，这条转换在本仓库里是既有写法（`split.cpp:1145` 的 `liftedMemberOf(const_cast<Type *>(lifted->typeAt(index)))`）。
+
+**换它们不改判据**（它们拿的是局部引用，不按名字提类型），改的是「读者在不在视图上」。`constantOf` 的合格条件与旧代码逐字相同（`FrozenGraphAdapter::constantOf`：有记录、kind 是 `Data`、`dataIndex < 0`、下标在静态区里），所以这不是放宽 —— 旧代码那三个条件正是它自己重抄了一遍。
 
 ---
 
@@ -144,7 +155,9 @@ std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_no
 
 ---
 
-## 六、本轮的 6 行，逐行对得上
+## 六、已换上的读，逐处对得上
+
+### （一）`4809017f6c` 的 6 行
 
 | 行 | 换成了什么 |
 | --- | --- |
@@ -156,7 +169,20 @@ std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_no
 
 - `jvp.cpp:807`/`:853`/`:912-913` —— `withPorts()`/`normPorts()`/`closureNodes()` → `view().ports(Context|Normal|Capture)`。
 - `vmap.cpp:276-278` —— `closureNodes()`/`normPorts()` → 同上两个。
-- `pullback.cpp#staticValue` —— 见第三节 ③。
+
+### （二）本轮的五个读者（判据不动，仍是 112 / 40）
+
+这四个静态常量读 + `exitHalvesOf` 的两处，全部在**局部引用**上，所以它们从来不在判据那 152 行里：换掉之后 `git grep -cE '\bGCGraph\b|\bGraphDraft\b'` 仍是 **112 / 40**。这是判据的已知盲区（第一节末尾），也是这一轮唯一还剩下的「读者没上视图」的部分。
+
+| 位置 | 旧读 | 新读 |
+| --- | --- | --- |
+| `rule_expand.cpp` `expandRuleRightSide` | `node->dataIndex`、`staticSlots[index]`、`node->dataType()` | `body->view().constantOf(ref)`、`typeOf(ref)`；局部 `staticSlots` 整个删掉（它成了唯一用途之后的空变量） |
+| `vmap.cpp` `buildVmapGraph` 的 `Data` 臂 | 同上 | `function->view().constantOf(ref)`、`typeOf(ref)` |
+| `jvp.cpp` `liftGraph` 的 `Data` 臂 | 同上，且每次把整张静态区**拷成 `std::vector<slot_t>`** | `function.view().constantOf(ref)`、`typeOf(ref)` —— 那份拷贝也一起没了 |
+| `transpose/walkmachinery.cpp` `constantValueOf` | 同上 | `ctx.function->view().constantOf(ref)`、`typeOf(ref)` |
+| `split.cpp` `exitHalvesOf` | `withInputsOf` ×2、`node(member)->dataType()` | `view().inputs(ref, PortGroup::Context)` ×2（`FrozenGraphAdapter::inputs` 的 `Context` 臂就是 `graph_.withInputsOf`）、`view().typeOf(member)` |
+
+`constantOf` 的合格条件与旧代码那三个条件逐字相同（`FrozenGraphAdapter::constantOf`：有记录、`kind == Data`、`dataIndex < 0`、下标在静态区里），`typeOf` 就是 `node == nullptr ? nullptr : node->dataType()` —— 两处都不是「换了个更宽松的问法」，是把重抄的条件交还给视图。**残留的一处**：`exitHalvesOf` 仍按 `ungated` 收 `const rt::GCGraph &`（`valueBehindGates` 是模板，约束要求 `const GCNode *`），它所以还在判据里。
 
 ---
 

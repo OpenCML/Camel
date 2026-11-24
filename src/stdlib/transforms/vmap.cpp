@@ -591,10 +591,8 @@ VmapGraph buildVmapGraph(
                 break;
             }
             case rt::GCNodeKind::Data: {
-                const std::span<const slot_t> slots = function->staticSlots();
-                const std::ptrdiff_t index          = -static_cast<std::ptrdiff_t>(node->dataIndex);
-                if (node->dataIndex >= 0 || index < 0 ||
-                    static_cast<size_t>(index) >= slots.size()) {
+                const std::optional<slot_t> constant = function->view().constantOf(ref);
+                if (!constant.has_value()) {
                     refused.refusedOrigin =
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri = "a constant";
@@ -602,11 +600,8 @@ VmapGraph buildVmapGraph(
                     complete           = false;
                     break;
                 }
-                copyOf[ref] = liftConstant(
-                    node->dataType(),
-                    rowsOfType(node->dataType()),
-                    slots[static_cast<size_t>(index)],
-                    why);
+                Type *const constantType = const_cast<Type *>(function->view().typeOf(ref));
+                copyOf[ref] = liftConstant(constantType, rowsOfType(constantType), *constant, why);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     refused.refusedOrigin =
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));

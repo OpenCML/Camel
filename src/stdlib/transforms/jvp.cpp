@@ -1559,30 +1559,26 @@ bool liftGraph(
                 break;
             }
             case NodeCase::Data: {
-                const std::vector<slot_t> slotValues(
-                    function.staticSlots().begin(),
-                    function.staticSlots().end());
-                const std::span<const slot_t> slots = slotValues;
-                const std::ptrdiff_t index          = -static_cast<std::ptrdiff_t>(node->dataIndex);
-                if (node->dataIndex < 0 && index >= 0 &&
-                    static_cast<size_t>(index) < slots.size()) {
+                const std::optional<slot_t> constant = function.view().constantOf(ref);
+                if (constant.has_value()) {
+                    // Interned types are never written through: the cast is the same one
+                    // `split.cpp#exitHalvesOf` makes of `typeOf`, and `dataType()` answered a
+                    // non-const pointer for the same object.
+                    Type *const constantType = const_cast<Type *>(function.view().typeOf(ref));
                     copyOf[ref] = draft.materializeStaticValue(
-                        slots[static_cast<size_t>(index)],
-                        node->dataType(),
-                        rt::kGCNodeFlagConstant);
+                        *constant, constantType, rt::kGCNodeFlagConstant);
                     // A constant does not move: its tangent is the one zero every rule shares --
                     // the zero of the constant's own type, since a tangent is a value of the
                     // value's space. A constant of a discrete type (a `bool` condition) has no
                     // tangent at all, and neither has one whose zero this transform does not write.
-                    if (pairOf(node->dataType()) != nullptr) {
+                    if (pairOf(constantType) != nullptr) {
                         // An array constant's shape can be one its type leaves open (`float[]`),
                         // and then the value in the slot is what says how long the zero is.
                         const ::Array *shapeOf = nullptr;
-                        if (node->dataType()->code() == camel::core::type::TypeCode::Array) {
-                            shapeOf = camel::core::rtdata::fromSlot<const ::Array *>(
-                                slots[static_cast<size_t>(index)]);
+                        if (constantType->code() == camel::core::type::TypeCode::Array) {
+                            shapeOf = camel::core::rtdata::fromSlot<const ::Array *>(*constant);
                         }
-                        tangentOf[ref] = zeroConstantFor(node->dataType(), shapeOf);
+                        tangentOf[ref] = zeroConstantFor(constantType, shapeOf);
                     }
                     copied[ref] = true;
                     ++copiedKinds;

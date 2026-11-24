@@ -302,8 +302,9 @@ ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type
         halves.why = "the exit is not a node with a type";
         return halves;
     }
-    const std::span<const gc_node_ref_t> members = graph.withInputsOf(exit);
-    const LiftedShape shape                      = liftedShapeOf(const_cast<Type *>(exitType));
+    const std::span<const gc_node_ref_t> members =
+        graph.view().inputs(exit, camel::graph::PortGroup::Context);
+    const LiftedShape shape = liftedShapeOf(const_cast<Type *>(exitType));
     if (shape.pair) {
         if (members.size() != 2) {
             halves.why =
@@ -319,9 +320,9 @@ ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type
         return halves;
     }
     for (gc_node_ref_t member : members) {
-        const rt::GCNode *made = graph.node(member);
+        const Type *madeType = graph.view().typeOf(member);
         const LiftedMember read =
-            liftedMemberOf(made != nullptr ? const_cast<Type *>(made->dataType()) : nullptr);
+            liftedMemberOf(madeType != nullptr ? const_cast<Type *>(madeType) : nullptr);
         if (read.forward == nullptr) {
             halves.why = "a member of the answer is not a form `Lift` writes: it is neither a "
                          "(value, tangent) pair nor a lifted function";
@@ -333,7 +334,8 @@ ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type
             halves.forward.push_back(ungated(&graph, member));
             continue;
         }
-        const std::span<const gc_node_ref_t> legs = graph.withInputsOf(member);
+        const std::span<const gc_node_ref_t> legs =
+            graph.view().inputs(member, camel::graph::PortGroup::Context);
         if (legs.size() != 2) {
             halves.why = "a value member of the answer is a pair, and its fill does not hold the "
                          "value and its tangent";
