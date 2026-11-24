@@ -26,7 +26,9 @@
  *               and summary, every planted directory whose run is gone is gone, the one a live run
  *               owns and the one the runner never wrote are untouched, and the run's record holds
  *               no copy of a plan or a case -- the manifest names the plan and each test's
- *               `meta.json` names the two paths a reader needs. It also requires the nested runs to
+ *               `meta.json` names the two paths a reader needs. The record's own `transcript.txt`
+ *               is expected: the run writes it, and it is the file that lets the record state its
+ *               own count. It also requires the nested runs to
  *               have printed their own `[RETAIN]` line with a non-zero removal count: a runner that
  *               stopped calling the policy fails here, not silently.
  *
@@ -391,10 +393,15 @@ function runnerMode() {
             )
         }
         // Nothing of the checkout is copied into the record, and the two paths a reader needs are in
-        // the test's own meta.json.
+        // the test's own meta.json. `transcript.txt` is in this list because the run writes it into
+        // its own directory: one line per verdict, then the `[SUMMARY]` line, so that the record can
+        // state its own size (`test/tools/transcript.mjs`, and `docs/test-plans.md` names it beside
+        // `run.json` and `summary.json`). It is not a copy of anything from the checkout, and the
+        // set below is "what a run writes", not "what a run wrote before the transcript existed".
         const recordNames = new Set([
             'stdout.txt', 'stderr.txt', 'output.txt', 'meta.json',
             'verify_stdout.txt', 'verify_stderr.txt', 'summary.json', 'run.json',
+            'transcript.txt',
         ])
         const seen = fileNamesUnder(lastRun)
         recorded = seen.length
