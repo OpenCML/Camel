@@ -202,7 +202,7 @@ export function judgeCapturedText(text) {
         return {
             ok: false,
             lines,
-            rows,
+            rows: rows > 0 ? rows : null,
             total: null,
             failure:
                 `no [SUMMARY] total: line in this capture${lines > 0 ? ` (its ${lines} case line(s) ` +
@@ -239,6 +239,25 @@ export function capturedRefusal(verdict) {
     return transcriptRefusal(verdict)
 }
 
+/**
+ * Both channels, each as its own number, printed whether the capture is readable or not.
+ *
+ * "The case lines are whole" and "the row block arrived" are two questions, and a reader who is
+ * told only that they disagree cannot say which of the two lost lines -- nor whether the rows are
+ * absent because the run never asked for them or because the block was cut. `rows: N of M` is the
+ * number the merge position compares (`scripts/merge-readings.mjs` reads exactly these rows), so it
+ * is printed on its own and never inferred from a refusal.
+ */
+export function readingLine(verdict) {
+    const total = verdict.total === null ? null : String(verdict.total)
+    const caseLines = total === null ? `${verdict.lines}` : `${verdict.lines} of ${total}`
+    let rows
+    if (verdict.rows === null) rows = 'none in this capture'
+    else rows = total === null ? `${verdict.rows}` : `${verdict.rows} of ${total}`
+    const summary = total === null ? ', summary: absent' : ''
+    return `transcript: case lines: ${caseLines}, rows: ${rows}${summary}${verdict.ok ? ' -- readable' : ''}`
+}
+
 const USAGE = 'usage: node test/tools/transcript.mjs --check <capture.txt|->'
 
 /**
@@ -246,9 +265,11 @@ const USAGE = 'usage: node test/tools/transcript.mjs --check <capture.txt|->'
  *
  *   node test/tools/transcript.mjs --check capture.txt
  *
- * Exit 0 only when the capture's own `[SUMMARY] total:` equals the number of case lines it holds;
- * exit 2 when it does not, and when it states no total at all. It prints its reading either way --
- * a checker that says nothing on success and nothing on failure is not a checker.
+ * Exit 0 only when the capture's own `[SUMMARY] total:` equals the number of case lines it holds
+ * and the number of rows of a `--list-known` block it carries; exit 2 when either disagrees, and
+ * when it states no total at all. It prints both counts either way -- a checker that says nothing
+ * on success and nothing on failure is not a checker, and one that reports a single number cannot
+ * say which channel was cut.
  */
 async function checkCli(argv) {
     if (argv[0] !== '--check' || argv.length !== 2) {
@@ -264,16 +285,9 @@ async function checkCli(argv) {
         process.exit(2)
     }
     const verdict = judgeCapturedText(text)
-    const channels =
-        verdict.rows === null
-            ? `${verdict.lines} case line(s)`
-            : `${verdict.lines} case line(s) and ${verdict.rows} case row(s)`
-    if (verdict.ok) {
-        process.stdout.write(`transcript: ${channels}, the summary counted ${verdict.total} -- readable\n`)
-        process.exit(0)
-    }
-    process.stdout.write(`[PLAN ERROR] ${capturedRefusal(verdict)}\n`)
-    process.exit(2)
+    if (!verdict.ok) process.stdout.write(`[PLAN ERROR] ${capturedRefusal(verdict)}\n`)
+    process.stdout.write(`${readingLine(verdict)}\n`)
+    process.exit(verdict.ok ? 0 : 2)
 }
 
 function readStdin() {

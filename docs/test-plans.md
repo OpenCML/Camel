@@ -421,8 +421,20 @@ lost and not only its tail: `node test/tools/transcript.mjs --check <capture.txt
 lines in a captured text and compares them with the `[SUMMARY] total:` line the capture states,
 exiting 2 when they disagree and also when the capture states no total at all -- a capture with no
 summary is not a run of zero cases. The colours are stripped before counting, which is the whole
-difference between 6 rows and 0 rows on a complete capture; the checker prints its reading either
-way.
+difference between 6 rows and 0 rows on a complete capture. A run that was asked for
+`--list-known` carries a second per-case channel, its `{"name":...}` rows, and that channel is
+counted and reported on its own, because the two fail separately: the three runs of 2026-11-24 kept
+every case line and lost rows, so a single number would have said only that something disagreed.
+
+```
+$ node test/tools/transcript.mjs --check capture.txt
+[PLAN ERROR] the transcript holds 1239 case rows but the summary counted 9159: this run cannot be read (its case lines are whole, so the row block was cut)
+transcript: case lines: 9159 of 9159, rows: 1239 of 9159
+```
+
+The reading line is printed on success too (`-- readable`), and `rows: none in this capture` says the
+run was not asked for the channel rather than that the block was cut. Exit 0 means both channels
+agree with the total the capture states.
 
 The runner bounds the record itself, at the start of every run: **`test/results/log` keeps the newest
 20 run directories** (`RUN_DIRS_KEPT`, next to the policy it belongs to, in
