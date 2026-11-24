@@ -80,6 +80,31 @@ assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `un
 timeout_ms = 10000
 
 [[tests]]
+name = "export_member_read_by_name"
+desc = "A member read by name (`access_key::<Params, f32><'bias'>(p)`) exports as the field's value: no node of its own, and the field the call names is the one that reaches the model, folded to one constant. The read names its field where a tuple read names a place, and the two are one shape and two operators, so the export tells them apart by what the call hands over -- a name is a string, a place is an int. The export succeeding at all is what pins the name branch: the other branch demands an int place and refuses the string this call carries."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_member_by_name.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_member_by_name.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_member_by_name.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('Mul') === 1 && model.ops.length === 2, `a member read is no node: one product and its output, got ${model.ops}`)
+assert(model.initializers.length === 1, `the field the call names is a constant of the model and nothing else is: ${model.initializers}`)
+assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
 name = "export_unsupported_op"
 desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI, at its source position: the refusal is the error value of the export_model call (`ExportUnsupported`, located at the unsupported call), which nothing handles, so the exit reports it as an unhandled error."
 kind = "behavior"
