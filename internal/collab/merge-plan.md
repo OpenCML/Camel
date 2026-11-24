@@ -13,8 +13,20 @@ develop              d6503a197c
 origin/integration   22aa42ad27   （陈旧快照：整机断网，读数建在未刷新的引用上）
 演练分支             seat/merge-rehearsal
 第 1 层              c1f68eca3ee1   已验：NEW=0，三条新红转 [XFAIL]，known 27→30，retention 仍 PASS
-第 2/3 层            48d221306e     不可推：137 条新红（136 条上一轮 PASS）+ 3 条 SIGSEGV
+第 2/3 层+17 修复    adbf4c62a7     恢复点。12 条中的 41 条清掉（onnx 0/23、tiles 0/1 全清），
+                                    剩下 48 条**整族归 C-1124-281**（Camel pass 跑完后程序多出模块图）
 ```
+
+**恢复点 `adbf4c62a7` 的四件事（下一次合并就从这里接着走）：**
+
+1. `⑯ op-overload-merge`、`㉑ gir-opertarget` 仍未并：**以 front-facts 为基 rebase 后重新合成**，不是解冲突。`㉓` 仍跳过。
+2. 48 条（图比对族 488/43 + `*.program_still_runs.fvm` 的 `requires a value return node` 族）**是一个根因**，
+   不要按两族拆给两位 —— 拆开会让同一个根因变成两条各修一半的账。
+3. 1 条新红 `declaration.every_declaration_lists`：未知 pass 名的诊断丢掉了「有哪些可用的」那半句。
+   **补回名单、用例不动。** 它转绿 + `C-1124-281` 有结论，才轮到整层读数。
+4. SIGSEGV 表**保留六列**（B / 14 / 15 / 17 / 22 / 17-fix），不缩成一行：
+   `host_resident_parallel` FAIL→139→139→139→139→PASS、`native_parallel.scheduler` FAIL→PASS→139→PASS→139→PASS、
+   `native_parallel.linear` FAIL→139→PASS→139→139→139。三次 PASS↔SIGSEGV 跳动 = 布局相关的未初始化/悬垂，不挂第 17 步。
 
 **第 1 层是唯一一份「零新红」的读数，它是后面所有比较的基线。** 与它比要用 `plan_id + 用例名`，
 不要比 `fail` 总数：`test-refactor-2` 把约 390 例移出快层（9919 → 9529），**移层的 `removed` 不记 `fixed`**。
