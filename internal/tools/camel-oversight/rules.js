@@ -161,12 +161,15 @@ export const RULES = [
         level: 'quiet',
         hold: 15,
         cooldown: 60,
+        // The main checkout is the author's own workspace: nothing is merged, built or tested in it.
+        // The only thing asked of the coordinator is to keep it in step with origin/develop while it
+        // stands on develop with nothing uncommitted; on another branch, or with changes, it is his.
         check: ({ m }) => {
             const c = readable(m.checkout) && m.checkout
-            if (!c || (c.dirty === 0 && c.behind === 0)) return null
+            if (!c || c.head !== 'develop' || c.dirty !== 0 || c.behind === 0) return null
             return {
-                key: `${c.dirty}/${c.behind}`,
-                text: `主检出（${c.head}）${c.dirty ? `有 ${c.dirty} 个未提交改动` : ''}${c.dirty && c.behind ? '，且' : ''}${c.behind ? `落后 origin/develop ${c.behind} 笔` : ''}。在它上面量的读数都是旧的：脏就存 patch 再还原，落后就 ff 合上。`,
+                key: String(c.behind),
+                text: `主检出在 develop 上、没有改动，落后 origin/develop ${c.behind} 笔：fast-forward 合上（只做 git merge --ff-only，不做别的）。`,
             }
         },
     },
