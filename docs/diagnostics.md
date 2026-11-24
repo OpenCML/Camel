@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-327 diagnostics: 305 errors, 22 warnings. 14 carry a machine-applicable edit, 313 say why they carry none.
+328 diagnostics: 306 errors, 22 warnings. 14 carry a machine-applicable edit, 314 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -281,6 +281,7 @@ prints one entry.
 | `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
 | `0x03000217` | [SemanticDiag::ReadonlyResourceWritten](#readonlyresourcewritten) | Error | no |
 | `0x03000218` | [SemanticDiag::OperatorAccessesUndeclared](#operatoraccessesundeclared) | Error | no |
+| `0x03000219` | [SemanticDiag::OperatorSignatureUnresolved](#operatorsignatureunresolved) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -3504,13 +3505,13 @@ None: choice: what to iterate instead is the writer's to write
 **Message**
 
 ```text
-'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'.
+'for' takes the elements of an array, a string, a map, a tensor, a stream, or a value of a named type that says how to walk it; '{0}' has type '{1}'.
 ```
 
 **Help**
 
 ```text
-A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; and the elements of a stream, one pull of its step function per round (5.4). 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).
+A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; the elements of a stream, one pull of its step function per round (5.4); and the integers of a value whose type declares how to walk it -- a range's iterator is such a declaration (5.4, 5.7). 'a..b' is the range value of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it counts them without building the array (4.2).
 ```
 
 **Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel -E short test/cases/loops/err_not_iterable.cml`)
@@ -5765,7 +5766,24 @@ std::cml cannot print {0}: {1}.
 This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, `sync` blocks, and one `type` statement for each named struct type the program names. Tags, generic instances and the other region kinds are refused.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/trans/cml/nullable_null.cml`, run as `camel test/cases/trans/cml/nullable_null.cml std::cml`)
+
+```camel
+// A `T?` that holds nothing is not a value `std::cml` writes, and the reason is measured rather than
+// assumed: the language reaches the emptiness of a `T?` through the operator that tests its tag
+// (`??` on an absent value is `:op/tag_is_null`), so the graph holds an operator node and not a
+// `null` constant, and the printer refuses the program at that node.
+//
+// This is the counter-reading to `nullable_value.cml`: widening the printer to name `T?` must not
+// widen it to invent a value that is not there. A printed program cannot say something the source
+// did not, so the refusal is the answer, and the entry pins the node it names.
+
+func main() => int sync {
+    let c: int? = null
+    println(c ?? -1)
+    return 0
+}
+```
 
 ### CmlBigConstant
 
@@ -9397,6 +9415,28 @@ An operator that itemizes none is read as writing the global resource, and the g
 
 *No example: no test small enough to show raises it.*
 
+### OperatorSignatureUnresolved
+
+`0x03000219` · Error · `SemanticDiag::OperatorSignatureUnresolved`
+
+**Fix**
+
+None: context: the call is one the compiler wrote, and the type it lacks is the one inference had not reached yet
+
+**Message**
+
+```text
+The signature of the operator '{0}' is not resolved: the type of {1} is not known where the compiler writes this call.
+```
+
+**Help**
+
+```text
+A conversion or a copy the compiler writes itself is a call of a built-in operator, and resolving which rule takes it needs both types: the type of the value it reads and the type it produces. Nothing is put in place of the type the compiler cannot see.
+```
+
+*No example: no test small enough to show raises it.*
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -11051,7 +11091,7 @@ Pass '{0}' cannot take the program: some values of it have several writings.
 An earlier pass (a saturation) left values with several writings, and nothing extracts them unless the pipeline says how. Put 'rewrite::extract cost=<module>::<function>' before '{0}': it chooses one writing for every value by that cost, for example 'rewrite::extract cost=rules::nodes' (a writing costs the number of its nodes).
 ```
 
-**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::cxx::fold std::nvm`)
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::nvm`)
 
 ```camel
 func f(a: int, b: int) => int {

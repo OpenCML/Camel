@@ -87,10 +87,36 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     // No declaration answered -- a program that shadows the name `cast`, say -- and the call is
     // still the conversion the language means: the node names the operator by its URI, which no
     // name in scope can shadow, and it is the one `lib/std/prelude.cml` declares.
-    node_handle_t castNode = currGraph_->addOperNode(target, ":op/cast");
-    linkNodes(LinkType::Norm, value, castNode);
-    registerNodeOrigin(context_, castNode, origin, "gir.cast");
-    return castNode;
+    //
+    // Three failures reach this line and they are three different things, so each says its own
+    // (design principles 3.3, "one statement per fact"): the built-in group is not there at all,
+    // which only a prelude missing its `#op` declaration produces and is a defect of the build;
+    // the group is there and no rule takes the pair, which is a conversion the language does not
+    // have and is the program's to write differently; and the types are not known yet, which is
+    // neither -- the call cannot name an operator because the signature it would point at does
+    // not exist yet. A node is written for none of the three: a call with no operator to point at
+    // is a node whose identity no reader can ask for.
+    const oper_group_ptr_t group = builtinOperatorGroupNamed("cast");
+    if (group == nullptr) {
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit("the built-in operator 'cast' has no group: the prelude's #op declaration of "
+                    "':op/cast' did not load");
+        throw BuildAbortException();
+    }
+    if (source == nullptr || target == nullptr) {
+        diags_->of(SemanticDiag::OperatorSignatureUnresolved)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit(
+                ":op/cast",
+                source == nullptr ? std::string("the type of the value it reads")
+                                  : std::string("the type it produces"));
+        throw BuildAbortException();
+    }
+    diags_->of(SemanticDiag::DynamicCastForbidden)
+        .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+        .commit(source->toString(), target->toString());
+    throw BuildAbortException();
 }
 
 node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
@@ -123,9 +149,28 @@ node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
     // No declaration answered -- a program that shadows the name `copy`, say -- and the call is
     // still the copy the language means: the node names the operator by its URI, which no name in
     // scope can shadow.
-    node_handle_t copyNode = currGraph_->addOperNode(copied, ":op/copy");
-    linkNodes(LinkType::Norm, value, copyNode);
-    return copyNode;
+    //
+    // The three failures conversionNodeOf tells apart apply here too. A copy the built-in rule
+    // refuses is not a conversation the language has: `copy::<T>(x: T): T` takes every type, so a
+    // refusal is the rule's own defect and not the program's to write differently -- which is why
+    // this one reports the compiler's state and not `DynamicCastForbidden`.
+    const oper_group_ptr_t group = builtinOperatorGroupNamed("copy");
+    if (group == nullptr) {
+        diags_->of(InternalDiag::UnknownInternalError)
+            .commit("the built-in operator 'copy' has no group: the prelude's #op declaration of "
+                    "':op/copy' did not load");
+        throw BuildAbortException();
+    }
+    if (copied == nullptr) {
+        diags_->of(SemanticDiag::OperatorSignatureUnresolved)
+            .commit(":op/copy", std::string("the type of the value it copies"));
+        throw BuildAbortException();
+    }
+    diags_->of(InternalDiag::UnknownInternalError)
+        .commit(
+            "the built-in operator 'copy' refused '" + copied->toString() +
+            "', which every type is meant to take");
+    throw BuildAbortException();
 }
 
 node_handle_t
@@ -4701,3 +4746,4 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
 }
 
 } // namespace camel::compile::gir
+
