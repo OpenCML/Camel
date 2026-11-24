@@ -39,8 +39,17 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // pass's own table, keyed by the plan (a plan is an immutable fact of the graph and keeps no
     // table a back end writes in place). Kept for the run, so a node that runs again does not look
     // its operator up by URI again.
-    std::unordered_map<const camel::runtime::ExecPlan *, std::unique_ptr<std::atomic<operator_t>[]>>
-        resolvedOpers_;
+    //
+    // An entry keeps a weak reference to the plan it was made for. The store frees a plan with its
+    // graph, and the address of a freed plan can be handed to the next version's plan: an entry
+    // found under that address but made for another plan is not this plan's answer, and answering
+    // it would run another version's operator on a node whose slots it does not fit. The bytecode
+    // engine keeps its per-version state under the same rule (fvm/version_state.h).
+    struct ResolvedOpers {
+        std::weak_ptr<const camel::runtime::ExecPlan> plan;
+        std::unique_ptr<std::atomic<operator_t>[]> table;
+    };
+    std::unordered_map<const camel::runtime::ExecPlan *, ResolvedOpers> resolvedOpers_;
     /// The operator table of `plan`, made on the first ask.
     std::atomic<operator_t> *resolvedOpersOf(const camel::runtime::ExecPlan &plan);
 
