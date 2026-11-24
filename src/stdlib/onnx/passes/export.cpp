@@ -26,6 +26,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/path.h"
+#include "graph/graph_view.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -40,6 +41,10 @@ namespace camel::onnx::passes {
 
 using camel::core::error::RuntimeDiag;
 using camel::core::type::TypeCode;
+using camel::graph::GraphView;
+using camel::graph::NodeKind;
+using camel::graph::NodeRef;
+using camel::graph::PortGroup;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
@@ -61,7 +66,8 @@ struct Refusal {
 struct Request {
     uint64_t origin = camel::source::kInvalidOriginId; // the call, for refusals about it
     ::Function *fn  = nullptr; // constant function value (the closure template when built by FILL)
-    GCGraph *graph  = nullptr;
+    /// The graph of `fn`, as the value: the view is how it is read, the value is the identity.
+    const camel::graph::Graph *graph = nullptr;
     std::vector<Example> captures;
     std::vector<Example> examples;
     std::string path;
@@ -70,13 +76,14 @@ struct Request {
 
 /// The source origin of `ref`, or of the nearest input that has one (calls synthesized by the
 /// compiler carry none; the function they call does).
-uint64_t originNear(const GCGraph *g, gc_node_ref_t ref) {
-    if (const uint64_t origin = g->nodeOrigin(ref); origin != camel::source::kInvalidOriginId) {
+uint64_t originNear(const GraphView &g, NodeRef ref) {
+    if (const uint64_t origin = g.originOf(ref); origin != camel::source::kInvalidOriginId) {
         return origin;
     }
-    for (const auto inputs : {g->withInputsOf(ref), g->normInputsOf(ref)}) {
-        for (gc_node_ref_t input : inputs) {
-            if (const uint64_t origin = g->nodeOrigin(input);
+    for (const auto inputs :
+         {g.inputs(ref, PortGroup::Context), g.inputs(ref, PortGroup::Normal)}) {
+        for (const NodeRef input : inputs) {
+            if (const uint64_t origin = g.originOf(input);
                 origin != camel::source::kInvalidOriginId) {
                 return origin;
             }
@@ -96,41 +103,50 @@ std::optional<Example> constantOf(const GCGraph *g, gc_node_ref_t ref) {
     return Example{g->staticArea()->get<slot_t>(index), ty ? ty : n->dataType()};
 }
 
-std::string describeNode(const GCGraph *g, gc_node_ref_t ref) {
-    const auto *n = g->node(ref);
-    if (n->kind == GCNodeKind::Oper) {
-        return std::format(
-            "a value computed by '{}'",
-            g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+std::string describeNode(const GraphView &g, NodeRef ref) {
+    switch (g.kindOf(ref)) {
+    case NodeKind::Oper: {
+        const camel::core::OperId oper = g.operatorOf(ref);
+        // A CAST, a COPY, a FILL and an ACCS are `Oper` on this face and name no operator record
+        // (`kNoOper`, graph_view.h): they are described the way every other computed value is.
+        if (oper != camel::core::kNoOper) {
+            return std::format(
+                "a value computed by '{}'",
+                camel::core::OperatorTable::instance().uri(oper));
+        }
+        break;
     }
-    if (n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) {
+    case NodeKind::Func:
+    case NodeKind::Call:
         return "the result of a call";
+    default:
+        break;
     }
     return "a value computed at run time";
 }
 
 /// Where to report argument `arg` of the request `node`: the argument when it has a source
 /// position, the call otherwise.
-uint64_t argOrigin(const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg) {
+uint64_t argOrigin(const GraphView &g, NodeRef node, NodeRef arg) {
     const uint64_t origin = originNear(g, arg);
     return origin != camel::source::kInvalidOriginId ? origin : originNear(g, node);
 }
 
 /// Reads `arg` of the request `node` as a constant; refuses when the preceding passes did not
 /// reduce it to one. The pass does not execute the program to obtain it.
-Example constantArgAt(
-    const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg, std::string_view what) {
+Example
+constantArgAt(const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg, std::string_view what) {
     if (auto value = constantOf(g, arg)) {
         return *value;
     }
     throw Refusal{
-        argOrigin(g, node, arg),
+        argOrigin(g->view(), node, arg),
         std::format(
             "the {} of onnx.export_model is {}, not a constant of the graph; onnx::export "
             "does not run the program: run std::opt before it so that it folds, or "
             "build it from constants only",
             what,
-            describeNode(g, arg))};
+            describeNode(g->view(), arg))};
 }
 
 /// Ordinary argument `index` of the request: `fn` and `example` stay positional.
@@ -154,7 +170,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
         const auto templ = constantOf(g, g->normInputsOf(arg).front());
         if (!templ) {
             throw Refusal{
-                argOrigin(g, node, arg),
+                argOrigin(g->view(), node, arg),
                 "the function argument of onnx.export_model is not a constant of the graph; "
                 "run std::opt before onnx::export"};
         }
@@ -164,27 +180,27 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
         const auto slots = g->nodeBodyAs<camel::runtime::GCFillBody>(arg)->slots();
         const auto refs  = g->withInputsOf(arg);
         request.captures.assign(
-            request.graph ? request.graph->closureNodes().size() : 0,
+            request.graph ? request.graph->view().ports(PortGroup::Capture).size() : 0,
             Example{NullSlot, nullptr});
         for (size_t k = 0; k < refs.size() && k < slots.size(); ++k) {
             const auto value = constantOf(g, refs[k]);
             const auto slot  = static_cast<size_t>(slots[k]);
             if (!value || slot >= request.captures.size()) {
                 throw Refusal{
-                    argOrigin(g, node, refs[k]),
+                    argOrigin(g->view(), node, refs[k]),
                     std::format(
                         "the function passed to onnx.export_model captures {}, not a constant "
                         "of the graph; onnx::export does not run the "
                         "program: run std::opt before it so that it folds, or pass "
                         "the value as a function argument",
-                        describeNode(g, refs[k]))};
+                        describeNode(g->view(), refs[k]))};
             }
             request.captures[slot] = *value;
         }
         for (const Example &capture : request.captures) {
             if (!capture.type) {
                 throw Refusal{
-                    argOrigin(g, node, arg),
+                    argOrigin(g->view(), node, arg),
                     "the function passed to onnx.export_model has a capture that is not bound "
                     "in the graph"};
             }
@@ -199,17 +215,18 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
 
 Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out) {
     Request request;
-    request.origin  = originNear(g, node);
+    request.origin  = originNear(g->view(), node);
     const auto with = g->withInputsOf(node);
     readFunction(g, node, request);
     if (!request.graph) {
-        throw Refusal{originNear(g, node), "onnx.export_model expects a function value"};
+        throw Refusal{originNear(g->view(), node), "onnx.export_model expects a function value"};
     }
 
     // `example` is the argument of a one-parameter function, or a tuple with one example per
     // parameter (as the export_model operator reads it).
     const Example example = constantArg(g, node, 1, "example argument");
-    if (request.graph->normPorts().size() == 1 || example.type->code() != TypeCode::Tuple) {
+    if (request.graph->view().ports(PortGroup::Normal).size() == 1 ||
+        example.type->code() != TypeCode::Tuple) {
         request.examples.push_back(example);
     } else {
         auto *tupleType = static_cast<core::type::TupleType *>(example.type);
@@ -223,7 +240,7 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
         request.path = out;
     } else if (with.empty()) {
         throw Refusal{
-            originNear(g, node),
+            originNear(g->view(), node),
             "the onnx.export_model call names no model file: give it as the `out` argument "
             "(export_model<out: \"model.onnx\">(fn, example)), or name it with the parameter "
             "out of the pass (onnx::export out=\"model.onnx\")"};
@@ -231,12 +248,12 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
         request.path = rtdata::fromSlot<::String *>(path->value)->toString();
     } else {
         throw Refusal{
-            argOrigin(g, node, with[0]),
+            argOrigin(g->view(), node, with[0]),
             std::format(
                 "the output path of onnx.export_model is {}, not a constant of the graph; "
                 "name the model file with the parameter out of the pass "
                 "(onnx::export out=\"model.onnx\"), or write the path as a string literal",
-                describeNode(g, with[0]))};
+                describeNode(g->view(), with[0]))};
     }
     if (with.size() > 1) {
         const Example axes = constantWithArg(g, node, 1, "dynamic_axes argument");
@@ -319,10 +336,10 @@ Request readEntryRequest(
         return *request;
     }
     const auto cond            = g->normInputsOf(*brch);
-    const std::string location = locationOf(ctx, originNear(g, node));
-    uint64_t origin            = originNear(g, *brch);
+    const std::string location = locationOf(ctx, originNear(g->view(), node));
+    uint64_t origin            = originNear(g->view(), *brch);
     if (origin == camel::source::kInvalidOriginId) {
-        origin = originNear(g, node);
+        origin = originNear(g->view(), node);
     }
     std::string message = std::format(
         "the onnx.export_model call{} is made in an arm of this branch, and the "
@@ -331,7 +348,7 @@ Request readEntryRequest(
         "arm computes is not a constant of the graph; write the export_model call "
         "outside the branch, or make the condition a constant",
         location.empty() ? std::string() : " at " + location,
-        cond.empty() ? std::string() : std::format(" ({})", describeNode(g, cond.front())));
+        cond.empty() ? std::string() : std::format(" ({})", describeNode(g->view(), cond.front())));
     if (unreadable) {
         message += "; the request cannot be read either: " + unreadable->message;
     }
@@ -415,17 +432,15 @@ uint64_t entryOriginOf(core::context::Context &ctx, const GCGraph *root) {
 }
 
 /// Whether node `ref` of `g` is the export request (the operator kRequestUri).
-bool isRequest(const GCGraph *g, gc_node_ref_t ref) {
+bool isRequest(const GraphView &g, NodeRef ref) {
     static const camel::core::OperId request =
         camel::core::OperatorTable::instance().intern(kRequestUri);
-    const auto *n = g->node(ref);
-    return n && n->kind == GCNodeKind::Oper &&
-           g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper == request;
+    return g.kindOf(ref) == NodeKind::Oper && g.operatorOf(ref) == request;
 }
 
-bool holdsRequest(const GCGraph *g) {
-    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
-        if (isRequest(g, it.ref())) {
+bool holdsRequest(const GraphView &g) {
+    for (const NodeRef ref : g.nodes()) {
+        if (isRequest(g, ref)) {
             return true;
         }
     }
@@ -436,7 +451,7 @@ bool holdsRequest(const GCGraph *g) {
 /// graph reaches), though none is visible in the entry graph itself.
 bool requestIsReachable(const camel::runtime::Program &program, GCGraph *root) {
     for (auto *g : camel::runtime::collectReachableGraphs(program, root)) {
-        if (g != nullptr && g != root && holdsRequest(g)) {
+        if (g != nullptr && g != root && holdsRequest(g->view())) {
             return true;
         }
     }
@@ -451,7 +466,7 @@ bool leadsToRequest(
     if (g == nullptr || !seen.insert(g).second) {
         return false;
     }
-    if (holdsRequest(g)) {
+    if (holdsRequest(g->view())) {
         return true;
     }
     for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
@@ -493,7 +508,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
                "uses macros such as grad)";
     }
     const auto &program      = programOfGraph(ctx, root);
-    const auto *callee    = calleeGraphOf(program, root, call);
+    const auto *callee       = calleeGraphOf(program, root, call);
     const std::string shown  = calleeNameOf(program, root, call);
     const std::string name   = shown.empty() ? "the called function" : "'" + shown + "'";
     const InlineDeclined *no = callee ? report->find(root->name(), callee->name()) : nullptr;
@@ -612,7 +627,7 @@ collectRequests(const core::context::Context &ctx, GCGraph *root, const std::str
         if (!n) {
             continue;
         }
-        if (isRequest(root, it.ref())) {
+        if (isRequest(root->view(), it.ref())) {
             requests.push_back(readEntryRequest(ctx, root, it.ref(), out));
         } else if ((n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) && !firstCall) {
             firstCall = it.ref();
@@ -627,7 +642,7 @@ collectRequests(const core::context::Context &ctx, GCGraph *root, const std::str
         const gc_node_ref_t call = callLeadingToRequest(program, root).value_or(*firstCall);
         const std::string callee = calleeNameOf(program, root, call);
         throw Refusal{
-            originNear(root, call),
+            originNear(root->view(), call),
             std::format(
                 "the entry graph still contains a call{} that was not inlined, so no "
                 "onnx.export_model(fn, example, path) request is visible in it; {}",
@@ -639,22 +654,29 @@ collectRequests(const core::context::Context &ctx, GCGraph *root, const std::str
 
 /// A macro operator (grad, with_grad, ...) left in the function means std::macro did
 /// not run: its expansion is a graph rewrite, which this pass does not perform.
-void refuseUnexpandedMacros(const GCGraph *g) {
-    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
-        const auto *n = *it;
-        if (n && n->kind == GCNodeKind::Oper && n->isMacro()) {
-            throw Refusal{
-                originNear(g, it.ref()),
-                std::format(
-                    "macro operator '{}' is not expanded; run std::macro (then "
-                    "std::opt) before onnx::export",
-                    g->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri())};
+void refuseUnexpandedMacros(const GraphView &g) {
+    const auto &operators = camel::core::OperatorTable::instance();
+    for (const NodeRef ref : g.nodes()) {
+        if (g.kindOf(ref) != NodeKind::Oper) {
+            continue;
         }
+        // Whether an operator is a macro is the operator's record (design principles 2.2), which
+        // is where the node's own flag was set from; the view answers it through the table.
+        const camel::core::OperId oper = g.operatorOf(ref);
+        if (oper == camel::core::kNoOper || !operators.isMacro(oper)) {
+            continue;
+        }
+        throw Refusal{
+            originNear(g, ref),
+            std::format(
+                "macro operator '{}' is not expanded; run std::macro (then "
+                "std::opt) before onnx::export",
+                operators.uri(oper))};
     }
 }
 
 Model translate(core::context::Context &ctx, const Request &request) {
-    refuseUnexpandedMacros(request.graph);
+    refuseUnexpandedMacros(request.graph->view());
     try {
         return translateFunction(
             ctx,
@@ -693,7 +715,7 @@ void exportEntry(
     }
     for (auto *g : camel::runtime::collectReachableGraphs(*program, root)) {
         if (g != nullptr) {
-            refuseUnexpandedMacros(g);
+            refuseUnexpandedMacros(g->view());
         }
     }
     Model model;

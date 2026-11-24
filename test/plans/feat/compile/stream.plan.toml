@@ -43,7 +43,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_value"
-desc = "A range is a value of the library's own type `Range` (design principles 5.4): `to_range(1, 5, 1)` writes the three numbers down, `to_array` is the one conversion from it to the integers it names, and `is_empty` says whether it names any. The type is not ambient, so the case imports it and annotates the binding with it. A `for` over a range walks its own `__iter__` whatever the step: the negative one counts down, and a range that names no integer runs no round."
+desc = "A range is a value of the library's own type `Range` (design principles 5.4): `to_range(1, 5, 1)` writes the three numbers down, `to_array` is the one conversion from it to the integers it names, and `is_empty` says whether it names any. Nothing is imported: the prelude's exports are the last layer, so the type and the three functions come along with the built-in rules it declares (10.2). A `for` over a range walks its own `__iter__` whatever the step: the negative one counts down, and a range that names no integer runs no round."
 kind = "behavior"
 case = "../../../cases/compile/stream/range_value.cml"
 args = ["${case}"]

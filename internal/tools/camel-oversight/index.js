@@ -34,12 +34,68 @@
 // of the same id is acknowledged and dropped, so a retried request does not start a second turn.
 
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { measure } from './measure.js'
-import { DEFAULT_LIMITS, LEVELS, RULES } from './rules.js'
+import { pathToFileURL } from 'node:url'
+import * as bootMeasure from './measure.js'
+import * as bootRules from './rules.js'
+
+// The parts that change most often -- the rules, their limits and texts, and what is measured --
+// are reloaded when they change, at the next beat, without restarting the host: a restart stops
+// every agent that is working. They are read from origin/develop, the content that has passed the
+// merge gate and been pushed, never from the checkout's working tree: a merge in progress there
+// holds content that has not been measured yet, and a lane's half-done edit may sit there too. A
+// file that fails to load leaves the version in use in place and is reported. The routes, the tools
+// and the session wiring in this file still need a restart.
+const HOT_REF = 'origin/develop'
+const HOT_DIR = path.join(os.homedir(), '.camel-oversight', 'hot')
+const hot = {
+    rules: { module: bootRules, blob: null, error: null },
+    measure: { module: bootMeasure, blob: null, error: null },
+}
+const gitIn = (repo, args) =>
+    new Promise((resolve, reject) =>
+        execFile('git', ['-C', repo, ...args], { env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, maxBuffer: 16 << 20 },
+            (error, stdout) => (error ? reject(error) : resolve(stdout))))
+// The text of a file as origin/develop has it, or null when it cannot be read.
+async function pushedText(repo, file) {
+    return gitIn(repo, ['show', `${HOT_REF}:${file}`]).catch(() => null)
+}
+async function reloadHot(repo, onChange) {
+    if (!repo) return
+    for (const [name, file] of [['rules', 'rules.js'], ['measure', 'measure.js']]) {
+        const slot = hot[name]
+        const spec = `internal/tools/camel-oversight/${file}`
+        let blob
+        try {
+            blob = (await gitIn(repo, ['rev-parse', `${HOT_REF}:${spec}`])).trim()
+        } catch (error) {
+            slot.error = `${spec} at ${HOT_REF}: ${String(error.message).split(/\r?\n/)[0]}`
+            continue
+        }
+        if (slot.blob === null) {
+            slot.blob = blob // the version imported at start stands until the pushed one changes
+            continue
+        }
+        if (blob === slot.blob) continue
+        slot.blob = blob // a broken version is not retried every beat
+        try {
+            const text = await gitIn(repo, ['show', `${HOT_REF}:${spec}`])
+            mkdirSync(HOT_DIR, { recursive: true })
+            const copy = path.join(HOT_DIR, `${name}-${blob.slice(0, 12)}.mjs`)
+            if (!existsSync(copy)) writeFileSync(copy, text)
+            slot.module = await import(pathToFileURL(copy).href)
+            slot.error = null
+            onChange && onChange({ file, blob: blob.slice(0, 12), ok: true })
+        } catch (error) {
+            slot.error = `${file}: ${error.message}`
+            onChange && onChange({ file, blob: blob.slice(0, 12), ok: false, error: error.message })
+        }
+    }
+}
 
 export const name = 'camel-oversight'
 export const inject = ['agents', 'webServer', 'tools', 'systemPrompt', 'timer']
@@ -291,7 +347,16 @@ export function apply(ctx, rawConfig) {
             }),
         )
 
-    const pending = () => [...delivered.values()].filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id)).map((entry) => entry.id)
+    // A dispatch is owed an answer once the coordinator has read it. One still waiting in its queue is
+    // listed by `queuedDispatches`, not here: naming its id before its text arrives asks for an
+    // answer to a message the coordinator cannot see.
+    const pending = () => {
+        const agent = target()
+        return [...delivered.values()]
+            .filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id))
+            .filter((entry) => !(agent && entry.messageId && stillQueued(agent, entry.messageId)))
+            .map((entry) => entry.id)
+    }
 
     // Whether a message is still waiting in the agent's queue, unread.
     const stillQueued = (agent, messageId) => {
@@ -384,7 +449,17 @@ export function apply(ctx, rawConfig) {
     // condition has held for the rule's `hold` and the same alert was not delivered within its
     // `cooldown` (an alert whose reading changed is new). All reminders due in one beat are delivered
     // as one message, at the loudest level among them.
-    const limits = { ...DEFAULT_LIMITS, ...(config.limits || {}) }
+    // Limits are read afresh at each beat: the rules file's defaults, then the plugin config, then
+    // the local config file, so a threshold changes without a restart.
+    const limitsNow = () => {
+        let local = {}
+        try {
+            if (existsSync(LOCAL_CONFIG)) local = JSON.parse(readFileSync(LOCAL_CONFIG, 'utf8')).limits || {}
+        } catch {
+            local = {}
+        }
+        return { ...hot.rules.module.DEFAULT_LIMITS, ...(config.limits || {}), ...local }
+    }
     let reading = null
     let lanesNow = { unreadable: 'not measured yet' }
     const alerts = new Map() // rule id -> {since, key, text, level, lastDelivered, lastKey}
@@ -394,7 +469,8 @@ export function apply(ctx, rawConfig) {
 
     const unackedOlderThan = (minutes) =>
         [...delivered.values()]
-            .filter((entry) => !acks.has(entry.id) && Date.now() - entry.at > minutes * 60_000)
+            // A dispatch another one replaced (`supersedes`) is answered by the answer to the replacement.
+            .filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id) && Date.now() - entry.at > minutes * 60_000)
             .map((entry) => entry.id)
     // Only dispatch-shaped ids are items; an id a session made up for itself can never have a backlog row.
     const takenIds = () =>
@@ -425,6 +501,7 @@ export function apply(ctx, rawConfig) {
 
     const deliver = (due, now) => {
         const agent = target()
+        const LEVELS = hot.rules.module.LEVELS
         const level = due.reduce((top, alert) => (LEVELS[alert.level] > LEVELS[top] ? alert.level : top), 'quiet')
         const text = `[oversight · 提醒]\n${due.map((alert) => `- ${alert.text}`).join('\n')}`
         const mode = agent ? sendToTarget(agent, level, text) : 'held (no claimed session)'
@@ -453,7 +530,9 @@ export function apply(ctx, rawConfig) {
     let rulesText = ''
     const loadRules = async () => {
         if (!config.repo) return
-        const text = await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
+        // As pushed, not as the checkout's working tree has it mid-merge (see HOT_REF).
+        const pushed = await pushedText(config.repo, config.rulesFile)
+        const text = pushed !== null ? pushed : await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
         if (text.trim()) rulesText = text.trim()
     }
     void loadRules()
@@ -525,8 +604,28 @@ export function apply(ctx, rawConfig) {
         const agent = target()
         if (!agent) return
         const now = Date.now()
+        // A call that only waits on a background job loses nothing when interrupted: the job keeps
+        // running. While such a wait holds dispatches behind it, the turn is ended at once, not after
+        // blockCancelMinutes, since the dispatches cannot arrive any other way.
+        const held = [...delivered.values()].filter(
+            (entry) => entry.messageId && !superseded.has(entry.id) && stillQueued(agent, entry.messageId) &&
+                now - entry.at >= (config.heldDispatchMinutes ?? 10) * 60_000,
+        )
         for (const [callId, call] of pendingCalls) {
             if ((config.blockExempt || []).includes(call.name)) continue
+            if (held.length && (config.waitTools || ['job_output']).includes(call.name)) {
+                pendingCalls.delete(callId)
+                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律 5）。`
+                nudge('wait-ended', 'urgent', text, (a) => {
+                    a.cancel({ kind: 'user' }, { keepInbox: true })
+                    a.followup(Object.freeze({
+                        id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
+                        content: Object.freeze([Object.freeze({ type: 'text', text })]),
+                    }))
+                    return 'cancel+followup'
+                })
+                continue
+            }
             const minutes = (now - call.at) / 60_000
             if (minutes >= config.blockCancelMinutes) {
                 pendingCalls.delete(callId)
@@ -553,7 +652,13 @@ export function apply(ctx, rawConfig) {
         beating = true
         try {
             const now = Date.now()
-            reading = await measure({
+            await reloadHot(config.repo, (change) => {
+                const entry = { kind: 'hot-reload', at: now, ...change }
+                record(entry)
+                emit(entry)
+            })
+            const limits = limitsNow()
+            reading = await hot.measure.module.measure({
                 repo: config.repo,
                 fetch: config.fetch !== false,
                 stateDir: config.stateDir,
@@ -568,13 +673,18 @@ export function apply(ctx, rawConfig) {
                 limits,
                 now,
                 unacked: unackedOlderThan(20),
+                stuck: agent
+                    ? [...delivered.values()]
+                          .filter((entry) => entry.messageId && !superseded.has(entry.id) && stillQueued(agent, entry.messageId))
+                          .map((entry) => ({ id: entry.id, minutes: Math.floor((now - entry.at) / 60_000) }))
+                    : [],
                 taken: takenIds(),
                 backlogOpen: backlogOpen(),
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
                 dmLastSeen,
             }
             const due = []
-            for (const rule of RULES) {
+            for (const rule of hot.rules.module.RULES) {
                 let found = null
                 try {
                     found = rule.check(facts)
@@ -665,6 +775,7 @@ export function apply(ctx, rawConfig) {
             promptReach,
             blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
             watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
+            hotLoaded: Object.fromEntries(Object.entries(hot).map(([name, slot]) => [name, { blob: slot.blob && slot.blob.slice(0, 12), error: slot.error }])),
         })
     })
 

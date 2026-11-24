@@ -49,11 +49,12 @@ uint64_t graphOriginOf(const camel::core::context::Context &context, const GCGra
             return origin;
         }
     }
-    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        if (*it == nullptr) {
-            continue;
-        }
-        if (const uint64_t origin = graph->nodeOrigin(it.ref());
+    // The nodes, by the view's own enumeration: a slot the graph does not hold as a node (a
+    // tombstone, a JOIN's shadow) is not one to ask for a position, and the range is the one place
+    // that says which slots those are (graph_view.h, NodeRange).
+    const camel::graph::GraphView &view = graph->view();
+    for (const camel::graph::NodeRef node : view.nodes()) {
+        if (const uint64_t origin = view.originOf(node);
             origin != camel::source::kInvalidOriginId) {
             return origin;
         }
@@ -79,7 +80,7 @@ std::string SiteTable::valueMark(size_t k) {
 }
 
 std::string SiteTable::siteFor(
-    const GCGraph *graph, gc_node_ref_t node, RuntimeDiag kind,
+    const camel::graph::Graph *graph, gc_node_ref_t node, RuntimeDiag kind,
     const std::vector<std::string> &args, std::string filled) {
     const auto key = std::make_tuple(
         static_cast<const void *>(graph),
@@ -94,7 +95,7 @@ std::string SiteTable::siteFor(
 }
 
 std::string SiteTable::siteForProgramFault(
-    const GCGraph *graph, gc_node_ref_t node, const std::string &kind) {
+    const camel::graph::Graph *graph, gc_node_ref_t node, const std::string &kind) {
     const auto key = std::make_tuple(
         static_cast<const void *>(graph), static_cast<uint16_t>(node), static_cast<uint32_t>(0));
     if (auto it = programFaults_.find(key); it != programFaults_.end()) {
@@ -191,7 +192,7 @@ std::string SiteTable::unlocated(RuntimeDiag kind, const std::vector<std::string
     return sites_.back().name;
 }
 
-std::string SiteTable::placeFor(const GCGraph *graph, gc_node_ref_t node) {
+std::string SiteTable::placeFor(const camel::graph::Graph *graph, gc_node_ref_t node) {
     const auto key = std::make_tuple(
         static_cast<const void *>(graph),
         static_cast<uint16_t>(node),

@@ -14,7 +14,9 @@
  *   4. names a `using namespace` in force brings (N2: a `using` applies to the block it is
  *      written in; two that bring things that cannot be told apart are AmbiguousName where
  *      the name is used);
- *   5. what the built-in module and the modules of operators bring along.
+ *   5. what the built-in module and the modules of operators bring along -- the prelude's
+ *      exports are what the built-in module brings, so a name of it is written without an
+ *      `import` (`preludeEntity`).
  *
  * Within a layer, functions of one name form a set of overloads; across layers nothing is
  * merged, except the operators (`__add__` and the like), whose overloads come from everywhere.
@@ -210,6 +212,23 @@ Builder::throughUsing(const std::string &written, const GCT::node_ptr_t &at) {
     overloads.shown  = written;
     overloads.entity = EntityAccess::makeGraphSet(std::move(merged));
     return overloads;
+}
+
+std::optional<camel::core::module::entity> Builder::preludeEntity(const std::string &name) {
+    if (module_ == nullptr || exports_ == nullptr || context_ == nullptr) {
+        return std::nullopt;
+    }
+    const module_ptr_t prelude = context_->preludeModule();
+    if (prelude == nullptr || prelude.get() == module_.get()) {
+        // Inside the prelude: its names are its own, layer 2, and a call there is resolved by the
+        // module's own declarations alone.
+        return std::nullopt;
+    }
+    auto found = exports_->exportedEntity(*prelude, Reference(name));
+    if (!found.has_value() || found->isTag()) {
+        return std::nullopt;
+    }
+    return found;
 }
 
 bool Builder::sameParameterTypes(FunctionType *a, FunctionType *b) {

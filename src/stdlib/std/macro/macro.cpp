@@ -14,8 +14,10 @@
 
 #include <iostream>
 #include <span>
+#include <string_view>
 
 #include "camel/execute/pass/registration.h"
+#include "graph/graph_view.h"
 
 namespace {
 
@@ -39,24 +41,27 @@ namespace {
 void reportGraphs(std::span<camel::runtime::GCGraph *const> graphs, size_t inlined) {
     std::ostream &os = std::cerr;
     size_t index     = 0;
-    for (const camel::runtime::GCGraph *graph : graphs) {
-        size_t calls = 0;
-        size_t brch  = 0;
-        size_t loops = 0;
+    for (const auto *graph : graphs) {
+        size_t calls          = 0;
+        size_t brch           = 0;
+        size_t loops          = 0;
+        std::string_view name = "?";
         if (graph != nullptr) {
-            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-                const camel::runtime::GCNode *node = *it;
-                if (node == nullptr) {
-                    continue;
-                }
-                switch (node->kind) {
-                case camel::runtime::GCNodeKind::Call:
+            // Three of the nine kinds are counted, so the walk is the view's: it enumerates every
+            // node that is one of the nine and drops the JOIN, the DREF and the tombstone, none of
+            // which is a Call, a Brch or a Loop -- and the four stored kinds it folds into Oper are
+            // not one of the three either. No one of the three counts can therefore change.
+            const camel::graph::GraphView &view = graph->view();
+            name                                = view.name();
+            for (const camel::graph::NodeRef ref : view.nodes()) {
+                switch (view.kindOf(ref)) {
+                case camel::graph::NodeKind::Call:
                     ++calls;
                     break;
-                case camel::runtime::GCNodeKind::Brch:
+                case camel::graph::NodeKind::Brch:
                     ++brch;
                     break;
-                case camel::runtime::GCNodeKind::Loop:
+                case camel::graph::NodeKind::Loop:
                     ++loops;
                     break;
                 default:
@@ -64,9 +69,8 @@ void reportGraphs(std::span<camel::runtime::GCGraph *const> graphs, size_t inlin
                 }
             }
         }
-        os << "M[ACRO] graph=" << index << " name=" << (graph ? graph->name() : "?")
-           << " calls=" << calls << " inlined=" << inlined << " brch=" << brch
-           << " loops=" << loops << "\n";
+        os << "M[ACRO] graph=" << index << " name=" << name << " calls=" << calls
+           << " inlined=" << inlined << " brch=" << brch << " loops=" << loops << "\n";
         ++index;
     }
     // A run that hangs must have this on the terminal, not in a buffer: the line is the only thing
