@@ -156,3 +156,22 @@ array_large.cml:37 The generic function 'sort_by' cannot be called with argument
 ⇒ 这不再是我刚修的那条路（候选集合），而是**泛型函数名字的调用**（`count<f>(r)` 这种 `<...>` 形式）在范围上没有实例：`settleOne` 里 `accepted()` 拿到的是 `ops`（函数名所在的组，通常没有规则）与 `overloads == nullptr`，于是问不出一个「接受」。⇒ 与 `map` 那次同形，但下一次要修的是**函数名调用的候选来源**（它的声明本身），不是集合。
 
 ⇒ 也就是说：`C-1124-93` 这一族「范围上的名字」至少有两个层次，第一个（集合/算子）已经绿，第二个（泛型函数名）还需要一处。
+
+## 十五、② 的三条声明：两条写成，一条写不成
+
+- **`count`、`find`**（`8c2c4e8e7c` 前后那一笔）：照 `map`/`len` 的现成写法加进 prelude 1084-1126 那一段，读数由新用例 `stream.range_count_find` 钉住：**名字形式 `count<f>(0 .. 5)`、`find<f>(0 .. 5)` 绿**（`stream` 计划 158/159，唯一红是既有的 `interval_loop_not_materialised`）。
+- **`sort_by` 没写成，原因不是缺声明而是缺原语**：它的身体要排序，而 prelude 里没有排序原语 —— `argsort`/`sort` 声明在 **array 模块**（`array.cml:331-351`），prelude 不 import 它。⇒ 范围的 `sort_by` 需要那个原语在 prelude 可达，那是另一个问题（一页），不是一条声明能收的。**因此这一条没有加，不是忘了。**
+
+## 十六、② 那 18 条为什么还是红：第三种形式
+
+18 条用的是**箭头形式** `xs->count<f>`（`xs` 是 `1 .. 2001`）。而读数说得很清楚：
+
+```
+名字形式  count<f>(0 .. 5)   → 绿（走收集到的集合，prelude 的体在里面）
+箭头形式  xs->count<f>       → 仍然红，报的是 instantiateForCall 的
+                              "The generic function 'count' cannot be called with argument types <…> (Range)"
+```
+
+⇒ 箭头形式把名字解析成 **array 的泛型模板**（`count::<T>(xs: T[])`），在 `instantiateForCall` 里直接判负，**没有去问收集到的那一份**。⇒ 这正是我在第十四节标为「未读」的第三个层次，现在量到了：**箭头形式与名字形式走的不是同一条解析**。
+
+⇒ 同一批读数里还露出 18 条其实不止三个名字：`take`、`reverse`、`zip`、`flat_map` 也在其中（`take`/`reverse` 同样是「范围上缺声明」；`zip` 是 `array.cml:68` 的 `enumerate` 里 `zip(Range, T[])`；`flat_map` 与 `add` 见上）。
