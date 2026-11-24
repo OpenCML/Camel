@@ -3598,6 +3598,10 @@ function selectionRefusal(message) {
  * must not become a plan expansion), and a record that kept a count and a digest instead of its rows
  * because the list was too long to store. The second one cannot narrow a run at all, so it is named
  * as the digest it is rather than reported as "names no case".
+ *
+ * The record's own `plans` travel with the names: they are the targets the engine computed the list
+ * for (`scripts/selection-cases.mjs --targets`), and they are what says whether the record describes
+ * this run or another one (`refuseRecordThatNarrowsLayer`).
  */
 function readCaseSelection(file) {
     if (!fs.existsSync(file)) throw selectionRefusal(`--selection-cases: ${file} does not exist`)
@@ -3626,7 +3630,11 @@ function readCaseSelection(file) {
             `--selection-cases: ${file} names no case; an empty selection must not become a plan expansion`
         )
     }
-    return new Set(names.map(selectionCaseName))
+    return {
+        names: new Set(names.map(selectionCaseName)),
+        doc: doc && !Array.isArray(doc) ? doc : {},
+        file,
+    }
 }
 
 /**
@@ -3640,6 +3648,90 @@ function missingCaseNames(plans, wantedNames) {
     return [...wantedNames].filter((name) => !started.has(name))
 }
 
+/** The targets a record was computed for, in the form `scripts/selection-cases.mjs` writes them. */
+function recordedTargets(record) {
+    const plans = record && Array.isArray(record.plans) ? record.plans : []
+    const seen = new Set()
+    for (const plan of plans) {
+        const text = String(plan).replace(/\\/g, '/').replace(/\/+$/, '')
+        if (text) seen.add(path.posix.normalize(text))
+    }
+    return [...seen].sort()
+}
+
+/** The targets this run names, in the same form. No target is the whole plan tree. */
+function runTargets(options) {
+    const named = options.targets.length > 0 ? options.targets : [PLANS_ROOT]
+    const seen = new Set()
+    for (const target of named) seen.add(relPath(path.resolve(target)).replace(/\/+$/, ''))
+    return [...seen].sort()
+}
+
+/** Whether this run names the whole plan tree and nothing else: what `--all` and `-Plan all` name. */
+function namesWholePlanTree(options) {
+    const targets = runTargets(options)
+    return targets.length === 1 && targets[0] === relPath(PLANS_ROOT)
+}
+
+/** How many cases a loaded selection starts. */
+function countSelectedCases(selected) {
+    return selected.plans.reduce((total, plan) => total + plan.tests.length, 0)
+}
+
+/**
+ * A record may narrow a run only when it describes that run.
+ *
+ * `scripts/selection-cases.mjs --targets` writes the targets it computed the list for into `plans`,
+ * and `--changed` hands over the record it computed for exactly the targets it starts -- there the
+ * narrowing is the whole point, and this function leaves it alone. A record whose `plans` name
+ * another set was computed for another run: a change selection handed to a layer run. Using it as
+ * `keep` makes the layer run start a subset of the layer while still printing the layer's name, and
+ * every reading a gate takes (exit 0, a `[SUMMARY]` with no failure, a `tests:` count nobody
+ * compares with the layer's) reads the same as a complete layer. Nothing in the run's output says
+ * which of the two it was, which is why the refusal is a number and not a warning.
+ *
+ * A whole-tree run is the floor under that rule: a record that covers fewer of its cases than the
+ * layer holds is a change's list whatever its `plans` say, because no change selection names the
+ * plan tree as its target. The denominator is this layer's own list, read through the same
+ * `loadPlans` a run of it uses, so it is the number `scripts/tier-report.mjs` reports for this tree.
+ */
+function refuseRecordThatNarrowsLayer(options, selection, selected) {
+    // A record that names no target makes no claim: the synthetic probes of the self-test write
+    // `plans: []`, and their refusal is about the case names they carry.
+    const described = recordedTargets(selection.doc)
+    if (described.length === 0) return
+    const started = runTargets(options)
+    const describesThisRun =
+        described.length === started.length && described.every((target, index) => target === started[index])
+    if (describesThisRun && !namesWholePlanTree(options)) return
+    const layer = loadPlans(
+        options.targets,
+        options.tier,
+        options.layeredPlans,
+        options.compileOnly === true,
+        options.selectionEmpty === true,
+        null
+    )
+    const covered = countSelectedCases(selected)
+    const layerCases = countSelectedCases(layer)
+    if (covered >= layerCases) return
+    const shown = (list) => {
+        const head = list.slice(0, 3).join(', ')
+        return list.length > 3 ? `${head}, ...` : head
+    }
+    const where = describesThisRun
+        ? `The record names this run's target(s) -- ${shown(started)} -- and covers ${covered} of ` +
+          `their ${layerCases} cases: its case list is a change's, not this layer's.`
+        : `The record was computed for ${described.length} target(s) (${shown(described)}) and this ` +
+          `run names ${started.length} (${shown(started)}).`
+    throw selectionRefusal(
+        `the selection covers ${covered} of ${layerCases} cases in this layer; a layer run cannot ` +
+            `sign for the layer if the record narrows it. ${selection.file}: ${where} A record ` +
+            'narrows the run it describes: run the targets the record names, or compute the record ' +
+            "for this run with scripts/selection-cases.mjs --targets."
+    )
+}
+
 /**
  * `--list-cases`: the cases this selection would run, printed as JSON rows, nothing started and no
  * install consulted. It reads the plan tree through `loadPlans`, so the `[[sweeps]]` copies, the
@@ -3647,8 +3739,8 @@ function missingCaseNames(plans, wantedNames) {
  * by construction would be a second definition of the same selection.
  */
 function listSelectedCases(options) {
-    const wantedNames = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
-    const keep = wantedNames === null ? null : (name) => wantedNames.has(name)
+    const selection = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
+    const keep = selection === null ? null : (name) => selection.names.has(name)
     const selected = loadPlans(
         options.targets,
         options.tier,
@@ -3657,6 +3749,7 @@ function listSelectedCases(options) {
         false,
         keep
     )
+    if (selection !== null) refuseRecordThatNarrowsLayer(options, selection, selected)
     if (selected.reachedNothing.length > 0) {
         for (const target of selected.reachedNothing) {
             console.error(
@@ -3666,7 +3759,7 @@ function listSelectedCases(options) {
         }
         return 2
     }
-    const missing = missingCaseNames(selected.plans, wantedNames)
+    const missing = missingCaseNames(selected.plans, selection === null ? null : selection.names)
     if (missing.length > 0) {
         const shown = missing.slice(0, 5).join(', ')
         const rest = missing.length > 5 ? ` and ${missing.length - 5} more` : ''
@@ -4585,8 +4678,8 @@ async function main() {
     // A recorded case selection (`--changed` hands one over) runs exactly those cases. It is a
     // narrowing of the same load, not a second one: the plans are still the selection's targets, and
     // `keep` decides which of their entries the change touched.
-    const wantedNames = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
-    const keep = wantedNames === null ? null : (name) => wantedNames.has(name)
+    const selection = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
+    const keep = selection === null ? null : (name) => selection.names.has(name)
     const selected = loadPlans(
         options.targets,
         options.tier,
@@ -4596,11 +4689,12 @@ async function main() {
         keep
     )
     const plans = selected.plans
+    if (selection !== null) refuseRecordThatNarrowsLayer(options, selection, selected)
     // A name the recorded selection carries that this run would not start is a stale or wrong
     // record, and running the rest of it would be a run that silently proves less than the record
     // says. It is refused with the base the record names, never dropped.
-    if (wantedNames !== null) {
-        const missing = missingCaseNames(plans, wantedNames)
+    if (selection !== null) {
+        const missing = missingCaseNames(plans, selection.names)
         if (missing.length > 0) {
             const shown = missing.slice(0, 5).join(', ')
             const rest = missing.length > 5 ? ` and ${missing.length - 5} more` : ''
