@@ -23,6 +23,9 @@ namespace {
 using camel::execute::makePass;
 using camel::execute::PassKernel;
 
-const PassKernel nopKernel("std::nop", makePass<NopPass>());
+// The name is the pass's own (`NopPass::kName`): the question "does the pipeline end in the pass
+// that executes nothing" is answered for a pipeline before any pass is built, and it reads the name
+// from there, so this registration is not a second spelling of it.
+const PassKernel nopKernel(NopPass::kName, makePass<NopPass>());
 
 } // namespace

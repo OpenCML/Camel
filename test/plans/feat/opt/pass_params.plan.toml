@@ -72,7 +72,7 @@ assert(models[0] === 'word_as_written.onnx', `the name is not the word as writte
 name = "string.quoted_value_with_a_space"
 desc = "A value with a space is quoted, and a string parameter takes the quoted value whole: the file is named with the space in it, so neither the quotes nor the space split the word."
 case = "../../../cases/modules/onnx/entry/forward.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/a b.onnx"']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/a b.onnx"', "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/a b.onnx"]
 verify_script = """

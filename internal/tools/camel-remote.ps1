@@ -509,6 +509,22 @@ $Plan = @(Split-CamelArgList -Values $Plan)
 $AstOnly = @(Split-CamelArgList -Values $AstOnly)
 $AstDrop = @(Split-CamelArgList -Values $AstDrop)
 
+# A backslash in a plan path is not a separator on the host: the path is resolved on Linux, where
+# `test\plans\feat\trans\cml.plan.toml` is one file name containing backslashes. The plan loader
+# refuses the selection and the gate answers exit 2, but the run before that point has already
+# reported a failure for every selected case in a second or two -- which reads like six broken tests
+# and is one broken argument. Measured on 2026-11-24: a lane's six-point run came back all-red at
+# 1s each for this reason. The refusal belongs here, before the transfer, where the argument that did
+# it is still in sight, and it names the form that works instead of translating it: a silent
+# conversion would leave the next reader writing backslashes into a path a Linux host resolves.
+$planBackslashed = @($Plan | Where-Object { $_ -match '\\' })
+if ($planBackslashed.Count -gt 0) {
+    $named = $planBackslashed -join "', '"
+    Write-Host "[camel-remote] -Plan takes forward slashes ('test/plans/feat/trans/cml.plan.toml'): '$named' is one file name on the Linux host, where a backslash is an ordinary character."
+    Write-Host '[camel-remote] The plan loader would refuse the selection (exit 2) after reporting a failure for every selected case.'
+    exit 2
+}
+
 # -ListKnown asks for the rows one plan run produced, so it needs a plan run: with neither -Plan nor
 # -Changed this run would build and stop, the caller would get no marker block, and the only reading
 # it could take from that is "the row channel did not run" -- which is the same sentence a broken
