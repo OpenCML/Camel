@@ -844,7 +844,10 @@ Each plan file may define:
 - `order`
   Numeric ordering key used when the runner sorts plans.
 - `tier`
-  The plan's default layer, `fast`, `slow` or `debug` (see "Layers"). A test may override it.
+  The plan's default layer, `fast`, `slow`, `milestone` or `debug` (see "Layers"). A test may
+  override it. A value that names none of the four is the fast layer (see "Layers"), and
+  `scripts/tier-report.mjs` counts the entries that reached a layer that way apart from the ones a
+  plan said so.
 - `debug_tier`
   `true` selects the plan under `--tier debug` while leaving its ordinary layer alone: the plan
   runs fast in Release and is re-run on the Debug binary by the debug layer. Use it on a plan

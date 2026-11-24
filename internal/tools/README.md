@@ -67,7 +67,9 @@ internal/tools/camel-gate.local.json        # this machine's values; git-ignored
 To create it:
 
 1. Copy `internal/tools/camel-gate.example.json` to `internal/tools/camel-gate.local.json` beside it.
-2. Fill in the placeholders. `sshHost` and `stateDir` are required; the rest have defaults.
+2. Fill in the placeholders, and delete the example's `_comment` line while you are there: it is not
+   a setting, and it is the one key the loader has nothing to compare it to. `sshHost` and `stateDir`
+   are required; the rest have defaults.
 3. Worktree-local: the file is git-ignored, so each checkout of the repository needs its own copy.
 
 The example file gives the shape only -- every value in it is a placeholder, and no host, drive letter
@@ -75,8 +77,13 @@ or user's home appears anywhere in the repository. The real file is the one plac
 
 Rules the loader keeps:
 
-- An unknown key is an error, not a silent no-op: a key that is misspelled would otherwise leave a
-  run measuring the machine its owner thought they had changed.
+- A key one or two characters from a known name is an error, not a silent no-op: a key that is
+  misspelled would otherwise leave a run measuring the machine its owner thought they had changed.
+  A key nothing here is close to is a **file newer than the tree's scripts** -- the file is
+  git-ignored and shared by path, so a checkout on an older branch reads a file written for a newer
+  one. That one warns, naming the key, the file and the tree that does not read it, and the run
+  continues; the alternative reports a correct file as a broken one and stops every run of the older
+  tree.
 - A tool that needs a setting the file does not carry stops with exit 2 and prints the path of the
   file to create. It never guesses a host.
 - A parameter with the same name as a key overrides it for one run (`-LocalConfig`, `-StateDir`,
@@ -364,6 +371,27 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   that disagrees with `jobsRequested` is the mechanism working. A convention ("load is high, lower
   `-Jobs` by hand") is not a mechanism: it is forgotten exactly when it matters.
 - all three are advisory: a locked or unwritable file never fails a build or a plan.
+- a run's line carries the token pool as the run read it on the host: `tokens` (how many tokens that
+  run held), `tokensPeak` (the highest share seen while it ran — a sampled peak, resolution one
+  heartbeat), and `pool` (`{ size, inUse }`, what the pool itself said at that reading). The host
+  reports the pool every 10 s whether or not the work prints anything, and a row written for that
+  report also carries `stageSeconds`, the time the current stage has been running: a heartbeat whose
+  only new value is `updatedAt` says the writer is alive, not that the run is doing anything. A row
+  from before the pool, or from a local run that draws nothing from it, has **no** `tokens` key at
+  all — absent means "not reported", and is never written as `0`, because zero reads as an empty
+  pool and would invite a run that the pool cannot support.
+- `queuedAt` is the moment the run started waiting for admission, and `queuedAtKind` names the gate
+  it waited on (`slot` for a host build/test slot, `local` for a local helper's machine-wide mutex).
+  **A row without `queuedAtKind` is a transition-period row and may only be read as `slot`; every row
+  written from now on says which gate it was.** That sentence is the reading rule, not a remark: the
+  default is right for the old rows by accident (they were all slot waits), and a default that
+  happens to be right is the kind of inference a reader stops checking. One field is not asked to
+  mean two things across one file.
+- the local helpers (`camel-build.ps1`, `camel-test.ps1`) write the registry too, so a local run is
+  not a run the panel cannot see. Their rows have no `tokens`: the pool is the build host's, and a
+  local run draws nothing from it.
+- `run-registry.ps1` is the one writer of that file; all three callers use it, because a second copy
+  of the append-and-compact rule is how two writers end up disagreeing about one file.
 ## The two DSH plugins
 
 Two directories here are loaded as plugins by the agent runtime rather than run as scripts. Their

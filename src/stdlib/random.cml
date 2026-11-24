@@ -110,7 +110,7 @@ export func uniform::<T>(k: Key) => T[...] when is_float::<T>() {
         a * b
     }, 1>
     // `to_array` is a debt: a comprehension's source needs elements, which a range will have once
-    // `operator for` lands (ruling D-1123-49); then the source goes back to `0 .. n`.
+    // `operator for` lands; then the source goes back to `0 .. n`.
     return reshape<shape>([uniform::<T>(fold(k, i)) for i in to_array(0 .. n)])
 }
 

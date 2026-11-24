@@ -482,6 +482,9 @@ if ($Latest) {
     $fetchLocalRel = $FetchFile
     $fetchDisplay = ''
 }
+# The run registry's writer, shared with the local helpers so the append-and-compact rule exists
+# once (`internal/tools/run-registry.ps1`).
+. (Join-Path $PSScriptRoot 'run-registry.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{
     stateDir         = $StateDir
     hostLibStdCxxDir = $LibStdCxxDir
@@ -636,7 +639,10 @@ $checkers = [ordered]@{
     # threshold of zero: the tree carries none of those comments, so the first one added is this
     # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
     # what the gate returns.
-    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @(); compiler = $false }
+    # The tree is named, not inherited: this command runs with the checkout as its working directory
+    # (see the block that builds it), so `.` is that checkout, and the checker has no default that
+    # could read the directory the run was started in instead (iron rule 17).
+    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @('--root', '.'); compiler = $false }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
@@ -752,7 +758,9 @@ if ($NoGpuWatch -and $gpuReadingWanted) {
 # nothing when it refuses.
 #
 # The three conditions of the failure -- the record gets shorter, the rows it loses still name a
-# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The bulk
+# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The tree
+# that question is asked about is an argument with no default: a default would have asked it about
+# the directory the tool was started in (iron rule 17). The bulk
 # condition is the one that does not depend on where a file is: on 2026-11-17 `eaa3ecb8c` recorded
 # with the bulk flag on a tree that was missing the seven `test/cases/compile/var/loop_*.cml` a
 # parallel lane had just added, and those rows went with the files (4400 lines to 4393). Those files
@@ -764,9 +772,16 @@ function Get-AstDropVerdict {
         [AllowEmptyCollection()][string[]]$Before = @(),
         [AllowEmptyCollection()][string[]]$After = @(),
         [AllowEmptyCollection()][string[]]$Drop = @(),
-        [string]$Root = '.',
+        # The tree the dropped rows are tested against. There is no default: a run that names no tree
+        # would read the directory it was started in, and that directory is the owner's main checkout
+        # (iron rule 17), not the tree whose record is being rewritten.
+        [string]$Root = '',
         [bool]$Bulk = $true
     )
+    if (-not $Root) {
+        Write-Host "[camel-remote] Get-AstDropVerdict needs -Root: the tree is named by the caller and never inherited, because the directory a tool was started in is the main checkout, not this tree (iron rule 17)."
+        exit 2
+    }
     # A line is `<16 hex> <ok|no> <path>`, and the question is about the paths: a hash that moved is
     # one line lost and one line gained, never a row that went, so a set of whole lines would call
     # every re-read row a deletion.
@@ -959,9 +974,12 @@ $testStateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelTestSta
 # JSON line per run snapshot, keyed by runId, and the panel keeps the last line per run. Nothing
 # here is read back by this script, and every write is best-effort: a locked or unwritable file
 # must never fail a build or a plan.
+#
+# The registry is also where the token pool is read: `tokens`, `tokensPeak` and `pool` in these rows
+# are the run's own reading of `/tmp/camel-tokens` (see the `HOST_TOKENS` handler below), and a row
+# that has no `tokens` field says the pool was never read -- it does not say the pool was empty.
 $runRegistryPath = Join-Path $cfg.stateDir 'run-registry.jsonl'
 $runRegistryMutex = New-Object System.Threading.Mutex($false, 'Global\CamelRunRegistry')
-$runRegistryEncoding = New-Object System.Text.UTF8Encoding($false)
 
 # ANSI colours: scripts/common.js always emits them, and over ssh (no console) they arrive verbatim.
 # camel-build.ps1 matches plain console text, so strip the escapes before applying its patterns.
@@ -1075,35 +1093,38 @@ function Set-BuildPhase([string]$phase, [string]$line) {
     }
 }
 
-# Append one snapshot for this run. Best-effort by design: the panel can survive a missing
-# registry (it falls back to the state files), but a build must not die because a monitor file
-# was busy. The named mutex serialises appends between concurrent runs; the file is compacted
-# only when it grows past half a megabyte.
+# Append one snapshot for this run through the shared writer (`run-registry.ps1`), then remember when
+# it was written and which phase it was written in: `stageSeconds` in the next row is measured from
+# the moment the stage actually changed, not from the run's start. A row whose only new number is
+# `updatedAt` says nothing that a reader can use -- "this stage has been going for N seconds" is the
+# reading that tells a slow run apart from a dead one.
 function Publish-Run {
     try {
         if ($null -eq $run) { return }
-        $run.updatedAt = (Get-Date).ToString('o')
-        $line = ($run | ConvertTo-Json -Compress -Depth 5)
-        $held = $false
-        try {
-            try {
-                $held = $runRegistryMutex.WaitOne([TimeSpan]::FromSeconds(2))
-            } catch [System.Threading.AbandonedMutexException] {
-                $held = $true
-            }
-            if (-not $held) { return }
-            $info = Get-Item -LiteralPath $runRegistryPath -ErrorAction SilentlyContinue
-            if ($null -ne $info -and $info.Length -gt 524288) {
-                $keep = @(Get-Content -LiteralPath $runRegistryPath -ErrorAction SilentlyContinue |
-                    Select-Object -Last 300)
-                $tmp = "$runRegistryPath.$PID.tmp"
-                [System.IO.File]::WriteAllLines($tmp, [string[]]$keep, $runRegistryEncoding)
-                Move-Item -Force -LiteralPath $tmp -Destination $runRegistryPath
-            }
-            [System.IO.File]::AppendAllText($runRegistryPath, $line + "`n", $runRegistryEncoding)
-        } finally {
-            if ($held) { $runRegistryMutex.ReleaseMutex() }
+        $now = Get-Date
+        if ($run.phase -ne $script:publishedPhase) {
+            $script:publishedPhase = $run.phase
+            $script:stageStartedAt = $now
         }
+        if ($null -ne $script:stageStartedAt) {
+            $run.stageSeconds = [int](($now - $script:stageStartedAt).TotalSeconds)
+        }
+        $run.updatedAt = $now.ToString('o')
+        # A field that was never read is *absent*, not null: the reader of this file is told
+        # "nobody reported" by the key not being there, and by nothing else. Tokens and the pool are
+        # the fields this happens to; every other field is written from the run's first row.
+        $row = @{}
+        foreach ($key in $run.Keys) { $row[$key] = $run[$key] }
+        if ($null -eq $run.tokens) {
+            $row.Remove('tokens')
+            $row.Remove('tokensPeak')
+        }
+        if ($null -eq $run.pool.size -and $null -eq $run.pool.inUse) { $row.Remove('pool') }
+        if ($row.ContainsKey('tokens')) { $script:publishedTokens = $row['tokens'] }
+        [void](Add-RunRegistryRow -Path $runRegistryPath -Mutex $runRegistryMutex -Row $row)
+        # Script scope: a plain assignment here would create a local and leave the throttle outside
+        # reading the old value, which would publish on every line.
+        $publishClock.at = $now
     } catch {
         # Advisory state only: never let the monitor break the work it monitors.
     }
@@ -1214,7 +1235,15 @@ $rowsChannel = $false
 $rowsOpen = $false
 $rowsEnded = $false
 $rowsSeen = 0
-$lastRunPublish = [datetime]::MinValue
+$publishClock = @{ at = [datetime]::MinValue }
+# The stage clock behind `stageSeconds`: reset by Publish-Run whenever the phase changes, so a
+# heartbeat row carries "this stage has been running for N seconds" rather than repeating the same
+# numbers with a newer `updatedAt` -- a row whose only new value is the timestamp says the writer is
+# alive, not that the run is doing anything.
+$stageStartedAt = $startedAt
+$publishedPhase = $null
+# The last `tokens` value actually written, so a heartbeat can say whether the pool reading moved.
+$publishedTokens = $null
 
 # One line per run for the panel's run registry. The fields that say *how* this run was scheduled
 # are reported by the host itself and not guessed here: `slot` is the build slot the host took
@@ -1251,6 +1280,13 @@ $run = @{
     loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
     loadAtEnd       = $null
     queuedAt        = $null
+    # Which gate `queuedAt` measured. Old rows have no such field and were all slot waits; a row that
+    # says `token` waited for the token pool. One field cannot mean two things across one file, so the
+    # gate is named beside the time instead of being inferred by whoever reads it -- and the reading
+    # rule is written down in `README.md`: a row *without* this field is a transition-period row and
+    # may only be read as `slot`, because every row written from now on says which gate it was. A
+    # default that happens to be right for the old rows is not a field that answers the question.
+    queuedAtKind    = $null
     queueSeconds    = $null
     buildStartedAt  = $null
     buildFinishedAt = $null
@@ -1272,6 +1308,17 @@ $run = @{
     plan            = @($Plan)
     target          = if ($Plan.Count -gt 0) { $Plan[0] } else { '' }
     lastLine        = "[camel-remote] pushing $branch to $sshHost"
+    # The token pool, as this run reads it on the host (`HOST_TOKENS` below). `tokens` is this run's
+    # own share, `tokensPeak` the highest share seen while it ran -- a sampled peak, resolution one
+    # heartbeat, which is stated rather than dressed up as an exact maximum. `pool` is what the pool
+    # itself said at that reading. Until the first reading these three keys are *absent* from the
+    # row, not null and never zero: "no row said anything" and "the pool was empty" must not look
+    # alike on a panel, because zero reads as permission to start another run.
+    tokens          = $null
+    tokensPeak      = $null
+    pool            = @{ size = $null; inUse = $null }
+    # Seconds the current stage has been running; the number a heartbeat row can change every time.
+    stageSeconds    = $null
 }
 Publish-Run
 
@@ -2341,6 +2388,8 @@ others_now() {
     awk -v me='$($run.runId)' -v now="`$(date +%s)" 'NF >= 4 { if (`$1 == me) next; if (now - `$4 > 21600) next; printf "%s%s:%s", sep, `$1, `$3; sep = "," }' "`$RUN_NOTE_DIR"/* 2>/dev/null
 }
 finish_probe() {
+    # The pool reporter is a background loop; it must not outlive the run that started it.
+    [ -n "`${tokens_reporter:-}" ] && kill "`$tokens_reporter" 2>/dev/null
     echo "HOST_LOAD_END=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
     echo "HOST_OVERLAP_END=`$(others_now)"
     rm -f "`$RUN_NOTE_DIR/'$($run.runId)'"
@@ -2393,6 +2442,36 @@ export CAMEL_BRANCH='$branch'
 export R
 echo "HOST_TOKEN_POOL=`$CAMEL_TOKEN_DIR size=`$CAMEL_TOKENS"
 echo '__CAMEL_REMOTE_SYNCED__'
+# --- the token pool, read while the run goes --------------------------------
+# The registry used to be written only when a stage changed, so a run sitting in one long case -- or
+# in a build that prints no progress lines -- wrote nothing for half an hour, and the panel's own
+# rule ("no new snapshot for five minutes means dead") drew a live run as dead (11-24: opertarget's
+# registry stood still for 35 minutes while its process kept starting cases). So this reporter
+# speaks every 10 s whether or not the work does: the pool's own reading when the token tool is in
+# the checkout, a bare alive line when it is not (the tool arrives with the pool; before that there
+# is no number to report, and "no number" must not be printed as zero).
+#
+# `show` is the pool's verifiable reading, and the lane in each holder record is how a token is
+# attributed to this run: `mine` counts the tokens whose holder record names this lane. The record
+# is only believed for a token that is actually held (show prints only held tokens), so a stale
+# record cannot inflate the count. One printf per line: a short line reaches the stream whole, so a
+# concurrent line from the run cannot be spliced into the middle of it.
+(
+    while :; do
+        sleep 10
+        if [ -f "`$R/internal/tools/host-tokens.sh" ]; then
+            pool_line=`$(CAMEL_LANE='$name' bash "`$R/internal/tools/host-tokens.sh" show 2>/dev/null |
+                awk -v lane='$name' '
+                    /^free=/ { seen = 1; for (i = 1; i <= NF; i++) { if (`$i ~ /^free=/) free = substr(`$i, 6); if (`$i ~ /^held=/) held = substr(`$i, 6) } }
+                    /held by pid/ { flat = `$0; gsub(/ +/, " ", flat); if (index(flat, " " lane " ") > 0) mine++ }
+                    END { if (seen) printf "mine=%d inuse=%d size=%d", mine + 0, held + 0, free + held }')
+            if [ -n "`$pool_line" ]; then printf 'HOST_TOKENS %s\n' "`$pool_line"; else printf 'HOST_ALIVE\n'; fi
+        else
+            printf 'HOST_ALIVE\n'
+        fi
+    done
+) &
+tokens_reporter=`$!
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
         # Captured rather than piped so the marker the guard prints past -AllowStale can be handed
@@ -2653,6 +2732,28 @@ exit `$code
             $line = "$_"
             # NOT $clean: PowerShell is case-insensitive and the script has a [switch]$Clean.
             $cleanLine = ($line -replace $ansiPattern, '').Trim()
+            # The registry's heartbeat and its token reading. The host reports the pool every 10 s
+            # whether or not the work prints anything, and a row written here carries `stageSeconds`
+            # -- a number that changes because the stage is still running -- so "alive and quiet"
+            # stays a different reading from "dead". Neither line is printed: ten a minute would
+            # drown the run they measure, and the registry is where a reader looks.
+            if ($cleanLine -match '^HOST_TOKENS mine=(\d+) inuse=(\d+) size=(\d+)\s*$') {
+                $mine = [int]$Matches[1]
+                $run.tokens = $mine
+                if ($null -eq $run.tokensPeak -or $mine -gt $run.tokensPeak) { $run.tokensPeak = $mine }
+                $run.pool = @{ size = [int]$Matches[3]; inUse = [int]$Matches[2] }
+                $sincePublish = ((Get-Date) - $publishClock.at).TotalSeconds
+                # A reading that moved is worth a row, at most one every 10 s; when nothing moved, a
+                # heartbeat row at most one every 60 s (the panel treats five silent minutes as dead).
+                if (($run.tokens -ne $publishedTokens -and $sincePublish -ge 10) -or $sincePublish -ge 60) {
+                    Publish-Run
+                }
+                return
+            }
+            if ($cleanLine -match '^HOST_ALIVE\s*$') {
+                if (((Get-Date) - $publishClock.at).TotalSeconds -ge 60) { Publish-Run }
+                return
+            }
             # -UpdateAstHashes sends the recorded file back on this stream, base64 between two markers.
             # It is a file and not a reading, so it is not printed: the lines are collected and the
             # file is written once the run has ended (the markers bracket the payload in order, so a
@@ -3036,6 +3137,11 @@ exit `$code
                 if ($null -eq $queueStartedAt) { $queueStartedAt = (Get-Date).AddSeconds(-$waited) }
                 $run.phase = 'queued'
                 $run.queuedAt = $queueStartedAt.ToString('o')
+                # The gate this wait was for. The token pool hands out budget per process instead of
+                # a slot per run, so a later run may wait on tokens instead; `queuedAt` keeps one
+                # meaning ("waiting for admission began here") and this field says which gate it was,
+                # rather than the same key meaning two things across one file.
+                $run.queuedAtKind = 'slot'
                 $run.queueSeconds = $waited
                 $run.lastLine = $cleanLine
                 Set-BuildPhase 'queued' $cleanLine
@@ -3064,18 +3170,18 @@ exit `$code
                     }
                     # Progress lines can arrive several times a second; the registry only needs a
                     # heartbeat, so throttle to one snapshot every few seconds.
-                    if (((Get-Date) - $lastRunPublish).TotalSeconds -ge 3) {
+                    if (((Get-Date) - $publishClock.at).TotalSeconds -ge 3) {
                         Publish-Run
-                        $lastRunPublish = Get-Date
+                        $publishClock.at = Get-Date
                     }
                 }
             } else {
                 Update-TestProgress $line
-                if (((Get-Date) - $lastRunPublish).TotalSeconds -ge 3) {
+                if (((Get-Date) - $publishClock.at).TotalSeconds -ge 3) {
                     $run.lastLine = $cleanLine
                     $run.phase = 'plan'
                     Publish-Run
-                    $lastRunPublish = Get-Date
+                    $publishClock.at = Get-Date
                 }
             }
             Write-Host $line

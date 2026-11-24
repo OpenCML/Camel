@@ -1600,6 +1600,16 @@ function printFailedOutput(result, pointer) {
     if (!SHOW_FAILED_OUTPUT) return
     const maxLines = 12
     const maxWidth = 240
+    // Two `(empty)` lines say the same thing twice, and a reader skimming them sees the shape of a
+    // printer that lost its input rather than a run that said nothing. One sentence names the fact
+    // the two lines only implied, and it keeps the pointer, which is where the uncut text is.
+    if (!result.stdout && !result.stderr) {
+        const where = pointer ? ` -- ${pointer}` : ''
+        console.log(
+            `    ${COLORS.cyan}[output]${COLORS.reset} both empty: the run produced no explanation${where}`,
+        )
+        return
+    }
     for (const [name, text] of [['stdout', result.stdout], ['stderr', result.stderr]]) {
         if (!text) {
             console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} (empty)`)
@@ -3495,27 +3505,44 @@ export function negativeSweepLine(counts) {
 }
 
 /**
- * A test's layer: `tier` on the test first, then its plan. Only `slow` and `milestone` are named
- * destinations; anything else (the old `smoke`/`feat`/`benchmark` labels included) is the fast
- * layer, so a plan written before the split still runs by default. `milestone` is the layer that
- * only runs at a milestone, either because the plan file says so or because a sweep left the copy
- * unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts when
- * an assertion fires, or that is only meaningful with assertions compiled in, lives there and is
- * never part of an ordinary or `all` run.
+ * The layer a plan's tests land in when the test says nothing: the plan's own `tier` when it names
+ * one of the four, `fast` otherwise (`docs/test-plans.md`: "any `tier` other than `slow`,
+ * `milestone` or `debug` is the fast layer" -- the old `smoke`/`feat`/`benchmark` labels included,
+ * so a plan written before the split still runs by default).
  *
- * Exported because the plan inventory (`scripts/plan-inventory.mjs`) asks the same question when it
- * decides whether a plan's slow tests have a layer: a second copy of this rule would drift from it.
+ * One function, because this question used to be answered in two places and the second answer was
+ * different. Selection went through `testTier`, which normalises; the per-plan accounting read
+ * `plan.tier ?? 'fast'` raw, so a plan labelled `feat` was filed under a layer no run covers
+ * (`coveredTiers` never returns it) and its emptiness was excused as "another layer's plan" instead
+ * of reported as a plan this layer started nothing in. Six plans in this tree carry `tier = "feat"`;
+ * their 96 tests have always run fast, and the accounting is the only reading that said otherwise.
+ * `scripts/tier-report.mjs` prints how many entries reached a layer by which of these answers, so
+ * "fast" no longer hides whether it was decided or defaulted (iron rule 6).
+ *
+ * Exported because the plan inventory (`scripts/plan-inventory.mjs`) and the layer report ask the
+ * same question: a second copy of this rule would drift from it.
+ */
+export function planLayer(plan) {
+    const tier = plan.tier
+    if (tier === 'fast' || tier === 'slow' || tier === 'milestone' || tier === 'debug') return tier
+    // Reached by a plan with no `tier` and by one whose value is not a layer name. Both are the fast
+    // layer by rule; neither is a fact anyone can read off the file, which is why the report counts
+    // them apart.
+    return 'fast'
+}
+
+/**
+ * A test's layer: `tier` on the test first, then its plan (`planLayer`). `milestone` is the layer
+ * that only runs at a milestone, either because the plan file says so or because a sweep left the
+ * copy unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts
+ * when an assertion fires, or that is only meaningful with assertions compiled in, lives there and
+ * is never part of an ordinary or `all` run.
+ *
+ * A test's `tier` is strict: a value that is not one of the four is an error here, not a silent
+ * `fast`, because the test said which layer it wants and the runner cannot honour it.
  */
 export function testTier(plan, test) {
-    const tier = test.tier !== undefined
-        ? test.tier
-        : plan.tier === 'slow'
-            ? 'slow'
-            : plan.tier === 'milestone'
-                ? 'milestone'
-                : plan.tier === 'debug'
-                    ? 'debug'
-                    : 'fast'
+    const tier = test.tier !== undefined ? test.tier : planLayer(plan)
     if (tier !== 'fast' && tier !== 'slow' && tier !== 'milestone' && tier !== 'debug') {
         throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow', 'milestone' or 'debug'`)
     }
@@ -3528,11 +3555,12 @@ export function testTier(plan, test) {
  * one: a fast run must not fail because it left out the reference a selected test compares
  * against.
  *
- * `debug` is a plan-set layer, not a label a plan carries instead of its normal layer: the plans
- * that exercise views, data blocks and the executor hot paths still run fast in Release, and
- * `debug_tier = true` on the plan also selects them on a Debug build. Their debug-only tests say
- * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
- * the debug layer's abort case would not abort.
+ * `debug` is a plan-set layer: `debug_tier = true` on a plan selects its tests on a Debug build
+ * while leaving their ordinary layer alone -- 22 plans, 319 tests, which run fast in Release and
+ * again under `--tier debug`. The entries whose own layer *is* `debug` (35, all from plans whose
+ * `tier = "debug"`; no test in this tree sets `tier = "debug"` itself) belong to no other layer.
+ * `all` therefore leaves the debug layer out: it runs on the Release binary, where the abort case
+ * would not abort.
  */
 // The layers a run of `tier` claims to cover: a plan of one of them that starts nothing in this run
 // is a failure, and a plan of another layer is expected to be empty here. `compileOnly` covers the
@@ -3637,7 +3665,10 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false, ke
         }
         const key = relPath(plan.__planPath)
         const declared = plan.tests.length
-        const own = plan.__planError ? 'failing' : plan.tier ?? 'fast'
+        // Through the same rule selection uses. Read raw, a plan labelled `feat` was filed under a
+        // layer `covered` never holds, so the plan's own emptiness was reported as "another layer's
+        // plan" -- an explanation that is always available and therefore checks nothing.
+        const own = plan.__planError ? 'failing' : planLayer(plan)
         if (plan.__planError) {
             // A schema error already fails this plan; it is counted here as read, not as unproven.
             emptyByLayer.push(plan.__planPath)

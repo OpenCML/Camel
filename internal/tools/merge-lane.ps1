@@ -132,11 +132,13 @@ param(
     [string] $Target = 'develop',
     # The merge seat's own worktree. EMPTY means "read it from this machine's settings", which is the
     # only place a machine-specific path belongs (internal/tools/camel-gate.local.json,
-    # `mergeWorktree`, git-ignored). It used to default to a path on the author's workstation: the
-    # first default was the author's own checkout, which rule 17 forbids, and the repair -- another
-    # seat's tree -- kept the same defect with a different victim, because a default that happens to
-    # name an existing tree does not fail, it merges into somebody else's checkout. So there is no
-    # default now: a run that cannot read the setting stops and names what is missing.
+    # `mergeWorktree`, git-ignored) -- the same key `scripts/hooks/pre-push` reads to decide which
+    # tree may push develop, and `-MainCheckout` is the one-off override. It used to default to a path
+    # on the author's workstation: the first default was the author's own checkout, which rule 17
+    # forbids, and the repair -- another seat's tree -- kept the same defect with a different victim,
+    # because a default that happens to name an existing tree does not fail, it merges into somebody
+    # else's checkout. So there is no default now: a run that cannot read the setting stops and names
+    # what is missing.
     [string] $MainCheckout = '',
     # The machine's settings file, when it is not the one beside this script. Same parameter as
     # camel-build.ps1, camel-test.ps1 and camel-remote.ps1, for the same reason: a run that has to
