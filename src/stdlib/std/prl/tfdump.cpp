@@ -5,6 +5,7 @@
 
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/reachable.h"
+#include "graph/graph_view.h"
 
 #include <algorithm>
 #include <cctype>
@@ -86,7 +87,9 @@ void dumpPredecessors(
         std::vector<gc_node_ref_t> nodes(
             graph->execPlan().topo.begin(), graph->execPlan().topo.end());
         std::sort(nodes.begin(), nodes.end());
-        os << "# graph " << graph->name() << "\n";
+        // The nodes that run come from the plan (`execPlan().topo`, section 13); the name is the
+        // face's answer.
+        os << "# graph " << graph->view().name() << "\n";
         for (gc_node_ref_t ref : nodes) {
             std::vector<std::pair<gc_node_ref_t, std::string>> entries;
             for (const ExecutionPredecessor &predecessor :

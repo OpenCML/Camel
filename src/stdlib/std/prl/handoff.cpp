@@ -13,6 +13,7 @@
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
+#include "graph/graph_view.h"
 
 #include <cstdlib>
 #include <format>
@@ -20,8 +21,6 @@
 #include <unordered_map>
 
 using camel::runtime::GCGraph;
-using camel::runtime::GCNodeKind;
-using camel::runtime::GCOperBody;
 
 // ---------------------------------------------------------------------------------------------
 // TaskflowBytecodeHandoff
@@ -100,35 +99,41 @@ TaskflowExecSchedPass::~TaskflowExecSchedPass() = default;
 
 std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) const {
     auto *graph = plan.graph;
+    // The frame layout is the plan's own subject (section 13) and not on the face.
     if (!graph->hasFrameLayout()) {
         return "it has no frame layout";
     }
-    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        const auto *node = *it;
-        if (node == nullptr) {
-            continue;
-        }
-        switch (node->kind) {
-        case GCNodeKind::Call:
+    // Everything else here is the graph's content, so it is asked of the face: the nodes it has,
+    // what each one is, and the operator it names. `nodes()` skips exactly the places that carry no
+    // answer -- a JOIN and a tombstone take no place in the view (C-1123-17) -- and both answered
+    // `default:` here, so the set of nodes this loop speaks about is the same.
+    const camel::graph::GraphView &view = graph->view();
+    for (const camel::graph::NodeRef ref : view.nodes()) {
+        switch (view.kindOf(ref)) {
+        case camel::graph::NodeKind::Call:
             return "it calls a function value";
-        case GCNodeKind::Func:
-            if (programs_.of(graph).calleeOf(*graph, it.ref()) == nullptr) {
+        case camel::graph::NodeKind::Func:
+            // A callee by id: the program's table is keyed by `GraphId`, which the face does not
+            // answer (CalleeRef names the value, not the id).
+            if (programs_.of(graph).calleeOf(*graph, ref) == nullptr) {
                 return "a direct call has no callee graph";
             }
             break;
-        case GCNodeKind::Oper: {
-            const auto *body = graph->nodeBodyAs<GCOperBody>(it.ref());
-            if (body == nullptr) {
+        case camel::graph::NodeKind::Oper: {
+            // A CAST, a COPY, a FILL and an ACCS carry the kind `Oper` and name no operator record
+            // (graph_view.h); the record is what "an operator has no body" was asked of.
+            if (!view.isOperRecord(ref)) {
                 return "an operator has no body";
             }
+            const auto &table = camel::core::OperatorTable::instance();
+            const camel::core::OperId oper = view.operatorOf(ref);
             // The higher-order operators and `attempt` declare that they call function values
             // (OperatorTraits::callsGraphs), and a marked operator is always one of them.
-            const auto &table = camel::core::OperatorTable::instance();
-            const auto traits = table.find(body->oper);
+            const auto traits = table.find(oper);
             if (traits && traits->callsGraphs) {
                 return "it has a higher-order operator";
             }
-            if (!context_->execMgr().findWithoutImport(std::string(body->uri()))) {
+            if (!context_->execMgr().findWithoutImport(std::string(table.uri(oper)))) {
                 return "an operator of it is not loaded yet";
             }
             break;
@@ -187,13 +192,15 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
     std::vector<size_t> spoiled; // not serial, callers not yet told
     for (size_t i = 0; i < graphs.size(); ++i) {
         auto *graph = graphs[i];
+        const camel::graph::GraphView &view = graph->view();
         obstacle[i] = serialObstacle(*planFor(graph));
-        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            const auto *node = *it;
-            if (node == nullptr || node->kind != GCNodeKind::Func) {
+        // The same set of nodes as before: a JOIN, a tombstone and a placeholder answer no kind
+        // here, and none of them is the FUNC node this asks about (C-1123-17).
+        for (const camel::graph::NodeRef ref : view.nodes()) {
+            if (view.kindOf(ref) != camel::graph::NodeKind::Func) {
                 continue;
             }
-            const auto callee = indexOf.find(programs_.of(graph).calleeOf(*graph, it.ref()));
+            const auto callee = indexOf.find(programs_.of(graph).calleeOf(*graph, ref));
             if (callee != indexOf.end()) {
                 callersOf[callee->second].push_back(i);
             } else if (obstacle[i].empty()) {
@@ -229,11 +236,11 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
             if (obstacle[i].empty()) {
                 std::cerr << std::format(
                     "[taskflow] graph '{}' is serial: runs as bytecode\n",
-                    graphs[i]->name());
+                    graphs[i]->view().name());
             } else {
                 std::cerr << std::format(
                     "[taskflow] graph '{}' stays on the scheduler: {}\n",
-                    graphs[i]->name(),
+                    graphs[i]->view().name(),
                     obstacle[i]);
             }
         }

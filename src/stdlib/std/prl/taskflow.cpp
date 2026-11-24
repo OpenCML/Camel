@@ -24,6 +24,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
+#include "graph/graph_view.h"
 
 #include <algorithm>
 #include <array>
@@ -568,27 +569,43 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
     while (!heavy && !work.empty()) {
         auto *current = work.back();
         work.pop_back();
-        for (auto it = current->nodes().begin(); it != current->nodes().end() && !heavy; ++it) {
-            const auto *node = *it;
-            if (node == nullptr) {
-                continue;
-            }
-            if (node->kind == GCNodeKind::Call) {
+        // What a node is and which operator it names are the face's answers; the walk keeps the
+        // representation because a callee is a `GraphId` in the program's table, which the face
+        // does not answer (`CalleeRef` names the value).
+        const camel::graph::GraphView &view = current->view();
+        for (const camel::graph::NodeRef ref : view.nodes()) {
+            switch (view.kindOf(ref)) {
+            case camel::graph::NodeKind::Call:
                 heavy = true;
-            } else if (node->kind == GCNodeKind::Oper) {
-                const auto *body = current->nodeBodyAs<GCOperBody>(it.ref());
+                break;
+            case camel::graph::NodeKind::Oper: {
+                // The four kinds the view folds into `Oper` name no operator record: a node with no
+                // record is what `body == nullptr` said, and it is heavy.
+                if (!view.isOperRecord(ref)) {
+                    heavy = true;
+                    break;
+                }
                 // Built-in operators have an empty protocol (":op/add_l"); the marked ones
                 // (":mark/...") are the higher-order ones.
                 const auto &table = OperatorTable::instance();
-                heavy =
-                    body == nullptr || !table.isBuiltin(body->oper) || table.isMarked(body->oper);
-            } else if (node->kind == GCNodeKind::Func) {
-                auto *callee = programs_.of(current).calleeOf(*current, it.ref());
+                const camel::core::OperId oper = view.operatorOf(ref);
+                heavy = !table.isBuiltin(oper) || table.isMarked(oper);
+                break;
+            }
+            case camel::graph::NodeKind::Func: {
+                auto *callee = programs_.of(current).calleeOf(*current, ref);
                 if (callee == nullptr) {
                     heavy = true;
                 } else if (seen.insert(callee).second) {
                     work.push_back(callee);
                 }
+                break;
+            }
+            default:
+                break;
+            }
+            if (heavy) {
+                break;
             }
         }
     }
@@ -2719,10 +2736,11 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
 namespace {
 
 // Whether the operator's declaration lets the calls on different elements run at once
-// (OperatorSemantics::elementCalls).
-bool elementsIndependent(GCGraph *graph, gc_node_ref_t nodeRef) {
+// (OperatorSemantics::elementCalls). It asks the face for the operator the node names
+// (`operatorOf`): the payload it was read out of is the representation's, not a reader's.
+bool elementsIndependent(const camel::graph::GraphView &graph, gc_node_ref_t nodeRef) {
     const auto *calls =
-        OperatorTable::instance().elementCalls(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper);
+        OperatorTable::instance().elementCalls(graph.operatorOf(nodeRef));
     return calls != nullptr && calls->independent;
 }
 
@@ -2876,7 +2894,7 @@ void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, 
         nodeRef,
         region.thread().callDepth,
         region.thread().faultDomain,
-        elementsIndependent(graph, nodeRef)};
+        elementsIndependent(graph->view(), nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2915,7 +2933,7 @@ void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRe
         nodeRef,
         region.thread().callDepth,
         region.thread().faultDomain,
-        elementsIndependent(graph, nodeRef)};
+        elementsIndependent(graph->view(), nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2962,7 +2980,7 @@ void TaskflowExecSchedPass::mark_reduce_arr(GCGraph *graph, gc_node_ref_t nodeRe
         nodeRef,
         region.thread().callDepth,
         region.thread().faultDomain,
-        elementsIndependent(graph, nodeRef)};
+        elementsIndependent(graph->view(), nodeRef)};
     region.enter();
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
@@ -3118,7 +3136,7 @@ void TaskflowExecSchedPass::mark_foreach_arr(GCGraph *graph, gc_node_ref_t nodeR
         nodeRef,
         region.thread().callDepth,
         region.thread().faultDomain,
-        elementsIndependent(graph, nodeRef)};
+        elementsIndependent(graph->view(), nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -3151,7 +3169,7 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
         nodeRef,
         region.thread().callDepth,
         region.thread().faultDomain,
-        elementsIndependent(graph, nodeRef)};
+        elementsIndependent(graph->view(), nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
