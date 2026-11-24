@@ -58,7 +58,7 @@ EOF
 
 top=$(git rev-parse --show-toplevel 2>/dev/null) || {
     echo "pre-push: refusing to push $protected_push: this is not inside a worktree, so which tree is" >&2
-    echo "pre-push: pushing cannot be answered -- and 只有合并位能推 develop (only the merge worktree may)." >&2
+    echo "pre-push: pushing cannot be answered -- and 只有合并位能推 $protected_push (only the merge worktree may)." >&2
     exit 1
 }
 # A push of documentation only is allowed from any tree, and only for `integration`, which is
@@ -104,7 +104,7 @@ config="$top/internal/tools/camel-gate.local.json"
 
 if ! command -v node >/dev/null 2>&1; then
     echo "pre-push: refusing to push $protected_push: node is not on PATH, so $config cannot be read." >&2
-    echo "pre-push: an unreadable rule is not an absent one -- 只有合并位能推 develop." >&2
+    echo "pre-push: an unreadable rule is not an absent one -- 只有合并位能推 $protected_push." >&2
     exit 1
 fi
 
@@ -128,12 +128,12 @@ state=$?
 
 if [ "$state" -eq 3 ]; then
     echo "pre-push: refusing to push $protected_push: $config has no 'mergeWorktree'." >&2
-    echo "pre-push: 只有合并位能推 develop -- write that key with the merge worktree's absolute path" >&2
+    echo "pre-push: 只有合并位能推 $protected_push -- write that key with the merge worktree's absolute path" >&2
     echo "pre-push: (internal/tools/camel-gate.example.json shows the shape; the file is git-ignored)." >&2
     exit 1
 elif [ "$state" -ne 0 ]; then
     echo "pre-push: refusing to push $protected_push: $config could not be read as JSON (node exit $state)." >&2
-    echo "pre-push: 只有合并位能推 develop -- an unreadable setting is not an absent one." >&2
+    echo "pre-push: 只有合并位能推 $protected_push -- an unreadable setting is not an absent one." >&2
     exit 1
 fi
 
@@ -155,12 +155,12 @@ $allowed
 EOF
 
 if [ -z "$match" ]; then
-    echo "pre-push: refusing to push $protected_push from this tree: 只有合并位能推 develop" >&2
-    echo "pre-push: (only the merge worktree may push develop)." >&2
+    echo "pre-push: refusing to push $protected_push from this tree: 只有合并位能推 $protected_push" >&2
+    echo "pre-push: (only the merge worktree may push $protected_push)." >&2
     echo "pre-push:   this tree:      $top" >&2
     echo "pre-push:   merge worktree: $(printf '%s' "$allowed" | tr '\n' ' ')" >&2
-    echo "pre-push:   $config, key 'mergeWorktree', names the tree that may write develop." >&2
-    echo "pre-push: push your own branch and hand it to the merge lane; develop is merged there." >&2
+    echo "pre-push:   $config, key 'mergeWorktree', names the tree that may write $protected_push." >&2
+    echo "pre-push: push your own branch and hand it to the merge lane; that branch is merged there." >&2
     exit 1
 fi
 
