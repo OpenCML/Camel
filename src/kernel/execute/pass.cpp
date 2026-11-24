@@ -1964,6 +1964,44 @@ std::string effectContainmentText(
     return text;
 }
 
+/// The graphs a pass brought with it.
+///
+/// A pass rewrites the program it is given. What it hands back may hold the graphs that program
+/// held and the graphs its own edits made -- and nothing else. So every graph in the produced table
+/// that the given program did not hold is one the pass *introduced*, and a program can only gain a
+/// graph it did not make by adopting another program's table (`Program::adoptMissing`, reached from
+/// the draft session when a reference names a graph only the program the pass runs in holds).
+///
+/// Naming them, not counting them, is the reading: a count says how much came in, and the names say
+/// whose it is. Measured on `lane/std-nop` with `opt::cse`, the program the pass is given holds six
+/// graphs and the one it hands back two hundred and eleven; the extra ones are named `opt::evaluated`
+/// and its neighbours, which is the pass's own module (`stdlib/opt.cml`), not the user's program.
+std::string introducedGraphsViolation(
+    const camel::runtime::Program &given, const camel::runtime::Program &produced) {
+    std::vector<const GCGraph *> introduced;
+    for (const GCGraph *graph : produced.graphs()) {
+        if (graph != nullptr && given.graph(graph->id()) == nullptr) {
+            introduced.push_back(graph);
+        }
+    }
+    if (introduced.empty()) {
+        return "";
+    }
+    constexpr size_t kNamesShown = 4;
+    std::string text = std::format(
+        "the program the pass hands back holds {} graph(s) it was not given, and a pass may only "
+        "hand back the graphs it was given and the ones its own edits made",
+        introduced.size());
+    text += "; the first are named";
+    for (size_t i = 0; i < introduced.size() && i < kNamesShown; ++i) {
+        text += std::format(" '{}'", introduced[i]->name());
+    }
+    if (introduced.size() > kNamesShown) {
+        text += std::format(" (and {} more)", introduced.size() - kNamesShown);
+    }
+    return text;
+}
+
 /// Every generic pass, including a registered nested pass, checks operator ports, entry/exit
 /// and effect credentials. The comparative resource-support and matched-order predicates run
 /// only when selected: by the optimizer's internal checks or graph::check_pass_boundary.
@@ -1980,7 +2018,19 @@ std::string effectContainmentText(
 /// Returns true when it refused: the diagnostic is recorded, and the caller fails the run.
 bool passBoundaryViolation(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
-    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true) {
+    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true,
+    const camel::runtime::Program *given = nullptr) {
+    // The graphs the pass brought with it, before anything about their content: a pass that hands
+    // back a program holding graphs it was not given has already answered the wrong question, and
+    // the node-level readings below would be read against a program that is not the user's.
+    if (given != nullptr) {
+        const std::string introduced = introducedGraphsViolation(*given, program);
+        if (!introduced.empty()) {
+            ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(spec, introduced);
+            CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (introduced graphs)", spec);
+            return true;
+        }
+    }
     const ProgramEffects effectsAfter = collectEffects(ctx->facts(), program);
     const std::vector<std::pair<size_t, size_t>> pairs =
         matchedEffects(effectsBefore, effectsAfter);
@@ -2260,7 +2310,8 @@ PassRunResult applyRegisteredPass(
                               *produced,
                               effectsBefore,
                               false,
-                              commitChecksAskedOf(*pass))) {
+                              commitChecksAskedOf(*pass),
+                              program)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -2655,6 +2706,10 @@ PassApplyResult applyPassesDetailed(
             // principles 3.3), and the end of this iteration compares. Read here rather than after
             // the pass because the program the pass is given is not read once it has returned.
             const ProgramEffects effectsBefore = collectEffects(ctx->facts(), *program);
+            // Kept to the boundary check below, which names the graphs the pass hands back and the
+            // program did not hold (`introducedGraphsViolation`): the program a pass is given is not
+            // read once it has returned, and this pointer is the only trace of it left.
+            const camel::runtime::Program *given = program;
             try {
                 program = pass->apply(program, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
@@ -2761,7 +2816,8 @@ PassApplyResult applyPassesDetailed(
                     *program,
                     effectsBefore,
                     false,
-                    commitChecksAskedOf(*pass))) {
+                    commitChecksAskedOf(*pass),
+                    given)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =
