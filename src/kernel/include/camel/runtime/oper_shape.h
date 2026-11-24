@@ -58,10 +58,6 @@ inline OperShape shapeOfOperator(camel::core::OperId id) noexcept {
 /// question is asked instead).
 inline OperShape shapeOfKind(camel::runtime::GCNodeKind kind) noexcept {
     switch (kind) {
-    case camel::runtime::GCNodeKind::Cast:
-        return OperShape::Conversion;
-    case camel::runtime::GCNodeKind::Copy:
-        return OperShape::Clone;
     case camel::runtime::GCNodeKind::Fill:
         return OperShape::Construction;
     case camel::runtime::GCNodeKind::Accs:

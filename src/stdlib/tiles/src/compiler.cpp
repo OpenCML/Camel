@@ -593,7 +593,6 @@ class Compiler {
                 out =
                     host(g->staticArea()->get<slot_t>(size_t(-node->dataIndex)), node->dataType());
                 break;
-            case rt::GCNodeKind::Copy:
             case rt::GCNodeKind::Gate:
                 if (!ins.empty())
                     out = eval(f, ins.front());
@@ -618,15 +617,6 @@ class Compiler {
                 // Do not visit or lower the other arm: it may contain an effect,
                 // fault, or unsupported operation that is unreachable in this instance.
                 out = eval(f, arms[arm]);
-                break;
-            }
-            case rt::GCNodeKind::Cast: {
-                Value out = eval(f, ins.front());
-                // A nominal struct annotation accepts an anonymous struct value whose fields match
-                // by name (design principles 5.2); the rule itself is `converts`, which the
-                // operator form `:op/cast` reads as well.
-                if (!converts(out, node->dataType()))
-                    throw std::runtime_error("unsupported cast or tensor shape assertion failed");
                 break;
             }
             case rt::GCNodeKind::Func: {
@@ -692,6 +682,13 @@ class Compiler {
                 const auto oper             = operBody->oper;
                 std::vector<Value> args;
                 const auto kernelArguments = rt::kernelArgumentsOf(*g, id);
+                // A copy is the COPY kind's rule read through the operator the front end writes it as
+                // (`:op/copy`, prelude.cml): one ordinary operand, and the value it stands for.
+                if (uri == ":op/copy" && kernelArguments.with.empty() &&
+                    kernelArguments.norm.size() == 1) {
+                    out = eval(f, kernelArguments.norm.front());
+                    break;
+                }
                 // A conversion is the CAST kind's rule read through the operator the front end
                 // writes it as (`prelude.cml`, `:op/cast`), and its target type is the call's own
                 // result type. Converting a value to a type it already has is that value, field

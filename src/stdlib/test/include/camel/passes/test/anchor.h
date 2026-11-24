@@ -27,7 +27,7 @@ inline camel::runtime::gc_node_ref_t anchorNode(camel::runtime::GraphTransaction
     const camel::runtime::gc_node_ref_t value = draft.materializeStaticValue(
         camel::core::rtdata::toSlot<float>(1.0f), camel::core::type::Type::Float32());
     const camel::runtime::gc_node_ref_t cast =
-        draft.addCastNode(camel::core::type::Type::Float32());
+        draft.addOperNode(camel::core::type::Type::Float32(), nullptr, ":op/cast");
     draft.setNormInputs(cast, std::span<const camel::runtime::gc_node_ref_t>(&value, 1));
     return cast;
 }

@@ -49,7 +49,7 @@ DraftNodeOwnerTestPass::apply(const camel::runtime::Program *program, std::ostre
 
     // A builder, and a handle taken out of it: node 0 of its draft, a Copy.
     compile_graph_ptr_t builderA = make();
-    const node_handle_t stale     = builderA->addCopyNode(camel::core::type::Type::Float32());
+    const node_handle_t stale     = builderA->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
     const void *staleDraft        = static_cast<const void *>(stale.draft);
     const int kindWhenMade        = static_cast<int>(nodeKindOf(stale));
     // The builder goes: nothing owns that address any more, and the handle is all that is left.

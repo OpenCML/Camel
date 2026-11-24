@@ -208,12 +208,9 @@ runtime::DraftNodeRef DraftGraphBuilder::addPortNode(
     return node;
 }
 
-runtime::DraftNodeRef DraftGraphBuilder::addCastNode(camel::core::type::Type *type) {
-    return ref(draft().addCastNode(type));
-}
-
-runtime::DraftNodeRef DraftGraphBuilder::addCopyNode(camel::core::type::Type *type) {
-    return ref(draft().addCopyNode(type));
+runtime::DraftNodeRef
+DraftGraphBuilder::addOperNode(camel::core::type::Type *type, std::string_view uri) {
+    return ref(draft().addOperNode(type, nullptr, uri));
 }
 
 runtime::DraftNodeRef

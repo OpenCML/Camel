@@ -15,10 +15,11 @@
  *  - a node the draft no longer holds is a gap: `alive` refuses an erased place and the encoder's
  *    table refuses a placeholder, and neither is a node of the view.
  *
- * The four kinds that are operators once plan 2.3 has finished removing them answer
- * `NodeKind::Oper` and `kNoOper` from `operatorOf`, exactly as the frozen adapter does -- those
- * nodes carry no operator identity, which `graph_view.h` says at length: it is here twice because
- * the two representations store the same four kinds.
+ * A CAST and a COPY became calls of `:op/cast` and `:op/copy` (plan 2.3, step 1) and are stored
+ * OPER records here, so `operatorOf` answers their operator like any other node's. The two kinds
+ * that are still kinds answer `NodeKind::Oper` and `kNoOper` from `operatorOf`, exactly as the
+ * frozen adapter does -- those nodes carry no operator identity, which `graph_view.h` says at
+ * length: it is here twice because the two representations store the same two kinds.
  */
 
 #include "graph/draft_view.h"
@@ -102,8 +103,6 @@ NodeKind DraftGraphAdapter::viewKind(camel::runtime::GCNodeKind stored) {
         return NodeKind::Data;
     case GCNodeKind::Port:
         return NodeKind::Port;
-    case GCNodeKind::Cast:
-    case GCNodeKind::Copy:
     case GCNodeKind::Fill:
     case GCNodeKind::Accs:
     case GCNodeKind::Oper:

@@ -107,8 +107,10 @@ constexpr gc_off_t kInvalidOffset       = static_cast<gc_off_t>(-1);
 enum class GCNodeKind : uint8_t {
     Data = 0,
     Port = 1,
-    Cast = 2,
-    Copy = 3,
+    // 2 was the CAST node and 3 the COPY node, deleted: a conversion is a call of `:op/cast` and a
+    // copy a call of `:op/copy`, the operators `lib/std/prelude.cml` declares for them (plan 2.3).
+    // The numbers are not reused -- an encoded kind is a byte of the graph's format -- and a graph
+    // that still holds them is the graph an older build wrote.
     Fill = 4,
     Accs = 5,
     Brch = 6,

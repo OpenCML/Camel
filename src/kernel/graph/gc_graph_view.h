@@ -24,7 +24,7 @@
  *   GCNodeKind::Func / Call / Gate           NodeKind::Func / Call / Gate
  *   GCNodeKind::Bind                         NodeKind::Bind      (reserved: nothing makes one)
  *   GCNodeKind::Oper                         NodeKind::Oper
- *   GCNodeKind::Cast / Copy / Fill / Accs    NodeKind::Oper      -- see the four kinds below
+ *   GCNodeKind::Fill / Accs                  NodeKind::Oper      -- see the two kinds below
  *   GCNodeKind::Join / Dref / Dead           no node: `contains` is false, and the NodeRef is a gap
  *
  *   GCNode::kind                             kindOf
@@ -66,16 +66,17 @@
  *   GCGraph::name()                          name()
  *   nodePayloadBytes / nodeBodyAs            nothing: no payload bytes leave this face
  *
- * The four kinds and `operatorOf`: `kindOf` answers `NodeKind::Oper` for a CAST, a COPY, a FILL and
- * an ACCS (so the shape of the graph is already the target's), and `operatorOf` answers `kNoOper`
- * for them, because none of the four carries an operator record -- they keep their own payload (a
- * kind, a place, a template), and a CAST and a COPY keep none at all. That is what the old face
- * said too (an empty URI from `operUriOf`, which asked a stored OPER), so a reader that asks "which
- * operator does this node name" gets exactly the answer it got before. The kind alone does not
- * answer "is this a stored OPER record": `NodeKind::Oper` with a `kNoOper` is one of the four, and
- * `graph_view.h` writes that two-step reading out together with why the face may not name the
- * operator that replaces one of them. Plan 2.3's remaining step -- the front end and the passes
- * stop building the four kinds -- is the change which fills this gap.
+ * The two kinds and `operatorOf`: `kindOf` answers `NodeKind::Oper` for a FILL and an ACCS (so the
+ * shape of the graph is already the target's), and `operatorOf` answers `kNoOper` for them,
+ * because neither carries an operator record -- each keeps its own payload (a kind, a place, a
+ * template). That is what the old face said too (an empty URI from `operUriOf`, which asked a
+ * stored OPER), so a reader that asks "which operator does this node name" gets exactly the answer
+ * it got before. The kind alone does not answer "is this a stored OPER record": `NodeKind::Oper`
+ * with a `kNoOper` is one of the two, and `graph_view.h` writes that two-step reading out
+ * together with why the face may not name the operator that replaces one of them. A CAST and a COPY
+ * were the other two of the four and are stored OPER records now (plan 2.3, step 1), so their
+ * operator is answered and nothing asks twice for them. Plan 2.3's remaining step -- the front end
+ * and the passes stop building the two remaining kinds -- is the change which fills this gap.
  *
  * `view()` on the graph (`camel/graph/graph.h`) hands out this adapter: a reader holding a
  * `const Graph *` -- the callee of a FUNC node, the anchor of a fact -- reads that graph again

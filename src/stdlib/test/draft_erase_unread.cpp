@@ -65,9 +65,9 @@ DraftEraseUnreadTestPass::apply(const camel::runtime::Program *program, std::ost
     auto &draft                 = builder->edit();
 
     // copy <- middle <- outside: the set {copy, middle} is read from outside it, by `outside`.
-    const node_handle_t copyNode    = builder->addCopyNode(camel::core::type::Type::Float32());
-    const node_handle_t middleNode  = builder->addCopyNode(camel::core::type::Type::Float32());
-    const node_handle_t outsideNode = builder->addCopyNode(camel::core::type::Type::Float32());
+    const node_handle_t copyNode    = builder->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    const node_handle_t middleNode  = builder->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    const node_handle_t outsideNode = builder->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
     const camel::runtime::gc_node_ref_t copyId    = nodeIdOf(copyNode);
     const camel::runtime::gc_node_ref_t middleId  = nodeIdOf(middleNode);
     const camel::runtime::gc_node_ref_t outsideId = nodeIdOf(outsideNode);
@@ -103,8 +103,8 @@ DraftEraseUnreadTestPass::apply(const camel::runtime::Program *program, std::ost
 
     // And the set form's own point: a node of the set that reads another node of it is not the
     // "reader outside" the permission refuses, so the pair goes together.
-    const node_handle_t headNode = builder->addCopyNode(camel::core::type::Type::Float32());
-    const node_handle_t tailNode = builder->addCopyNode(camel::core::type::Type::Float32());
+    const node_handle_t headNode = builder->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    const node_handle_t tailNode = builder->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
     const camel::runtime::gc_node_ref_t headId = nodeIdOf(headNode);
     const camel::runtime::gc_node_ref_t tailId = nodeIdOf(tailNode);
     {

@@ -44,10 +44,6 @@ std::string kindName(GCNodeKind kind) {
         return "DATA";
     case GCNodeKind::Port:
         return "PORT";
-    case GCNodeKind::Cast:
-        return "CAST";
-    case GCNodeKind::Copy:
-        return "COPY";
     case GCNodeKind::Fill:
         return "FILL";
     case GCNodeKind::Accs:

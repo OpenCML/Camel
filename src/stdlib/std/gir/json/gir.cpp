@@ -347,7 +347,7 @@ std::string dumpJsonRuntimeGraph(
             const auto *node = g->node(ref);
             if (!node)
                 continue;
-            const auto kind = recordType(*node);
+            const auto kind = recordType(*g, ref);
             json value{
                 {"id", nodeId(g, ref)},
                 {"kind", kind},

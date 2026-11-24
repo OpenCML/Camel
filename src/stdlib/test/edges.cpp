@@ -56,7 +56,7 @@ const Program *commitEdit(
         const gc_node_ref_t value = draft.materializeStaticValue(
             camel::core::rtdata::toSlot<float>(1.0f),
             camel::core::type::Type::Float32());
-        const gc_node_ref_t copy = draft.addCopyNode(camel::core::type::Type::Int32());
+        const gc_node_ref_t copy = draft.addOperNode(camel::core::type::Type::Int32(), nullptr, ":op/copy");
         draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&value, 1));
         break;
     }
@@ -650,7 +650,7 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
         const gc_node_ref_t shared = chain.materializeStaticValue(
             camel::core::rtdata::toSlot<float>(7.0f),
             camel::core::type::Type::Float32());
-        const gc_node_ref_t plainReader = chain.addCopyNode(camel::core::type::Type::Float32());
+        const gc_node_ref_t plainReader = chain.addOperNode(camel::core::type::Type::Float32(), nullptr, ":op/copy");
         chain.setNormInputs(plainReader, std::span<const gc_node_ref_t>(&shared, 1));
         chain.takeStatementPlace(middle, shared);
         chain.eraseNode(middle);
@@ -1121,7 +1121,7 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     // edge that goes out of it.
     const gc_node_ref_t source = chainAnchorNode(transaction);
     for (size_t i = 0; i < 2; ++i) {
-        const gc_node_ref_t reader = draft.addCopyNode(camel::core::type::Type::Float32());
+        const gc_node_ref_t reader = draft.addOperNode(camel::core::type::Type::Float32(), nullptr, ":op/copy");
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&source, 1));
     }
     // A GATE reads a value of its own and a context port of `source`; its wait is a control input,
