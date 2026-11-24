@@ -45,12 +45,17 @@ async function attempt(read) {
 }
 
 const PROTECTED = ['develop', 'main', 'release', 'fsh-dev']
+// The branch gate counts the branches the agents make, which all live under a namespace (lane/,
+// probe/, ...). A branch without one is a person's -- the author picking a release commit on
+// tmp-rel-0246, a contributor's xxx-dev: it is no lane waiting to be merged, and counting it held the
+// gate shut over work that was never the coordinator's.
+const AGENT_BRANCH = /^[a-z0-9][a-z0-9-]*\//
 
 /// Lane branches not yet in develop, how far each is ahead and behind, and the worst behind.
 async function branchesOf(git) {
     const names = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
         .split('\n')
-        .filter((name) => name && !PROTECTED.includes(name))
+        .filter((name) => name && !PROTECTED.includes(name) && AGENT_BRANCH.test(name))
     const rows = []
     for (const branch of names) {
         const ahead = Number(await git(['rev-list', '--count', `origin/develop..${branch}`]).catch(() => 'x'))
