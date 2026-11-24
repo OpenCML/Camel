@@ -353,8 +353,10 @@ to it. There is a one-second `timeline` of slots held and children running, a `l
 timer that reports how late it fired: the runner's own thread being unavailable is what makes a
 chatty child wait on a full stdout pipe), and the top contributors by name for each field — a
 total without names is how the wrong thing gets optimized. `test_timings` is one record per test
-with all of those intervals and its `at` marks relative to the start of the run. The run prints
-one `[SLOT]` line with the ratio and the totals.
+with all of those intervals and its `at` marks relative to the start of the run, the plan that ran
+it (`plan`, the name every record uses, and `plan_path`), and its own CPU figure -- `cpu_ms`, with
+`cpu_reason` where the host read none, so the per-test cost is in the record the timing questions
+are already asked of. The run prints one `[SLOT]` line with the ratio and the totals.
 
 Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (a 32-core host shared with
 other gates), eight runs before and eight after:
@@ -445,6 +447,16 @@ in the window like any other. Measured right after a gate on this host: 22 run d
 26,992 files, one of them the gate's own -- the newest twenty runs, which is about one gate's worth of
 directories rather than twenty gates of history. The window is measured in runs, and the runs a gate
 starts are most of them.
+
+A test's record names exactly one plan, and always names it. `plan_path` is the plan that ran the
+test and `plan_id` its `id`; a plan file that declares no `id` is recorded under its file name -- the
+same fallback its tests already carry -- so no record has a `plan` that `JSON.stringify` dropped for
+being undefined (303 of 8,932 rows of a full fast-layer run had none) and no log directory is called
+`undefined`. A `[[sweeps]]` copy belongs to the sweep's plan, not to the plan it was copied from:
+`plan_path` and `plan_id` are the sweep's, `sweep`, `source_plan` and `source_test` name what was
+copied, and the copy's `case` (and `golden`, and `verify_script_path`) is resolved against the source
+plan while the expansion still knows it. A copy whose two identity fields pointed at two different
+plans was how a sweep's cost got charged to the plan it copied from.
 
 `isRunnerOutput(path)` in the same module is also the answer to *which* trees a run writes, for
 everything that walks the checkout (`test/tools/check-no-algo.mjs`, `scripts/check-doc-links.mjs`,
@@ -752,6 +764,12 @@ Every `[[tests]]` entry may use these common fields:
   each test is, not only that none reached it. A green whose room nobody can read is a green nobody
   looked at, and on 2026-11-16 two cases were read as unstable for three rounds because the record
   held `cpu_ms: null` for them and nothing could show they were 0.1–4.2% past the line.
+  Where the host reports no CPU time at all, the null is not left to be read as a zero: each
+  `meta.json` and each `test_timings[]` row carries `cpu_reason` (why no figure was read), and
+  `summary.json` carries one `cpu_readings` block -- whether any test had a reading, how many did,
+  how many declared a budget, and the reasons counted. Before that block the only statement a run
+  made about a host with no `/proc/self/stat` was one `[WARN]` line on the console, so a record read
+  a week later could not tell "this host has no figure" from "the runner stopped measuring".
 - `cpu_budget_ms`
   Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
   process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test

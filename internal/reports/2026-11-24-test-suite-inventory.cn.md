@@ -452,9 +452,11 @@ debug 35**。`scripts/plan-inventory.mjs` 用同一个 `loadPlanTests` + `expand
    今天 648 条快层用例（6.5%）在记录里没有任何耗时。
 3. **CI 侧只有 2026-10-24 的一次**（`ci-failures.md`，run `40077350582`，`tests: 5956`），
    超出近月窗口，且 CI 只在打标签时跑，不能当"近月红次"的样本。
-4. **`summary.json` 丢了 303 条用例的计划身份。** 16 个计划文件没有 `id`，而记录写的是
-   `plan: entry.plan.id`，`JSON.stringify` 把 `undefined` 丢了——于是那 303 条在 `summary.json` 里
-   没有 `plan` 键，只能靠 `meta.json` 的 `plan_path` 认回来。本页认回来了。
+4. **`summary.json` 丢了 303 条用例的计划身份。** 今天有 **14 个计划文件**没有 `id`（它们名下 369 条
+   用例），而记录写的是 `plan: entry.plan.id`，`JSON.stringify` 把 `undefined` 丢了——于是那 303 条
+   在 `summary.json` 里没有 `plan` 键，只能靠 `meta.json` 的 `plan_path` 认回来。本页认回来了。
+   303 是 11-12 那一次的读数，369 是今天的：中间树长大了（`transforms` 那一个计划今天就占 216 条）。
+   同一处还有第二个后果：这些用例的日志目录叫 `undefined/`，`logPathOf` 拿到的是同一个 `undefined`。
 5. **派生副本的 `meta.json` 里 `plan_path` 与 `plan_id` 指向两个不同的计划。** `plan_id` 是
    `sweep` 那张计划、`plan_path` 是它复制的来源计划（`test.__planPath` 被 `...test` 带过来）。
    两处都是"计划的身份"，却是两个答案——按 `plan_path` 统计会把副本的成本记到来源计划头上
