@@ -24,6 +24,7 @@
 #include "camel/runtime/specializations.h"
 
 #include <span>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::core::context {
@@ -52,6 +53,11 @@ class Program final : public camel::core::rtdata::Object {
         count_           = other.count_;
         root_            = other.root_;
         specializations_ = other.specializations_;
+        // A copy is a new program and made nothing itself: the commit that produces one records
+        // what it made on it (setMadeGraphs). Carrying the source's record would let a work table
+        // or a satellite claim graphs it did not make.
+        made_.clear();
+        madeRecorded_ = false;
         if (manager_ != nullptr) {
             noteAll();
         }
@@ -241,6 +247,22 @@ class Program final : public camel::core::rtdata::Object {
     /// built into a graph -- is forgotten by the manager, so that nothing destructs or traces it.
     void abandonConstruction(std::span<GCGraph *const> unconstructed);
 
+    /// The graphs the commit that made this program made itself (a specialization, an outlined
+    /// region, a graph a transaction built): the ids a pass may find in the table it hands back
+    /// beside the ones the program it was given held. `hasMadeGraphs` says whether a commit
+    /// recorded them at all: a program that no such commit produced has no record, and a reader
+    /// that needs `made` must say it cannot see rather than take `produced - given` for it --
+    /// that difference would make "nothing was introduced" true by construction
+    /// (src/kernel/execute/pass.cpp, `introducedGraphsViolation`). Carried forward by a commit
+    /// from the program it rewrites, so a pass that makes a graph in one commit and hands the
+    /// program on in another does not lose it.
+    bool hasMadeGraphs() const { return madeRecorded_; }
+    const std::unordered_set<uint32_t> &madeGraphs() const { return made_; }
+    void setMadeGraphs(std::unordered_set<uint32_t> ids) {
+        made_         = std::move(ids);
+        madeRecorded_ = true;
+    }
+
     /// The specializations made over the graphs of this program (specializations.h): copied
     /// with the program, so a rewrite that carries a program forward carries what it already
     /// made.
@@ -271,6 +293,10 @@ class Program final : public camel::core::rtdata::Object {
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
     RuntimeSpecializationTable specializations_;
+    /// The ids of the graphs the commit that made this program made (see hasMadeGraphs): not a
+    /// copy of the table it came from, and not a difference of tables.
+    std::unordered_set<uint32_t> made_;
+    bool madeRecorded_ = false;
 };
 
 /// Makes the function values among the static values of `graph` name `to` where `to` holds the
