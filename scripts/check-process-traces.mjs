@@ -21,12 +21,23 @@
 // would then report green forever. The reading also names the directory it read: this check reads
 // `src/` and nothing else, so a traced comment in `test/`, `examples/` or `showcase/` is outside it.
 //
-// Usage: node scripts/check-process-traces.mjs [--root <dir>]   exit 0 when clean, 1 with a list
+// Usage: node scripts/check-process-traces.mjs --root <dir>   exit 0 when clean, 1 with a list
+//
+// `--root` is required and has no default. The directory a process is started in is the main
+// checkout (iron rule 17), not the tree the reader meant, so the tree is named here by the caller.
 import fs from 'node:fs';
 import path from 'node:path';
 
 const args = process.argv.slice(2);
-const root = args.includes('--root') ? args[args.indexOf('--root') + 1] : process.cwd();
+const rootAt = args.indexOf('--root');
+const root = rootAt >= 0 ? args[rootAt + 1] : '';
+if (!root || root.startsWith('--')) {
+  console.log(
+    'check-process-traces: --root <dir> is required. The directory a tool was started in is the main ' +
+      'checkout, not the tree to read (iron rule 17), so the tree is named by the caller and never inherited.',
+  );
+  process.exit(2);
+}
 const dirs = ['src'];
 const exts = new Set(['.cpp', '.h', '.hpp', '.cc', '.c', '.inc', '.def', '.cml', '.cmake']);
 

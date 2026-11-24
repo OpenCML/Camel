@@ -605,7 +605,10 @@ $checkers = [ordered]@{
     # threshold of zero: the tree carries none of those comments, so the first one added is this
     # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
     # what the gate returns.
-    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @(); compiler = $false }
+    # The tree is named, not inherited: this command runs with the checkout as its working directory
+    # (see the block that builds it), so `.` is that checkout, and the checker has no default that
+    # could read the directory the run was started in instead (iron rule 17).
+    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @('--root', '.'); compiler = $false }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
@@ -721,7 +724,9 @@ if ($NoGpuWatch -and $gpuReadingWanted) {
 # nothing when it refuses.
 #
 # The three conditions of the failure -- the record gets shorter, the rows it loses still name a
-# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The bulk
+# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The tree
+# that question is asked about is an argument with no default: a default would have asked it about
+# the directory the tool was started in (iron rule 17). The bulk
 # condition is the one that does not depend on where a file is: on 2026-11-17 `eaa3ecb8c` recorded
 # with the bulk flag on a tree that was missing the seven `test/cases/compile/var/loop_*.cml` a
 # parallel lane had just added, and those rows went with the files (4400 lines to 4393). Those files
@@ -733,9 +738,16 @@ function Get-AstDropVerdict {
         [AllowEmptyCollection()][string[]]$Before = @(),
         [AllowEmptyCollection()][string[]]$After = @(),
         [AllowEmptyCollection()][string[]]$Drop = @(),
-        [string]$Root = '.',
+        # The tree the dropped rows are tested against. There is no default: a run that names no tree
+        # would read the directory it was started in, and that directory is the owner's main checkout
+        # (iron rule 17), not the tree whose record is being rewritten.
+        [string]$Root = '',
         [bool]$Bulk = $true
     )
+    if (-not $Root) {
+        Write-Host "[camel-remote] Get-AstDropVerdict needs -Root: the tree is named by the caller and never inherited, because the directory a tool was started in is the main checkout, not this tree (iron rule 17)."
+        exit 2
+    }
     # A line is `<16 hex> <ok|no> <path>`, and the question is about the paths: a hash that moved is
     # one line lost and one line gained, never a row that went, so a set of whole lines would call
     # every re-read row a deletion.
