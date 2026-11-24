@@ -1,0 +1,1385 @@
+plan	case	cause_class	first_line_of_the_red
+compile.collections	collfuzz.quick	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+compile.collections	edges.fold_cse_dce	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.inline_fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.inline_opt_jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.macro_opt_fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.opt	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.simplify_prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.tiny2x4.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.tiny2x4.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.tiny2x4.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.collections	edges.tiny2x4.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.comprehension_context	comprehension_context.annotated.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.comprehension_context	comprehension_context.annotated.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.comprehension_context	comprehension_context.annotated.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.diag_catalog	catalog.doc_is_generated	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.diag_render	render.sem_independent	golden-behind-the-recording	[INFO] snapshot differs from golden
+compile.effects_syntax	effect.through_parameter	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.effects_syntax	err.pure_parameter_write	an-expected-line-is-missing	[INFO] output does not contain 'err_pure_parameter_write.cml:25:'
+compile.equality	equality.fold	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+compile.equality	equality.inline.inline_fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+compile.equality	equality.inline.inline_jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+compile.equality	equality.inline.inline_nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+compile.equality	equality.macro_opt	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+compile.equality	equality.simplify	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.call_mismatch	unclassified	[INFO] expected diagnostic SemanticDiag::DeclaredTypeMismatch
+compile.extent_expressions	extent_expressions.call_values.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.call_values.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.call_values.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.call_values.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.conv_mismatch	unclassified	[INFO] expected diagnostic SemanticDiag::DeclaredTypeMismatch
+compile.extent_expressions	extent_expressions.negative	an-expected-line-is-missing	[INFO] output does not contain 'which is not a dimension'
+compile.extent_expressions	extent_expressions.values.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.values.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.values.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.values.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.extent_expressions	extent_expressions.window_mismatch	unclassified	[INFO] expected diagnostic SemanticDiag::DeclaredTypeMismatch
+compile.function_values	return_named_function.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.function_values	return_named_function.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.function_values	return_named_function.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.function_values	return_named_function.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.impl	impl.agreement.gir	unclassified	[INFO] verification exited 1
+compile.impl	impl.agreement.paths	unclassified	[INFO] verification exited 1
+compile.impl	impl.cross_module.disagreement.fvm	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.cross_module.disagreement.jit	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.cross_module.disagreement.nvm	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.cross_module.disagreement.paths	unclassified	[INFO] verification exited 1
+compile.impl	impl.cross_module.disagreement.prl	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.cross_module.paths	unclassified	[INFO] verification exited 1
+compile.impl	impl.disagreement.fvm	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.disagreement.gir	unclassified	[INFO] verification exited 1
+compile.impl	impl.disagreement.jit	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.disagreement.nvm	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.disagreement.paths	unclassified	[INFO] verification exited 1
+compile.impl	impl.disagreement.prl	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 7 (expected 18 chars, got 18 chars): expected "kernel=-4 body=42\n", got "kernel=42 body=42\n"
+compile.impl	impl.generic_executor.paths	unclassified	[INFO] verification exited 1
+compile.impl	impl.kernel_arms.paths	unclassified	[INFO] verification exited 1
+compile.impl	impl.kernel_arms.structure	unclassified	[INFO] verification exited 1
+compile.impl	impl.ordinary_call	unclassified	[INFO] verification exited 1
+compile.lambda_inference	lambda_inference.positions	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.arrow_receiver.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.arrow_receiver.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.arrow_receiver.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.arrow_receiver.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.comprehension_position.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.comprehension_position.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.comprehension_position.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.comprehension_position.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.empty_array.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.empty_array.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.empty_array.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.literal_context	context.empty_array.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.native_declarations	native.para_declaration_import	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.native_declarations	native.para_unordered_reduce_callback_arity	an-expected-line-is-missing	[INFO] output does not contain 'SemanticDiag::NoMatchingFunction'
+compile.native_declarations	native.random_declaration_import	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.native_declarations	native.random_wrong_arity	to_array-not-in-the-compiler	[INFO] output does not contain 'SemanticDiag::NoMatchingFunction'
+compile.native_declarations	native.random_wrong_type	to_array-not-in-the-compiler	[INFO] output does not contain 'SemanticDiag::NoMatchingFunction'
+compile.native_declarations	native.tensor_declaration_import	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.numeric_permissions	grad_library	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.numeric_permissions	grad_library.eight_threads	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.numeric_permissions	grad_library.safe	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.numeric_permissions	library_gemm.tolerance	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.numeric_permissions	library_gemm.tolerance.eight_threads	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.numeric_permissions	library_gemm.tolerance.safe	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.numeric_permissions	library_gemm.tolerance.safe.eight_threads	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.operators	int_mat_assign	an-expected-line-is-missing	[INFO] output does not contain 'SemanticDiag::NoMatchingFunction'
+compile.param_defaults	param_defaults.applied.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.param_defaults	param_defaults.applied.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.param_defaults	param_defaults.applied.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.param_defaults	param_defaults.applied.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_are_counted.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_are_counted.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_are_counted.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_are_counted.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_ten.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_ten.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_ten.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_ten.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_thousand.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_thousand.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_thousand.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_loop_thousand.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_ten.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_ten.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_ten.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_ten.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_thousand.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_thousand.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_thousand.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.boxes_made_per_call_thousand.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.content_survives_collection.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.content_survives_collection.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.content_survives_collection.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.content_survives_collection.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.ref	ref.counted_sites_are_a_diagnostic.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.region_roots	region_roots.resource_write.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.region_roots	region_roots.resource_write.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.region_roots	region_roots.resource_write.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.region_roots	region_roots.resource_write.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.region_roots	region_roots.writing_freedom_of_two_writes	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_argmax_shifts_the_axis_and_agrees_with_row_by_row_map.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_argmax_shifts_the_axis_and_agrees_with_row_by_row_map.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_element_of_a_row.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_element_of_a_row.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_element_of_a_row.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_element_of_a_row.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_product_of_two_arrays.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_product_of_two_arrays.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_product_of_two_arrays.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_batches_the_product_of_two_arrays.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_elementwise_after_std_opt	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_elementwise_without_the_optimizer	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_layout_ops_are_batched_through_their_written_arguments.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_layout_ops_are_batched_through_their_written_arguments.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_layout_ops_are_batched_through_their_written_arguments.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_layout_ops_are_batched_through_their_written_arguments.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_matmul_agrees_with_row_by_row_map.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_matmul_agrees_with_row_by_row_map.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_reductions_shift_the_axis_and_agree_with_row_by_row_map.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_reductions_shift_the_axis_and_agree_with_row_by_row_map.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_refuses_an_answer_of_one_row	an-expected-line-is-missing	[INFO] output does not contain '[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]'
+compile.rulesets	vmap_rewritten_body_after_std_opt	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_rewritten_body_without_the_optimizer	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_transform_agrees_with_row_by_row_map.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_transform_agrees_with_row_by_row_map.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_transform_agrees_with_row_by_row_map.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_transform_agrees_with_row_by_row_map.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_transform_refuses_a_call_by_name.fvm	an-expected-line-is-missing	[INFO] output does not contain 'asked=1 found=0 missing=1'
+compile.rulesets	vmap_transform_refuses_a_call_by_name.nvm	an-expected-line-is-missing	[INFO] output does not contain 'asked=1 found=0 missing=1'
+compile.rulesets	vmap_whole_argmax_reads_each_row_as_one_line.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_whole_argmax_reads_each_row_as_one_line.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_whole_extrema_keep_the_batch_axis_and_agree_with_row_by_row_map.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_whole_extrema_keep_the_batch_axis_and_agree_with_row_by_row_map.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_whole_reduction_keeps_the_batch_axis_and_agrees_with_row_by_row_map.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.rulesets	vmap_whole_reduction_keeps_the_batch_axis_and_agrees_with_row_by_row_map.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.stream	stream.interval_loop_not_materialised	unclassified	[INFO] used 5720 ms of CPU against a 20000 ms timeout, below the 4x margin: the bound is the work's own time, not a bound (raise it with a stated reason, or mak
+compile.struct_join	compile.struct_join.snake_checks	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+compile.unused_values	unused_values.one_input_one_answer	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+compile.when	when.generic_false	an-expected-line-is-missing	[INFO] output does not contain 'add — when is_numeric::<T>()'
+compile.when	when.with_name	an-expected-line-is-missing	[INFO] expected exit 1, got exit 42
+compile.with_overloads	with_overloads.generic_explicit.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+compile.with_overloads	with_overloads.generic_explicit.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.bad_call.argument	an-expected-line-is-missing	[INFO] output does not contain 'bad_call_argument.cml:9:27'
+consistency.attempt	attempt.bad_calls	unclassified	[INFO] verification exited 1
+consistency.attempt	attempt.collector.stress_both.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.collector.stress_both.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.collector.stress_both.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.collector.stress_both.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.collector.stress.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.collector.stress.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.collector.stress.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.collector.stress.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.compiled.fvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.compiled.inline_jit	an-expected-line-is-missing	[INFO] output does not contain 'MaxRecursionDepthExceeded at compiled.cml:12:60'
+consistency.attempt	attempt.compiled.jit	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.compiled.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.compiled.prl	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.concurrent.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.concurrent.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.concurrent.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.concurrent.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.limit.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.limit.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.limit.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.limit.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.depth.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.effects.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.effects.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.effects.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.effects.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.kinds.fvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.kinds.jit	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.kinds.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.kinds.prl	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.fvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.fvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.jit	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.prl	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.jit	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.library.prl	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.lowest_index.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.lowest_index.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.lowest_index.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.lowest_index.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.macro.evaluated	unclassified	[INFO] expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 15
+consistency.attempt	attempt.many.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.many.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.many.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.many.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.nested.fvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.nested.jit	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.nested.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.nested.prl	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.not_isolated.fault_in_argument.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+consistency.attempt	attempt.not_isolated.fault_in_argument.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+consistency.attempt	attempt.not_isolated.fault_in_argument.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+consistency.attempt	attempt.not_isolated.fault_in_argument.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+consistency.attempt	attempt.not_isolated.fault_outside.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+consistency.attempt	attempt.not_isolated.fault_outside.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+consistency.attempt	attempt.not_isolated.fault_outside.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+consistency.attempt	attempt.not_isolated.fault_outside.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+consistency.attempt	attempt.partial_fault.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.partial_fault.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.partial_fault.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.partial_fault.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.cse_dce.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.cse_dce.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.cse_dce.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.cse_dce.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.fold.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.fold.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.fold.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.fold.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline_opt.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline_opt.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline_opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline_opt.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.inline.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.macro_opt.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.macro_opt.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.macro_opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.macro_opt.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.nested_opt.fvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.pipeline.nested_opt.jit	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.pipeline.nested_opt.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.pipeline.nested_opt.prl	golden-behind-the-recording	[INFO] snapshot differs from golden
+consistency.attempt	attempt.pipeline.none.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.none.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.none.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.none.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.opt.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.opt.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.opt.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.places_opt.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.places_opt.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.places_opt.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.places_opt.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.simplify.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.simplify.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.simplify.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.pipeline.simplify.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.places.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.places.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.places.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.places.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.refuse.grad	unclassified	[INFO] expected diagnostic RuntimeDiag::RuntimeError, line 13
+consistency.attempt	attempt.refuse.onnx	unclassified	[INFO] expected diagnostic RuntimeDiag::TranslationRefused, line 10, column 12
+consistency.attempt	attempt.siblings.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.siblings.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.siblings.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.siblings.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.attempt	attempt.translate.cpp	an-expected-line-is-missing	[INFO] output does not contain 'rt::attempt<double>(depth, at_10_12, tagged0, x)'
+consistency.cleanup	cleanup.exit_in_map.fvm	range-takes-no-higher-order-function	[INFO] expected exit 9, got exit 1
+consistency.cleanup	cleanup.exit_in_map.jit	range-takes-no-higher-order-function	[INFO] expected exit 9, got exit 1
+consistency.cleanup	cleanup.exit_in_map.nvm	range-takes-no-higher-order-function	[INFO] expected exit 9, got exit 1
+consistency.cleanup	cleanup.exit_in_map.prl	range-takes-no-higher-order-function	[INFO] expected exit 9, got exit 1
+consistency.comprehension	comprehension.shadowed.fvm	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.shadowed.jit	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.shadowed.nvm	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.shadowed.prl	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.inline_opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.inline.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.macro_opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.comprehension	comprehension.values.simplify.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.fold.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.inline_opt.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.inline.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.macro_opt.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.opt.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.empty_array.simplify.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.entering	entering.err_arg_reverse.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_arg_reverse.cml:4:14:'
+consistency.entering	entering.err_numeric.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_numeric.cml:4:14:'
+consistency.entering	entering.err_other_payload.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_other_payload.cml:4:14:'
+consistency.entering	entering.graph_explicit.nvm	unclassified	[INFO] node signatures differ
+consistency.entering	entering.graph_implicit.nvm	unclassified	[INFO] node signatures differ
+consistency.entering	entering.positions.plan_regions.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+consistency.entry	entry.error_from_attempt.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.entry	entry.error_from_attempt.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.entry	entry.error_from_attempt.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.entry	entry.error_from_attempt.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.fail_never	never.argument	unclassified	[INFO] verification exited 1
+consistency.fail_never	never.argument_overload	unclassified	[INFO] verification exited 1
+consistency.fail_never	never.tagged_position	unclassified	[INFO] verification exited 1
+consistency.fail_never	never.tagged_position_run	unclassified	[INFO] verification exited 1
+consistency.faults	fault.after_map_output.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults	fault.after_map_output.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults	fault.after_map_output.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults	fault.after_map_output.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults	fault.float_div_zero.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_div_zero.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_div_zero.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_div_zero.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_nan_to_int.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_nan_to_int.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_nan_to_int.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_nan_to_int.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_text_overflow.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_overflow.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_overflow.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_overflow.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_underflow.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_text_underflow.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_text_underflow.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_text_underflow.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_to_int_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults	fault.float_to_int_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults	fault.float_to_int_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults	fault.float_to_int_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults	fault.i32_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.i32_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.i32_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.i32_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.in_closure.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_closure.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_closure.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_closure.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_filter.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_filter.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_filter.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_filter.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_foreach.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_foreach.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_foreach.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_foreach.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_map_many.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_map_many.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_map_many.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_map_many.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_map.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_map.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_map.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_map.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_nested_map.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_nested_map.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_nested_map.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_nested_map.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_reduce.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_reduce.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_reduce.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_reduce.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.in_untaken_arm.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults	fault.in_untaken_arm.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults	fault.in_untaken_arm.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults	fault.in_untaken_arm.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults	fault.index_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.index_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.index_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.index_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.int_text_blank.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_blank.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_blank.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_blank.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_trailing.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.int_text_trailing.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.int_text_trailing.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.int_text_trailing.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.mod_zero_in_function.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.mod_zero_in_function.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.mod_zero_in_function.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.mod_zero_in_function.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.negative_index.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.negative_index.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.negative_index.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.negative_index.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.parallel_lowest_index.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.parallel_lowest_index.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.parallel_lowest_index.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.parallel_lowest_index.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults	fault.parse_int.fvm	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults	fault.parse_int.jit	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults	fault.parse_int.nvm	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults	fault.parse_int.prl	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults	fault.slice_negative_bound.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_negative_bound.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_negative_bound.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_negative_bound.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.faults	fault.slice_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.faults	fault.slice_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.faults	fault.slice_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.faults_optimized	fault.after_map_output.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults_optimized	fault.after_map_output.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults_optimized	fault.after_map_output.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults_optimized	fault.after_map_output.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\n
+consistency.faults_optimized	fault.float_div_zero.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_div_zero.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_div_zero.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_div_zero.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_nan_to_int.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_nan_to_int.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_nan_to_int.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_nan_to_int.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_text_overflow.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_overflow.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_overflow.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_overflow.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_underflow.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_text_underflow.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_text_underflow.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_text_underflow.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_to_int_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults_optimized	fault.float_to_int_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults_optimized	fault.float_to_int_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults_optimized	fault.float_to_int_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, 0x04000050, line 5
+consistency.faults_optimized	fault.i32_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.i32_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.i32_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.i32_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.in_closure.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_closure.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_closure.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_closure.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_filter.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_filter.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_filter.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_filter.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_foreach.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_foreach.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_foreach.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_foreach.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_map_many.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_map_many.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_map_many.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_map_many.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_map.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_map.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_map.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_map.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_nested_map.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_nested_map.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_nested_map.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_nested_map.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_reduce.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_reduce.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_reduce.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_reduce.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.in_untaken_arm.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults_optimized	fault.in_untaken_arm.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults_optimized	fault.in_untaken_arm.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults_optimized	fault.in_untaken_arm.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.faults_optimized	fault.index_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.index_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.index_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.index_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.int_text_blank.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults_optimized	fault.int_text_blank.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults_optimized	fault.int_text_blank.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults_optimized	fault.int_text_blank.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults_optimized	fault.int_text_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_trailing.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.int_text_trailing.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.int_text_trailing.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.int_text_trailing.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.mod_zero_in_function.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.mod_zero_in_function.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.mod_zero_in_function.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.mod_zero_in_function.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.negative_index.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.negative_index.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.negative_index.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.negative_index.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.parallel_lowest_index.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.parallel_lowest_index.jit	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.parallel_lowest_index.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.parallel_lowest_index.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "before\n"
+consistency.faults_optimized	fault.parse_int.fvm	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.parse_int.jit	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.parse_int.nvm	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.parse_int.prl	unclassified	[INFO] expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.slice_negative_bound.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_negative_bound.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_negative_bound.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_negative_bound.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.faults_optimized	fault.slice_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.faults_optimized	fault.slice_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.faults_optimized	fault.slice_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::SliceOutOfRange, 0x04000052, line 5
+consistency.generic_values	generic_values.err_each_waits.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_each_waits.cml:4:'
+consistency.generic_values	generic_values.err_no_context.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_no_context.cml:3:'
+consistency.generic_values	generic_values.values.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.inline_opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.inline.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.macro_opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.opt.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.generic_values	generic_values.values.simplify.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.narrowing	narrowing.after_narrowing.fvm	unclassified	[INFO] verification exited 1
+consistency.narrowing	narrowing.after_narrowing.jit	unclassified	[INFO] verification exited 1
+consistency.narrowing	narrowing.after_narrowing.nvm	unclassified	[INFO] verification exited 1
+consistency.narrowing	narrowing.after_narrowing.prl	unclassified	[INFO] verification exited 1
+consistency.narrowing	narrowing.functions	an-expected-line-is-missing	[INFO] output does not contain '.cml:8:'
+consistency.narrowing	narrowing.graph	unclassified	[INFO] node signatures differ
+consistency.narrowing	narrowing.graph_is_match	unclassified	[INFO] node signatures differ
+consistency.narrowing	narrowing.shadowed_not_narrowed	an-expected-line-is-missing	[INFO] output does not contain '.cml:4:'
+consistency.new_values	new_values.container_held	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.new_values	new_values.container_held.copies	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.new_values	new_values.dropped_foreach_lambda	range-takes-no-higher-order-function	[INFO] output does not contain 'dropped_foreach_lambda.cml:12:33'
+consistency.new_values	new_values.sort_rebinding.copies	unclassified	[INFO] verification exited 1
+consistency.new_values	new_values.value_used	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.new_values	new_values.value_used.copies	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.operator_overloads	operator_overloads.ambiguous_generic	unclassified	[INFO] expected diagnostic SemanticDiag::AmbiguousCall, line 11, column 19
+consistency.operator_overloads	operator_overloads.ambiguous_modules	unclassified	[INFO] expected diagnostic SemanticDiag::AmbiguousCall, line 9, column 20
+consistency.operator_overloads	operator_overloads.conflict_import	unclassified	[INFO] expected diagnostic SemanticDiag::OperatorOverloadConflict, line 4, column 1
+consistency.operator_overloads	operator_overloads.eq_not_bool	an-expected-line-is-missing	[INFO] output does not contain '.cml:7:'
+consistency.partial_application	partial_application.err_ambiguous.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_ambiguous.cml:12:13:'
+consistency.partial_application	partial_application.err_argument_type.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_argument_type.cml:4:'
+consistency.partial_application	partial_application.err_configured_twice.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_configured_twice.cml:5:'
+consistency.partial_application	partial_application.err_context_argument_name.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_context_argument_name.cml:12:'
+consistency.partial_application	partial_application.err_context_argument_out_of_range.nvm	unclassified	[INFO] expected diagnostic SemanticDiag::LiteralNotRepresentable, line 11, column 22
+consistency.partial_application	partial_application.err_entering_ambiguous.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_entering_ambiguous.cml:10:13:'
+consistency.partial_application	partial_application.err_overload_choice_name.nvm	an-expected-line-is-missing	[INFO] output does not contain 'err_overload_choice_name.cml:17:13:'
+consistency.partial_application	partial_application.err_var_context_parameter.nvm	an-expected-line-is-missing	[INFO] output does not contain 'name=SemanticDiag::VarContextParameterCannotBeBound'
+consistency.partial_application	partial_application.var_parameter_effect.nvm	an-expected-line-is-missing	[INFO] output does not contain 'name=SemanticDiag::VarContextParameterCannotBeBound'
+consistency.runner	runner.backend_matrix	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+consistency.unused_fallible	unused_fallible.if_arms.fvm	unclassified	[INFO] verification exited 1
+consistency.unused_fallible	unused_fallible.if_arms.jit	unclassified	[INFO] verification exited 1
+consistency.unused_fallible	unused_fallible.if_arms.nvm	unclassified	[INFO] verification exited 1
+consistency.unused_fallible	unused_fallible.if_arms.prl	unclassified	[INFO] verification exited 1
+consistency.values	value.content_equality.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.values	value.content_equality.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.values	value.content_equality.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.values	value.content_equality.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+consistency.values	value.function_values.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.function_values.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.function_values.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.function_values.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.higher_order.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.higher_order.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.higher_order.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.higher_order.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.match_values.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.match_values.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.match_values.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.match_values.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.non_tail_deep.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.non_tail_deep.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.non_tail_deep.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.non_tail_deep.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.tagged_values.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.tagged_values.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.tagged_values.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.tagged_values.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.with_params.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.with_params.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.with_params.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+consistency.values	value.with_params.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+docs.ai_reference	docs.ai_reference.current	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+docs.ai_reference	docs.ai_reference.example_does_not_compile	to_array-not-in-the-compiler	[INFO] stdout does not contain 'missing_name'
+docs.links	docs.links.citations	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+docs.links	docs.links.questions_index	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+docs.links	docs.snippets_compile	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+effects.masking_transition	resources_effects	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.binary_search.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.binary_search.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.binary_search.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.binary_search.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.merge_sort.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.merge_sort.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.merge_sort.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.algorithms.merge_sort.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.case_study.break_rate.fvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+examples	examples.case_study.break_rate.jit	golden-behind-the-recording	[INFO] snapshot differs from golden
+examples	examples.case_study.break_rate.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+examples	examples.case_study.break_rate.prl	golden-behind-the-recording	[INFO] snapshot differs from golden
+examples	examples.cli.temperature_default_pipeline	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_lower_case_unit.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_lower_case_unit.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_lower_case_unit.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_lower_case_unit.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_missing_args	range-takes-no-higher-order-function	[INFO] output does not contain ''value', 'unit' and 'steps''
+examples	examples.cli.temperature_unknown_unit.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_unknown_unit.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_unknown_unit.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature_unknown_unit.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.cli.temperature.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.functions.generic_helpers.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+examples	examples.functions.generic_helpers.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+examples	examples.functions.generic_helpers.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+examples	examples.functions.generic_helpers.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+examples	examples.numeric.random_walk.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+examples	examples.numeric.random_walk.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+examples	examples.numeric.random_walk.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+examples	examples.numeric.random_walk.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+examples	examples.parallel.parallel_map.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.parallel.parallel_map.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.parallel.parallel_map.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.parallel.parallel_map.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+examples	examples.text.csv_parse.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+examples	examples.text.csv_parse.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+examples	examples.text.csv_parse.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+examples	examples.text.csv_parse.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+exemplars	05_effect_order	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+exemplars	07_export_integrity	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+exemplars	08_structured_control_flow	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+linear.closures_and_state	lambda_filter.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.collections_and_structs	list_transform_chain.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.collections_and_structs	list_transform.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.collections_and_structs	nested_array_type.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.collections_and_structs	nested_array_type.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.collections_and_structs	render_grid.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.faults	array_index_negative.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_negative.inline_jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_negative.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_negative.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_negative.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_negative.tf	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_out_of_range.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_out_of_range.inline_jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_out_of_range.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_out_of_range.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_out_of_range.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.faults	array_index_out_of_range.tf	unclassified	[INFO] expected diagnostic RuntimeDiag::IndexOutOfRange, 0x04000002, line 6, column 44
+linear.loop_collect	loops.collect.large.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.loop_collect	loops.collect.large.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.loop_collect	loops.collect.large.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.loop_collect	loops.collect.large.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.loops	loops.grad_loop_collect	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.loops	loops.hof_compact_element_view.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.hof_compact_element_view.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.hof_compact_element_view.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.native_callback	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.native_callback.fault	an-expected-line-is-missing	[INFO] output does not contain 'native_callback_fault.cml:3:61'
+linear.loops	loops.native_callback.fault.scheduler	an-expected-line-is-missing	[INFO] output does not contain 'native_callback_fault.cml:3:61'
+linear.loops	loops.native_callback.scheduler	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.open_rank_round_iterate_round	an-expected-line-is-missing	[INFO] output does not contain 'open_rank_round_iterate_round.cml:12:'
+linear.loops	loops.open_rank_round_scalar_read	unclassified	[INFO] expected diagnostic SemanticDiag::ArgumentsRejected, line 10, column 39
+linear.loops	loops.reduce_element_view.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.reduce_element_view.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.reduce_element_view.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.reduce_element_view.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.loops	loops.zero_leaf_state.dump	unclassified	[INFO] verification exited 1
+linear.loops	loops.zero_leaf_state.opt_jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.recursion_and_calls	perf_helper_smoke.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+linear.subscript	subscript.step_zero_const	unclassified	[INFO] expected diagnostic SemanticDiag::SliceStepZero, 0x030001E9, line 8, column 20
+linear.var_read_before_region	var_read_before_region.default	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.opt_nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.capacity	capacity.dead_function_closure_verify	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.capacity	capacity.fold_clone_limit	an-expected-line-is-missing	[INFO] output does not contain 'RuntimeDiag::MemoryExhausted'
+mm.capacity	capacity.graph_limit_diagnostic	parser-rejects-the-old-spelling	[INFO] stdout does not contain '"code":"0x04000014"'
+mm.capacity	capacity.growth_fvm_gc_stress	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+mm.capacity	capacity.growth_jit	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+mm.capacity	capacity.growth_nvm_gc_stress	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+mm.capacity	capacity.growth_simplify_gc_stress	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+mm.capacity	capacity.growth_tf_gc_stress	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+mm.capacity	capacity.meta_limit_diagnostic	parser-rejects-the-old-spelling	[INFO] stdout does not contain '"code":"0x04000014"'
+mm.capacity	capacity.perm_limit_diagnostic	parser-rejects-the-old-spelling	[INFO] stdout does not contain '"code":"0x04000014"'
+mm.capacity	capacity.scale_check	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:compile.comprehension_context:comprehension_context.annotated.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:compile.comprehension_context:comprehension_context.annotated.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:compile.comprehension_context:comprehension_context.annotated.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:compile.equality:equality.inline.inline_nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:compile.extent_expressions:extent_expressions.values.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:compile.impl:impl.ordinary_call	unclassified	[INFO] verification exited 1
+mm.gc_poison_sweep	poison:compile.lambda_inference:lambda_inference.positions	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:compile.param_defaults:param_defaults.applied.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:consistency.attempt:attempt.kinds.nvm	golden-behind-the-recording	[INFO] snapshot differs from golden
+mm.gc_poison_sweep	poison:linear.collections_and_structs:render_grid.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:linear.var_read_before_region:var_read_before_region.default	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.array_reduction_kernels:array_reduction_kernels.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.array_sum_rounding:array_sum_rounding.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.bytes:binary_io_decoding_and_atomic_replace	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.graph_outline:outline_delivers_the_graph_it_makes	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 193 (expected 633 chars, got 633 chars): expected "...\n[outline] graphs=1->2 new_id=68 in_commit
+mm.gc_poison_sweep	poison:modules.graph:types_and_node_kind	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 26 (expected 44 chars, got 44 chars): expected "true\nfalse\ntrue\nfalse\n0\n1\n47\nNodeKind::Ope
+mm.gc_poison_sweep	poison:modules.optim:optim.trajectory_matches_native.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.random_reference:reference.philox_values.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.random_shuffle_kernels:random_shuffle_kernels.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.random:keyed_random.four_schedulers.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.resources:core	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.tensor:binary_roundtrip	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.with_after_norm:with_after_norm.computed_input.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:para.core:bootstrap_medians	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:para.handoff:shapes.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.graph_space	graph_space.function_value_keeps_program	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.graph_space	graph_space.grad_in_a_loop	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.graph_space	graph_space.grad_in_a_loop_fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.graph_space	graph_space.jit_entries_of_freed_versions	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.process_state	process_state.stw_give_up_escalates	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+mm.process_state	process_state.stw_sleep_leaves_its_region	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_merge_kernels	array_merge_kernels.merge_sort_graph	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.array_reduction_kernels	array_reduction_kernels.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_reduction_kernels	array_reduction_kernels.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_reduction_kernels	array_reduction_kernels.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_reduction_kernels	array_reduction_kernels.paths	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_reduction_kernels	array_reduction_kernels.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_sum_rounding	array_sum_rounding.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_sum_rounding	array_sum_rounding.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_sum_rounding	array_sum_rounding.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.array_sum_rounding	array_sum_rounding.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.autodiff	grad_function_value_branch.default	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_branch.macro	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_container.default	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_container.macro	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_passed.default	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_passed.macro	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_recursion.macro	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_static_branch.default	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_function_value_static_branch.macro	unclassified	[INFO] verification exited 1
+modules.autodiff	grad_structures	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+modules.autodiff	has_aux.engine.plain.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.autodiff	has_aux.engine.plain.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.macro.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.macro.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.macro.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.runtime.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.runtime.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.simplified.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.simplify.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	nn_grad_check.simplify.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	second_order_refused_vjp	an-expected-line-is-missing	[INFO] known_fail_owner             lane-holdmerge (hold/vjpgrad)
+modules.autodiff	second_order_refused_vjp_func	an-expected-line-is-missing	[INFO] output does not contain 'cannot differentiate through this call of a function value'
+modules.autodiff	tensor_grad_check.macro.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	tensor_grad_check.macro.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	tensor_grad_check.macro.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	tensor_grad_check.runtime.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	tensor_grad_check.runtime.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	tensor_grad_check.simplified.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	tensor_grad_check.simplify.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	tensor_grad_check.simplify.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff	vjp_old_annotation_removed	unclassified	[INFO] expected diagnostic SemanticDiag::InvalidAnnotation, line 9, column 1
+modules.autodiff_inspection	autodiff.random_input.macro.graph	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.macro.results.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.macro.results.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.macro.results.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.macro.results.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.opt.graph	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.opt.results.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.opt.results.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.opt.results.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_inspection	autodiff.random_input.opt.results.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.autodiff_value_with	value_with.registry	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.bytes	binary_io_decoding_and_atomic_replace	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.ddpm_primitives	tiles.batch_matmul.source.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.ddpm_primitives	tiles.batch_matmul.source.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.ddpm_primitives	tiles.batch_matmul.source.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.ddpm_primitives	tiles.mixed_matmul.source.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.ddpm_primitives	tiles.mixed_matmul.source.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.ddpm_primitives	tiles.mixed_matmul.source.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	declared_definitions	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	expanded_nodes	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels_expanded.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels_expanded.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels_expanded.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels_expanded.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.definitions	kernels.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.fusion_group	fusion_group.profile.none	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+modules.graph	constant_folding_makes_a_value	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.graph	constant_folding_survives_a_safepoint	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.graph	node_kinds_match_the_graph	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 34 (expected 727 chars, got 727 chars): expected "...pick, total, kinds, main, __g_51__, __g_52__
+modules.graph	types_and_node_kind	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 26 (expected 44 chars, got 44 chars): expected "true\nfalse\ntrue\nfalse\n0\n1\n47\nNodeKind::Ope
+modules.graph_outline	outline_delivers_a_graph_the_bytecode_vm_can_compile	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 193 (expected 633 chars, got 633 chars): expected "...\n[outline] graphs=1->2 new_id=68 in_commit
+modules.graph_outline	outline_delivers_the_graph_it_makes	unclassified	[INFO] expect_stdout_exact differs: first difference at offset 193 (expected 633 chars, got 633 chars): expected "...\n[outline] graphs=1->2 new_id=68 in_commit
+modules.import_audit	import.audit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.index_semantics	declaration_evaluator	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.index_semantics	evaluator_is_not_in_a_pipeline	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.index_semantics	instances	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.jax_alignment	batching.tensor.fvm	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+modules.jax_alignment	batching.tensor.inline_jit	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+modules.jax_alignment	batching.tensor.jit	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+modules.jax_alignment	batching.tensor.nvm	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+modules.jax_alignment	batching.tensor.prl	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+modules.jax_alignment	refused.vmap_two_parameters	an-expected-line-is-missing	[INFO] output does not contain 'argument 1 has type '(a: float, b: float) => float pure''
+modules.json_value	json.decode_as.no_document.fvm	unclassified	[INFO] verification exited 1
+modules.json_value	json.decode_as.no_document.jit	unclassified	[INFO] verification exited 1
+modules.json_value	json.decode_as.no_document.nvm	unclassified	[INFO] verification exited 1
+modules.json_value	json.decode_as.no_document.prl	unclassified	[INFO] verification exited 1
+modules.json_value	json.gc_macro.default.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.default.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.forced_major.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.forced_major.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.forced_minor.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.forced_minor.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.generational.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.generational.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.poison.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc_macro.poison.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.default.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.default.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.default.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.forced_major.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.forced_major.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.forced_major.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.forced_minor.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.forced_minor.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.forced_minor.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.generational.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.generational.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.generational.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.poison.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.poison.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.gc.poison.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.json_value	json.kind.no_document.fvm	unclassified	[INFO] verification exited 1
+modules.json_value	json.kind.no_document.jit	unclassified	[INFO] verification exited 1
+modules.json_value	json.kind.no_document.nvm	unclassified	[INFO] verification exited 1
+modules.json_value	json.kind.no_document.prl	unclassified	[INFO] verification exited 1
+modules.math_kernels	math_kernels.value_missing	range-takes-no-higher-order-function	[INFO] expected diagnostic SemanticDiag::NativeValueNotLoaded, line 3
+modules.math_kernels	math_kernels.value_type_mismatch	range-takes-no-higher-order-function	[INFO] expected diagnostic SemanticDiag::NativeValueMismatch, line 3
+modules.naive_in_expert_out	train_step.loss.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.naive_in_expert_out	train_step.loss.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.naive_in_expert_out	train_step.loss.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.nn	adam_update_bits.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.nn	adam_update_bits.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.nn	adam_update_bits.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.nn	adam_update_bits.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.nn	lr	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.nn	lrit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.nn	mnist	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.onnx	as_refusal.constant_fails.operator	an-expected-line-is-missing	[INFO] output does not contain 'as_constant_fails.cml:15:13'
+modules.onnx	as_refusal.constant_fails.pass	unclassified	[INFO] expected diagnostic RuntimeDiag::TranslationRefused, 0x0400000B, line 15, column 13
+modules.onnx	export_import_order	to_array-not-in-the-compiler	[INFO] verification exited 1
+modules.onnx	export_impure_op	to_array-not-in-the-compiler	[INFO] expected diagnostic RuntimeDiag::UnhandledError, 0x04000051, line 13, column 89
+modules.onnx	export_loop_carried_array_field	unclassified	[INFO] expected diagnostic RuntimeDiag::UnhandledError, 0x04000051, line 22, column 81
+modules.onnx	export_loop_for	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.onnx	export_mixed_width_refused	to_array-not-in-the-compiler	[INFO] output does not contain 'Invalid call to '__add__''
+modules.onnx	export_unsupported_op	unclassified	[INFO] expected diagnostic RuntimeDiag::UnhandledError, 0x04000051, line 14, column 85
+modules.onnx	ort_core_slice	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+modules.onnx	pass_export_refusal_located.request_in_arm_json	unclassified	[INFO] verification exited 1
+modules.onnx	pass_export_refusal_located.two_calls	unclassified	[INFO] expected diagnostic RuntimeDiag::TranslationRefused, 0x0400000B, line 13, column 25
+modules.op_record	op_record.uses_reach_the_record	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.optim	optim.training_loop_matches_native.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.optim	optim.training_loop_matches_native.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.optim	optim.training_loop_matches_native.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.optim	optim.training_loop_matches_native.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.four_schedulers.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.four_schedulers.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.four_schedulers.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.four_schedulers.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.leaves_generator_alone.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.leaves_generator_alone.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.leaves_generator_alone.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.leaves_generator_alone.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.permutation_non_positive.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.permutation_non_positive.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.permutation_non_positive.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random	keyed_random.permutation_non_positive.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_reference	reference.kernel_call	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_reference	reference.philox_values.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_reference	reference.philox_values.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_reference	reference.philox_values.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_reference	reference.philox_values.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_shuffle_kernels	random_shuffle_kernels.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_shuffle_kernels	random_shuffle_kernels.graph	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_shuffle_kernels	random_shuffle_kernels.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_shuffle_kernels	random_shuffle_kernels.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.random_shuffle_kernels	random_shuffle_kernels.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.resources	conflict_per_resource	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.resources	core	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.resources	core_test_pass_is_not_in_a_pipeline	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.resources	declared_resources	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.resources	resource_names	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.rules	rules.alternate_alternates_rounds	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.rules	rules.attribution_records_without_changing_the_counters	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.rules	rules.fact_argument_is_not_a_constant	an-expected-line-is-missing	[INFO] output does not contain 'fact_arg_not_constant.cml:16:42'
+modules.rules	rules.only_requires_before_a_rule	unclassified	[INFO] expected diagnostic SemanticDiag::RuleTagNotRequires, line 5, column 2
+modules.rules	rules.repeat_counts_rounds	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.rules	rules.repeat_honours_the_budget	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.rules	rules.requires_not_a_permission	unclassified	[INFO] expected diagnostic SemanticDiag::TagNotAPermission, line 5, column 11
+modules.rules	rules.requires_outside_a_rule	unclassified	[INFO] expected diagnostic SemanticDiag::TagUndeclared, line 3, column 2
+modules.rules	rules.requires_without_argument	unclassified	[INFO] expected diagnostic SemanticDiag::TagArgumentCount, line 3, column 2
+modules.rules	rules.run_cost_is_measurable	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.rules	rules.until_honours_the_budget	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.rules	rules.until_reads_the_predicate_before_a_round	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.rules_conditions	rules.condition_that_commits_is_refused	unclassified	[INFO] expected diagnostic SemanticDiag::EffectInRuleCondition, 0x030001AD, line 14, column 32
+modules.rules_conditions	rules.condition_that_prints_is_refused	unclassified	[INFO] expected diagnostic SemanticDiag::EffectInRuleCondition, 0x030001AD, line 10, column 12
+modules.rules_conditions	rules.generic_condition_effect_is_refused	unclassified	[INFO] expected diagnostic SemanticDiag::EffectInRuleCondition, 0x030001AD, line 16, column 32
+modules.std	array.sort_reference	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+modules.std	random.basic	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.stdlib_faults	stdlib.fault.argmax_empty.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmax_empty.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmax_empty.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmax_empty.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.chunks_zero.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.chunks_zero.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.chunks_zero.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.chunks_zero.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.lcm_overflow.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.opt	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.max_empty.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.max_empty.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.max_empty.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.max_empty.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.mean_empty.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.mean_empty.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.mean_empty.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.mean_empty.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.min_empty.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.min_empty.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.min_empty.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.stdev_short.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.opt	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.opt	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.zip_with.fvm	unclassified	[INFO] stdout does not start with "before\n"
+modules.stdlib_faults	stdlib.fault.zip_with.jit	unclassified	[INFO] stdout does not start with "before\n"
+modules.stdlib_faults	stdlib.fault.zip_with.nvm	unclassified	[INFO] stdout does not start with "before\n"
+modules.stdlib_faults	stdlib.fault.zip_with.opt	unclassified	[INFO] stdout does not start with "before\n"
+modules.stdlib_faults	stdlib.fault.zip_with.prl	unclassified	[INFO] stdout does not start with "before\n"
+modules.stdlib_registry	registry.audit_table_matches_the_library	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.docs_complete	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.match_type_signatures_read	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.migrations_stay_migrated	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.overload_position_names_agree	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.parameter_types_match	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.purity_declared	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.reference_is_generated	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.result_types_match	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_registry	registry.signatures_match	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.inline_opt	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.macro_opt	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.fvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.inline_opt	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.jit	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.macro_opt	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.nvm	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.prl	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.inline_opt	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.macro_opt	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	binary_roundtrip	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tensor	broadcast_ops	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tensor	gelu_grad.bits	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gelu_grad.bits.generic_unit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gemm_canonical	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gemm_canonical.bits	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gemm_canonical.bits.generic_unit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gemm_canonical.fused	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gemm_canonical.generic_unit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gemm_canonical.library	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	gemm_consistency	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	linalg_layout	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tensor	static_types	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tensor	take_negative_is_compile_time	range-takes-no-higher-order-function	[INFO] stdout does not contain 'index -1 is out of range for the first dimension of extent 4'
+modules.tensor	take_one_hot.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	take_one_hot.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	take_one_hot.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	take_one_hot.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	take_out_of_range_is_compile_time	range-takes-no-higher-order-function	[INFO] stdout does not contain 'index 4 is out of range for the first dimension of extent 4'
+modules.tensor	take_runtime_out_of_range.fvm	range-takes-no-higher-order-function	[INFO] stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor	take_runtime_out_of_range.jit	range-takes-no-higher-order-function	[INFO] stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor	take_runtime_out_of_range.nvm	range-takes-no-higher-order-function	[INFO] stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor	take_runtime_out_of_range.prl	range-takes-no-higher-order-function	[INFO] stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor	whole_reduction_rounding.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	whole_reduction_rounding.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	whole_reduction_rounding.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor	whole_reduction_rounding.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tensor_int_division	int_division.by_zero.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.by_zero.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.by_zero.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.by_zero.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.fvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.jit	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.nvm	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.prl	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor.bounds	slice_runtime	an-expected-line-is-missing	[INFO] output does not contain 'slice_runtime.cml:6:'
+modules.tensor.dtype	npy_generic_wrapper_mismatch	an-expected-line-is-missing	[INFO] output does not contain 'npy_generic_wrapper_mismatch.cml:8:55'
+modules.tensor.named_dims	err_mismatch	unclassified	[INFO] expected diagnostic SemanticDiag::DimensionMismatch, line 6, column 47
+modules.tensor.named_dims	err_unbound_name	unclassified	[INFO] expected diagnostic SemanticDiag::DimensionNameNotBound, line 3, column 36
+modules.tensor.named_dims	return_extent_checked	an-expected-line-is-missing	[INFO] output does not contain 'err_return_extent.cml:8:16'
+modules.tensor.named_dims	unknown_extent_mismatch	an-expected-line-is-missing	[INFO] output does not contain 'unknown_extent_mismatch.cml:9:17'
+modules.tensor.shape_inference	si_as_fails	an-expected-line-is-missing	[INFO] output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_as_fails_fvm	an-expected-line-is-missing	[INFO] output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_as_fails_jit	an-expected-line-is-missing	[INFO] output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_as_fails_prl	an-expected-line-is-missing	[INFO] output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_branch_join	unclassified	[INFO] expected diagnostic SemanticDiag::ReturnNeedsConversion, line 7, column 5
+modules.tensor.shape_inference	si_computed_extent_run_time	an-expected-line-is-missing	[INFO] output does not contain 'computed_extent_run_time.cml:7:25'
+modules.tensor.shape_inference	si_computed_extent_stays_open	unclassified	[INFO] expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 7, column 17
+modules.tensor.shape_inference	si_computed_slice	unclassified	[INFO] expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 7, column 15
+modules.tensor.shape_inference	si_loaded_struct	unclassified	[INFO] expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 10, column 17
+modules.tensor.shape_inference	si_plain_result	unclassified	[INFO] expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 11, column 14
+modules.tensor.shape_inference	si_recursion_leaf	unclassified	[INFO] expected diagnostic SemanticDiag::ReturnNeedsConversion, line 4, column 5
+modules.tensor.shape_inference	si_tuple_return	unclassified	[INFO] expected diagnostic SemanticDiag::ReturnNeedsConversion, line 8, column 5
+modules.tensor.shape_inference	si_var_argument	unclassified	[INFO] expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 9, column 17
+modules.tensor.shape_types	as_runtime_mismatch	an-expected-line-is-missing	[INFO] output does not contain 'as_runtime_mismatch.cml:8:15'
+modules.tensor.subscript	slice_step_zero	an-expected-line-is-missing	[INFO] output does not contain 'The slice 't[a:b:s]' has a step of 0'
+modules.threads	values.cli_eight	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.threads	values.cli_four	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.threads	values.cli_four_env	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.threads	values.cli_one	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+modules.tiles	compiled_region_parallel	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tiles	gpu_preference.host_only	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tiles	gpu_preference.missing_device	an-expected-line-is-missing	[INFO] output does not contain 'CUDA device 63 was named by --devices but is not available'
+modules.tiles	gpu_preference.no_device.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tiles	gpu_preference.no_device.jit_hot_threshold0	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tiles	gpu_preference.no_device.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tiles	gpu_preference.no_device.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tiles	gpu_probe.host_only_is_silent	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tiles	gpu_probe.once_per_process	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.tiles	host_resident_parallel	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tiles	native_parallel	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tiles	native_parallel.linear	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tiles	native_parallel.scheduler	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+modules.tiles	source	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.with_after_norm	with_after_norm.computed_input.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.with_after_norm	with_after_norm.computed_input.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.with_after_norm	with_after_norm.computed_input.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+modules.with_after_norm	with_after_norm.computed_input.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.algebra	gradient.false	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.algebra	gradient.true	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.camel_passes	camel_passes.cse_written_variable.by_camel	unclassified	[INFO] verification exited 1
+opt.camel_passes	camel_passes.cse_written_variable.by_cpp	golden-behind-the-recording	[INFO] snapshot differs from golden
+opt.camel_passes	camel_passes.fold.constant_budget.by_camel	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+opt.camel_passes	camel_passes.fold.constant_budget.by_cpp	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+opt.commit_refusal	commit_refusal.loop_body_read	an-expected-line-is-missing	[INFO] stdout does not contain 'refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 
+opt.effects_kept	opt_matches_interpreter.mnist.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.inline_dce.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.inline_dce.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.inline_dce.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.inline_dce.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt_dce.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt_dce.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt_dce.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt_dce.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.opt.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.reference.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.reference.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.reference.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.1.reference.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.inline_dce.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.inline_dce.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.inline_dce.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.inline_dce.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt_dce.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt_dce.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt_dce.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt_dce.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.opt.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.reference.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.reference.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.reference.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.42.reference.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	branch.graph	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	covered_value.graph.false	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	covered_value.graph.true	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.dce.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.dce.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.dce.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.dce.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.inline_dce.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.inline_dce.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.inline_dce.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.inline_dce.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.opt.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.opt.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.opt.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.opt.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.reference.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.reference.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.reference.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.reference.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.safe.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.safe.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.safe.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.safe.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.twice.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.twice.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.twice.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	ordering.twice.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.gate_value	other_wait.graph	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.generic	effect_order_folded.inline.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	effect_order_folded.inline.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	effect_order_folded.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	effect_order_folded.simplify.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	effect_order_folded.simplify.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	effect_order_folded.simplify.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	fold_cast.failing_fails_at_run_time	unclassified	[INFO] expected diagnostic RuntimeDiag::RuntimeError, line 13, column 13
+opt.generic	fold_cast.failing_is_kept	unclassified	[INFO] verification exited 1
+opt.generic	fold_constant_loop_effect.simplify_nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	fold_constant_loop.simplify_nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	hang_branch_00017.simplify_macro_nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	hang_branch_00017.simplify_nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_taskflow	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_taskflow	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.generic	specialization_survives_the_round.copy_is_reused_in_a_later_round	unclassified	[INFO] verification exited 1
+opt.generic	specialize_dim_name_recursion.bounded	unclassified	[INFO] verification exited 1
+opt.inline	loop_wait_after_inline.non_contiguous_loop.refused	an-expected-line-is-missing	[INFO] output does not contain 'loop #0 is the LOOP node 52'
+opt.inline	loop_wait_after_inline.two_loops_interleaved.refused	an-expected-line-is-missing	[INFO] output does not contain 'test::interleave_loop_range: graph 'f8': node 31'
+opt.pass_params	declaration.guard_script	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.pass_params	docs.planted_page_is_red	an-expected-line-is-missing	[INFO] stdout does not contain 'planted-page-'
+opt.pass_params	docs.planted_page_passes_the_page_rule	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.pass_params	docs.word_form_only	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.progen	progen_seed_4	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+opt.rounds_warning	budget.spent_is_not_a_fixpoint	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.screens	generic.effect_order_folded	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.screens	generic.gate_branch_wait	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	generic.gate_value_dependency	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	nn.checkpoint_roundtrip	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.screens	nn.lr	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	nn.lrit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	nn.mnist	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	onnx.export_import_order	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	onnx.export_impure	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	screens.gemm_library	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.screens	screens.grad_library	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.second_pass	second_pass.perf_fib_smoke	an-expected-line-is-missing	[INFO] expected exit 0, got exit 2
+opt.splice_place	nn_grad_check.spliced_body_chain_is_one_chain	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt_twice.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt_twice.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt_twice.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt_twice.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.reference.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.reference.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.reference.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.reference.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_inline.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_inline.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_inline.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_inline.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_twice.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_twice.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_twice.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt_twice.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.opt.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.reference.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.reference.jit	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.reference.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.splice_place	var_parameter.reference.prl	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.writings	opt.writings.greedy_fusion_reads_no_writing	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+opt.writings	opt.writings.two_effects_wall_clock	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+para.core	bootstrap_medians	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+para.core	concurrent_alloc.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+para.core	concurrent_alloc.prl_fans_out	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+para.core	concurrent_alloc.prl_gc_stress	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+para.core	file_chunk_hash	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	filter_keeps_all.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	filter_keeps_all.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	filter_keeps_all.tf	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_chunks.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_chunks.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_chunks.prl_gc_stress	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_chunks.prl_one_worker	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_ordered_effects.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_ordered_effects.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_result_order.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_result_order.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	map_result_order.tf	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	merge_sort_small.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+para.core	monte_carlo_pi	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	ordered_operators_inline.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	println_whole_lines.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	unordered_foreach_smoke.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	unordered_foreach_smoke.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	unordered_foreach_smoke.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	unordered_foreach_timing.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	unordered_reduce_sum.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	unordered_reduce_sum.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.core	unordered_reduce_sum.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.exec_pred	fault.predecessors	unclassified	[INFO] verification exited 1
+para.exec_pred	sync_block.predecessors	unclassified	[INFO] verification exited 1
+para.handoff	fault_deep.fvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+para.handoff	fault_deep.nvm	range-takes-no-higher-order-function	[INFO] stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+para.handoff	fault_deep.prl	range-takes-no-higher-order-function	[INFO] stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+para.handoff	fault_deep.prl_off	range-takes-no-higher-order-function	[INFO] stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+para.handoff	shapes.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.handoff	shapes.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.handoff	shapes.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.handoff	shapes.prl_counts	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.handoff	shapes.prl_gc_stress_generational	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.handoff	shapes.prl_gc_stress_major	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+para.handoff	shapes.prl_off	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+parse.frontend	frontend.ast_snapshot	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+parse.frontend	grammar.reference_in_step	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+runtime.graph_draft_ledger	runtime.graph_draft_ledger.never_rises	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+runtime.oper_shape	runtime.oper_shape.the_operator_and_the_kind_answer_one_shape	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	guard.finished	range-takes-no-higher-order-function	[INFO] expect_stdout_exact differs: first difference at offset 0 (expected 98 chars, got 854 chars): expected "d4 config seed=42 playouts=100 position=XXXOO....
+showcase_d4_mcts	guard.no_playouts	range-takes-no-higher-order-function	[INFO] expect_stdout_exact differs: first difference at offset 0 (expected 115 chars, got 854 chars): expected "d4 config seed=42 playouts=0 position=XX.OO.... 
+showcase_d4_mcts	guard.unreachable	range-takes-no-higher-order-function	[INFO] expect_stdout_exact differs: first difference at offset 0 (expected 117 chars, got 854 chars): expected "d4 config seed=42 playouts=100 position=XXXX....
+showcase_d4_mcts	mcts.selfplay.curve	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.block.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.block.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.block.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.block.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.empty.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.empty.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.empty.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.empty.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.fork.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.fork.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.fork.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.fork.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.win.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.win.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.win.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_d4_mcts	search.win.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+showcase_i2_diffusion	diffusion_step.seed7.default	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+showcase_i2_diffusion	diffusion_step.seed7.prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+showcase_i2_diffusion	diffusion_step.seed7.twice	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+showcase_i2_diffusion	diffusion_step.seed8.default	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+showcase_s2_first_step_gradient	first_step.scalar_library_vjp.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.autodiff_migration_ledger	tools.autodiff_migration_ledger.ratchet	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.compile_bench	compile_bench.smoke	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.grammar	grammar.files	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.grammar	grammar.tables	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.inspect_copies	inspect.copies.training_step	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.load_class	load_class.tree	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.member_init	tools.member_init.sweep	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.plan_refs	plan_refs.counted_box	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.plan_refs	plan_refs.last_use_column	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tools.portability	portability.std_includes	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.canonical_gir	canonical_document_and_equivalence	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.cml	print_and_recompile	exit-1-with-no-line-saying-why	[INFO] note: On the Debug tier this is red with `Camel Debug Assertion Failed: Location: ../src/core/type/base.cpp(335), Function: bool camel::core::type::Type:
+trans.cml	print_then_run_agrees_with_the_origin	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.cpp	agree_with_fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+trans.cpp	empty_struct_text	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.cpp	every_expect_program_links_no_runtime	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.cpp	named_struct_types	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+trans.cpp	narrow_argmax	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.cpp	narrow_one_program_twenty_times	an-expected-line-is-missing	[INFO] stdout does not contain '20 of 20: exit 0'
+trans.effect_trace	macro_body_effect_stage	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.macro	failed_depth.error	unclassified	[INFO] expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 15, column 13
+trans.macro	failed_evaluation.error	unclassified	[INFO] expected diagnostic RuntimeDiag::MacroEvaluationFailed, 0x0400000E, line 17, column 13
+trans.macro	failed_evaluation.json	unclassified	[INFO] verification exited 1
+trans.macro	failed_unreached.error	unclassified	[INFO] expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 9, column 12
+trans.macro	not_static.note	unclassified	[INFO] verification exited 1
+trans.macro	round_budget.error	unclassified	[INFO] expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 10, column 13
+trans.pass_dump	dump_after_each_pass	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+trans.source_spelling	every_generator_writes_source_the_parser_reads	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.fvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.jit	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.nvm	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.prl	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_map_order_prl	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_map_order.fvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_map_order.jit	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_map_order.nvm	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+?	abs_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	broadcast_product_gradient_of_a_stated_shape.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	broadcast_product_gradient_of_a_stated_shape.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+feat\compile\transforms	cml_var_holding_a_lambda	an-expected-line-is-missing	[INFO] output does not contain '((x: int): int => x + 100)(1)'
+?	compositions.grad_vjp_g_zero.fvm	known-fail-mark-changed-its-mind	[INFO] known_fail_owner             unowned (`lane-transforms` wrote this mark and is gone)
+?	compositions.grad_vjp_g_zero.nvm	known-fail-mark-changed-its-mind	[INFO] known_fail_owner             unowned (`lane-transforms` wrote this mark and is gone)
+?	compositions.grad_vmap_f.fvm	known-fail-mark-changed-its-mind	[INFO] known_fail_owner             unowned (`lane-transforms` wrote this mark and is gone)
+?	compositions.grad_vmap_f.nvm	known-fail-mark-changed-its-mind	[INFO] known_fail_owner             unowned (`lane-transforms` wrote this mark and is gone)
+?	divide_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	erf_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	erfc_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	exp_gradient_of_a_stated_shape.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	exp_gradient_of_a_stated_shape.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	floatgate.f32_loop_state_cotangent_port.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	gelu_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	linear_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	log_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	max_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	maximum_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	min_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	minimum_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	neg_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	relu_gradient_of_a_stated_shape.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	relu_gradient_of_a_stated_shape.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	rsqrt_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	rules_angle_args.reshape_shape.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	rules_angle_args.reshape_shape.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	rules_angle_args.softmax_after_layout.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	rules_angle_args.softmax_after_layout.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	sigmoid_gradient_of_a_stated_shape.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	sigmoid_gradient_of_a_stated_shape.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	sqrt_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_max_axis_gradient_tie.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_mean_axis_answered_by_the_engine.nvm	known-fail-mark-changed-its-mind	[INFO] known_fail_owner             unowned (`lane-statedsig` wrote this mark and is gone)
+?	stated_mean_axis_gradient_nonsquare_axis.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_mean_axis_gradient_square_axis.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_mean_gradient.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_min_axis_gradient_negative_axis.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_sum_answered_by_the_engine.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_sum_axis_gradient_negative_axis.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_sum_axis_gradient.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	stated_take_answered_by_the_engine.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	tanh_gradient_of_a_stated_shape.fvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	tanh_gradient_of_a_stated_shape.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+feat\compile\transforms	transforms.library_grad_is_the_composition	printed-an-error-it-forbids	[INFO] expected exit 0, got exit 1
+?	transpose_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	transpose_loop_escape.int_is_a_zero_tangent_space.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	transpose_loop_escape.names_the_value_one_read.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	transpose_loop_escape.one_value_read_twice_is_one_capture.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	transpose_loop_escape.second_state_of_the_same_loop.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	transpose_loop_escape.two_states_before_the_escape.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	transpose_loop_escape.two_values_of_two_kinds.nvm	known-fail-mark-changed-its-mind	[INFO] known_fail_owner             unowned (`lane-valports` wrote this mark and is gone)
+?	transpose_runs_a_loop_rounds_backwards.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+?	where_gradient_both_legs.nvm	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
