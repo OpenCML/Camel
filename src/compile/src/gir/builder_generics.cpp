@@ -1435,6 +1435,41 @@ compile_graph_ptr_t Builder::instantiateForCall(
     const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call, Type *expectedResult) {
+    try {
+        return instantiateForCallBinding(
+            tmpl, withInputs, normInputs, withTypes, normTypes, call, expectedResult);
+    } catch (const GenericCallRejected &rejected) {
+        // The name's own declaration is one candidate, and the call is not an instance of it: a
+        // name of a module is declared over the one type its module writes (`count` over an
+        // array), and a call over another type is no instance of that text even when the name has
+        // a body the call fits (the prelude's, over a range). The retry asks the name's gathered
+        // bodies once -- the same set every other form of the name asks -- and reports the
+        // refusal only when none of them accepts the call.
+        OperatorOverloads collected = preludeOperatorOverloadsOf(rejected.name);
+        if (!collected.graphs.empty() || !collected.templates.empty()) {
+            if (compile_graph_ptr_t chosen = chooseOperatorOverload(
+                    collected, withInputs, normInputs, withTypes, normTypes, call,
+                    [](FunctionType *, bool) { return true; })) {
+                CAMEL_LOG_DEBUG_S(
+                    "GIR Builder",
+                    "The declaration of '{}' does not take this call; the name's collected body "
+                    "was used",
+                    rejected.name);
+                return chosen;
+            }
+        }
+        diags_->of(SemanticDiag::GenericArgumentsMismatch)
+            .atOrigin(rejected.call->origin())
+            .commit(
+                rejected.name, rejected.arguments, rejected.why, rejected.signature);
+        throw BuildAbortException();
+    }
+}
+
+compile_graph_ptr_t Builder::instantiateForCallBinding(
+    const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
+    const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
     // A `constas n: T` parameter is bound by an argument written at its position, in the angle
     // brackets or the parentheses: a compile-time constant, not a runtime one. It selects the
@@ -1484,10 +1519,8 @@ compile_graph_ptr_t Builder::instantiateForCall(
                                        typesText(normTypes, withCount));
     };
     const auto reject = [&](const std::string &why) {
-        diags_->of(SemanticDiag::GenericArgumentsMismatch)
-            .atOrigin(call->origin())
-            .commit(tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString());
-        throw BuildAbortException();
+        throw GenericCallRejected{
+            call, tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString()};
     };
     if (declaredWithCount != withTypes.size()) {
         // Every argument written in the parentheses (`take(xs, 2)`): say which parameters
@@ -1881,10 +1914,49 @@ compile_graph_ptr_t Builder::instantiateForCall(
     return instantiateGeneric(tmpl, bindings, extents, constas, call);
 }
 
+namespace {
+/// Whether a declaration's written parameter takes an argument of this type, once the arguments
+/// have solved the variables the declaration writes (`bindings`). A parameter that still names a
+/// variable the arguments did not solve says nothing here: it is the call's to say, and it is
+/// taken as fitting. A function position is compared on its parameters -- the declaration states
+/// which function it expects -- and on its result only when both are written, because the result
+/// of an element function is what the call builds, not what it was given.
+bool writtenParameterTakes(Type *written, Type *actual, const type_bindings_t &bindings) {
+    if (written == nullptr || actual == nullptr) {
+        return false;
+    }
+    Type *solved = substituteTypeVars(written, bindings);
+    if (containsTypeVar(solved)) {
+        return true;
+    }
+    if (solved->code() == TypeCode::Function && actual->code() == TypeCode::Function) {
+        auto *want = static_cast<FunctionType *>(solved);
+        auto *have = static_cast<FunctionType *>(actual);
+        if (want->withTypesCount() != have->withTypesCount() ||
+            want->normTypesCount() != have->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->withTypesCount(); ++i) {
+            if (!writtenParameterTakes(want->withTypeAt(i), have->withTypeAt(i), bindings)) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < want->normTypesCount(); ++i) {
+            if (!writtenParameterTakes(want->normTypeAt(i), have->normTypeAt(i), bindings)) {
+                return false;
+            }
+        }
+        return !want->hasExitType() || !have->hasExitType() ||
+               writtenParameterTakes(want->exitType(), have->exitType(), bindings);
+    }
+    return solved->assignableFrom(actual);
+}
+} // namespace
+
 void Builder::settleGenericOperatorArguments(
-    const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
-    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
-    const GCT::node_ptr_t &call) {
+    const oper_group_ptr_t &ops, const OperatorOverloads *overloads,
+    std::vector<Argument> &withInputs, std::vector<Argument> &normInputs, type_vec_t &withTypes,
+    type_vec_t &normTypes, const GCT::node_ptr_t &call) {
     // A name that still has no function value: a generic function, or a name with several
     // functions (overloads of the program, an operator with several signatures).
     const auto isOverloaded = [&](const Argument &arg) {
@@ -1928,6 +2000,13 @@ void Builder::settleGenericOperatorArguments(
             if (params.size() == 2) {
                 add(TupleType::create(std::vector<Type *>{params[0], params[1]}));
             }
+        } else if (Type *walked = walkedElementTypeOf(type)) {
+            // The element type of a value a `for` walks (a range's integers, a type's own
+            // `operator for`): a function applied to the elements -- a comprehension's element
+            // function, the function in `xs->map<f>` -- takes that type as its parameter, and
+            // the type comes from the one place the walk's element type is taken from, not from
+            // this probe.
+            add(walked);
         }
     };
     for (const auto *list : {&withInputs, &normInputs}) {
@@ -1946,13 +2025,72 @@ void Builder::settleGenericOperatorArguments(
             }
         }
     }
+    // Whether the operator takes this call. The rules of its group and the declarations of the
+    // name that have a body answer together: a call site has no "rule" and "body" to tell apart,
+    // only whether the name takes the call, so this is one question with one answer -- not a set
+    // tried after another.
     const auto accepted = [&] {
         std::vector<StaticArg> statics;
         statics.reserve(normInputs.size());
         for (const Argument &input : normInputs) {
             statics.push_back(isWaiting(input) ? StaticArg{} : staticArgOf(input.node));
         }
-        return ops->resolve(withTypes, normTypes, statics).has_value();
+        // The name may stand for a set of declarations without a built-in group (`map` over a
+        // range reaches the operator group's own path; a set gathered for a name applies the
+        // same question below).
+        if (ops != nullptr && ops->resolve(withTypes, normTypes, statics).has_value()) {
+            return true;
+        }
+        if (overloads == nullptr) {
+            return false;
+        }
+        const auto takes = [&](FunctionType *signature) {
+            if (signature == nullptr || signature->withTypesCount() != withTypes.size() ||
+                signature->normTypesCount() != normTypes.size()) {
+                return false;
+            }
+            // The variables a declaration writes are solved by the arguments, and what it writes
+            // without one must be the argument's own type. Unifying alone answers only the first
+            // half: `unifyTypeVars` has nothing to walk into once a parameter names no variable,
+            // so it reports no disagreement for a `Range` parameter asked about an `int[]` (and
+            // for a function parameter whose written parameter is not the argument's), and every
+            // declaration of the name would then "take" every call.
+            type_bindings_t bindings;
+            for (size_t i = 0; i < withTypes.size(); ++i) {
+                if (!unifyTypeVars(signature->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < normTypes.size(); ++i) {
+                if (!unifyTypeVars(signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < withTypes.size(); ++i) {
+                if (!writtenParameterTakes(
+                        signature->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < normTypes.size(); ++i) {
+                if (!writtenParameterTakes(
+                        signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (const auto &graph : overloads->graphs) {
+            if (takes(graph->funcType())) {
+                return true;
+            }
+        }
+        for (const auto &tmpl : overloads->templates) {
+            if (takes(tmpl->funcType)) {
+                return true;
+            }
+        }
+        return false;
     };
     // A name with several functions: the one the operator accepts, when it is exactly one
     // (`xs->map<abs>`, `xs->reduce<max, 0>`). The operator is asked about each candidate's
@@ -2124,7 +2262,7 @@ void Builder::settleGenericOperatorArguments(
             type     = refusedType;
             return;
         }
-        if (tmpl->name.empty()) {
+        if (isElementFunction(tmpl->func)) {
             // The element function of a list comprehension: nothing to take `x` from.
             Type *source = !normTypes.empty() ? valueTypeOf(normTypes.front()) : nullptr;
             quiet.attach();
@@ -2142,7 +2280,7 @@ void Builder::settleGenericOperatorArguments(
                 "suggested by its other arguments is one it accepts{}; its type variable(s) {} "
                 "stay undetermined. Write the call in a function whose parameter types are "
                 "written out, e.g. '(x: int) => {}(x)'",
-                ops->name(),
+                ops != nullptr ? ops->name() : std::string("the operator"),
                 tried.empty() ? std::string() : " (tried: " + tried + ")",
                 strutil::join(names, ", ", [](const std::string &n) { return n; }),
                 tmpl->name));
@@ -2152,6 +2290,12 @@ void Builder::settleGenericOperatorArguments(
     // the name stands for, so the name stays unsettled and is refused. A rule whose signature is
     // not declared (a computed one) says nothing here, and the name is tried as before.
     const auto positionTakesFunction = [&](bool with, size_t index) {
+        // A name gathered as a set of declarations and no built-in group beside it: no rule says
+        // what the position takes, which is the same answer as a rule whose signature is not
+        // declared -- the name is tried.
+        if (ops == nullptr) {
+            return true;
+        }
         for (const auto &[uri, resolver] : ops->resolvers()) {
             FunctionType *sig = resolver->fixedSignature();
             if (sig == nullptr) {

@@ -1623,6 +1623,24 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
+    /// A generic call the name's own declaration does not take: the call, the name, the arguments
+    /// as a report writes them, why the declaration refused them, and the signature it refused
+    /// them by. `instantiateForCall` retries with the name's other bodies before it reports this,
+    /// and reports it only when none of them accepts the call.
+    struct GenericCallRejected {
+        GCT::node_ptr_t call;
+        std::string name;
+        std::string arguments;
+        std::string why;
+        std::string signature;
+    };
+    /// The binding itself: the one declaration of the name against the arguments of the call,
+    /// throwing `GenericCallRejected` where it does not hold.
+    compile_graph_ptr_t instantiateForCallBinding(
+        const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
+        Type *expectedResult = nullptr);
     /// The instance of one chosen template; `resolveGenericCall` is this for the single template
     /// a name holds, and the call site is this for each candidate of a name with several.
     compile_graph_ptr_t instantiateForCall(
@@ -1774,15 +1792,19 @@ class Builder {
         const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    /// The overloads of a name: the rules of its operator group and the declarations of it with a
+    /// body (defined below, beside the resolution that gathers them).
+    struct OperatorOverloads;
     /// An argument of a built-in operator that names a generic function. An operator's type
     /// rule is C++ code that needs the argument types, so it cannot say which function it
     /// expects; the instances the types of the other arguments suggest are tried (their
     /// element types first) and the one the operator accepts is taken. Replaces the name in
     /// `inputs` / `types`; an error when no instance is accepted.
     void settleGenericOperatorArguments(
-        const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
-        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
-        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+        const oper_group_ptr_t &ops, const OperatorOverloads *overloads,
+        std::vector<Argument> &withInputs, std::vector<Argument> &normInputs,
+        camel::core::type::type_vec_t &withTypes, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
     //  ---- Build-time tuples. ----
     // A tuple that is known while the graph is built: its type and its element nodes, without a
     // FILL node. A rest parameter's `ts` and a tuple comprehension are the two producers.
@@ -3531,6 +3553,10 @@ class Builder {
         oper_group_ptr_t ops;
         /// The module each imported overload comes from, for diagnostics (absent: this one).
         std::unordered_map<const void *, std::string> moduleOf;
+        /// The name the set is of: what the reports call it. A set gathered for a name can have
+        /// no operator group (`count` is a function of a module and not an operator), and the
+        /// name is then the only thing the set is known by.
+        std::string name;
     };
     /// The DREF of an operator (`__add__`) whose set has overloads of the program, with that
     /// set. A DREF of an operator without any is an ordinary DREF to the operator group.
@@ -3586,6 +3612,12 @@ class Builder {
     /// imported generic function is built).
     const OperatorOverloads &importedOperatorOverloadsOf(const std::string &group);
     std::map<std::pair<const void *, std::string>, OperatorOverloads> importedOperators_;
+    /// The overloads of `group` the prelude declares with a body
+    /// (ProgramExports::exportedOperatorOverloads of the ambient layer): the layer a name needs
+    /// no import for, and the one the import sets do not bring. Computed once per operator: the
+    /// prelude does not change while a program is built.
+    const OperatorOverloads &preludeOperatorOverloadsOf(const std::string &group);
+    std::map<std::string, OperatorOverloads> preludeOperators_;
     /// The DREF for a use of the operator `group` (visitDRefNode).
     node_handle_t operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct);
     /// The program's overload a call of an operator takes (an instance for a generic one), or
@@ -3617,6 +3649,22 @@ class Builder {
     std::vector<std::pair<camel::core::module::Module *, std::string>> declaringModulesOf(
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
+    /// The type of the elements a `for` over a value of `type` reads: an array's element type,
+    /// else the element type of the stream the type's `__iter__` answers. This is the loop's own
+    /// resolution asked for its answer alone (the loop builds the call it reads; this needs the
+    /// type), and it is the one place the element type of a walked value is taken from -- a
+    /// comprehension's element function and a call that applies a function to the elements both
+    /// ask it, so neither says "the element is this" a second time. Null for a type nothing
+    /// walks, and for a type that still has a type variable.
+    camel::core::type::Type *walkedElementTypeOf(camel::core::type::Type *type);
+    /// Whether this function is a list comprehension's element function: the one the compiler
+    /// makes from `[e for x in xs]`, which has no name and wrote no clause about resources. Its
+    /// signature keeps saying no clause -- a measurement of its body is a fact about the body,
+    /// not a promise the element function makes (design principles 3.3) -- and this is the one
+    /// place that answers "which function is a comprehension's element function": the
+    /// measurement of a body asks it, and the refusal of a comprehension asks it, so the
+    /// compiler-made function is identified once, by the label it was made with.
+    bool isElementFunction(const GCT::node_ptr_t &func) const;
     /// Adds what the declaring modules of the operands export as overloads of `group` to the
     /// set of `dref`, once each: an overload the module also imports (or one found by both
     /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the

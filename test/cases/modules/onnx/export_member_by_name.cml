@@ -1,0 +1,33 @@
+/**
+ * A member read by name is an operation on the exporter's own values, not a node: `access_key` picks
+ * the field the call names out of the aggregate in hand, so what reaches the model is that field's
+ * value and no op of its own.
+ *
+ * The read names its field (`'bias'`) where a tuple read names a place (`t.1`), and the two are one
+ * shape and two operators: the export has to tell them apart by what the call hands over, and a
+ * name is a string where a place is an int.
+ */
+
+import { get_env } from env
+import { export_model } from onnx
+import { reshape } from tensor
+
+type Params = { gain: f32, bias: f32 }
+
+with <p: Params>
+func scale(x: f32[...]) => f32[...] {
+    return x * access_key::<Params, f32><'bias'>(p)
+}
+
+func main() => string! sync {
+    let p: Params = { gain: f32(4.0), bias: f32(0.5) }
+    let x = reshape<[2]>([1.0, 2.0] as f32[])
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
+        scale<p>(x)
+    }, x) {
+        case error e => {
+            return e
+        }
+        case v => 'exported'
+    }
+}

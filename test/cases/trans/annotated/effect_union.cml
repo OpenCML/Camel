@@ -1,0 +1,27 @@
+/**
+ * The two directions of one rule, read at the node (design principles 3.3): a node's effect is the
+ * accesses its operator's record states united with the ones the function it runs brings.
+ *
+ *   * `state:update` writes the reference, so it is an effect even though the function its parameter
+ *     admits is `pure` -- the declaration's own half is enough;
+ *   * `map` over `inc` declares nothing for itself and runs a function that writes nothing, so it is
+ *     no effect at all.
+ *
+ * What the dump prints for a node is the node's role registry, which reads the fact layer's answer
+ * for that node (`core.resources`) and not a predicate of its own.
+ */
+
+import state
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func main() => int sync {
+    let r = state::ref(1)
+    let xs = [1, 2, 3]
+    let ys = xs->map<inc>
+    return state::update(r, func (x: int) {
+        x + ys[0]
+    }) - 2
+}

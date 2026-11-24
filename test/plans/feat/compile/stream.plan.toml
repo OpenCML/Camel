@@ -68,17 +68,26 @@ expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
+# The name form of `count` and `find` over a range: the prelude declares them with a body, and a
+# call that writes the function in angle brackets resolves it there.
 [[tests]]
-name = "stream.range_value_map_no_instance"
-desc = "A range is not an array, and the functions an array shares with it are not declared at the type yet (design principles 5.4): `map` resolves through the operator group, no member of it takes a `Range`, so `map<dbl>(1..5)` is an ordinary no-match under the name the program wrote. This is the reading of the overload set today, pinned so the gap is a reading rather than a belief."
-kind = "negative"
+name = "stream.range_count_find"
+desc = "count and find of the integers a range names, written in angle brackets"
+kind = "behavior"
+case = "../../../cases/compile/stream/range_count_find.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3\n3\n2\n8\n"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.range_value_map"
+desc = "A range's `map` is the prelude's own declaration of the name beside the array rule: one name, one overload set, and the value's type chooses. `map<dbl>(1 .. 5)` walks the integers of the range and doubles them, `[2, 4, 6, 8]`. The case file keeps the name it pinned the no-match under; a parse snapshot records the path."
+kind = "behavior"
 case = "../../../cases/compile/stream/range_value_map_no_instance.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_diagnostic_code = "0x0300000F"
-expect_output_contains = ["No matching function found for argument types"]
-expect_output_not_contains = ["UnknownInternalError", "Warning"]
+expect_exit = 0
+expect_stdout_contains = ["[2, 4, 6, 8]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -1511,3 +1520,13 @@ expect_stdout_exact = "[0, 1, 2]\n3\n"
 expect_output_not_contains = ["[Error]", "Unresolved reference"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "stream.map_three_owners"
+desc = "One name, three owners: `map` on an array is the rule of the name's operator group, on a `Range` it is the prelude's own declaration beside the rules, and on a stream it is `stream`'s. They are one overload set, so a call accepts all three and the value's type alone chooses."
+kind = "behavior"
+case = "../../../cases/compile/stream/map_three_owners.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["[2, 4, 6]\n[0, 2, 4, 6]\n642"]
+timeout_ms = 20000
