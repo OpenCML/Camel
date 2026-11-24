@@ -109,11 +109,12 @@ export func uniform::<T>(k: Key) => T[...] when is_float::<T>() {
     let n = shape->reduce<func (a: int, b: int) => int {
         a * b
     }, 1>
-    // A range is not a comprehension's source: a comprehension is the array operators applied to
-    // what it walks (`xs->filter<(x) => c>`, then the map), and no rule of that group takes a
-    // `Range` -- `for i in r` walks a range through the loop's own `operator for`, which is a
-    // statement and not a comprehension. So the integers are written as the array they are not,
-    // and `to_array` is the one conversion from a range.
+    // A comprehension is the array operators applied to what it walks (`xs->filter<(x) => c>`,
+    // then the map), and those rules take an array: `[e for i in 0 .. n]` is refused today as a
+    // source that has no elements to take, with a constant end and a computed one alike, while
+    // `for i in r` walks a range through the loop's own `operator for` -- a statement, and not a
+    // comprehension. So the integers are written as the array they are not, and `to_array` is the
+    // one conversion from a range.
     //
     // This call does not resolve and the function does not compile today: `to_array` is a function
     // of the built-in module, and a module reaches such a name through the operator group of its
@@ -151,7 +152,7 @@ export func normal::<T>(k: Key) => T[...] when is_float::<T>() {
     let n = shape->reduce<func (a: int, b: int) => int {
         a * b
     }, 1>
-    // The same as in `uniform`: a range is not a comprehension's source.
+    // The same as in `uniform`: the array rules a comprehension applies do not take a range.
     return reshape<shape>([normal::<T>(fold(k, i)) for i in to_array(0 .. n)])
 }
 
