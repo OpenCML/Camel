@@ -1,0 +1,16 @@
+/**
+ * A function of the prelude is written without an import: the prelude is the built-in module's
+ * declaration file, and what it exports comes along with the built-in rules it declares (design
+ * principles 10.2, the last layer). `to_array` is the one conversion from a `Range` to the
+ * integers it names, and it is in scope here with nothing imported.
+ *
+ * This is the case a *generic* body is not: a name inside `::<T>` is checked at the declaration by
+ * `Builder::resolveGenericTemplateNames` -> `walkStaticBodyNames` -> `valueNameExists`, which never
+ * asks the prelude layer, so `to_array` there is still `Unresolved reference` (that is what
+ * `stdlib/random.cml`'s `uniform::<T>` and `normal::<T>` report today).
+ */
+func main() => int sync {
+    let xs: int[] = to_array(0 .. 3)
+    println(xs)
+    return 0
+}

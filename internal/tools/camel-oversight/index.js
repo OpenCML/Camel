@@ -23,6 +23,8 @@
 //                        sent of its own accord;
 //   GET  /oversee/events a server-sent event stream that pushes each acknowledgement, each message
 //                        the model sends, and the claimed session ending, as they happen;
+//   POST /oversee/reload put the pushed plugin into the live directory, reload this one plugin, and
+//                        answer with the commit it came from (the band's button);
 //   tools oversight_claim, oversight_ack, oversight_tell, oversight_readings  the model's side.
 //
 // The routes are raw web-server routes, outside the GUI's launch-token login. The gate is the network:
@@ -39,18 +41,26 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as bootMeasure from './measure.js'
 import * as bootRules from './rules.js'
 
 // The parts that change most often -- the rules, their limits and texts, and what is measured --
 // are reloaded when they change, at the next beat, without restarting the host: a restart stops
-// every agent that is working. They are read from origin/develop, the content that has passed the
-// merge gate and been pushed, never from the checkout's working tree: a merge in progress there
-// holds content that has not been measured yet, and a lane's half-done edit may sit there too. A
+// every agent that is working. They are read from the line merges land on -- origin/integration, or
+// origin/develop where there is no integration branch -- the content that has passed the merge gate
+// and been pushed, never from the checkout's working tree: a merge in progress there holds content
+// that has not been measured yet, and a lane's half-done edit may sit there too. Develop moves only
+// when integration is promoted, hours apart, and a fix to these files should not wait for that. A
 // file that fails to load leaves the version in use in place and is reported. The routes, the tools
 // and the session wiring in this file still need a restart.
-const HOT_REF = 'origin/develop'
+const HOT_REFS = ['origin/integration', 'origin/develop']
+async function hotRef(repo) {
+    for (const ref of HOT_REFS) {
+        if (await gitIn(repo, ['rev-parse', '--verify', '--quiet', ref]).then(() => true, () => false)) return ref
+    }
+    return HOT_REFS[HOT_REFS.length - 1]
+}
 const HOT_DIR = path.join(os.homedir(), '.camel-oversight', 'hot')
 const hot = {
     rules: { module: bootRules, blob: null, error: null },
@@ -60,12 +70,14 @@ const gitIn = (repo, args) =>
     new Promise((resolve, reject) =>
         execFile('git', ['-C', repo, ...args], { env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, maxBuffer: 16 << 20 },
             (error, stdout) => (error ? reject(error) : resolve(stdout))))
-// The text of a file as origin/develop has it, or null when it cannot be read.
+// The text of a file as the merged line has it (hotRef), or null when it cannot be read.
 async function pushedText(repo, file) {
-    return gitIn(repo, ['show', `${HOT_REF}:${file}`]).catch(() => null)
+    const ref = await hotRef(repo)
+    return gitIn(repo, ['show', `${ref}:${file}`]).catch(() => null)
 }
 async function reloadHot(repo, onChange) {
     if (!repo) return
+    const HOT_REF = await hotRef(repo)
     for (const [name, file] of [['rules', 'rules.js'], ['measure', 'measure.js']]) {
         const slot = hot[name]
         const spec = `internal/tools/camel-oversight/${file}`
@@ -100,6 +112,11 @@ async function reloadHot(repo, onChange) {
 export const name = 'camel-oversight'
 export const inject = ['agents', 'webServer', 'tools', 'systemPrompt', 'timer']
 
+// The directory this file was imported from, as the process sees it. It is the loading path, and the
+// reload route reads it rather than assuming: the profile decides where the plugin comes from, and a
+// sync into a directory nothing loads from would replace files no one runs.
+const LOADED_FROM = path.dirname(fileURLToPath(import.meta.url))
+
 const DEFAULTS = {
     logFile: path.join(os.homedir(), '.camel-oversight', 'log.jsonl'),
     sender: 'decision-maker',
@@ -121,6 +138,12 @@ const DEFAULTS = {
     blockCancelMinutes: 30,
     blockExempt: [],
     limits: {},
+    // Where the pushed plugin is put and loaded from, the one script allowed to put it there, and the
+    // commit it is taken from. Machine-local like `repo` and `buildHost`; the defaults are the path
+    // the plan names, and a profile or config.json overrides them.
+    liveDir: 'D:\\Projects\\camel-oversight-live',
+    syncScript: 'D:\\Projects\\Camel\\internal\\tools\\sync-oversight-live.mjs',
+    syncRef: 'origin/develop',
 }
 
 const clip = (text, n) => {
@@ -534,7 +557,7 @@ export function apply(ctx, rawConfig) {
     let rulesText = ''
     const loadRules = async () => {
         if (!config.repo) return
-        // As pushed, not as the checkout's working tree has it mid-merge (see HOT_REF).
+        // As pushed, not as the checkout's working tree has it mid-merge (see hotRef).
         const pushed = await pushedText(config.repo, config.rulesFile)
         const text = pushed !== null ? pushed : await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
         if (text.trim()) rulesText = text.trim()
@@ -785,6 +808,7 @@ export function apply(ctx, rawConfig) {
             blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
             watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
             hotLoaded: Object.fromEntries(Object.entries(hot).map(([name, slot]) => [name, { blob: slot.blob && slot.blob.slice(0, 12), error: slot.error }])),
+            plugin: pluginState(),
         })
     })
 
@@ -877,6 +901,136 @@ export function apply(ctx, rawConfig) {
         delivered.set(id, entry)
         record(entry)
         answer(res, 202, { id, mode, session: String(agent.id), status: agent.status, withdrawn, alreadyRead, queued: queued.length + 1 })
+    })
+
+    // ---- reloading the plugin itself ---------------------------------------------------------------
+    //
+    // The owner's rule (2026-11-24): restarting DSH to change this plugin stops every agent at work, so
+    // the change is a button, and what it buys is this plugin reloading alone. Three steps, in this
+    // order, and the third one is what makes the first two safe to ship:
+    //
+    //   1. sync -- `sync-oversight-live.mjs` copies the plugin directory out of origin/develop into the
+    //      live directory, refuses a tree whose `.js` fails `node --check` or whose `index.js` or
+    //      `client.js` fails to import, and leaves the live directory untouched when it refuses. The
+    //      refusal is returned with the file and the line; nothing here decides what "broken" means.
+    //   2. reload -- DSH's own profile reconciliation (`ctx.hmr.reconcileProfile`), which replaces the
+    //      running plugins whose loaded files changed on disk and restarts their Loader entries. It is
+    //      the only interface that means "re-read this plugin's modules" (see README: the Plugin
+    //      Manager has no such method; its `reload` is private and does exactly this call).
+    //   3. report -- the commit the plugin directory came from, so the band writes down which version
+    //      is live instead of which version somebody believed.
+    //
+    // The one thing the route cannot undo: DSH's replacement is stop-then-start. A module that passes
+    // the checks above and still fails to start leaves nothing running -- its previous code is gone --
+    // and this route is inside the plugin that stopped. That is why the sync gate imports both halves
+    // before the live directory moves, and why the answer is written before the restart: a reload that
+    // goes wrong has at least said on the wire which commit it was trying.
+    const repoRoot = () => config.repo || 'D:\\Projects\\Camel'
+    const syncRecord = () => {
+        try {
+            return JSON.parse(readFileSync(`${config.liveDir}.sync.json`, 'utf8'))
+        } catch {
+            return null
+        }
+    }
+    // The version this process is running, read once: after a reload the new instance reads it again.
+    const loadedSha = (syncRecord() || {}).sha || null
+    const pluginState = () => {
+        const record = syncRecord()
+        return {
+            loaded: loadedSha,
+            synced: record ? record.sha || null : null,
+            target: config.liveDir,
+            loading: LOADED_FROM,
+            fromLive: path.resolve(LOADED_FROM).toLowerCase() === path.resolve(config.liveDir).toLowerCase(),
+            at: record ? record.at || null : null,
+        }
+    }
+
+    const runSync = () =>
+        new Promise((resolve) => {
+            execFile(
+                process.execPath,
+                [
+                    config.syncScript,
+                    '--repo', repoRoot(),
+                    '--ref', config.syncRef,
+                    '--target', config.liveDir,
+                    '--json',
+                ],
+                { timeout: 180_000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+                (error, stdout, stderr) => {
+                    // The script's last line is its JSON outcome; anything before it is progress.
+                    const line = String(stdout || '').trim().split(/\r?\n/).pop()
+                    try {
+                        resolve(JSON.parse(line))
+                    } catch {
+                        resolve({
+                            ok: false,
+                            stage: 'spawn',
+                            message: clip((error && error.message) || stderr || 'the sync script printed no outcome', 300),
+                        })
+                    }
+                },
+            )
+        })
+
+    route('/oversee/reload', 'POST', async (req, res) => {
+        const outcome = await runSync()
+        if (!outcome.ok) {
+            record({ kind: 'reload-refused', stage: outcome.stage, file: outcome.file || null, line: outcome.line || null, message: outcome.message, at: Date.now() })
+            return answer(res, 409, {
+                ok: false,
+                stage: outcome.stage,
+                file: outcome.file || null,
+                line: outcome.line || null,
+                message: outcome.message,
+                liveUnchanged: outcome.liveUnchanged === true,
+                sha: outcome.sha || null,
+            })
+        }
+        const payload = {
+            ok: true,
+            changed: outcome.changed === true,
+            sha: outcome.sha,
+            ref: outcome.ref,
+            target: outcome.target,
+            files: outcome.files || [],
+            loadedFrom: LOADED_FROM,
+            reload: 'not-needed',
+        }
+        if (!payload.changed) {
+            // The live directory already holds this commit: nothing to reload, and a reload here would
+            // be a hiccup bought for nothing on every push that leaves the plugin alone.
+            return answer(res, 200, payload)
+        }
+        if (path.resolve(LOADED_FROM).toLowerCase() !== path.resolve(config.liveDir).toLowerCase()) {
+            payload.ok = false
+            payload.reload = 'refused'
+            payload.reason =
+                `this plugin runs from ${LOADED_FROM}, not from ${config.liveDir}: the profile's camel-oversight ` +
+                'dependency still points at the repository, so reloading would re-import the old files. Point it at ' +
+                'the live directory and restart DSH once; from then on the button works.'
+            return answer(res, 409, payload)
+        }
+        const hmr = ctx.get('hmr')
+        if (!hmr || typeof hmr.reconcileProfile !== 'function') {
+            payload.ok = false
+            payload.reload = 'unavailable'
+            payload.reason = 'this process has no hmr service (started without a profile), so the new files wait for the next DSH start'
+            return answer(res, 409, payload)
+        }
+        payload.reload = 'scheduled'
+        record({ kind: 'reload', sha: outcome.sha, at: Date.now(), from: LOADED_FROM })
+        answer(res, 200, payload)
+        // The answer first, the restart second: reconciliation stops this plugin's own Loader entry,
+        // and a response written after that would come from a module the process has let go of.
+        setTimeout(() => {
+            hmr.runExclusive(() => hmr.reconcileProfile(['camel-oversight'])).then(
+                (result) => record({ kind: 'reloaded', sha: outcome.sha, at: Date.now(), warnings: result.warnings.length, pending: result.pending.length }),
+                (error) => record({ kind: 'reload-failed', sha: outcome.sha, at: Date.now(), message: clip((error && error.message) || error, 300) }),
+            )
+        }, 250)
     })
 
     // ---- the model's side ------------------------------------------------------------------------

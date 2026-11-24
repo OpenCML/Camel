@@ -74,6 +74,13 @@ function Get-CamelGateConfig {
         # "some path" is a reading about somebody else's tree that looks exactly like a reading about
         # this one.
         baselineWorktree = ''
+        # The batch driver's own: where `merge-batch.ps1` writes the two worktrees it measures. The
+        # gate does not read it and ignores the value, but it must not call it unknown: the batch
+        # copies this one file into every tree it reads, so a key the batch writes and the gate
+        # refuses stops the measurement before a single row -- which is exactly how the first
+        # end-to-end batch run of 2026-11-24 failed, with `has an unknown key 'scratchRoot'` as the
+        # only line in its baseline transcript. A settings file is one file for both tools.
+        scratchRoot      = ''
     }
 
     if ($null -ne $file) {

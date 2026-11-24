@@ -1,0 +1,12 @@
+// The prelude is the built-in layer, and it is one layer for the whole program: a module compiled
+// as a library -- every module of the standard library -- writes a function of the prelude without
+// an import, just as the entry module does (design principles 10.2). This program imports such a
+// module and calls what it exports; neither file imports `prelude`.
+
+import { count, gather } from prelude_caller
+
+func main() => int sync {
+    println(gather(3))
+    println(count::<float>([1.0, 2.0, 3.0]))
+    return 0
+}

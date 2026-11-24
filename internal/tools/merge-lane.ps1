@@ -854,6 +854,31 @@ if ($baselineCheckout.Problem) {
 }
 $BaselineWorktree = $baselineCheckout.Path
 
+# Three trees and three jobs, kept apart on purpose:
+#   $toolRoot         the checkout this SCRIPT lives in -- the instruments (the gate entry, the
+#                     comparer, the record writer) come from here, because the tree the merge makes
+#                     is under judgement and a judged tree must not carry the instrument that judges
+#                     it. `origin/<target>` does not carry these files at all, which is how the first
+#                     full run failed with "Cannot find module ...merge-record.mjs"; an older comparer
+#                     would have accepted `--accept` and ignored `--tree`, seeding a baseline nothing
+#                     could check, and that run would have read as green.
+#   $MainCheckout     the merge position: the seat checkout whose branch is the target, where the
+#                     merge commit is made, which the gates measure, and from which the push is made
+#                     (the hook names that tree for `develop`).
+#   $BaselineWorktree the throwaway tree the baseline is measured in, held at the first parent on a
+#                     branch of its own.
+# The header check and the plan selection are the other way round on purpose: they are about the
+# tree's own files and its own selection rules, so they run the tree's own copies.
+$toolRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+if (-not (Test-Path -LiteralPath (Join-Path $toolRoot 'scripts\merge-readings.mjs'))) {
+    Write-Host ''
+    Write-Host 'STOPPED: this script is not in a checkout that carries the merge instruments (exit 2, nothing measured)' -ForegroundColor Yellow
+    Write-Host "  $toolRoot has no scripts/merge-readings.mjs. The comparer and the record writer are run from the checkout this script lives in, so run it from the merge position's own checkout after pulling."
+    Write-Host ''
+    Write-Host "Nothing was pushed, and local $Target is where it was."
+    exit 2
+}
+
 Push-Location $MainCheckout
 try {
     # The two directories that are not `$MainCheckout\.git` once the merge position is a linked
@@ -1113,7 +1138,7 @@ try {
     if ($WarmBaseline) {
         $warmDir = Join-Path $commonDir 'camel-readings'
         $warmStarted = Get-Date
-        $warmProbe = Test-FastLayerBaseline -CacheDir $warmDir -Develop $originTarget -Checkout $MainCheckout
+        $warmProbe = Test-FastLayerBaseline -CacheDir $warmDir -Develop $originTarget -Checkout $toolRoot
         if ($warmProbe.Hit) {
             $warmProbe.Text -split "`n" | Where-Object { $_ } | ForEach-Object { "  $_" }
             Write-Host ''
@@ -1150,8 +1175,12 @@ try {
         $warmTranscript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-warm-rows-$PID.txt")
         Write-Host ("  measuring the fast layer on $Target {0} in {1} -- the run every merge after this one would otherwise do for itself ..." -f `
             $originTarget.Substring(0,9), $warmPath)
-        $warmRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
-            -Path $warmPath -Plan @('test/plans/smoke', 'test/plans/feat') -ListKnown -NoGpuWatch 2>&1)
+        # Joined, not a bare array: `pwsh -File` passes each element as its own argument, so
+        # `-Plan @('test/plans/smoke', 'test/plans/feat')` arrives as `-Plan test/plans/smoke` plus a
+        # stray positional `test/plans/feat`, and the run stops before measuring anything. The gate's
+        # own `-Plan` reads a comma list; that is the form it is given here.
+        $warmRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
+            -Path $warmPath -Plan 'test/plans/smoke,test/plans/feat' -ListKnown -NoGpuWatch 2>&1)
         $warmExit = $LASTEXITCODE
         $warmSeconds = ((Get-Date) - $warmStarted).TotalSeconds
         [System.IO.File]::WriteAllText($warmTranscript,
@@ -1167,7 +1196,7 @@ try {
             exit 2
         }
         $env:CAMEL_BASELINE_SECONDS = [string][int]$warmSeconds
-        $warmAccept = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $warmTranscript `
+        $warmAccept = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $warmTranscript `
             --cache $warmDir --develop $originTarget --plans $warmPlans --tree $warmMeasured --accept 2>&1)
         $warmAcceptExit = $LASTEXITCODE
         Remove-Item Env:\CAMEL_BASELINE_SECONDS -ErrorAction SilentlyContinue
@@ -1253,7 +1282,7 @@ try {
     # host holds describes an older tree, and this check does not read it.
     Write-Host ''
     Write-Host 'clang syntax check (CI''s clang 19, this tree''s compile lines) ...'
-    $syntax = & pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+    $syntax = & pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
         -Path $MainCheckout -Check clang-syntax -NoBuild -AllowStale -NoGpuWatch 2>&1
     $syntaxExit = $LASTEXITCODE
     $syntax | Where-Object { $_ -match 'clang-syntax:|check |STOPPED|refused|error:' } | Select-Object -Last 8 |
@@ -1410,7 +1439,7 @@ try {
     # comparison that followed was the tree against itself: 0/0/0, and a green that measured nothing.
     # So this asks the comparer's own key (it is the only place the key is written) and, on a miss,
     # measures the tree the merge lands on rather than asking anybody to.
-    $probe = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --cache $compareDir `
+    $probe = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --cache $compareDir `
         --develop $developTip --plans $planSetFile --probe 2>&1)
     $probeExit = $LASTEXITCODE
     $probeText = ($probe | ForEach-Object { "$_" }) -join "`n"
@@ -1453,7 +1482,7 @@ try {
             # own files, because those two trees differ by more than the merge -- measured as
             # `smoke`-plus-`docs.links` (31 cases) where the merge selected `docs.links` (21), and the
             # comparison then refused, correctly, as two runs of different things.
-            $seedRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+            $seedRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
                 -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
             $seedExit = $LASTEXITCODE
             $seedSeconds = ((Get-Date) - $seedStarted).TotalSeconds
@@ -1475,17 +1504,23 @@ try {
         }
         if ($seedRows -eq 0) {
             Write-Host ''
-            Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
+Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading taken; the run exited $seedExit)" -ForegroundColor Yellow
+            # The run's own last lines are the only place that says why it measured nothing: without
+            # them the refusal says "no rows" and the reader has to guess whether it was the plan
+            # set, the slot, the host or the tree. The transcript is removed on the way out, so this
+            # is the one moment they can be read.
+            Write-Host '  the baseline run returned no rows; its last lines:' -ForegroundColor Yellow
+            $seedRun | Select-Object -Last 6 | ForEach-Object { "    $_" }
             Write-Host "  This is not a defect in your tree: the baseline run on develop $($developTip.Substring(0, 9)) recorded no row, so nothing was learned about this change and nothing was pushed."
             Write-Host "  What repairs it: the row block must arrive with rows inside it. Re-run internal/tools/camel-remote.ps1 -Path $baselinePath -Changed -ChangedBase $head -ListKnown -NoGpuWatch and read what it prints; a build that failed or a plan set that starts no case writes no block. An empty baseline is never stored -- it would call every case fixed."
             Write-Host ''
             Write-GitState -MergeCommit $mergeCommit
             exit 2
         }
-        # The seconds and the case count are the reading this step owes: "it measured" is only worth
+# The seconds and the case count are the reading this step owes: "it measured" is only worth
         # something if it says how much. They travel into the entry's `.where` beside the shas.
         $env:CAMEL_BASELINE_SECONDS = [string][int]$seedSeconds
-        $accept = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $seedTranscript `
+        $accept = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $seedTranscript `
             --cache $compareDir --develop $developTip --plans $planSetFile --tree $measuredTree --accept 2>&1)
         $acceptExit = $LASTEXITCODE
         Remove-Item Env:\CAMEL_BASELINE_SECONDS -ErrorAction SilentlyContinue
@@ -1520,8 +1555,8 @@ try {
     # One measurement, one transcript. The rows are read out of it twice -- once for the comparison
     # and once, after the push, to store this commit's own reading as the baseline for the next
     # merge -- so the plan runs once and both readers read the same run.
-    $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
-    $rowsRun = @(& pwsh -NoProfile -File (Join-Path $MainCheckout 'internal\tools\camel-remote.ps1') `
+$transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
+    $rowsRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
         -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
     $rowsExit = $LASTEXITCODE
     # Byte for byte, without a BOM and with LF: the comparer splits on `\n` and matches the markers
@@ -1533,9 +1568,15 @@ try {
     Write-Host ("  {0} row(s) from the run, camel-remote exit {1}, {2} plan target(s){3}" -f `
         $rowsCount, $rowsExit, $planTargets.Count, $(if ($widened) { ' (the whole fast layer)' } else { '' }))
 
-    $compare = @(& node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
+    # The pass record is built from the comparer's own file -- the sets it judged, the plan set and
+    # its hash, the baseline it compared against -- so `--out` is asked for here. Reassembling that
+    # from the transcript would read a second time what was already read once, and the second reading
+    # is where the two would disagree.
+    $diffDir = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-diff-$PID")
+    New-Item -ItemType Directory -Force -Path $diffDir | Out-Null
+    $compare = @(& node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $transcript `
         --cache $compareDir --develop $developTip --plans $planSetFile --tree $comparedTree `
-        --changed-files $changedFilesFile --message-file $messageFile 2>&1)
+        --changed-files $changedFilesFile --message-file $messageFile --out $diffDir 2>&1)
     $compareExit = $LASTEXITCODE
 
     # The same three-way convention as the clang step. 1 is a reading -- the cases that moved are
@@ -1602,8 +1643,6 @@ try {
     # and say the push touches code. It is attempted once. Everything else about the push is what it
     # was: the verdict on whether to push at all is the row comparison above, and `new` and `changed`
     # empty is still what "the readings allow it" means.
-    Write-Host ''
-    Write-Host "pushing HEAD:$Target ..."
     # What the plans of a changed-file list are, read into the fresh tree: `--changed` over the landed
     # file list, then the same run the row stage uses, on the plans that list selects. Both answers
     # come back as data, so a refusal that names nothing is a refusal and not an empty green.
@@ -1623,10 +1662,38 @@ try {
             Remove-Item -LiteralPath $listFile -Force -ErrorAction SilentlyContinue
         }
     }
+
+    # --- the record the pre-push hook reads -------------------------------------
+    # A merge commit may reach the target only when a gate wrote down that it passed. The hook
+    # (`scripts/hooks/pre-push`) walks the first-parent range of the push and refuses a merge commit
+    # with no record, so the record is written before the push and removed if the push does not land:
+    # a claim about a commit nobody can fetch has no reader, and one left behind would let a later
+    # push of this commit pass on a reading taken now. That is the same mistake as a merge made on
+    # local `develop` -- a judgement outliving the tree it was about.
+    $passedDir = Join-Path $commonDir 'camel-passed'
+    New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+    $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
+        --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
+        --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `
+        --baseline-source $(if ($seededFrom) { "measured now on $($developTip.Substring(0, 9))" } else { "cached from an earlier measurement of $($developTip.Substring(0, 9))" }) `
+        --gate headers --gate clang-syntax --gate rows 2>&1)
+    $recordExit = $LASTEXITCODE
+    $recordOut | ForEach-Object { "  $_" }
+    if ($recordExit -ne 0) {
+        Stop-With "the pass record for $($mergeCommit.Substring(0, 9)) could not be written (exit $recordExit)" 'The pre-push hook refuses a merge commit without one, so the push is not attempted.' $mergeCommit
+    }
+    $recordFile = Join-Path $passedDir "$mergeCommit.json"
+
+    Write-Host ''
+    Write-Host "pushing HEAD:$Target ..."
+
     $push = Invoke-PushWithRecovery -Tree $MainCheckout -Target $Target -ReRun $rerunPlans
     $push.Lines | Where-Object { $_ } | ForEach-Object { Write-Host $_ }
 
     if (-not $push.Ok) {
+        # The record names a reading of the merge commit. A push that did not land leaves a claim
+        # about a commit nobody can fetch, so it is removed with the failure rather than outliving it.
+        Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
         switch ($push.Kind) {
             'touches code' {
                 Stop-With "origin/$Target moved while this merge was read, and the commits that landed touch code" `
@@ -1676,6 +1743,7 @@ try {
     $remote = ((& git ls-remote origin "refs/heads/$Target") -split "`t") | Select-Object -First 1
     $local = "$(& git rev-parse HEAD)".Trim()
     if ($remote -ne $local) {
+        Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
         Stop-With "origin/$Target is not the commit just made" "local $local, remote $remote" $mergeCommit
     }
 
@@ -1697,7 +1765,7 @@ try {
     if ($push.Recovered) {
         Write-Host "  warning: no baseline was stored for $($local.Substring(0,9)): the rows this run read are the rows of $($comparedTree.Substring(0,9)), and the documentation that landed made the pushed tree a different one. The next merge on that commit measures instead of comparing"
     } else {
-        & node (Join-Path $MainCheckout 'scripts\merge-readings.mjs') --transcript $transcript `
+        & node (Join-Path $toolRoot 'scripts\merge-readings.mjs') --transcript $transcript `
             --cache $compareDir --develop $local --plans $planSetFile --tree $local --accept 2>&1 |
             Select-Object -Last 1 | ForEach-Object { "  $_" }
         if ($LASTEXITCODE -ne 0) {
@@ -1712,7 +1780,7 @@ try {
     # Which of the two the next merge will do, read rather than left to be discovered as a slow
     # merge: a baseline for this commit covers the plans this run selected, and the fast layer covers
     # every merge whose selection stays inside it.
-    $tipProbe = Test-FastLayerBaseline -CacheDir $compareDir -Develop $local -Checkout $MainCheckout
+    $tipProbe = Test-FastLayerBaseline -CacheDir $compareDir -Develop $local -Checkout $toolRoot
     if ($tipProbe.Hit) {
         Write-Host "  the next merge on $($local.Substring(0,9)) compares against that fast-layer baseline and measures only its own tree"
     } else {
@@ -1748,6 +1816,7 @@ finally {
     if ($planSetFile) { Remove-Item -LiteralPath $planSetFile -Force -ErrorAction SilentlyContinue }
     if ($changedFilesFile) { Remove-Item -LiteralPath $changedFilesFile -Force -ErrorAction SilentlyContinue }
     if ($messageFile) { Remove-Item -LiteralPath $messageFile -Force -ErrorAction SilentlyContinue }
+    if ($diffDir) { Remove-Item -LiteralPath $diffDir -Recurse -Force -ErrorAction SilentlyContinue }
     # (the changed-file list is not a temp file: both sides read it from git)
     Pop-Location
 }

@@ -1439,8 +1439,17 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
     if (throughUsing(written, gct)) {
         return true;
     }
-    return module_->hasImportedRef(written, ImportLayer::Ambient) &&
-           importedEntity(written, ImportLayer::Ambient).has_value();
+    if (module_->hasImportedRef(written, ImportLayer::Ambient) &&
+        importedEntity(written, ImportLayer::Ambient).has_value()) {
+        return true;
+    }
+    // The last layer is also the prelude's own exports (`preludeEntity`, design principles 10.2),
+    // which the two questions above do not reach: they ask what a module imports, not what the
+    // built-in module's declaration file exports. A generic template's body is asked this question
+    // at its declaration, before any instance is built, so without this the two readers of one
+    // name disagree -- `to_array` resolves in a body that is built (`resolveDRefNode`) and is
+    // reported unresolved in a body that is checked (`stdlib/random.cml`, `uniform::<T>`).
+    return preludeEntity(name).has_value();
 }
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
