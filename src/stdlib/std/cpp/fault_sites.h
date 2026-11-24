@@ -38,6 +38,11 @@ uint64_t nodeOriginNear(const camel::graph::Graph *graph, camel::runtime::gc_nod
 
 /// The definition of the function `graph` was compiled from, or the first of its nodes that
 /// has a source position.
+///
+/// This one still names the frozen graph: the answer starts at the origin the debug map keeps for
+/// the graph's own `GraphId`, and a `GraphId` is a number `GraphView` does not answer (it answers
+/// `CalleeRef`, by value, for the graphs a node names). Everything past that first try is shape,
+/// and it is read through the view.
 uint64_t graphOriginOf(
     const camel::core::context::Context &context, const camel::runtime::GCGraph *graph);
 
@@ -55,7 +60,7 @@ class SiteTable {
     /// know (the recursion limit): it is written as it is in `args`, and the runtime replaces
     /// its first occurrence in the message with the value in effect.
     std::string siteFor(
-        const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t node,
+        const camel::graph::Graph *graph, camel::runtime::gc_node_ref_t node,
         camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args,
         std::string filled = {});
 
@@ -63,13 +68,13 @@ class SiteTable {
     /// named with the kind the program wrote instead of the diagnostic's own name (design
     /// principles 3.9), and with the message the program gives as the value filled in.
     std::string siteForProgramFault(
-        const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t node,
+        const camel::graph::Graph *graph, camel::runtime::gc_node_ref_t node,
         const std::string &kind);
 
     /// The name of the Place of the call of a runtime module's operator at `node` of `graph`
     /// (camel/standalone/core.h): the source excerpt and the start of the one-line report,
     /// to which the generated program adds the runtime's diagnostic when the operator faults.
-    std::string placeFor(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t node);
+    std::string placeFor(const camel::graph::Graph *graph, camel::runtime::gc_node_ref_t node);
 
     /// The name of the Site of a fault of `kind` at `origin`, a place of the program that is
     /// not a node: the entry function, for the reports of its command-line arguments.
