@@ -86,16 +86,18 @@ test('a date or a hash that is data is not a trace', () => {
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('`lane-local` is refused on purpose, and the comment was the thing that changed', () => {
-    // One word, two domains. In `src/stdlib/tiles/src/compiler.cpp` the sentence was "a legal graph
-    // outside the initial lane-local subset remains a CPU region" -- GPU lane domains, two lines
-    // after a message about lane domains, with nothing to do with a project lane. The pattern cannot
-    // tell that from `lane-shapeext`, and the two ways out are not equal: a whitelist for one path
-    // grows until nobody reads it, while rewording says the same thing ("the subset the initial
-    // lanes handle") and leaves the pattern sharp. The comment was rewritten; the pattern was not.
+test('the GPU lane domain in the tiles compiler is refused on purpose, and the comment changed', () => {
+    // One word, two domains. In `src/stdlib/tiles/src/compiler.cpp:534` the sentence was "a legal
+    // graph outside the initial lane-local subset remains a CPU region" -- GPU lane domains, two
+    // lines after a message about lane domains, with nothing to do with a project lane. The pattern
+    // cannot tell that word from a project lane code, and the two ways out are not equal: a
+    // whitelist for one path grows until nobody reads it, while rewording says the same thing ("the
+    // subset the initial lanes handle") and leaves the pattern sharp. The comment was rewritten;
+    // the pattern was not.
     //
     // This case is here so the next person who meets it meets the decision as well -- and does not
-    // "fix" the checker by teaching it the exception.
+    // "fix" the checker by teaching it the exception. The word itself is in the data below, not in
+    // this comment: a comment that spells it would be the very hit it explains.
     const root = tree([['src', 'stdlib/tiles/src/compiler.cpp', '// A legal graph outside the initial lane-local subset remains a CPU region.\n']]);
     const { status, stdout } = run(root);
     assert.equal(status, 1, 'the pattern still refuses it: it was the comment that changed, not the check');

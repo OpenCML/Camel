@@ -108,7 +108,10 @@ function commentText(line, state, lang) {
     if (c === '"' || c === "'") { inString = c; i++; continue; }
     if (lang === 'hash' && c === '#') { text += line.slice(i + 1); break; }
     if (c === '/' && line[i + 1] === '/') { text += line.slice(i + 2); break; }
-    if (c === '/' && line[i + 1] === '*') { inBlock = true; i += 2; continue; }
+    // `/* */` is C's. In a shell or PowerShell file a `/*` is a glob (`out/*/`) or a path, and
+    // opening a block on it never closes: everything after it reads as a comment, which turns code
+    // into hits and makes the check refuse lines nobody wrote as prose.
+    if (lang !== 'hash' && c === '/' && line[i + 1] === '*') { inBlock = true; i += 2; continue; }
     i++;
   }
   return [text, inBlock];
