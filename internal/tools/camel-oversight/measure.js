@@ -58,8 +58,10 @@ const LANE_BRANCH = /^lane\//
 async function branchesOf(git) {
     // A lane is unmerged when it has content in neither shared line: develop can run ahead of
     // integration (a docs push, a merge before the seats moved), and a lane cut from that develop is
-    // not unmerged work. Behind is measured against the line it will merge into: integration while it
-    // holds develop, develop otherwise.
+    // not unmerged work. A commit whose change is already on the line under another hash (a cherry-pick,
+    // a rebase, the same fix carried by two lanes) is not unmerged either: the line is compared by patch,
+    // not by name. Behind is measured against the line it will merge into: integration while it holds
+    // develop, develop otherwise.
     const hasIntegration = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
     const integrationHoldsDevelop = hasIntegration &&
         await git(['merge-base', '--is-ancestor', 'origin/develop', 'origin/integration']).then(() => true, () => false)
@@ -70,7 +72,7 @@ async function branchesOf(git) {
         .filter((name) => name && !PROTECTED.includes(name) && LANE_BRANCH.test(name))
     const rows = []
     for (const branch of names) {
-        const ahead = Number(await git(['rev-list', '--count', '--no-merges', branch, ...exclude]).catch(() => 'x'))
+        const ahead = Number(await git(['rev-list', '--count', '--no-merges', '--cherry-pick', '--right-only', `${base}...${branch}`, ...exclude]).catch(() => 'x'))
         if (!Number.isFinite(ahead) || ahead === 0) continue
         const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..${base}`]).catch(() => 'x'))
         rows.push({ branch, ahead, behind: Number.isFinite(behind) ? behind : null })
