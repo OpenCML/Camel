@@ -24,9 +24,32 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `merge-batch.ps1` | The merge position for a BATCH: three or four lanes that touch no file in common, merged into one temporary worktree, measured once over the union of their plans, with the baseline taken on a separate checkout of the merge's first parent. `-Target` names the branch it lands on and pushes to, `develop` (the default) or `integration`, with the same parameter and validation as `merge-lane.ps1`. `-ScratchRoot` is where its two trees and every transcript live, from the settings file's `scratchRoot` like `mergeWorktree`, with no built-in path and exit 2 when the seat names none. See "Batching the merge position" below. |
 | `merge-batch-sets.ps1` | The two readings a batch is composed by: the pairwise intersection of the lanes' changed-file sets, and the plan-set union with the name `scripts/merge-readings.mjs` gives it; plus `Resolve-BatchTarget`, which spells every ref from the target and refuses a target it does not know, and `Resolve-BatchScratchRoot`, which takes the seat's `scratchRoot` and refuses a seat that names none. Separated out because all of it fails quietly, and so it can be checked without a host. |
 | `merge-batch-sets.test.ps1` | Their test: `pwsh -NoProfile -File internal/tools/merge-batch-sets.test.ps1` prints `29 checks, 0 failed` and exits 1 on a failure. The plan-set hash check runs the comparer's own `planSetHash` through node and requires the same string; the target checks include the tool's own refusal of an unknown `-Target`, which needs no host because parameter binding stops before the body runs; the scratch-root checks run the tool against a throwaway git repository to require the exit 2 a seat with no `scratchRoot` gets. |
+| `merge-push-shape.ps1` | The shape a commit must have to be pushed to a target: `Test-PushFirstParent` fetches `origin`, resolves the target's tip, and refuses a single-parent commit (a lane commit that would go straight in) or a merge whose first parent is not that tip. One implementation, dot-sourced by `merge-lane.ps1` (before both of its pushes) and `merge-batch.ps1`; the refusal is D-1124-78 and names the commands that redo the merge on the tip. |
+| `merge-lane-firstparent.test.ps1` | Its test, and the regression beside it: `pwsh -NoProfile -File internal/tools/merge-lane-firstparent.test.ps1` prints `30 checks, 0 failed`. Four cases -- a merge of the tip arrives, a merge of an older tip is refused with the sentence and the redo command, a single-parent commit is refused, and `Invoke-PushWithRecovery` still pushes when the shape is right -- plus the wiring: each tool calls the reading and neither carries a copy of it. |
+| `hook-integration.test.ps1` | The same rule at the push itself: `scripts/hooks/pre-push` refuses a push to `refs/heads/integration` whose commit is not a merge of the remote tip. `pwsh -NoProfile -File internal/tools/hook-integration.test.ps1` runs the real hook (found by its `sh`, taken from git's own install) against a throwaway repository: `13 checks, 0 failed`. |
 | `camel-cleanup.sh` | The cleanup door: a run's temporaries live under `~/camel-work/tmp/<lane>-<time>/` and are judged by the manifest the run wrote when it created them. `rm` accepts a path only when it is under that root **and** in a manifest. |
 | `camel-cleanup.test.ps1` | Its test: the six readings against a fake home (never the real one). `pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <alias>`. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
+
+## What `scripts/hooks/pre-push` refuses
+
+Two rules, and both can be bypassed in one way:
+
+- **`develop` is written from the merge worktree only.** The tree is read from this machine's
+  settings file (`mergeWorktree`); a push from any other tree is refused with the key to set.
+- **An arrival on `integration` is a merge of its tip** (D-1124-78). The hook reads the refs git is
+  about to send, and for `refs/heads/integration` it requires two parents and a first parent equal to
+  the remote tip (a new branch has no tip, so only the parent count applies). A lane commit that
+  would go straight in is refused by name; a merge made on an older tip is refused with the sentence
+  that says what the operator was doing and the command that redoes it on the tip, `rerere`
+  included. `merge-lane.ps1` and `merge-batch.ps1` assert the same thing before their own pushes --
+  the hook is what covers a push made by hand or by a branch re-landed somewhere else.
+
+`git push --no-verify` runs no hook at all, so neither rule can stop a push that asks to skip them.
+That is written here instead of being locked down, because a lock in a hook that git itself offers to
+skip is a lock in name only. **A push made with `--no-verify` says so in its conclusion line**, and
+the chain it wrote is then the thing to repair (the shape is re-read by the next merge, and
+`internal/backlog.md` is where a wrong arrival is recorded).
 
 ## The machine-local settings file
 
