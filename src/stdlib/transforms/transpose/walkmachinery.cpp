@@ -559,7 +559,7 @@ gc_node_ref_t ruleCotangentOf(
         if (arrayPort != nullptr && arrayPort->rankZeroType() != nullptr &&
             port->assignableFrom(ctType)) {
             const std::vector<gc_node_ref_t> source{ct};
-            handed = ctx.draft->addCastNode(port);
+            handed = ctx.draft->addOperNode(port, nullptr, ":op/cast");
             ctx.draft->setNormInputs(handed, std::span<const gc_node_ref_t>(source));
         }
     }

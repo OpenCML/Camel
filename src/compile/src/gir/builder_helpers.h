@@ -85,6 +85,9 @@ inline runtime::GCFillKind fillKindForType(Type *type) {
     }
 }
 
+/// The URI of the operator an OPER node stands for (defined below, beside `isCopyNode`).
+inline std::string_view operUriOf(node_handle_t node);
+
 /// Which construction a node states, if it states one: a FILL says it in its payload, and
 /// `:op/fill` says it by being that operator -- the type it makes then gives the kind
 /// (`fillKindForType`). Everything that reads a construction back asks this rather than the node
@@ -95,11 +98,10 @@ constructionKindOf(node_handle_t node, const Type *type) {
         return std::nullopt;
     }
     if (!nodeIsKind(node, runtime::GCNodeKind::Fill)) {
-        if (!nodeIsKind(node, runtime::GCNodeKind::Oper) || type == nullptr) {
+        if (type == nullptr) {
             return std::nullopt;
         }
-        const auto op = nodeGraphOf(node)->operTarget(node);
-        if (op == nullptr || op->uri() != ":op/fill") {
+        if (operUriOf(node) != ":op/fill") {
             return std::nullopt;
         }
         return fillKindForType(const_cast<Type *>(type));
@@ -134,11 +136,7 @@ inline std::vector<std::pair<size_t, node_handle_t>> constructionValuesOf(node_h
         }
         return values;
     }
-    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        return values;
-    }
-    const auto op = nodeGraphOf(node)->operTarget(node);
-    if (op == nullptr || op->uri() != ":op/fill") {
+    if (operUriOf(node) != ":op/fill") {
         return values;
     }
     const auto norm = normInputsOf(node);
@@ -165,11 +163,7 @@ inline bool isMemberRead(node_handle_t node) {
     if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
-    if (op == nullptr) {
-        return false;
-    }
-    const std::string_view uri = op->uri();
+    const std::string_view uri = operUriOf(node);
     return uri == ":op/access" || uri == ":op/access_key";
 }
 
@@ -302,27 +296,36 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
     return leftEpoch < rightEpoch;
 }
 
-/// A node that copies its one operand, in **either** shape: the COPY kind the front end still
-/// builds, or the `:op/copy` call the flip builds instead.
+/// The URI of the operator an OPER node stands for, whether the node was built from a resolved
+/// declaration (`addOperNode(op, ...)`, whose target the graph holds) or by URI alone (a call the
+/// builder writes for an operation no declaration in scope answers -- `addOperNode(type, uri)`),
+/// whose payload is the only place the name is kept until the graph is encoded.
+inline std::string_view operUriOf(node_handle_t node) {
+    if (node == nullptr) {
+        return {};
+    }
+    if (const auto op = nodeGraphOf(node)->operTarget(node); op != nullptr) {
+        return op->uri();
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return {};
+    }
+    const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
+    if (payload.size() < sizeof(runtime::GCOperBody)) {
+        return {};
+    }
+    return reinterpret_cast<const runtime::GCOperBody *>(payload.data())->uri();
+}
+
+/// A node that copies its one operand: the `:op/copy` call (`lib/std/prelude.cml`), the operator
+/// the COPY node kind was written as (plan 2.3, step 1).
 ///
 /// A copy is not only a value with the value's type. A copy of a constant is still that constant,
 /// and a `var` declaration's copy still stands between the variable and the value it starts from,
 /// so the readers below look *through* a copy to answer two questions of their own -- whether the
-/// value is a constant, and what value a cell was made with. While both shapes exist they have to
-/// see through both; when the kind is gone this predicate loses its first arm and nothing else
-/// moves.
+/// value is a constant, and what value a cell was made with.
 inline bool isCopyNode(node_handle_t node) {
-    if (node == nullptr) {
-        return false;
-    }
-    if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
-        return true;
-    }
-    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        return false;
-    }
-    const auto op = nodeGraphOf(node)->operTarget(node);
-    return op != nullptr && op->uri() == ":op/copy";
+    return node != nullptr && operUriOf(node) == ":op/copy";
 }
 
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
@@ -731,10 +734,9 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
     if (kind == runtime::GCNodeKind::Oper) {
-        // The operator of a node being built is named by its target, not yet by a payload.
-        const auto &op = nodeGraphOf(node)->operTarget(node);
-        const auto id  = op == nullptr ? std::optional<camel::core::OperId>{}
-                                       : camel::core::OperatorTable::instance().lookup(op->uri());
+        // The operator of a node being built is named by its target, and by the payload when the
+        // builder wrote the call by URI alone (`operUriOf`).
+        const auto id = camel::core::OperatorTable::instance().lookup(operUriOf(node));
         return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
     }
     return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
@@ -809,8 +811,7 @@ inline bool isFailCall(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const auto &op = nodeGraphOf(node)->operTarget(node);
-    return op != nullptr && op->uri() == camel::core::kFailOperatorUri;
+    return operUriOf(node) == camel::core::kFailOperatorUri;
 }
 
 /// The chain link itself. No control edge: this is the pair as the model wants it, for a caller

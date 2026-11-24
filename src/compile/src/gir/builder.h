@@ -3800,16 +3800,16 @@ class Builder {
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// The same conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
     /// node whose written type arguments are the operand's type and the target, and whose result
-    /// type is the target. Falls back to `castNodeTo` where no declaration answers, so a pair the
-    /// operator's rule does not cover keeps the node kind it had instead of disappearing.
+    /// type is the target. Where no declaration answers -- a program that shadows `cast` -- the call
+    /// is still written, by its URI (`:op/cast`), which no name in scope can shadow.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// A copy written as the operator it is (`copy::<T>` of the prelude): an OPER node whose one
     /// written type argument is the type copied and whose one ordinary operand is the value, which
-    /// is the whole of what a copy is about -- nothing about it configures the call. Falls back to
-    /// `addCopyNode` where no declaration answers, so a copy the rule does not cover keeps the node
-    /// kind it had instead of disappearing. The caller registers the origin, as it does today: what
-    /// a copy of a constant says about where it came from is the constant's own answer.
+    /// is the whole of what a copy is about -- nothing about it configures the call. Where no
+    /// declaration answers, the call is still written, by its URI (`:op/copy`), which no name in
+    /// scope can shadow. The caller registers the origin, as it does today: what a copy of a
+    /// constant says about where it came from is the constant's own answer.
     node_handle_t copyNodeOf(node_handle_t value, camel::core::type::Type *type);
     /// A construction written as the operator it is (`fill::<T, ...F>` of the prelude): an OPER
     /// node whose ordinary operands are the template the compiler made and then the values, in

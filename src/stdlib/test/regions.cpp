@@ -255,7 +255,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     } else {
         RuntimeGraphDraftSession orphanOwner(context_, program);
         auto &wrongOwner          = orphanOwner.edit(const_cast<GCGraph *>(lostRegionGraph)).edit();
-        const gc_node_ref_t owner = wrongOwner.addCopyNode(camel::core::type::Type::Int32());
+        const gc_node_ref_t owner = wrongOwner.addOperNode(camel::core::type::Type::Int32(), nullptr, ":op/copy");
         std::string refusal;
         bool refused = false;
         if (owner != kInvalidNodeRef) {
@@ -304,7 +304,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         const uint32_t goneRegion = wrongRegion.addRegion(GCRegionKind::Block, 0);
         wrongRegion.retireRegion(goneRegion, false);
         const gc_node_ref_t strandedNode =
-            wrongRegion.addCopyNode(camel::core::type::Type::Int32());
+            wrongRegion.addOperNode(camel::core::type::Type::Int32(), nullptr, ":op/copy");
         std::string refusal;
         bool refused = false;
         if (strandedNode != kInvalidNodeRef) {

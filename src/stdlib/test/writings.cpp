@@ -17,6 +17,7 @@
 #include "camel/runtime/writings.h"
 
 #include <array>
+#include <span>
 #include <bit>
 #include <format>
 #include <stdexcept>
@@ -25,6 +26,23 @@
 using namespace camel::runtime;
 
 namespace {
+
+/// The writing a conversion is: a call of `:op/cast` (`lib/std/prelude.cml`), the operator the
+/// CAST node kind was written as. A writing is compared by its bytes, so the body is one static
+/// value every call shares.
+DraftNodeInit castWriting(camel::core::type::Type *type) {
+    static const camel::runtime::GCOperBody body = [] {
+        camel::runtime::GCOperBody made;
+        made.op   = nullptr;
+        made.oper = camel::core::OperatorTable::instance().intern(":op/cast");
+        return made;
+    }();
+    return DraftNodeInit{
+        .kind     = camel::runtime::GCNodeKind::Oper,
+        .dataType = type,
+        .payload  = std::as_bytes(std::span(&body, 1)),
+    };
+}
 
 struct Report {
     std::ostream &os;
@@ -139,9 +157,7 @@ void congruence(Report &r, const Program &program) {
     r.check("congruence_follows", writings.congruentMerges() > before);
     r.check("classes_grew", writings.store().classRoots(0).size() > classesBefore);
     // Asking for a writing that exists gives it; for one that does not, adds a node.
-    DraftNodeInit init;
-    init.kind = GCNodeKind::Cast;
-    init.dataType = draft.header(ports[0])->dataType;
+    const DraftNodeInit init = castWriting(draft.header(ports[0])->dataType);
     const size_t slots = draft.nodeSlotCount();
     const gc_node_ref_t made = writings.lookupOrAdd(init, std::array{ports[0]});
     const gc_node_ref_t again = writings.lookupOrAdd(init, std::array{ports[1]});
@@ -212,9 +228,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
         writings.build();
         const auto ports = portsOf(transaction);
         writings.assertEqual(ports[0], ports[1]);
-        DraftNodeInit init;
-        init.kind     = GCNodeKind::Cast;
-        init.dataType = draft.header(ports[0])->dataType;
+        const DraftNodeInit init = castWriting(draft.header(ports[0])->dataType);
         GraphDraft::WritingScope scope(draft);
         writings.lookupOrAdd(init, std::array{ports[0]});
         writings.save();

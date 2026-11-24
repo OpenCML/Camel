@@ -173,14 +173,11 @@ enum class NodeCase : uint8_t {
     Other,
 };
 
-/// The operator a kind stands for: a conversion, a copy, a construction or a member read, asked of
-/// a node the front end still builds as one of those four kinds.
+/// The operator a kind stands for: a construction or a member read, asked of a node the front end
+/// still builds as one of those two kinds. A conversion and a copy have no kind any more: they are
+/// calls of `:op/cast` and `:op/copy`, and only `nodeOperatorOf(uri)` answers them.
 inline NodeOperator nodeOperatorOf(runtime::GCNodeKind kind) noexcept {
     switch (kind) {
-    case runtime::GCNodeKind::Cast:
-        return NodeOperator::Cast;
-    case runtime::GCNodeKind::Copy:
-        return NodeOperator::Copy;
     case runtime::GCNodeKind::Fill:
         return NodeOperator::Fill;
     case runtime::GCNodeKind::Accs:
@@ -211,10 +208,6 @@ inline NodeCase nodeCaseOf(runtime::GCNodeKind kind) noexcept {
         return NodeCase::Gate;
     case runtime::GCNodeKind::Loop:
         return NodeCase::Loop;
-    case runtime::GCNodeKind::Cast:
-        return NodeCase::Cast;
-    case runtime::GCNodeKind::Copy:
-        return NodeCase::Copy;
     case runtime::GCNodeKind::Fill:
         return NodeCase::Fill;
     case runtime::GCNodeKind::Accs:

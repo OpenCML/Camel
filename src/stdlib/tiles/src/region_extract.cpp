@@ -71,8 +71,8 @@ std::vector<rt::gc_node_ref_t> copyLoopNodes(
         const auto *node = source.node(ref);
         require(
             node->kind == rt::GCNodeKind::Oper || node->kind == rt::GCNodeKind::Accs ||
-                node->kind == rt::GCNodeKind::Fill || node->kind == rt::GCNodeKind::Cast ||
-                node->kind == rt::GCNodeKind::Port || node->kind == rt::GCNodeKind::Gate,
+                node->kind == rt::GCNodeKind::Fill || node->kind == rt::GCNodeKind::Port ||
+                node->kind == rt::GCNodeKind::Gate,
             "unsupported node in a loop");
         auto *type = typeOf(source, ref);
         if (node->kind == rt::GCNodeKind::Port) {

@@ -33,8 +33,6 @@ namespace {
 
 string recordShape(const camel::runtime::GCNode &record) {
     switch (record.kind) {
-    case camel::runtime::GCNodeKind::Cast:
-    case camel::runtime::GCNodeKind::Copy:
     case camel::runtime::GCNodeKind::Fill:
     case camel::runtime::GCNodeKind::Accs:
     case camel::runtime::GCNodeKind::Brch:
@@ -446,7 +444,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string shape   = recordShape(*node);
         string style   = recordStyle(*node);
         string size    = recordSize(*node);
-        string type    = recordType(*node);
+        string type    = recordType(*graph, nodeRef);
         // Every real node carries its output value type. Export the compiler's type, including
         // static slots, rather than inferring it from the label or from the input types.
         const auto *outputType = nodeStaticSlotType(graph, *node);

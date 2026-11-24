@@ -29,20 +29,20 @@
  * The vocabulary is nine kinds, three kinds of edge and "which region a node is in" (section 1).
  * Four readings differ from today's graph, and every reader still using the old reading is what the
  * first migration deletes:
- *  - CAST, COPY, FILL and ACCS are not kinds: they are operators, declared in `lib/std` like any
- *    other (plan 2.3). Until the front end and the passes stop building those four node kinds, an
- *    adapter folds each of them into `NodeKind::Oper` -- the graph's shape is already the target's
- *    -- and `operatorOf` answers `kNoOper` for one of them. That answer is the literal one and it
- *    is not the same statement as "this node is not an operator": a CAST and a COPY carry no
- *    payload at all, and a FILL or an ACCS carries its own kind and a place, so no operator
- *    identity sits on the node to hand out, and this face answers what the graph stores and never
- *    a name for what it does not (the file comment above). Answering the operator that replaces
- *    one of them instead -- `:op/cast` and its siblings, which `lib/std` does declare -- would also
- *    invite reading the kind's body as that operator's record, which `runtime/oper_shape.h` records
- *    as a real misread. So the two-step reading is the one a caller writes: `NodeKind::Oper` with
- *    a `kNoOper` is one of the four. What a node *does* is `runtime::shapeOfOperation`, which
- *    answers for both forms; this face has no counterpart yet, so a reader on it takes the two
- *    steps itself.
+ *  - FILL and ACCS are not kinds: they are operators, declared in `lib/std` like any other (plan
+ *    2.3). Until the front end and the passes stop building those two node kinds, an adapter folds
+ *    each of them into `NodeKind::Oper` -- the graph's shape is already the target's -- and
+ *    `operatorOf` answers `kNoOper` for one of them. That answer is the literal one and it is not
+ *    the same statement as "this node is not an operator": a FILL or an ACCS carries its own kind
+ *    and a place, so no operator identity sits on the node to hand out, and this face answers what
+ *    the graph stores and never a name for what it does not (the file comment above). Answering
+ *    the operator that replaces one of them instead -- `:op/fill`, `:op/access`, which `lib/std`
+ *    does declare -- would also invite reading the kind's body as that operator's record, which
+ *    `runtime/oper_shape.h` records as a real misread. So the two-step reading is the one a caller
+ *    writes: `NodeKind::Oper` with a `kNoOper` is one of the two. What a node *does* is
+ *    `runtime::shapeOfOperation`, which answers for both forms; this face has no counterpart yet,
+ *    so a reader on it takes the two steps itself. A CAST and a COPY were the other two of the
+ *    four; they are stored OPER records now (`operatorOf` answers), so nothing asks twice for them.
  *  - JOIN does not appear: a BRCH owns one region per arm and its value is the selected arm's
  *    result, so the two paired payloads (`GCBrchBody::join`, `GCJoinBody::brch`) and the arm count
  *    each of them repeats are gone.

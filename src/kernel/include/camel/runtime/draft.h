@@ -786,8 +786,6 @@ class GraphDraft : public camel::graph::Graph {
     addDataNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex, uint8_t runtimeFlags = 0);
     gc_node_ref_t
     addPortNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex, uint8_t runtimeFlags = 0);
-    gc_node_ref_t addCastNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
-    gc_node_ref_t addCopyNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t
     addFillNode(camel::core::type::Type *type, const GCFillBody &body, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addFillNode(

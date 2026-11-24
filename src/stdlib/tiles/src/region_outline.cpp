@@ -17,6 +17,7 @@
 #include "camel/runtime/loop.h"
 #include "camel/runtime/resources.h"
 #include "tiles/device.h"
+#include "src/stdlib/transforms/node_operator.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/placement.h"
@@ -153,7 +154,12 @@ class EffectOrder {
         const auto *header = draft.header(id);
         if (header == nullptr)
             return false;
-        if (header->kind == runtime::GCNodeKind::Dead || header->kind == runtime::GCNodeKind::Cast)
+        if (header->kind == runtime::GCNodeKind::Dead)
+            return true;
+        // A conversion keeps its order even where the two types say it cannot fail: a check the
+        // program wrote is read where it stands, which is what a CAST answered before the operator
+        // took its place (`:op/cast`).
+        if (camel::transforms::nodeOperatorOf(draft, id) == camel::transforms::NodeOperator::Cast)
             return true;
         if (!runtime::nodeIsFreelySchedulable(draft, id))
             return true;

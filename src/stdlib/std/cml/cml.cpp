@@ -673,7 +673,8 @@ class CmlPrinter {
                 return;
             }
             if (node->kind == camel::runtime::GCNodeKind::Gate ||
-                node->kind == camel::runtime::GCNodeKind::Copy) {
+                camel::transforms::nodeOperatorOf(*root, ref) ==
+                    camel::transforms::NodeOperator::Copy) {
                 const auto inputs = root->normInputsOf(ref);
                 if (inputs.empty()) {
                     return;
@@ -1391,7 +1392,8 @@ class CmlPrinter {
                 return false;
             }
             if (node->kind == camel::runtime::GCNodeKind::Gate ||
-                node->kind == camel::runtime::GCNodeKind::Copy) {
+                camel::transforms::nodeOperatorOf(*graph_, user) ==
+                    camel::transforms::NodeOperator::Copy) {
                 current = user;
                 continue;
             }
@@ -1524,7 +1526,9 @@ class CmlPrinter {
             }
             user = users.front();
             node = graph_->node(user);
-            if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Copy) {
+            if (node == nullptr ||
+                camel::transforms::nodeOperatorOf(*graph_, user) !=
+                    camel::transforms::NodeOperator::Copy) {
                 break;
             }
         }
@@ -1547,7 +1551,8 @@ class CmlPrinter {
             const Type *valueType = cell->typeAt(0);
             return valueType != nullptr && typeText(mine) == typeText(valueType);
         }
-        if (node->kind != camel::runtime::GCNodeKind::Cast) {
+        if (camel::transforms::nodeOperatorOf(*graph_, user) !=
+            camel::transforms::NodeOperator::Cast) {
             return false;
         }
         // The cast writes a type; the question is whether the value's own type says something the
@@ -2571,7 +2576,8 @@ class CmlPrinter {
         for (int guard = 0; guard < 16; ++guard) {
             const camel::runtime::GCNode *below = graph_->node(joinRef);
             if (below == nullptr || (below->kind != camel::runtime::GCNodeKind::Gate &&
-                                     below->kind != camel::runtime::GCNodeKind::Copy)) {
+                                     camel::transforms::nodeOperatorOf(*graph_, joinRef) !=
+                                         camel::transforms::NodeOperator::Copy)) {
                 break;
             }
             const auto slots = graph_->normInputsOf(joinRef);
@@ -2698,7 +2704,8 @@ class CmlPrinter {
             const gc_node_ref_t next               = below.back();
             const camel::runtime::GCNode *nextNode = graph_->node(next);
             if (nextNode != nullptr && (nextNode->kind == camel::runtime::GCNodeKind::Gate ||
-                                        nextNode->kind == camel::runtime::GCNodeKind::Copy)) {
+                                        camel::transforms::nodeOperatorOf(*graph_, next) ==
+                                            camel::transforms::NodeOperator::Copy)) {
                 current = next;
                 continue;
             }
@@ -2849,12 +2856,7 @@ class CmlPrinter {
             // written back builds its own (see `collectConstructionTemplates`).
             return;
         }
-        switch (node->kind) {
-        case camel::runtime::GCNodeKind::Port:
-        case camel::runtime::GCNodeKind::Gate:
-        case camel::runtime::GCNodeKind::Brch:
-            return;
-        case camel::runtime::GCNodeKind::Copy:
+        if (camel::transforms::nodeOperatorOf(*graph_, ref) == camel::transforms::NodeOperator::Copy) {
             // A copy the source named is the value a `var` was *declared* with, and it is the
             // declaration: a `var` the builder makes a value rather than a cell
             // (`builder_expr.cpp`'s NREF) gives the name its own copy of the initializer, and no
@@ -2872,6 +2874,12 @@ class CmlPrinter {
                     tailPrintedAsStatement = true;
                 }
             }
+            return;
+        }
+        switch (node->kind) {
+        case camel::runtime::GCNodeKind::Port:
+        case camel::runtime::GCNodeKind::Gate:
+        case camel::runtime::GCNodeKind::Brch:
             return;
         case camel::runtime::GCNodeKind::Oper: {
             const auto *body           = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
@@ -3348,6 +3356,15 @@ class CmlPrinter {
         if (node == nullptr) {
             fail(ref, "a missing node");
         }
+        if (camel::transforms::nodeOperatorOf(*graph_, ref) == camel::transforms::NodeOperator::Copy) {
+            // A `COPY` is the graph's own copy of one value -- a call of `:op/copy` now -- so it has
+            // one slot and the reading is that one.
+            const auto inputs = graph_->normInputsOf(ref);
+            return inputs.empty() ? Expr{"()", 100} : expression(inputs.back());
+        }
+        if (camel::transforms::nodeOperatorOf(*graph_, ref) == camel::transforms::NodeOperator::Cast) {
+            return castExpression(ref);
+        }
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Data:
             return dataExpression(ref);
@@ -3358,7 +3375,6 @@ class CmlPrinter {
             }
             return {found->second, 100};
         }
-        case camel::runtime::GCNodeKind::Copy:
         case camel::runtime::GCNodeKind::Gate: {
             const auto inputs = graph_->normInputsOf(ref);
             if (inputs.empty()) {
@@ -3371,13 +3387,9 @@ class CmlPrinter {
             // last slot made an arm's value the count of its own last `println`
             // (`linear/runtime/order_edges_regions.cml`: the arm's value is 4, the gate's last slot
             // is `println(2)` and prints 2, which the round trip read as rc 54 against the origin's
-            // 56). A `COPY` is the graph's own copy of one value, so it has one slot and either
-            // reading answers the same node.
-            return expression(
-                node->kind == camel::runtime::GCNodeKind::Gate ? inputs.front() : inputs.back());
+            // 56).
+            return expression(inputs.front());
         }
-        case camel::runtime::GCNodeKind::Cast:
-            return castExpression(ref);
         case camel::runtime::GCNodeKind::Accs:
             return accessExpression(ref);
         case camel::runtime::GCNodeKind::Fill:

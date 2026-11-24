@@ -103,8 +103,8 @@ EditRecordTestPass::apply(const camel::runtime::Program *program, std::ostream &
     draft.addEditListener(&listener);
 
     // The low-level entry: a node made, then an operand added to an existing node.
-    const node_handle_t erased  = builder->addCopyNode(camel::core::type::Type::Float32());
-    const node_handle_t operand = builder->addCopyNode(camel::core::type::Type::Float32());
+    const node_handle_t erased  = builder->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    const node_handle_t operand = builder->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
     const camel::runtime::gc_node_ref_t erasedId  = nodeIdOf(erased);
     const camel::runtime::gc_node_ref_t operandId = nodeIdOf(operand);
     const camel::runtime::gc_node_ref_t reads[1]  = {operandId};
