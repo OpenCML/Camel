@@ -2644,7 +2644,12 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // steps in the slot were 2.9-4.4 s together.
     // A `parallel = false` test passes no hook and keeps its slot to the end (see executePlans).
     if (typeof logContext.releaseSlot === 'function') logContext.releaseSlot()
-    const cpuReading = wrapForCpu ? readCpuReport(proc.cpuReport) : { cpuMs: null, reason: null }
+    const cpuReading = wrapForCpu
+        ? readCpuReport(proc.cpuReport)
+        // Nothing was wrapped, because this host has no reading to take and the test declared no
+        // budget: the reason is still recorded, so that `cpu_ms: null` never has to be read as `0`
+        // by whoever opens the record later.
+        : { cpuMs: null, reason: `no reading was taken: ${NO_CPU_TIME_SKIP}` }
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
         exitCode: proc.status,
@@ -2880,10 +2885,20 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 // at all, and this says why (NO_CPU_TIME_SKIP) instead of leaving a pass that looks
                 // like a judged one.
                 margin_skipped: result.marginSkipped ?? null,
+                // Why there is no CPU figure, when there is none. `cpu_ms: null` on its own reads as
+                // "used no CPU", which on a host with no /proc/self/stat is exactly backwards, so the
+                // reason is written next to the null instead of being left to a console line.
+                cpu_reason: result.cpuReason ?? null,
                 // The card this test was given when it did not name one (`cuda_free_device`):
                 // ordinal, uuid and the memory reading the choice came from.
                 cuda_device: result.cudaDevice ?? null,
+                // This test's plan, the plan that ran it. For a `[[sweeps]]` copy these are the
+                // sweep's own, and `source_plan` / `source_test` name what was copied.
                 plan_path: test.__planPath,
+                sweep: test.__sweep ?? null,
+                source_plan: test.__sweepSource ? test.__sweepSource.plan_path : null,
+                source_plan_id: test.__sweepSource ? test.__sweepSource.plan_id : null,
+                source_test: test.__sweepSource ? test.__sweepSource.test : null,
                 test_tmp: result.testTmpRelative || null,
             },
             null,
@@ -3090,6 +3105,8 @@ export function expandSweeps(doc, planPath) {
         const riskSample = Number.isInteger(sweep.risk_sample) && sweep.risk_sample > 0 ? sweep.risk_sample : 0
         for (const source of sweepSources(sweep, planPath)) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
+            const sourceDir = path.dirname(source)
+            const sweepId = doc.id || path.basename(planPath, '.plan.toml')
             // A copy is named after the sweep, its source plan and the source test. The source
             // plan is part of the name because two plans may both have a test called `shapes`
             // without it the copies collide, and a back end waits for, and compares
@@ -3126,6 +3143,25 @@ export function expandSweeps(doc, planPath) {
                     verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
                     __backendReference: test.__backendReference ? rename(test.__backendReference) : null,
                     __sweep: sweep.name,
+                    // A copy belongs to the plan that runs it, not to the plan it was copied from.
+                    // Before this, a copy's `meta.json` named two different plans: `plan_id` was the
+                    // sweep's (from the plan the entry lives under) and `plan_path` was the source's
+                    // (`...test` carried the source's `__planPath` through), and every reader that
+                    // aggregated cost by `plan_path` charged the copy to the source plan. Nothing is
+                    // lost by owning it: the source stays in the copy's name
+                    // (`<sweep>:<source plan id>:<source test>`) and in `__sweepSource`.
+                    __planPath: planPath,
+                    __planId: sweepId,
+                    __sweepSource: { plan_path: source, plan_id: sourceId, test: test.name },
+                    // A path in an entry is relative to the plan file that declares it, so the
+                    // copied one is resolved here, against the source plan, while that is still
+                    // known. An absolute path resolves to itself, which is why every other reader
+                    // can keep resolving `case` against `__planPath`.
+                    ...(typeof test.case === 'string' ? { case: path.resolve(sourceDir, test.case) } : {}),
+                    ...(typeof test.golden === 'string' ? { golden: path.resolve(sourceDir, test.golden) } : {}),
+                    ...(typeof test.verify_script_path === 'string'
+                        ? { verify_script_path: path.resolve(sourceDir, test.verify_script_path) }
+                        : {}),
                     ...(sampleCount > 0 ? { tier: sampled.has(test) ? 'fast' : 'milestone' } : {}),
                 })
             }
@@ -3430,7 +3466,14 @@ function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false,
             try {
                 const { doc, tests: ownTests } = loadPlanTests(planPath)
                 const tests = [...ownTests, ...expandSweeps(doc, planPath)]
-                return { ...doc, __planPath: planPath, tests }
+                // The name a plan is recorded under, with the same fallback `loadPlanTests` gives its
+                // tests. Fourteen plan files declare no `id`, and every record that read
+                // `plan: entry.plan.id` then lost the key entirely (`JSON.stringify` drops an
+                // undefined value), so 303 tests of those plans sat in summary.json belonging to no
+                // plan, and their log directory was literally `undefined/`. A plan with no declared
+                // id is now named after its file, which is what every other reader already assumed.
+                const planId = doc.id || path.basename(planPath, '.plan.toml')
+                return { ...doc, id: planId, __planPath: planPath, tests }
             } catch (error) {
                 // A schema error is a property of this plan file: fail this plan and go on. Any
                 // other error is a defect of the runner or of a sweep target, and stays fatal.
@@ -3766,9 +3809,16 @@ function slotTiming(entry, clock, marks, windows) {
     const verifyMs = verification && verification.wallMs ? verification.wallMs : 0
     return {
         plan: entry.plan.id,
+        plan_path: entry.plan.__planPath,
         test: entry.test.name,
         status: entry.outcome ? entry.outcome.status : 'fail',
         serial: clock.serial === true,
+        // This test's own CPU time (user + system, the whole process tree), the figure its
+        // `cpu_budget_ms` and the timeout margin are judged against -- and `cpu_reason` where this
+        // host reported none, so a null here is a stated absence and not a zero.
+        cpu_ms: result && Number.isFinite(result.cpuMs) ? roundMs(result.cpuMs) : null,
+        cpu_budget_ms: result && typeof result.cpuBudgetMs === 'number' ? roundMs(result.cpuBudgetMs) : null,
+        cpu_reason: result ? result.cpuReason ?? null : null,
         // How many of the run's slot permits this test held: a `parallel = false` test and a
         // benchmark ask for all of them, so it is the one case where a held slot is not one
         // eighth of the run's capacity.
@@ -3927,6 +3977,43 @@ function startLoopMonitor() {
     return () => {
         clearInterval(timer)
         return stalls
+    }
+}
+
+/**
+ * What this run could and could not read about CPU, for `summary.json`. A `cpu_ms: null` on every
+ * test is not "every test used no CPU": on this host class it is "the kernel offered no figure", and
+ * a record read a week later has to be able to tell that apart from a runner that stopped measuring.
+ * So the run states it once, with the reasons it recorded per test and how many tests declared a
+ * budget, instead of leaving the absence to be inferred from 8,000 nulls.
+ */
+function summarizeCpuReadings(records) {
+    const reasons = new Map()
+    let withReading = 0
+    let budgeted = 0
+    let budgetWithReading = 0
+    for (const record of records) {
+        if (Number.isFinite(record.cpu_ms)) withReading += 1
+        else {
+            const reason = record.cpu_reason || NO_CPU_TIME_SKIP
+            reasons.set(reason, (reasons.get(reason) || 0) + 1)
+        }
+        if (typeof record.cpu_budget_ms === 'number') {
+            budgeted += 1
+            if (Number.isFinite(record.cpu_ms)) budgetWithReading += 1
+        }
+    }
+    return {
+        available: withReading > 0,
+        platform: process.platform,
+        tests: records.length,
+        with_reading: withReading,
+        without_reading: records.length - withReading,
+        cpu_budget_tests: budgeted,
+        cpu_budget_with_reading: budgetWithReading,
+        reasons: [...reasons.entries()]
+            .sort((lhs, rhs) => rhs[1] - lhs[1] || lhs[0].localeCompare(rhs[0]))
+            .map(([reason, count]) => ({ reason, count })),
     }
 }
 
@@ -4772,6 +4859,7 @@ async function main() {
     }
 
     const split = gateSplit(outcome.wallMs)
+    const cpuReadings = summarizeCpuReadings(outcome.timings)
     const slotTiming = summarizeSlotTimings(
         outcome.timings,
         outcome.wallMs,
@@ -4800,6 +4888,10 @@ async function main() {
                 // Where the slots went, for every test: the slot held before a child existed and
                 // after it was gone, plus the aggregates and the tests that own most of it.
                 slot_timing: slotTiming,
+                // Whether this host's CPU figures exist at all, and why not where they do not: the
+                // same statement the `[WARN]` line makes, in the record, so that `cpu_ms: null` in a
+                // `test_timings[]` row has a reason attached to the run it belongs to.
+                cpu_readings: cpuReadings,
                 test_timings: outcome.timings,
                 // What the run left in the checkout, in the same record as everything else it
                 // measured: the paths, the tests that were running when each appeared, and the two
