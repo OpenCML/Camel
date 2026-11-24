@@ -534,8 +534,28 @@ export function apply(ctx, rawConfig) {
         const agent = target()
         if (!agent) return
         const now = Date.now()
+        // A call that only waits on a background job loses nothing when interrupted: the job keeps
+        // running. While such a wait holds dispatches behind it, the turn is ended at once, not after
+        // blockCancelMinutes, since the dispatches cannot arrive any other way.
+        const held = [...delivered.values()].filter(
+            (entry) => entry.messageId && !superseded.has(entry.id) && stillQueued(agent, entry.messageId) &&
+                now - entry.at >= (config.heldDispatchMinutes ?? 10) * 60_000,
+        )
         for (const [callId, call] of pendingCalls) {
             if ((config.blockExempt || []).includes(call.name)) continue
+            if (held.length && (config.waitTools || ['job_output']).includes(call.name)) {
+                pendingCalls.delete(callId)
+                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律 5）。`
+                nudge('wait-ended', 'urgent', text, (a) => {
+                    a.cancel({ kind: 'user' }, { keepInbox: true })
+                    a.followup(Object.freeze({
+                        id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
+                        content: Object.freeze([Object.freeze({ type: 'text', text })]),
+                    }))
+                    return 'cancel+followup'
+                })
+                continue
+            }
             const minutes = (now - call.at) / 60_000
             if (minutes >= config.blockCancelMinutes) {
                 pendingCalls.delete(callId)
