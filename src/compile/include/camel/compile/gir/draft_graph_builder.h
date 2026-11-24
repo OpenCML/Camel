@@ -201,6 +201,27 @@ class DraftGraphBuilder {
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
         return drefTarget(ref(nodeId));
     }
+    /// Whether an OPER node names an operator this builder registered. A call built from a resolved
+    /// declaration has one (`addOperNode(op, ...)`, `retargetOperNode`); a call the front end writes
+    /// by **URI alone** -- which is how a conversion and a copy are written, so that a program that
+    /// shadows the operator's name still gets the call the language means (`addOperNode(type, uri)`)
+    /// -- never does, and its payload is the only place the name is kept until the graph is encoded.
+    /// A node of another kind has none either: "which operator does this name" has nothing to ask.
+    ///
+    /// The two questions are not interchangeable, which is the one thing a caller has to know:
+    /// * `operTarget` is a **precondition check**: it answers for a node this builder registered a
+    ///   target for, and for any other node it reports `DraftGraphBuilder operator target not found.`
+    ///   and aborts -- in every build, not only a debug one (`GUARD`). It is the right question when
+    ///   the caller knows by construction how the node was written, as the sites that build a call
+    ///   from a resolved declaration do.
+    /// * `hasOperTarget` is the question to ask **first** when the node may be either shape, or of
+    ///   another kind altogether: it answers `false` and aborts nothing. `operUriOf`
+    ///   (`builder_helpers.h`) is the reader every caller should use for "which operator does this
+    ///   name", because it asks this and then falls back to the payload.
+    bool hasOperTarget(runtime::DraftNodeRef node) const {
+        return operTargets_.contains(node.id);
+    }
+    bool hasOperTarget(runtime::gc_node_ref_t nodeId) const { return hasOperTarget(ref(nodeId)); }
     const oper_idx_ptr_t &operTarget(runtime::DraftNodeRef node) const;
     const oper_idx_ptr_t &operTarget(runtime::gc_node_ref_t nodeId) const {
         return operTarget(ref(nodeId));

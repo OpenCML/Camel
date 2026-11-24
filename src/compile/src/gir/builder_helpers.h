@@ -300,15 +300,25 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
 /// declaration (`addOperNode(op, ...)`, whose target the graph holds) or by URI alone (a call the
 /// builder writes for an operation no declaration in scope answers -- `addOperNode(type, uri)`),
 /// whose payload is the only place the name is kept until the graph is encoded.
+///
+/// **This is the reader for "which operator does this name", and it answers on any node.** The
+/// empty answer is a whole answer: a node that names no operator (a port, a constant, a
+/// construction, an operation whose payload carries no body) names none, and every caller here
+/// (`isCopyNode`, `constructionKindOf`, `isMemberRead`, `nodeTakesAnOrder`, `isFailCall`) is asking
+/// that question about a value it did not build and cannot have classified first.
+///
+/// So the kind and the target are asked in that order. `operTarget` is a precondition check that
+/// **aborts** for a node without a registered target (`DraftGraphBuilder`), and every node of
+/// another kind is such a node -- asking it first is what aborted the whole front end once, on the
+/// first operand that was a port or a constant. `hasOperTarget` is the question to ask first; it
+/// answers for the URI-only shape too, whose name then comes from the payload.
 inline std::string_view operUriOf(node_handle_t node) {
-    if (node == nullptr) {
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return {};
     }
-    if (const auto op = nodeGraphOf(node)->operTarget(node); op != nullptr) {
-        return op->uri();
-    }
-    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        return {};
+    const DraftGraphBuilder *graph = nodeGraphOf(node);
+    if (graph->hasOperTarget(node)) {
+        return graph->operTarget(node)->uri();
     }
     const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
     if (payload.size() < sizeof(runtime::GCOperBody)) {
