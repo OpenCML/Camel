@@ -69,10 +69,13 @@
     push runs there and nowhere else: for `develop` the pre-push hook allows it from that tree only.
 
 .PARAMETER ScratchRoot
-    Where the two temporary worktrees live. Default `D:\Temp\camel-batch`. Each is created once with a
-    creation record (rule 12, `internal/collab/rules.md`) and removed only after a push, and only when
-    the merge worktree's target branch is the commit just pushed -- a tree holding an unpushed merge
-    is the one thing a cleanup must not delete.
+    Where the two temporary worktrees and every transcript live, from the settings file's
+    `scratchRoot` by default. There is no built-in path: the value is machine-local and belongs to
+    the seat, and a batch that wrote into a directory nobody named would measure whatever was lying
+    there. A seat whose settings file does not name one is refused (exit 2) with the key to add. Each
+    tree is created once with a creation record (rule 12, `internal/collab/rules.md`) and removed only
+    after a push, and only when the merge worktree's target branch is the commit just pushed -- a
+    tree holding an unpushed merge is the one thing a cleanup must not delete.
 
 .PARAMETER Jobs
     The plan runner's width, narrowed by the host slot as usual.
@@ -101,7 +104,9 @@ param(
     [string] $Target = 'develop',
     [string] $ToolTree = '',
     [string] $MergeWorktree = '',
-    [string] $ScratchRoot = 'D:\Temp\camel-batch',
+    # No default: the settings file's `scratchRoot`, read below, or a refusal. A path this tool
+    # assumes is a path the seat did not choose.
+    [string] $ScratchRoot = '',
     [int] $Jobs = 8,
     [int] $SlotWaitSeconds = 1800,
     [switch] $NoPush,
@@ -243,6 +248,12 @@ if (-not $MergeWorktree) {
     Stop-With 'the settings file names no mergeWorktree' "Add ``mergeWorktree`` to ${cfgPath}: only that tree may push $($targetInfo.Name), so the batch pushes from it and nowhere else." 2
 }
 $MergeWorktree = "$MergeWorktree".TrimEnd('\', '/')
+# Same rule as `mergeWorktree`, same file, and the same refusal when it is missing: the scratch root
+# is where this machine's batch writes two worktrees and every transcript, so it is a setting and not
+# a guess. `D:\Temp\camel-batch` used to be assumed here, which meant a seat could have a batch
+# measure a directory nobody had made for it.
+try { $ScratchRoot = Resolve-BatchScratchRoot -ScratchRoot $ScratchRoot -Config $cfg }
+catch { Stop-With 'the batch has no scratch root' "$($_.Exception.Message) ($cfgPath)" 2 }
 if ($cfg.sshHost) { $script:sshHost = $cfg.sshHost }
 
 $gate = Join-Path $ToolTree 'internal\tools\camel-remote.ps1'

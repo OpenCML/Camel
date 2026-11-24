@@ -1,5 +1,6 @@
 # What `merge-batch-sets.ps1` decides, checked without a host, a build or a lane: the pairwise file
-# sets, the plan-set union and its hash, and the target branch a batch lands on (`Resolve-BatchTarget`).
+# sets, the plan-set union and its hash, the target branch a batch lands on (`Resolve-BatchTarget`),
+# and the scratch root it writes into (`Resolve-BatchScratchRoot`).
 #
 #   pwsh -NoProfile -File internal/tools/merge-batch-sets.test.ps1
 #
@@ -10,6 +11,10 @@
 # requires the same string. It is the one check here that is not about this file's own idea of
 # correctness: a record that names its plan set by a different hash than the baseline cache does
 # cannot be joined to a baseline, and nothing downstream would say so.
+#
+# The scratch-root checks run the tool itself against a throwaway git repository whose settings file
+# names a merge worktree but no scratchRoot, because "exit 2" is a property of the script and not of
+# the resolver: the resolver throwing is only worth something if the script turns it into that exit.
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -130,6 +135,42 @@ $said = @(& pwsh -NoProfile -File $tool -Branch 'lane/not-a-batch' -Target 'trun
 $saidExit = $LASTEXITCODE
 Check 'the script refuses an unknown -Target (exit 1)' ($saidExit -eq 1) "exit $saidExit"
 Check 'the script''s refusal names the value it was given' ((@($said | ForEach-Object { "$_" }) -join ' ') -match 'trunk') (@($said | ForEach-Object { "$_" }) -join ' ')
+
+# --- the scratch root: the seat's setting, never a path of this tool's own ----
+# `-ScratchRoot` is read the way `mergeWorktree` is, from the seat's settings file. The tool used to
+# assume `D:\Temp\camel-batch`; a batch then wrote into a directory the seat had not made, and what
+# it measured was whatever was lying there.
+$noScratch = ''
+try { Resolve-BatchScratchRoot -ScratchRoot '' -Config ([pscustomobject]@{}) | Out-Null } catch { $noScratch = "$_" }
+Check 'a seat with no scratch root is refused' ($noScratch -ne '') $noScratch
+Check 'the refusal names the key it needs and the setting beside it' ($noScratch -match 'scratchRoot' -and $noScratch -match 'mergeWorktree') $noScratch
+$fromSeat = Resolve-BatchScratchRoot -ScratchRoot '' -Config ([pscustomobject]@{ scratchRoot = 'D:\Temp\seat-scratch\' })
+Check 'the settings file''s scratchRoot is used, trailing separator and all' ($fromSeat -eq 'D:\Temp\seat-scratch') $fromSeat
+$explicit = Resolve-BatchScratchRoot -ScratchRoot 'D:\Temp\explicit-scratch\' -Config ([pscustomobject]@{ scratchRoot = 'D:\Temp\seat-scratch' })
+Check '-ScratchRoot wins over the settings file' ($explicit -eq 'D:\Temp\explicit-scratch') $explicit
+
+# The parameter carries no default of its own: the tool's declaration is what used to name a path
+# nobody chose, and a check that only called the resolver would not notice it coming back.
+$declared = @(Select-String -LiteralPath $tool -Pattern "\[string\] \`$ScratchRoot = '[^']")
+Check 'the tool declares no built-in scratch path' ($declared.Count -eq 0) "`[$($declared.Count) declaration(s) of a default`]"
+
+# And the script-level fact: a settings file with a mergeWorktree but no scratchRoot stops with 2.
+# The repository is a throwaway one, so this needs no host, no lane and no settings file of its own.
+$scratchRepo = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-batch-settings-$PID")
+New-Item -ItemType Directory -Force -Path (Join-Path $scratchRepo 'internal\tools') | Out-Null
+try {
+    & git -C $scratchRepo init -q 2>&1 | Out-Null
+    $repoTop = "$(& git -C $scratchRepo rev-parse --show-toplevel 2>$null)".Trim()
+    $cfgJson = ([ordered]@{ mergeWorktree = $repoTop } | ConvertTo-Json -Compress)
+    [System.IO.File]::WriteAllText((Join-Path $scratchRepo 'internal\tools\camel-gate.local.json'), $cfgJson,
+        (New-Object System.Text.UTF8Encoding($false)))
+    $said = @(& pwsh -NoProfile -File $tool -Branch 'lane/not-a-batch' -ToolTree $repoTop 2>&1)
+    $saidExit = $LASTEXITCODE
+    Check 'a settings file with no scratchRoot stops the batch (exit 2)' ($saidExit -eq 2) "exit $saidExit"
+    Check 'and the refusal names the key, not a path it fell back to' ((@($said | ForEach-Object { "$_" }) -join ' ') -match 'scratchRoot') (@($said | ForEach-Object { "$_" }) -join ' ')
+} finally {
+    Remove-Item -LiteralPath $scratchRepo -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 Write-Host ''
 Write-Host "$checks checks, $failed failed"

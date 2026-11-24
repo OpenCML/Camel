@@ -2,6 +2,8 @@
 # a host, a build or a lane: which pairs of lanes touch a file in common, and what the plans they
 # select add up to. The branch the batch lands on is here for the same reason: which refs a target
 # spells is decided once, by name, and a value it does not know is refused here rather than defaulted.
+# Where the batch writes its worktrees is here for that reason too: it is read from the seat's
+# settings file, and a seat that names none is refused instead of given a path of this tool's choosing.
 #
 # They are separated out for the reason `camel-remote-args.ps1` is: this is the part that fails
 # quietly. "These lanes look like they touch different things" is an impression, and the pair it gets
@@ -11,7 +13,8 @@
 #
 # `merge-batch-sets.test.ps1` checks both, plus the plan-set hash against the one
 # `scripts/merge-readings.mjs` computes, because a record that names a plan set by a different hash
-# than the baseline cache does is a record nobody can join to a baseline.
+# than the baseline cache does is a record nobody can join to a baseline. It checks the target and
+# the scratch root the same way: by calling the resolvers, with no host involved.
 
 # The branch a batch lands on, and every ref the run builds from it: the base it reads
 # (`origin/<target>`), the refspec it pushes (`<target>`), and the remote ref it reads back
@@ -46,6 +49,24 @@ function Resolve-BatchTarget {
         # of them is visible from the branch alone.
         Statement = if ($name -eq 'develop') { 'target: develop (the default)' } else { "target: $name (from -Target)" }
     }
+}
+
+# Where the batch's two worktrees and every transcript are written. `-ScratchRoot` may name it; when
+# it does not, the settings file's `scratchRoot` does, and when neither does this refuses. There is
+# no default, for the same reason `mergeWorktree` has none: the path is machine-local and belongs to
+# the seat, and a path the tool writes into without anybody having said it may is a build's scratch
+# where nothing is watching it -- the old `D:\Temp\camel-batch` was exactly that, and a seat that
+# never made that directory got a batch that measured whatever happened to be lying there. The
+# refusal names the key and the file, and never falls back to a path this checkout does not own.
+function Resolve-BatchScratchRoot {
+    param([string] $ScratchRoot = '', $Config)
+    $given = "$ScratchRoot".Trim()
+    if ($given) { return $given.TrimEnd('\', '/') }
+    $fromFile = if ($Config -and $Config.scratchRoot) { "$($Config.scratchRoot)".Trim() } else { '' }
+    if (-not $fromFile) {
+        throw 'the settings file names no scratchRoot: the batch creates two worktrees and every transcript under one directory, so it needs a path it owns; add ``scratchRoot`` beside ``mergeWorktree``, because this script has no default to fall back to'
+    }
+    return $fromFile.TrimEnd('\', '/')
 }
 
 # One entry per pair of lanes, in the order the lanes were given. `Shared` is the intersection of the
