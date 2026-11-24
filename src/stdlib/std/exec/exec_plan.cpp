@@ -17,6 +17,7 @@
 #include "camel/facts/control_regions.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/control_regions.h"
+#include "graph/graph_view.h"
 
 #include <algorithm>
 #include <atomic>
@@ -30,6 +31,14 @@
 namespace camel::runtime {
 
 namespace {
+
+/// The face a reader asks about the graph's **content** (`graph/graph_view.h`): a node's kind, its
+/// ports, its users, the operator it names, the type of its value, the region it is in. What the
+/// plan is about -- the runtime slot a node writes (`dataIndex`, section 13) and the execution plan
+/// itself -- is not on that face, and the functions below that need one keep the representation for
+/// it while asking the face for everything else.
+using View     = camel::graph::GraphView;
+using ViewKind = camel::graph::NodeKind;
 
 gc_data_idx_t dataIndexOf(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
@@ -46,19 +55,24 @@ using IntervalBound = ExecLoop::IntervalBound;
 /// writes; one nothing computes -- the constant the front end wrote, or the constant a pass folded
 /// a computation into -- is the value itself, which the plan reads without a frame slot.
 IntervalBound boundOf(const GCGraph &graph, gc_node_ref_t ref) {
-    const GCNode *node = graph.node(ref);
-    const auto *type   = node == nullptr ? nullptr : node->dataType();
-    if (node != nullptr && node->kind == GCNodeKind::Data && node->dataIndex < 0 &&
-        type != nullptr && type->code() == camel::core::type::TypeCode::Int64) {
-        const auto slots   = graph.staticSlots();
-        const size_t index = static_cast<size_t>(-static_cast<int64_t>(node->dataIndex));
-        if (index != 0 && index < slots.size() && slots[index] != NullSlot) {
+    const View &view                   = graph.view();
+    const camel::core::type::Type *type = view.typeOf(ref);
+    if (view.kindOf(ref) == ViewKind::Data && type != nullptr &&
+        type->code() == camel::core::type::TypeCode::Int64) {
+        // The two halves of a DATA node's one field (`dataIndex`) are two questions: a negative
+        // value indexes the static area, which is the graph's content, and the face answers the
+        // *value* at it (`constantOf`) without handing the array out (graph_view.h says why). A
+        // slot nothing writes (NullSlot) is not a bound, which is what the index test said before.
+        const std::optional<::slot_t> constant = view.constantOf(ref);
+        if (constant.has_value() && *constant != NullSlot) {
             return IntervalBound{
                 .slot       = 0,
-                .value      = camel::core::rtdata::fromSlot<int64_t>(slots[index]),
+                .value      = camel::core::rtdata::fromSlot<int64_t>(*constant),
                 .isConstant = true};
         }
     }
+    // The other half, a non-negative `dataIndex`, is the runtime slot: section 13's, and not on the
+    // face.
     return IntervalBound{.slot = dataIndexOf(graph, ref), .value = 0, .isConstant = false};
 }
 
@@ -114,25 +128,26 @@ namespace {
 using camel::runtime::valueBehindGates;
 
 /// Whether the value of `node` is read only by the node at `reader` (one reference, the reader's):
-/// a value nothing else reads can be left unmade.
+/// a value nothing else reads can be left unmade. It asks the face only (`inputs`): the two runs of
+/// a node's input table are `inputs(Normal)` and `inputs(Context)`.
 bool readOnlyBy(
-    const GCGraph &graph, std::span<const gc_node_ref_t> live, gc_node_ref_t node,
+    const View &graph, std::span<const gc_node_ref_t> live, gc_node_ref_t node,
     gc_node_ref_t reader) {
     size_t seen = 0;
     for (gc_node_ref_t at : live) {
-        for (gc_node_ref_t input : graph.normInputsOf(at)) {
+        for (gc_node_ref_t input : graph.inputs(at, camel::graph::PortGroup::Normal)) {
             if (input == node && ++seen > 1) {
                 return false;
             }
         }
-        for (gc_node_ref_t input : graph.withInputsOf(at)) {
+        for (gc_node_ref_t input : graph.inputs(at, camel::graph::PortGroup::Context)) {
             if (input == node && ++seen > 1) {
                 return false;
             }
         }
     }
     // The one reference is the reader's own with input (the region's result).
-    for (gc_node_ref_t input : graph.withInputsOf(reader)) {
+    for (gc_node_ref_t input : graph.inputs(reader, camel::graph::PortGroup::Context)) {
         if (input == node) {
             return true;
         }
@@ -156,7 +171,7 @@ bool planStateComponents(
     if (loop.collectionCount != 0 || loop.stateCount < 2 || loop.valueType == nullptr) {
         return false;
     }
-    const auto results = graph.withInputsOf(loopRef);
+    const auto results = graph.view().inputs(loopRef, camel::graph::PortGroup::Context);
     ASSERT(!results.empty(), "A LOOP node has the result of its body region.");
     const gc_node_ref_t bodyValue = valueBehindGates(graph, results.front());
     const GCNode *fill            = graph.node(bodyValue);
@@ -180,7 +195,7 @@ bool planStateComponents(
     }
     // The template of the FILL is a constant: the tuple is made from it, so it holds no value of
     // the body's.
-    const auto norm      = graph.normInputsOf(bodyValue);
+    const auto norm      = graph.view().inputs(bodyValue, camel::graph::PortGroup::Normal);
     const GCNode *source = norm.empty() ? nullptr : graph.node(norm.front());
     if (source == nullptr || source->kind != GCNodeKind::Data) {
         return false;
@@ -189,14 +204,15 @@ bool planStateComponents(
     if (fillBody == nullptr || fillBody->slots().size() != loop.stateCount) {
         return false;
     }
-    if (!readOnlyBy(graph, plan.topo, bodyValue, loopRef)) {
+    if (!readOnlyBy(graph.view(), plan.topo, bodyValue, loopRef)) {
         return false;
     }
     // Every component is a value the body computes in a slot of its own: not a port (the state is
     // written into the ports every round) and not a constant of the static area.
     std::vector<gc_data_idx_t> stateSlots(loop.stateCount, 0);
     size_t seen = 0;
-    for (gc_node_ref_t input : graph.withInputsOf(bodyValue)) {
+    for (gc_node_ref_t input :
+         graph.view().inputs(bodyValue, camel::graph::PortGroup::Context)) {
         const GCNode *node = graph.node(input);
         if (node == nullptr || node->kind == GCNodeKind::Port || node->dataIndex == 0 ||
             !regions.within(regions.controlOf(input), bodyRegion)) {
@@ -239,6 +255,7 @@ bool planStateComponents(
 /// The loops of `graph` that are regions of it: where their ranges are in the plan and which
 /// slots a round reads and writes.
 void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
+    const View &view = graph.view();
     struct Event {
         uint32_t position;
         uint32_t loopEnd;
@@ -248,37 +265,51 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
     std::optional<ControlRegions> regions;
     for (uint32_t li = 0; li < plan.topo.size(); ++li) {
         const gc_node_ref_t ref = plan.topo[li];
-        const GCNode *node      = graph.node(ref);
-        if (node == nullptr || node->kind != GCNodeKind::Loop) {
+        // A LOOP is asked by the face: its kind, its form, the regions it owns and the ports it
+        // reads are the view's answers (graph_view.h).
+        if (view.kindOf(ref) != ViewKind::Loop) {
             continue;
         }
         // A loop is its regions (design principles 3.10): a LOOP node without a body region is not
-        // a loop this plan can run, and there is no other form for it to be.
-        const uint32_t condRegion = graph.loopRegionOf(ref, GCRegionKind::LoopCond);
-        const uint32_t bodyRegion = graph.loopRegionOf(ref, GCRegionKind::LoopBody);
+        // a loop this plan can run, and there is no other form for it to be. The two regions come
+        // back from `regionsOwnedBy`, and which is which is on each region's own record; a region
+        // the graph does not have is 0, as `loopRegionOf` answered one.
+        uint32_t condRegion = 0;
+        uint32_t bodyRegion = 0;
+        for (const camel::graph::RegionId owned : view.regionsOwnedBy(ref)) {
+            const camel::graph::RegionRecord record = view.region(owned);
+            if (record.kind == camel::graph::RegionKind::LoopCond) {
+                condRegion = owned;
+            } else if (record.kind == camel::graph::RegionKind::LoopBody) {
+                bodyRegion = owned;
+            }
+        }
         if (bodyRegion == 0) {
             continue;
         }
         if (!regions) {
             regions.emplace(graph);
         }
-        const camel::core::LoopKind kind = graph.loopKindOf(ref);
+        // The form of the loop is one record, not three accessors (LoopForm).
+        const camel::graph::LoopForm form = view.loopFormOf(ref);
         ExecLoop loop;
         loop.position        = li;
-        loop.iterates        = camel::core::loopHasIterable(kind);
+        loop.iterates        = camel::core::loopHasIterable(form.kind);
         loop.hasCond         = condRegion != 0;
-        loop.collectionCount = graph.loopCollectionCountOf(ref);
-        loop.stateCount =
-            static_cast<uint32_t>(graph.normInputsOf(ref).size() - (loop.iterates ? 1 : 0));
-        loop.stateSlot = node->dataIndex;
+        loop.collectionCount = form.collectionCount;
+        const std::span<const gc_node_ref_t> norm =
+            view.inputs(ref, camel::graph::PortGroup::Normal);
+        loop.stateCount = static_cast<uint32_t>(norm.size() - (loop.iterates ? 1 : 0));
+        // The node's runtime slot is the plan's own subject (section 13), read as every other slot
+        // in this file is; the type it writes is the face's answer.
+        loop.stateSlot = dataIndexOf(graph, ref);
         if (loop.stateCount > 1 || loop.collectionCount != 0) {
-            loop.valueType = static_cast<const camel::core::type::TupleType *>(node->dataType());
+            loop.valueType = static_cast<const camel::core::type::TupleType *>(view.typeOf(ref));
         }
-        loop.origin     = graph.nodeOrigin(ref);
-        const auto norm = graph.normInputsOf(ref);
+        loop.origin = view.originOf(ref);
         if (loop.iterates) {
             loop.iterableSlot = dataIndexOf(graph, valueBehindGates(graph, norm.front()));
-            if (graph.loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval) {
+            if (form.iterableForm == camel::core::LoopIterableForm::Interval) {
                 // The sequence is the pair of the interval's two bounds: the loop computes the
                 // element of a round from them and the round number, and no array of the interval
                 // is ever built (`for i in a..b`, design principles 4.2).
@@ -303,15 +334,15 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
                             "node reads first -- a FILL or the constant holding the same two "
                             "integers -- and a pass removed it. This is a defect of the compiler, "
                             "not an error of the program.",
-                            graph.name(),
+                            view.name(),
                             ref,
-                            graph.nodeOrigin(ref)));
+                            view.originOf(ref)));
                 }
                 loop.intervalFrom = bounds->first;
                 loop.intervalTo   = bounds->second;
             }
         }
-        const auto results = graph.withInputsOf(ref);
+        const auto results = view.inputs(ref, camel::graph::PortGroup::Context);
         ASSERT(
             results.size() == (loop.hasCond ? 3u : 2u),
             "A loop of regions reads the results of its regions and its round.");
@@ -325,11 +356,11 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
             plan.loopSlots.push_back(dataIndexOf(graph, norm[j + (loop.iterates ? 1 : 0)]));
         }
         if (loop.hasCond) {
-            for (gc_node_ref_t port : graph.regionPorts(condRegion)) {
+            for (gc_node_ref_t port : view.regionParameters(condRegion)) {
                 plan.loopSlots.push_back(dataIndexOf(graph, port));
             }
         }
-        for (gc_node_ref_t port : graph.regionPorts(bodyRegion)) {
+        for (gc_node_ref_t port : view.regionParameters(bodyRegion)) {
             plan.loopSlots.push_back(dataIndexOf(graph, port));
         }
         // The ranges: the nodes of the condition, then those of the body, then the LOOP node.
@@ -389,15 +420,15 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
                     "begins at the first of the loop's nodes and the LOOP node ends it, so a plan "
                     "this table describes would run that node as part of every round. This plan "
                     "cannot be run. This is a defect of the compiler, not an error of the program.",
-                    graph.name(),
+                    view.name(),
                     index,
                     ref,
-                    graph.nodeOrigin(ref),
+                    view.originOf(ref),
                     li,
                     spanFirst,
                     spanEnd,
                     intruderRef,
-                    graph.nodeOrigin(intruderRef),
+                    view.originOf(intruderRef),
                     intruder));
         }
         // A loop whose body ends in a tuple nothing reads keeps the state as its components
@@ -577,13 +608,14 @@ gc_node_ref_t cellOfNode(const GCGraph &graph, gc_node_ref_t ref) {
 /// Whether the cell is a variable this graph declares (`var x = e` is `:var/new`). A cell that
 /// comes from elsewhere -- a `var` parameter, a captured cell -- is a port of this graph: its
 /// value is held outside it, so nothing in the graph can prove the old value has no observer.
-bool cellDeclaredHere(const GCGraph &graph, gc_node_ref_t cell) {
-    const GCNode *node = cell == kInvalidNodeRef ? nullptr : graph.node(cell);
-    if (node == nullptr || node->kind != GCNodeKind::Oper) {
+bool cellDeclaredHere(const View &graph, gc_node_ref_t cell) {
+    if (cell == kInvalidNodeRef || graph.kindOf(cell) != ViewKind::Oper ||
+        !graph.isOperRecord(cell)) {
         return false;
     }
-    const auto *body = graph.nodeBodyAs<GCOperBody>(cell);
-    return body != nullptr && body->oper == camel::core::oper::VarNew;
+    // The four kinds the view folds into `Oper` name no operator record (`isOperRecord`), which is
+    // the answer a missing payload gave before; one that does name one is asked by its identity.
+    return graph.operatorOf(cell) == camel::core::oper::VarNew;
 }
 
 /// Whether the value a variable starts with is one this graph makes: a copy (a clone of a literal,
@@ -622,18 +654,21 @@ bool initialValueMadeHere(const GCGraph &graph, gc_node_ref_t init) {
 /// assignment do not. A cell of this graph is judged in order instead (see planStorageReuse); a
 /// cell from elsewhere is judged with this, because the graph may run again.
 bool cellValueMayBeKept(
-    const GCGraph &graph, const std::vector<std::vector<gc_node_ref_t>> &users,
-    gc_node_ref_t cell) {
+    const View &graph, const std::vector<std::vector<gc_node_ref_t>> &users, gc_node_ref_t cell) {
     if (cell >= users.size()) {
         return true;
     }
     for (const gc_node_ref_t user : users[cell]) {
-        const GCNode *node = graph.node(user);
-        if (node == nullptr || node->kind != GCNodeKind::Oper) {
+        if (graph.kindOf(user) != ViewKind::Oper) {
             return true;
         }
-        const auto *body = graph.nodeBodyAs<GCOperBody>(user);
-        if (body != nullptr && body->uri() == ":var/get") {
+        // A node the view folds into `Oper` and that names no record is a CAST, a COPY, a FILL or an
+        // ACCS (`isOperRecord`): not an operator of the graph's, so what it keeps is not this
+        // proof's to see -- the same answer the missing payload gave.
+        if (!graph.isOperRecord(user)) {
+            return true;
+        }
+        if (camel::core::OperatorTable::instance().uri(graph.operatorOf(user)) == ":var/get") {
             return true;
         }
     }
@@ -911,13 +946,13 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                         StorageReuse decision    = StorageReuse::Copy;
                         if (cell != kInvalidNodeRef) {
                             const bool escapes = cellEscapes(graph, users, cell, escapeCache);
-                            if (!cellDeclaredHere(graph, cell)) {
+                            if (!cellDeclaredHere(graph.view(), cell)) {
                                 // A cell this graph does not declare (a `var` parameter, a
                                 // captured cell): the plan has no proof of who holds the old
                                 // value, so the array's own count answers -- unless the graph
                                 // reads the cell and may keep what it read, which the count
                                 // cannot see (two names for one array are one array's count).
-                                decision = escapes || cellValueMayBeKept(graph, users, cell)
+                                decision = escapes || cellValueMayBeKept(graph.view(), users, cell)
                                                ? StorageReuse::Copy
                                                : StorageReuse::ByArrayCount;
                             } else if (escapes) {
@@ -1041,37 +1076,43 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 /// (`handsOnOnlyOutsideArrays`): `xs[i]` on a value with more than one dimension makes a value of
 /// its own (a view that shares the block, or a copy for an array of references), so the plan counts
 /// it as a producer's, as it counts any operator's output.
-bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
-    const GCNode *node = graph.node(at);
-    if (node == nullptr) {
-        return false;
-    }
+bool forwardsItsValue(const View &graph, gc_node_ref_t at) {
     // The three carriers a graph is built with, not operators: a JOIN hands on the arm's value, a
     // GATE passes its input through and a port hands on what it was given. Their node kind is the
     // fact -- there is no operator record for one, because a program cannot name one.
-    if (node->kind == GCNodeKind::Join || node->kind == GCNodeKind::Gate ||
-        node->kind == GCNodeKind::Port) {
+    //
+    // The view folds a JOIN into the kind of the BRCH it merges (`graph_view.h`: one kind for a
+    // branch and its merge point) and answers "not a node of this graph" for it, because a
+    // merge point takes no place of the numbering's own (C-1123-17). So the two are told apart by
+    // `contains`: a BRCH owns the arm regions and does not hand a value on; a JOIN does.
+    const ViewKind kind = graph.kindOf(at);
+    if (kind == ViewKind::Gate || kind == ViewKind::Port) {
         return true;
     }
-    if (node->kind != GCNodeKind::Oper) {
+    if (kind == ViewKind::Brch) {
+        return !graph.contains(at);
+    }
+    if (kind != ViewKind::Oper) {
         return false;
     }
-    const auto *body = graph.nodeBodyAs<GCOperBody>(at);
-    if (body == nullptr) {
+    // `isOperRecord` is "an OPER node whose payload names one": a CAST, a COPY, a FILL and an ACCS
+    // carry the kind and name none, which is what "no body" said before this read moved.
+    if (!graph.isOperRecord(at)) {
         return false;
     }
     // The same fact for an operator: it is the operator's own declaration, not a list of names
     // here, so the two cannot say different things (OperatorTable::handsOnOperandValue).
     const camel::core::OperatorTable &table = camel::core::OperatorTable::instance();
-    if (!table.handsOnOperandValue(body->uri())) {
+    const std::string_view uri              = table.uri(graph.operatorOf(at));
+    if (!table.handsOnOperandValue(uri)) {
         return false;
     }
-    if (!table.handsOnOnlyOutsideArrays(body->uri())) {
+    if (!table.handsOnOnlyOutsideArrays(uri)) {
         return true;
     }
     // A row of a higher-rank value is a value of its own (a view that shares the block, or a copy
     // for an array of references), and the declaration says so: the hand-on is of an element.
-    const camel::core::type::Type *type = node->dataType();
+    const camel::core::type::Type *type = graph.typeOf(at);
     return type != nullptr && type->code() != camel::core::type::TypeCode::Array;
 }
 
@@ -1267,7 +1308,7 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
         if (node == nullptr || node->kind == GCNodeKind::Data) {
             continue; // a constant is the program's: the graph neither takes nor gives it
         }
-        if (!forwardsItsValue(graph, at)) {
+        if (!forwardsItsValue(graph.view(), at)) {
             carried[at].push_back(at);
             continue;
         }
@@ -1505,12 +1546,8 @@ bool takesTheReferenceForItsValue(const GCGraph &graph, gc_node_ref_t at) {
 /// because no back end can tell whether they ran -- `retainCountNow` and `giveBackCountNow` answer
 /// false for a value that is not the handle, so a row for any other value is inert wherever it is
 /// written.
-bool valueIsCounted(const GCGraph &graph, gc_node_ref_t value) noexcept {
-    const GCNode *node = graph.node(value);
-    if (node == nullptr) {
-        return false;
-    }
-    const camel::core::type::Type *type = node->dataType();
+bool valueIsCounted(const View &graph, gc_node_ref_t value) noexcept {
+    const camel::core::type::Type *type = graph.typeOf(value);
     if (type == nullptr) {
         return false;
     }
@@ -1620,7 +1657,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // The same argument is why the holds are taken at the node that made the value and not at
         // the first position that writes one of its rows: only the producing node has an edge to
         // every reader, so only there is the hold taken before all of them.
-        const bool counted = valueIsCounted(graph, value);
+        const bool counted = valueIsCounted(graph.view(), value);
         // The rows written, and the holds taken beyond the value's own reference -- the two numbers
         // `1 + copies == give-backs + kept` is read from.
         uint32_t held   = 0;
