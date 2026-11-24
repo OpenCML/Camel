@@ -1,0 +1,49 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+id = "lit2.graph_identity"
+order = 479
+tier = "fast"
+tags = ["feat", "compile", "graph_read"]
+desc = """
+Two readings the view layer had been arguing about instead of taking: what a node's type is when
+its value sits in the static area, and what a Program answers when it is asked about a graph.
+
+`graph_identity.types` walks every node of every graph of a program and reports how many sit in the
+static area, how many of those answer no type, and whether a draft of the same graph answers the
+same type node by node. Two readers used to keep their own branch for "the record has no type; it
+is at the static slot" (`onnx/passes/export.cpp`'s `constantOf`, `tiles/src/region_extract.cpp`'s
+`typeOf`); this is the reading that says whether such a node exists at all. On a frozen graph it
+cannot: the encoder folds the effective type into `record.typeId` when it writes the graph. The
+branch is live on the draft side only, and it is answered in `DraftGraphAdapter::typeOf` now.
+
+`graph_identity.program` asks `Program::calleeOf` and `Context::programOfRuntimeGraph` with the
+graph as a value and reads three things: a call is answered for the graph it is in (not for another
+graph's node at that number), a value the program does not hold -- a draft -- answers none, and the
+same graph asked two ways (the program's identity lookup, the view's record lookup with the program
+as resolver) names one value.
+"""
+
+[[tests]]
+name = "graph_identity.types"
+desc = "One node, one type. Per graph: the node count, how many nodes sit in the static area (`staticIndexOf`), how many of those answer no type on either side (must be 0), and how many answer a type at all -- so a program with no static node cannot pass as agreement. Then a draft of the same graph answers the same type node by node (`draft-differ=0`), which is the half of the answer a draft's `typeOf` had to learn: a draft's record may carry an index and no type. Red before `DraftGraphAdapter::typeOf` read the static slot: a differing node is printed with the record's answer, the view's, and the slot index."
+kind = "behavior"
+case = "../../../cases/opt/generic/graph_identity.cml"
+args = ["${case}", "test::view_types", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[VT] graph 0 nodes=", " static=", " static-untyped=0 typed=", "[VT] agree=1 graphs=", " untyped=0 typed=", " draft-differ=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "graph_identity.program"
+desc = "A Program answers by the graph's identity. Per graph: the program holds that value and the context names this program for it. Per call site: the program answers a callee, and the two routes -- `Program::calleeOf` by identity, `GraphView::calleeOf` by the record with the program as resolver -- name the same graph value. Per call site, every other graph of the program is asked about the same ref where that ref is not a call: the answer is none (`crossed=0`), which is the line that goes red when the answer comes from a node's pointer or number in another graph. Then the sites are grouped by the value they named (`sameness ... shared=2`): two places in the source, one graph -- an answer keyed on a node or a text could not produce that grouping. And a draft of the program's root is handed over as the same kind of value -- the same nodes, a different identity: the program does not hold it and no program is named for it (`foreign draft=1 holds=0 program=0`), which is the line that goes red when the handle is taken as an address of the one representation the program happens to hold."
+kind = "behavior"
+case = "../../../cases/opt/generic/graph_identity.cml"
+args = ["${case}", "test::program_identity", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[PI] graph 0 holds=1 program=1 nodes=", "[PI] call graph=", " answer=1 routes=1", "[PI] cross graph=", " answer=none", "[PI] foreign draft=1 holds=0 program=0", "[PI] sameness callees=", " sites=", " shared=2", "[PI] agree=1 graphs=", " crossed=0 routes=", " foreign=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

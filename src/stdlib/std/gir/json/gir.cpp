@@ -145,7 +145,7 @@ std::string dumpJsonRuntimeGraph(
     GCGraph *root, const camel::core::context::context_ptr_t &ctx, const JsonGirOptions &options) {
     if (!root || !root->hasNodePayload())
         return {};
-    const Program *program = ctx ? ctx->programOfRuntimeGraph(root) : nullptr;
+    const Program *program = ctx ? ctx->programOfRuntimeGraph(*root) : nullptr;
     return program ? dumpJsonRuntimeGraph(*program, root, ctx, options) : std::string{};
 }
 

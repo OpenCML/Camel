@@ -903,7 +903,7 @@ GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context, GraphVizDumpCon
     : RuntimeGraphTranslatePass(context), config_(std::move(config)) {}
 
 std::string GraphVizDumpPass::dumpDot(camel::runtime::GCGraph *graph) {
-    program_ = camel::runtime::ProgramHold(*context_, context_->programOfRuntimeGraph(graph));
+    program_ = camel::runtime::ProgramHold(*context_, context_->programOfRuntimeGraph(*graph));
     GUARD(program_.get() != nullptr, "A graph to dump belongs to no program of the context.");
     return dumpGraph(graph);
 }

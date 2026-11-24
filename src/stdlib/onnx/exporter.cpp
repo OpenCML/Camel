@@ -184,7 +184,7 @@ std::vector<Value> elementsOf(slot_t slot, type::Type *ty) {
 
 /// The program that holds `g`: a graph being exported is always one of the context's.
 const camel::runtime::Program &programOf(core::context::Context &ctx, const GCGraph *g) {
-    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(g);
+    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(*g);
     if (program == nullptr) {
         throw std::logic_error("the ONNX export met a graph that belongs to no program");
     }
