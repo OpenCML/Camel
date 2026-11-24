@@ -306,15 +306,30 @@ if (blindMode) {
         // A line the rule already reads is not unread, whatever else it spells.
         if (!/\bCAMEL\b/.test(line) || /\bcamel\b|\bEXE\b/.test(line)) return
         const strings = [...line.matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => m[1] ?? m[2])
-        if (strings.flatMap(passesOfElement).length === 0) return
-        unread.push({ file: rel(file), line: index + 1, text: line.trim() })
+        const passes = strings.flatMap(passesOfElement)
+        if (passes.length === 0) return
+        const last = passes[passes.length - 1]
+        unread.push({
+          file: rel(file), line: index + 1, last, handsOn: TRANSLATE.has(last), text: line.trim(),
+        })
       })
     }
   }
-  console.log(`unread: ${unread.length} line(s) name the binary as \`CAMEL\` and carry a pass word`)
-  for (const u of unread) console.log(`  ${u.file}:${u.line}  ${u.text.slice(0, 120)}`)
+  // Ordered by what the line does with the graph, and counted that way too. On 2026-11-24 one of
+  // these was a real defect -- `test/cases/opt/pass_written/check.mjs` counted a JSON document whose
+  // programs then ran, and the plan was red -- and it was one `std::jgir` among seventeen `std::nvm`
+  // and friends. A list that does not separate them is read as either all-scary or all-noise, and
+  // both readings lose the one line that mattered.
+  const handsOn = unread.filter((u) => u.handsOn)
+  const rest = unread.filter((u) => !u.handsOn)
+  console.log(`unread: ${unread.length} line(s) name the binary as \`CAMEL\` and carry a pass word` +
+    `, of which ${handsOn.length} end in a pass that hands the graph on`)
+  for (const u of [...handsOn, ...rest]) {
+    console.log(`  ${u.handsOn ? 'HANDS-ON' : 'runs    '}  ${u.file}:${u.line}  ${u.last}  ${u.text.slice(0, 100)}`)
+  }
   if (unread.length > 0) {
     console.log('  the rule names `camel` and `EXE`, so none of these is inside the total above')
+    console.log('  HANDS-ON is where a `std::nop` question could live; `runs` is a program the line meant to run')
     process.exit(3)
   }
 }
