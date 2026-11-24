@@ -2,7 +2,7 @@
   "version": 1,
   "base": "4b528b928f^1",
   "head": "4b528b928f",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "src/kernel/graph/draft_view.cpp",
@@ -41,6 +41,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 9018,
   "case_digest": "sha256:e44073cac91c6f5055f4590d99eb077aaf10620f1e425c9935819cac1efb36ae",
+  "cause_counts": {
+    "plan": 9018
+  },
   "cases": [],
   "cases_recorded": false
 }

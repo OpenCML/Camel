@@ -2,7 +2,7 @@
   "version": 1,
   "base": "abed9ea896^1",
   "head": "abed9ea896",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "docs/technical/41_resources_and_definitions.md",
@@ -46,6 +46,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 9041,
   "case_digest": "sha256:afe387a0950273bc9ed03761d5da43882c56673df5672bb04aa76f848ba3d8b2",
+  "cause_counts": {
+    "plan": 9041
+  },
   "cases": [],
   "cases_recorded": false
 }

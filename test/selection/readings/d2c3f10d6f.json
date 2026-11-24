@@ -2,7 +2,7 @@
   "version": 1,
   "base": "d2c3f10d6f^1",
   "head": "d2c3f10d6f",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "src/kernel/ops/include/camel/ops/operator_record.h",
@@ -37,6 +37,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 7432,
   "case_digest": "sha256:a11219bd459d06076efe6eb463f511bc46e21dfa8ee0e1edf93192c977025fd8",
+  "cause_counts": {
+    "plan": 7432
+  },
   "cases": [],
   "cases_recorded": false
 }

@@ -2,7 +2,7 @@
   "version": 1,
   "base": "1347235053^1",
   "head": "1347235053",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "test/plans/feat/parse/rulings.plan.toml"
@@ -19,6 +19,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 50,
   "case_digest": "sha256:f4dfd6f71975b5865b206d8871cdd2dcafb66a1160ccf33dc9d71ffeaafc2594",
+  "cause_counts": {
+    "plan": 50
+  },
   "cases": [
     {
       "name": "parse.rulings/rulings.count_until_by_while.fvm",

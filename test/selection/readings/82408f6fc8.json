@@ -2,7 +2,7 @@
   "version": 1,
   "base": "82408f6fc8^1",
   "head": "82408f6fc8",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "internal/tools/camel-remote.ps1",
@@ -33,6 +33,10 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 2529,
   "case_digest": "sha256:e4b54b73dcbe227f4553c573fd1b643f04caac8b56444cb839dc91c74a7dd085",
+  "cause_counts": {
+    "plan": 2520,
+    "case": 9
+  },
   "cases": [],
   "cases_recorded": false
 }

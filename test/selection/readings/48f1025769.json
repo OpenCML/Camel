@@ -2,7 +2,7 @@
   "version": 1,
   "base": "48f1025769^1",
   "head": "48f1025769",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "docs/cli.md",
@@ -71,6 +71,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 9043,
   "case_digest": "sha256:1a08704d0b0f31cf7579697c0cdac51d427874fc1bbdbefbf50aab9a0a43bf5f",
+  "cause_counts": {
+    "plan": 9043
+  },
   "cases": [],
   "cases_recorded": false
 }

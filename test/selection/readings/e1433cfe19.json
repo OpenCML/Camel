@@ -2,7 +2,7 @@
   "version": 1,
   "base": "e1433cfe19^1",
   "head": "e1433cfe19",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "test/plans/feat/compile/higher_order_clause.plan.toml",
@@ -21,6 +21,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 241,
   "case_digest": "sha256:9993ade9abc6b300844feb621483be73594d157420a0e80dc2d709719063606b",
+  "cause_counts": {
+    "plan": 241
+  },
   "cases": [
     {
       "name": "broadcast_product_gradient/poison:broadcast_product_gradient:broadcast_product_gradient.engine_and_library_agree.nvm",

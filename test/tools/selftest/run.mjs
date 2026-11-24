@@ -1037,6 +1037,10 @@ const RULELESS_ALLOWED = [
         why: 'the manual perf baseline; a change here must not select a perf plan',
     },
     {
+        match: /^test\/selection\//,
+        why: 'the selection records: each one is the case list a replay of one change set must reproduce, and no plan reads them',
+    },
+    {
         match: /^test\/cases\/opt\/progen\/(README\.md|findings\.json)$/,
         why: 'the progen corpus documentation and its findings index are read by the manual progen tool; the finding and judgement programs next to them are named by rules',
     },

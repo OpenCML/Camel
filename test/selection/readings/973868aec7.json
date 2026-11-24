@@ -2,7 +2,7 @@
   "version": 1,
   "base": "973868aec7^1",
   "head": "973868aec7",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "internal/tools/README.md",
@@ -23,6 +23,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 21,
   "case_digest": "sha256:03e36518fa470ffdc363ab12e0efe96780ccbd6d33b156ec191fff12b4938e4c",
+  "cause_counts": {
+    "plan": 21
+  },
   "cases": [
     {
       "name": "docs.links/docs.a_port_and_its_body_disagreeing_are_caught_both_ways",

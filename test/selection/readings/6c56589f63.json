@@ -2,7 +2,7 @@
   "version": 1,
   "base": "6c56589f63^1",
   "head": "6c56589f63",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "internal/tools/merge-lane.ps1",
@@ -21,6 +21,9 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 31,
   "case_digest": "sha256:e25edc13e62498507671cd9cbd3aa89b00345e3d2d930bff641fb5c2a05a2092",
+  "cause_counts": {
+    "plan": 31
+  },
   "cases": [
     {
       "name": "docs.links/docs.a_port_and_its_body_disagreeing_are_caught_both_ways",

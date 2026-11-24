@@ -2,7 +2,7 @@
   "version": 1,
   "base": "d8c6789e69^1",
   "head": "d8c6789e69",
-  "tree": "4b5d7dc364ac48647c7da3f337d4567aa11b9464",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
   "tier": "fast",
   "files": [
     "internal/reports/2026-11-24-the-generator-sweep-read-every-emitter.cn.md",
@@ -23,6 +23,10 @@
   "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
   "case_count": 9,
   "case_digest": "sha256:cca2ab34fa5d720c78628cde5e5ff4bf55872df53618aeb42e957b3a480fe533",
+  "cause_counts": {
+    "case": 1,
+    "plan": 8
+  },
   "cases": [
     {
       "name": "modules.std/array.sort_reference",

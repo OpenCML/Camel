@@ -331,10 +331,18 @@ function recordOf(options, selection) {
     }
     const names = selection.cases.map((row) => row.name)
     const recorded = names.length <= CASES_IN_RECORD_MAX
+    // The summary of why, kept even when the rows are not: a count per cause is the reading that
+    // says whether a change narrowed a plan or rode it whole, and it costs three numbers.
+    const causeCounts = {}
+    for (const row of selection.cases) {
+        const kind = row.cause.split(':')[0]
+        causeCounts[kind] = (causeCounts[kind] ?? 0) + 1
+    }
     return {
         ...base,
         case_count: names.length,
         case_digest: digestOf(names),
+        cause_counts: causeCounts,
         // The list and the cause that keeps each case: the digest is a key, the list is the
         // reading. A verifier compares both, so a case cannot move from one cause to another and
         // still read as the same selection.
