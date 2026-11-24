@@ -76,6 +76,10 @@
     tree is created once with a creation record (rule 12, `internal/collab/rules.md`) and removed only
     after a push, and only when the merge worktree's target branch is the commit just pushed -- a
     tree holding an unpushed merge is the one thing a cleanup must not delete.
+    The two helper refs the trees are checked out on are named after this root
+    (`Resolve-BatchRefName`), not after the tool: three seats share one target branch, and a literal
+    name is one only the first of them can have. A name this root's scratch already has, held by a
+    tree outside it, is refused with that tree named, in this tool's words rather than git's.
 
 .PARAMETER Jobs
     The plan runner's width, narrowed by the host slot as usual.
@@ -265,6 +269,13 @@ foreach ($needed in @($gate, $comparer, $selector)) {
 
 $script:mergeTree = Join-Path $ScratchRoot 'camel-batch-merge'
 $baseTree = Join-Path $ScratchRoot 'camel-batch-base'
+# The two helper refs follow the scratch root, not this file. A literal `probe/batch-base` is a name
+# every seat on the machine wants and only the first one can have: on 2026-11-24 the acceptance run
+# stopped at a `fatal:` from git saying that ref is already used by worktree at
+# 'D:/Temp/camel-batch/camel-batch-base'`, with that tree created fifteen hours earlier by another
+# seat's scratch. Both names are derived here, once, and every later mention reads these two.
+$script:baseRef = Resolve-BatchRefName -ScratchRoot $ScratchRoot -Which 'base'
+$script:mergeRef = Resolve-BatchRefName -ScratchRoot $ScratchRoot -Which 'merge'
 $passedDir = Join-Path (Invoke-Git $ToolTree @('rev-parse', '--path-format=absolute', '--git-common-dir')).Text 'camel-passed'
 
 Push-Location $ToolTree
@@ -403,9 +414,18 @@ try {
     function Initialize-Tree {
         param([string] $Path, [string] $BranchName, [string] $Sha)
         $normalized = ($Path -replace '\\', '/')
-        $registered = @((Invoke-Git $ToolTree @('worktree', 'list', '--porcelain')).Lines |
-            Where-Object { "$_" -like 'worktree *' } | ForEach-Object { ("$_".Substring(9).Trim()) -replace '\\', '/' })
+        # The listing is kept as text as well as as paths: when the name is somebody else's, the
+        # message has to name that tree, and `git worktree list --porcelain` is the only thing that
+        # knows. Git's own `fatal: '<ref>' is already used by worktree at '<path>'` is a sentence
+        # about the tool's internals; this one is about the seat's scratch.
+        $porcelain = (Invoke-Git $ToolTree @('worktree', 'list', '--porcelain')).Text
+        $registered = @("$porcelain" -split "`n" |
+            Where-Object { "$_".Trim() -like 'worktree *' } | ForEach-Object { ("$_".Trim().Substring(9).Trim()) -replace '\\', '/' })
         if ($registered -notcontains $normalized) {
+            $refusal = Get-BatchRefRefusal -Porcelain $porcelain -RefName $BranchName -Path $Path
+            if ($refusal) {
+                Stop-With $refusal "The name follows this batch's scratch root ($ScratchRoot), and that tree is not in it: another scratch already claims it, or a run here was left behind. Remove that tree, or name a different -ScratchRoot, and run again -- nothing was merged." 2
+            }
             if (Test-Path -LiteralPath $Path) {
                 Stop-With "$Path exists but is not a registered worktree" 'A directory with no .git of its own makes git answer about the repository above it. Move it out of the way and run again.' 2
             }
@@ -433,7 +453,7 @@ try {
     $script:loadStart = Get-LoadAverage
     Write-Host ''
     Write-Host "[batch] baseline tree: $baseTree ($($targetInfo.Name) $($script:baseShort), a separate tree from the merge)"
-    Initialize-Tree -Path $baseTree -BranchName 'probe/batch-base' -Sha $base
+    Initialize-Tree -Path $baseTree -BranchName $script:baseRef -Sha $base
 
     # --- 5. measure one tree with the plan set, given explicitly ------------
     # `-Plan` and never `-Changed`: the plan set is already decided (the lanes' union), and `-Changed`
@@ -507,7 +527,7 @@ try {
     # --- 6. the merged tree -------------------------------------------------
     function Merge-IntoTree {
         param($Lanes)
-        Initialize-Tree -Path $script:mergeTree -BranchName 'probe/batch-merge' -Sha $base
+        Initialize-Tree -Path $script:mergeTree -BranchName $script:mergeRef -Sha $base
         $made = @()
         $first = $true
         foreach ($lane in $Lanes) {
@@ -815,7 +835,7 @@ try {
             Invoke-Git $ToolTree @('worktree', 'remove', '--force', $path) | Out-Null
             Write-Host "[batch] removed $path (created by this run; nothing in it exists only there)"
         }
-        foreach ($br in @('probe/batch-base', 'probe/batch-merge')) {
+        foreach ($br in @($script:baseRef, $script:mergeRef)) {
             Invoke-Git $ToolTree @('branch', '-D', $br) | Out-Null
         }
     }

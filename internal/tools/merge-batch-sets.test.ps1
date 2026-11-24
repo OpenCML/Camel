@@ -172,6 +172,48 @@ try {
     Remove-Item -LiteralPath $scratchRepo -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# --- the helper refs: the seat's name, and a collision said in words ----------------------------
+# `probe/batch-base` and `probe/batch-merge` were literals. Three seats push to one target branch, so
+# the second seat to start a batch stopped at `fatal: 'probe/batch-base' is already used by worktree
+# at 'D:/Temp/camel-batch/camel-batch-base'` -- git talking about a directory nobody in that run
+# owned. The names follow the scratch root now, and a collision is a sentence naming the tree.
+$refA = Resolve-BatchRefName -ScratchRoot 'D:\Temp\camel-batch-3' -Which 'base'
+$refA2 = Resolve-BatchRefName -ScratchRoot 'D:\Temp\camel-batch-3\' -Which 'base'
+Check 'the same scratch root spells the same ref' ($refA -eq $refA2) "$refA vs $refA2"
+$refB = Resolve-BatchRefName -ScratchRoot 'D:\Temp\camel-batch' -Which 'base'
+Check 'two scratch roots never share a ref' ($refA -ne $refB) "both spelled $refA"
+Check 'the name says which of the two trees it is' (($refA -like 'probe/batch-base-*') -and ((Resolve-BatchRefName -ScratchRoot 'D:\Temp\camel-batch-3' -Which 'merge') -like 'probe/batch-merge-*')) $refA
+$noRootName = ''
+try { Resolve-BatchRefName -ScratchRoot '' -Which 'base' | Out-Null } catch { $noRootName = "$_" }
+Check 'a ref name with no scratch root is refused' ($noRootName -match 'scratch root') $noRootName
+Check 'the tool names no helper ref as a literal any more' (@(Select-String -LiteralPath $tool -Pattern "'probe/batch-(base|merge)'").Count -eq 0) 'a literal spelling is back'
+
+# A real collision, not a fabricated one: a throwaway repository, a worktree that really holds the
+# name, and the refusal read out of `git worktree list --porcelain`. What is checked is the sentence,
+# because the sentence is what a seat has to act on.
+$refRepo = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-batch-refs-$PID")
+$held = Join-Path $refRepo 'held-tree'
+$mineTree = Join-Path $refRepo 'my-tree'
+New-Item -ItemType Directory -Force -Path $refRepo | Out-Null
+try {
+    & git -C $refRepo init -q 2>&1 | Out-Null
+    & git -C $refRepo config user.email 'batch@example.invalid' 2>&1 | Out-Null
+    & git -C $refRepo config user.name 'batch test' 2>&1 | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $refRepo 'a.txt'), "one`n", (New-Object System.Text.UTF8Encoding($false)))
+    & git -C $refRepo add -A 2>&1 | Out-Null
+    & git -C $refRepo commit -q -m 'one' 2>&1 | Out-Null
+    & git -C $refRepo worktree add -q -B $refA $held HEAD 2>&1 | Out-Null
+    $porcelain = ((& git -C $refRepo worktree list --porcelain) -join "`n")
+    $refusal = Get-BatchRefRefusal -Porcelain $porcelain -RefName $refA -Path $mineTree
+    Check 'a ref another tree holds is refused' ($refusal -ne $null -and "$refusal" -ne '') "$refusal"
+    Check 'and the refusal names the tree that holds it' (("$refusal" -replace '\\', '/').Contains(($held -replace '\\', '/'))) "$refusal"
+    Check 'and it does not read like git''s fatal line' ("$refusal" -notmatch '^fatal:') "$refusal"
+    Check 'the tree holding the name is not a collision with itself' ($null -eq (Get-BatchRefRefusal -Porcelain $porcelain -RefName $refA -Path $held)) 'the holder was reported as a collision'
+    Check 'a free name is not a collision' ($null -eq (Get-BatchRefRefusal -Porcelain $porcelain -RefName 'probe/batch-base-free' -Path $mineTree)) 'a free name was refused'
+} finally {
+    Remove-Item -LiteralPath $refRepo -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host ''
 Write-Host "$checks checks, $failed failed"
 if ($failed -gt 0) { exit 1 }
