@@ -116,7 +116,7 @@ function declaredEntryPoints(pyprojectPath) {
  * Check that every command the wheel declares has its binary in the bundled install.
  *
  * Each `[project.scripts]` entry point is a Python function that execs
- * `camel/.cmlenv/bin/<command>` (pypi/camel-lang/src/camel_cli.py), so a declared command whose
+ * `camel/.cmlenv/bin/<command>` (packaging/pypi/camel-lang/src/camel_cli.py), so a declared command whose
  * binary the build did not collect installs a command that fails on first use. Failing here
  * names the tool and the directory, rather than leaving it to the smoke test on one platform.
  *
@@ -124,7 +124,7 @@ function declaredEntryPoints(pyprojectPath) {
  * (scripts/wheel_modes.py): setuptools records 0o644 for package data whatever the source
  * mode is, so `chmod` before the build would not travel.
  *
- * @param {string} pyprojectBase - pypi/camel-lang, which holds pyproject.toml
+ * @param {string} pyprojectBase - packaging/pypi/camel-lang, which holds pyproject.toml
  * @param {string} bundledBin - camel/.cmlenv/bin inside the package being built
  * @param {string[]} toolBinaries - the tool names copied there
  */
@@ -132,7 +132,7 @@ function prepareBundledBinaries(pyprojectBase, bundledBin, toolBinaries) {
     const declared = declaredEntryPoints(path.join(pyprojectBase, 'pyproject.toml'))
     if (declared.length === 0) {
         logFail(
-            `pypi/camel-lang/pyproject.toml declares no [project.scripts]: the wheel would install no command`
+            `packaging/pypi/camel-lang/pyproject.toml declares no [project.scripts]: the wheel would install no command`
         )
         process.exit(1)
     }
@@ -367,7 +367,16 @@ function packageWheelBundle({
         process.exit(1)
     }
 
-    const PYPI_BASE = path.join(BASEDIR, 'pypi', 'camel-lang')
+    // The setuptools package root, and the directory the staging copy of `out/<tag>/` is written
+    // into. It was `pypi/camel-lang` until 2de5b196f8 ("root: the editor extension ... and pypi a
+    // package directory") moved the directory under `packaging/` and left this path naming the old
+    // one: `npm run pypi:rollup` then died in every cell of build-pypi.yml with
+    //
+    //   Error: ENOENT: no such file or directory, open '.../pypi/camel-lang/pyproject.toml'
+    //
+    // after the native build had already succeeded (run 45345553169, linux-x64/linux-arm64/macos).
+    // `scripts/setver.js` already names both spellings, which is why only this file broke.
+    const PYPI_BASE = path.join(BASEDIR, 'packaging', 'pypi', 'camel-lang')
     const CAMEL_BASE = path.join(PYPI_BASE, 'src', 'camel')
     const CMLENV = path.join(CAMEL_BASE, '.cmlenv')
 
