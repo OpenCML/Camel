@@ -44,27 +44,32 @@ async function attempt(read) {
     }
 }
 
-const PROTECTED = ['develop', 'main', 'release', 'fsh-dev']
+const PROTECTED = ['develop', 'main', 'release', 'fsh-dev', 'integration']
 // The branch gate counts the branches the agents make, which all live under a namespace (lane/,
 // probe/, ...). A branch without one is a person's -- the author picking a release commit on
 // tmp-rel-0246, a contributor's xxx-dev: it is no lane waiting to be merged, and counting it held the
 // gate shut over work that was never the coordinator's.
 const AGENT_BRANCH = /^[a-z0-9][a-z0-9-]*\//
 
-/// Lane branches not yet in develop, how far each is ahead and behind, and the worst behind.
+/// Lane branches not yet merged, how far each is ahead and behind, and the worst behind. Merged means
+/// into integration once that branch exists (lanes land there; develop follows it on promotion), into
+/// develop before. A merge seat's own branch (seat/...) is the merging, not a lane waiting for it.
 async function branchesOf(git) {
+    const base = (await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false))
+        ? 'origin/integration'
+        : 'origin/develop'
     const names = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
         .split('\n')
-        .filter((name) => name && !PROTECTED.includes(name) && AGENT_BRANCH.test(name))
+        .filter((name) => name && !PROTECTED.includes(name) && AGENT_BRANCH.test(name) && !name.startsWith('seat/'))
     const rows = []
     for (const branch of names) {
-        const ahead = Number(await git(['rev-list', '--count', `origin/develop..${branch}`]).catch(() => 'x'))
+        const ahead = Number(await git(['rev-list', '--count', `${base}..${branch}`]).catch(() => 'x'))
         if (!Number.isFinite(ahead) || ahead === 0) continue
-        const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..origin/develop`]).catch(() => 'x'))
+        const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..${base}`]).catch(() => 'x'))
         rows.push({ branch, ahead, behind: Number.isFinite(behind) ? behind : null })
     }
     const behinds = rows.map((row) => row.behind).filter((value) => value !== null)
-    return { unmerged: rows.length, maxBehind: behinds.length ? Math.max(...behinds) : 0, rows }
+    return { base, unmerged: rows.length, maxBehind: behinds.length ? Math.max(...behinds) : 0, rows }
 }
 
 /// Branches already merged into develop and not deleted, local and on origin.
@@ -219,6 +224,16 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
             head: await git(['rev-parse', '--short=9', 'origin/develop']),
             ageMinutes: Math.round((Date.now() / 1000 - Number(await git(['log', '-1', '--format=%ct', 'origin/develop']))) / 60),
         })),
+        // The integration branch, when there is one: how old its tip is, and how far develop trails it.
+        integration: await attempt(async () => {
+            const has = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
+            if (!has) return { absent: true }
+            return {
+                head: await git(['rev-parse', '--short=9', 'origin/integration']),
+                ageMinutes: Math.round((Date.now() / 1000 - Number(await git(['log', '-1', '--format=%ct', 'origin/integration']))) / 60),
+                developBehind: Number(await git(['rev-list', '--count', 'origin/develop..origin/integration'])),
+            }
+        }),
         fshDev: await attempt(async () => ({
             head: await git(['rev-parse', '--short=9', 'origin/fsh-dev']),
             notOnDevelop: Number(await git(['rev-list', '--count', '--no-merges', 'origin/develop..origin/fsh-dev'])),
