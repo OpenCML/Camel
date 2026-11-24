@@ -5,6 +5,7 @@
 
 #include "camel/execute/pass/runtime_trans.h"
 #include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
 
 #include <string>
 #include <unordered_map>
@@ -51,8 +52,9 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
     /// Debugger-facing origin attributes for the readable dump: `origin=<id>`, and when the
     /// span resolves, `span="sl:sc-el:ec"` (0-based, LSP-style) plus `srcfile="..."`. Empty
     /// when the node has no recorded origin. Lets the VSCode GIR panel match DOT nodes against
-    /// gir-json nodes and jump to source.
-    std::string debugOriginAttr(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref);
+    /// gir-json nodes and jump to source. The origin is read through the view (`originOf`), which
+    /// is the graph's own `nodeOrigin`.
+    std::string debugOriginAttr(const camel::graph::GraphView &graph, camel::graph::NodeRef ref);
 
     std::string dumpGraph(camel::runtime::GCGraph *graph);
 

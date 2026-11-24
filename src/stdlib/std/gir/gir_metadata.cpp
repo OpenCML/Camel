@@ -7,6 +7,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/resources.h"
+#include "graph/graph_view.h"
 #include <format>
 #include <sstream>
 using namespace std;
@@ -97,15 +98,13 @@ string portLabel(
     return info.name.empty() ? "PORT" : info.name;
 }
 
-string graphTooltip(camel::runtime::GCGraph *graph) {
-    ASSERT(graph != nullptr, "Graph tooltip requires a runtime graph.");
-    auto *funcType = graph->funcType();
+string graphTooltip(const camel::graph::GraphView &graph) {
+    auto *funcType = graph.funcType();
     return funcType ? funcType->toString() : string("<unknown>");
 }
 
-string recordTooltip(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
-    ASSERT(graph != nullptr, "Node tooltip requires a runtime graph.");
-    return std::format("{}::node#{}", graph->name(), record.dataIndex);
+string recordTooltip(string_view graphName, const camel::runtime::GCNode &record) {
+    return std::format("{}::node#{}", graphName, record.dataIndex);
 }
 
 string recordLabel(
