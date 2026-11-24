@@ -196,3 +196,27 @@ composition.cml:14:13  '..' takes two integers and '<>' takes two functions;
 **于是回退**（`git checkout --` 三个文件 + 用例），重建后 `stream` **158/159**，唯一红是既有的 `interval_loop_not_materialised`。树回到 `334a3988cc`，未提交任何半成品。
 
 **这一刀的下一个假设（未验证，不写代码）**：需要一个**判别器** —— 「名字是算子符号」时保持原来的组解析，只有**普通标识符**（`count`、`find`）才允许无组集合。判别器可以是名字里是否含非标识符字符，也可以是「该名字有没有 `operator` 声明」，**但这两者都得先读一遍再定，不能再猜**。
+
+## 十八、第三刀（重试版）：成了，而且没改坏普通函数名
+
+**形状**（按「先走原路，失败后重试一次」）：
+
+- `visitDRefNode` **不动**（普通 DREF → 模板 → 集合），不放宽任何条件。
+- `instantiateForCall` 拆成 `instantiateForCallBinding`（原体）+ 一层**重试包装**：绑定失败时抛 `GenericCallRejected`（携带 call/名字/实参文本/原因/签名），包装层拿**prelude 为这个名字收的体**走**同一个 `chooseOperatorOverload`** 再问一次；成功则用那份体，失败才报原来那条诊断 —— **一条也不多报**。
+- **有界**：只重试一次，重试路径不进 `mergedOverloadsNamed`（那条路已证明会把普通函数名的 DREF 变成无组集合）。
+- **痕迹**：重试用上时留 `CAMEL_LOG_DEBUG_S` 一行（`-vvv` 可见）。
+
+**另修一处必要的东西**：`OperatorOverloads` 带上了 `name`；`chooseOperatorOverload` 里 `set.ops` 的四处用法逐处判空（报错读 `name`；**没有组就没有内置候选**，因为内置候选是组的一部分）。
+
+**读数**：`feat/compile/stream.plan.toml` **158 / 159**，唯一红仍是 `interval_loop_not_materialised`。新用例 `stream.range_count_find` 一个程序里四件事全绿：
+
+```
+count<f>(1 .. 5)        → 3      名字形式
+(1 .. 5)->count<f>      → 3      箭头形式（这一刀的目标）
+[3, 9, 2]->count<f>     → 2      数组箭头形式（证明没被抢走）
+(inc <> dbl)(3)         → 8      普通函数名与组合（证明没改坏）
+```
+
+**`stdlib_values` 的新诊断顺序**（59 / 41 / 18 不变，但**红在哪变了**）：`count`（原 26 行）与 `find`（原 33 行）**不再出现在错误列表里**，现在第一条是 `any`，随后 `sort_by`、`take`、`reverse`。⇒ 每个用例在**下一个**缺声明的名字上失败，所以总数不变，**位置在往前挪**。
+
+**还缺的名字**（都不在本笔范围）：`any`、`all`、`take`、`reverse`、`zip`（同族声明）、`sort_by`（缺排序原语）、`flat_map`（语义页）、`add`（独立缺陷）。
