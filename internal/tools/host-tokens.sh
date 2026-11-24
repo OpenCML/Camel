@@ -12,8 +12,30 @@
 #   take N        take N tokens (blocking; while waiting it prints who holds what)
 #   run N -- CMD  take N tokens, run CMD with them, give them back when CMD exits
 #   take-all      take every token (a time-sensitive measurement; the caller must say so)
-#   show          what the pool looks like now: free, and who holds the rest
+#   show          what the pool looks like now: free, held, and the peak so far
 #   self-test     check the properties this exists for, without a host
+#
+# Waiting is not failing, and running out of the wait is not a red reading:
+#
+#   a token arrives in time   -> the caller runs
+#   the wait runs out (CAMEL_TOKEN_WAIT_S, default 1800) -> exit 6, naming who held the pool
+#
+# Exit 6 rather than 2 (`2` is this tool being asked something it cannot do, e.g. take more tokens
+# than the pool has) and rather than 1 (a run that measured something and it was red). A run that
+# could not get a token measured nothing, and that has to be its own answer.
+#
+# Who holds a token is read from `/proc/locks`, not from `fuser`: `fuser` lists the processes with
+# the file *open*, which includes a process that has already released it and a `$( ... )` that will
+# be gone before the listing is printed. `/proc/locks` is the kernel's own table of held locks, and
+# it is the only thing here that answers "held" rather than "opened".
+#
+# Two optional readings for a caller that takes a token per case in a long run (the test runner):
+#
+#   CAMEL_TOKEN_REPORT=FILE   append `<pid> <wait_ms> <tokens>` to FILE on every successful take
+#   "$TOKEN_DIR/peak"         the largest number of tokens held at once, written by this script
+#
+# The second is why `tokensPeak` is a reading and not a zero: the pool records the high-water mark
+# itself, because the caller that holds twelve tokens at once is not the one that can count them.
 #
 # The mechanism is `flock` on the token files, and that choice is the whole point: the kernel
 # releases the lock when the holder dies, so a crashed run cannot carry a token away. No reclamation
@@ -39,6 +61,32 @@ WHO="${CAMEL_TOKEN_WHO:-$$}"
 
 die() { echo "host-tokens: $*" >&2; exit 2; }
 
+# Milliseconds since the epoch, in a variable and not on stdout: a `$(date +%s%N)` costs a fork and
+# an exec, and this is measured on every take. Measured on the loaded host: 110 ms a take with two
+# `date` execs, 6 ms with the builtin. A reading that costs more than what it measures is not worth
+# keeping, and this one was close to that for a pool taking one token per test case.
+now_ms() {
+    if [ -n "${EPOCHREALTIME:-}" ]; then
+        local t="${EPOCHREALTIME//[!0-9]/}"
+        NOW_MS=$((t / 1000))
+    else
+        NOW_MS=$(( $(date +%s%N 2>/dev/null || echo 0) / 1000000 ))
+    fi
+}
+
+# The wait ran out: nothing was measured. `show` to stderr, because the caller's stdout is the
+# output of the command it never ran.
+die_wait() {
+    echo "host-tokens: $*" >&2
+    show >&2
+    exit 6
+}
+
+WAIT_S="${CAMEL_TOKEN_WAIT_S:-1800}"
+case "$WAIT_S" in
+    ''|*[!0-9]*) die "CAMEL_TOKEN_WAIT_S is not a number of seconds: '$WAIT_S'" ;;
+esac
+
 # The size must be a number a pool can exist at: 1 is a serial machine, 0 is not a machine.
 case "$POOL_SIZE" in
     ''|*[!0-9]*) die "CAMEL_TOKENS is not a number: '$POOL_SIZE'" ;;
@@ -48,28 +96,111 @@ esac
 token_path() { printf '%s/token-%02d.lock' "$TOKEN_DIR" "$1"; }
 record_path() { printf '%s/token-%02d.holder' "$TOKEN_DIR" "$1"; }
 
+# Everything on the taking path is a shell builtin on purpose. This runs once per test case -- five
+# thousand times in the fast layer -- and on the loaded host one fork costs 5-10 ms and one exec of
+# `date`, `stat` or `wc` costs 30-70 ms. A reading that costs more than the thing it measures is not
+# worth keeping: measured at 110 ms a take before this, 1-2 ms after.
 prepare() {
-    mkdir -p "$TOKEN_DIR" || die "cannot make $TOKEN_DIR"
+    [ -d "$TOKEN_DIR" ] || mkdir -p "$TOKEN_DIR" || die "cannot make $TOKEN_DIR"
     # A pool that was configured at 24 and is now asked for 32 gets the extra files; a smaller pool
     # keeps them on disk but never hands them out, so raising the size later does not start from a
     # directory that disagrees with itself.
-    local j=1
+    local j=1 f paths=() have=''
     while [ "$j" -le "$POOL_SIZE" ]; do
-        [ -e "$(token_path "$j")" ] || : > "$(token_path "$j")"
+        printf -v f '%s/token-%02d.lock' "$TOKEN_DIR" "$j"
+        [ -e "$f" ] || : > "$f"
+        paths[j]="$f"
         j=$((j + 1))
+    done
+    # The inodes are the key /proc/locks is read by, and they change only when a token file is
+    # replaced. Kept beside the pool, with the size they were taken at, so the freshness check is one
+    # builtin `read` and a run of takes costs no process at all.
+    [ -r "$TOKEN_DIR/inodes.size" ] && read -r have < "$TOKEN_DIR/inodes.size"
+    if [ "$have" != "$POOL_SIZE" ]; then
+        printf '%s\n' "$POOL_SIZE" > "$TOKEN_DIR/inodes.size"
+        stat -c %i -- "${paths[@]:1}" > "$TOKEN_DIR/inodes" 2>/dev/null || : > "$TOKEN_DIR/inodes"
+    fi
+}
+
+# Who holds a token file now. `/proc/locks` is the reading: it is the kernel's table of held locks,
+# so a process that opened the file and did not lock it is not in it, and a process that released it
+# is gone from it. `fuser` cannot tell those two from a holder, which is how an open descriptor was
+# read as "the old lock is held" on 2026-11-24 (internal/tools/README.md). It is used only when
+# /proc/locks cannot be read at all, and then the reading says so rather than passing itself off.
+read_holder_mode() {
+    if [ -r /proc/locks ]; then echo /proc/locks; else echo fuser; fi
+}
+
+holders_of() {
+    local file ino i pid
+    file=$(token_path "$1")
+    if [ -r /proc/locks ]; then
+        ino=$(stat -c %i "$file" 2>/dev/null) || return 0
+        [ -n "$ino" ] || return 0
+        # `N: FLOCK ADVISORY WRITE <pid> <major>:<minor>:<inode> <start> <end>`: the pid is the field
+        # before the one that ends in this inode. A blocked waiter is a `->` entry and is skipped.
+        while read -r _ type _ _ lpid where _ _; do
+            [ "$type" = 'FLOCK' ] || continue
+            [ "${where##*:}" = "$ino" ] && echo "$lpid"
+        done < /proc/locks
+    else
+        fuser "$file" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true
+    fi
+}
+
+# How many tokens are held right now, into HELD_N: the pool's own count, from /proc/locks, with no
+# process. `holders_of` (which forks for its `stat` and its `ps`) is the diagnostic path; this is the
+# counting path, and they read the same table.
+count_held() {
+    local locks=' ' ino held=0
+    HELD_N=0
+    [ -s "$TOKEN_DIR/inodes" ] || return 0
+    # `$(< /proc/locks)` is a builtin read: on a busy host that file holds every flock in the machine
+    # -- several hundred lines while plans, compilers and the panel are all holding locks -- and
+    # looping it line by line in bash cost more than the take it was counting (a 700 ms difference
+    # over four takers). Matching each of our inodes against the whole text is C-speed and needs no
+    # process; the match is `:<inode> `, which is the tail of the `major:minor:inode` field.
+    locks="$(< /proc/locks)" 2>/dev/null || return 0
+    while read -r ino; do
+        [ -n "$ino" ] || continue
+        case "$locks" in *":$ino "*) held=$((held + 1)) ;; esac
+    done < "$TOKEN_DIR/inodes"
+    [ "$held" -le "$POOL_SIZE" ] || held="$POOL_SIZE"
+    HELD_N=$held
+}
+
+# Raise the high-water mark without a lock: the mark is the largest N for which a marker file exists,
+# so two takers writing at once cannot make it go down, and there is no read-modify-write to protect.
+# A file per level, `peak-12`, because `: > file` is a redirection and not a process.
+record_peak() {
+    count_held
+    [ "$HELD_N" -ge 1 ] || return 0
+    : > "$TOKEN_DIR/peak-$HELD_N"
+}
+
+peak_of() {
+    local f n
+    PEAK_N=0
+    for f in "$TOKEN_DIR"/peak-*; do
+        [ -e "$f" ] || continue
+        n="${f##*-}"
+        case "$n" in ''|*[!0-9]*) continue ;; esac
+        [ "$n" -gt "$PEAK_N" ] && PEAK_N=$n
     done
 }
 
-# Who holds a token file now. `fuser` is the reading; a file nobody has open is free.
-holders_of() {
-    fuser "$(token_path "$1")" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true
+# The waiting is a reading the caller asked for: a runner that takes a token per case wants to know
+# how long each case queued, and asking the kernel's clock here is the only place that knows.
+report_take() {
+    [ -n "${CAMEL_TOKEN_REPORT:-}" ] || return 0
+    printf '%s %s %s\n' "$$" "${1:-0}" "${2:-0}" >> "$CAMEL_TOKEN_REPORT" 2>/dev/null || true
 }
 
 show() {
     prepare
     free=0
     held=0
-    echo "pool: $TOKEN_DIR size=$POOL_SIZE lane=$LANE"
+    echo "pool: $TOKEN_DIR size=$POOL_SIZE lane=$LANE reading=$(read_holder_mode)"
     i=1
     while [ "$i" -le "$POOL_SIZE" ]; do
         pids=$(holders_of "$i")
@@ -78,7 +209,8 @@ show() {
         else
             held=$((held + 1))
             rec=''
-            [ -e "$(record_path "$i")" ] && rec=$(cat "$(record_path "$i")" 2>/dev/null)
+            printf -v rp '%s/token-%02d.holder' "$TOKEN_DIR" "$i"
+            [ -r "$rp" ] && read -r rec < "$rp"
             for p in $pids; do
                 etime=$(ps -o etime= -p "$p" 2>/dev/null | tr -d ' ')
                 echo "  token $(printf '%02d' "$i") held by pid $p (${etime:-?}) ${rec}"
@@ -86,19 +218,28 @@ show() {
         fi
         i=$((i + 1))
     done
-    echo "free=$free held=$held"
+    peak_of
+    echo "free=$free held=$held peak=$PEAK_N"
 }
 
 # Take one token, blocking. The wait is not silent: a run that queues for thirty minutes without
 # saying who it is waiting for is indistinguishable from a run that hung, and on 2026-11-24 that
 # cost a whole measurement.
 take_one() {
-    local n="$1" waited=0 pid
+    local n="$1" waited=0 t0 tms
+    now_ms; t0=$NOW_MS
     while :; do
         # -n first: the common case is a free pool and must not pay for a message.
         if flock -n "$n"; then
             printf '%s %s %s %s\n' "$$" "$LANE" "$WHO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(record_path "$1")"
+            now_ms; tms=$(( NOW_MS - t0 ))
+            record_peak
+            report_take "$tms" 1
             return 0
+        fi
+        now_ms; tms=$(( NOW_MS - t0 ))
+        if [ "$tms" -ge $((WAIT_S * 1000)) ]; then
+            die_wait "no token $n within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE): nothing was measured, so this exits 6"
         fi
         if [ "$waited" -eq 0 ]; then
             echo "host-tokens: waiting for token $n; the pool holds $POOL_SIZE"
@@ -113,10 +254,11 @@ take_one() {
 }
 
 take() {
-    local want="$1" taken=0 n fd got held=' ' waited=0
+    local want="$1" taken=0 n fd got held=' ' t0 tms waited=0
     [ "$want" -ge 1 ] || die "take needs at least one token"
     [ "$want" -le "$POOL_SIZE" ] || die "cannot take $want tokens from a pool of $POOL_SIZE"
     prepare
+    now_ms; t0=$NOW_MS
     while [ "$taken" -lt "$want" ]; do
         # One pass over the whole pool, non-blocking. Waiting on the *first* token while the second is
         # free would make a pool of twenty-four run exactly one thing at a time -- which is the defect
@@ -144,9 +286,15 @@ take() {
             n=$((n + 1))
         done
         if [ "$got" -eq 0 ]; then
+            now_ms; tms=$(( NOW_MS - t0 ))
+            # Out of time is not out of tokens, and it is not a red reading either: the caller ran
+            # nothing, and that has to be its own answer (6), not "your choice was wrong" (2).
+            if [ "$tms" -ge $((WAIT_S * 1000)) ]; then
+                die_wait "no token of $POOL_SIZE within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE, holding $taken): nothing was measured, so this exits 6"
+            fi
             # The wait is not silent: a run that queues without saying who it waits for looks exactly
             # like a run that hung, and on 2026-11-24 that cost a whole measurement.
-            echo "host-tokens: waiting for a token of $POOL_SIZE (lane=$LANE, holding $taken)"
+            echo "host-tokens: waiting for a token of $POOL_SIZE (lane=$LANE, holding $taken, waited $((tms / 1000))s)"
             show | sed 's/^/  /'
             sleep 1
             waited=$((waited + 1))
@@ -155,9 +303,12 @@ take() {
             fi
         fi
     done
+    now_ms; tms=$(( NOW_MS - t0 ))
+    record_peak
+    report_take "$tms" "$want"
     # One line per case would drown the run it is measuring: a caller that hands a token to every
     # case in a plan passes CAMEL_TOKEN_QUIET=1 and hears only about waits.
-    [ "${CAMEL_TOKEN_QUIET:-0}" = '1' ] || echo "host-tokens: took $want of $POOL_SIZE tokens (lane=$LANE)"
+    [ "${CAMEL_TOKEN_QUIET:-0}" = '1' ] || echo "host-tokens: took $want of $POOL_SIZE tokens (lane=$LANE, waited $((tms / 1000))s)"
 }
 
 self_test() {
@@ -240,9 +391,55 @@ self_test() {
     else
         echo 'ok    a pool size that is not a number is refused'
     fi
+    # 9. the peak is a reading, not a zero. Three tokens held at once must leave the mark at three
+    #    even after they are all back: that is the number `tokensPeak` reports, and a pool that never
+    #    records it is a pool nobody can tell from an unused one.
+    ( take 3 >/dev/null; exec sleep 20 ) &
+    holder2=$!
+    sleep 0.5
+    out=$(show)
+    case "$out" in
+        *'peak=3'*) echo 'ok    the peak records three held at once' ;;
+        *) echo "FAIL  the peak did not record three: $out"; bad=$((bad + 1)) ;;
+    esac
+    kill -9 "$holder2" 2>/dev/null
+    wait "$holder2" 2>/dev/null
+    sleep 0.5
+    out=$(show)
+    case "$out" in
+        *'free=3 held=0 peak=3'*) echo 'ok    the peak stays at three after every token is back' ;;
+        *) echo "FAIL  the peak did not stay: $out"; bad=$((bad + 1)) ;;
+    esac
+
+    # 10. a wait that runs out is its own answer: 6, not 2 (a refusal) and not 1 (a red reading)
+    ( take 3 >/dev/null; exec sleep 20 ) &
+    holder3=$!
+    sleep 0.5
+    t0=$(date +%s)
+    ( WAIT_S=2; take 1 >/dev/null 2>&1 )
+    rc=$?
+    secs=$(( $(date +%s) - t0 ))
+    if [ "$rc" -eq 6 ]; then
+        echo "ok    a wait that runs out exits 6 (${secs}s, a 2 s wait)"
+    else
+        echo "FAIL  a wait that runs out exited $rc, not 6"; bad=$((bad + 1))
+    fi
+    kill -9 "$holder3" 2>/dev/null
+    wait "$holder3" 2>/dev/null
+
+    # 11. the report file carries the wait per take, which is what `tokenWaitSeconds` is summed from
+    report=$(mktemp)
+    CAMEL_TOKEN_REPORT="$report" "$0" run 1 -- true >/dev/null 2>&1
+    n=$(wc -l < "$report")
+    first=$(head -1 "$report")
+    case "$n:$first" in
+        1:*[0-9]) echo "ok    the report records one take: $first" ;;
+        *) echo "FAIL  the report has '$n' line(s): $first"; bad=$((bad + 1)) ;;
+    esac
+    rm -f "$report"
 
     rm -rf "$root"
-    if [ "$bad" -eq 0 ]; then echo 'selftest: 8 checks, 0 failed'; return 0; fi
+    if [ "$bad" -eq 0 ]; then echo 'selftest: 11 checks, 0 failed'; return 0; fi
     echo "selftest: $bad failed"; return 1
 }
 

@@ -58,6 +58,19 @@ const RESULTS_ROOT = process.env.CAMEL_TEST_RESULTS_ROOT
 const LOG_ROOT = path.join(RESULTS_ROOT, 'log')
 const REPO_ROOT = path.dirname(TEST_ROOT)
 const IS_WINDOWS = process.platform === 'win32'
+
+// The host's token pool. One worker process, one token: the test case takes it through the one line of
+// shell that sits in front of every case on the build host (`internal/tools/host-case.sh`), and the
+// kernel returns it when that case's process tree exits -- so a case that hangs or is killed cannot
+// carry a token away. A case that arrives when the pool is empty *queues*; it does not fail. When no
+// pool is configured (`CAMEL_TOKEN_DIR` unset) nothing here changes and a lane runs as it always did.
+const HOST_CASE = path.join(REPO_ROOT, 'internal', 'tools', 'host-case.sh')
+const TOKEN_POOL = !IS_WINDOWS && !!process.env.CAMEL_TOKEN_DIR && fs.existsSync(HOST_CASE)
+// What the run will report as `tokenWaitSeconds`: how many cases took a token, how long they queued in
+// all, and how many of them queued at all. A pool that is never contended reports a wait of 0.0 s,
+// which is a reading; a report that is absent would be a pool nobody can tell from an unused one.
+const tokenTaking = { cases: 0, waitMs: 0, queued: 0 }
+let tokenSerial = 0
 // The build a run addresses. A Release build lands in out/latest; a Debug build has its own tree
 // at out/debug (scripts/collect-out.js), so `--build debug` cannot silently read a Release binary
 // and the two configurations can be tested without rebuilding one over the other.
@@ -2615,7 +2628,17 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     const launch = wrapForCpu
         ? { command: process.execPath, args: [CHILD_CPU_TOOL, '--', toolExe, ...args] }
         : { command: toolExe, args }
-    const proc = await runProcess(launch.command, launch.args, {
+    // The token sits outermost, so it is held for the whole of the case -- including the CPU wrapper
+    // and anything the case itself starts -- and it is the case's own token, not the runner's.
+    let tokenReport = null
+    let spawned = launch
+    if (TOKEN_POOL) {
+        tokenSerial += 1
+        tokenReport = path.join(os.tmpdir(), `camel-token-${process.pid}-${tokenSerial}.txt`)
+        env.CAMEL_TOKEN_REPORT = tokenReport
+        spawned = { command: 'bash', args: [HOST_CASE, launch.command, ...launch.args] }
+    }
+    const proc = await runProcess(spawned.command, spawned.args, {
         // The checkout root, and not the test's scratch directory, because `${test_tmp}` is a
         // *repository-relative* path (docs/test-plans.md, "Test Scratch"): a plan writes
         // `ONNX_OUT=${test_tmp}/m.onnx`, and a program started anywhere but here resolves that one
@@ -2644,6 +2667,26 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // steps in the slot were 2.9-4.4 s together.
     // A `parallel = false` test passes no hook and keeps its slot to the end (see executePlans).
     if (typeof logContext.releaseSlot === 'function') logContext.releaseSlot()
+    // How long this case queued for its token, in the pool's own millisecond reading. Absent when the
+    // case never got one (it would have exited 6 and this line would not be reached) -- `null` here is
+    // "no pool", never "waited zero".
+    let tokenWaitMs = null
+    if (tokenReport) {
+        try {
+            const text = fs.existsSync(tokenReport) ? fs.readFileSync(tokenReport, 'utf8') : ''
+            fs.rmSync(tokenReport, { force: true })
+            const lines = text.split('\n').filter((line) => line.trim() !== '')
+            if (lines.length > 0) {
+                tokenWaitMs = lines.reduce((sum, line) => sum + Number(line.split(' ')[1] || 0), 0)
+                tokenTaking.cases += lines.length
+                tokenTaking.waitMs += tokenWaitMs
+                if (tokenWaitMs > 0) tokenTaking.queued += 1
+            }
+        } catch {
+            // A reading that could not be taken is not a case that failed: the token was held either
+            // way, and `tokenWaitSeconds` says it did not see this case.
+        }
+    }
     const cpuReading = wrapForCpu
         ? readCpuReport(proc.cpuReport)
         // Nothing was wrapped, because this host has no reading to take and the test declared no
@@ -2652,6 +2695,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         : { cpuMs: null, reason: `no reading was taken: ${NO_CPU_TIME_SKIP}` }
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
+        tokenWaitMs,
         exitCode: proc.status,
         signal: proc.signal,
         timedOut: proc.timedOut,
@@ -4980,6 +5024,27 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} wall: ${(outcome.wallMs / 1000).toFixed(1)} s, jobs: ${options.jobs}, tier: ${options.tier}`
     )
+    // The pool's own reading, beside the wall clock it is paid out of: how many cases took a token, the
+    // high-water mark the pool recorded for itself, and the time the run spent queuing rather than
+    // running. `peak` is the number a person checks against "two runs and a build must stay under 24".
+    if (TOKEN_POOL) {
+        let peak = 0
+        try {
+            for (const name of fs.readdirSync(process.env.CAMEL_TOKEN_DIR)) {
+                const match = /^peak-(\d+)$/.exec(name)
+                if (match) peak = Math.max(peak, Number(match[1]))
+            }
+        } catch {
+            // The pool directory can be gone by now (a caller that cleans up after itself). The rest of
+            // the line is still the run's own reading, so it is printed without the peak.
+        }
+        console.log(
+            `${COLORS.cyan}[TOKEN]${COLORS.reset} pool ${process.env.CAMEL_TOKEN_DIR} peak=${peak}`
+            + `, cases with a token ${tokenTaking.cases}`
+            + `, queued ${tokenTaking.queued}`
+            + `, tokenWaitSeconds=${(tokenTaking.waitMs / 1000).toFixed(1)}`
+        )
+    }
     console.log(formatGateSplit(split))
 
     // Two ways to fail, and both are red: a test that failed, and a run that left a path behind in

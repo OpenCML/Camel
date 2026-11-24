@@ -203,6 +203,40 @@ The host sweep applies the same idea to the persistent checkouts: it removes one
 per-checkout lock, no process inside, nothing written in ten minutes). A checkout with no record is
 named and left, and `-Clean` is the explicit way to reclaim it.
 
+## The token pool: one process, one token
+
+`host-tokens.sh` hands out the build host's budget per **process** rather than per run. A token is a
+`flock` on one of `$CAMEL_TOKEN_DIR/token-NN.lock` (default `/tmp/camel-tokens`, `$CAMEL_TOKENS` files,
+default 24), held on an inherited descriptor and returned by the kernel when the holder exits -- so a
+killed run cannot carry one away and there is no reclamation pass. `take N`, `take-all`, `run N -- CMD`,
+`show` and `self-test` are the whole interface.
+
+Who takes one:
+
+| caller | how | what it holds |
+| --- | --- | --- |
+| each test case | `internal/tools/host-case.sh`, the one line of shell in front of every case on the host | one token for the case's whole process tree, returned when it exits |
+| a build | `camel-run build` -> `host-tokens.sh run N -- ninja` | `N` tokens (default 8) |
+| the clang syntax sweep | `scripts/check-clang-syntax.mjs` -> `host-tokens.sh run N -- docker ...` | `min(--jobs, pool)` for the container's life, which is also its `-P` |
+
+Queuing is not failing. A taker that finds the pool empty waits, printing who holds what; when the wait
+runs out (`CAMEL_TOKEN_WAIT_S`, default 1800) it exits **6** -- nothing was measured -- which is
+neither `2` (this tool was asked something it cannot do) nor `1` (a reading came back red). A test case
+never pays that price for a full pool: the runner reports it as `tokenWaitSeconds` and moves on.
+
+The readings are the pool's own, and this is the same rule as the lock files below: `fuser` cannot tell
+an open descriptor from a held lock, so "held" comes from `/proc/locks` matched against the inodes the
+pool cached in `$CAMEL_TOKEN_DIR/inodes`, and the high-water mark comes from the `peak-<n>` markers the
+pool writes as it hands tokens out (`show` prints `free=`, `held=`, `peak=`). The runner prints the
+same thing as one line per plan run:
+
+```
+[TOKEN] pool /tmp/camel-tokens peak=24, cases with a token 1187, queued 3, tokenWaitSeconds=4.2
+```
+
+`peak` is the number to check against "two test runs and a build must stay under the pool size": it is
+the largest number of tokens held at once, recorded by the pool rather than guessed by the caller.
+
 ## `camel-build.ps1`
 
 One build at a time on this workstation, under a machine-wide lock, because several worktrees building

@@ -137,19 +137,40 @@ check_tools() {
 
 pool_ready() { [ -d "$POOL_DIR" ] && [ -e "$POOL_DIR/token-01.lock" ]; }
 
+# The pool's own reading, read the pool's way: `/proc/locks` for what is held -- `fuser` cannot tell an
+# open descriptor from a held lock (internal/tools/README.md), and this line used to count open fds as
+# "in use" -- and the pool's `peak-<n>` markers for the high-water mark it recorded while handing
+# tokens out. Both live beside the tokens, so this needs no tool and no second opinion.
 pool_report() {
     if ! pool_ready; then
         echo 'tokens: unavailable'
         return
     fi
-    local held=0 free=0 n pids
+    local held=0 free=0 ino inodes locks=' ' peak=0 f n mine=0
+    if [ -s "$POOL_DIR/inodes" ]; then
+        locks="$(< /proc/locks)" 2>/dev/null || locks=' '
+        while read -r ino; do
+            [ -n "$ino" ] || continue
+            case "$locks" in *":$ino "*) held=$((held + 1)) ;; esac
+        done < "$POOL_DIR/inodes"
+    fi
+    free=$((POOL_SIZE - held))
+    [ "$free" -ge 0 ] || free=0
+    for f in "$POOL_DIR"/peak-*; do
+        [ -e "$f" ] || continue
+        n="${f##*-}"
+        case "$n" in ''|*[!0-9]*) continue ;; esac
+        [ "$n" -gt "$peak" ] && peak=$n
+    done
+    # `mine` is what this process is holding, read from its own descriptors, not from an environment
+    # variable that nothing sets: the pool hands out fds 20+ by token index.
     n=1
     while [ "$n" -le "$POOL_SIZE" ]; do
-        pids=$(fuser "$POOL_DIR/token-$(printf '%02d' "$n").lock" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true)
-        if [ -n "$pids" ]; then held=$((held + 1)); else free=$((free + 1)); fi
+        [ -e "/proc/$$/fd/$((20 + n))" ] && mine=$((mine + 1))
         n=$((n + 1))
     done
-    echo "tokens: mine=${CAMEL_TOKENS_MINE:-0} peak=${CAMEL_TOKENS_PEAK:-0}"
+    POOL_PEAK=$peak
+    echo "tokens: mine=$mine peak=$peak"
     echo "pool: size=$POOL_SIZE inUse=$held free=$free"
 }
 
@@ -274,7 +295,7 @@ cmd_plan() {
     echo "lockFrom=$0@$VERSION"
     echo "lockWaitSeconds=$waited"
     pool_report
-    echo "tokensPeak: ${CAMEL_TOKENS_PEAK:-0}"
+    echo "tokensPeak: ${POOL_PEAK:-0}"
     load_line
 
     # The exclusive hold takes the old lock and every slot, so a time-sensitive measurement is not taken
@@ -316,7 +337,9 @@ cmd_build() {
     local taker
     taker="$(dirname "$SELF")/host-tokens.sh"
     [ -x "$taker" ] || die "token pool present but $taker is missing: refusing to build outside the pool"
-    echo "tokensPeak: $want"
+    # `tokensWanted`, not `tokensPeak`: the peak is what the pool recorded while this build was
+    # running, and a line printed before the tokens are taken is a claim about the future.
+    echo "tokensWanted: $want"
     load_line
     [ "$#" -ge 1 ] && [ "$1" = '--' ] && shift
     exec "$taker" run "$want" -- "$@"
@@ -329,7 +352,7 @@ cmd_status() {
     say "CAMEL_RUN $VERSION"
     slots_report
     pool_report
-    echo "tokensPeak: ${CAMEL_TOKENS_PEAK:-0}"
+    echo "tokensPeak: ${POOL_PEAK:-0}"
     load_line
 }
 
