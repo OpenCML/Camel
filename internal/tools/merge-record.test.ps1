@@ -290,6 +290,69 @@ Check 'a record whose plan-set hash does not describe its names does not open th
 Check 'and the refusal is this commit, saying the two hashes differ' `
     ($push.Text -match [regex]::Escape($third.Substring(0, 9)) -and $push.Text -match [regex]::Escape('the set and its hash are not the same set')) $push.Text
 
+# --- 8. a merge with nothing to measure is a record of its own ----------------------------------
+# Every file a documentation-only merge touches is a file no plan covers, so `--changed` selects no
+# plan and there is nothing to compare. That is not "the gate is down" (exit 2 with no reading) and it
+# is not "measured and green" (a comparison with zeros in it): it is a third claim, and a push has to
+# be able to tell it apart from the other two. The writer refuses `--measured none` unless it says why
+# and names the gate that decided it, and `verify` refuses a hand-written one that carries rows.
+& git -C $work reset --quiet --hard origin/develop 2>&1 | Out-Null
+& git -C $work checkout --quiet -B 'lane/docs' $base 2>&1 | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $work 'internal/questions') | Out-Null
+Set-Content -LiteralPath (Join-Path $work 'internal/questions/scratch.md') -Value 'a question'
+& git -C $work add -A 2>&1 | Out-Null
+& git -C $work commit --quiet -m 'lane: a question page' 2>&1 | Out-Null
+$docsLane = (& git -C $work rev-parse HEAD).Trim()
+& git -C $work checkout --quiet develop 2>&1 | Out-Null
+$docsBase = (& git -C $work rev-parse HEAD).Trim()
+& git -C $work merge --quiet --no-ff 'lane/docs' -m 'merge a question page' 2>&1 | Out-Null
+$docsMerge = (& git -C $work rev-parse HEAD).Trim()
+
+$docsArgs = @((Join-Path $work 'scripts/merge-record.mjs'), 'write',
+    '--merge', $docsMerge, '--first-parent', $docsBase, '--second-parent', $docsLane,
+    '--branch', 'lane/docs', '--tree', $work, '--out', $passedDir)
+
+$noWhy = @(& node @($docsArgs + @('--measured', 'none', '--gate', 'rows', '--gate', 'docs-only')) 2>&1)
+Check 'a docs-only record without a reason is refused' ($LASTEXITCODE -eq 2) (($noWhy | ForEach-Object { "$_" }) -join ' / ')
+$noGate = @(& node @($docsArgs + @('--measured', 'none', '--why', 'documentation only')) 2>&1)
+Check 'a docs-only record without the gate that decided it is refused' ($LASTEXITCODE -eq 2) (($noGate | ForEach-Object { "$_" }) -join ' / ')
+
+$docsOut = @(& node @($docsArgs + @('--measured', 'none', '--why', 'documentation only', '--gate', 'docs-only')) 2>&1)
+$docsExit = $LASTEXITCODE
+Check 'a docs-only record is written' ($docsExit -eq 0 -and (Test-Path (Join-Path $passedDir "$docsMerge.json"))) (($docsOut | ForEach-Object { "$_" }) -join ' / ')
+$savedDocs = Get-Content -LiteralPath (Join-Path $passedDir "$docsMerge.json") -Raw | ConvertFrom-Json
+Check 'it says nothing was measured' ($savedDocs.measured -eq 'none') "$($savedDocs.measured)"
+Check 'it says why' ($savedDocs.why -match 'documentation') "$($savedDocs.why)"
+Check 'it names no plans and no rows' ($savedDocs.planSet.count -eq 0 -and $savedDocs.readings.cases -eq 0) "count=$($savedDocs.planSet.count) cases=$($savedDocs.readings.cases)"
+Check 'it names the gate that decided it' ($savedDocs.gates -contains 'docs-only') ($savedDocs.gates -join ',')
+
+$push = Invoke-Git $work @('push', 'origin', "$($docsMerge):refs/heads/develop")
+Check 'a docs-only merge is pushed' ($push.Exit -eq 0) $push.Text
+Check 'and the remote is that merge' (((& git -C $origin rev-parse develop)).Trim() -eq $docsMerge)
+
+# --- 9. a hand-written docs-only record cannot claim rows ---------------------------------------
+# The hook reads the file, not the writer. A record that says `measured: none` and carries rows is a
+# document contradicting itself, and the whole point of the field is that the two readings are told
+# apart -- so `verify` refuses it rather than reading the zeros.
+& git -C $work checkout --quiet -B 'lane/docs2' $docsMerge 2>&1 | Out-Null
+Set-Content -LiteralPath (Join-Path $work 'internal/questions/second.md') -Value 'another question'
+& git -C $work add -A 2>&1 | Out-Null
+& git -C $work commit --quiet -m 'lane: another question page' 2>&1 | Out-Null
+& git -C $work checkout --quiet develop 2>&1 | Out-Null
+& git -C $work merge --quiet --no-ff 'lane/docs2' -m 'merge another question page' 2>&1 | Out-Null
+$docsAfter = (& git -C $work rev-parse HEAD).Trim()
+$forgedDocs = @{
+    sha = $docsAfter; firstParent = (& git -C $work rev-parse 'HEAD^1').Trim(); secondParent = 'x'
+    planSet = @{ names = @(); hash = '0-9e37'; count = 0 }
+    baseline = @{ sha = 'x'; source = 'none (documentation only)'; cases = $null }
+    readings = @{ cases = 12; fixed = 0; new = 0; changed = 0 }
+    gates = @('headers', 'docs-only'); measured = 'none'; why = 'documentation only'
+}
+[System.IO.File]::WriteAllText((Join-Path $passedDir "$docsAfter.json"), (($forgedDocs | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+$push = Invoke-Git $work @('push', 'origin', 'develop')
+Check 'a docs-only record carrying rows does not open the door' ($push.Exit -ne 0) $push.Text
+Check 'and the refusal says the two readings disagree' ($push.Text -match 'nothing was measured and reports') $push.Text
+
 # --- result ------------------------------------------------------------------
 & git -C $work worktree remove --force $tree 2>&1 | Out-Null
 Write-Host ''

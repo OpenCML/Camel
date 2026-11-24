@@ -343,6 +343,9 @@ function Sync-BaselineWorktree {
 # The header check and the plan selection are the other way round on purpose: they are about the
 # tree's own files and its own selection rules, so they run the tree's own copies.
 $toolRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+# The list that decides what docs-only means, in its own file so a test can read it without this
+# script's merge, host and gates around it. Dot-sourced: it defines two functions and nothing else.
+. (Join-Path $PSScriptRoot 'merge-lane-docs.ps1')
 if (-not (Test-Path -LiteralPath (Join-Path $toolRoot 'scripts\merge-readings.mjs'))) {
     Write-Host ''
     Write-Host 'STOPPED: this script is not in a checkout that carries the merge instruments (exit 2, nothing measured)' -ForegroundColor Yellow
@@ -471,6 +474,17 @@ try {
             Stop-With "-MergeCommit was given with -Branch $Branch, which does not resolve to a commit" 'The second parent is compared against the lane the merge names, so the lane has to be nameable. Nothing was measured and nothing was pushed.' 2
         }
         if ($mcFirst -ne $originTarget) {
+            # Two shapes land here and they are not the same mistake. The first parent is an OLDER
+            # origin/$Target: the seat merged integration into itself and then made its merge on top --
+            # which puts integration's commits on this branch as if they were arrivals, and makes every
+            # tool that reads the first-parent chain count them again. The first parent is a commit
+            # origin never had: the seat started from another base entirely. Naming which one it is
+            # matters, because the repair differs (redo on the new tip, or find the right base).
+            & git merge-base --is-ancestor $mcFirst $originTarget 2>$null
+            $integratedTheOtherWay = ($LASTEXITCODE -eq 0)
+            if ($integratedTheOtherWay) {
+                Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, and that is an older origin/$Target, not the tip $($originTarget.Substring(0, 9))" "You are merging integration into the seat, and then merging the lane on top of that: the push would not be a fast-forward, and on the first-parent chain integration's own commits would read as arrivals from a lane. Redo the merge on the current tip -- git checkout -B tmp origin/$Target, then git merge --no-ff $Branch with 'git config rerere.enabled true' replaying the resolution you already made -- and pass that commit. Nothing was measured and nothing was pushed." 2
+            }
             Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, not origin/$Target $($originTarget.Substring(0, 9))" "Its first parent is the tip the merge lands on, and the push is a fast-forward only from origin/$Target. Merge the lane from a checkout whose HEAD is origin/$Target and pass that commit; nothing was measured and nothing was pushed." 2
         }
         if ($mcSecond -ne $laneTip) {
@@ -902,6 +916,55 @@ try {
         (New-Object System.Text.UTF8Encoding($false)))
     $messageFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-message-$PID.txt")
     [System.IO.File]::WriteAllText($messageFile, "$Message`n", (New-Object System.Text.UTF8Encoding($false)))
+    # --- a merge with nothing to measure ----------------------------------------
+    # `--changed` named no plan. If every file this merge changes is documentation, that is a fact
+    # about the change and not a failure of the selection: no plan covers `internal/questions/`, and
+    # none should -- nothing executes a page. The run is then recorded as what it is (`measured: none`,
+    # with the reason and the gate that decided it) and pushed, because a merge that was never meant to
+    # be measured must not be refused as if the measuring had gone wrong. Anything else stays exit 2:
+    # a change with one non-documentation file in it is a change a plan could turn red on.
+    $docsOnly = ($selectExit -eq 0 -and $planTargets.Count -eq 0) -and (Test-DocsOnlyMerge -Files $changedFiles)
+    if ($docsOnly) {
+        $firstParentSha = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
+        Write-Host ''
+        Write-Host 'docs-only: nothing to measure' -ForegroundColor Yellow
+        Write-Host "  Every one of the $($changedFiles.Count) file(s) this merge changes is documentation: $($changedFiles -join ', ')"
+        Write-Host '  `--changed` names no plan because no plan covers these paths, and running the suite anyway would read some other change.'
+        Write-Host "  The record says so in those words, and the merge is pushed as a merge that had nothing to measure."
+        $passedDir = Join-Path $commonDir 'camel-passed'
+        New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+        $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
+            --measured none `
+            --why "documentation only: every file this merge changes is documentation, so no plan is selected and there is nothing to measure" `
+            --merge $mergeCommit --first-parent $firstParentSha --second-parent $head --branch $Branch `
+            --tree $MainCheckout --out $passedDir --gate headers --gate clang-syntax --gate docs-only 2>&1)
+        $recordExit = $LASTEXITCODE
+        $recordOut | ForEach-Object { "  $_" }
+        if ($recordExit -ne 0) {
+            Stop-With "the pass record for $($mergeCommit.Substring(0, 9)) could not be written (exit $recordExit)" 'The pre-push hook refuses a merge commit without one, so the push is not attempted.' $mergeCommit
+        }
+        $recordFile = Join-Path $passedDir "$mergeCommit.json"
+        if ($NoPush) {
+            Write-Host ''
+            Write-Host 'would push: this merge had nothing to measure. Nothing was pushed (-NoPush).' -ForegroundColor Yellow
+            Write-GitState -MergeCommit $mergeCommit
+            Write-Host ''
+            Write-Host "tried $Branch at $head; nothing was pushed (-NoPush)"
+            exit 0
+        }
+        for ($i = 1; $i -le 3; $i++) {
+            & git push origin "HEAD:$Target" 2>&1 | Select-Object -Last 1
+            if ($LASTEXITCODE -eq 0) { break }
+            Start-Sleep -Seconds 4
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
+            Stop-With 'git push failed after 3 attempts' "The merge is committed locally and not on origin/$Target, and the pass record was removed with the push's claim." $mergeCommit
+        }
+        Write-Host ''
+        Write-Host "merged $Branch at $head; origin/$Target is $mergeCommit (docs-only, nothing measured)" -ForegroundColor Green
+        exit 0
+    }
     if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
         # Not a red and not a green: the selection itself did not answer, so the plans this merge
         # touches are unknown and nothing about the change has been measured. Same shape as the
