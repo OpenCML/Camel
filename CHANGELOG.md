@@ -1,4 +1,14 @@
 [0.2.46]
+Changes:
+- **标准库整体搬进 `lib/`**：`std`、`tensor`、`test`、`tiles`、`transforms`、`onnx` 各自成目录，构建里 graph view、算子记录与 fact store 各成一个块、各带自己的 root；kernel 拥有 user-module 类，编译器只注册一个 loader；pass driver 从注册表取 pass，一个 Camel 函数名一个入口。
+- **`panic` 成为签名可以写的一个子句**：四十二条声明写上了它（`/`、`print` 等），写法是 `func operator /(x: int, y: int): int panic`；`panic` 不声明资源，判据是「可失败的签名是返回类型，不是 fault」；另有一条检查点名还欠这一句的九十二条。语法里 `panic` 是一个词。
+- **`copy` 是普通算子**，不再只是节点种类：`copy: (x: T) => T`——可变值的第二个名字，通过它的写不被看见。AST 快照、AI 参考页与补全列表都跟着改了。
+- **算子记录定形**：panic 记成一个 bool，elementwise 只记一次，锚在图上；runtime 的四种访问不再自己推断，改为问算子。
+- **规则成为对象**：一条规则以对象到达 transform，kernel 不再 include AST；规则集只编译一次，后续 pass 读同一份值；带 `with` 参数的规则按值取键。
+- **AST 记录是一道闸门**：一条 lane 的改动要读自己的 diff 对照快照；两个 ruleset 用例进入快照。
+- **闸门自身**：文档链接的期望跟着搬迁走；每个检查器说出它找到的布局，根不见了不再算错误；生成的 C++ 按仍然存在的每个 include 根编译；perf 判比率不判毫秒；margin 由测量它的那条腿设定；五个用例显式声明它们需要的平台事实。
+- **三处修复**：`enum` match 把 body 节点给它自己的 arm，不是装着它的 case 节点；module root 以 UTF-8 到达文件系统；JIT-only pass 的注册头移出 guard，profiled JIT 入口声明它需要带 JIT 的构建。
+- **规模**：用例文件 3962 → 3965，计划里的用例 9827 → 9895。
 
 [0.2.45]
 Changes:
