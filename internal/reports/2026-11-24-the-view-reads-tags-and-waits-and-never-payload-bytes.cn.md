@@ -52,6 +52,22 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- <目录>
 
 `tools` 的 −4 与 `gir` 的 −3 里，只有两类真搬运：`gir/dot/graphviz.cpp` 的两条 order/sync 边循环改问 `predecessors(Order/Sync)`，`tiles` 的 `region_outline.cpp` 反向 `uses().norm` 改问 `users(Normal)`；其余是入口处多余的表示类型（`program->root()` 的 `auto`）与三处注释（它们引用的读数现在在视图上：`originOf`、`exit`）。**这两处不必粉饰：它们是 E 类缺口，不是这一轮补的能力。**
 
+三个路径都是实的，命令原地可复现：`src/tools`（debugger + camel-cli）、`src/stdlib/std/gir`（`src/stdlib/std/gir/dot/graphviz.cpp` 等 7 个文件）、`src/stdlib/tiles`。**`src/stdlib/std/onnx` 不存在**（onnx 在 `src/stdlib/onnx`，本页口径下 84），所以 onnx 的数本页不给，它属于 `lane/3a-onnx-tiles`。
+
+### 2.1 A 的判据不是 `tiles` 的总数，是那几处调用点能不能迁
+
+`lane/3a-onnx-tiles` 报的 A 类在 `tiles` 是 13 个位置（`nodeAttrs` 4、区域 tag set 5、`effectivePermissions` 5）。本轮的读数：**只有 `placement.cpp` 那一组能整体迁走，其余每一处都坐在一个同时读载荷/原始 kind/`flags` 的函数里**，逐处核过：
+
+| A 的调用点 | 所在函数还读什么 | 结论 |
+|---|---|---|
+| `tiles/src/placement.cpp:198`、`:251`、`:42`、`:48`、`:206`、`:246` | 无（只读 tag set、区域链、`staticSlots`/`dataIndex`→`constantOf`） | **迁了**（4 个签名 + 5 处调用点，−11 行） |
+| `tiles/src/compiler.cpp:84`（`checkAttributeFates`） | `g.node(id)->kind`、`nodeBodyAs<GCOperBody>(id)->uri()` | 不迁：kind 与载荷是 B |
+| `tiles/src/region_extract.cpp:81`、`:213` | `source.node(ref)->kind`、`->flags`、`nodePayloadBytes`、`nodeOrigin` | 不迁：整条 `DraftNodeInit` 是 B 的写 |
+| `tiles/src/graph_regions.cpp:232`、`:666` | `graph.node(inputs[i])->dataType()`（B-3 可换）与 kernel IR | 半迁：换掉 `dataType` 不动 `GCGraph` 这个名字（函数形参是它），所以计数不动 |
+| `onnx/exporter.cpp:748-749`（`recordFates`） | `nodeAttrs`、`nodePermissions`、`nodeOrigin`、`name`——**都已在视图上**，只差 `operUriOf(g, ref)` | 已就绪，属 onnx 那条车道的账，本轮不动 |
+
+所以：**补对 A 的效果是「`placement.cpp` 整组迁走」，不是「`tiles` 里那 13 处一起消失」**——其余 12 处被 B 钉在同一函数里，而 B 的答复是 §3 的 B-2。这一条可验：`git show` 本轮 diff，`tiles` 的 −11 行全部落在 `placement.*` 与 `chainMembers` 那一块。
+
 ## 3 B 的判断：B-2，不是 B-1
 
 **B-1（视图交一份只读载荷视图：字节范围 + kind + 常量槽索引 + 帧布局）与 `graph_view.h` 明说的边界冲突，因此不做。** 依据三条，都是本仓已经写下的：
@@ -73,16 +89,53 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- <目录>
 - `src/tools`（54）：debugger 的索引与观察者接口都以 `GCGraph*` 为身份（E）。
 - `src/stdlib/onnx`（84）：`exporter.cpp:748` 的 A1 现在可搬（`attrsOf`+`permissionsOf`+`originOf` 都在），本轮没动它因为它不在五个目录的判据里；`exporter.cpp:561`/`:665` 的 C1 同。
 
-## 5 闸门
+## 5 不是缺口的那几类（和缺口分开记账）
 
-命令（原文）：
+和 `fvm/version_state.cpp:37` 的 `execPlanOf` 一样，下面这些**看起来像视图的洞，其实不是**，把它们算进缺口会把账算错：
+
+1. **`src/stdlib/autodiff` 的 41 行（另一条车道在同目录报 40）：没有一行是「读」。** 全是图的身份——被存下来、被返回、当 `unordered_map` 的键——加上 4 行 `ruleGraphs`。身份不是视图能答的东西（视图答的是内容），所以这个目录**不该出现在任何「视图缺口」的表里**。本轮它一行没动，也不该动。
+2. **`execPlanOf(graph)`（`fvm/version_state.cpp:37`）**：执行计划是事实层自己的答案，作者 11-23 已裁。同类的是**帧布局**（本页 B4）。
+3. **`GCGraph::view()` 造适配器时没装 callee 解析器** —— 这一条**不属于 A/B/C**，它是「适配器与所有者之间少一根线」，不是「视图缺一个读法」，修法完全不同。核过的事实：
+   - `src/kernel/graph/gc_graph_view.cpp:41-46`：`GCGraph::view()` 是 `new FrozenGraphAdapter(*this)`，**用的是单参数构造**，`calleeGraphOf_` 为空；
+   - `src/kernel/graph/gc_graph_view.cpp:506-534`：`FrozenGraphAdapter::calleeOf` 对 FUNC 节点先问 `graph_.calleeIdOf(ref)`，拿到一个有效 `GraphId` 就 `GUARD(calleeGraphOf_ != nullptr)`（**518 行**）；
+   - `GUARD` 在 Release 里是活的（`camel/utils/assert.h:95`，报 `Camel Invariant Violation` 并 abort），不是被 `NDEBUG` 抹掉的 `ASSERT`；
+   - `src/kernel/graph/callee_graph_of.h:18-20` 自己写着：没有解析器的适配器「不是错的，是更窄」，它答不了按值的 callee，`calleeOf` 在那里**拒绝**；
+   - 唯一的调用者 `src/kernel/facts/facts.cpp:988`（`arrangeable` 事实）拿到的正是这种窄适配器：`facts.cpp:451` 的 `GraphAccess::view` 是 `&graph.view()`。
+   **所以「`view().calleeOf` 一用就 GUARD」是真的**，而且是**一句也没有传递者**的那种真：`GCGraph` 不持有 `Program`，`Program` 才有 `graph(GraphId)`。修法是让 `Program` 收 `const Graph *`（E 的那一半），或者让事实层的 `GraphAccess` 自己带上解析器——**两条都不是视图的洞**。这一条值得单独派工，它在 `transforms` 里是最容易回收的一块。
+
+## 6 闸门读数
+
+**① 构建（题面原命令，`-Plan` 为空即「只构建」）：**
 
 ```
 pwsh internal\tools\camel-remote.ps1 -Path D:\Projects\Camel-wt\viewgaps -Jobs 8 -NoGpuWatch
+→ BUILD_EXIT=0, BUILD_SECONDS=20.9, [DONE] Release build completed
 ```
 
-读数见本页末「闸门读数」一节；`test::view_ports` 新增一行 `[VW]`（A 与 C 的一致性：`attrs`/`perms`/`wait`/`users`/`edges`/`regions` 逐节点、逐区域与表示自己的答案比），计划 `graph_faces.view_ports` 钉住 `[VW] agree=1`。
+**② 本车道钉住的那个计划（5 条全绿）：**
 
-## 6 没有做的事
+```
+-Plan "test/plans/feat/opt/graph_faces.plan.toml"
+→ RUN_EXIT=0, [tier] fast: 1 plan file(s), 5 declared test entries, 5 pass
+```
 
-未动 `develop`、未推 `develop`、未删分支与 tag、未 `--amend`、未改 `internal/collab/**`。D 与 E 未做（题面点名不做）。`fvm/version_state.cpp:37` 的 `execPlanOf` 未加视图能力。
+`graph_faces.view_ports` 里新增的 `[VW]` 行在跑：`attrs`/`perms`/`wait`/`users` 逐节点、`edges`/`regions` 逐图与表示自己的答案逐项比，`[VW] agree=1`。
+
+**③ 全快速层（`smoke,feat`）：基线本身是红的，本车道没有新红。**
+
+```
+-Plan "smoke,feat"
+基线 5162f14ccc（干净树）：total 9895, pass 8458, fail 1384, skip 23, known failures 30
+本车道（22 个文件 + 本页）：total 9895, pass 8458, fail 1384, skip 23, known failures 30
+失败用例名逐条求交：base=1384、mine=1384、Compare-Object 条目 = 0
+```
+
+即 **1384 条红在 `5162f14ccc` 上就有**（与本轮无关），而两边的失败集合**完全相同**——本轮一条新红也没有、也没有把哪条红变绿。为了让这条读数不受「工作树脏」影响，基线是用 `5162f14ccc` 的独立检出（临时工作树 `D:\Projects\Camel-wt\viewgaps-base`，分支 `scratch/viewgaps-base`）量的，与本车道互不覆盖。
+
+同一形状的窄读数（`feat/compile,feat/examples,feat/modules/tiles`，2922 条）：基线 `fail 270`、本车道 `fail 270`，名字集合 `Compare-Object` 条目 = 0。
+
+**④ 静态检查器没跑成，原因是读数本身：** `-Check all` 在**未提交**的树上拒绝执行（「the base and this tree are the same commit: there was no change to measure」），提交之后这条车道没有再跑一次 `-Check`——**所以「检查器干净」这一条我没读到**，不当作已验。
+
+## 7 没有做的事
+
+未动 `develop`、未推 `develop`、未删分支与 tag、未 `--amend`、未改 `internal/collab/**`。D 与 E 未做（题面点名不做）。`fvm/version_state.cpp:37` 的 `execPlanOf` 未加视图能力。`git stash` 未再使用（本仓 stash 是全仓共享的，本轮改动的暂存与恢复都走 patch 文件与 WIP 提交）。
