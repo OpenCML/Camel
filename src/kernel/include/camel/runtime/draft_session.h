@@ -168,10 +168,13 @@ class RuntimeGraphDraftSession {
     void noteMadeGraph(GCGraph *graph);
     /// The graphs this transaction made, in the order they were made.
     const std::vector<GCGraph *> &madeGraphs() const { return madeGraphs_; }
-    /// The ids of the graphs this session made itself (`adoptGraph`, `noteMadeGraph`): what a
-    /// commit records on the program it hands back (`Program::setMadeGraphs`), beside the record
-    /// it carries from the program it rewrote. A graph taken from another program
-    /// (`adoptProgram`) is not here: that is the adoption the pass boundary refuses.
+    /// The ids of the graphs this session made itself (`adoptGraph`, `noteMadeGraph`), and of the
+    /// graphs it adopted from a program that declared them made (`adoptProgram`, see
+    /// `Program::madeGraphs`) and that the work table then holds: what a commit records on the
+    /// program it hands back (`Program::setMadeGraphs`), beside the record it carries from the
+    /// program it rewrote. A graph taken from a program that made nothing -- a library or a
+    /// definition program, encoded with `Program::bind` -- is not here: that is the adoption the
+    /// pass boundary refuses.
     const std::unordered_set<uint32_t> &madeGraphIds() const { return madeIds_; }
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
     /// The context of the program the session rewrites.
