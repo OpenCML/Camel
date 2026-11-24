@@ -1,0 +1,14 @@
+/**
+ * An explicit import of a prelude name is still accepted -- naming the module costs nothing, it is
+ * only not required. Beside it `to_range`, an operator of the same file, is reached with no import
+ * of it exactly as `to_array` now is.
+ */
+import { to_array } from prelude
+
+func main() => int sync {
+    let r = to_range(0, 3, 1)
+    let xs = to_array(r)
+    println(xs)
+    println(len(xs))
+    return 0
+}

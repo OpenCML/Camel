@@ -34,12 +34,68 @@
 // of the same id is acknowledged and dropped, so a retried request does not start a second turn.
 
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { measure } from './measure.js'
-import { DEFAULT_LIMITS, LEVELS, RULES } from './rules.js'
+import { pathToFileURL } from 'node:url'
+import * as bootMeasure from './measure.js'
+import * as bootRules from './rules.js'
+
+// The parts that change most often -- the rules, their limits and texts, and what is measured --
+// are reloaded when they change, at the next beat, without restarting the host: a restart stops
+// every agent that is working. They are read from origin/develop, the content that has passed the
+// merge gate and been pushed, never from the checkout's working tree: a merge in progress there
+// holds content that has not been measured yet, and a lane's half-done edit may sit there too. A
+// file that fails to load leaves the version in use in place and is reported. The routes, the tools
+// and the session wiring in this file still need a restart.
+const HOT_REF = 'origin/develop'
+const HOT_DIR = path.join(os.homedir(), '.camel-oversight', 'hot')
+const hot = {
+    rules: { module: bootRules, blob: null, error: null },
+    measure: { module: bootMeasure, blob: null, error: null },
+}
+const gitIn = (repo, args) =>
+    new Promise((resolve, reject) =>
+        execFile('git', ['-C', repo, ...args], { env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, maxBuffer: 16 << 20 },
+            (error, stdout) => (error ? reject(error) : resolve(stdout))))
+// The text of a file as origin/develop has it, or null when it cannot be read.
+async function pushedText(repo, file) {
+    return gitIn(repo, ['show', `${HOT_REF}:${file}`]).catch(() => null)
+}
+async function reloadHot(repo, onChange) {
+    if (!repo) return
+    for (const [name, file] of [['rules', 'rules.js'], ['measure', 'measure.js']]) {
+        const slot = hot[name]
+        const spec = `internal/tools/camel-oversight/${file}`
+        let blob
+        try {
+            blob = (await gitIn(repo, ['rev-parse', `${HOT_REF}:${spec}`])).trim()
+        } catch (error) {
+            slot.error = `${spec} at ${HOT_REF}: ${String(error.message).split(/\r?\n/)[0]}`
+            continue
+        }
+        if (slot.blob === null) {
+            slot.blob = blob // the version imported at start stands until the pushed one changes
+            continue
+        }
+        if (blob === slot.blob) continue
+        slot.blob = blob // a broken version is not retried every beat
+        try {
+            const text = await gitIn(repo, ['show', `${HOT_REF}:${spec}`])
+            mkdirSync(HOT_DIR, { recursive: true })
+            const copy = path.join(HOT_DIR, `${name}-${blob.slice(0, 12)}.mjs`)
+            if (!existsSync(copy)) writeFileSync(copy, text)
+            slot.module = await import(pathToFileURL(copy).href)
+            slot.error = null
+            onChange && onChange({ file, blob: blob.slice(0, 12), ok: true })
+        } catch (error) {
+            slot.error = `${file}: ${error.message}`
+            onChange && onChange({ file, blob: blob.slice(0, 12), ok: false, error: error.message })
+        }
+    }
+}
 
 export const name = 'camel-oversight'
 export const inject = ['agents', 'webServer', 'tools', 'systemPrompt', 'timer']
@@ -291,7 +347,16 @@ export function apply(ctx, rawConfig) {
             }),
         )
 
-    const pending = () => [...delivered.values()].filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id)).map((entry) => entry.id)
+    // A dispatch is owed an answer once the coordinator has read it. One still waiting in its queue is
+    // listed by `queuedDispatches`, not here: naming its id before its text arrives asks for an
+    // answer to a message the coordinator cannot see.
+    const pending = () => {
+        const agent = target()
+        return [...delivered.values()]
+            .filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id))
+            .filter((entry) => !(agent && entry.messageId && stillQueued(agent, entry.messageId)))
+            .map((entry) => entry.id)
+    }
 
     // Whether a message is still waiting in the agent's queue, unread.
     const stillQueued = (agent, messageId) => {
@@ -384,7 +449,17 @@ export function apply(ctx, rawConfig) {
     // condition has held for the rule's `hold` and the same alert was not delivered within its
     // `cooldown` (an alert whose reading changed is new). All reminders due in one beat are delivered
     // as one message, at the loudest level among them.
-    const limits = { ...DEFAULT_LIMITS, ...(config.limits || {}) }
+    // Limits are read afresh at each beat: the rules file's defaults, then the plugin config, then
+    // the local config file, so a threshold changes without a restart.
+    const limitsNow = () => {
+        let local = {}
+        try {
+            if (existsSync(LOCAL_CONFIG)) local = JSON.parse(readFileSync(LOCAL_CONFIG, 'utf8')).limits || {}
+        } catch {
+            local = {}
+        }
+        return { ...hot.rules.module.DEFAULT_LIMITS, ...(config.limits || {}), ...local }
+    }
     let reading = null
     let lanesNow = { unreadable: 'not measured yet' }
     const alerts = new Map() // rule id -> {since, key, text, level, lastDelivered, lastKey}
@@ -394,12 +469,13 @@ export function apply(ctx, rawConfig) {
 
     const unackedOlderThan = (minutes) =>
         [...delivered.values()]
-            .filter((entry) => !acks.has(entry.id) && Date.now() - entry.at > minutes * 60_000)
+            // A dispatch another one replaced (`supersedes`) is answered by the answer to the replacement.
+            .filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id) && Date.now() - entry.at > minutes * 60_000)
             .map((entry) => entry.id)
     // Only dispatch-shaped ids are items; an id a session made up for itself can never have a backlog row.
     const takenIds = () =>
         [...acks.values()]
-            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 15 * 60_000)
+            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 60 * 60_000)
             .map((entry) => entry.id)
     const backlogOpen = () =>
         reading && reading.backlog instanceof Map ? [...reading.backlog.values()].filter((row) => !row.done).length : 0
@@ -418,13 +494,18 @@ export function apply(ctx, rawConfig) {
         const previous = lastOfKind.get(kind)
         if (previous && stillQueued(agent, previous)) agent.inbox.remove(previous)
         lastOfKind.set(kind, message.id)
+        // DSH has three ways in. inject adds to the running turn's context and starts nothing; steer goes
+        // in at the running turn's next step and, with no turn running, waits for one; followup is a new
+        // message after the current turn and starts one when the session is idle. So only followup wakes
+        // an idle session: urgent and wake reminders use it then, steer and inject only while a turn runs.
+        if (agent.status !== 'running' && (level === 'urgent' || level === 'wake')) return agent.followup(message), 'followup'
         if (level === 'urgent') return agent.steer(message), 'steer'
-        if (level === 'wake' && agent.status !== 'running') return agent.followup(message), 'followup'
         return agent.inject(message), 'inject'
     }
 
     const deliver = (due, now) => {
         const agent = target()
+        const LEVELS = hot.rules.module.LEVELS
         const level = due.reduce((top, alert) => (LEVELS[alert.level] > LEVELS[top] ? alert.level : top), 'quiet')
         const text = `[oversight · 提醒]\n${due.map((alert) => `- ${alert.text}`).join('\n')}`
         const mode = agent ? sendToTarget(agent, level, text) : 'held (no claimed session)'
@@ -453,7 +534,9 @@ export function apply(ctx, rawConfig) {
     let rulesText = ''
     const loadRules = async () => {
         if (!config.repo) return
-        const text = await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
+        // As pushed, not as the checkout's working tree has it mid-merge (see HOT_REF).
+        const pushed = await pushedText(config.repo, config.rulesFile)
+        const text = pushed !== null ? pushed : await readFile(path.join(config.repo, config.rulesFile), 'utf8').catch(() => '')
         if (text.trim()) rulesText = text.trim()
     }
     void loadRules()
@@ -485,12 +568,13 @@ export function apply(ctx, rawConfig) {
 
     // A turn that ends by asking the owner: the last assistant text ends in a question mark, or asks for
     // a decision in so many words. The owner is not there to answer; the rule is to go on with the default.
-    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|Should I|Would you like|Let me know|shall I)/i
+    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|你说一声|不说我就|你点头|你同意的话|你若同意|由你定|你定|你否决|Should I|Would you like|Let me know|shall I)/i
     const asksOwner = (text) => {
         const tailText = String(text || '').trim().slice(-400)
         return tailText !== '' && (/[?？]\s*$/.test(tailText) || ASKS.test(tailText))
     }
     let lastAskNudge = 0
+    let lastTurn = null
     const QUESTION_TOOLS = new Set(['ask_user_question', 'ask_user'])
     onTargetEvent = (event) => {
         const d = event.data || {}
@@ -499,7 +583,7 @@ export function apply(ctx, rawConfig) {
             pendingCalls.set(String(d.callId), { name: d.name, at, warned: false })
             if (QUESTION_TOOLS.has(d.name) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问、不等——按默认建议继续；真是问句就写 internal/questions/ 一页，再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问负责人、不等——按默认做法继续；真有问题就用 oversight_tell 直接问决策者（问句、读数、默认做法）。')
             }
         } else if (event.type === 'tool/result') {
             const callId = d.message && d.message.source ? d.message.source.callId : d.callId
@@ -511,9 +595,12 @@ export function apply(ctx, rawConfig) {
         } else if (event.type === 'turn/end') {
             pendingCalls.clear()
             const aborted = d.reason && d.reason.kind === 'aborted'
+            // What the turn ended on, for the rules: a turn that ends on a promise ("I will ... after ...")
+            // leaves the work to a message that may never come.
+            lastTurn = { at, text: String(lastAssistantText || ''), aborted: Boolean(aborted) }
             if (!aborted && asksOwner(lastAssistantText) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问、不等——按默认建议继续干；真是问句就写 internal/questions/ 一页（问句、读数、两三条路各带代价、默认建议），再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问负责人、不等——按默认做法继续干；真有问题就用 oversight_tell 直接问决策者（问句、读数、两三条路各带代价、默认做法）。')
             }
         }
     }
@@ -525,18 +612,38 @@ export function apply(ctx, rawConfig) {
         const agent = target()
         if (!agent) return
         const now = Date.now()
+        // A call that only waits on a background job loses nothing when interrupted: the job keeps
+        // running. While such a wait holds dispatches behind it, the turn is ended at once, not after
+        // blockCancelMinutes, since the dispatches cannot arrive any other way.
+        const held = [...delivered.values()].filter(
+            (entry) => entry.messageId && !superseded.has(entry.id) && stillQueued(agent, entry.messageId) &&
+                now - entry.at >= (config.heldDispatchMinutes ?? 10) * 60_000,
+        )
         for (const [callId, call] of pendingCalls) {
             if ((config.blockExempt || []).includes(call.name)) continue
+            if (held.length && (config.waitTools || ['job_output']).includes(call.name)) {
+                pendingCalls.delete(callId)
+                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律：你只做判断，不在会话里久等）。`
+                nudge('wait-ended', 'urgent', text, (a) => {
+                    a.cancel({ kind: 'user' }, { keepInbox: true })
+                    a.followup(Object.freeze({
+                        id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
+                        content: Object.freeze([Object.freeze({ type: 'text', text })]),
+                    }))
+                    return 'cancel+followup'
+                })
+                continue
+            }
             const minutes = (now - call.at) / 60_000
             if (minutes >= config.blockCancelMinutes) {
                 pendingCalls.delete(callId)
                 nudge('blocked-cancelled', 'urgent',
-                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
+                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
                     (a) => {
                         a.cancel({ kind: 'user' }, { keepInbox: true })
                         a.followup(Object.freeze({
                             id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
-                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
+                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
                         }))
                         return 'cancel+followup'
                     })
@@ -553,7 +660,13 @@ export function apply(ctx, rawConfig) {
         beating = true
         try {
             const now = Date.now()
-            reading = await measure({
+            await reloadHot(config.repo, (change) => {
+                const entry = { kind: 'hot-reload', at: now, ...change }
+                record(entry)
+                emit(entry)
+            })
+            const limits = limitsNow()
+            reading = await hot.measure.module.measure({
                 repo: config.repo,
                 fetch: config.fetch !== false,
                 stateDir: config.stateDir,
@@ -568,13 +681,19 @@ export function apply(ctx, rawConfig) {
                 limits,
                 now,
                 unacked: unackedOlderThan(20),
+                stuck: agent
+                    ? [...delivered.values()]
+                          .filter((entry) => entry.messageId && !superseded.has(entry.id) && stillQueued(agent, entry.messageId))
+                          .map((entry) => ({ id: entry.id, minutes: Math.floor((now - entry.at) / 60_000) }))
+                    : [],
                 taken: takenIds(),
                 backlogOpen: backlogOpen(),
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
                 dmLastSeen,
+                lastTurn,
             }
             const due = []
-            for (const rule of RULES) {
+            for (const rule of hot.rules.module.RULES) {
                 let found = null
                 try {
                     found = rule.check(facts)
@@ -665,6 +784,7 @@ export function apply(ctx, rawConfig) {
             promptReach,
             blocking: [...pendingCalls.values()].map((call) => ({ name: call.name, minutes: Math.round((Date.now() - call.at) / 60_000) })),
             watch: config.repo ? { repo: config.repo, everySeconds: config.watchSeconds } : { off: 'no repo in config' },
+            hotLoaded: Object.fromEntries(Object.entries(hot).map(([name, slot]) => [name, { blob: slot.blob && slot.blob.slice(0, 12), error: slot.error }])),
         })
     })
 
@@ -869,16 +989,16 @@ export function apply(ctx, rawConfig) {
                         : ''
                 }
                 if (initiator !== aimed) return ''
-                const waiting = pending()
+                // Only stable text goes here: the rules (they change when rules.md does) and how the
+                // channel works. This is assembled into every request ahead of the conversation, so text
+                // that changed with each measurement -- unanswered ids, open alerts -- broke the prompt
+                // cache for the whole conversation behind it. Those reach the session as messages (a
+                // newer one of the same kind replaces an unread older one) and on the band.
                 const head =
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +
                     'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit). ' +
                     'Messages prefixed "[oversight · …]" are the plugin\'s own reminders from its measurements; act on them, no acknowledgement needed. oversight_readings gives the measurements on demand.'
-                const open = [...alerts.keys()]
-                const parts = rulesText ? [rulesText, head] : [head]
-                if (waiting.length > 0) parts.push(`Not yet acknowledged: ${waiting.join(', ')}.`)
-                if (open.length > 0) parts.push(`Open alerts: ${open.join(', ')}.`)
-                return parts.join(' ')
+                return (rulesText ? [rulesText, head] : [head]).join(' ')
             },
         }),
     )

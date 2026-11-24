@@ -16,6 +16,7 @@
 #include "camel/profile/operators.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/reachable.h"
+#include "graph/graph_view.h"
 #include "runtime/graph_build.h"
 #include <algorithm>
 #include <iostream>
@@ -43,8 +44,8 @@ runtimeDataIndexOf(const camel::runtime::GCGraph *graph, camel::runtime::gc_node
 static std::vector<data_idx_t> directCallDstSlotsOf(camel::runtime::GCGraph *targetRuntimeGraph) {
     GUARD(targetRuntimeGraph != nullptr, "FastVM direct-call target graph is null.");
     std::vector<data_idx_t> dstSlots;
-    const auto normPorts = targetRuntimeGraph->normPorts();
-    const auto withPorts = targetRuntimeGraph->withPorts();
+    const auto normPorts = targetRuntimeGraph->view().ports(camel::graph::PortGroup::Normal);
+    const auto withPorts = targetRuntimeGraph->view().ports(camel::graph::PortGroup::Context);
     dstSlots.reserve(normPorts.size() + withPorts.size());
     for (auto portRef : normPorts) {
         dstSlots.push_back(runtimeDataIndexOf(targetRuntimeGraph, portRef));
@@ -145,8 +146,9 @@ static bytecode_vec_t compileRuntimeGraph(
     const auto &topoSortedIndices = plan.topo;
     const auto returnNodeRef      = graph->returnNodeRef();
     const auto *returnNode        = graph->returnNode();
-    const bool expectsValueReturn = graph->funcType() && graph->funcType()->hasExitType() &&
-                                    graph->funcType()->exitType() != Type::Void();
+    const camel::core::type::FunctionType *funcType = graph->view().funcType();
+    const bool expectsValueReturn                  = funcType && funcType->hasExitType() &&
+                                                    funcType->exitType() != Type::Void();
     const bool hasValueReturn     = returnNodeRef != camel::runtime::kInvalidNodeRef &&
                                     returnNode != nullptr && returnNode->dataIndex != 0;
     if (expectsValueReturn && !hasValueReturn) {
@@ -261,7 +263,7 @@ static bytecode_vec_t compileRuntimeGraph(
 
         size_t currIdx             = bytecodes.size();
         const size_t bytecodeStart = bytecodes.size();
-        const auto nodeOrigin      = graph->nodeOrigin(runtimeNodeIndex);
+        const auto nodeOrigin      = graph->view().originOf(runtimeNodeIndex);
 
         if (auto it = brchTargetMap.find(runtimeNodeIndex); it != brchTargetMap.end()) {
             for (size_t jumpIndex : it->second) {
@@ -276,7 +278,7 @@ static bytecode_vec_t compileRuntimeGraph(
         if (!plan.loops.empty()) {
             for (const uint32_t code : plan.loopEventsAt(i)) {
                 const auto &loop      = plan.loops[code / 3];
-                const auto loopOrigin = graph->nodeOrigin(plan.topo[loop.position]);
+                const auto loopOrigin = graph->view().originOf(plan.topo[loop.position]);
                 const size_t eventPc  = bytecodes.size();
                 switch (static_cast<camel::runtime::ExecLoopEvent>(code % 3)) {
                 case camel::runtime::ExecLoopEvent::Begin:
@@ -314,10 +316,12 @@ static bytecode_vec_t compileRuntimeGraph(
         }
 
         vector<data_idx_t> normOps, withOps;
-        for (auto inputRef : graph->normInputsOf(runtimeNodeIndex)) {
+        for (auto inputRef :
+             graph->view().inputs(runtimeNodeIndex, camel::graph::PortGroup::Normal)) {
             normOps.push_back(runtimeDataIndexOf(graph, inputRef));
         }
-        for (auto inputRef : graph->withInputsOf(runtimeNodeIndex)) {
+        for (auto inputRef :
+             graph->view().inputs(runtimeNodeIndex, camel::graph::PortGroup::Context)) {
             withOps.push_back(runtimeDataIndexOf(graph, inputRef));
         }
 
@@ -367,7 +371,8 @@ static bytecode_vec_t compileRuntimeGraph(
 
             case camel::execute::OperShape::Access: {
                 requireInputCount("ACCS", runtimeNodeIndex, "norm", normOps.size(), 1);
-                const auto sourceRef  = graph->normInputsOf(runtimeNodeIndex).front();
+                const auto sourceRef =
+                    graph->view().inputs(runtimeNodeIndex, camel::graph::PortGroup::Normal).front();
                 const auto *srcRecord = graph->node(sourceRef);
                 const auto *accBody =
                     graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
@@ -440,7 +445,8 @@ static bytecode_vec_t compileRuntimeGraph(
         switch (record->kind) {
         case camel::runtime::GCNodeKind::Brch: {
             appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
-            for (size_t armIndex = 0; armIndex < graph->armCountOf(runtimeNodeIndex); ++armIndex) {
+            const size_t armCount = graph->view().regionsOwnedBy(runtimeNodeIndex).size();
+            for (size_t armIndex = 0; armIndex < armCount; ++armIndex) {
                 const auto armEntry = plan.branchArmEntriesOf(i)[armIndex];
                 GUARD(
                     armEntry != camel::runtime::kInvalidNodeRef,
@@ -534,7 +540,8 @@ static bytecode_vec_t compileRuntimeGraph(
         }
 
         case camel::runtime::GCNodeKind::Oper: {
-            const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex);
+            // The operator the node names, as the view hands it out: the record's own field.
+            const camel::core::OperId operId = graph->view().operatorOf(runtimeNodeIndex);
             // The plan names the operator: an update node whose storage must not be reused runs
             // the plain form of the operator it names, and the copying form of an operator that
             // has an in-place one runs it where the plan handed over the value it was given
@@ -543,7 +550,7 @@ static bytecode_vec_t compileRuntimeGraph(
 
             if (opt.enableInlineOperators) {
                 const auto &inlineOpMap = getSupportedInlineOperatorsMap();
-                auto it                 = inlineOpMap.find(operBody->oper);
+                auto it                 = inlineOpMap.find(operId);
                 if (it != inlineOpMap.end()) {
                     requireInputCount("OPER", runtimeNodeIndex, "norm", normOps.size(), 2);
                     appendBytecode(
@@ -558,8 +565,8 @@ static bytecode_vec_t compileRuntimeGraph(
                 }
             }
 
-            if (camel::core::OperatorTable::instance().isMarked(operBody->oper)) {
-                const std::optional<MarkOpCode> markOp = markOpCodeOf(operBody->oper);
+            if (camel::core::OperatorTable::instance().isMarked(operId)) {
+                const std::optional<MarkOpCode> markOp = markOpCodeOf(operId);
                 if (!markOp) {
                     // A marked operator the bytecode set cannot express: a compiler defect.
                     ctx->rtmDiags()
@@ -608,7 +615,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 },
                 3);
             *native->extra2() =
-                graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex)->oper;
+                graph->view().operatorOf(runtimeNodeIndex);
             // What a pass recorded about this node (design principles 9.6); native_call hands it
             // to the operator through its ArgsView.
             *native->operAttrs() = graph->nodeAttrs(runtimeNodeIndex);
@@ -623,7 +630,8 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Data:
             [[fallthrough]];
         case camel::runtime::GCNodeKind::Gate: {
-            const auto normInputs = graph->normInputsOf(runtimeNodeIndex);
+            const auto normInputs =
+                graph->view().inputs(runtimeNodeIndex, camel::graph::PortGroup::Normal);
             if (!normInputs.empty()) {
                 // The value a GATE hands on is its first normal input (design principles 3.1);
                 // the inputs after it are the reads of the region's
@@ -796,7 +804,7 @@ LinkedBytecodeResult compileAndLinkGraphs(
         // builds the placeholder, and it reaches this pass with no node at all: it has no
         // bytecode and no call it can serve, so it is skipped rather than reported as an
         // internal error.
-        if (runtimeGraph->nodeCount() == 0) {
+        if (runtimeGraph->view().nodeSlotCount() == 0) {
             continue;
         }
         camel::runtime::validateRuntimeGraphPayload(program, runtimeGraph);

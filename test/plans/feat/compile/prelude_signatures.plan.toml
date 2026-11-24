@@ -69,3 +69,27 @@ expect_exit = 0
 expect_stdout_contains = ["[1] 2 8 0 false true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "unimported_function_is_in_scope"
+desc = "A function of the prelude is written without an import: `to_array` resolves with nothing imported (design principles 10.2, the last layer -- the prelude is the built-in module's declaration file). The body of a generic function is the one place this does not hold yet: its declaration-site name check (`resolveGenericTemplateNames` -> `valueNameExists`) does not ask the prelude layer."
+kind = "behavior"
+case = "../../../cases/compile/prelude_signatures/unimported_function.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[0, 1, 2]"]
+expect_output_not_contains = ["[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "imported_function_beside_an_ambient_operator"
+desc = "An explicit import of a prelude name is still accepted, and beside it `to_range` -- an operator of the same file -- is reached with no import of it: nothing about the last layer forbids naming the module."
+kind = "behavior"
+case = "../../../cases/compile/prelude_signatures/imported_function.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[0, 1, 2]", "3"]
+expect_output_not_contains = ["[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

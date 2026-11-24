@@ -14,6 +14,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/shaped_operators.h"
+#include "graph/graph_view.h"
 
 #include <algorithm>
 #include <cctype>
@@ -28,6 +29,8 @@ using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
 
 namespace {
+
+using camel::graph::PortGroup;
 
 bool isAnonymousGraphName(const std::string &name) {
     return name.size() >= 4 && name.starts_with("__") && name.ends_with("__");
@@ -56,10 +59,11 @@ gc_node_ref_t resultOf(const GCGraph *graph) {
     gc_node_ref_t ref = graph->outputNodeRef();
     while (ref != kInvalidNodeRef) {
         const auto *node = graph->node(ref);
-        if (node == nullptr || node->kind != GCNodeKind::Gate || graph->normInputsOf(ref).empty()) {
+        if (node == nullptr || node->kind != GCNodeKind::Gate ||
+            graph->view().inputs(ref, PortGroup::Normal).empty()) {
             break;
         }
-        ref = graph->normInputsOf(ref).front();
+        ref = graph->view().inputs(ref, PortGroup::Normal).front();
     }
     return ref;
 }
@@ -82,14 +86,15 @@ std::string withoutParentheses(const std::string &text) {
 
 /// Whether every user of `ref` takes it as the template of a construction (FILL, Norm 0).
 bool onlyTemplate(const GCGraph *graph, gc_node_ref_t ref) {
-    if (!graph->withOutputsOf(ref).empty() || graph->normOutputsOf(ref).empty()) {
+    if (!graph->view().users(ref, PortGroup::Context).empty() ||
+        graph->view().users(ref, PortGroup::Normal).empty()) {
         return false;
     }
-    for (gc_node_ref_t user : graph->normOutputsOf(ref)) {
+    for (gc_node_ref_t user : graph->view().users(ref, PortGroup::Normal)) {
         const auto *node = graph->node(user);
         if (node == nullptr ||
             camel::execute::shapeOfKind(node->kind) != camel::execute::OperShape::Construction ||
-            graph->normInputsOf(user).front() != ref) {
+            graph->view().inputs(user, PortGroup::Normal).front() != ref) {
             return false;
         }
     }
@@ -120,10 +125,11 @@ std::string movedOnce(const std::string &text, const std::string &name) {
 gc_node_ref_t resultThrough(const GCGraph *graph, gc_node_ref_t ref) {
     while (ref != kInvalidNodeRef) {
         const auto *node = graph->node(ref);
-        if (node == nullptr || node->kind != GCNodeKind::Gate || graph->normInputsOf(ref).empty()) {
+        if (node == nullptr || node->kind != GCNodeKind::Gate ||
+            graph->view().inputs(ref, PortGroup::Normal).empty()) {
             break;
         }
-        ref = graph->normInputsOf(ref).front();
+        ref = graph->view().inputs(ref, PortGroup::Normal).front();
     }
     return ref;
 }
@@ -206,7 +212,7 @@ FunctionEmitter::FunctionEmitter(
 
 void FunctionEmitter::collectParameters(Member &member) {
     auto *graph        = member.graph;
-    const Type *result = graph->funcType()->exitType();
+    const Type *result = graph->view().funcType()->exitType();
     if (!program_.values.type(result)) {
         throw Refusal{
             graph,
@@ -244,10 +250,10 @@ void FunctionEmitter::collectParameters(Member &member) {
     };
     // The order of the arguments of a direct call: the normal ones, then the `with` ones
     // (declared, then captures), as a FUNC node lists its inputs.
-    for (gc_node_ref_t port : graph->normPorts()) {
+    for (gc_node_ref_t port : graph->view().ports(PortGroup::Normal)) {
         add(port, "a parameter");
     }
-    for (gc_node_ref_t port : graph->withPorts()) {
+    for (gc_node_ref_t port : graph->view().ports(PortGroup::Context)) {
         add(port, "a 'with' parameter");
     }
     for (gc_node_ref_t port : graph->closureNodes()) {
@@ -259,26 +265,26 @@ std::string FunctionEmitter::parameterName(const GCGraph *graph, gc_node_ref_t p
     // The names are those of the declared parameters: the `with` ones, then the others; ports
     // after the declared `with` ones are captures, named by what they capture (as
     // src/passes/trans/dot/graphviz.cpp names them).
-    const auto *type = graph->funcType();
+    const auto *type = graph->view().funcType();
     if (type == nullptr) {
         return "arg";
     }
     const auto captured    = graph->captureNames();
-    const size_t withPorts = graph->withPorts().size();
+    const size_t withPorts = graph->view().ports(PortGroup::Context).size();
     const size_t withCount = graph->closureNodes().empty() && captured.size() <= withPorts
                                  ? withPorts - captured.size()
                                  : withPorts;
     std::optional<size_t> argIndex;
     for (size_t i = 0; i < withPorts; ++i) {
-        if (graph->withPorts()[i] == port) {
+        if (graph->view().ports(PortGroup::Context)[i] == port) {
             if (i >= withCount) {
                 return cppIdentifier(camel::core::symbolText(captured[i - withCount]));
             }
             argIndex = i;
         }
     }
-    for (size_t i = 0; !argIndex && i < graph->normPorts().size(); ++i) {
-        if (graph->normPorts()[i] == port) {
+    for (size_t i = 0; !argIndex && i < graph->view().ports(PortGroup::Normal).size(); ++i) {
+        if (graph->view().ports(PortGroup::Normal)[i] == port) {
             argIndex = withCount + i;
         }
     }
@@ -436,7 +442,9 @@ size_t FunctionEmitter::liveUses(const GCGraph *graph, gc_node_ref_t ref) {
         std::unordered_set<gc_node_ref_t> live(order.begin(), order.end());
         for (gc_node_ref_t n : order) {
             size_t count = 0;
-            for (const auto users : {graph->normOutputsOf(n), graph->withOutputsOf(n)}) {
+            const camel::graph::GraphView &view = graph->view();
+            for (const auto users :
+                 {view.users(n, PortGroup::Normal), view.users(n, PortGroup::Context)}) {
                 for (gc_node_ref_t user : users) {
                     count += live.contains(user) ? 1 : 0;
                 }
@@ -497,17 +505,18 @@ Block FunctionEmitter::lowerSequenceBody(
         }
         for (uint32_t part : parts) {
             if (part != 0) {
-                for (gc_node_ref_t port : frame.graph->regionPorts(part)) {
+                for (gc_node_ref_t port : frame.graph->view().regionParameters(part)) {
                     ownedByLoops.insert(port);
                 }
             }
         }
-        ownedByLoops.insert(frame.graph->withInputsOf(loop).back());
-        if (frame.graph->loopIterableFormOf(loop) == camel::core::LoopIterableForm::Interval) {
+        ownedByLoops.insert(frame.graph->view().inputs(loop, PortGroup::Context).back());
+        if (frame.graph->view().loopFormOf(loop).iterableForm ==
+            camel::core::LoopIterableForm::Interval) {
             // The pair of the interval's two bounds is the loop's sequence (design principles
             // 4.2, LoopIterableForm::Interval): it is written out with the loop, as the array of
             // the interval, not where it stands.
-            ownedByLoops.insert(frame.graph->normInputsOf(loop).front());
+            ownedByLoops.insert(frame.graph->view().inputs(loop, PortGroup::Normal).front());
         }
     }
     for (size_t i = 0; i < order.size(); ++i) {
@@ -526,7 +535,7 @@ Block FunctionEmitter::lowerSequenceBody(
                 camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Clone;
             const bool valueOnly =
                 forwards || node->kind == GCNodeKind::Data || node->kind == GCNodeKind::Port;
-            const auto inputs = frame.graph->normInputsOf(ref);
+            const auto inputs = frame.graph->view().inputs(ref, PortGroup::Normal);
             if (valueOnly &&
                 (!forwards || (!inputs.empty() && frame.values.contains(inputs.front())))) {
                 lowerNode(frame, ref, out, false, Tail{});
@@ -562,7 +571,7 @@ Block FunctionEmitter::lowerSequenceBody(
     case Tail::Kind::Return:
         // A function declared to return nothing ends with `return;` whatever its last value
         // (`return println(...)` in a `void` function gives the string println gives).
-        if (isVoid(current_->graph->funcType()->exitType())) {
+        if (isVoid(current_->graph->view().funcType()->exitType())) {
             out.push_back(Stmt::line("return;"));
             break;
         }
@@ -694,7 +703,9 @@ bool FunctionEmitter::lowerNode(
             // the position of the function's definition).
             gc_node_ref_t at = ref;
             if (type->code() == camel::core::type::TypeCode::Function) {
-                for (const auto users : {g->withOutputsOf(ref), g->normOutputsOf(ref)}) {
+                const camel::graph::GraphView &view = g->view();
+                for (const auto users :
+                     {view.users(ref, PortGroup::Context), view.users(ref, PortGroup::Normal)}) {
                     if (!users.empty()) {
                         at = users.front();
                         break;
@@ -723,7 +734,7 @@ bool FunctionEmitter::lowerNode(
         return false;
     case GCNodeKind::Gate: {
         // A GATE passes its value on once what it waits for has run.
-        const auto inputs = g->normInputsOf(ref);
+        const auto inputs = g->view().inputs(ref, PortGroup::Normal);
         if (!inputs.empty()) {
             frame.values[ref] = valueOf(frame, inputs.front());
         }
@@ -813,14 +824,15 @@ void FunctionEmitter::lowerCall(
     // same ports' types (`collectParameters`), so a call that matches the ports matches the
     // definition by construction; a callee whose type and ports agree is unaffected.
     std::vector<const Type *> parameters;
-    for (const auto ports : {callee->normPorts(), callee->withPorts()}) {
+    for (const auto ports : {callee->view().ports(PortGroup::Normal), callee->view().ports(PortGroup::Context)}) {
         for (gc_node_ref_t port : ports) {
             const auto *node = callee->node(port);
             parameters.push_back(node != nullptr ? node->dataType() : nullptr);
         }
     }
     size_t argument = 0;
-    for (const auto inputs : {g->normInputsOf(ref), g->withInputsOf(ref)}) {
+    for (const auto inputs :
+         {g->view().inputs(ref, PortGroup::Normal), g->view().inputs(ref, PortGroup::Context)}) {
         for (gc_node_ref_t input : inputs) {
             const Type *parameter = argument < parameters.size() ? parameters[argument] : nullptr;
             std::string text;
@@ -1012,21 +1024,21 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             types.push_back(type);
         }
     };
-    collect(g->normInputsOf(ref), norm, normTypes);
-    collect(g->withInputsOf(ref), with, withTypes);
+    collect(g->view().inputs(ref, PortGroup::Normal), norm, normTypes);
+    collect(g->view().inputs(ref, PortGroup::Context), with, withTypes);
     // Which of the `with` arguments are constants of the program: a rule that would have to know
     // one at translation time (the shape a `tensor:reshape` rearranges to) can tell a written
     // shape from a computed one.
     std::vector<bool> withConstant;
-    for (gc_node_ref_t input : g->withInputsOf(ref)) {
+    for (gc_node_ref_t input : g->view().inputs(ref, PortGroup::Context)) {
         withConstant.push_back(g->node(input)->kind == GCNodeKind::Data);
     }
     // The arguments' nodes and the first argument's type, kept before they are moved into the
     // call a rule sees: a rule asks for a field name after that, and the field index is a node of
     // the graph (a constant), not a value of the arguments.
     const std::vector<gc_node_ref_t> normInputs(
-        g->normInputsOf(ref).begin(),
-        g->normInputsOf(ref).end());
+        g->view().inputs(ref, PortGroup::Normal).begin(),
+        g->view().inputs(ref, PortGroup::Normal).end());
     const Type *firstNormType = normTypes.empty() ? nullptr : normTypes.front();
 
     if (lowerVariable(frame, ref, uri, out) || lowerHigherOrder(frame, ref, uri, out) ||
@@ -1235,15 +1247,15 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
 void FunctionEmitter::lowerLoop(
     Frame &frame, gc_node_ref_t loop, const std::vector<gc_node_ref_t> &order, Block &out) {
     auto *g = frame.graph;
-    if (g->loopCollectionCountOf(loop) != 0) {
+    if (g->view().loopFormOf(loop).collectionCount != 0) {
         refuse(g, loop, std::format("{} has a loop that collects values", describeFunction(g)));
     }
-    const bool iterates            = camel::core::loopHasIterable(g->loopKindOf(loop));
-    const auto norm                = g->normInputsOf(loop);
+    const bool iterates            = camel::core::loopHasIterable(g->view().loopFormOf(loop).kind);
+    const auto norm                = g->view().inputs(loop, PortGroup::Normal);
     const size_t k                 = norm.size() - (iterates ? 1 : 0);
     const camel::runtime::ControlRegions regions(*g);
     const auto parts               = regions.loopPartsOf(loop);
-    const auto results             = g->withInputsOf(loop);
+    const auto results             = g->view().inputs(loop, PortGroup::Context);
     const bool hasCond             = parts[0] != 0;
     const gc_node_ref_t bodyResult = results[0];
     const gc_node_ref_t condResult = hasCond ? results[1] : kInvalidNodeRef;
@@ -1251,7 +1263,7 @@ void FunctionEmitter::lowerLoop(
     // The state is k variables the rounds assign; the ports of both regions are those variables.
     std::vector<std::string> state;
     for (size_t j = 0; j < k; ++j) {
-        const gc_node_ref_t port = g->regionPorts(parts[1])[(iterates ? 1 : 0) + j];
+        const gc_node_ref_t port = g->view().regionParameters(parts[1])[(iterates ? 1 : 0) + j];
         const std::string name   = locals_.unique(std::format("v{}_state", nextValue_++));
         out.push_back(
             Stmt::line(
@@ -1263,12 +1275,13 @@ void FunctionEmitter::lowerLoop(
         state.push_back(name);
         frame.values[port] = CppValue{name, false};
         if (hasCond) {
-            frame.values[g->regionPorts(parts[0])[j]] = CppValue{name, false};
+            frame.values[g->view().regionParameters(parts[0])[j]] = CppValue{name, false};
         }
     }
     std::string array, index;
-    const gc_node_ref_t element =
-        iterates ? g->regionPorts(parts[1]).front() : static_cast<gc_node_ref_t>(kInvalidNodeRef);
+    const gc_node_ref_t element = iterates
+                                      ? g->view().regionParameters(parts[1]).front()
+                                      : static_cast<gc_node_ref_t>(kInvalidNodeRef);
     if (iterates) {
         const gc_node_ref_t iterable = norm.front();
         array                        = locals_.unique(std::format("v{}_items", nextValue_++));
@@ -1289,7 +1302,7 @@ void FunctionEmitter::lowerLoop(
                     "dimension and a row on a value of several, and no one C++ type holds both",
                     describeFunction(g)));
         }
-        if (g->loopIterableFormOf(loop) == camel::core::LoopIterableForm::Interval) {
+        if (g->view().loopFormOf(loop).iterableForm == camel::core::LoopIterableForm::Interval) {
             // `for i in a..b`: the graph's sequence is the pair of the interval's two bounds
             // (design principles 4.2, LoopIterableForm::Interval). The C++ this exporter writes
             // has no loop driver of its own — it writes the loop out — so the interval becomes
@@ -1302,7 +1315,7 @@ void FunctionEmitter::lowerLoop(
             // asking for its C++ type asks for a `Tuple` there and writes an array into it.
             const std::string items =
                 std::format("rt::Array<{}>", cppType(g, element, g->node(element)->dataType()));
-            const auto bounds = g->withInputsOf(iterable);
+            const auto bounds = g->view().inputs(iterable, PortGroup::Context);
             if (bounds.size() != 2) {
                 refuse(
                     g,
@@ -1355,7 +1368,7 @@ void FunctionEmitter::lowerLoop(
         }
     }
     if (iterates) {
-        const gc_node_ref_t element = g->regionPorts(parts[1]).front();
+        const gc_node_ref_t element = g->view().regionParameters(parts[1]).front();
         // The item of a value of several dimensions is its row, one dimension less, which is what
         // the interpreter hands the body (design principles 4.2): `rt::atRow`, whose elements are
         // copied -- accepted, as the conversion at the bridge is -- so the body holds a value of
@@ -1443,11 +1456,11 @@ bool FunctionEmitter::lowerBranch(
     auto *g                   = frame.graph;
     const gc_node_ref_t join  = g->nodeBodyAs<GCBrchBody>(brch)->join;
     const auto *joinNode      = join != kInvalidNodeRef ? g->node(join) : nullptr;
-    const size_t armCount     = g->armCountOf(brch);
-    const auto cases          = g->withInputsOf(brch);
-    const auto selectorInputs = g->normInputsOf(brch);
+    const size_t armCount     = g->view().regionsOwnedBy(brch).size();
+    const auto cases          = g->view().inputs(brch, PortGroup::Context);
+    const auto selectorInputs = g->view().inputs(brch, PortGroup::Normal);
     if (joinNode == nullptr || joinNode->kind != GCNodeKind::Join || selectorInputs.empty() ||
-        armCount < 2 || g->withInputsOf(join).size() != armCount) {
+        armCount < 2 || g->view().inputs(join, PortGroup::Context).size() != armCount) {
         refuse(g, brch, std::format("a branch of {} is malformed", describeFunction(g)));
     }
     const std::string selector = valueOf(frame, selectorInputs.front()).text;
@@ -1516,7 +1529,7 @@ bool FunctionEmitter::lowerBranch(
     branch.kind = Stmt::Kind::Branch;
     for (size_t k = 0; k < armCount; ++k) {
         Block body;
-        const gc_node_ref_t result              = g->withInputsOf(join)[k];
+        const gc_node_ref_t result              = g->view().inputs(join, PortGroup::Context)[k];
         const std::vector<gc_node_ref_t> region = regionOf(k);
         body = lowerSequence(frame, region, resultThrough(g, result), armTail);
         for (gc_node_ref_t n : region) {
@@ -1601,19 +1614,19 @@ std::optional<std::string> FunctionEmitter::functionValue(
     // function type takes a function whose result nobody wants (design principles 3.9), and a
     // lambda that returns a value is not that type -- the result is dropped where the value is
     // made, rather than the call being handed a type the parameter does not have.
-    const Type *spelled = expected != nullptr ? expected : function->funcType();
+    const Type *spelled = expected != nullptr ? expected : function->view().funcType();
     auto type           = program_.values.type(spelled);
     if (name == program_.functionNames.end() || !type) {
         return std::nullopt;
     }
     bool dropResult = false;
-    if (expected != nullptr && function->funcType() != nullptr) {
+    if (expected != nullptr && function->view().funcType() != nullptr) {
         const auto *wanted = static_cast<const camel::core::type::FunctionType *>(expected);
-        dropResult = isVoid(wanted->exitType()) && !isVoid(function->funcType()->exitType());
+        dropResult = isVoid(wanted->exitType()) && !isVoid(function->view().funcType()->exitType());
     }
     std::string params, args;
     size_t i = 0;
-    for (const auto ports : {function->normPorts(), function->withPorts()}) {
+    for (const auto ports : {function->view().ports(PortGroup::Normal), function->view().ports(PortGroup::Context)}) {
         for (gc_node_ref_t port : ports) {
             auto t = program_.values.type(function->node(port)->dataType());
             if (!t) {
@@ -1648,8 +1661,8 @@ std::optional<std::string> FunctionEmitter::functionValue(
 void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     const auto *g = frame.graph;
     const auto *node = g->node(ref);
-    const auto norm  = g->normInputsOf(ref);
-    const auto with  = g->withInputsOf(ref);
+    const auto norm  = g->view().inputs(ref, PortGroup::Normal);
+    const auto with  = g->view().inputs(ref, PortGroup::Context);
     if (norm.empty()) {
         refuse(g, ref, std::format("a construction in {} has no template", describeFunction(g)));
     }
@@ -1810,8 +1823,8 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
 void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
     const auto *g     = frame.graph;
     const auto *node  = g->node(ref);
-    const auto norm   = g->normInputsOf(ref);
-    const auto with   = g->withInputsOf(ref);
+    const auto norm   = g->view().inputs(ref, PortGroup::Normal);
+    const auto with   = g->view().inputs(ref, PortGroup::Context);
     // A member read is written two ways (plan 2.3): a node of the ACCS kind carries the place or
     // the name in its own body, and the operator form (`access::<T, U><at>(x)` by place,
     // `access_key::<T, U><key>(x)` by name, of the prelude) carries it as the call's `with`
@@ -1945,7 +1958,7 @@ void FunctionEmitter::lowerCopyValue(Frame &frame, gc_node_ref_t ref) {
     // holder of a shared array sees it unchanged (array.h).
     const auto *g     = frame.graph;
     const auto *node  = g->node(ref);
-    const auto inputs = g->normInputsOf(ref);
+    const auto inputs = g->view().inputs(ref, PortGroup::Normal);
     if (!inputs.empty()) {
         cppType(g, ref, node->dataType());
         frame.values[ref] = valueOf(frame, inputs.front());
@@ -1956,7 +1969,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
     // A call of a function value (design principles 2.1): with input 0 is the value,
     // the other `with` inputs and the normal ones its arguments.
     const auto *g = frame.graph;
-    const auto with  = g->withInputsOf(ref);
+    const auto with  = g->view().inputs(ref, PortGroup::Context);
     if (with.empty()) {
         refuse(g, ref, std::format("a call in {} has no function", describeFunction(g)));
     }
@@ -1965,11 +1978,11 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
         // top level (the closure the root builds of them, a FILL).
         const gc_node_ref_t closure = with.front();
         std::string expr = std::format("{}(depth", program_.functionNames.at(program_.entryMain));
-        for (gc_node_ref_t arg : g->normInputsOf(ref)) {
+        for (gc_node_ref_t arg : g->view().inputs(ref, PortGroup::Normal)) {
             expr += ", " + valueOf(frame, arg).text;
         }
         if (camel::execute::shapeOfNode(*g, closure) == camel::execute::OperShape::Construction) {
-            for (gc_node_ref_t captured : g->withInputsOf(closure)) {
+            for (gc_node_ref_t captured : g->view().inputs(closure, PortGroup::Context)) {
                 expr += ", " + valueOf(frame, captured).text;
             }
         }
@@ -1978,7 +1991,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
     }
     cppType(g, with.front(), g->node(with.front())->dataType());
     std::string expr = std::format("{}({}", valueOf(frame, with.front()).text, callDepth(g, ref));
-    for (gc_node_ref_t arg : g->normInputsOf(ref)) {
+    for (gc_node_ref_t arg : g->view().inputs(ref, PortGroup::Normal)) {
         expr += ", " + valueOf(frame, arg).text;
     }
     for (size_t i = 1; i < with.size(); ++i) {
@@ -1991,7 +2004,7 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A value entering `T?` or `T!` (design principles 3.8), `null` entering `T?`, a failed
     // value passed on with another payload (`->`), a conversion between numbers.
     const auto *g             = frame.graph;
-    const gc_node_ref_t input = g->normInputsOf(ref).front();
+    const gc_node_ref_t input = g->view().inputs(ref, PortGroup::Normal).front();
     const Type *toType        = g->node(ref)->dataType();
     const Type *fromType      = g->node(input)->dataType();
     const std::string to      = cppType(g, ref, toType);
@@ -2144,7 +2157,9 @@ std::string assignedOperator(std::string_view uri) {
 bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
     // A variable stays a C++ local while everything that has its cell reads or writes it, in
     // this function or an arm lowered into it.
-    for (const auto users : {graph->normOutputsOf(cell), graph->withOutputsOf(cell)}) {
+    const camel::graph::GraphView &view = graph->view();
+    for (const auto users :
+         {view.users(cell, PortGroup::Normal), view.users(cell, PortGroup::Context)}) {
         for (gc_node_ref_t user : users) {
             const auto *node = graph->node(user);
             if (node == nullptr) {
@@ -2153,7 +2168,7 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
             if (node->kind == GCNodeKind::Oper &&
                 (isVariableAccess(operatorId(graph, user)) ||
                  operatorId(graph, user) == camel::core::oper::VarTake) &&
-                graph->normInputsOf(user).front() == cell) {
+                graph->view().inputs(user, PortGroup::Normal).front() == cell) {
                 // An access that gives the cell back -- an assignment's value is the cell it
                 // wrote -- hands on this same cell, so what its users do to it, they do to this
                 // one: a call that takes it as a `var` argument takes the variable out of the
@@ -2187,7 +2202,7 @@ bool FunctionEmitter::lowerVariable(
     const auto *g                = frame.graph;
     const camel::core::OperId id = operatorId(g, ref);
     if (id == camel::core::oper::VarNew) {
-        const gc_node_ref_t init = g->normInputsOf(ref).front();
+        const gc_node_ref_t init = g->view().inputs(ref, PortGroup::Normal).front();
         const Type *valueType    = g->node(init)->dataType();
         const std::string type   = cppType(g, init, valueType);
         const std::string name   = locals_.unique(std::format("var{}", nextValue_++));
@@ -2212,7 +2227,7 @@ bool FunctionEmitter::lowerVariable(
         }
         return true;
     }
-    const auto norm = g->normInputsOf(ref);
+    const auto norm = g->view().inputs(ref, PortGroup::Normal);
     if (id == camel::core::oper::VarTake) {
         // `:var/take` hands the variable's own array to an in-place form. The generated
         // program moves it there (`std::move(cell)` in the form's lowering), so the take is
@@ -2337,14 +2352,14 @@ bool FunctionEmitter::lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block 
         return true;
     }
     const auto *g = frame.graph;
-    const auto taken = g->normInputsOf(ref);
-    const auto items = g->withInputsOf(ref);
+    const auto taken = g->view().inputs(ref, PortGroup::Normal);
+    const auto items = g->view().inputs(ref, PortGroup::Context);
     if (taken.size() != 1 || items.size() != 1 ||
         g->node(taken.front())->kind != GCNodeKind::Oper ||
         operatorUri(g, taken.front()) != ":var/take") {
         return false;
     }
-    const auto cellInput = g->normInputsOf(taken.front());
+    const auto cellInput = g->view().inputs(taken.front(), PortGroup::Normal);
     if (cellInput.empty()) {
         return false;
     }
@@ -2380,12 +2395,12 @@ bool FunctionEmitter::lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Bloc
         return true;
     }
     const auto *g = frame.graph;
-    const auto args  = g->normInputsOf(ref);
+    const auto args  = g->view().inputs(ref, PortGroup::Normal);
     if (args.size() != 3 || g->node(args.front())->kind != GCNodeKind::Oper ||
         operatorUri(g, args.front()) != ":var/take") {
         return false;
     }
-    const auto cellInput = g->normInputsOf(args.front());
+    const auto cellInput = g->view().inputs(args.front(), PortGroup::Normal);
     if (cellInput.empty()) {
         return false;
     }
@@ -2447,8 +2462,8 @@ bool FunctionEmitter::lowerFail(
     // `fail<'Kind'>(message)`: the kind is a constant of the graph -- the tag the program wrote,
     // which is what the fault's report is named after (design principles 3.9) -- and the message
     // is the call's argument. Both are wanted, and neither is a value of the program's own words.
-    const auto with = g->withInputsOf(ref);
-    const auto norm = g->normInputsOf(ref);
+    const auto with = g->view().inputs(ref, PortGroup::Context);
+    const auto norm = g->view().inputs(ref, PortGroup::Normal);
     std::string kind;
     if (!with.empty()) {
         const auto *node = g->node(with[0]);
@@ -2517,8 +2532,8 @@ bool FunctionEmitter::lowerHigherOrder(
         RuntimeDiag::MaxRecursionDepthExceeded,
         {g->name(), std::to_string(program_.recursionLimit)},
         std::to_string(program_.recursionLimit));
-    const auto norm = g->normInputsOf(ref);
-    const auto with = g->withInputsOf(ref);
+    const auto norm = g->view().inputs(ref, PortGroup::Normal);
+    const auto with = g->view().inputs(ref, PortGroup::Context);
     std::string expr;
     if (it->second == "attempt") {
         // The marked call of the value `attempt(f)` (f, args...): the result's payload type is the

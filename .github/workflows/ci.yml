@@ -1,4 +1,5 @@
-# Everything that has to stay green, on the release branch, on every tag and on demand.
+# Everything that has to stay green, on the published line, on a release branch while it is being
+# assembled, on every tag and on demand.
 #
 # The work of one platform lives in ci-leg.yml. Compiling is the larger half of a leg, so the
 # three platform legs every run needs -- linux-x64, win-x64 and macos-arm64 -- are what the run is
@@ -6,16 +7,19 @@
 # dispatch: it finishes before the longest platform leg does, so it costs a runner without making
 # the run any shorter.
 #
-# `release` is the branch a version is assembled on, and it is pushed *before* the tag is made
-# (agents/branching.md): a red run there costs a push, where a red run on the tag costs a
-# published version. `develop` is not a trigger -- it takes a merge every few minutes, so a leg
-# that started on it would spend 40 minutes measuring a tree nobody releases.
+# A version is assembled on a short-lived `release/<version>` branch, which is pushed *before* the
+# tag is made (agents/branching.md): a red run there costs a push, where a red run on the tag costs
+# a published version. `main` is measured too, because a fast-forward of `main` onto the measured
+# commit is how a version becomes the answer to "which commit is the release". `develop` is not a
+# trigger -- it takes a merge every few minutes, so a leg that started on it would spend 40 minutes
+# measuring a tree nobody releases.
 name: CI
 
 on:
   push:
     branches:
-      - release
+      - main
+      - "release/**"
     tags:
       - "v*"
       - "V*"
@@ -85,8 +89,10 @@ jobs:
           # Apple Silicon, and the only leg that builds for arm64. The JIT has a code generator for
           # x86-64 only (cmake/Options.cmake turns ENABLE_FASTVM_JIT off on every other processor),
           # so this leg is JIT-less by platform rather than by an option: std::jit runs the
-          # bytecode interpreter there and says so. build-pypi.yml builds no macOS wheel yet (5.37
-          # item 6), so this leg is the only macOS signal there is.
+          # bytecode interpreter there and says so. build-pypi.yml builds the macOS arm64 wheel from
+          # the same tree since 2026-11-24 (5.37 item 6): its macos-arm64 cell bundles the dylibs
+          # with delocate-wheel and checks the result, so this leg is the build signal and that one
+          # is the packaging signal.
           - runner: macos-latest
             slug: macos-arm64
             arch: baseline # the x86-64 levels do not apply to arm64

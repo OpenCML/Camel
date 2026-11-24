@@ -27,11 +27,20 @@ and both numbers are printed for every emitter.
 What is a sample, and what is a lint. A generator the check can run is asked for text and the text
 is compiled: the printer (`std::cml`), the formatter (`camel-format`) and the program generator
 (`test/tools/progen`). A generator whose output cannot be produced without a whole install is
-handed the other reading: its source is grepped for the three old forms a grep can tell apart from
-the new ones. `..` is both the interval and what a composition used to be written with, and `:`
-divides a slice's bounds as well as a Python dict, so those two forms are not linted -- they are
-measured instead by the formatter fixture below, which writes all five the way the ruling writes
-them and fails if the formatter changes one.
+handed the other reading: its source is grepped for the old forms a grep can tell apart from the
+new ones -- and so is Camel source itself (`.cml`), because a generator is not the only place that
+writes a program: a test case, a benchmark and a doc example are Camel too. `..` is both the
+interval and what a composition used to be written with, and `:` divides a slice's bounds as well
+as a Python dict, so those two forms are not linted -- they are measured instead by the formatter
+fixture below, which writes all five the way the ruling writes them and fails if the formatter
+changes one.
+
+The lint reads *code positions*. A comment and a string literal are prose about the language, not
+the language: a note that says the old spelling used to be `func f(x: P): int` must keep saying it,
+and `println("(x) => y")` says nothing about how a lambda is written. Two exceptions, each because
+there the text is code nevertheless, are in `code_lines`: a `/// @example` line is the Camel the
+doc-snippet check compiles, and in a generator's own source `.cpp`/`.h` the string is what it
+prints.
 """
 
 import argparse
@@ -48,14 +57,27 @@ MIN_TOKENS = 20
 
 TOKEN = re.compile(r"[A-Za-z_]\w*|\d+(?:\.\d+)?|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"|[^\s]")
 
-# The three old forms a grep tells apart from the new spelling. A `func` head cannot be
+# The old forms a grep tells apart from the new spelling. A `func` head cannot be
 # confused with anything: no new form writes `)` then `:` then a type. There is no word
 # boundary before `func`: inside a string literal the text before it is often the two
 # characters `\n`, whose `n` is a word character, and that is exactly the case this catches.
+#
+# The fourth entry is the untyped lambda `(x) => e`. It has no distinguishing punctuation, so a
+# grep can only read it where the text is Camel: `(x) => e` is also a JavaScript arrow function,
+# and `(x, y) => ...` is also a function type whose parameters carry no names. It is therefore
+# limited to the file kinds that hold Camel as data (`.cml`, `.tsv`, `.cpp`, `.h`) and to a paren
+# group that is not in a type position (not after `:`, and not after a name, which is what tells
+# `f(x)` from `(x)`). A function type's parameters are typed, so `(x: int) => int` does not match;
+# an unnamed one is written after `:`, so it does not match either.
 LINT = [
-    ("result-type colon", re.compile(r"func\s+(?:operator\s+\S+|\w+)\s*(?:::)?\s*(?:<[^>]*>)?\s*\([^)]*\)\s*:\s*[A-Za-z_(]")),
-    ("named type argument =", re.compile(r"::<[^>]*\b[A-Za-z_]\w*\s*=\s*[^=>]")),
-    ("paren lambda", re.compile(r"(?<!func )\([^()]*\)\s*:\s*[\w(\[]+\s*=>")),
+    ("result-type colon", re.compile(r"func\s+(?:operator\s+\S+|\w+)\s*(?:::)?\s*(?:<[^>]*>)?\s*\([^)]*\)\s*:\s*[A-Za-z_(]"), None),
+    ("named type argument =", re.compile(r"::<[^>]*\b[A-Za-z_]\w*\s*=\s*[^=>]"), None),
+    ("paren lambda", re.compile(r"(?<!func )\([^()]*\)\s*:\s*[\w(\[]+\s*=>"), None),
+    (
+        "paren lambda (untyped)",
+        re.compile(r"(?<![\w:])(?<!func )(?<!func)(?<!: )\([^():]*\)\s*=>"),
+        {".cml", ".tsv", ".cpp", ".h"},
+    ),
 ]
 
 # The files that write Camel source for a person or for a test to compile.
@@ -122,20 +144,107 @@ def parse_only(camel, text, workdir, name="sample"):
     )
 
 
+def strip_comments(line, in_block, keep_strings):
+    """One line with what is not a code position removed.
+
+    `line` and `in_block` are the line and whether a `/* */` comment is still open, which is
+    carried across lines and returned. A string literal is data -- `println("(x) => y")` says
+    nothing about the spellings of lambdas -- so its contents go too, unless `keep_strings` says
+    otherwise: in a *generator's* source (a `.cpp` of the printer, a `.mjs` of the reference) the
+    string is where the Camel is written, and removing it would stop reading the very text the
+    check exists to read.
+    """
+    out = []
+    index = 0
+    quote = ""
+    while index < len(line):
+        if in_block:
+            end = line.find("*/", index)
+            if end < 0:
+                return "".join(out), True
+            index = end + 2
+            in_block = False
+            continue
+        char = line[index]
+        if quote:
+            if char == "\\" and index + 1 < len(line):
+                if keep_strings:
+                    out.append(line[index : index + 2])
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+                out.append(char)
+            elif keep_strings:
+                out.append(char)
+            index += 1
+            continue
+        if char in "\"'":
+            quote = char
+            out.append(char)
+        elif line.startswith("//", index):
+            break
+        elif line.startswith("/*", index):
+            in_block = True
+            index += 2
+            continue
+        else:
+            out.append(char)
+        index += 1
+    return "".join(out), in_block
+
+
+def code_lines(path, text):
+    """The lines of a file that hold code, as the lint reads them.
+
+    A `.cml` file is code except where it is not: a `//` comment and a block comment are prose,
+    and a string literal is data. A `///` block is prose too -- except an `@example` line, which is
+    exactly the Camel the doc-snippet check compiles, so an old spelling written there is a defect
+    and one quoted in a comment ("this used to be `func f(x: P): int`") is not.
+    A `.cpp`/`.h` file keeps its strings: that is where the printer writes the Camel it prints.
+    A `.tsv`, `.py` or `.mjs` file is read as it stands: the diagnostic registry's help text and a
+    generator's sample are the material being measured, not the language it is written in.
+    """
+    lines = text.splitlines()
+    if path.suffix == ".tsv":
+        return lines
+    in_block = False
+    kept = []
+    for line in lines:
+        head = line.lstrip()
+        if path.suffix == ".cml":
+            if head.startswith("///"):
+                payload = head[3:].lstrip()
+                if not payload.startswith("@example"):
+                    kept.append("")
+                    continue
+                line = payload[len("@example") :]
+                kept.append(strip_comments(line.split("  //")[0] if "  //" in line else line, False, False)[0])
+                continue
+            if head.startswith("//"):
+                kept.append("")
+                continue
+        stripped, in_block = strip_comments(line, in_block, keep_strings=path.suffix != ".cml")
+        kept.append(stripped)
+    return kept
+
+
 def lint_hits():
     hits = []
     for item in LINT_FILES:
         base = ROOT / item
         paths = [base] if base.is_file() else sorted(p for p in base.rglob("*") if p.is_file())
         for path in paths:
-            if path.suffix not in (".py", ".mjs", ".cpp", ".tsv", ".h"):
+            if path.suffix not in (".py", ".mjs", ".cpp", ".tsv", ".h", ".cml"):
                 continue
             try:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            for number, line in enumerate(text.splitlines(), 1):
-                for label, pattern in LINT:
+            for number, line in enumerate(code_lines(path, text), 1):
+                for label, pattern, kinds in LINT:
+                    if kinds is not None and path.suffix not in kinds:
+                        continue
                     if pattern.search(line):
                         hits.append(f"{path.relative_to(ROOT)}:{number}: {label}: {line.strip()[:80]}")
     return hits
