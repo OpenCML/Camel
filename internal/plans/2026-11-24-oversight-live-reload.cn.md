@@ -8,7 +8,7 @@
 
 - 横带上加一个"重载插件"按钮，点了调插件自己的路由（如 `POST /oversee/reload`）。
 - 路由做三步：从 `origin/develop` 取插件目录到 live 目录（逐个 `node --check`，有一个不过就停下并在横带上报出原因，live 目录不变）；通过 DSH 的插件管理接口（Plugin Manager 的操作，或 `dsh-hmr` 服务提供的重载）重载 `camel-oversight` 这一个插件；横带显示重载后的版本号（插件目录在 `origin/develop` 上的提交）。
-- 先查清 DSH 提供哪个接口能从插件自身或网页触发"重载这一个插件并重新读入它的模块"（看 `lib/types/*.d.ts`：插件管理服务的方法、`hmr` 服务的方法）；若插件不能重载自己，就由网页直接调 DSH 的插件管理接口，按钮仍放在横带上。
+- 接口已查清（协调者 11-24，读 `dsh-plugin-manager` 与 `dsh-hmr` 的 `lib/types/index.d.ts`）：`PluginManager.reload` 是私有的，公开的只有 `setPluginEnabled`；`Hmr` 不是远程服务，网页调不到。唯一的路是插件自己的路由调 `Hmr.reconcileProfile([本插件的 id])`，按 DSH 的要求裹在 `runExclusive` 里。重载会撤掉插件自己的 fiber，所以路由先回应、再发起重载；横带在插件重新起来后读到新版本号。
 - 有了按钮，下面"同步由合并位在推送成功之后做"一步可以省掉：同步在点按钮时做。`dsh-hmr` 的文件监视也不必打开。
 
 ## 原先的目标（按钮之外仍成立的部分）
