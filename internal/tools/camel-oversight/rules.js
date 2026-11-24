@@ -91,12 +91,33 @@ export const RULES = [
         hold: 0,
         cooldown: 30,
         check: ({ m, lanes, limits }) => {
-            const d = readable(m.develop) && m.develop
+            // With an integration branch, lanes land there and develop follows on promotion: the branch
+            // that stalls when the merge seats stall is integration; develop is late by design.
+            const i = readable(m.integration) && !m.integration.absent && m.integration
+            const d = i || (readable(m.develop) && m.develop)
+            const name = i ? 'integration' : 'develop'
             if (!d || d.ageMinutes <= limits.developStallMinutes) return null
             if (!readable(lanes) || lanes.running === 0) return null
             return {
                 key: d.head,
-                text: `develop ${d.ageMinutes} 分钟没有前进（${d.head}），而有 ${lanes.running} 条车道在跑。问合并车道在等什么；每条车道一落地就合、就推。`,
+                text: `${name} ${d.ageMinutes} 分钟没有前进（${d.head}），而有 ${lanes.running} 条车道在跑。问合并位在等什么；交回的车道排进合并队列，排着的多就多开合并位。`,
+            }
+        },
+    },
+    {
+        // Promotion: develop is advanced from integration after a full fast-layer run. Late by design,
+        // but not without end.
+        id: 'promotion-due',
+        level: 'quiet',
+        hold: 0,
+        cooldown: 60,
+        check: ({ m, limits }) => {
+            const i = readable(m.integration) && !m.integration.absent && m.integration
+            const d = readable(m.develop) && m.develop
+            if (!i || !d || i.developBehind === 0 || d.ageMinutes <= limits.promotionMinutes) return null
+            return {
+                key: i.head,
+                text: `develop 落后 integration ${i.developBehind} 笔、上次前进在 ${d.ageMinutes} 分钟前：在 integration 尖端跑一遍全快层，与上次晋级的读数逐条比，干净就把 develop 快进过去。`,
             }
         },
     },
@@ -289,6 +310,7 @@ export const DEFAULT_LIMITS = {
     mergedLocal: 20,
     developStallMinutes: 25,
     staleMinutes: 120,
+    promotionMinutes: 180,
     staleShown: 5,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 45,

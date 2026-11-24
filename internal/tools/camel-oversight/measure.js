@@ -44,27 +44,33 @@ async function attempt(read) {
     }
 }
 
-const PROTECTED = ['develop', 'main', 'release', 'fsh-dev']
-// The branch gate counts the branches the agents make, which all live under a namespace (lane/,
-// probe/, ...). A branch without one is a person's -- the author picking a release commit on
-// tmp-rel-0246, a contributor's xxx-dev: it is no lane waiting to be merged, and counting it held the
-// gate shut over work that was never the coordinator's.
-const AGENT_BRANCH = /^[a-z0-9][a-z0-9-]*\//
+const PROTECTED = ['develop', 'main', 'release', 'fsh-dev', 'integration']
+// The branch gate counts lanes waiting to be merged, and lanes live under lane/. Everything else is
+// not a lane waiting: a person's branch (the author picking a release commit on tmp-rel-0246, a
+// contributor's xxx-dev), the coordinator's docs branch, a merge seat's own branch, the gate's
+// baseline branches and measurement probes. Counting those held the gate shut at 31 while far fewer
+// lanes were actually waiting, and the coordinator ran two lanes.
+const LANE_BRANCH = /^lane\//
 
-/// Lane branches not yet in develop, how far each is ahead and behind, and the worst behind.
+/// Lane branches not yet merged, how far each is ahead and behind, and the worst behind. Merged means
+/// into integration once that branch exists (lanes land there; develop follows it on promotion), into
+/// develop before. A merge seat's own branch (seat/...) is the merging, not a lane waiting for it.
 async function branchesOf(git) {
+    const base = (await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false))
+        ? 'origin/integration'
+        : 'origin/develop'
     const names = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
         .split('\n')
-        .filter((name) => name && !PROTECTED.includes(name) && AGENT_BRANCH.test(name))
+        .filter((name) => name && !PROTECTED.includes(name) && LANE_BRANCH.test(name))
     const rows = []
     for (const branch of names) {
-        const ahead = Number(await git(['rev-list', '--count', `origin/develop..${branch}`]).catch(() => 'x'))
+        const ahead = Number(await git(['rev-list', '--count', `${base}..${branch}`]).catch(() => 'x'))
         if (!Number.isFinite(ahead) || ahead === 0) continue
-        const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..origin/develop`]).catch(() => 'x'))
+        const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..${base}`]).catch(() => 'x'))
         rows.push({ branch, ahead, behind: Number.isFinite(behind) ? behind : null })
     }
     const behinds = rows.map((row) => row.behind).filter((value) => value !== null)
-    return { unmerged: rows.length, maxBehind: behinds.length ? Math.max(...behinds) : 0, rows }
+    return { base, unmerged: rows.length, maxBehind: behinds.length ? Math.max(...behinds) : 0, rows }
 }
 
 /// Branches already merged into develop and not deleted, local and on origin.
@@ -84,9 +90,11 @@ async function mergedOf(git) {
     return { mergedLocal, mergedRemote }
 }
 
-/// The backlog's rows, by id: status and the stamp of the last update.
-async function backlogOf(repo) {
-    const text = await readFile(path.join(repo, 'internal', 'backlog.md'), 'utf8')
+/// The backlog's rows, by id: status and the stamp of the last update. Read as origin/develop has
+/// it, like the rules and the hot-reloaded files: the main checkout is the author's workspace and may
+/// stand on another branch, or hold an edit nobody pushed.
+async function backlogOf(git) {
+    const text = await git(['show', 'origin/develop:internal/backlog.md'])
     const rows = new Map()
     const ownRows = new Set()
     for (const line of text.split('\n')) {
@@ -219,6 +227,16 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
             head: await git(['rev-parse', '--short=9', 'origin/develop']),
             ageMinutes: Math.round((Date.now() / 1000 - Number(await git(['log', '-1', '--format=%ct', 'origin/develop']))) / 60),
         })),
+        // The integration branch, when there is one: how old its tip is, and how far develop trails it.
+        integration: await attempt(async () => {
+            const has = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
+            if (!has) return { absent: true }
+            return {
+                head: await git(['rev-parse', '--short=9', 'origin/integration']),
+                ageMinutes: Math.round((Date.now() / 1000 - Number(await git(['log', '-1', '--format=%ct', 'origin/integration']))) / 60),
+                developBehind: Number(await git(['rev-list', '--count', 'origin/develop..origin/integration'])),
+            }
+        }),
         fshDev: await attempt(async () => ({
             head: await git(['rev-parse', '--short=9', 'origin/fsh-dev']),
             notOnDevelop: Number(await git(['rev-list', '--count', '--no-merges', 'origin/develop..origin/fsh-dev'])),
@@ -241,7 +259,7 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
         ),
         branches: await attempt(() => branchesOf(git)),
         merged: await attempt(() => mergedOf(git)),
-        backlog: await attempt(() => backlogOf(repo)),
+        backlog: await attempt(() => backlogOf(git)),
         panel: await attempt(() => buildPanelOf(repo, stateDir)),
         host: buildHost ? await attempt(() => buildHostOf(buildHost, buildProbe)) : { unconfigured: true },
     }
