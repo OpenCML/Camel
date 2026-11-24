@@ -87,7 +87,9 @@ param(
     # parameter would make PowerShell prompt for one. A merge without them is refused below, by name.
     [string] $Branch = '',
     [string] $Message = '',
-    [string] $MainCheckout = 'D:\Projects\Camel',
+    # The merge seat's own worktree. D:\Projects\Camel is the author's workspace (iron rule 17):
+    # nothing is merged, built or measured there.
+    [string] $MainCheckout = 'D:\Projects\Camel-wt\merge',
     # Where the baseline is measured. It has to be a tree that is NOT the one being compared, and it
     # has to be a real checkout (the gate builds it), so it is a worktree of this repository detached
     # at the first parent. One fixed path and not one per merge: the host keeps the build of that
