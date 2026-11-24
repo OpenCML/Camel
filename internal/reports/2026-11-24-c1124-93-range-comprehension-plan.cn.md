@@ -88,3 +88,23 @@
 ⇒ 待定：标记加在哪一层（GCT 造 FUNC 时、还是 GIR 建图时）。加错会让**所有**纯函数退回「未知」，那是另一条读数。
 
 **顺带记一条没解释的现象**：同形状的显式 `(1 .. 3)->map<func (x: int) { x * 2 }>` 是绿的，说明内联函数的签名在那一刻还不是 `pure`（大概是声明处类型没被测量替换），而推导式的元素函数是**实例化后**的图，测量已经写回。两者差在「什么时候被测量」，不在「纯不纯」。
+
+## 十、绿红并排：差别是 `void`，不是 `pure`
+
+临时诊断（`genericCandidateBinds` 入口一行，八条出口各带步名，量完即删）跑两条最小用例，同一天同一份构建：
+
+```
+绿  println((1 .. 3)->map<func (x: int) { x * 2 }>)      PASS，无 [cand] 行
+红  println([i * 2 for i in 0 .. 3])                    FAIL，一行：
+    [cand] map | step=withBind ok=0 | withs=[void] norms=[Range] withIn=1 lefts=[w]
+```
+
+三件事一次读出来：
+
+1. **绿的这条路根本没走到候选过滤** —— 没有 `[cand]` 行，说明它在那之前就定下来了（内联函数的类型是具体的，调用直接成立）。
+2. **红的那条走到了，而它的 `with` 类型是 `void`** —— 不是 `(i: int) => int`。所以 `bindTypeVars((item: int) => U, void)` 在第一步就退，`map` 这个候选判负，`fits=0`，于是 `NoMatchingFunction`。
+3. ⇒ 报错文本里那句 `<(i: int) => int>` 是**另一个来源**（`Argument` 的节点类型），与候选判定看到的不是同一个值：**同一个实参有两个类型读数**，一个说函数、一个说 `void`。
+
+⇒ 所以 ③ 的阻塞点不是效果位（`pure` 那笔已证），也不是「实参是怎么来的」这种模糊说法，而是：**元素函数经 `settleGenericOperatorArguments` 换成实例之后，`nodeTypeOf` 给不出它的函数类型**，`withTypes[i]` 因此是 `void`。
+
+⇒ 下一步（一处）：看 `settleOne` 里 `arg.node = createFuncDataNode(chosen, true, false)` 之后 `type = valueTypeOf(nodeTypeOf(arg.node))` 为什么是 `void` —— 是节点本就是函数值（类型在它的 TYPE 子节点上），还是实例的签名没被挂上去。判据：**同一个实参不该有两个类型读数**。
