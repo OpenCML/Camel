@@ -274,13 +274,14 @@ foreach ($needed in @($gate, $comparer, $selector)) {
 }
 
 $script:mergeTree = Join-Path $ScratchRoot 'camel-batch-merge'
-$baseTree = Join-Path $ScratchRoot 'camel-batch-base'
+# `$baseTree` and `$script:baseRef` are derived once the first parent is known (below): the baseline
+# tree is named by the commit it measures, so naming it needs the sha.
+$script:baseRef = ''
 # The two helper refs follow the scratch root, not this file. A literal `probe/batch-base` is a name
 # every seat on the machine wants and only the first one can have: on 2026-11-24 the acceptance run
 # stopped at a `fatal:` from git saying that ref is already used by worktree at
 # 'D:/Temp/camel-batch/camel-batch-base'`, with that tree created fifteen hours earlier by another
 # seat's scratch. Both names are derived here, once, and every later mention reads these two.
-$script:baseRef = Resolve-BatchRefName -ScratchRoot $ScratchRoot -Which 'base'
 $script:mergeRef = Resolve-BatchRefName -ScratchRoot $ScratchRoot -Which 'merge'
 $passedDir = Join-Path (Invoke-Git $ToolTree @('rev-parse', '--path-format=absolute', '--git-common-dir')).Text 'camel-passed'
 
@@ -309,6 +310,28 @@ try {
     $script:base = $baseResolve.Text
     $script:baseShort = $script:base.Substring(0, 9)
     $base = $script:base
+
+    # --- the baseline tree, named by the commit it measures -------------------
+    # A baseline is "what the plans read on THIS commit"; its identity is the commit and the plan
+    # set, not the seat that measured it. With `baselineRoot` set, the tree is `<root>\<sha>` on a
+    # branch of the same name, so every seat batching onto one tip reuses one checkout and one host
+    # build -- the three seats of 2026-11-24 each made their own and built it three times. Without
+    # it, the older shape stands: a tree under this seat's scratch root, on a ref that follows that
+    # root, and whose sha is checked before it is read.
+    $baselineRoot = ''
+    if ($cfg.baselineRoot) {
+        $baselineRoot = "$($cfg.baselineRoot)".Trim()
+        if ($baselineRoot -and -not [System.IO.Path]::IsPathRooted($baselineRoot)) {
+            Stop-With "'baselineRoot' in $cfgPath names '$baselineRoot', which is not an absolute path" 'The batch measures the baseline in a tree named by the commit it measures; a relative path would name one per working directory. Write the absolute directory, or remove the key to keep the seat-local tree. Nothing was merged.' 2
+        }
+    }
+    if ($baselineRoot) {
+        $baseTree = Join-Path $baselineRoot $base
+        $script:baseRef = "probe/batch-base-$($base.Substring(0, 12))"
+    } else {
+        $baseTree = Join-Path $ScratchRoot 'camel-batch-base'
+        $script:baseRef = Resolve-BatchRefName -ScratchRoot $ScratchRoot -Which 'base'
+    }
 
     Write-Host ''
     Write-Host "[batch] $($targetInfo.Statement) -- the branch this batch writes and pushes" -ForegroundColor Cyan
@@ -418,7 +441,7 @@ try {
     # different sha on purpose: seeding the baseline on the merged tree and comparing is comparing a
     # tree with itself, which answers zero difference for every case and reads like a clean merge.
     function Initialize-Tree {
-        param([string] $Path, [string] $BranchName, [string] $Sha)
+        param([string] $Path, [string] $BranchName, [string] $Sha, [switch] $Keep)
         $normalized = ($Path -replace '\\', '/')
         # The listing is kept as text as well as as paths: when the name is somebody else's, the
         # message has to name that tree, and `git worktree list --porcelain` is the only thing that
@@ -441,9 +464,12 @@ try {
             # Rule 12: what a cleanup may delete is what a run recorded creating.
             Add-Content -LiteralPath (Join-Path $ScratchRoot 'manifest.jsonl') -Value (
                 (ConvertTo-Json -Compress -InputObject ([pscustomobject]@{
-                            path = $Path; branch = $BranchName; sha = $Sha; pid = $PID; at = (Get-Date).ToString('o')
+                            path = $Path; branch = $BranchName; sha = $Sha; pid = $PID; kept = [bool]$Keep; at = (Get-Date).ToString('o')
                         })))
-            $script:createdTrees += $Path
+            # A baseline tree named by the commit it measures is shared with every seat that lands on
+            # that commit: its whole purpose is to outlive the run that made it, so it is recorded and
+            # kept. Only the batch's own merge tree is deleted below.
+            if (-not $Keep) { $script:createdTrees += $Path }
         } else {
             $co = Invoke-Git $Path @('checkout', '--force', '-B', $BranchName, $Sha)
             if ($co.Code -ne 0) { Stop-With "could not move $Path to $Sha" "$($co.Text)" 2 }
@@ -457,9 +483,6 @@ try {
     }
 
     $script:loadStart = Get-LoadAverage
-    Write-Host ''
-    Write-Host "[batch] baseline tree: $baseTree ($($targetInfo.Name) $($script:baseShort), a separate tree from the merge)"
-    Initialize-Tree -Path $baseTree -BranchName $script:baseRef -Sha $base
 
     # --- 5. measure one tree with the plan set, given explicitly ------------
     # `-Plan` and never `-Changed`: the plan set is already decided (the lanes' union), and `-Changed`
@@ -512,6 +535,20 @@ try {
         Write-Host "[batch] the baseline for $($script:baseShort) under this plan set is already stored; no baseline run" -ForegroundColor Green
         $script:timings += [pscustomobject]@{ Label = "baseline $($script:baseShort) (cache hit)"; Seconds = 0; Rows = 0; Exit = 0 }
     } elseif ($probeExit -eq 2) {
+        # Only now is the tree made or moved: a reading that already exists is a tree nobody needs.
+        # That is the whole point of naming it by the sha -- the second seat to arrive at this tip
+        # finds the reading, and neither it nor the first ever touches a shared checkout.
+        Write-Host ''
+        Write-Host "[batch] baseline tree: $baseTree ($($targetInfo.Name) $($script:baseShort), a separate tree from the merge)"
+        $heldBase = ''
+        if (Test-Path -LiteralPath (Join-Path $baseTree '.git')) {
+            $heldBase = (Invoke-Git $baseTree @('rev-parse', 'HEAD')).Text
+        }
+        if ($heldBase -and $heldBase -ne $base) {
+            Write-Host 'stale baseline beside the tip: rebuilding'
+            Write-Host "  $baseTree holds $($heldBase.Substring(0, 9)), and the tip being measured is $($script:baseShort): a baseline for another tree is not reused, so it is moved and measured again."
+        }
+        Initialize-Tree -Path $baseTree -BranchName $script:baseRef -Sha $base -Keep:([bool]$baselineRoot)
         $baseRun = Measure-Tree -Path $baseTree -Label "baseline $($script:baseShort) (first parent)" -TranscriptPath (Join-Path $ScratchRoot 'base-transcript.txt')
         if ($baseRun.Rows.Count -eq 0) {
             Stop-With 'the baseline run produced no rows' "The row channel printed nothing between its markers, so nothing was measured on $($script:baseShort) and there is nothing to compare against. The transcript is $($baseRun.Transcript): read the run's own lines there. A gate that did not run is not a tree that is fine." 2
@@ -872,8 +909,11 @@ try {
             Invoke-Git $ToolTree @('worktree', 'remove', '--force', $path) | Out-Null
             Write-Host "[batch] removed $path (created by this run; nothing in it exists only there)"
         }
-        foreach ($br in @($script:baseRef, $script:mergeRef)) {
+        foreach ($br in @($script:mergeRef) + @($(if (-not $baselineRoot) { $script:baseRef }))) {
             Invoke-Git $ToolTree @('branch', '-D', $br) | Out-Null
+        }
+        if ($baselineRoot) {
+            Write-Host "[batch] kept ${baseTree}: the baseline tree is named by the commit it measures ($($script:baseShort)), so the next batch onto that tip reuses this checkout and its build"
         }
     }
 

@@ -98,11 +98,23 @@
     pushes nothing and touches no branch; run it when the test slot is free, after a merge.
 
 .PARAMETER BaselineWorktree
-    Where the baseline is measured. It is a worktree of its own, detached at the tree the merge lands
+    Where the baseline is measured. It is a worktree of its own, held at the tree the merge lands
     on, and it is kept between merges so the host's build of it stays warm. Left empty, it is read
     from this machine's settings file (`baselineWorktree`), the same way -MainCheckout is, and a run
     that cannot read it stops with exit 2 instead of measuring a baseline in another seat's tree. The
     path may not exist yet: this script creates the worktree there on the first merge.
+
+    This is the legacy shape: one fixed path per seat, moved to each tip. `-BaselineRoot` is the
+    shape that shares the work (see below), and a machine that sets it does not need this one. When
+    this path IS used, its HEAD is checked against the tip first: a tree holding another commit is
+    said to be stale and moved, not read.
+
+.PARAMETER BaselineRoot
+    The directory the per-tip baseline checkouts live under. Each baseline tree is named by the
+    commit it measures -- `<BaselineRoot>\<sha>` -- so the seats that land on one tip share one
+    checkout, one host build and one reading instead of making three. Read from this machine's
+    settings (`baselineRoot`) when not given. A run with neither this nor -BaselineWorktree stops
+    with exit 2: a baseline measured in "some path" is a reading about somebody else's tree.
 
 .EXAMPLE
     .\merge-lane.ps1 -Branch lane/range-ri -Message "merge range-ri: ..." -WhatIf
@@ -141,6 +153,11 @@ param(
     # screen, they collide in the numbers. The path may not exist yet -- this script creates the
     # worktree there (Sync-BaselineWorktree) -- so "not there" is the first merge, not a refusal.
     [string] $BaselineWorktree = '',
+    # The directory the per-tip baseline checkouts live under: the tree for a commit is
+    # `<BaselineRoot>\<sha>`, so every seat that measures that commit uses the same tree. Empty means
+    # "read `baselineRoot` from this machine's settings", and a machine that sets neither this nor
+    # -BaselineWorktree is refused with exit 2 (the settings file says which to add).
+    [string] $BaselineRoot = '',
     # One branch per baseline tree: git will not check one branch out twice, so a second merge
     # position beside this one gives its own tree its own branch (the batch tool's reason, ported).
     [string] $BaselineBranch = 'camel-baseline',
@@ -199,7 +216,11 @@ function Resolve-SeatPath {
         # Where camel-gate-config.ps1 lives (the settings loader, shared with the other gate tools).
         [string] $ToolsRoot = '',
         # The path may not exist yet: the baseline worktree is created at it by this script.
-        [switch] $MayCreate
+        [switch] $MayCreate,
+        # The key may be absent and that is not a defect: `baselineRoot` is the newer shape, and a
+        # machine still on `baselineWorktree` has no `baselineRoot` and must not be refused for it.
+        # An absent optional key answers with an empty path; a malformed one is still a refusal.
+        [switch] $Optional
     )
 
     # An explicit path is the answer, and the file is not even read: what a seat types on the command
@@ -212,6 +233,7 @@ function Resolve-SeatPath {
     $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $ToolsRoot
 
     if (-not $cfg.localConfigFound) {
+        if ($Optional) { return @{ Path = ''; Problem = '' } }
         return @{
             Path    = ''
             Problem = "there is no settings file at $($cfg.localConfigPath), and -$Parameter was not given. These paths are machine-local, so this run cannot name one: copy internal/tools/camel-gate.example.json to that path and set '$Key', or pass -$Parameter."
@@ -220,6 +242,7 @@ function Resolve-SeatPath {
     $property = $cfg.PSObject.Properties[$Key]
     $value = if ($null -ne $property) { "$($property.Value)".Trim() } else { '' }
     if (-not $value) {
+        if ($Optional) { return @{ Path = ''; Problem = '' } }
         return @{
             Path    = ''
             Problem = "the settings file at $($cfg.localConfigPath) has no '$Key', and -$Parameter was not given. That key is what says which tree this is, and nothing here may guess one: set it in that file, or pass -$Parameter."
@@ -262,6 +285,15 @@ function Resolve-BaselineWorktree {
     param([string] $Given = '', [string] $LocalConfig = '', [string] $ToolsRoot = '')
     return Resolve-SeatPath -Given $Given -Key 'baselineWorktree' -Parameter 'BaselineWorktree' `
         -LocalConfig $LocalConfig -ToolsRoot $ToolsRoot -MayCreate
+}
+
+# The newer shape of the same setting: a directory the per-tip baseline checkouts live under, so a
+# tip is measured once for every seat that lands on it. Optional on purpose -- a machine still on the
+# legacy fixed path has no such key, and must not be refused for having the older arrangement.
+function Resolve-BaselineRoot {
+    param([string] $Given = '', [string] $LocalConfig = '', [string] $ToolsRoot = '')
+    return Resolve-SeatPath -Given $Given -Key 'baselineRoot' -Parameter 'BaselineRoot' `
+        -LocalConfig $LocalConfig -ToolsRoot $ToolsRoot -MayCreate -Optional
 }
 
 # The branch every reading in this script is about: the start point, the state a stop prints, the
@@ -366,6 +398,67 @@ function Stop-With {
     Write-Host ''
     Write-GitState -MergeCommit $MergeCommit
     exit 1
+}
+
+# --- which checkout measures a baseline, and under what name -----------------
+#
+# A baseline is "what the plans read on THIS commit". Its identity is therefore the commit and the
+# plan set, and nothing else -- not the seat that measured it, not the path it happened to be
+# checked out at. On 2026-11-24 three seats merged onto one `integration` tip and each built the
+# same tree: three worktrees, three host builds, three runs, one reading. So the tree is named by
+# the sha and shared: `<Root>\<sha>`, on a branch of the same name, and a seat that finds it ready
+# uses it as it stands.
+#
+# The legacy shape (one fixed path per seat, moved to each tip) is kept, because a machine where it
+# works is not repaired by a rename. It is read only after its HEAD is compared with the tip: a path
+# holding another commit is a baseline for another tree, and it is moved -- out loud -- instead of
+# being read.
+#
+# Returns @{ Path; Branch; Kind ('tip'|'fresh'|'stale'|'none'); Problem; Lines }. `Lines` are what
+# the caller prints; this function decides and says nothing, so a test can call it without noise.
+function Get-BaselineCheckout {
+    param(
+        [Parameter(Mandatory)][string] $Tip,
+        # The directory the per-tip checkouts live under; empty means the legacy path is in use.
+        [string] $Root = '',
+        [string] $LegacyPath = '',
+        [string] $LegacyBranch = 'camel-baseline'
+    )
+
+    if ($Tip.Length -lt 7) {
+        return [pscustomobject]@{ Path = ''; Branch = ''; Kind = 'none'; Lines = @(); Problem = "'$Tip' is not a commit sha, so no baseline tree can be named for it" }
+    }
+
+    if ($Root) {
+        $path = Join-Path $Root $Tip
+        # 12 characters, the same prefix `merge-readings.mjs` uses for the reading's own file name:
+        # one name for one commit, so a person reading a directory sees the same key the cache uses.
+        $branch = "camel-baseline-$($Tip.Substring(0, 12))"
+    } else {
+        if (-not $LegacyPath) {
+            return [pscustomobject]@{ Path = ''; Branch = ''; Kind = 'none'; Lines = @(); Problem = 'neither a baseline root nor a baseline worktree was named' }
+        }
+        $path = $LegacyPath
+        $branch = $LegacyBranch
+    }
+
+    $held = ''
+    if (Test-Path -LiteralPath $path) {
+        $held = "$(& git -C $path rev-parse --verify HEAD 2>$null)".Trim()
+    }
+    if ($held -eq $Tip -and $held) {
+        return [pscustomobject]@{ Path = $path; Branch = $branch; Kind = 'tip'; Lines = @(); Problem = '' }
+    }
+    if ($held) {
+        $heldShort = if ($held.Length -gt 9) { $held.Substring(0, 9) } else { $held }
+        $tipShort = $Tip.Substring(0, 9)
+        $lines = @(
+            'stale baseline beside the tip: rebuilding',
+            "  $path holds $heldShort, and the tip being measured is ${tipShort}: a baseline for another tree is not reused, so it is moved to $tipShort and measured again."
+        )
+        return [pscustomobject]@{ Path = $path; Branch = $branch; Kind = 'stale'; Lines = $lines; Problem = '' }
+    }
+    return [pscustomobject]@{ Path = $path; Branch = $branch; Kind = 'fresh'; Lines = @(); Problem = '' }
 }
 
 # The baseline's own checkout: a worktree of THIS repository, held at the sha it must measure.
@@ -920,15 +1013,28 @@ $MainCheckout = $mergeCheckout.Path
 # The baseline tree is read here too, and not at the point it is used: a run that cannot name it would
 # otherwise merge, build and measure before finding out, which is the eleven minutes this script
 # exists to stop spending twice. Read the same way, refused the same way, stopped the same way.
-$baselineCheckout = Resolve-BaselineWorktree -Given $BaselineWorktree -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
-if ($baselineCheckout.Problem) {
+$baselineRootCheck = Resolve-BaselineRoot -Given $BaselineRoot -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
+if ($baselineRootCheck.Problem) {
     Write-Host ''
-    Write-Host 'STOPPED: the tree the baseline is measured in is not named (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
-    Write-Host "  $($baselineCheckout.Problem)"
+    Write-Host 'STOPPED: the directory the baseline checkouts live under is not usable (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
+    Write-Host "  $($baselineRootCheck.Problem)"
     Write-Host ''
     exit 2
 }
-$BaselineWorktree = $baselineCheckout.Path
+$BaselineRoot = $baselineRootCheck.Path
+if (-not $BaselineRoot) {
+    # No root: the legacy shape. Its path is still required, and still refused when it cannot be read.
+    $baselineCheckout = Resolve-BaselineWorktree -Given $BaselineWorktree -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
+    if ($baselineCheckout.Problem) {
+        Write-Host ''
+        Write-Host 'STOPPED: the tree the baseline is measured in is not named (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
+        Write-Host "  $($baselineCheckout.Problem)"
+        Write-Host '  Set `baselineRoot` to a directory and each tip is measured once for every seat that lands on it; or set `baselineWorktree` to one fixed tree, the older shape.'
+        Write-Host ''
+        exit 2
+    }
+    $BaselineWorktree = $baselineCheckout.Path
+}
 
 # Three trees and three jobs, kept apart on purpose:
 #   $toolRoot         the checkout this SCRIPT lives in -- the instruments (the gate entry, the
@@ -1229,8 +1335,16 @@ try {
             Write-Host '  What repairs it: the comparer''s own line is above; `--probe` reads one key and needs no rows.'
             exit 2
         }
-        $warmPath = $BaselineWorktree
-        $warmProblem = Sync-BaselineWorktree -Path $warmPath -Sha $originTarget -CommonDir $commonDir -Repo $MainCheckout -BranchName $BaselineBranch
+        $warmPlan = Get-BaselineCheckout -Tip $originTarget -Root $BaselineRoot -LegacyPath $BaselineWorktree -LegacyBranch $BaselineBranch
+        foreach ($line in @($warmPlan.Lines)) { if ($line) { Write-Host $line } }
+        if ($warmPlan.Problem) {
+            Write-Host ''
+            Write-Host 'STOPPED: the fast layer could not be measured, so nothing was stored (exit 2, no reading taken)' -ForegroundColor Yellow
+            Write-Host "  $($warmPlan.Problem)"
+            exit 2
+        }
+        $warmPath = $warmPlan.Path
+        $warmProblem = Sync-BaselineWorktree -Path $warmPath -Sha $originTarget -CommonDir $commonDir -Repo $MainCheckout -BranchName $warmPlan.Branch
         $warmMeasured = ''
         if ($null -eq $warmProblem) {
             $warmMeasured = "$(& git -C $warmPath rev-parse HEAD 2>$null)".Trim()
@@ -1527,9 +1641,13 @@ try {
         # move the branch the merge landed on, and measuring the merged tree is the defect this whole
         # step exists to remove. The worktree is kept between merges so the host's build of it stays
         # warm -- a cold build per merge is what would make people go around this gate.
-        $baselinePath = $BaselineWorktree
-        $worktreeProblem = Sync-BaselineWorktree -Path $baselinePath -Sha $developTip `
-            -CommonDir $commonDir -Repo $MainCheckout -BranchName $BaselineBranch
+        $baselinePlan = Get-BaselineCheckout -Tip $developTip -Root $BaselineRoot -LegacyPath $BaselineWorktree -LegacyBranch $BaselineBranch
+        foreach ($line in @($baselinePlan.Lines)) { if ($line) { Write-Host $line } }
+        $baselinePath = $baselinePlan.Path
+        $worktreeProblem = if ($baselinePlan.Problem) { $baselinePlan.Problem } else {
+            Sync-BaselineWorktree -Path $baselinePath -Sha $developTip `
+                -CommonDir $commonDir -Repo $MainCheckout -BranchName $baselinePlan.Branch
+        }
         # The sha this run will really read, taken from the checkout itself. `--tree $developTip`
         # alone would be an assertion about the source, and an assertion is exactly what a seeding
         # pointed at the wrong tree gets right while measuring the wrong one.
