@@ -63,13 +63,18 @@ Check 'two directories is two records, both directories' ($twoDirs.Count -eq 2 -
 Check 'the count is every *.plan.toml under them (4), not a layer' ($line -like '*4 plan file(s)*') $line
 Check 'the sentence says the run starts those directories and nothing else' ($line -like '*starts the plans under those directories and nothing else*') $line
 Check 'and says it is not a run of the whole plan tree' ($line -like '*not a run of the whole plan tree*') $line
-Check 'with no -Tier it names the runner default, so the layer is not hidden' ($line -like '*at tier fast (the runner default)*') $line
+Check 'with no -Tier it names the runner default, so the layer is not hidden' ($line -like '*tier fast, the runner default*') $line
+# The two numbers a reader has to reconcile: the target's own `*.plan.toml` count here, and the
+# runner's `[tier]` line, which counts the plan files that start at least one case of the layer. They
+# differ by the plans that belong to another layer, and the sentence has to say so, or the smaller
+# number reads as a plan that went missing.
+Check 'and says which of the two counts the [tier] line is' ($line.Contains("runner's [tier] line counts the plan files that start one")) $line
 Check 'the line is one [camel-remote] line' ($line.StartsWith('[camel-remote] plan target: ') -and -not $line.Contains("`n")) $line
 
 $oneDir = @(Resolve-CamelPlanTarget -Values @('test/plans/alpha') -Root $scratch)
 $line = Format-CamelPlanTargetLine -Targets $oneDir -Tier ''
 Check 'one directory is singular in the sentence and counts its own plans (3)' ($line -like '*you named 1 directory*' -and $line -like '*3 plan file(s)*' -and $line -like '*plans under it*') $line
-Check 'a named -Tier replaces the default in the sentence' ((Format-CamelPlanTargetLine -Targets $oneDir -Tier 'slow') -like '*at tier slow*') (Format-CamelPlanTargetLine -Targets $oneDir -Tier 'slow')
+Check 'a named -Tier replaces the default in the sentence' ((Format-CamelPlanTargetLine -Targets $oneDir -Tier 'slow') -like '*tier slow*') (Format-CamelPlanTargetLine -Targets $oneDir -Tier 'slow')
 
 # --- 2. a plan file is not read at a layer -----------------------------------
 $fileTarget = @(Resolve-CamelPlanTarget -Values @('test/plans/alpha/two.plan.toml') -Root $scratch)
@@ -86,7 +91,7 @@ Check 'a path that names nothing says so, and says the runner will refuse it' ($
 $treeTargets = @(Resolve-CamelPlanTarget -Values @('all') -Root $scratch)
 Check 'the all shorthand is the plan tree' ($treeTargets.Count -eq 1 -and $treeTargets[0].Kind -eq 'tree') "$($treeTargets[0].Kind)"
 $line = Format-CamelPlanTargetLine -Targets $treeTargets -Tier 'fast'
-Check 'the tree is a layer question, not a directory subset' ($line -like '*whole plan tree (4 plan file(s))*' -and $line -like '*layer question*' -and $line -like '*at tier fast*') $line
+Check 'the tree is a layer question, not a directory subset' ($line -like '*whole plan tree (4 plan file(s))*' -and $line -like '*layer question*' -and $line -like '*tier fast*') $line
 
 # --- 4b. the whole tree with no layer is refused, and says why --------------
 # The reading that motivated this arrived as `--changed: the cases this change selects could not be

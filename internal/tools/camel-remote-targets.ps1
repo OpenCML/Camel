@@ -80,8 +80,8 @@ function Format-CamelPlanTargetLine {
     )
     $targets = @($Targets)
     if ($targets.Count -eq 0) { return $null }
-    $tierName = if ("$Tier".Trim()) { $Tier.Trim() } else { 'fast (the runner default)' }
-    $layer = if ($Golden) { 'the layer does not filter a recording' } else { "at tier $tierName" }
+    $tierName = if ("$Tier".Trim()) { $Tier.Trim() } else { 'fast, the runner default' }
+    $layer = if ($Golden) { 'a recording reads no layer' } else { "tier $tierName" }
     $files = @($targets | Where-Object { $_.Kind -eq 'file' })
     $dirs = @($targets | Where-Object { $_.Kind -eq 'directory' })
     $tree = @($targets | Where-Object { $_.Kind -eq 'tree' })
@@ -98,15 +98,22 @@ function Format-CamelPlanTargetLine {
         $plans = ($dirs | Measure-Object -Property Plans -Sum).Sum
         $word = if ($dirs.Count -eq 1) { 'directory' } else { 'directories' }
         $under = if ($dirs.Count -eq 1) { 'it' } else { 'those directories' }
+        $poss = if ($dirs.Count -eq 1) { 'its' } else { 'their' }
+        # The number here is the target's own contents. The runner's `[tier]` line counts a subset of
+        # it -- the plan files that start at least one case of the layer -- and on 2026-11-24 the two
+        # read 20 and 19 for the same two directories. Both are true and one of them looks like a
+        # plan went missing, so the sentence says which count is which.
         $parts += "you named $($dirs.Count) $word ($names): this run starts the plans under $under and " +
-            "nothing else -- $plans plan file(s) $layer, a directory being read at the layer; it is not " +
-            'a run of the whole plan tree'
+            "nothing else -- $plans plan file(s) under $under; the layer ($layer) then decides which of " +
+            "$poss cases run, and the runner's [tier] line counts the plan files that start one; it is " +
+            'not a run of the whole plan tree'
     }
     if ($tree.Count -gt 0) {
         $names = ($tree | ForEach-Object { $_.Name }) -join ', '
         $plans = ($tree | Measure-Object -Property Plans -Sum).Sum
         $parts += "$names is the whole plan tree ($plans plan file(s)), not a directory subset: " +
-            "a whole-tree target is a layer question -- it runs the plans of the layer -Tier names $layer"
+            "a whole-tree target is a layer question -- it runs the plans of the layer -Tier names " +
+            "$layer, and that layer decides which of those plan files start a case"
     }
     if ($missing.Count -gt 0) {
         $names = ($missing | ForEach-Object { $_.Name }) -join ', '
