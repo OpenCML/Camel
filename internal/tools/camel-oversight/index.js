@@ -494,8 +494,12 @@ export function apply(ctx, rawConfig) {
         const previous = lastOfKind.get(kind)
         if (previous && stillQueued(agent, previous)) agent.inbox.remove(previous)
         lastOfKind.set(kind, message.id)
+        // DSH has three ways in. inject adds to the running turn's context and starts nothing; steer goes
+        // in at the running turn's next step and, with no turn running, waits for one; followup is a new
+        // message after the current turn and starts one when the session is idle. So only followup wakes
+        // an idle session: urgent and wake reminders use it then, steer and inject only while a turn runs.
+        if (agent.status !== 'running' && (level === 'urgent' || level === 'wake')) return agent.followup(message), 'followup'
         if (level === 'urgent') return agent.steer(message), 'steer'
-        if (level === 'wake' && agent.status !== 'running') return agent.followup(message), 'followup'
         return agent.inject(message), 'inject'
     }
 
