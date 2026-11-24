@@ -1596,14 +1596,22 @@ export rule jvp_log_d(x: float) { log_d(x) => func (dx: float) {
 // that the library answers the default spelling and refuses the stated one by port count, which is
 // a refusal and not a wrong number.
 
-/// `softmax_cross_entropy`'s label form: one integer class per row, the URI
-/// `nn:softmax_cross_entropy_labels` (`nn/tensor_ops.cpp`, `softmaxCrossEntropyLabelsInfer`
-/// chooses it when the target's element type is integer). Declared here because a law is filed
-/// under the **operator's** name, and no name a program writes is this one: a program writes
-/// `softmax_cross_entropy` and the target's type is what makes the label form. Not exported: a
-/// ruleset exports rules, and this is the name of an operator and not a value of the library.
-#op('nn:softmax_cross_entropy_labels')
-func softmax_cross_entropy_labels::<T, I>(logits: T[...], target: I) => float panic
+/// `softmax_cross_entropy`'s label form: one integer class per row, the operator the URI
+/// `nn:softmax_cross_entropy_labels` names (`nn/tensor_ops.cpp`,
+/// `softmaxCrossEntropyLabelsInfer` chooses it when the target's element type is integer).
+///
+/// The stand-in is here because a law is filed under the **operator's** name and no name a program
+/// writes is this one: a program writes `softmax_cross_entropy` and the target's type is what makes
+/// the label form, so the head this family files `jvp_softmax_cross_entropy_labels` under has no
+/// spelling in the library and needs one declared. It is the same kind of stand-in `add` below is
+/// and for the same reason (a family cannot read another module's private function), and its body
+/// is the dispatch itself, so it answers what the operator answers. `lib/rulesets/transpose.cml`
+/// declares its own copy for the backward half; one name declared privately in two modules is two
+/// names, which is why `add` is declared twice already.
+func softmax_cross_entropy_labels::<T>(logits: T[...], labels: int[]) => float
+    when is_float::<T>() {
+    return softmax_cross_entropy(logits, labels)
+}
 
 /// `conv2d(input, kernel, bias)` is linear in each of its three tensors, so its tangent is the same
 /// convolution with one tangent in the place of one operand and a zero in the others:
@@ -1713,7 +1721,7 @@ export rule jvp_softmax_cross_entropy::<T>(logits: T[...], target: T[...])
 /// no tangent space is a slot the walk never asks for (`lib/rulesets/transpose.cml#take_from_type_t`
 /// is the same shape). The gradient is the engine's `softmax_cross_entropy_grad` on the same
 /// arguments, which the front end sends to the label form's own URI by the target's type.
-export rule jvp_softmax_cross_entropy_labels::<T, I>(logits: T[...], labels: I)
+export rule jvp_softmax_cross_entropy_labels::<T>(logits: T[...], labels: int[])
     when is_float::<T>() {
     softmax_cross_entropy_labels(logits, labels) => func (dlogits: T[...]) {
         sum_stated(

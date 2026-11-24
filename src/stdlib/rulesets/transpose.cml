@@ -1295,11 +1295,13 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 // read at, so a law of two ports that answers one value answers it for the port it names first and
 // the discrete port is never asked; that is `take_from_type_t`'s shape too.
 
-/// `softmax_cross_entropy`'s label form: the operator name, for the reason `rulesets.jvp`'s
-/// declaration of it records -- a law is filed under the operator's own name
+/// `softmax_cross_entropy`'s label form: the operator name, for the reason `rulesets.jvp`'s copy of
+/// this stand-in records -- a law is filed under the operator's own name
 /// (`nn:softmax_cross_entropy_labels`) and no name a program writes is that one.
-#op('nn:softmax_cross_entropy_labels')
-func softmax_cross_entropy_labels::<T, I>(logits: T[...], target: I) => float panic
+func softmax_cross_entropy_labels::<T>(logits: T[...], labels: int[]) => float
+    when is_float::<T>() {
+    return softmax_cross_entropy(logits, labels)
+}
 
 /// The transpose of `conv2d(input, kernel, bias)`: the three cotangents the engine's pullback
 /// answers, in the order the operands are named, each computed by the operator the engine calls
@@ -1358,7 +1360,7 @@ export rule softmax_cross_entropy_t::<T, A, B>(logits: A, target: B) when is_flo
 
 /// The transpose of the label form: the cotangent of the loss is the logits' gradient, scaled by
 /// it, and the labels are integers -- one value for the first port, and the second is never asked.
-export rule softmax_cross_entropy_labels_t::<T, A, I>(logits: A, labels: I) when is_float::<T>() {
+export rule softmax_cross_entropy_labels_t::<T, A>(logits: A, labels: int[]) when is_float::<T>() {
     softmax_cross_entropy_labels(logits, labels) => func (ct: T) {
         softmax_cross_entropy_grad(logits, labels, ct)
     }
