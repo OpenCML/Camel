@@ -15,7 +15,7 @@ speaks back, and both are pushed as they happen.
 | `/oversee/say` | POST | `{"id": "D-1123-43", "text": "...", "mode": "queue"}` queues a dispatch prefixed `[decision-maker · D-1123-43]`; `mode: "steer"` delivers at the nearest step; a repeated id is dropped |
 | `/oversee/acks` | GET | acknowledgements and the coordinator's own messages |
 | `/oversee/events` | GET | server-sent events: acknowledgements, `oversight_tell`, reminders, the claimed session ending, and a `beat` after each measurement |
-| `/oversee/reload` | POST | sync the plugin directory out of `origin/develop` into the live directory, reload this one plugin, and answer with the commit it came from; a tree that fails a check is refused with `file:line` and the live directory is left alone |
+| `/oversee/reload` | POST | sync the plugin directory out of the pushed line (`origin/integration`, or `origin/develop` without it) into the live directory, reload this one plugin, and answer with the commit it came from; a tree that fails a check is refused with `file:line` and the live directory is left alone |
 
 Model tools: `oversight_claim`, `oversight_ack`, `oversight_tell`, `oversight_readings`.
 
@@ -64,7 +64,7 @@ merges in flight and lane half-work, and DSH's replacement does not fall back to
 
 **The button.** The band's `重载插件` calls `POST /oversee/reload`, which:
 
-1. runs `internal/tools/sync-oversight-live.mjs`: it reads the plugin directory out of `origin/develop`
+1. runs `internal/tools/sync-oversight-live.mjs`: it reads the plugin directory out of the pushed line the plugin reads (`origin/integration`, or `origin/develop` without it)
    (`git ls-tree` + `git cat-file`, no worktree, no `stash`), writes it to a temporary directory beside the
    live one, and gates every `.js` with `node --check`, then imports the staged `index.js` and `client.js` in
    a child process. A file that fails stops everything: the temporary directory is removed, the live
