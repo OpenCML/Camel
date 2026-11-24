@@ -469,7 +469,8 @@ export function apply(ctx, rawConfig) {
 
     const unackedOlderThan = (minutes) =>
         [...delivered.values()]
-            .filter((entry) => !acks.has(entry.id) && Date.now() - entry.at > minutes * 60_000)
+            // A dispatch another one replaced (`supersedes`) is answered by the answer to the replacement.
+            .filter((entry) => !acks.has(entry.id) && !superseded.has(entry.id) && Date.now() - entry.at > minutes * 60_000)
             .map((entry) => entry.id)
     // Only dispatch-shaped ids are items; an id a session made up for itself can never have a backlog row.
     const takenIds = () =>
