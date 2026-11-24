@@ -1,0 +1,223 @@
+# lane 分支实况（原始读数，2026-11-24）
+
+integration = b44f0e67dd8c9adbb4c72dbd7df0c407157bece4
+develop     = 584d9e471161e0c46aeed04b32f38a1017369442
+生成时间 = 2026-11-24 19:32:17
+
+## ① 每条 lane 分支（按 merge-base 时间从早到晚）
+```
+lane/batch-merge | tip b5b9fbd9c2 (2026-11-24 18:37:47 +0800) | merge-base 0ccf6129b8 (2026-11-24 05:31:01 +0800) | 补丁 19 | 落后 235 | 文件 10 | internal/tools(7) scripts/hooks(1) scripts/merge-readings.mjs(1) | backlog D-1123-108 / `lane/batch-merge` | 有工作树
+lane/parser-old-spelling | tip 82d1d5b3b0 (2026-11-24 05:34:01 +0800) | merge-base 0ccf6129b8 (2026-11-24 05:31:01 +0800) | 补丁 6 | 落后 235 | 文件 78 | src/kernel(29) src/stdlib(28) src/compile(13) | backlog C-1123-56 / — | 有工作树
+lane/refgen-body | tip 3117452632 (2026-11-24 05:37:14 +0800) | merge-base 65354a1c9a (2026-11-24 05:36:12 +0800) | 补丁 1 | 落后 232 | 文件 2 | docs/stdlib-reference.md(1) scripts/stdlib-reference.mjs(1) | backlog C-1124-6 / `lane/refgen-body` | 有工作树
+lane/3a-transforms-autodiff | tip dbd8bdeb30 (2026-11-24 14:48:57 +0800) | merge-base eb381f688a (2026-11-24 06:01:35 +0800) | 补丁 6 | 落后 225 | 文件 12 | src/stdlib(10) internal/questions(2) | backlog D-1123-101 / `lane/op61`、`lane/kinds-to-oper`、`lane/3a-onnx`、`lane/3a-transforms-autodiff`、`lane/extraction-cost` | 有工作树
+lane/comprehension-shadowed | tip 153e9ec53f (2026-11-24 15:54:46 +0800) | merge-base eb381f688a (2026-11-24 06:01:35 +0800) | 补丁 2 | 落后 225 | 文件 1 | test/plans(1) | backlog C-1124-31 / — | 有工作树
+lane/plan-set | tip cbd5274b30 (2026-11-24 06:41:27 +0800) | merge-base d8c6789e69 (2026-11-24 06:12:02 +0800) | 补丁 3 | 落后 216 | 文件 7 | internal/tools(3) scripts/hooks(1) scripts/merge-readings.mjs(1) | backlog D-1123-102 / `lane/plan-set` | 有工作树
+lane/op-overload-merge | tip d10dae8683 (2026-11-24 13:38:02 +0800) | merge-base bc90856729 (2026-11-24 07:31:45 +0800) | 补丁 10 | 落后 203 | 文件 33 | test/plans(14) src/compile(6) src/kernel(6) | backlog D-1123-82 / `lane/op-overload-merge` | 有工作树
+lane/3a-rewrite | tip 826b685d86 (2026-11-24 12:17:13 +0800) | merge-base e3c6e02933 (2026-11-24 10:30:31 +0800) | 补丁 2 | 落后 147 | 文件 6 | src/stdlib(4) internal/questions(2) | backlog 无 / 无 | 有工作树
+lane/oversight-live | tip 94954bc289 (2026-11-24 12:22:33 +0800) | merge-base 30b16c7616 (2026-11-24 12:15:07 +0800) | 补丁 2 | 落后 128 | 文件 5 | internal/tools(5) | backlog D-1123-145 / — | 有工作树
+lane/test-suite-refactor | tip aa5b3920f5 (2026-11-24 13:03:14 +0800) | merge-base e0c7aa35b0 (2026-11-24 12:16:23 +0800) | 补丁 4 | 落后 127 | 文件 4 | docs/test-plans.md(1) internal/backlog.md(1) internal/reports(1) | backlog D-1123-151 / — | 无工作树
+lane/merge-reuse | tip b2dd3a001d (2026-11-24 13:05:42 +0800) | merge-base 998b809f20 (2026-11-24 12:55:34 +0800) | 补丁 5 | 落后 119 | 文件 8 | internal/tools(4) internal/reports(1) scripts/hooks(1) | backlog D-1123-103 / `lane/plan-set` | 有工作树
+lane/gir-opertarget | tip 48481ee86f (2026-11-24 19:01:23 +0800) | merge-base 26dc49bcb1 (2026-11-24 13:07:45 +0800) | 补丁 10 | 落后 105 | 文件 84 | src/stdlib(35) src/kernel(16) src/compile(14) | backlog D-1124-26 / — | 有工作树
+lane/red-bisect | tip 26b015d494 (2026-11-24 13:24:26 +0800) | merge-base 26dc49bcb1 (2026-11-24 13:07:45 +0800) | 补丁 2 | 落后 105 | 文件 6 | internal/tools(3) internal/reports(2) internal/backlog.md(1) | backlog D-1123-93 / `lane/red-bisect` | 有工作树
+lane/sync-three | tip 91dc43460e (2026-11-24 14:35:13 +0800) | merge-base 26dc49bcb1 (2026-11-24 13:07:45 +0800) | 补丁 6 | 落后 105 | 文件 74 | src/stdlib(35) src/compile(13) src/kernel(12) | backlog 无 / 无 | 有工作树
+lane/view-graph-identity | tip e48f813668 (2026-11-24 17:59:25 +0800) | merge-base 26dc49bcb1 (2026-11-24 13:07:45 +0800) | 补丁 12 | 落后 105 | 文件 90 | src/stdlib(41) src/kernel(18) src/compile(13) | backlog D-1124-26 / — | 有工作树
+lane/misc | tip 6ae7563435 (2026-11-24 18:53:49 +0800) | merge-base 819bf42361 (2026-11-24 15:32:52 +0800) | 补丁 25 | 落后 88 | 文件 41 | internal/tools(9) src/stdlib(8) src/kernel(4) | backlog D-1124-11 / — | 有工作树
+lane/precise-select | tip 352eeb02a5 (2026-11-24 17:18:25 +0800) | merge-base 819bf42361 (2026-11-24 15:32:52 +0800) | 补丁 7 | 落后 88 | 文件 27 | test/selection(19) internal/reports(2) test/tools(2) | backlog D-1123-123 / `lane/merge-start` | 有工作树
+lane/coverage-table | tip 93eec4d309 (2026-11-24 17:44:09 +0800) | merge-base e66efb7a7b (2026-11-24 17:21:13 +0800) | 补丁 3 | 落后 66 | 文件 4 | internal/reports(1) scripts/coverage-table.mjs(1) test/selection(1) | backlog D-1124-44 / — | 有工作树
+lane/test-refactor-2 | tip ba7ef0b4f5 (2026-11-24 19:02:51 +0800) | merge-base e66efb7a7b (2026-11-24 17:21:13 +0800) | 补丁 14 | 落后 66 | 文件 93 | test/plans(69) test/tools(11) internal/reports(6) | backlog D-1124-44 / — | 有工作树
+lane/front-facts | tip cf1a18bda8 (2026-11-24 19:28:31 +0800) | merge-base 1798450b30 (2026-11-24 17:41:47 +0800) | 补丁 7 | 落后 60 | 文件 20 | src/stdlib(9) src/kernel(4) test/plans(3) | backlog D-1124-49 / 多车道 | 有工作树
+lane/red-b-fixes | tip 2f5733f453 (2026-11-24 17:43:13 +0800) | merge-base 2f5733f453 (2026-11-24 17:43:13 +0800) | 补丁 0 | 落后 94 | 文件 0 |  | backlog D-1123-93 / `lane/red-bisect` | 有工作树
+lane/selection-docs | tip b85c5b77a8 (2026-11-24 18:02:25 +0800) | merge-base b85c5b77a8 (2026-11-24 18:02:25 +0800) | 补丁 0 | 落后 53 | 文件 0 |  | backlog 无 / 无 | 有工作树
+lane/merge-tooling | tip e1257e13c2 (2026-11-24 19:04:07 +0800) | merge-base 835195485e (2026-11-24 18:30:18 +0800) | 补丁 4 | 落后 32 | 文件 7 | internal/tools(5) internal/collab(1) test/plan-selection.json(1) | backlog D-1124-54 / 协调者 | 有工作树
+lane/macwheel-freed | tip f3bb1f6d11 (2026-11-24 18:30:39 +0800) | merge-base f3bb1f6d11 (2026-11-24 18:30:39 +0800) | 补丁 0 | 落后 31 | 文件 0 |  | backlog D-1124-54 / 协调者 | 有工作树
+```
+
+## ② 图（--simplify-by-decoration，--since=2026-11-24 05:31:01 +0800）
+```
+*   b44f0e67dd (origin/integration) merge integration: the backlog's rows for the three seats and the batch tool land on red-b-fixes' green readings, which are reused because the only new file selects a plan this merge did not read
+|\  
+| * 48d34373b6 (docs/coordinator, camel-baseline-2) collab: three seats, and the batch tool first
+* |   783a10b7ba (tag: backup/orphan-783a10b7ba) merge red-b-fixes: a generic body's name check asks the prelude layer as well as its own scope, the prelude's layer reaches a module and not only the entry, and a range 0 .. 3 names three integers; the cases and the report that keep each of them travel with the code
+|\ \  
+| |/  
+|/|   
+| * 2f5733f453 (lane/red-b-fixes) report: the reading that settled ①, and the case that keeps it
+| * cd795d8a93 Merge remote-tracking branch 'origin/develop' into lane/red-b-fixes
+* | 584d9e4711 (origin/develop, camel-baseline-3) collab: the two rows were one line, and a row that is half of a line is neither
+* | e8d1922cda (origin/docs/coordinator) collab: the return condition becomes something a tool can evaluate
+* |   237de16dc8 merge selection-docs: plan-selection.json names internal/backlog.md and internal/plans/ as feat/docs_links, so a docs-only change is measured instead of widening to the whole fast layer, with the three cases that hold the rule
+|\ \  
+| * | b85c5b77a8 (lane/selection-docs) 选择器：只有文档改动的合并也能被测量（backlog 与 internal/plans 各一条规则）
+* | | 570fe6772a (base/opt-570fe6772a) collab: an effect summary that cannot express a Ref write, and a stdlib that does not compile
+* | | f3bb1f6d11 (lane/macwheel-freed) collab: one merge tool, and the order in which the copy retires
+* | | 6cbedac86a (docs/to-integration) plans: promotion is taken by whichever merge seat is idle, and docs stop pushing develop
+* | |   d9c926714f merge macos-wheel: the macOS wheel carries the platform tag its check reads, and the rollup, the docs and .gitignore follow pypi to packaging/pypi; no test plan covers the tag function, so this gate shows the tree still passes rather than that the fix works
+|\ \ \  
+| |/ /  
+|/| |   
+| * | ca1eeb54d3 (tag: archive/lane-macos-wheel, origin/lane/macos-wheel) pypi: the macOS wheel claims the architecture of its binaries, not of the interpreter
+* | | 2e3c1fd3f1 (HEAD -> develop) collab: eleven dispatches recorded as rows, and the commit is the receipt
+* | | 819bf42361 (camel-baseline) merge fsh-dev: an integration branch is fed by parallel merge seats and promotes to develop on a full fast-layer run, the branch gate counts only lane branches, and the band shows the lanes waiting and whether new ones are held back
+|/ /  
+* |   0a0f96354b merge v0.2.46 back: the published line, and the notes it carries
+|\ \  
+| |/  
+|/|   
+| * 67829a34a5 (tag: v0.2.46, origin/main, origin/HEAD, main) changes: what v0.2.46 answers with, in nine entries
+* f14ed321b0 (tag: backup/orphan-f14ed321b0) merge fsh-dev: the branch gate binds the dispatches too, and the backlog reminder is a count
+* 7a9a31d927 (tag: backup/orphan-7a9a31d927) backlog: the reload button goes through the plugin itself, because the page cannot reach the service
+* a2c6f4eff4 (scratch/op61-dev) merge count-script: the counters become a program that refuses a path which is not there
+* 9f9c316d3d merge 3a-onnx-tiles: five reads move to the view, the seventy-one that cannot say what they would need, and the index regenerated
+*   dbc2c4f5af Merge develop into fsh-dev
+|\  
+| * 4aac09cd4a merge 3a-fvm-cpp: the C++ back end runs the cases the other back ends run on the same graph
+* | 448643aada Merge develop into fsh-dev
+|\| 
+| * 018a757907 merge 3a-prl-exec: the parallel back end runs the cases the others run, and refuses the ones it cannot
+| *   6ac9fee133 merge 3a-tools: the tooling reads the tree it is given instead of the tree it was built beside
+| |\  
+| | * 729281c9d1 (tag: archive/lane-3a-tools) merge origin/develop@315d2b2903 into lane/3a-tools: the collab rules that a checkout being merged in is not a place to commit
+* | f363ae858b Merge develop into fsh-dev
+|\| 
+| * b2d84a8792 merge doc-example-gates: the examples a document shows are run by the test plan that documents them
+* bcc535d050 Merge develop into fsh-dev
+```
+
+## ③ 包含关系（A ⊇ B：A 的尖端是 B 的祖先）
+```
+lane/sync-three ⊇ lane/gir-opertarget
+lane/sync-three ⊇ lane/view-graph-identity
+```
+
+## ④ 三个合并位
+```
+seat/instrument | tip 26672d58ed (2026-11-24 17:53:19 +0800) | 落后 integration 127 | HEAD: camel-remote: the plan runs inside camel-run, and the inline slot block is gone
+seat/merge | tip 9cc2eeaa4b (2026-11-24 17:18:55 +0800) | 落后 integration 70 | HEAD: op-overload: the operator overloads resolve by arity and type, not by declaration order (13 documentation commits precede this merge; none touches src/, so the clang unit count is unaffected by them)
+seat/merge-2 | tip d641fd0c3b (2026-11-24 19:29:27 +0800) | 落后 integration 13 | HEAD: merge fsh-dev: the branch gate counts patches instead of lanes, the oversight plugin reads integration, and rule 7 sends documents to integration, with the daily review page they were decided on
+seat/merge-2-dev | tip ff954bcef0 (2026-11-24 16:55:18 +0800) | 落后 integration 71 | HEAD: merge fsh-dev: the oversight plugin reads the backlog from docs/coordinator, an urgent reminder wakes an idle session, the iron rules are cut to twelve with their reasons moved out, and a plan run takes a token per process
+seat/merge-3 | tip f34c227e33 (2026-11-24 19:31:29 +0800) | 落后 integration 0 | HEAD: merge gir-opertarget: a node's OPER identity is read as the operator's before the builder's target table is asked, a conversion or a copy takes the built-in :op/cast and :op/copy group by name from the builtins module instead of through the program's scope, and the branch-arm refusal's case now accepts a node of any kind
+```
+
+## ⑤ 工作树
+```
+worktree D:/Projects/Camel
+HEAD 2e3c1fd3f165016b1634a8c769f6ce6b45f34c87
+branch refs/heads/develop
+worktree D:/Projects/Camel-wt/3a-tr
+HEAD dbd8bdeb30c01c718642d1fac6b41b1c5c8ef7f4
+branch refs/heads/lane/3a-transforms-autodiff
+worktree D:/Projects/Camel-wt/3arewrite
+HEAD 826b685d86baaa914e6d8dfa51e0de635c3808ed
+branch refs/heads/lane/3a-rewrite
+worktree D:/Projects/Camel-wt/ad
+HEAD 34d47009b77b97e5c7fdfec1160c7d34ceb31320
+detached
+worktree D:/Projects/Camel-wt/backfill
+HEAD d2c3f10d6fd8fdfe4675f75efe05a8f132f8ac74
+branch refs/heads/probe/d1123-102-backfill
+worktree D:/Projects/Camel-wt/base-8240
+HEAD 82408f6fc8b9336cb08f71721f1f73af5fe4cec9
+branch refs/heads/baseline/82408f6fc8
+worktree D:/Projects/Camel-wt/batch
+HEAD b5b9fbd9c2865119b5ad3f3165d10f4641527422
+branch refs/heads/lane/batch-merge
+worktree D:/Projects/Camel-wt/camel-baseline
+HEAD 819bf42361c476cb4005c268d602144795badc4d
+branch refs/heads/camel-baseline
+worktree D:/Projects/Camel-wt/catchup-f-parser-old-spelling
+HEAD 82d1d5b3b0ba5e531983289a8db050b28989459e
+branch refs/heads/lane/parser-old-spelling
+worktree D:/Projects/Camel-wt/comp2
+HEAD 153e9ec53f18b7d1a2f582a008653ff2d22a454b
+branch refs/heads/lane/comprehension-shadowed
+worktree D:/Projects/Camel-wt/cover2
+HEAD 93eec4d3093643914d6edbfc0da23b94cac625df
+branch refs/heads/lane/coverage-table
+worktree D:/Projects/Camel-wt/docs
+HEAD 48d34373b6601b1dddf4a3d59f7091fc0919947e
+branch refs/heads/docs/coordinator
+worktree D:/Projects/Camel-wt/ex
+HEAD b1c103bc1ad10d9c34ad30a48626ecb9c157450e
+detached
+worktree D:/Projects/Camel-wt/front2
+HEAD cf1a18bda8b8d5dc51227cd9c772a7c11ed960b6
+branch refs/heads/lane/front-facts
+worktree D:/Projects/Camel-wt/liveplug
+HEAD 94954bc2891973b09f59bf660af3ac2802d81614
+branch refs/heads/lane/oversight-live
+worktree D:/Projects/Camel-wt/macwheel
+HEAD f3bb1f6d117d0c6ba2f624ef543682bccc059f01
+branch refs/heads/lane/macwheel-freed
+worktree D:/Projects/Camel-wt/merge
+HEAD 9cc2eeaa4bd19021f8fa076019b37ca5e5a06760
+branch refs/heads/seat/merge
+worktree D:/Projects/Camel-wt/merge1
+HEAD 26672d58ed60d205297af49b0156dce98ae454c2
+branch refs/heads/seat/instrument
+worktree D:/Projects/Camel-wt/merge2
+HEAD d641fd0c3bad18fa3c5f576077ffc164e5fe8b4b
+branch refs/heads/seat/merge-2
+worktree D:/Projects/Camel-wt/merge2-baseline
+HEAD 48d34373b6601b1dddf4a3d59f7091fc0919947e
+branch refs/heads/camel-baseline-2
+worktree D:/Projects/Camel-wt/merge3
+HEAD f34c227e337c8287030d90aaa5e6a1c1b6db7da4
+branch refs/heads/seat/merge-3
+worktree D:/Projects/Camel-wt/merge3-baseline
+HEAD 584d9e471161e0c46aeed04b32f38a1017369442
+branch refs/heads/camel-baseline-3
+worktree D:/Projects/Camel-wt/op61
+HEAD d10dae8683df497cbbb4d27ef0b524bec7db4519
+branch refs/heads/lane/op-overload-merge
+worktree D:/Projects/Camel-wt/opertarget
+HEAD 48481ee86fe58b06bbec6513e197ccdbb2b03d86
+branch refs/heads/lane/gir-opertarget
+worktree D:/Projects/Camel-wt/opertarget-base
+HEAD 570fe6772a3820f7f770baec5720d859e02aa461
+branch refs/heads/base/opt-570fe6772a
+worktree D:/Projects/Camel-wt/planset
+HEAD cbd5274b30d859e9e24e32b79f91418eff7ca701
+branch refs/heads/lane/plan-set
+worktree D:/Projects/Camel-wt/redb
+HEAD 2f5733f45325ba82bfa4b450a00ebaf1061be685
+branch refs/heads/lane/red-b-fixes
+worktree D:/Projects/Camel-wt/redbisect
+HEAD 26b015d494df89bad5c8d23dc0ae31be55203bda
+branch refs/heads/lane/red-bisect
+worktree D:/Projects/Camel-wt/refgen
+HEAD 3117452632d888f8dbae1dc6650f0f01dda0072b
+branch refs/heads/lane/refgen-body
+worktree D:/Projects/Camel-wt/reuse
+HEAD b2dd3a001d5ec2b1321c060ba02c962bc39ea3a5
+branch refs/heads/lane/merge-reuse
+worktree D:/Projects/Camel-wt/sel
+HEAD 352eeb02a5665b2a8cd128b9b9f005f35218cc54
+branch refs/heads/lane/precise-select
+worktree D:/Projects/Camel-wt/selrule
+HEAD b85c5b77a8ef3448d59096c693e742c939bcbf9d
+branch refs/heads/lane/selection-docs
+worktree D:/Projects/Camel-wt/sync3
+HEAD 91dc43460e8b8bab8491aafc816d65d0956528cb
+branch refs/heads/lane/sync-three
+worktree D:/Projects/Camel-wt/testref2
+HEAD ba7ef0b4f506c7f30c2b3538d9c9baccbf7cb991
+branch refs/heads/lane/test-refactor-2
+worktree D:/Projects/Camel-wt/toolfix
+HEAD e1257e13c20a1c69ab3ab537008da83577bdf5bc
+branch refs/heads/lane/merge-tooling
+worktree D:/Projects/Camel-wt/tsuite
+HEAD 6ae756343531e32b598ba63d2758eff7d7bc0d7a
+branch refs/heads/lane/misc
+worktree D:/Projects/Camel-wt/viewident
+HEAD e48f813668d5e790522f9bea40a3988a1f447dac
+branch refs/heads/lane/view-graph-identity
+worktree D:/Temp/camel-batch/camel-batch-base
+HEAD 1a6a94e3d2272ca7d144a1d774d110c6f8b95087
+branch refs/heads/probe/batch-base
+worktree D:/Temp/camel-batch/camel-batch-merge
+HEAD 0515db91a874cfb256016ba5b14cfdca372c6397
+branch refs/heads/probe/batch-merge
+worktree D:/Temp/camel-batch/camel-lane-base
+HEAD 82408f6fc8b9336cb08f71721f1f73af5fe4cec9
+branch refs/heads/camel-batch-baseline
+```
