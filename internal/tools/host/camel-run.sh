@@ -19,6 +19,14 @@
 #   3. the install cannot be verified (no checkout, no `.git`, `origin/integration` never fetched)
 #                                                  -> exits and says which of the three is missing
 #   4. a needed tool is missing (`flock`, `date`)    -> exits and names it
+#   5. the installed bytes are not the bytes the install record was written for
+#                                                  -> exits and prints both digests. A version number
+#                                                     that outlived its own file is the reading nobody
+#                                                     can check, and the live directory is exactly the
+#                                                     place it happens: on 2026-11-24 `camel-run` there
+#                                                     was an older copy than the checkout it was
+#                                                     installed from, and the record still named that
+#                                                     checkout (see `version_check`)
 #
 # Two things open, and they are the same principle from the other side -- close what should be known,
 # open what must not block:
@@ -32,7 +40,10 @@
 #   lock      take the first free test slot, print the reading lines, then run the command that follows
 #             `--` while holding it
 #   status    print the pool and the slots as they are now
-#   install   idempotent: put this script at its installed path, print `installed <sha> at <time>`
+#   install   idempotent: put this script at its installed path and record
+#             `<version> <sha256 of these bytes>` beside it, print `installed <version> (<digest>) at
+#             <time>`. It refuses a checkout with uncommitted changes to this file: the version would
+#             name bytes the commit does not contain.
 #
 # Usage from a generated run.sh:
 #   "${CAMEL_RUN:=/home/zjwei/camel-work/bin/camel-run}" lock --lane "$name" --branch "$branch" -- \
@@ -60,7 +71,43 @@ sha_of() {
     git -C "$dir" rev-parse --short=9 HEAD 2>/dev/null || true
 }
 
+digest_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
 self_sha() { sha_of; }
+
+# What version these bytes are, said only when it can be said truthfully; `VERSION` is the one name
+# every message uses afterwards.
+#
+# The installed copy lives in a directory that is not a checkout, so git cannot name it there. The
+# install record is the provenance then -- but a record is a name for the bytes that were installed,
+# and it says nothing about a file that has changed since. A fallback that reads the record without
+# checking it prints a version number about some other file, which is worse than refusing: the
+# reader cannot tell it apart from a true one. So the record is believed only when this file's own
+# digest is the digest the record was written for. A disagreement exits with both digests, because
+# "install did not keep up" is the finding, and "unknown version" would hide it.
+version_check() {
+    local dir have recorded want mine
+    VERSION=''
+    dir=$(dirname "$SELF")
+    have=$(sha_of)
+    if [ -n "$have" ]; then
+        VERSION="$have"
+        return 0
+    fi
+    if [ ! -f "$VERSION_FILE" ]; then
+        die "cannot name this script's version: $dir is not a git checkout and there is no install record at $VERSION_FILE. Run it from a checkout, or install it from one (camel-run.sh install)"
+    fi
+    recorded=$(awk 'NR == 1 { print $1 }' "$VERSION_FILE" 2>/dev/null)
+    want=$(awk 'NR == 1 { print $2 }' "$VERSION_FILE" 2>/dev/null)
+    mine=$(digest_of "$SELF")
+    if [ -z "$recorded" ] || [ -z "$want" ] || [ -z "$mine" ]; then
+        die "the install record $VERSION_FILE cannot name these bytes: it holds '${recorded:-}' '${want:-}' and $SELF has no digest of its own. Reinstall with a version that writes both (camel-run.sh install)"
+    fi
+    if [ "$mine" != "$want" ]; then
+        die "install did not keep up: $VERSION_FILE says $recorded, written for bytes $want, but $SELF is $mine. Reinstall from that checkout (camel-run.sh install); these bytes have no version until then, and a run will not take a slot on a version nobody can name"
+    fi
+    VERSION="$recorded"
+}
 
 check_version() {
     # The caller may name the version it expects (a run.sh records the one that generated it). A
@@ -68,17 +115,15 @@ check_version() {
     # that cost half a day on 2026-11-24.
     local want="${CAMEL_RUN_EXPECT:-}"
     local have
-    have=$(self_sha)
-    if [ -z "$have" ]; then
-        die "cannot name this script's version: $(dirname "$SELF") is not a git checkout. Refusing rather than running code of unknown version"
-    fi
+    version_check
+    have="$VERSION"
     if [ -n "$want" ] && [ "$want" != "$have" ]; then
         die "version mismatch: this script is $have, the run expects $want. Reinstall from origin/integration, or run with CAMEL_RUN_EXPECT=$have if $have is known good"
     fi
 }
 
 check_tools() {
-    for t in flock date awk fuser; do
+    for t in flock date awk fuser sha256sum; do
         command -v "$t" >/dev/null 2>&1 || die "missing tool: $t"
     done
 }
@@ -128,7 +173,7 @@ cmd_plan() {
     local slot=0 n fd got told=0 waited=0 candidates started
     check_tools
     check_version
-    say "CAMEL_RUN $(self_sha) lane=$LANE branch=${BRANCH:-?}"
+    say "CAMEL_RUN $VERSION lane=$LANE branch=${BRANCH:-?}"
     if [ "$(merge_seat)" = 1 ]; then candidates='1 2 3'; else candidates='1 2'; fi
 
     # The old single lock, taken first and in this order on purpose. New runs then queue behind the runs
@@ -173,7 +218,7 @@ cmd_plan() {
 
     echo "HOST_TEST_WAIT_END=$slot"
     echo "HOST_TEST_SLOT=$slot"
-    echo "lockFrom=$0@$(self_sha)"
+    echo "lockFrom=$0@$VERSION"
     echo "lockWaitSeconds=$waited"
     pool_report
     echo "tokensPeak: ${CAMEL_TOKENS_PEAK:-0}"
@@ -205,7 +250,7 @@ cmd_build() {
     local want="${CAMEL_BUILD_TOKENS:-8}" peak=0
     check_tools
     check_version
-    say "CAMEL_RUN $(self_sha) lane=$LANE build tokens=$want"
+    say "CAMEL_RUN $VERSION lane=$LANE build tokens=$want"
     if ! pool_ready; then
         echo 'tokens: unavailable'
         echo 'tokensPeak: 0'
@@ -225,7 +270,10 @@ cmd_build() {
 }
 cmd_status() {
     check_tools
-    say "CAMEL_RUN $(self_sha)"
+    # The same resolution a plan run does, so an install that fell behind is seen here -- by the
+    # cheapest command there is -- rather than on the run it would have refused.
+    version_check
+    say "CAMEL_RUN $VERSION"
     slots_report
     pool_report
     echo "tokensPeak: ${CAMEL_TOKENS_PEAK:-0}"
@@ -235,16 +283,25 @@ cmd_status() {
 cmd_install() {
     # Idempotent: running it twice changes nothing after the first time, and it says so either way.
     mkdir -p "$INSTALL_DIR" || die "cannot create $INSTALL_DIR"
-    local here sha same=0
+    local here sha digest same=0
     here=$(cd "$(dirname "$SELF")" && pwd)
     sha=$(self_sha)
     [ -z "$sha" ] && die "cannot name this script's version; install from a checkout of origin/integration"
+    # The record names the bytes, so it may only be written for bytes its checkout actually holds. A
+    # copy edited on the way in would install under a commit it is not -- which is the one thing the
+    # record exists to prevent, and the reason `version_check` compares digests at all.
+    if [ -n "$(git -C "$here" status --porcelain --untracked-files=no -- "$SELF" 2>/dev/null)" ]; then
+        die "the checkout at $here has uncommitted changes to this file, so $sha would name bytes that commit does not contain. Commit them, then install"
+    fi
+    digest=$(digest_of "$SELF")
+    [ -z "$digest" ] && die "cannot compute a digest of $SELF, so the record could not be checked. Refusing to install"
     if [ -f "$INSTALLED" ] && cmp -s "$SELF" "$INSTALLED"; then same=1; fi
     if [ "$same" = 0 ]; then
         cp "$SELF" "$INSTALLED.tmp" && chmod 755 "$INSTALLED.tmp" && mv "$INSTALLED.tmp" "$INSTALLED" || die "install failed"
     fi
-    printf '%s\n' "$sha" > "$VERSION_FILE"
-    echo "installed $sha at $(date -u +%Y-%m-%dT%H:%M:%SZ) (from $here; $([ "$same" = 1 ] && echo 'unchanged' || echo 'replaced'))"
+    # `<version> <sha256 of those bytes>`: the version, and the bytes it is a version of.
+    printf '%s %s\n' "$sha" "$digest" > "$VERSION_FILE"
+    echo "installed $sha ($digest) at $(date -u +%Y-%m-%dT%H:%M:%SZ) (from $here; $([ "$same" = 1 ] && echo 'unchanged' || echo 'replaced'))"
 }
 
 cmd="${1:-status}"
