@@ -73,6 +73,28 @@ export const RULES = [
         },
     },
     {
+        // A turn that ends on a promise or on waiting for someone's nod: the session goes idle and the
+        // promised work waits for a message that may never come (the author: it says it will do
+        // something, ends the turn, and moves on to the next message instead).
+        id: 'promise-at-turn-end',
+        level: 'wake',
+        hold: 2,
+        cooldown: 20,
+        check: ({ lastTurn, target, now }) => {
+            if (!lastTurn || lastTurn.aborted || !target || target.status === 'running') return null
+            if (now - lastTurn.at > 60 * 60_000) return null
+            const tail = lastTurn.text.trim().slice(-600)
+            const PROMISE = /(我会|我将|我这就|我马上|接下来我|下一步我|随后|稍后|落地后|跑完后|合完后|推完后|之后再|再推|再合|等[^。\n]{0,24}(后|再|完)|待[^。\n]{0,16}再|你说一声|不说我就|等你|你点头)/
+            const m = PROMISE.exec(tail)
+            if (!m) return null
+            const sentence = tail.slice(Math.max(0, tail.lastIndexOf('。', m.index) + 1), Math.min(tail.length, m.index + 60)).replace(/\s+/g, ' ').trim()
+            return {
+                key: String(lastTurn.at),
+                text: `你上一轮结束在一句承诺或等待上：「${sentence}」。不要以"我会…/等…再…"结束一轮：能做的这一轮就做；要等读数就起后台任务，写明在等什么、完成时由谁叫醒你；做不了的记进 backlog 一行。不等负责人点头（铁律：不问、不等）。`,
+            }
+        },
+    },
+    {
         id: 'unacked',
         level: 'wake',
         hold: 0,

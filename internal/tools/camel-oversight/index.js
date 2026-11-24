@@ -564,12 +564,13 @@ export function apply(ctx, rawConfig) {
 
     // A turn that ends by asking the owner: the last assistant text ends in a question mark, or asks for
     // a decision in so many words. The owner is not there to answer; the rule is to go on with the default.
-    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|Should I|Would you like|Let me know|shall I)/i
+    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|你说一声|不说我就|你点头|你同意的话|你若同意|由你定|你定|你否决|Should I|Would you like|Let me know|shall I)/i
     const asksOwner = (text) => {
         const tailText = String(text || '').trim().slice(-400)
         return tailText !== '' && (/[?？]\s*$/.test(tailText) || ASKS.test(tailText))
     }
     let lastAskNudge = 0
+    let lastTurn = null
     const QUESTION_TOOLS = new Set(['ask_user_question', 'ask_user'])
     onTargetEvent = (event) => {
         const d = event.data || {}
@@ -590,6 +591,9 @@ export function apply(ctx, rawConfig) {
         } else if (event.type === 'turn/end') {
             pendingCalls.clear()
             const aborted = d.reason && d.reason.kind === 'aborted'
+            // What the turn ended on, for the rules: a turn that ends on a promise ("I will ... after ...")
+            // leaves the work to a message that may never come.
+            lastTurn = { at, text: String(lastAssistantText || ''), aborted: Boolean(aborted) }
             if (!aborted && asksOwner(lastAssistantText) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
                 nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问负责人、不等——按默认做法继续干；真有问题就用 oversight_tell 直接问决策者（问句、读数、两三条路各带代价、默认做法）。')
@@ -682,6 +686,7 @@ export function apply(ctx, rawConfig) {
                 backlogOpen: backlogOpen(),
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
                 dmLastSeen,
+                lastTurn,
             }
             const due = []
             for (const rule of hot.rules.module.RULES) {
