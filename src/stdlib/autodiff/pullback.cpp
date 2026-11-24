@@ -261,13 +261,13 @@ std::vector<Type *> callVersionsOf(Type *callValueType, uint32_t writtenCaptures
 
 /// A static value the node holds, where the graph is the one the transaction owns: the owner is
 /// what a caller has, so the owner is what it passes.
+///
+/// One question of the view: `constantOf` is a DATA node's value where the graph was given it, and
+/// `nullopt` for a node of another kind and for a DATA node on a runtime slot. The three steps this
+/// spelled out -- the record, `dataIndex >= 0`, `staticSlots()[-dataIndex]` -- are the answer it
+/// gives, and the read no longer names the representation (graph_view.h, `constantOf`).
 std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
-    const auto &draft  = transaction.graph();
-    const auto *header = draft.header(node);
-    if (!header || header->kind != GCNodeKind::Data || header->dataIndex >= 0) {
-        return std::nullopt;
-    }
-    return draft.staticSlots()[static_cast<size_t>(-header->dataIndex)];
+    return transaction.graph().view().constantOf(node);
 }
 
 bool isFunctionType(Type *type) { return type != nullptr && type->code() == TypeCode::Function; }

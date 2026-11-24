@@ -804,7 +804,8 @@ bool liftGraph(
         const size_t parameterCount = function.funcType()->normTypesCount();
         const size_t withCount =
             function.funcType() != nullptr ? function.funcType()->withTypesCount() : 0;
-        const std::vector<gc_node_ref_t> originalWith = idListOf(function.withPorts());
+        const std::vector<gc_node_ref_t> originalWith =
+            function.view().ports(camel::graph::PortGroup::Context);
         // The value half of the lifted list: the ordinary parameters in their order, which is every
         // value a direction is handed in for (`liftSignature`).
         std::vector<camel::core::type::Type *> valueTypes;
@@ -849,7 +850,8 @@ bool liftGraph(
         }
         // Which value of the lifted list a port of the original body is, by its place in that list.
         std::unordered_map<gc_node_ref_t, size_t> parameterOf;
-        const std::vector<gc_node_ref_t> originalPorts = idListOf(function.normPorts());
+        const std::vector<gc_node_ref_t> originalPorts =
+            function.view().ports(camel::graph::PortGroup::Normal);
         for (size_t i = 0; i < originalPorts.size(); ++i) {
             parameterOf[originalPorts[i]] = i;
         }
@@ -865,7 +867,7 @@ bool liftGraph(
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
         // The declared ones and the captured ones, one list: the first `withTypesCount()` are the
         // caller's `with` arguments and the rest are the values the body captured, in the closure
-        // tuple's order (`GCGraph::withPorts`, cited below).
+        // tuple's order (`ports(Context)`, read below).
         {
             for (size_t i = 0; i < withCount && i < originalWith.size(); ++i) {
                 camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
@@ -885,7 +887,7 @@ bool liftGraph(
         }
         // The values the body *captures* from where it was written, which are not `with` parameters
         // and were the one kind of port this lift left out. A capture is a port of the graph
-        // (`GCGraph::closureNodes`) but not one of its `with`
+        // (`ports(Capture)`) but not one of its `with`
         // ports, so a cell the walk never made is a hole: the lifted copy reads nothing where the
         // value stood, and the refusal that produces names the whole body (`skip=body`) rather than
         // the capture. `(t: float[]) => k * t[0]` shows it: a captured `float` refuses exactly as a
@@ -900,11 +902,15 @@ bool liftGraph(
         // same way and records the same defect: a capture the copy does not declare answers the
         // zero of its slot.
         //
-        // Both facts are the graph's own and are read where it stores them: `GCGraph::closureNodes`
-        // and `GCGraph::closureType`. Nothing is recorded twice and nothing new is encoded.
+        // Both facts are the graph's own and are read where it stores them: the capture ports
+        // (`ports(Capture)`) and the closure type the source states (`GCGraph::closureType`, which
+        // the face does not answer -- a graph whose layout only the function value carries states
+        // none, and the derived tuple would not be able to say that). Nothing is recorded twice and
+        // nothing new is encoded.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
         {
-            const std::vector<gc_node_ref_t> captures = idListOf(function.closureNodes());
+            const std::vector<gc_node_ref_t> captures =
+                function.view().ports(camel::graph::PortGroup::Capture);
             for (gc_node_ref_t original : captures) {
                 const rt::GCNode *captureNode = nodeOf(function, original);
                 camel::core::type::Type *captureType =

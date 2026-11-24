@@ -273,10 +273,12 @@ VmapGraph buildVmapGraph(
     // so the batched body reads the capture and not the batch element. Answering every port of
     // the source graph with the batch parameter, the capture port among them, would make
     // `x + c` compute `2x` and answer `[2.0, 4.0, 6.0]` where `[4.0, 5.0, 6.0]` is the answer.
-    const auto captures         = function->closureNodes();
-    const auto sourceParameters = function->normPorts();
+    const std::vector<gc_node_ref_t> captures =
+        function->view().ports(camel::graph::PortGroup::Capture);
+    const std::vector<gc_node_ref_t> sourceParameters =
+        function->view().ports(camel::graph::PortGroup::Normal);
     // Where a capture port's value is in the closure tuple: the tuple is in capture order, so the
-    // port that is the i-th entry of `closureNodes` is the i-th slot.
+    // port that is the i-th entry of `ports(Capture)` is the i-th slot.
     std::vector<size_t> captureSlot(function->nodeCount(), static_cast<size_t>(-1));
     for (size_t at = 0; at < captures.size(); ++at) {
         captureSlot[captures[at]] = at;

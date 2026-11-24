@@ -11,11 +11,11 @@ namespace camel::transforms {
 /// not copy, and why. A build that answered with a graph anyway would be a graph that computes
 /// something else (design principles 9.9).
 bool refuseAt(
-    SplitGraph &refusal, const rt::GCGraph *source, gc_node_ref_t ref, std::string construct,
-    std::string why) {
-    refusal.refusedOrigin = ref < source->nodeCount()
-                                ? static_cast<camel::source::origin_id_t>(source->nodeOrigin(ref))
-                                : camel::source::kInvalidOriginId;
+    SplitGraph &refusal, const camel::graph::GraphView &source, gc_node_ref_t ref,
+    std::string construct, std::string why) {
+    refusal.refusedOrigin    = ref < source.nodeSlotCount()
+                                   ? static_cast<camel::source::origin_id_t>(source.originOf(ref))
+                                   : camel::source::kInvalidOriginId;
     refusal.refusedConstruct = std::move(construct);
     refusal.refusedWhy       = std::move(why);
     return false;
@@ -1319,7 +1319,7 @@ bool cutArm(
     if (root == rt::kInvalidNodeRef) {
         return refuseAt(
             refusal,
-            half.source,
+            half.source->view(),
             rt::kInvalidNodeRef,
             "an arm",
             "the arm's yield does not hold the half this cut keeps");
@@ -1344,7 +1344,7 @@ bool buildHalfBranch(
     if (armCount == 0 || conditionCopy == rt::kInvalidNodeRef) {
         return refuseAt(
             refusal,
-            half.source,
+            half.source->view(),
             rt::kInvalidNodeRef,
             "the branch",
             "the branch has no arm or no condition the cut can name");
@@ -2147,7 +2147,7 @@ SplitGraph buildSplitGraph(
             }
             refuseAt(
                 refusal,
-                function,
+                function->view(),
                 exit,
                 "the exit",
                 "this graph's exit is the Join of a branch (the arm the condition picks writes the "
@@ -2179,7 +2179,7 @@ SplitGraph buildSplitGraph(
         SplitGraph refusal;
         refuseAt(
             refusal,
-            function,
+            function->view(),
             exit,
             "the exit",
             "this graph's exit is a Join that holds the pair and no branch names it, so the two "
@@ -2213,7 +2213,7 @@ SplitGraph buildSplitGraph(
         SplitGraph refusal;
         refuseAt(
             refusal,
-            function,
+            function->view(),
             exit,
             "the exit",
             "a lifted function answers with the pair (result, tangent); here the pair is a call's "

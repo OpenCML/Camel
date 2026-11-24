@@ -72,9 +72,12 @@ using camel::runtime::GraphId;
 /// A refusal, said at the node of the source graph that caused it: the construct the plumbing does
 /// not copy, and why. A build that answered with a graph anyway would be a graph that computes
 /// something else (design principles 9.9).
+///
+/// The source is read through its view: all a refusal needs of it is the node's **origin** -- where
+/// the construct was written -- and that is `originOf`, the reading the graph already stores.
 bool refuseAt(
-    SplitGraph &refusal, const rt::GCGraph *source, gc_node_ref_t ref, std::string construct,
-    std::string why);
+    SplitGraph &refusal, const camel::graph::GraphView &source, gc_node_ref_t ref,
+    std::string construct, std::string why);
 
 /// The node's data inputs: its norm inputs followed by its with inputs, in order.
 std::vector<gc_node_ref_t> dataInputsOf(const camel::graph::GraphView &view, gc_node_ref_t ref);
@@ -272,7 +275,7 @@ struct Half {
         if (index >= closurePorts.size()) {
             refuseAt(
                 refusal,
-                source,
+                source->view(),
                 rt::kInvalidNodeRef,
                 "a residual",
                 "the backward half reads a value of the forward half and this build gave it no "
@@ -353,7 +356,7 @@ struct Half {
                 // answered. A reader that wants the pair whole wants something neither half has.
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "the pair a call answers",
                     "the backward half reads the pair itself, and what crosses the cut is only the "
@@ -370,7 +373,12 @@ struct Half {
         }
         const rt::GCNode *node = source->node(ref);
         if (node == nullptr) {
-            return refuseAt(refusal, source, ref, "a node", "the node is not a node of the graph");
+            return refuseAt(
+                refusal,
+                source->view(),
+                ref,
+                "a node",
+                "the node is not a node of the graph");
         }
         // The effect runs (control, order, sync) are not data: a node that has one stands in a
         // block or on a chain, and copying its values without its place would move a statement.
@@ -379,7 +387,7 @@ struct Half {
             !source->syncPredsOf(ref).empty()) {
             return refuseAt(
                 refusal,
-                source,
+                source->view(),
                 ref,
                 "a node on an effect edge",
                 "the plumbing copies the data ports of a straight-line body; the control, order "
@@ -397,7 +405,7 @@ struct Half {
         case rt::GCNodeKind::Join:
             return refuseAt(
                 refusal,
-                source,
+                source->view(),
                 ref,
                 "a branch",
                 "the plumbing copies straight-line bodies");
@@ -412,7 +420,7 @@ struct Half {
             // copying a body region.
             return refuseAt(
                 refusal,
-                source,
+                source->view(),
                 ref,
                 "a loop",
                 "this loop is on the chain the exit reads and neither half has a value for it: the "
@@ -452,7 +460,7 @@ struct Half {
             if (input >= source->nodeCount() || copyOf[input] == rt::kInvalidNodeRef) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a node whose input was not copied",
                     "an operand of the node is not reachable from the half's exit");
@@ -483,7 +491,7 @@ struct Half {
                 }
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a port",
                     "the port is not a parameter of the graph, so neither half takes it");
@@ -500,7 +508,7 @@ struct Half {
             if (!tangent) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a tangent port",
                     "the value half reads the tangent of parameter " +
@@ -509,7 +517,7 @@ struct Half {
             }
             return refuseAt(
                 refusal,
-                source,
+                source->view(),
                 ref,
                 "a parameter",
                 "the backward half reads the value of parameter " +
@@ -544,7 +552,7 @@ struct Half {
             if (written == rt::kInvalidNodeRef) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a constant",
                     "the slot of the constant is not readable");
@@ -571,7 +579,7 @@ struct Half {
             if (!body) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a construction",
                     "the node builds a value and its payload says neither which slots its values "
@@ -624,7 +632,7 @@ struct Half {
             if (!waits.empty()) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a gate that waits on a statement",
                     "the gate forwards its value and waits on the statements written beside it, "
@@ -636,7 +644,7 @@ struct Half {
             if (forwarded == rt::kInvalidNodeRef) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a gate",
                     "the gate forwards no value, so there is nothing for this half to read");
@@ -667,7 +675,7 @@ struct Half {
                 if (splitType == nullptr || withCount == 0 || withCount > inputs.size()) {
                     return refuseAt(
                         refusal,
-                        source,
+                        source->view(),
                         ref,
                         "a call through a function value",
                         "the value's signature has no halves and no `split` of it to call, or the "
@@ -678,7 +686,7 @@ struct Half {
                 if (halves.forward == nullptr) {
                     return refuseAt(
                         refusal,
-                        source,
+                        source->view(),
                         ref,
                         "a call through a function value",
                         "the value's signature has no forward half, so the call has no value to "
@@ -723,7 +731,7 @@ struct Half {
             if (!rt::isValid(callee)) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "a call to a named function",
                     "the node names no callee graph, so there is no function to call");
@@ -745,7 +753,7 @@ struct Half {
                 if (nested.answer == nullptr) {
                     return refuseAt(
                         refusal,
-                        source,
+                        source->view(),
                         ref,
                         "a call to a function that answers the pair",
                         "the cut of that callee has not been made here, so the value half has no "
@@ -801,7 +809,7 @@ struct Half {
             if (!read.has_value() || reads.empty()) {
                 return refuseAt(
                     refusal,
-                    source,
+                    source->view(),
                     ref,
                     "an access node",
                     "the node reads no input, so the half has nothing to project");
@@ -857,7 +865,7 @@ struct Half {
                     if (liftedType == nullptr || node->dataType() != liftedType) {
                         return refuseAt(
                             refusal,
-                            source,
+                            source->view(),
                             ref,
                             "a tangent of a call",
                             "the value half hands the call's linear half on lifted, and this read "
@@ -887,7 +895,7 @@ struct Half {
                 if (index == residualIndexOf->end()) {
                     return refuseAt(
                         refusal,
-                        source,
+                        source->view(),
                         ref,
                         "a linear half",
                         "the cut does not carry the linear half of this call, so the second half "
@@ -918,7 +926,7 @@ struct Half {
         default:
             return refuseAt(
                 refusal,
-                source,
+                source->view(),
                 ref,
                 "a node of another kind",
                 std::string("node kind ") + std::to_string(static_cast<int>(node->kind)) +
@@ -929,7 +937,7 @@ struct Half {
     /// Copies everything `root` needs, inputs first, and answers whether the half is complete.
     bool copyHalf(gc_node_ref_t root, SplitGraph &refusal) {
         if (root >= source->nodeCount()) {
-            return refuseAt(refusal, source, root, "the exit", "the exit is not a node");
+            return refuseAt(refusal, source->view(), root, "the exit", "the exit is not a node");
         }
         seen[root] = 1;
         std::vector<std::pair<gc_node_ref_t, bool>> stack{{root, false}};
