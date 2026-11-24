@@ -2680,7 +2680,10 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
                 tokenWaitMs = lines.reduce((sum, line) => sum + Number(line.split(' ')[1] || 0), 0)
                 tokenTaking.cases += lines.length
                 tokenTaking.waitMs += tokenWaitMs
-                if (tokenWaitMs > 0) tokenTaking.queued += 1
+                // A take that costs a few milliseconds is the pool's own overhead, not a queue: count
+                // a case as queued only when it waited long enough to be a wait (100 ms), so the line
+                // does not report a queue that nobody stood in.
+                if (tokenWaitMs >= 100) tokenTaking.queued += 1
             }
         } catch {
             // A reading that could not be taken is not a case that failed: the token was held either
