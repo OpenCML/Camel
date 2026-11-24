@@ -15,6 +15,8 @@
  */
 
 #include "engine.h"
+#include "camel/graph/graph.h"
+#include "graph/graph_view.h"
 #include "camel/runtime/control.h"
 
 #include "../generic/rewrite.h"
@@ -88,9 +90,10 @@ bool nodeCameFromInlineSplice(const GCGraph *graph, uint32_t region) {
 /// The source position `ref` is written at, as a key that tells it apart from other positions:
 /// the span its origin resolves to, or the origin itself when the span is not known, and 0 when the
 /// node has no origin. Spans and origins are ids of their own, so the high bit keeps them apart.
-uint64_t
-originKeyOf(const GCGraph *graph, const camel::source::SourceContext *source, gc_node_ref_t ref) {
-    const uint64_t origin = graph->nodeOrigin(ref);
+uint64_t originKeyOf(
+    const camel::graph::Graph *graph, const camel::source::SourceContext *source,
+    gc_node_ref_t ref) {
+    const uint64_t origin = graph->view().originOf(ref);
     if (origin == 0) {
         return 0;
     }
@@ -269,16 +272,18 @@ bool mayHoldFunction(const camel::core::type::Type *type) {
     return false;
 }
 
-bool returnsClosure(const GCGraph *graph) {
-    const auto *type = graph ? graph->funcType() : nullptr;
+/// Whether the function's exit type may hold a function value. The only reading is the graph's own
+/// type, which the view answers, so this asks the graph by value and not the representation.
+bool returnsClosure(const camel::graph::Graph *graph) {
+    const auto *type = graph ? graph->view().funcType() : nullptr;
     return type && type->hasExitType() && mayHoldFunction(type->exitType());
 }
 
 /// The callee of each direct call in `graph`, read from the session's draft where the graph is
 /// being edited (calls of graphs created in this session exist only there).
-std::vector<const GCGraph *>
+std::vector<const camel::graph::Graph *>
 directCallees(const camel::runtime::RuntimeGraphDraftSession &session, const GCGraph *graph) {
-    std::vector<const GCGraph *> callees;
+    std::vector<const camel::graph::Graph *> callees;
     if (const auto *transaction = session.tryDraft(graph)) {
         const auto &draft = transaction->graph();
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -286,14 +291,14 @@ directCallees(const camel::runtime::RuntimeGraphDraftSession &session, const GCG
             if (!header || header->kind != GCNodeKind::Func) {
                 continue;
             }
-            if (GCGraph *callee = draft.calleeGraphOf(id)) {
+            if (auto *callee = draft.calleeGraphOf(id)) {
                 callees.push_back(callee);
             }
         }
         return callees;
     }
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        if (GCGraph *callee = session.work().calleeOf(*graph, it.ref())) {
+        if (auto *callee = session.work().calleeOf(*graph, it.ref())) {
             callees.push_back(callee);
         }
     }
@@ -359,14 +364,16 @@ bool isDraftBranchArmHead(
 /// constant, including the copies specialization made of them earlier in the same session. Calls
 /// of these graphs from elsewhere are inlined as usual (the copy belongs to the caller).
 struct MacroOperandGraphs {
-    std::unordered_set<const GCGraph *> graphs;
+    std::unordered_set<const camel::graph::Graph *> graphs;
     /// A macro operator takes a function that is not a constant of the graph (a parameter, the
     /// result of a call): any function of the program may reach it.
     bool all = false;
     /// The closure holds a macro operator, so the set above depends on the drafts.
     bool present = false;
 
-    bool contains(const GCGraph *graph) const { return all || graphs.contains(graph); }
+    bool contains(const camel::graph::Graph *graph) const {
+        return all || graphs.contains(graph);
+    }
 };
 
 /// The graph of the function constant `ref` of `graph` (a DATA node, or the closure template a
@@ -697,12 +704,12 @@ class CallBook {
     explicit CallBook(const camel::runtime::RuntimeGraphDraftSession &session)
         : session_(session) {}
 
-    size_t calls(const GCGraph *callee) const {
+    size_t calls(const camel::graph::Graph *callee) const {
         const auto it = index_.find(callee);
         return it == index_.end() ? 0 : slots_[it->second].calls;
     }
 
-    bool counted(const GCGraph *graph) const {
+    bool counted(const camel::graph::Graph *graph) const {
         const auto it = index_.find(graph);
         return it != index_.end() && slots_[it->second].counted;
     }
@@ -711,7 +718,7 @@ class CallBook {
     void recount(const GCGraph *graph) { replaceHeld(graph, directCallees(session_, graph)); }
 
     /// `graph` left the closure: its calls no longer count.
-    void forget(const GCGraph *graph) {
+    void forget(const camel::graph::Graph *graph) {
         replaceHeld(graph, {});
         slots_[slotOf(graph)].counted = false;
         slots_[slotOf(graph)].clean.reset();
@@ -727,20 +734,20 @@ class CallBook {
     void invalidateAll() { ++global_; }
 
     /// What the examination of `graph` reads, as one number that changes when any of it does.
-    uint64_t stampOf(const GCGraph *graph) const {
+    uint64_t stampOf(const camel::graph::Graph *graph) const {
         const auto it = index_.find(graph);
         return it == index_.end() ? global_ : stampOf(slots_[it->second]);
     }
 
     /// The examination of `graph` found nothing to do, and declined `declined`.
-    void examined(const GCGraph *graph, std::vector<DeclinedCall> declined) {
+    void examined(const camel::graph::Graph *graph, std::vector<DeclinedCall> declined) {
         Slot &slot = slots_[slotOf(graph)];
         slot.clean = Clean{stampOf(slot), std::move(declined)};
     }
 
     /// The calls declined by the last examination of `graph`, when nothing it read has changed
     /// since and it found nothing to do; null otherwise.
-    const std::vector<DeclinedCall> *unchangedExamination(const GCGraph *graph) const {
+    const std::vector<DeclinedCall> *unchangedExamination(const camel::graph::Graph *graph) const {
         const auto it = index_.find(graph);
         if (it == index_.end()) {
             return nullptr;
@@ -765,7 +772,7 @@ class CallBook {
         std::optional<Clean> clean;
     };
 
-    uint32_t slotOf(const GCGraph *graph) {
+    uint32_t slotOf(const camel::graph::Graph *graph) {
         const auto [it, inserted] = index_.try_emplace(graph, static_cast<uint32_t>(slots_.size()));
         if (inserted) {
             slots_.emplace_back();
@@ -781,7 +788,8 @@ class CallBook {
         return stamp;
     }
 
-    void replaceHeld(const GCGraph *graph, const std::vector<const GCGraph *> &now) {
+    void replaceHeld(
+        const camel::graph::Graph *graph, const std::vector<const camel::graph::Graph *> &now) {
         std::vector<uint32_t> nowSlots;
         nowSlots.reserve(now.size());
         for (const auto *callee : now) {
@@ -807,7 +815,7 @@ class CallBook {
     }
 
     const camel::runtime::RuntimeGraphDraftSession &session_;
-    std::unordered_map<const GCGraph *, uint32_t> index_;
+    std::unordered_map<const camel::graph::Graph *, uint32_t> index_;
     std::vector<Slot> slots_;
     uint64_t global_ = 0;
 };
@@ -1058,7 +1066,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 if (draft.sourceRefOf(id) == kInvalidNodeRef) {
                     continue;
                 }
-                GCGraph *const calleeGraph = draft.calleeGraphOf(id);
+                auto *const calleeGraph = draft.calleeGraphOf(id);
                 if (!calleeGraph || calleeGraph == nextGraph) {
                     continue;
                 }
