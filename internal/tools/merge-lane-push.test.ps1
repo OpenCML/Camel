@@ -225,10 +225,27 @@ function Write-ListFile {
     param([string] $Path, [string[]] $Lines)
     [System.IO.File]::WriteAllText($Path, (($Lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
+# Each of the four documentation places on its own, because "the one rule matches all four" and "the
+# rule matches only some of them" are the same result when one path is the whole test -- the other
+# three would then widen to the fast layer in a real recovery and never be measured as anything.
+$docsPaths = @(
+    'internal/backlog.md'
+    'internal/plans/2026-11-24-one-plan.cn.md'
+    'internal/reports/2026-11-24-one-page.cn.md'
+    'internal/questions/2026-11-24-one-question.cn.md'
+)
+foreach ($docsPath in $docsPaths) {
+    Write-ListFile -Path $listFile -Lines @($docsPath)
+    $oneDoc = Get-PlansForChangedFiles -Checkout $repoRoot -ListFile $listFile
+    Check "$docsPath selects the documentation check and nothing else" `
+        ($oneDoc.Exit -eq 0 -and -not $oneDoc.Widened -and ($oneDoc.Targets -join ',') -eq 'test/plans/feat/docs_links.plan.toml') `
+        "targets=[$($oneDoc.Targets -join ', ')] widened=$($oneDoc.Widened)"
+}
+
 Write-ListFile -Path $listFile -Lines @('internal/reports/2026-11-24-one-page.cn.md', 'internal/backlog.md')
 $selection = Get-PlansForChangedFiles -Checkout $repoRoot -ListFile $listFile
 Check 'the documentation that lands selects a plan' ($selection.Exit -eq 0 -and $selection.Targets.Count -eq 1) "exit $($selection.Exit): $($selection.Targets -join ', ')"
-Check 'and it is the documentation check' (($selection.Targets -join ',') -eq 'test/plans/feat/docs_links.plan.toml') ($selection.Targets -join ',')
+Check 'all four together are still one plan, not four' (($selection.Targets -join ',') -eq 'test/plans/feat/docs_links.plan.toml') ($selection.Targets -join ',')
 Check 'and the selection did not widen to the layer' (-not $selection.Widened) $selection.Text
 
 Write-ListFile -Path $listFile -Lines @('src/kernel/runtime/node.cpp')

@@ -99,7 +99,10 @@
 
 .PARAMETER BaselineWorktree
     Where the baseline is measured. It is a worktree of its own, detached at the tree the merge lands
-    on, and it is kept between merges so the host's build of it stays warm.
+    on, and it is kept between merges so the host's build of it stays warm. Left empty, it is read
+    from this machine's settings file (`baselineWorktree`), the same way -MainCheckout is, and a run
+    that cannot read it stops with exit 2 instead of measuring a baseline in another seat's tree. The
+    path may not exist yet: this script creates the worktree there on the first merge.
 
 .EXAMPLE
     .\merge-lane.ps1 -Branch lane/range-ri -Message "merge range-ri: ..." -WhatIf
@@ -131,7 +134,13 @@ param(
     # has to be a real checkout (the gate builds it), so it is a worktree of this repository detached
     # at the first parent. One fixed path and not one per merge: the host keeps the build of that
     # worktree between runs, and a fresh path per merge would mean a cold build per merge.
-    [string] $BaselineWorktree = 'D:\Projects\Camel-wt\camel-baseline',
+    #
+    # Empty means "read it from this machine's settings" (`baselineWorktree`), the same way the merge
+    # checkout is read, and for the same reason: a default that names a real directory is a baseline
+    # measured in whoever's tree that is, and two seats sharing one baseline tree do not collide on
+    # screen, they collide in the numbers. The path may not exist yet -- this script creates the
+    # worktree there (Sync-BaselineWorktree) -- so "not there" is the first merge, not a refusal.
+    [string] $BaselineWorktree = '',
     # One branch per baseline tree: git will not check one branch out twice, so a second merge
     # position beside this one gives its own tree its own branch (the batch tool's reason, ported).
     [string] $BaselineBranch = 'camel-baseline',
@@ -144,31 +153,54 @@ $ErrorActionPreference = 'Stop'
 
 # --- which checkout a merge lands in -----------------------------------------
 #
-# The merge position is a machine-local path, so it belongs in the machine's settings file and
-# nowhere else: internal/tools/camel-gate.local.json, key `mergeWorktree`, git-ignored, the key the
-# pre-push hook already reads to decide which tree may push develop. This script reads the same key,
-# which is the point -- one setting says which tree is the merge position, so the hook that guards
-# the push and the tool that makes the merge cannot disagree about it.
+# --- the paths a merge is made in and measured in ------------------------------
 #
-# There is no default. The parameter used to default to a path on the author's workstation, and when
-# that was repaired it defaulted to another seat's tree instead: a default that happens to name an
-# existing checkout does not fail, it does the work in somebody else's tree and reports success. So a
-# run that cannot read the setting stops, and the two ways to fail say different things -- no file
-# means this machine was never set up, no key means it was set up without naming a tree -- because a
-# reader acts differently on each.
+# Both are machine-local paths, so both belong in this machine's settings file and nowhere else:
+# internal/tools/camel-gate.local.json (git-ignored), keys `mergeWorktree` and `baselineWorktree`.
+# `mergeWorktree` is the key the pre-push hook already reads to decide which tree may push develop,
+# and sharing it is the point -- one setting says which tree is the merge position, so the hook that
+# guards a push and the tool that makes the merge cannot disagree about it.
+#
+# Neither has a default any more, and that is the whole of the repair. -MainCheckout defaulted to the
+# author's own checkout (rule 17 forbids working there); the repair pointed it at another seat's
+# worktree, so the defect kept its shape and changed its victim. A default that happens to name an
+# existing tree does not fail: the merge is made in somebody else's checkout and the run reports
+# success. The baseline worktree had the same shape -- a path on this workstation -- with the same
+# consequence one step later: the baseline is measured, and a worktree created, in a tree that
+# belongs to whoever owns that path, and two seats share it without either of them saying so.
+#
+# So a run that cannot read a setting stops, and the ways to fail say different things, because a
+# reader acts differently on each:
+#
+#   no settings file       this machine was never set up
+#   no key in that file    it was set up without naming this tree
+#   more than one value    the hook allows a list; a merge uses one, and "the first of them" is a guess
+#   not an absolute path   a relative path resolves against the current directory, which is a guess
+#   not a directory        (the merge position only) it must exist; the baseline tree is created there
+#
+# The last one is where the two keys differ, and the difference is a fact about the tools, not a
+# weaker check for one of them: a merge position is a checkout that is already there, and a baseline
+# worktree is made by this script (Sync-BaselineWorktree). Refusing a baseline path that does not
+# exist yet would refuse the first merge on a fresh seat, which is the normal case and not a defect.
 #
 # Returns @{ Path; Problem }. `Problem` empty means `Path` is the answer.
-function Resolve-MergeCheckout {
+function Resolve-SeatPath {
     param(
         [string] $Given = '',
+        # The settings key, and the parameter that overrides it for one run. Both are named in every
+        # refusal: the repair is one of the two, and the reader has to know which.
+        [string] $Key = '',
+        [string] $Parameter = '',
         [string] $LocalConfig = '',
         # Where camel-gate-config.ps1 lives (the settings loader, shared with the other gate tools).
-        [string] $ToolsRoot = ''
+        [string] $ToolsRoot = '',
+        # The path may not exist yet: the baseline worktree is created at it by this script.
+        [switch] $MayCreate
     )
 
-    # An explicit path is the answer: what a seat types on the command line overrides the file for one
-    # run, and that is the rule the other tools in this directory keep. The file is not even read, so
-    # a machine with no settings can still merge by naming its tree.
+    # An explicit path is the answer, and the file is not even read: what a seat types on the command
+    # line overrides the file for one run, which is the rule the other tools in this directory keep --
+    # and it is how a machine with no settings file at all still merges.
     if ($Given) { return @{ Path = $Given; Problem = '' } }
 
     if (-not $ToolsRoot) { $ToolsRoot = $PSScriptRoot }
@@ -178,34 +210,54 @@ function Resolve-MergeCheckout {
     if (-not $cfg.localConfigFound) {
         return @{
             Path    = ''
-            Problem = "there is no settings file at $($cfg.localConfigPath), and -MainCheckout was not given. The merge checkout is a machine-local path, so this run cannot name one: copy internal/tools/camel-gate.example.json to that path and set 'mergeWorktree', or pass -MainCheckout."
+            Problem = "there is no settings file at $($cfg.localConfigPath), and -$Parameter was not given. These paths are machine-local, so this run cannot name one: copy internal/tools/camel-gate.example.json to that path and set '$Key', or pass -$Parameter."
         }
     }
-    $value = "$($cfg.mergeWorktree)".Trim()
+    $property = $cfg.PSObject.Properties[$Key]
+    $value = if ($null -ne $property) { "$($property.Value)".Trim() } else { '' }
     if (-not $value) {
         return @{
             Path    = ''
-            Problem = "the settings file at $($cfg.localConfigPath) has no 'mergeWorktree', and -MainCheckout was not given. That key is what says which checkout a merge lands in (the same key the pre-push hook reads), and nothing here may guess one: set it in that file, or pass -MainCheckout."
+            Problem = "the settings file at $($cfg.localConfigPath) has no '$Key', and -$Parameter was not given. That key is what says which tree this is, and nothing here may guess one: set it in that file, or pass -$Parameter."
         }
     }
-    # The key takes more than one value for the hook's sake (a machine that keeps the merge tree in
-    # more than one place); a merge position is one checkout, and merging into "the first of them" is
-    # the guess this function exists to refuse.
+    # A key may be a list for the hook's sake (a machine that keeps the merge tree in more than one
+    # place). A merge uses one tree, and taking the first of several is the guess this exists to refuse.
     $trees = @($value -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     if ($trees.Count -ne 1) {
         return @{
             Path    = ''
-            Problem = "'mergeWorktree' in $($cfg.localConfigPath) names $($trees.Count) trees ($($trees -join '; ')), and a merge lands in one checkout. Pass -MainCheckout to say which."
+            Problem = "'$Key' in $($cfg.localConfigPath) names $($trees.Count) trees ($($trees -join '; ')), and this tool uses one tree. Pass -$Parameter to say which."
         }
     }
     $tree = $trees[0]
-    if (-not (Test-Path -LiteralPath $tree -PathType Container)) {
+    if (-not [System.IO.Path]::IsPathRooted($tree)) {
         return @{
             Path    = ''
-            Problem = "'mergeWorktree' in $($cfg.localConfigPath) names $tree, and there is no directory there. A merge position is a checkout that exists; nothing here will create one or use another."
+            Problem = "'$Key' in $($cfg.localConfigPath) names '$tree', which is not an absolute path. A path is read from that file or given on the command line, never resolved against whatever directory this happens to run in."
+        }
+    }
+    if (-not $MayCreate -and -not (Test-Path -LiteralPath $tree -PathType Container)) {
+        return @{
+            Path    = ''
+            Problem = "'$Key' in $($cfg.localConfigPath) names $tree, and there is no directory there. A merge position is a checkout that exists; nothing here will create one or use another."
         }
     }
     return @{ Path = $tree; Problem = '' }
+}
+
+# The two settings this script needs, each read through the one resolver above so the two cannot drift
+# apart in what they check or in how a refusal reads.
+function Resolve-MergeCheckout {
+    param([string] $Given = '', [string] $LocalConfig = '', [string] $ToolsRoot = '')
+    return Resolve-SeatPath -Given $Given -Key 'mergeWorktree' -Parameter 'MainCheckout' `
+        -LocalConfig $LocalConfig -ToolsRoot $ToolsRoot
+}
+
+function Resolve-BaselineWorktree {
+    param([string] $Given = '', [string] $LocalConfig = '', [string] $ToolsRoot = '')
+    return Resolve-SeatPath -Given $Given -Key 'baselineWorktree' -Parameter 'BaselineWorktree' `
+        -LocalConfig $LocalConfig -ToolsRoot $ToolsRoot -MayCreate
 }
 
 # The branch every reading in this script is about: the start point, the state a stop prints, the
@@ -772,8 +824,8 @@ function Format-RecoveryConclusion {
             $Branch, $Head, $Target, (& $short $Local), @($Targets).Count, (@($Targets) -join ', '), $Files, (& $short $MeasuredTree))
 }
 
-# Which checkout a merge lands in, read before anything is done in one. A stop here has touched no
-# repository: no fetch, no lock, no branch, no build.
+# The two trees a merge needs, both read before anything is done in either. A stop here has touched
+# no repository: no fetch, no lock, no branch, no build.
 $mergeCheckout = Resolve-MergeCheckout -Given $MainCheckout -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
 if ($mergeCheckout.Problem) {
     Write-Host ''
@@ -783,6 +835,19 @@ if ($mergeCheckout.Problem) {
     exit 2
 }
 $MainCheckout = $mergeCheckout.Path
+
+# The baseline tree is read here too, and not at the point it is used: a run that cannot name it would
+# otherwise merge, build and measure before finding out, which is the eleven minutes this script
+# exists to stop spending twice. Read the same way, refused the same way, stopped the same way.
+$baselineCheckout = Resolve-BaselineWorktree -Given $BaselineWorktree -LocalConfig $LocalConfig -ToolsRoot $PSScriptRoot
+if ($baselineCheckout.Problem) {
+    Write-Host ''
+    Write-Host 'STOPPED: the tree the baseline is measured in is not named (exit 2, nothing was read and nothing was merged)' -ForegroundColor Yellow
+    Write-Host "  $($baselineCheckout.Problem)"
+    Write-Host ''
+    exit 2
+}
+$BaselineWorktree = $baselineCheckout.Path
 
 Push-Location $MainCheckout
 try {

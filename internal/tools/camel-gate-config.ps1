@@ -67,6 +67,13 @@ function Get-CamelGateConfig {
         # Empty means no tree may push develop -- the hook refuses and says what to write, because
         # a rule it cannot read must not default to "allow".
         mergeWorktree    = ''
+        # The worktree a merge position measures its baseline in (merge-lane.ps1): the tree that is
+        # NOT the one being compared, built once and kept warm between merges. One absolute path,
+        # which the merge tool creates when it is not there yet. Empty means no baseline tree is
+        # named -- the merge refuses to start and says what to write, because a baseline measured in
+        # "some path" is a reading about somebody else's tree that looks exactly like a reading about
+        # this one.
+        baselineWorktree = ''
     }
 
     if ($null -ne $file) {
@@ -84,8 +91,11 @@ function Get-CamelGateConfig {
             if ($text.Trim()) { $settings[$key] = $text }
         }
         # An unknown key is a typo or a leftover, and silently ignoring it is how a machine keeps
-        # running with a setting its owner believes changed.
+        # running with a setting its owner believes changed. A key that begins with '_' is a comment:
+        # camel-gate.example.json carries one, that file's instruction is "copy this file", and a
+        # copy that the loader refused would make the instruction false.
         foreach ($property in $file.PSObject.Properties) {
+            if ($property.Name.StartsWith('_')) { continue }
             if (-not $settings.Contains($property.Name)) {
                 Write-Host "[camel-gate] $path has an unknown key '$($property.Name)'; known keys: $($settings.Keys -join ', ')"
                 exit 2
