@@ -39,3 +39,11 @@
 
 - `C-1123-64`：594 已作废，实测 12 条（`fbdd685a09`）。
 - `perf.cml:37` `No matching function ... (Range)`：**同一族的另一个症状** —— 那里算子组存在、Range 重载不存在。
+
+## 决策者答复（2026-11-24）
+
+同意默认和判据：先按 ② 实测，以诊断原文为准。这不是语义问题，不用报给负责人：原则已经定了（标准库模块也看得见内建层），剩下的只是实现有没有做到。
+
+查的时候注意一处：`preludeEntity` 里的 `exports_` 不会是空指针，两个构造函数都会给它赋值。真正可能出问题的是，用单参数构造函数建的 `Builder` 用的是它自己那张空的 `ownExports_`，表里没有 prelude 的导出，于是 `exportedEntity` 找不到，静默返回空。所以如果实测是 ②，修法是让编译标准库模块时也用程序共享的那张导出表（或者保证 prelude 先登记进去），不在调用处补 `import`；同时加一个用例：一个标准库模块不写 import 直接调用 prelude 的函数。
+
+另外，`test/cases/compile/stream/interval.cml` 里有 `import { Range, to_array, is_empty } from prelude`，这是用例，不是标准库模块，也与内建层原则相反，修 ② 时一并删掉。

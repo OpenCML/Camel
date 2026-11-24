@@ -116,7 +116,7 @@ function declaredEntryPoints(pyprojectPath) {
  * Check that every command the wheel declares has its binary in the bundled install.
  *
  * Each `[project.scripts]` entry point is a Python function that execs
- * `camel/.cmlenv/bin/<command>` (pypi/camel-lang/src/camel_cli.py), so a declared command whose
+ * `camel/.cmlenv/bin/<command>` (packaging/pypi/camel-lang/src/camel_cli.py), so a declared command whose
  * binary the build did not collect installs a command that fails on first use. Failing here
  * names the tool and the directory, rather than leaving it to the smoke test on one platform.
  *
@@ -124,7 +124,7 @@ function declaredEntryPoints(pyprojectPath) {
  * (scripts/wheel_modes.py): setuptools records 0o644 for package data whatever the source
  * mode is, so `chmod` before the build would not travel.
  *
- * @param {string} pyprojectBase - pypi/camel-lang, which holds pyproject.toml
+ * @param {string} pyprojectBase - packaging/pypi/camel-lang, which holds pyproject.toml
  * @param {string} bundledBin - camel/.cmlenv/bin inside the package being built
  * @param {string[]} toolBinaries - the tool names copied there
  */
@@ -132,7 +132,7 @@ function prepareBundledBinaries(pyprojectBase, bundledBin, toolBinaries) {
     const declared = declaredEntryPoints(path.join(pyprojectBase, 'pyproject.toml'))
     if (declared.length === 0) {
         logFail(
-            `pypi/camel-lang/pyproject.toml declares no [project.scripts]: the wheel would install no command`
+            `packaging/pypi/camel-lang/pyproject.toml declares no [project.scripts]: the wheel would install no command`
         )
         process.exit(1)
     }
@@ -195,6 +195,9 @@ function runPythonProbe(pyExe, snippet, what) {
  * thing that knows which glibc the bundled libraries actually need; `scripts/check_wheel_tags.py`
  * fails the build if that repair did not happen.
  *
+ * macOS is the exception the sentence above argues for: there the answer comes from the binaries
+ * and `MACOSX_DEPLOYMENT_TARGET`, not from the interpreter (see `macosPlatformTag`).
+ *
  * @param {string} pyExe
  */
 function nativePlatformTag(pyExe) {
@@ -202,12 +205,55 @@ function nativePlatformTag(pyExe) {
     if (forced) {
         return forced
     }
+    if (process.platform === 'darwin') {
+        return macosPlatformTag()
+    }
     const platform = runPythonProbe(
         pyExe,
         'import sysconfig;print(sysconfig.get_platform())',
         'sysconfig.get_platform()'
     )
     return platform.replace(/[-.]/g, '_')
+}
+
+/**
+ * `macosx_<major>_<minor>_<arch>` from what the build compiled for, not from the interpreter.
+ *
+ * `sysconfig.get_platform()` on the macOS cell answers `macosx-10.9-universal2`, because that is
+ * how the setup-python framework build of CPython was itself built -- it says nothing about this
+ * wheel. It matters because `delocate-wheel` does not *replace* the tag, it narrows it:
+ * `delocating.py` keeps "architecture tags [limited] to whatever the wheel already claimed to
+ * support" (`arch_version.keys() - wheel_arch_version.keys()` are dropped). Claiming universal2
+ * therefore named the wheels
+ *
+ *   camel_lang-0.2.47-cp310-abi3-macosx_13_0_arm64.macosx_13_0_x86_64.whl
+ *   camel_lang-0.2.47-py3-none-macosx_13_0_arm64.macosx_13_0_x86_64.whl
+ *
+ * in build-pypi.yml run 45349410016 -- a file pip installs on an Intel Mac, where not one of the
+ * camel binaries has an x86_64 slice (the only x86_64 code it carried was the CPython framework
+ * delocate bundled in). The architecture is this machine's, the version is what CMake was told to
+ * compile against; both are facts about the artifact, which is the standard the Linux comment
+ * above sets.
+ *
+ * Since macOS 11 the minor version is not part of the release version, and pip reads
+ * `macosx_14_0`, never `macosx_14_4` (delocate's `get_macos_platform_tag` zeroes it too).
+ */
+function macosPlatformTag() {
+    const target = (process.env.MACOSX_DEPLOYMENT_TARGET || '').trim()
+    const [major, minor = '0'] = target.split('.')
+    const parsedMajor = Number(major)
+    if (!target || !Number.isInteger(parsedMajor) || parsedMajor <= 0) {
+        logFail(
+            `Cannot name a macOS wheel without MACOSX_DEPLOYMENT_TARGET (got ` +
+                `${JSON.stringify(target)}). CMake compiled every binary against that version, so ` +
+                `it is the only honest source for the tag; set it, or set ` +
+                `CAMEL_PYPI_PLATFORM_TAG explicitly.`
+        )
+        process.exit(1)
+    }
+    const arch = process.arch === 'x64' ? 'x86_64' : process.arch
+    const releaseMinor = parsedMajor >= 11 ? '0' : minor
+    return `macosx_${parsedMajor}_${releaseMinor}_${arch}`
 }
 
 /**
@@ -367,7 +413,16 @@ function packageWheelBundle({
         process.exit(1)
     }
 
-    const PYPI_BASE = path.join(BASEDIR, 'pypi', 'camel-lang')
+    // The setuptools package root, and the directory the staging copy of `out/<tag>/` is written
+    // into. It was `pypi/camel-lang` until 2de5b196f8 ("root: the editor extension ... and pypi a
+    // package directory") moved the directory under `packaging/` and left this path naming the old
+    // one: `npm run pypi:rollup` then died in every cell of build-pypi.yml with
+    //
+    //   Error: ENOENT: no such file or directory, open '.../pypi/camel-lang/pyproject.toml'
+    //
+    // after the native build had already succeeded (run 45345553169, linux-x64/linux-arm64/macos).
+    // `scripts/setver.js` already names both spellings, which is why only this file broke.
+    const PYPI_BASE = path.join(BASEDIR, 'packaging', 'pypi', 'camel-lang')
     const CAMEL_BASE = path.join(PYPI_BASE, 'src', 'camel')
     const CMLENV = path.join(CAMEL_BASE, '.cmlenv')
 
@@ -411,9 +466,10 @@ function packageWheelBundle({
     // system's -- and the build tree's entry is what `auditwheel repair` follows to find
     // libcamel.so, which is how the wheel ended up carrying a second copy of it. Dropped
     // from the copy the wheel is packed from, so the build tree itself is untouched and stays
-    // runnable: on Linux only, because this edits the ELF dynamic string table, and the other
-    // platforms have no such entry (Windows has no RUNPATH; a macOS Mach-O is rewritten by
-    // delocate, which 5.37 item 6 has not written yet).
+    // runnable: on Linux only, because this edits the ELF dynamic string table. Windows has no
+    // RUNPATH. A macOS Mach-O keeps its `LC_RPATH` entries until `delocate-wheel` sanitizes them
+    // (build-pypi.yml, "Bundle the dylibs into the macOS wheels": `--sanitize-rpaths` is that
+    // command's default and removes the absolute ones, re-signing the file it edited).
     if (process.platform === 'linux') {
         runCommand(`${py} "${path.join(BASEDIR, 'scripts', 'strip_build_rpath.py')}" "${CMLENV}"`)
         runCommand(

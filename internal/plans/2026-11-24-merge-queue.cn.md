@@ -53,3 +53,24 @@
 - 两项相干（造一对改同一文件的探针车道）：进同一个合并位、按顺序合；让前一项故意红，后一项不会被带进 `integration`。
 - 晋级：`develop` 每次前进前都有一份全快层读数，与上一次逐条比过。
 - 一天下来报：已交回到进 `integration` 的中位等待时间、`integration` 每两小时前进几次、`develop` 晋级几次。
+
+## 晋级由空闲的合并位做
+
+晋级不需要一个专门的人：`integration` 前进之后，**空闲的那个合并位**接这一笔。它有 3 号槽的使用权，也已经有热的工作树，所以它做的只是「合一次 `develop` 尖端、跑一次整层快层、比红表、够了就推」。
+
+- **触发**：`integration` 前进之后，或距上次晋级三小时，先到者为准。
+- **谁做**：三个合并位里当时空闲的那一个；两个都在跑时，谁先空谁做。
+- **失败就停**：新增红不为 0 时**不推**，报红的用例名与失败的第一条期望，然后停——晋级失败比晋级错了好。
+- **报一行**：`promoted <sha> | fast: <N> cases, <pass>/<fail> | new reds: <n> | slot 3 | queue <秒>`。
+- **文档不再推 `develop`**：有了 `integration` 之后，backlog、问题页、计划页一律推 `integration`，`develop` 只由晋级快进；推前核 `git rev-list origin/integration..HEAD` 里只有文档提交。
+
+**第 3 步的两条逐字命令**：
+
+```powershell
+git push origin origin/integration:refs/heads/develop
+git ls-remote origin refs/heads/develop
+```
+
+第 1 条把 `integration` 快进到 `develop`（不带任何新提交）；第 2 条是核对，输出里 `refs/heads/develop` 的 sha 必须等于 `integration` 的 sha，否则这次晋级没有落。
+
+**为什么要比红表而不是只看红数**：整层跑一次会带上上游所有改动（判据修正、唤醒、收尾规矩），那些改动第一次被整层跑时，红的位置会动；只看红数会把「换了一条红」读成「没有新增红」。
