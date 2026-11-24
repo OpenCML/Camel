@@ -52,17 +52,17 @@ namespace camel::transforms {
 /// invariants. Staying inside the region is the whole point: a node outside it is computed once,
 /// before the loop, and a node inside it is computed once per round.
 void regionClosure(
-    const rt::GCGraph *graph, uint32_t region, gc_node_ref_t root,
+    const camel::graph::GraphView &graph, uint32_t region, gc_node_ref_t root,
     std::unordered_set<gc_node_ref_t> &inside, std::vector<gc_node_ref_t> &outside) {
-    if (graph == nullptr || root >= graph->nodeCount()) {
+    if (root >= graph.nodeSlotCount()) {
         return;
     }
     // A region's ports are the round's variables: they are read *inside* the round even though the
     // port node itself is recorded in the body (a port belongs to the graph, not to the region it
     // serves), so they are inside for this walk.
-    const std::span<const gc_node_ref_t> ports = graph->regionPorts(region);
-    const auto insideRegion                    = [graph, region, ports](gc_node_ref_t ref) {
-        return graph->nodeRegion(ref) == region ||
+    const std::span<const gc_node_ref_t> ports = graph.regionParameters(region);
+    const auto insideRegion                    = [&graph, region, ports](gc_node_ref_t ref) {
+        return graph.regionOf(ref) == region ||
                std::find(ports.begin(), ports.end(), ref) != ports.end();
     };
     std::vector<gc_node_ref_t> stack{root};
@@ -72,8 +72,13 @@ void regionClosure(
         if (!inside.insert(ref).second) {
             continue;
         }
-        for (gc_node_ref_t input : dataInputsOf(graph->view(), ref)) {
-            if (input >= graph->nodeCount() || graph->node(input) == nullptr) {
+        for (gc_node_ref_t input : dataInputsOf(graph, ref)) {
+            // "the graph holds a place here" is `regionOf` answering a region: the face has no
+            // separate record-or-not query, and its `regionOf` is the frozen graph's own
+            // `nodeRegion` for every place the graph holds (a JOIN and a placeholder included), so
+            // this is the same guard it was.
+            if (input >= graph.nodeSlotCount() ||
+                graph.regionOf(input) == camel::graph::kNoRegion) {
                 continue;
             }
             if (insideRegion(input)) {
@@ -198,10 +203,10 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
     // loop's tape, and the ones it reads from outside the loop are the invariants.
     std::unordered_set<gc_node_ref_t> valueInside;
     std::vector<gc_node_ref_t> valueOutside;
-    regionClosure(function, cut.bodyRegion, cut.valueRoot, valueInside, valueOutside);
+    regionClosure(function->view(), cut.bodyRegion, cut.valueRoot, valueInside, valueOutside);
     std::unordered_set<gc_node_ref_t> tangentInside;
     std::vector<gc_node_ref_t> tangentOutside;
-    regionClosure(function, cut.bodyRegion, cut.tangentRoot, tangentInside, tangentOutside);
+    regionClosure(function->view(), cut.bodyRegion, cut.tangentRoot, tangentInside, tangentOutside);
     std::vector<gc_node_ref_t> tape;
     for (gc_node_ref_t ref : tangentInside) {
         if (ref == cut.stateTangent) {
