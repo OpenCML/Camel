@@ -27,12 +27,16 @@ origin/integration   22aa42ad27   （陈旧快照：整机断网，读数建在�
 4. SIGSEGV 表**保留六列**（B / 14 / 15 / 17 / 22 / 17-fix），不缩成一行：
    `host_resident_parallel` FAIL→139→139→139→139→PASS、`native_parallel.scheduler` FAIL→PASS→139→PASS→139→PASS、
    `native_parallel.linear` FAIL→139→PASS→139→139→139。三次 PASS↔SIGSEGV 跳动 = 布局相关的未初始化/悬垂，不挂第 17 步。
-5. **合并队列的下一条：`lane/std-nop` 要叠 3 笔**（量过的，不是推的：`adbf4c62a7` 里有 `44dc6c721e`，
-   没有 `8482e2ec25` / `1af97ebe7d` / `eb1f45d433`）：
-   `8482e2ec25` 声明检查器通过常量读遍名 → `1af97ebe7d` 遍边界的表检查 → `eb1f45d433` 把判据补成 `given ∪ made`。
-   `feat/opt` fast 在 `eb1f45d433` 上：`total 1636, pass 1478, fail 158`；相对 head 的 275 红 **113+4 转绿、新增 0**，
-   两次读数 post-only 空、pre-only 空。158 里 **55 条是 `C-1124-326`**（`std::macro` 把嵌套 autodiff 用 `makeProgram`
-   造的图并进表，要 **rehome** 不是 adopt less），落在 4 个 plan、94% 集中在 2 个 ⇒ 一个机制。
+5. **合并队列的下一条：`lane/std-nop` 要叠 4 笔**（量过的，不是推的：`adbf4c62a7` 里有 `44dc6c721e`，
+   没有 `8482e2ec25` / `1af97ebe7d` / `eb1f45d433` / `41e2c25743`）：
+   `8482e2ec25` 声明检查器通过常量读遍名 → `1af97ebe7d` 遍边界的表检查 → `eb1f45d433` 判据补成 `given ∪ made`
+   → `41e2c25743` **`made` 身份随图走**（`Program::bindOwn` 记、`bindTaken`/`adoptMissing` 沿链传、
+   session 的 `adoptProgram` 只并入 `work_` 确实持有且源自对方 made 的 id）。
+   `feat/opt` fast 在 `41e2c25743` 上：`total 1366, pass 1276, fail 90`；相对 `eb1f45d433` 的 145 红
+   **`after ⊆ before`、`before − after = 55`、新增 0**（名字集判定，不是减法）。
+   **诊断层 55 → 0，plan 层 145 → 90**；`algebra` 是 4 → 2（余下 `tensor.rules_simplify_execution.fvm/.jit` 与本机制无关）。
+   反证：真 adoption（定义图以 FUNC 调用进入交回程序）**仍被拒并点名** `tensor_definitions::softmax`。
+   `smoke.core/gir.rgir_snapshot` 是**陈旧 golden**（旧/今二进制 output.txt 哈希相同），不算新红。
 
 **第 1 层是唯一一份「零新红」的读数，它是后面所有比较的基线。** 与它比要用 `plan_id + 用例名`，
 不要比 `fail` 总数：`test-refactor-2` 把约 390 例移出快层（9919 → 9529），**移层的 `removed` 不记 `fixed`**。
