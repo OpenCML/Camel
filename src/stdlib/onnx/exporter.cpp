@@ -3746,7 +3746,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                     ref = forwarded;
                     continue;
                 }
-                if (kind != GCNodeKind::Oper || operUriOf(g, ref) != ":op/copy") {
+                if (kind != GCNodeKind::Oper || operUriOf(g->view(), ref) != ":op/copy") {
                     return ref;
                 }
                 const auto norm = g->normInputsOf(ref);
