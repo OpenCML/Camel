@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "base": "973868aec7^1",
+  "head": "973868aec7",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
+  "tier": "fast",
+  "files": [
+    "internal/tools/README.md",
+    "internal/tools/camel-cleanup.sh",
+    "internal/tools/camel-cleanup.test.ps1",
+    "internal/tools/camel-remote-cleanup.test.ps1",
+    "internal/tools/camel-remote.ps1"
+  ],
+  "files_digest": "sha256:1e3b0330770ad47734724bc3037050b405e188bb992b2020f9369388f8c08389",
+  "widened": false,
+  "empty": false,
+  "plans": [
+    "test/plans/feat/docs_links.plan.toml"
+  ],
+  "layered": [],
+  "plan_case_count": 21,
+  "verdict": null,
+  "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
+  "case_count": 21,
+  "case_digest": "sha256:03e36518fa470ffdc363ab12e0efe96780ccbd6d33b156ec191fff12b4938e4c",
+  "cause_counts": {
+    "plan": 21
+  },
+  "cases": [
+    {
+      "name": "docs.links/docs.a_port_and_its_body_disagreeing_are_caught_both_ways",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.diagnostics_catalog",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.every_laws_port_agrees_with_its_body",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_empty",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_line_number",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_missing_file",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_missing_symbol",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_skip_local_caches",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_symbol",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.questions_index",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.reader_facing",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.technical_index",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.no_unfinished_merge_left_in_the_tree",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.no_unfinished_merge_pattern_sees_all_four_forms",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_compile",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_excerpt_different_operator_fails",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_excerpt_matches_up_to_renumbering",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_excerpt_number_may_not_be_reused",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_is_compared",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.the_stated_lane_means_port_is_its_own_open_rank",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    }
+  ],
+  "cases_recorded": true
+}

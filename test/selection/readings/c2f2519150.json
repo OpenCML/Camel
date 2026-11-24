@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "base": "c2f2519150^1",
+  "head": "c2f2519150",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
+  "tier": "fast",
+  "files": [
+    "scripts/merge-readings.mjs",
+    "test/tools/reading-normal.mjs",
+    "test/tools/reading-normal.test.mjs",
+    "test/tools/run-tests.mjs"
+  ],
+  "files_digest": "sha256:4530dc12619c2dd6db828516d477b911cf5e87184b0886a5791c03a6b079c3ba",
+  "widened": false,
+  "empty": false,
+  "plans": [
+    "test/plans/smoke",
+    "test/plans/feat/consistency/runner.plan.toml",
+    "test/plans/feat/tools/plan_fields.plan.toml"
+  ],
+  "layered": [],
+  "plan_case_count": 13,
+  "verdict": null,
+  "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
+  "case_count": 13,
+  "case_digest": "sha256:45ee80dc1a0205e6a8f9448d0cd55e7d0674ddf003e4452ed17a27fca5e8e27b",
+  "cause_counts": {
+    "plan": 13
+  },
+  "cases": [
+    {
+      "name": "consistency.runner/runner.backend_matrix",
+      "cause": "plan:test/plans/feat/consistency/runner.plan.toml"
+    },
+    {
+      "name": "smoke.core/gir.gir_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/gir.inline_gir_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/gir.rgir_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/inspect.ast_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/inspect.cst_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/inspect.tok_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/prl.runtime",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/runtime.fvm_runtime",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/runtime.inline_fvm_runtime",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/runtime.nvm_runtime",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "tools.plan_fields/plan_fields.table",
+      "cause": "plan:test/plans/feat/tools/plan_fields.plan.toml"
+    },
+    {
+      "name": "tools.plan_fields/plan_fields.tree",
+      "cause": "plan:test/plans/feat/tools/plan_fields.plan.toml"
+    }
+  ],
+  "cases_recorded": true
+}

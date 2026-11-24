@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "base": "4b528b928f^1",
+  "head": "4b528b928f",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
+  "tier": "fast",
+  "files": [
+    "src/kernel/graph/draft_view.cpp",
+    "src/kernel/graph/draft_view.h",
+    "src/kernel/graph/gc_graph_view.cpp",
+    "src/kernel/graph/gc_graph_view.h",
+    "src/kernel/graph/graph_view.h",
+    "src/kernel/include/camel/runtime/operator_instance.h",
+    "src/stdlib/test/graph_faces.cpp",
+    "test/plans/feat/opt/graph_faces.plan.toml",
+    "test/tools/facts/main.cpp"
+  ],
+  "files_digest": "sha256:c2de8f28a7e37e1324c89dfab420d6311bf714fadedb15b319aaa8f162dca313",
+  "widened": false,
+  "empty": false,
+  "plans": [
+    "test/plans/smoke",
+    "test/plans/feat/compile",
+    "test/plans/feat/trans",
+    "test/plans/feat/linear",
+    "test/plans/feat/modules",
+    "test/plans/feat/consistency",
+    "test/plans/feat/mm",
+    "test/plans/feat/compile/type_array.plan.toml",
+    "test/plans/feat/runtime/graph_draft_ledger.plan.toml",
+    "test/plans/feat/runtime/draft_node_owner.plan.toml",
+    "test/plans/feat/runtime/edit_record.plan.toml",
+    "test/plans/feat/opt",
+    "test/plans/feat/runtime/draft_erase_unread.plan.toml",
+    "test/plans/feat/consistency/runner.plan.toml",
+    "test/plans/feat/opt/graph_faces.plan.toml"
+  ],
+  "layered": [],
+  "plan_case_count": 9018,
+  "verdict": null,
+  "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
+  "case_count": 9018,
+  "case_digest": "sha256:e44073cac91c6f5055f4590d99eb077aaf10620f1e425c9935819cac1efb36ae",
+  "cause_counts": {
+    "plan": 9018
+  },
+  "cases": [],
+  "cases_recorded": false
+}

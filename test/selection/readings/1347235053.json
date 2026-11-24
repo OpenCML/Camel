@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "base": "1347235053^1",
+  "head": "1347235053",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
+  "tier": "fast",
+  "files": [
+    "test/plans/feat/parse/rulings.plan.toml"
+  ],
+  "files_digest": "sha256:2b057e51569ed9b2628239b1e732d48784c538dc556f9b11062251abaabe544f",
+  "widened": false,
+  "empty": false,
+  "plans": [
+    "test/plans/feat/parse/rulings.plan.toml"
+  ],
+  "layered": [],
+  "plan_case_count": 50,
+  "verdict": null,
+  "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
+  "case_count": 50,
+  "case_digest": "sha256:f4dfd6f71975b5865b206d8871cdd2dcafb66a1160ccf33dc9d71ffeaafc2594",
+  "cause_counts": {
+    "plan": 50
+  },
+  "cases": [
+    {
+      "name": "parse.rulings/rulings.count_until_by_while.fvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.count_until_by_while.jit",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.count_until_by_while.nvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.count_until_by_while.prl",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.doc_comment_attribution_is_syntax",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.doc_comment_formatting",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.doc_comment_in_ast",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.dotdot_looser_than_link",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.dotdot_precedence.fvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.dotdot_precedence.jit",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.dotdot_precedence.nvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.dotdot_precedence.prl",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.eager_and_or.fvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.eager_and_or.jit",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.eager_and_or.nvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.eager_and_or.prl",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.exponent_is_float",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.function_type_needs_names",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.if_statement_without_block",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.import_rename_hides_original",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.import_rename.fvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.import_rename.jit",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.import_rename.nvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.import_rename.prl",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.lambda_needs_parentheses",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.logical_operators_marked_in_ast",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.loop_ast",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.loop_gct",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.loop_graph",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.loop_is_a_keyword",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.loop_needs_for_or_while",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.minus_by_precedence.fvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.minus_by_precedence.jit",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.minus_by_precedence.nvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.minus_by_precedence.prl",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.not_by_precedence.fvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.not_by_precedence.jit",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.not_by_precedence.nvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.not_by_precedence.prl",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.null_comparison_parses",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.open_range_not_in_language",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.operator_names_reserved",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.optional_comp_removed",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.power.fvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.power.jit",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.power.nvm",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.power.prl",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.static_for_head_names",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.stream_type_as_interval",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    },
+    {
+      "name": "parse.rulings/rulings.stream_type_marks",
+      "cause": "plan:test/plans/feat/parse/rulings.plan.toml"
+    }
+  ],
+  "cases_recorded": true
+}

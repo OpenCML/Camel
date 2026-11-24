@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "base": "d2c3f10d6f^1",
+  "head": "d2c3f10d6f",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
+  "tier": "fast",
+  "files": [
+    "src/kernel/ops/include/camel/ops/operator_record.h",
+    "src/kernel/ops/operator_record.cpp",
+    "src/stdlib/graph.cml",
+    "src/stdlib/graph/module.cpp",
+    "src/stdlib/graph/read.cpp",
+    "src/stdlib/rules.cml",
+    "src/stdlib/std/builtin/executors/builtin_semantics.cpp",
+    "test/plans/feat/mm/writings.plan.toml"
+  ],
+  "files_digest": "sha256:53b5bc72ea1cbf9e87985fb418cd977e03951929d44f6733c4ddc995a529553f",
+  "widened": false,
+  "empty": false,
+  "plans": [
+    "test/plans/smoke",
+    "test/plans/feat/compile",
+    "test/plans/feat/trans",
+    "test/plans/feat/linear",
+    "test/plans/feat/modules",
+    "test/plans/feat/modules/graph.plan.toml",
+    "test/plans/feat/modules/graph_facts.plan.toml",
+    "test/plans/feat/modules/rules.plan.toml",
+    "test/plans/feat/opt",
+    "test/plans/feat/trans/pass_dump.plan.toml",
+    "test/plans/feat/modules/rules_proofs.plan.toml",
+    "test/plans/feat/mm/writings.plan.toml"
+  ],
+  "layered": [],
+  "plan_case_count": 7432,
+  "verdict": null,
+  "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
+  "case_count": 7432,
+  "case_digest": "sha256:a11219bd459d06076efe6eb463f511bc46e21dfa8ee0e1edf93192c977025fd8",
+  "cause_counts": {
+    "plan": 7432
+  },
+  "cases": [],
+  "cases_recorded": false
+}

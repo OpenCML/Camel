@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "base": "10824724c3^1",
+  "head": "10824724c3",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
+  "tier": "fast",
+  "files": [
+    "internal/tools/camel-remote.ps1",
+    "internal/tools/merge-lane.ps1",
+    "scripts/check-clang-syntax.mjs"
+  ],
+  "files_digest": "sha256:339a8b50c8af003e62634e17f5d7a280238226e90c50a494056083f2a58e2043",
+  "widened": false,
+  "empty": false,
+  "plans": [
+    "test/plans/feat/docs_links.plan.toml",
+    "test/plans/smoke"
+  ],
+  "layered": [],
+  "plan_case_count": 31,
+  "verdict": null,
+  "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
+  "case_count": 31,
+  "case_digest": "sha256:e25edc13e62498507671cd9cbd3aa89b00345e3d2d930bff641fb5c2a05a2092",
+  "cause_counts": {
+    "plan": 31
+  },
+  "cases": [
+    {
+      "name": "docs.links/docs.a_port_and_its_body_disagreeing_are_caught_both_ways",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.diagnostics_catalog",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.every_laws_port_agrees_with_its_body",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_empty",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_line_number",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_missing_file",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_missing_symbol",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_skip_local_caches",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.citations_symbol",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.questions_index",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.reader_facing",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.links.technical_index",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.no_unfinished_merge_left_in_the_tree",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.no_unfinished_merge_pattern_sees_all_four_forms",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_compile",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_excerpt_different_operator_fails",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_excerpt_matches_up_to_renumbering",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_excerpt_number_may_not_be_reused",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.snippets_dump_is_compared",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "docs.links/docs.the_stated_lane_means_port_is_its_own_open_rank",
+      "cause": "plan:test/plans/feat/docs_links.plan.toml"
+    },
+    {
+      "name": "smoke.core/gir.gir_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/gir.inline_gir_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/gir.rgir_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/inspect.ast_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/inspect.cst_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/inspect.tok_snapshot",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/prl.runtime",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/runtime.fvm_runtime",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/runtime.inline_fvm_runtime",
+      "cause": "plan:test/plans/smoke"
+    },
+    {
+      "name": "smoke.core/runtime.nvm_runtime",
+      "cause": "plan:test/plans/smoke"
+    }
+  ],
+  "cases_recorded": true
+}

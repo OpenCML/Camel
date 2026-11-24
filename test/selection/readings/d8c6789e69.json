@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "base": "d8c6789e69^1",
+  "head": "d8c6789e69",
+  "tree": "94e3e0f3f94eb369f68cd9246d815a34a80018d0",
+  "tier": "fast",
+  "files": [
+    "internal/reports/2026-11-24-the-generator-sweep-read-every-emitter.cn.md",
+    "test/cases/modules/std/array/sort_reference.py"
+  ],
+  "files_digest": "sha256:2e5d9142d3803b6e8273b94fb23e746f4224500cb9b330953e5bc8367728584c",
+  "widened": false,
+  "empty": false,
+  "plans": [
+    "test/plans/feat/parse/frontend.plan.toml",
+    "test/plans/feat/modules/std.plan.toml"
+  ],
+  "layered": [
+    "test/plans/feat/parse/frontend.plan.toml"
+  ],
+  "plan_case_count": 38,
+  "verdict": null,
+  "verdict_note": "selection only: no test verdict was recorded for this change set, and none is inferred from it",
+  "case_count": 9,
+  "case_digest": "sha256:cca2ab34fa5d720c78628cde5e5ff4bf55872df53618aeb42e957b3a480fe533",
+  "cause_counts": {
+    "case": 1,
+    "plan": 8
+  },
+  "cases": [
+    {
+      "name": "modules.std/array.sort_reference",
+      "cause": "case:test/cases/modules/std/array/sort_reference.py"
+    },
+    {
+      "name": "parse.frontend/frontend.ast_snapshot",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    },
+    {
+      "name": "parse.frontend/frontend.ast_snapshot_drop_guard",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    },
+    {
+      "name": "parse.frontend/frontend.format_keeps_ast",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    },
+    {
+      "name": "parse.frontend/grammar.reference_in_step",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    },
+    {
+      "name": "parse.frontend/syntax.ident_list_open",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    },
+    {
+      "name": "parse.frontend/syntax.resource_group_open",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    },
+    {
+      "name": "parse.frontend/syntax.tag_group_open",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    },
+    {
+      "name": "parse.frontend/syntax.type_params_open",
+      "cause": "plan:test/plans/feat/parse/frontend.plan.toml"
+    }
+  ],
+  "cases_recorded": true
+}
