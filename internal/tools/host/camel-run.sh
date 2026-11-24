@@ -36,6 +36,13 @@
 #   * a slot is occupied             -> report who holds it, keep waiting, and after the deadline say
 #                                       `timed-out` rather than "no slot exists"
 #
+# Exit codes, because a run that measured nothing must not look like one that measured a red:
+#   0  the command ran; its own code is what the caller sees
+#   3  this script could not name its version, or the install is behind the bytes, or a tool is missing
+#   4  no test slot within the wait -- the run measured nothing (see SLOT_WAIT_S)
+#   5  no shared hold on the old lock within the same wait -- an older run is taking the host alone,
+#      and again the run measured nothing. Not 2 (a refused choice) and not 1 (a red reading).
+#
 # Subcommands:
 #   lock      take the first free test slot, print the reading lines, then run the command that follows
 #             `--` while holding it
@@ -147,14 +154,21 @@ pool_report() {
 }
 
 slots_report() {
-    local n pids
+    local n pids one args shown
     for n in 1 2 3; do
         pids=$(fuser "/tmp/camel-host-test-$n.lock" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | tr '\n' ' ' || true)
         if [ -z "$pids" ]; then echo "slot $n: free"; else
-            local one
+            # A pid that is already gone is not a holder: this script's own `$( )` substitutions inherit
+            # every descriptor, so a raw `fuser` listing names processes that existed for a millisecond.
+            # A slot reported as held by four dead pids reads like a queue that is not there.
+            shown=0
             for one in $pids; do
-                echo "slot $n: held by pid $one ($(ps -o etime= -p "$one" 2>/dev/null | tr -d ' '))"
+                args=$(ps -o args= -p "$one" 2>/dev/null)
+                [ -n "$args" ] || continue
+                echo "slot $n: held by pid $one ($(ps -o etime= -p "$one" 2>/dev/null | tr -d ' ')) $(printf '%s' "$args" | cut -c1-80)"
+                shown=1
             done
+            [ "$shown" = 0 ] && echo "slot $n: free (an open descriptor, no process behind it)"
         fi
     done
 }
@@ -163,6 +177,25 @@ load_line() {
     local l
     l=$(awk '{print $1" "$2" "$3}' /proc/loadavg 2>/dev/null || echo '')
     echo "loadAtStart: $l"
+}
+
+old_lock_holders() {
+    # Who has the old lock open, this process excluded: our own descriptor is open whether or not the
+    # lock was taken, and naming ourselves as the blocker is the one answer that is certainly wrong.
+    local pids one args
+    pids=$(fuser "$OLD_LOCK" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | grep -vx "$$" || true)
+    if [ -z "$pids" ]; then
+        echo "old lock $OLD_LOCK: no other process has it open"
+    else
+        # Only pids that are still there: this script's own `$( )` substitutions inherit the descriptor
+        # and are gone a moment later, so a listing taken without the check names processes that no
+        # longer exist as if they were blocking us.
+        for one in $pids; do
+            args=$(ps -o args= -p "$one" 2>/dev/null)
+            [ -n "$args" ] || continue
+            echo "old lock $OLD_LOCK: pid $one ($(ps -o etime= -p "$one" 2>/dev/null | tr -d ' ')) $(printf '%s' "$args" | cut -c1-100)"
+        done
+    fi
 }
 
 merge_seat() {
@@ -181,7 +214,27 @@ cmd_plan() {
     # because the old code is already written into the worktrees and does not know these slots exist.
     # The direction is one-way (new yields to old, old does not yield to new) and that is the price of
     # not deleting a lock other processes are already waiting on.
+    #
+    # It is a SHARED hold, and that is what lets one file serve both designs at once: an old-style run
+    # takes it exclusively, so it excludes every new run for as long as it holds it, and two new runs
+    # take it shared, so they do not exclude each other -- the three slots are what bounds them. An
+    # exclusive hold here would turn three slots back into one, which is why it is `-s` and not `-x`.
+    # The wait is the slot's wait, and running out of it exits 5: nothing was measured, which is
+    # neither a refused choice (2) nor a red reading (1).
     exec 7>"$OLD_LOCK"
+    started=$(date +%s)
+    if ! flock -s -w "$SLOT_WAIT_S" 7; then
+        waited=$(( $(date +%s) - started ))
+        say "no shared hold on $OLD_LOCK within ${SLOT_WAIT_S} s (waited ${waited} s): a run of the old shape is taking the host alone, so this run measured nothing and exits 5"
+        old_lock_holders
+        echo "oldLockWaitSeconds=$waited"
+        exit 5
+    fi
+    old_lock_waited=$(( $(date +%s) - started ))
+    echo "oldLockWaitSeconds=$old_lock_waited"
+    # The slot's clock starts here, not at the shared hold: `lockWaitSeconds` is the slot wait, and a
+    # number that quietly also carried the old-lock wait would answer two questions at once (they are
+    # different ones: "did an old run block me" and "were the three slots all taken").
     started=$(date +%s)
 
     while :; do
