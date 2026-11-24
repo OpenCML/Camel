@@ -52,8 +52,10 @@
 # this run handed over"). 5 means the gpu observation read a case red
 # that its baseline does not name (see "the gpu layer is observed, and never gates"; the known reds
 # never decide a run). 4 means the -NoBuild guard refused before anything ran; 3 means the host is
-# short of disk; 2 means the worktree, the push or the transfer failed, or -Check named a checker
-# that does not exist.
+# short of disk; 2 means the worktree, the push or the transfer failed, -Check named a checker
+# that does not exist, or `-Plan` named the whole plan tree without -Tier naming a layer of it (that
+# refusal is about the target and is printed before anything is pushed; see
+# `camel-remote-targets.ps1`, which also says why it is not a `--changed` refusal).
 #
 # --- where the machine-specific values live ---------------------------------
 # Nothing in this file names a host, a drive or a user's home. The ssh alias, the ssh/scp binaries,
@@ -879,6 +881,30 @@ if ($PSBoundParameters.ContainsKey('AstOnly')) {
 if ($astProblems.Count -gt 0) {
     foreach ($problem in $astProblems) { Write-Host "[camel-remote] $problem" }
     exit 2
+}
+
+# What `-Plan` names, said before the push (see `camel-remote-targets.ps1`). The opening lines of a
+# run used to say nothing about the target, so a reader had to wait for the runner's `[tier]` line,
+# after the build, to learn how many plan files the run was about -- and that line never says whether
+# the number is the target's own contents or a layer the target was silently widened to.
+. (Join-Path $PSScriptRoot 'camel-remote-targets.ps1')
+if ($Changed -and $Plan.Count -gt 0) {
+    # `-Changed` selects the plans the change touches and the plan stage runs that selection, not the
+    # `-Plan` list (`$runPlan` below). Saying which of the two is being read is the whole point here.
+    Write-Host ("[camel-remote] plan target: -Changed selects the plans this change touches; the {0} -Plan target(s) named here ({1}) are not read" -f `
+        $Plan.Count, ($Plan -join ', '))
+} elseif (-not $Clean -and $Plan.Count -gt 0) {
+    $planTargets = @(Resolve-CamelPlanTarget -Values $Plan -Root $Path)
+    # The whole plan tree is a layer question, and the runner answers it silently with `fast`. A run
+    # that starts one layer while its target says "the whole tree" cannot be told from a complete
+    # reading afterwards, so the target is refused before anything is pushed -- one word says what
+    # was meant, and `-UpdateGolden` (which reads no layer) is exempt.
+    $targetRefusal = @(Get-CamelPlanTargetRefusal -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
+    if ($targetRefusal.Count -gt 0) {
+        foreach ($reason in $targetRefusal) { Write-Host $reason }
+        exit 2
+    }
+    Write-Host (Format-CamelPlanTargetLine -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
 }
 
 # One checkout per worktree name, kept for its incremental build directory. `-Clean` throws that
