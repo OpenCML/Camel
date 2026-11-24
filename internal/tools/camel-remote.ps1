@@ -1206,7 +1206,10 @@ $run = @{
     queuedAt        = $null
     # Which gate `queuedAt` measured. Old rows have no such field and were all slot waits; a row that
     # says `token` waited for the token pool. One field cannot mean two things across one file, so the
-    # gate is named beside the time instead of being inferred by whoever reads it.
+    # gate is named beside the time instead of being inferred by whoever reads it -- and the reading
+    # rule is written down in `README.md`: a row *without* this field is a transition-period row and
+    # may only be read as `slot`, because every row written from now on says which gate it was. A
+    # default that happens to be right for the old rows is not a field that answers the question.
     queuedAtKind    = $null
     queueSeconds    = $null
     buildStartedAt  = $null
