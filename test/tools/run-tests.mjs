@@ -4374,13 +4374,22 @@ async function executePlans(plans, options, sharedVars, logDir) {
                         // longer appears turns the run red, the same way a mark that starts
                         // passing does. Unset is legal and pins nothing.
                         const pinned = entry.test.__knownFailMsg
-                        // This column IS the verdict and NOT the output: the failure lines the runner
-                        // assembled about the case, then what the case printed. Only `known_fail_msg`
-                        // reads it -- that field pins the *reason* a marked case fails with, which may
-                        // be a line the runner wrote (`stdout differs from ... in the golden`) -- and a
-                        // `prints` condition must never be matched against it: a failure line quotes
-                        // the line a run did not find, so the condition would be satisfied by the
-                        // sentence saying it was not (see `observedOutput`).
+                        // This column IS the verdict and NOT the case's output: the failure lines
+                        // the runner assembled about the case, then what the case printed. Only
+                        // `known_fail_msg` reads it, and it has to read the first part: an entry with
+                        // a verification script is judged by two programs, and `verifyFailureLines`
+                        // carries the second one's text here (`verification output: ...`). Measured
+                        // on the gate host at 1e01eaa0a9, by narrowing this column to the case's own
+                        // output and running every plan that carries a pin: the two pins of
+                        // `feat.linear.effects_model_edges` stopped matching (`CTRL edge(s)`,
+                        // `CTRL input(s)` -- both are lines their verifiers print), and every other
+                        // pin in the tree still matched, so the runner's own text is read by those
+                        // two verifiers and by no pin that names the case's output.
+                        //
+                        // A `prints` condition must never be matched against this column: a failure
+                        // line quotes the line a run did not find (`output does not contain '<line>'`),
+                        // so the condition would be satisfied by the sentence saying it was not (see
+                        // `observedOutput`).
                         const verdictText = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
                         if (pinned !== null && !verdictText.includes(pinned)) {
                             const first = `${(result.failures || [])[0] || result.stderr || result.stdout || '(no output)'}`

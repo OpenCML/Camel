@@ -970,10 +970,19 @@ everywhere is written once:
   existed keeps working -- but a new mark is expected to carry it.
 - `known_fail_msg`
   A fragment of the reason a marked test fails with, so the reason is pinned and not only the
-  failure. When a marked test fails and the fragment does not appear in its output, the case stays
-  `fail` and the runner prints
+  failure. When a marked test fails and the fragment does not appear in what it failed with, the case
+  stays `fail` and the runner prints
   `known failure changed its mind: expected "<pinned>", got "<first line>"` (`test/tools/run-tests.mjs`,
-  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. A
+  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. What it
+  is matched against is the run's *verdict* about the entry -- the failure lines the runner assembled,
+  then what the case printed -- and not the case's output alone: an entry with a verification script is
+  judged by two programs, and the verifier's words reach the pin through
+  `verification output: ...` (`verifyFailureLines`). Measured on the gate host at `1e01eaa0a9` by
+  narrowing that column to the case's own output and running every plan that carries a pin: the two
+  pins of `feat.linear.effects_model_edges` stopped matching and every other pin still matched. This
+  is exactly the column a `known_fail_ends_when = { prints }` condition must never be read against --
+  a failure line quotes the line a run did not find, so a condition that matched here would be
+  satisfied by the sentence saying it is unmet. A
   fragment identifies the reason -- the words the refusal uses, not a whole message. Absent is legal
   and pins nothing: `expandBackends` reads the field as `null`, so every mark written before it
   existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
