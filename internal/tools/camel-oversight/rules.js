@@ -68,7 +68,29 @@ export const RULES = [
             if (late.length === 0) return null
             return {
                 key: 'stuck',
-                text: `${late.length} 条派工排在你这一轮之后没送到（${late.map((e) => `${e.id} ${e.minutes} 分钟`).join('、')}）。后台任务留着跑，结束这一轮；读数好了推送会叫醒你（铁律 5）。`,
+                text: `${late.length} 条派工排在你这一轮之后没送到（${late.map((e) => `${e.id} ${e.minutes} 分钟`).join('、')}）。后台任务留着跑，结束这一轮；读数好了推送会叫醒你（铁律：你只做判断，不在会话里久等）。`,
+            }
+        },
+    },
+    {
+        // A turn that ends on a promise or on waiting for someone's nod: the session goes idle and the
+        // promised work waits for a message that may never come (the author: it says it will do
+        // something, ends the turn, and moves on to the next message instead).
+        id: 'promise-at-turn-end',
+        level: 'wake',
+        hold: 2,
+        cooldown: 20,
+        check: ({ lastTurn, target, now }) => {
+            if (!lastTurn || lastTurn.aborted || !target || target.status === 'running') return null
+            if (now - lastTurn.at > 60 * 60_000) return null
+            const tail = lastTurn.text.trim().slice(-600)
+            const PROMISE = /(我会|我将|我这就|我马上|接下来我|下一步我|随后|稍后|落地后|跑完后|合完后|推完后|之后再|再推|再合|等[^。\n]{0,24}(后|再|完)|待[^。\n]{0,16}再|你说一声|不说我就|等你|你点头)/
+            const m = PROMISE.exec(tail)
+            if (!m) return null
+            const sentence = tail.slice(Math.max(0, tail.lastIndexOf('。', m.index) + 1), Math.min(tail.length, m.index + 60)).replace(/\s+/g, ' ').trim()
+            return {
+                key: String(lastTurn.at),
+                text: `你上一轮结束在一句承诺或等待上：「${sentence}」。不要以"我会…/等…再…"结束一轮：能做的这一轮就做；要等读数就起后台任务，写明在等什么、完成时由谁叫醒你；做不了的记进 backlog 一行。不等负责人点头（铁律：不问、不等）。`,
             }
         },
     },
@@ -144,9 +166,10 @@ export const RULES = [
             if (!readable(m.backlog)) return null
             const missing = taken.filter((id) => !m.backlog.has(id))
             if (missing.length === 0) return null
+            const shown = missing.slice(0, 5).join('、') + (missing.length > 5 ? ` 等 ${missing.length} 条` : '')
             return {
-                key: missing.join(','),
-                text: `回执了 taken 却不在 internal/backlog.md 里：${missing.join('、')}。接了的活不进 backlog 就等于不存在，补上这几行。`,
+                key: String(Math.ceil(missing.length / 5)),
+                text: `回执了 taken 超过一小时仍不在 backlog 里：${shown}。接了的活要落一行。`,
             }
         },
     },
@@ -204,7 +227,7 @@ export const RULES = [
             if (!g || g.mergedLocal.length <= limits.mergedLocal) return null
             return {
                 key: String(g.mergedLocal.length),
-                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉（铁律 12 与 13：先确认工作树干净、没有活会话在里面）。`,
+                text: `已合进 develop 却没删的本地分支 ${g.mergedLocal.length} 条（上限 ${limits.mergedLocal}），清掉（按清理那条铁律：先确认工作树干净、没有活会话在里面）。`,
             }
         },
     },

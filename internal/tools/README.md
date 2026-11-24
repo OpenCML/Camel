@@ -256,13 +256,14 @@ rather than holding copies:
 | Directory | What it computes | Who reads it |
 |---|---|---|
 | `camel-lanes/` | the lane table's gates, plus `GET /camel/state` and `POST /camel/say` | every step of a coordinating session |
-| `build-queue/` | the build and test panel: build slots, waiters, the recent timeline, CPU and memory | the Web GUI panel |
+| `camel-oversight/` | the decision-maker channel, the watch over the coordinator, and the band above its composer | the coordinator session and the owner |
 
 ```powershell
 $base = "$env:USERPROFILE\.dsh\profiles\web\node_modules\@local"
-New-Item -ItemType Junction -Path "$base\camel-lanes"     -Target "<repo>\internal\tools\camel-lanes"
-New-Item -ItemType Junction -Path "$base\dsh-build-queue" -Target "<repo>\internal\tools\build-queue"
+New-Item -ItemType Junction -Path "$base\camel-lanes" -Target "<repo>\internal\tools\camel-lanes"
 ```
+
+`camel-oversight` is linked to a checkout of its own that tracks `origin/develop`, not to a lane's working tree; [its README](camel-oversight/README.md) says how, and how it reloads.
 
 `camel-lanes` reads the same three files this document describes, and takes their directory from
 `camel-gate.local.json`'s `stateDir` rather than holding a second copy of that decision -- two

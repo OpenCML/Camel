@@ -475,7 +475,7 @@ export function apply(ctx, rawConfig) {
     // Only dispatch-shaped ids are items; an id a session made up for itself can never have a backlog row.
     const takenIds = () =>
         [...acks.values()]
-            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 15 * 60_000)
+            .filter((entry) => entry.status === 'taken' && /^[DC]-\d+-\d+$/.test(entry.id) && Date.now() - entry.at > 60 * 60_000)
             .map((entry) => entry.id)
     const backlogOpen = () =>
         reading && reading.backlog instanceof Map ? [...reading.backlog.values()].filter((row) => !row.done).length : 0
@@ -494,8 +494,12 @@ export function apply(ctx, rawConfig) {
         const previous = lastOfKind.get(kind)
         if (previous && stillQueued(agent, previous)) agent.inbox.remove(previous)
         lastOfKind.set(kind, message.id)
+        // DSH has three ways in. inject adds to the running turn's context and starts nothing; steer goes
+        // in at the running turn's next step and, with no turn running, waits for one; followup is a new
+        // message after the current turn and starts one when the session is idle. So only followup wakes
+        // an idle session: urgent and wake reminders use it then, steer and inject only while a turn runs.
+        if (agent.status !== 'running' && (level === 'urgent' || level === 'wake')) return agent.followup(message), 'followup'
         if (level === 'urgent') return agent.steer(message), 'steer'
-        if (level === 'wake' && agent.status !== 'running') return agent.followup(message), 'followup'
         return agent.inject(message), 'inject'
     }
 
@@ -564,12 +568,13 @@ export function apply(ctx, rawConfig) {
 
     // A turn that ends by asking the owner: the last assistant text ends in a question mark, or asks for
     // a decision in so many words. The owner is not there to answer; the rule is to go on with the default.
-    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|Should I|Would you like|Let me know|shall I)/i
+    const ASKS = /(请问|要不要|你希望|是否需要|需要我|确认一下|等你|请你决定|你来定|你看呢|行吗|可以吗|你说一声|不说我就|你点头|你同意的话|你若同意|由你定|你定|你否决|Should I|Would you like|Let me know|shall I)/i
     const asksOwner = (text) => {
         const tailText = String(text || '').trim().slice(-400)
         return tailText !== '' && (/[?？]\s*$/.test(tailText) || ASKS.test(tailText))
     }
     let lastAskNudge = 0
+    let lastTurn = null
     const QUESTION_TOOLS = new Set(['ask_user_question', 'ask_user'])
     onTargetEvent = (event) => {
         const d = event.data || {}
@@ -578,7 +583,7 @@ export function apply(ctx, rawConfig) {
             pendingCalls.set(String(d.callId), { name: d.name, at, warned: false })
             if (QUESTION_TOOLS.has(d.name) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问、不等——按默认建议继续；真是问句就写 internal/questions/ 一页，再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'urgent', '[oversight · 纠偏] 你在向负责人提问。铁律 1：不问负责人、不等——按默认做法继续；真有问题就用 oversight_tell 直接问决策者（问句、读数、默认做法）。')
             }
         } else if (event.type === 'tool/result') {
             const callId = d.message && d.message.source ? d.message.source.callId : d.callId
@@ -590,9 +595,12 @@ export function apply(ctx, rawConfig) {
         } else if (event.type === 'turn/end') {
             pendingCalls.clear()
             const aborted = d.reason && d.reason.kind === 'aborted'
+            // What the turn ended on, for the rules: a turn that ends on a promise ("I will ... after ...")
+            // leaves the work to a message that may never come.
+            lastTurn = { at, text: String(lastAssistantText || ''), aborted: Boolean(aborted) }
             if (!aborted && asksOwner(lastAssistantText) && Date.now() - lastAskNudge > 10 * 60_000) {
                 lastAskNudge = Date.now()
-                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问、不等——按默认建议继续干；真是问句就写 internal/questions/ 一页（问句、读数、两三条路各带代价、默认建议），再用 oversight_tell 报页名。')
+                nudge('asked-owner', 'wake', '[oversight · 纠偏] 你上一轮以问句结束，在等负责人回答。铁律 1：不问负责人、不等——按默认做法继续干；真有问题就用 oversight_tell 直接问决策者（问句、读数、两三条路各带代价、默认做法）。')
             }
         }
     }
@@ -615,7 +623,7 @@ export function apply(ctx, rawConfig) {
             if ((config.blockExempt || []).includes(call.name)) continue
             if (held.length && (config.waitTools || ['job_output']).includes(call.name)) {
                 pendingCalls.delete(callId)
-                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律 5）。`
+                const text = `[oversight · 纠偏] 你在 ${call.name} 上等后台任务，而 ${held.length} 条派工（${held.map((e) => e.id).join('、')}）排在这一轮之后到不了。插件结束了这一轮，后台任务照常在跑。先读派工，读数好了推送会叫醒你（铁律：你只做判断，不在会话里久等）。`
                 nudge('wait-ended', 'urgent', text, (a) => {
                     a.cancel({ kind: 'user' }, { keepInbox: true })
                     a.followup(Object.freeze({
@@ -630,12 +638,12 @@ export function apply(ctx, rawConfig) {
             if (minutes >= config.blockCancelMinutes) {
                 pendingCalls.delete(callId)
                 nudge('blocked-cancelled', 'urgent',
-                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
+                    `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话——否则派工与提醒都进不来。`,
                     (a) => {
                         a.cancel({ kind: 'user' }, { keepInbox: true })
                         a.followup(Object.freeze({
                             id: randomUUID(), role: 'user', source: Object.freeze({ kind: 'user' }),
-                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律 5：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
+                            content: Object.freeze([Object.freeze({ type: 'text', text: `[oversight · 纠偏] 工具调用 ${call.name} 阻塞会话 ${Math.round(minutes)} 分钟，插件已中断那一轮（排队的消息都保留）。铁律"你只做判断"：会话只做判断；长活交车道或后台运行，不占住会话。接着干，别重跑那条阻塞命令。` })]),
                         }))
                         return 'cancel+followup'
                     })
@@ -682,6 +690,7 @@ export function apply(ctx, rawConfig) {
                 backlogOpen: backlogOpen(),
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
                 dmLastSeen,
+                lastTurn,
             }
             const due = []
             for (const rule of hot.rules.module.RULES) {
@@ -980,16 +989,16 @@ export function apply(ctx, rawConfig) {
                         : ''
                 }
                 if (initiator !== aimed) return ''
-                const waiting = pending()
+                // Only stable text goes here: the rules (they change when rules.md does) and how the
+                // channel works. This is assembled into every request ahead of the conversation, so text
+                // that changed with each measurement -- unanswered ids, open alerts -- broke the prompt
+                // cache for the whole conversation behind it. Those reach the session as messages (a
+                // newer one of the same kind replaces an unread older one) and on the band.
                 const head =
                     `Messages prefixed "[${config.sender} · <id>]" come from the decision-maker through the oversight channel. ` +
                     'Each is a dispatch: acknowledge it with oversight_ack in the same turn (taken, and record it in internal/backlog.md under the same id; declined with a reason; or done with the commit). ' +
                     'Messages prefixed "[oversight · …]" are the plugin\'s own reminders from its measurements; act on them, no acknowledgement needed. oversight_readings gives the measurements on demand.'
-                const open = [...alerts.keys()]
-                const parts = rulesText ? [rulesText, head] : [head]
-                if (waiting.length > 0) parts.push(`Not yet acknowledged: ${waiting.join(', ')}.`)
-                if (open.length > 0) parts.push(`Open alerts: ${open.join(', ')}.`)
-                return parts.join(' ')
+                return (rulesText ? [rulesText, head] : [head]).join(' ')
             },
         }),
     )

@@ -56,15 +56,21 @@ const LANE_BRANCH = /^lane\//
 /// into integration once that branch exists (lanes land there; develop follows it on promotion), into
 /// develop before. A merge seat's own branch (seat/...) is the merging, not a lane waiting for it.
 async function branchesOf(git) {
-    const base = (await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false))
-        ? 'origin/integration'
-        : 'origin/develop'
+    // A lane is unmerged when it has content in neither shared line: develop can run ahead of
+    // integration (a docs push, a merge before the seats moved), and a lane cut from that develop is
+    // not unmerged work. Behind is measured against the line it will merge into: integration while it
+    // holds develop, develop otherwise.
+    const hasIntegration = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
+    const integrationHoldsDevelop = hasIntegration &&
+        await git(['merge-base', '--is-ancestor', 'origin/develop', 'origin/integration']).then(() => true, () => false)
+    const base = integrationHoldsDevelop ? 'origin/integration' : 'origin/develop'
+    const exclude = hasIntegration ? ['^origin/develop', '^origin/integration'] : ['^origin/develop']
     const names = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
         .split('\n')
         .filter((name) => name && !PROTECTED.includes(name) && LANE_BRANCH.test(name))
     const rows = []
     for (const branch of names) {
-        const ahead = Number(await git(['rev-list', '--count', `${base}..${branch}`]).catch(() => 'x'))
+        const ahead = Number(await git(['rev-list', '--count', '--no-merges', branch, ...exclude]).catch(() => 'x'))
         if (!Number.isFinite(ahead) || ahead === 0) continue
         const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..${base}`]).catch(() => 'x'))
         rows.push({ branch, ahead, behind: Number.isFinite(behind) ? behind : null })
@@ -94,7 +100,9 @@ async function mergedOf(git) {
 /// it, like the rules and the hot-reloaded files: the main checkout is the author's workspace and may
 /// stand on another branch, or hold an edit nobody pushed.
 async function backlogOf(git) {
-    const text = await git(['show', 'origin/develop:internal/backlog.md'])
+    // The coordinator records rows on its docs branch and pushes them between merges; until then that
+    // branch is the newer record. Without it, origin/develop.
+    const text = await git(['show', 'docs/coordinator:internal/backlog.md']).catch(() => git(['show', 'origin/develop:internal/backlog.md']))
     const rows = new Map()
     const ownRows = new Set()
     for (const line of text.split('\n')) {
@@ -158,7 +166,7 @@ async function buildPanelOf(repo, stateDir) {
     const touched = (row) => Date.parse(row.updatedAt || row.startedAt || '') || 0
     const open = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) < 20 * 60_000)
     const abandoned = runs.filter((row) => !row.finishedAt && Date.now() - touched(row) >= 20 * 60_000).length
-    // The two queues the build-queue panel draws, read from the same files it reads: who holds the
+    // The two queues the desk panel (panel-deck) draws, read from the same files it reads: who holds the
     // build or test slot on this machine and who is waiting, with how long.
     const queue = async (name) => {
         const file = path.join(dir, name)
