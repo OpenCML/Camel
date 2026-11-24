@@ -69,6 +69,63 @@ function Resolve-BatchScratchRoot {
     return $fromFile.TrimEnd('\', '/')
 }
 
+# The two refs a batch creates, named after the scratch root and not after the tool. Three seats push
+# to one target branch, so a literal name is a name the second seat to start a batch cannot have: on
+# 2026-11-24 the run stopped at `fatal: 'probe/batch-base' is already used by worktree at
+# 'D:/Temp/camel-batch/camel-batch-base'` -- git talking about a directory the seat does not own, in a
+# message nobody can act on. The leaf and a short hash of the whole path make the name the seat's own:
+# two scratches never share one, and a re-run recognises its own leftovers instead of a stranger's.
+#
+# The hash is the same `h * 31 + c` fold `Get-PlanSetHash` uses, so this file needs no crypto
+# provider and two machines reading the same path spell the same name.
+function Resolve-BatchRefName {
+    param([string] $ScratchRoot = '', [string] $Which = 'base')
+    $root = "$ScratchRoot".Trim().TrimEnd('\', '/')
+    if (-not $root) {
+        throw 'a batch ref name needs the scratch root: without it the name is the tool''s, and every seat on the machine shares it'
+    }
+    $leaf = ($root -split '[\\/]')[-1]
+    $leaf = "$leaf" -replace '[^A-Za-z0-9._-]', '-'
+    $leaf = $leaf.Trim('-')
+    if (-not $leaf) { $leaf = 'scratch' }
+    $hash = [int64]0
+    $mask = [int64]4294967295
+    foreach ($ch in (($root -replace '\\', '/').ToLowerInvariant()).ToCharArray()) {
+        $hash = (($hash * 31) + [int64][char]$ch) -band $mask
+    }
+    return "probe/batch-$Which-$leaf-$('{0:x}' -f $hash)"
+}
+
+# What to say when the ref a batch wants is already held by a tree that is not the one it is about to
+# create. `$null` means the name is free, or the tree holding it is this batch's own and will be
+# moved to the base the same way a re-run does. The sentence names the tree, because that is the only
+# part a seat can act on: `fatal: '<ref>' is already used by worktree at '<path>'` is git describing
+# its internals, and the run that hit it could not tell a stale scratch from a live one.
+function Get-BatchRefRefusal {
+    param([string] $Porcelain = '', [string] $RefName = '', [string] $Path = '')
+    $holder = Get-BatchRefHolder -Porcelain $Porcelain -RefName $RefName
+    if (-not $holder) { return $null }
+    if ((($holder -replace '\\', '/').TrimEnd('/')) -eq (($Path -replace '\\', '/').TrimEnd('/'))) { return $null }
+    return "the ref $RefName is held by the worktree $holder, and that tree is not this batch's own ($Path)"
+}
+
+# Which worktree holds a ref, read from `git worktree list --porcelain` as text. That is the reading
+# that turns "cannot create the worktree" into "this name is another tree's": the tool can then say
+# whose it is, which is the only sentence a seat can act on. `$null` when nothing holds it.
+function Get-BatchRefHolder {
+    param([string] $Porcelain = '', [string] $RefName = '')
+    $path = $null
+    foreach ($line in ("$Porcelain" -split "`n")) {
+        $t = "$line".Trim()
+        if ($t -like 'worktree *') {
+            $path = $t.Substring(9).Trim()
+        } elseif ($t -eq "branch refs/heads/$RefName" -and $path) {
+            return $path
+        }
+    }
+    return $null
+}
+
 # One entry per pair of lanes, in the order the lanes were given. `Shared` is the intersection of the
 # two file sets -- the one reading that makes "they do not touch the same file" a fact.
 function Get-BatchPairReport {
