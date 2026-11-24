@@ -14,118 +14,108 @@
 // those. It is the measurement behind the `std::nop` patches; it is not a rule the suite enforces by
 // itself.
 //
-//   node scripts/camel-pass-scan.mjs [--root DIR] [--list] [--check]
+//   node scripts/camel-pass-scan.mjs [--root DIR] [--list] [--check] [--audit]
 //
 //     (no flag)   one summary: how many pipelines end in a translating pass, how many need
 //                 `std::nop`, how many already hand the graph on, and a count per pass
 //     --list      the same, then one line per pipeline: file:line, the passes, and the verdict
 //     --check     exit 0 when no pipeline needs `std::nop`, 1 when one does, 2 when the tree could
 //                 not be read; the gate entry, for whoever wires it
+//     --audit     compare the pass words this script parsed with the same words read by a second,
+//                 independent reader (a quoted-string regex, which is how the bug this file once had
+//                 would be written). Exit 3 when a pass word an element writes is missing from the
+//                 parse. The reading is a set difference on words, never a count: two totals that
+//                 agree by luck are what missed 35 single-quoted `onnx::export` pipelines.
 //
-// What counts as a pipeline: every `args = [...]` array in test/plans/**/*.plan.toml (a plan test's
-// command line), and every `[camel, path, 'std::x']` style call under test/tools and benchmarks. A
-// pass word is the first whitespace-separated word of a token that looks like a pass (`std::...`,
-// `onnx::...`); its parameters follow it, which is why `std::jgir canonical=true` is one pass.
+// The reader itself lives in scripts/camel-pass-pipelines.mjs, shared with the patch script so the
+// two cannot drift. It reads an element written each of the three ways a TOML array allows --
+// double-quoted, single-quoted literal, bare word -- plus the two spellings that carry more than one
+// pass: a comma-joined list (`"std::opt safe_fp=false,std::fvm"`) and a repeat suffix
+// (`std::nvm/10` is `std::nvm`).
+//
+// Before appending `std::nop` to a pipeline, all three of these must hold. They are checkboxes rather
+// than a sentence because "the last pass translates, so append" is exactly the shorthand that got
+// this wrong before.
+//
+//   [ ] the last written pass hands the graph on -- a translating or a rewriting pass, not a
+//       scheduling one -- and is not already `std::nop`; the scan decides this, a person does not
+//   [ ] the case says nothing about the program's own output or exit code: after `std::nop` the
+//       program does not run, so an expectation that only holds while it runs is now untested
+//   [ ] the pass's own artefacts (files, dumps, diagnostics) are produced before the `std::nop`, and
+//       no pass after it needs the graph -- `... std::nop std::gir` never prints anything
+//
+// A pipeline that ends in a translating pass on purpose says so on its own line and is listed, never
+// silently skipped: `# camel-pass-scan: keep`.
 import fs from 'node:fs'
 import path from 'node:path'
+import {
+  TRANSLATE, ALREADY_HANDS_ON, argsArrays, elementsOf, stringsOf, leadingPasses,
+  passesOfElement, scriptPipelines, walk,
+} from './camel-pass-pipelines.mjs'
 
 const args = process.argv.slice(2)
 const rootIndex = args.indexOf('--root')
 const root = path.resolve(rootIndex >= 0 ? args[rootIndex + 1] : process.cwd())
 const list = args.includes('--list')
 const check = args.includes('--check')
-
-// A pass whose job is done by printing or exporting: it hands the graph on.
-const TRANSLATE = new Set([
-  'std::gir', 'std::rgir', 'std::gir_regions', 'std::rgir_regions',
-  'std::agir', 'std::argir', 'std::jgir',
-  'std::cml', 'std::cpp', 'std::cpp::module_file', 'std::cpp::inspect',
-  'std::topo_node_seq', 'std::tfdump',
-  'std::fastvm::bytecode', 'std::fastvm::linked_bytecode',
-  'std::fastvm::jit_asm', 'std::fastvm::jit_bin',
-  'std::fastvm::jit_rmir', 'std::fastvm::jit_mir',
-  'onnx::export',
-])
-// The passes that print and hand the graph on without being turned around by this model: a pipeline
-// that ends in one of them never executed the program to begin with.
-const ALREADY_HANDS_ON = new Set(['std::stats', 'std::rulesets', 'std::arraytype', 'std::identitytype'])
-const ALIASES = {
-  'std::lnr': 'std::fvm', 'std::linear': 'std::nvm', 'std::nodevm': 'std::nvm',
-  'std::default': 'std::nvm', 'std::jit': 'std::fastvm::jit', 'std::tf': 'std::taskflow',
-  'std::prl': 'std::taskflow', 'std::parallel': 'std::taskflow', 'std::tfg': 'std::tfdump',
-  'std::tns': 'std::topo_node_seq', 'std::bc': 'std::fastvm::bytecode',
-  'std::lbc': 'std::fastvm::linked_bytecode', 'std::asm': 'std::fastvm::jit_asm',
-  'std::bin': 'std::fastvm::jit_bin', 'std::rmir': 'std::fastvm::jit_rmir',
-  'std::mir': 'std::fastvm::jit_mir', 'std::cppmod': 'std::cpp::module_file',
-  'std::cppinspect': 'std::cpp::inspect',
-}
-const PASSY = /^(?:std|test|onnx|tiles|json|re|nn|tensor)::/
-const canon = (word) => { const name = word.trim().split(/\s+/)[0]; return ALIASES[name] ?? name }
-
-function walk(dir, out = []) {
-  let entries
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return out }
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === 'out' || entry.name === '.git') continue
-      walk(full, out)
-    } else out.push(full)
-  }
-  return out
-}
+const audit = args.includes('--audit')
 
 // Every command line this tree writes, as { file, line, passes }.
 function pipelines() {
   const found = []
+  const differences = []
   for (const file of walk(path.join(root, 'test/plans'))) {
     if (!file.endsWith('.plan.toml')) continue
     const text = fs.readFileSync(file, 'utf8')
-    const re = /args\s*=\s*\[([\s\S]*?)\]/g
-    let m
-    while ((m = re.exec(text))) {
-      const tokens = [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1])
-      const passes = tokens.filter((t) => PASSY.test(t)).map(canon)
+    for (const array of argsArrays(text)) {
+      const elements = elementsOf(array.body)
+      const passes = elements.flatMap(passesOfElement)
       if (passes.length === 0) continue
-      const line = text.slice(0, m.index).split('\n').length
+      const line = text.slice(0, array.at).split('\n').length
+      const lineEnd = text.indexOf('\n', array.close)
+      const tail = text.slice(array.at, lineEnd < 0 ? text.length : lineEnd)
+      for (const word of leadingPasses(stringsOf(array.body))) {
+        if (!passes.includes(word)) differences.push({ file, line, word, passes })
+      }
       // A pipeline that ends in a translating pass on purpose says so on its own line, so the check
       // can be a gate without reading intent out of the passes: # camel-pass-scan: keep.
-      const lineEnd = text.indexOf('\n', m.index + m[0].length)
-      const tail = text.slice(m.index, lineEnd < 0 ? text.length : lineEnd)
-        const keep = tail.indexOf('# camel-pass-scan: keep')
-        if (keep >= 0) {
-            // Listed, never just skipped: an exception nobody prints becomes the rule with age.
-            kept.push({ file, line, passes, why: tail.slice(keep).trim() })
-            continue
-        }
+      const keep = tail.indexOf('# camel-pass-scan: keep')
+      if (keep >= 0) {
+        // Listed, never just skipped: an exception nobody prints becomes the rule with age.
+        kept.push({ file, line, passes, why: tail.slice(keep).trim() })
+        continue
+      }
       found.push({ file, line, passes })
     }
   }
-  for (const dir of ['test/tools', 'benchmarks']) {
+  // `test/cases` is where a plan's case scripts live, and a pipeline written there runs a program
+  // just as much as one in `args`: `tiles/public_pass_graph.py` dumps with `std::jgir` and then read
+  // the program's own output as JSON.
+  for (const dir of ['test/tools', 'benchmarks', 'test/cases']) {
     for (const file of walk(path.join(root, dir))) {
-      if (!/\.(mjs|js|py)$/.test(file)) continue
-      const lines = fs.readFileSync(file, 'utf8').split('\n')
-      lines.forEach((text, index) => {
-        // A command line, not a sentence about one: it runs camel and names a pass.
-        if (!/\bcamel\b/.test(text)) return
-        const words = [...text.matchAll(/'([^']*)'|"([^"]*)"/g)].map((x) => x[1] ?? x[2])
-        const passes = words.filter((t) => PASSY.test(t)).map(canon)
-        if (passes.length === 0) return
-        if (!passes.some((p) => TRANSLATE.has(p))) return
-        found.push({ file, line: index + 1, passes })
-      })
+      if (!/\.(mjs|js|py|ps1)$/.test(file)) continue
+      for (const p of scriptPipelines(file, fs.readFileSync(file, 'utf8'))) {
+        const strings = [...p.text.matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => m[1] ?? m[2])
+        for (const word of leadingPasses(strings)) {
+          if (!p.passes.includes(word)) differences.push({ file, line: p.line, word, passes: p.passes })
+        }
+        if (!p.passes.some((x) => TRANSLATE.has(x))) continue
+        // A line that runs a translating pass and then the program says so on its own line.
+        if (p.text.includes('# camel-pass-scan: keep')) {
+          kept.push({ file, line: p.line, passes: p.passes, why: p.text.slice(p.text.indexOf('# camel-pass-scan: keep')).trim() })
+          continue
+        }
+        found.push(p)
+      }
     }
   }
-  return found
+  return { found, differences }
 }
 
 const kept = []
-const all = pipelines()
+const { found: all, differences } = pipelines()
 const ending = all.filter((p) => TRANSLATE.has(p.passes[p.passes.length - 1]))
 const needsNop = ending.filter((p) => p.passes[p.passes.length - 1] !== 'std::nop')
-const handsOn = ending.filter((p) => ALREADY_HANDS_ON.has(p.passes[p.passes.length - 1]))
-// A pipeline that ends in one of these prints and executes nothing: it never needed std::nop, and
-// counting it here is how "already hands the graph on" is a number instead of an impression.
 const alreadyOnes = all.filter((p) => ALREADY_HANDS_ON.has(p.passes[p.passes.length - 1]))
 const byPass = {}
 for (const p of ending) {
@@ -146,4 +136,13 @@ for (const p of kept) console.log(`  ${rel(p.file)}:${p.line}  ${p.passes.join('
 if (list) {
   for (const p of needsNop) console.log(`  ${rel(p.file)}:${p.line}  ${p.passes.join(' ')}`)
 }
+if (audit) {
+  // The set difference between the words the files write and the words this script parsed. Empty is
+  // the only passing reading.
+  console.log(`audit: ${differences.length} pass word(s) written but not parsed`)
+  for (const d of differences) {
+    console.log(`  ${rel(d.file)}:${d.line}  '${d.word}' not in [${d.passes.join(' ')}]`)
+  }
+}
 if (check) process.exit(needsNop.length === 0 ? 0 : 1)
+if (audit && differences.length > 0) process.exit(3)
