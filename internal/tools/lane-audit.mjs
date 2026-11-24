@@ -49,6 +49,14 @@
  * says that on the first line too, because "the base is tonight's rehearsal" and "the base is
  * develop" are not the same reading.
  *
+ * "Contained in the base" is not "already published", and the difference is the one mistake that has
+ * already cost this project work: on 2026-11-24 six lane branches were deleted whose content lived on
+ * a single unmerged branch, and three of them were written up as done. A rehearsal tree is built on
+ * one machine and is not on the remote yet -- the one measured here is 162 commits ahead of
+ * `origin/develop` -- so every row also records whether `origin/develop` holds it, and a bucket 1 row
+ * whose content is still unpublished says so on its own line. Deleting such a branch leaves the base
+ * as the only ref holding those commits.
+ *
  * As a self-check the program reads `refs/heads/lane/*` before and after it measures and fails
  * (exit 4) if any sha moved, so "this tool is read-only" is a reading it takes rather than a claim it
  * makes. Exit codes:
@@ -66,6 +74,10 @@ const DEFAULT_BASE = 'seat/merge-rehearsal'
 const FALLBACK_BASE = 'develop'
 const DEFAULT_RANGE = 'refs/heads/lane/*'
 const DEFAULT_LIMIT = 20
+// The line a merge lands on and a push publishes. Read from the local refs, like everything else, and
+// used only to mark rows: it decides no bucket, because a table that refused to name a deletable row
+// until a push happened would be answering a different question than the one it is asked.
+const PUBLISHED = 'origin/develop'
 
 const USAGE =
     'usage: node internal/tools/lane-audit.mjs [--base <ref>] [--range <glob>] [--limit <n>] [--check] [--json] [--repo <dir>]'
@@ -189,7 +201,7 @@ function count(repo, range) {
 }
 
 /// One branch, four readings and the commands they came from.
-function auditOne(repo, baseRef, baseSha, laneRef, tip) {
+function auditOne(repo, baseRef, baseSha, laneRef, tip, publishedRef) {
     const lane = branchName(laneRef)
     const ahead = count(repo, `${baseRef}..${lane}`)
     const behind = count(repo, `${lane}..${baseRef}`)
@@ -197,6 +209,13 @@ function auditOne(repo, baseRef, baseSha, laneRef, tip) {
     const contained = isAncestor.code === 0
     // A non-zero exit from --is-ancestor other than 1 means git could not answer; 1 means "no".
     const containedKnown = isAncestor.code === 0 || isAncestor.code === 1
+
+    // Whether the published line holds it too. A row contained in a rehearsal tree but not published
+    // is deletable only once that tree lands, and the table has to say which row that is.
+    const published = publishedRef
+        ? git(repo, ['merge-base', '--is-ancestor', lane, publishedRef])
+        : null
+    const containedInPublished = !published ? null : published.code === 0
 
     // The paths this branch is about: what it changed since it forked from the base.
     const nameOnly = git(repo, ['diff', '--name-only', `${baseRef}...${lane}`])
@@ -228,6 +247,9 @@ function auditOne(repo, baseRef, baseSha, laneRef, tip) {
         equiv: changedPaths.length
             ? `git diff ${lane}..${baseRef} -- ${changedPaths.map((path) => (path.includes(' ') ? `'${path}'` : path)).join(' ')}`
             : null,
+        containedInPublished: publishedRef
+            ? `git merge-base --is-ancestor ${lane} ${publishedRef}`
+            : null,
     }
 
     // Bucket 1 needs a reason of its own per row; the two reasons are kept apart because a reader
@@ -258,6 +280,7 @@ function auditOne(repo, baseRef, baseSha, laneRef, tip) {
         ahead,
         behind,
         contained: containedKnown ? contained : null,
+        containedInPublished,
         equiv,
         equivBasis,
         changedPaths,
@@ -286,6 +309,12 @@ function reportText(payload) {
     lines.push(
         `base    ${base.ref} @ ${short(base.sha)}${base.fellBack ? `   （请求的 ${base.requested} 不存在，退回 ${FALLBACK_BASE}）` : '   （本地 ref）'}`,
     )
+    const versus = payload.baseVsPublished
+    if (versus) {
+        lines.push(
+            `已发布  ${versus.ref} @ ${short(versus.sha)}   （本地视图，未 fetch；基线领先它 ${num(versus.ahead)} 笔、落后 ${num(versus.behind)} 笔）`,
+        )
+    }
     lines.push(`range   ${payload.range}   共 ${payload.counts.branches} 条`)
     lines.push('')
 
@@ -293,7 +322,14 @@ function reportText(payload) {
     lines.push(`① 可删（contained=yes，或 ahead=0 且 equiv=yes）—— ${first.length} 条`)
     if (first.length === 0) lines.push('   （无）')
     for (const row of first) {
-        lines.push(`   ${pad(row.branch, 30)} ${short(row.tip)}  ${row.reason}`)
+        const unpublished = row.containedInPublished === false ? '   ← 还没上已发布线' : ''
+        lines.push(`   ${pad(row.branch, 30)} ${short(row.tip)}  ${row.reason}${unpublished}`)
+    }
+    const unpublishedCount = first.filter((row) => row.containedInPublished === false).length
+    if (unpublishedCount > 0) {
+        lines.push(
+            `   ⇒ 其中 ${unpublishedCount} 条的提交只在基线上：① 的前提是「基线这一支会落地」。基线没落地就删分支，那些提交只剩基线这一支 ref 持有。`,
+        )
     }
     lines.push('')
 
@@ -342,6 +378,9 @@ function reportText(payload) {
     lines.push('  ahead      git rev-list --count <base>..<lane>')
     lines.push('  behind     git rev-list --count <lane>..<base>')
     lines.push('  contained  git merge-base --is-ancestor <lane> <base>    （exit 0 即 yes）')
+    lines.push(
+        '  published  git merge-base --is-ancestor <lane> origin/develop   （① 里「还没上已发布线」的判据）',
+    )
     lines.push('  equiv      git diff <lane>..<base> -- <该分支改过的路径>   （无输出即 yes）')
     lines.push('')
     lines.push(
@@ -378,9 +417,22 @@ function main() {
     const before = snapshot(repo, options.range)
     if (before.size === 0) fail(`no ref matches ${options.range} in ${repo}`)
 
+    // The published line, if this checkout has one. It decides no bucket: it only marks the rows whose
+    // content is still on the base alone.
+    const publishedSha = resolveCommit(repo, PUBLISHED)
+    const publishedRef = publishedSha ? PUBLISHED : null
+    const baseVsPublished = publishedRef
+        ? {
+              ref: publishedRef,
+              sha: publishedSha,
+              ahead: count(repo, `${publishedRef}..${baseRef}`),
+              behind: count(repo, `${baseRef}..${publishedRef}`),
+          }
+        : null
+
     const rows = []
     for (const [ref, tip] of before) {
-        rows.push(auditOne(repo, baseRef, baseSha, ref, tip))
+        rows.push(auditOne(repo, baseRef, baseSha, ref, tip, publishedRef))
     }
 
     const after = snapshot(repo, options.range)
@@ -415,6 +467,7 @@ function main() {
         localRefsOnly: true,
         fetched: false,
         base: { requested: options.base, ref: baseRef, sha: baseSha, fellBack },
+        baseVsPublished,
         range: options.range,
         limit: options.limit,
         check: options.check,
